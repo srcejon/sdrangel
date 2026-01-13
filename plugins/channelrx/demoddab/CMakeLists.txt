@@ -25,6 +25,7 @@ set(demoddab_HEADERS
 include_directories(
     ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client
     ${DAB_INCLUDE_DIR}
+    ${DAB_INCLUDE_DIR}/library/includes
 )
 
 if(NOT SERVER_MODE)

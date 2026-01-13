@@ -41,16 +41,17 @@ void systemDataHandler(bool sync, int16_t snr, int32_t freqOffset, void *ctx)
     sink->systemData(sync, snr, freqOffset);
 }
 
-void ensembleNameHandler(const char *name, int32_t id, void *ctx)
+void ensembleNameHandler(const std::string &name, int32_t id, void *ctx)
 {
     DABDemodSink *sink = (DABDemodSink *)ctx;
-    sink->ensembleName(QString::fromUtf8(name), id);
+    sink->ensembleName(QString::fromStdString(name), id);
 }
 
-void programNameHandler(const char *name, int32_t id, void *ctx)
+void serviceNameHandler(const std::string &name, int32_t id, uint16_t subChId, void *ctx)
 {
+    (void) subChId;
     DABDemodSink *sink = (DABDemodSink *)ctx;
-    sink->programName(QString::fromUtf8(name), id);
+    sink->programName(QString::fromStdString(name), id);
 }
 
 void fibQualityHandler(int16_t percent, void *ctx)
@@ -278,10 +279,10 @@ void motDataHandler(uint8_t *data, int len, const char *filename, int contentsub
     sink->motData(data, len, QString::fromUtf8(filename), contentsubType);
 }
 
-void tiiDataHandler(int tii, void *ctx)
+void tiiDataHandler(tiiData *tiiData, void *ctx)
 {
     DABDemodSink *sink = (DABDemodSink *)ctx;
-    sink->tii(tii);
+    sink->tii(tiiData->mainId << 8 | tiiData->subId);
 }
 
 void DABDemodSink::systemData(bool sync, int16_t snr, int32_t freqOffset)
@@ -513,8 +514,8 @@ DABDemodSink::DABDemodSink() :
     m_api.dabMode = 1; // Latest DAB spec only has mode 1
     m_api.syncsignal_Handler = syncHandler;
     m_api.systemdata_Handler = systemDataHandler;
-    m_api.ensemblename_Handler = ensembleNameHandler;
-    m_api.programname_Handler = programNameHandler;
+    m_api.name_of_ensemble = ensembleNameHandler;
+    m_api.serviceName = serviceNameHandler;
     m_api.fib_quality_Handler = fibQualityHandler;
     m_api.audioOut_Handler = audioHandler;
     m_api.dataOut_Handler = dataHandler;
@@ -650,13 +651,13 @@ void DABDemodSink::setProgram(const QString& name)
     m_programSet = false;
     QByteArray ba = name.toUtf8();
     const char *program = ba.data();
-    if (!is_audioService (m_dab, program))
+    if (!is_audioService (m_dab, std::string(program)))
     {
         qWarning() << name << " is not an audio service";
     }
     else
     {
-        dataforAudioService(m_dab, program, &m_ad, 0);
+        dataforAudioService(m_dab, std::string(program), m_ad, 0);
         if (!m_ad.defined)
         {
             qWarning() << name << " audio data is not defined";
@@ -664,7 +665,7 @@ void DABDemodSink::setProgram(const QString& name)
         else
         {
             dabReset_msc(m_dab);
-            set_audioChannel(m_dab, &m_ad);
+            set_audioChannel(m_dab, m_ad);
             m_programSet = true;
         }
     }

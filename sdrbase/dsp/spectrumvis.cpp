@@ -319,24 +319,27 @@ void SpectrumVis::performCWT(bool positiveOnly)
         fftPower[i] = (c.real() * c.real() + c.imag() * c.imag()) * m_powFFTMul;
     }
 
-    // Morlet wavelet central angular frequency (sigma = omega0/sqrt(2) in frequency)
-    static const float omega0 = 6.0f;
-    static const float halfOmega0Sq = omega0 * omega0 / 2.0f; // 18.0
-    // A 4-sigma cutoff in relative units (|j/|k| - 1| < coverage) for efficiency
-    static const float coverage = 4.0f / omega0; // ~0.667
+    // Morlet wavelet central angular frequency (sigma = omega0/sqrt(2) in frequency).
+    // omega0 = 6 is the standard choice that gives a good trade-off between time and
+    // frequency resolution while keeping the wavelet admissibility condition satisfied.
+    static const float kMorletCentralFrequency = 6.0f;
+    // Limit summation to bins within 4 sigma of the wavelet centre (in relative units).
+    // |j/|k| - 1| < kSigmaCutoff approximates the full Gaussian with <0.01% error.
+    static const float kSigmaCutoff = 4.0f / kMorletCentralFrequency; // ~0.667
+    static const float halfOmega0Sq = kMorletCentralFrequency * kMorletCentralFrequency / 2.0f; // 18.0
 
-    // Compute CWT power for each display bin in centred (reordered) space.
-    // Display bin kOut in [0, fftSize-1] maps to centred frequency k = kOut - halfSize
+    // Compute CWT power for each display bin in centered (reordered) space.
+    // Display bin kOut in [0, fftSize-1] maps to centered frequency k = kOut - halfSize
     // (k ranges from -halfSize to halfSize-1; k=0 is DC).
-    // FFT natural-order index for centred bin k: (k + fftSize) % fftSize
+    // FFT natural-order index for centered bin k: (k + fftSize) % fftSize
     if (positiveOnly)
     {
         // Only positive-frequency half is valid; duplicate each bin as FFT does
         for (int i = 0; i < halfSize; i++)
         {
-            // positive centred bin: k = i + 1 (skip DC at i=0 -> k=1)
+            // positive centered bin: k = i + 1 (skip DC at i=0 -> k=1)
             int k = i + 1;
-            float rangeF = coverage * k;
+            float rangeF = kSigmaCutoff * k;
             int rangeBins = static_cast<int>(rangeF) + 2;
             int jMin = std::max(1, k - rangeBins);
             int jMax = std::min(halfSize - 1, k + rangeBins);
@@ -360,7 +363,7 @@ void SpectrumVis::performCWT(bool positiveOnly)
         // Full two-sided spectrum; handle positive and negative halves separately
         for (int kOut = 0; kOut < fftSize; kOut++)
         {
-            int k = kOut - halfSize; // centred frequency index
+            int k = kOut - halfSize; // centered frequency index
 
             if (k == 0) { // DC bin: no well-defined scale, set to zero
                 m_powerSpectrum[kOut] = 0.0f;
@@ -368,9 +371,9 @@ void SpectrumVis::performCWT(bool positiveOnly)
             }
 
             int kAbs = std::abs(k);
-            int rangeBins = static_cast<int>(coverage * kAbs) + 2;
+            int rangeBins = static_cast<int>(kSigmaCutoff * kAbs) + 2;
 
-            // Iterate over same-sign bins in centred space
+            // Iterate over same-sign bins in centered space
             int jCentMin, jCentMax;
             if (k > 0) {
                 jCentMin = std::max(1, k - rangeBins);
@@ -383,7 +386,7 @@ void SpectrumVis::performCWT(bool positiveOnly)
             float power = 0.0f;
             float norm = 0.0f;
             for (int jCent = jCentMin; jCent <= jCentMax; jCent++) {
-                // Convert centred index to natural FFT order
+                // Convert centered index to natural FFT order
                 int jNat = (jCent + fftSize) % fftSize;
                 float ratio = static_cast<float>(jCent) / static_cast<float>(k);
                 float w = std::exp(-halfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));

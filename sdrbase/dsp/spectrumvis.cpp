@@ -22,6 +22,8 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <cmath>
+
 #include "SWGGLSpectrum.h"
 #include "SWGSpectrumServer.h"
 #include "SWGSuccessResponse.h"
@@ -148,7 +150,11 @@ void SpectrumVis::feed(const ComplexVector::const_iterator& cbegin, const Comple
             std::copy(begin, begin + samplesNeeded, m_fftBuffer.begin() + m_fftBufferFill);
             begin += samplesNeeded;
 
-            performFFT(positiveOnly);
+            if (m_settings.m_transformType == SpectrumSettings::CWT) {
+                performCWT(positiveOnly);
+            } else {
+                performFFT(positiveOnly);
+            }
 
 			// advance buffer respecting the fft overlap factor
 			// undefined behavior if the memory regions overlap, valid code for 50% overlap
@@ -202,7 +208,11 @@ void SpectrumVis::feed(const SampleVector::const_iterator& cbegin, const SampleV
 				*it++ = Complex(begin->real() / m_scalef, begin->imag() / m_scalef);
 			}
 
-            performFFT(positiveOnly);
+            if (m_settings.m_transformType == SpectrumSettings::CWT) {
+                performCWT(positiveOnly);
+            } else {
+                performFFT(positiveOnly);
+            }
 
 			// advance buffer respecting the fft overlap factor
 			// undefined behavior if the memory regions overlap, valid code for 50% overlap
@@ -290,6 +300,148 @@ void SpectrumVis::performFFT(bool positiveOnly)
 
     // extract power spectrum and reorder buckets
     processFFT(m_fft->out(), true, positiveOnly, m_settings.m_fftSize);
+}
+
+void SpectrumVis::performCWT(bool positiveOnly)
+{
+    // Apply window function and compute FFT (reuses the existing FFT engine)
+    m_window.apply(&m_fftBuffer[0], m_fft->in());
+    m_fft->transform();
+
+    const Complex* fftOut = m_fft->out();
+    const int fftSize = m_settings.m_fftSize;
+    const int halfSize = fftSize / 2;
+
+    // Compute power spectrum from FFT output (natural/unshifted order: 0..N-1)
+    std::vector<float> fftPower(fftSize);
+    for (int i = 0; i < fftSize; i++) {
+        const Complex& c = fftOut[i];
+        fftPower[i] = (c.real() * c.real() + c.imag() * c.imag()) * m_powFFTMul;
+    }
+
+    // Morlet wavelet central angular frequency (sigma = omega0/sqrt(2) in frequency)
+    static const float omega0 = 6.0f;
+    static const float halfOmega0Sq = omega0 * omega0 / 2.0f; // 18.0
+    // A 4-sigma cutoff in relative units (|j/|k| - 1| < coverage) for efficiency
+    static const float coverage = 4.0f / omega0; // ~0.667
+
+    // Compute CWT power for each display bin in centred (reordered) space.
+    // Display bin kOut in [0, fftSize-1] maps to centred frequency k = kOut - halfSize
+    // (k ranges from -halfSize to halfSize-1; k=0 is DC).
+    // FFT natural-order index for centred bin k: (k + fftSize) % fftSize
+    if (positiveOnly)
+    {
+        // Only positive-frequency half is valid; duplicate each bin as FFT does
+        for (int i = 0; i < halfSize; i++)
+        {
+            // positive centred bin: k = i + 1 (skip DC at i=0 -> k=1)
+            int k = i + 1;
+            float rangeF = coverage * k;
+            int rangeBins = static_cast<int>(rangeF) + 2;
+            int jMin = std::max(1, k - rangeBins);
+            int jMax = std::min(halfSize - 1, k + rangeBins);
+
+            float power = 0.0f;
+            float norm = 0.0f;
+            for (int j = jMin; j <= jMax; j++) {
+                float ratio = static_cast<float>(j) / static_cast<float>(k);
+                float w = std::exp(-halfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
+                power += fftPower[j] * w;
+                norm += w;
+            }
+
+            float val = (norm > 0.0f) ? power / norm : 0.0f;
+            m_powerSpectrum[i * 2] = val;
+            m_powerSpectrum[i * 2 + 1] = val;
+        }
+    }
+    else
+    {
+        // Full two-sided spectrum; handle positive and negative halves separately
+        for (int kOut = 0; kOut < fftSize; kOut++)
+        {
+            int k = kOut - halfSize; // centred frequency index
+
+            if (k == 0) { // DC bin: no well-defined scale, set to zero
+                m_powerSpectrum[kOut] = 0.0f;
+                continue;
+            }
+
+            int kAbs = std::abs(k);
+            int rangeBins = static_cast<int>(coverage * kAbs) + 2;
+
+            // Iterate over same-sign bins in centred space
+            int jCentMin, jCentMax;
+            if (k > 0) {
+                jCentMin = std::max(1, k - rangeBins);
+                jCentMax = std::min(halfSize - 1, k + rangeBins);
+            } else {
+                jCentMin = std::max(-halfSize, k - rangeBins);
+                jCentMax = std::min(-1, k + rangeBins);
+            }
+
+            float power = 0.0f;
+            float norm = 0.0f;
+            for (int jCent = jCentMin; jCent <= jCentMax; jCent++) {
+                // Convert centred index to natural FFT order
+                int jNat = (jCent + fftSize) % fftSize;
+                float ratio = static_cast<float>(jCent) / static_cast<float>(k);
+                float w = std::exp(-halfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
+                power += fftPower[jNat] * w;
+                norm += w;
+            }
+
+            m_powerSpectrum[kOut] = (norm > 0.0f) ? power / norm : 0.0f;
+        }
+    }
+
+    // Zero any unused bins beyond fftSize (matches processFFT behaviour)
+    for (int i = fftSize; i < m_settings.m_fftSize; i++) {
+        m_powerSpectrum[i] = 0.0f;
+    }
+
+    // Track spectrum maximum (linear power, before dB conversion)
+    m_specMax = *std::max_element(&m_powerSpectrum[0], &m_powerSpectrum[m_settings.m_fftSize]);
+
+    // Perform math operation on linear value
+    if (m_settings.m_mathMode != SpectrumSettings::MathModeNone) {
+        mathLinear(m_powerSpectrum);
+    }
+
+    // Convert to dB
+    if (!m_settings.m_linear) {
+        for (int i = 0; i < m_settings.m_fftSize; i++) {
+            m_powerSpectrum[i] = m_mult * log2fapprox(m_powerSpectrum[i]);
+        }
+    }
+
+    // Perform math operation on dB value
+    if (m_settings.m_mathMode != SpectrumSettings::MathModeNone) {
+        mathDB(m_powerSpectrum);
+    }
+
+    if (m_settings.mathAverageUsed()) {
+        m_mathMovingAverage.nextAverage();
+    }
+
+    // Send new data to visualisation
+    if (m_glSpectrum) {
+        m_glSpectrum->newSpectrum(&m_powerSpectrum[0], m_settings.m_fftSize);
+    }
+
+    // Web socket spectrum connections
+    if (m_wsSpectrum.socketOpened())
+    {
+        m_wsSpectrum.newSpectrum(
+            m_powerSpectrum,
+            m_settings.m_fftSize,
+            m_centerFrequency,
+            m_sampleRate,
+            m_settings.m_linear,
+            m_settings.m_ssb,
+            m_settings.m_usb
+        );
+    }
 }
 
 void SpectrumVis::processFFT(const Complex* fftOut, bool reorder, bool positiveOnly, int fftSize)

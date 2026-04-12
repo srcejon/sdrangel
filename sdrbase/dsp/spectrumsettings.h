@@ -121,6 +121,11 @@ public:
         ShowAll
     };
 
+    enum TransformType {
+        FFT,
+        CWT
+    };
+
     struct SpectrumMemory {
         QList<Real> m_spectrum;
         bool m_display;
@@ -194,6 +199,7 @@ public:
     bool m_displayRBW;
     bool m_displayCursorStats;
     bool m_displayPeakStats;
+    TransformType m_transformType; //!< FFT or CWT
     QList<SpectrumMemory> m_spectrumMemory;
     QRgb m_spectrumColor;
 

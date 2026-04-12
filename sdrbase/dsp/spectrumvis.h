@@ -223,6 +223,7 @@ private:
 	QRecursiveMutex m_mutex;
 
     void performFFT(bool positiveOnly);
+    void performCWT(bool positiveOnly);
     void processFFT(const Complex* fftOut, bool reorder, bool positiveOnly, int fftSize);
     void setRunning(bool running) { m_running = running; }
     void applySettings(const SpectrumSettings& settings, bool force = false);

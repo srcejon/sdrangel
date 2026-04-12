@@ -233,8 +233,10 @@ void GLSpectrumGUI::displaySettings()
     ui->linscale->blockSignals(true);
     ui->mathMode->blockSignals(true);
     ui->mathAvgCount->blockSignals(true);
+    ui->transformType->blockSignals(true);
 
     ui->fftWindow->setCurrentIndex(m_settings.m_fftWindow);
+    ui->transformType->setCurrentIndex((int) m_settings.m_transformType);
 
     for (int i = SpectrumSettings::m_log2FFTSizeMin; i <= SpectrumSettings::m_log2FFTSizeMax; i++)
     {
@@ -285,6 +287,7 @@ void GLSpectrumGUI::displaySettings()
     ui->linscale->blockSignals(false);
     ui->mathMode->blockSignals(false);
     ui->mathAvgCount->blockSignals(false);
+    ui->transformType->blockSignals(false);
     blockApplySettings(false);
 
     updateMeasurements();
@@ -311,6 +314,7 @@ void GLSpectrumGUI::displayControls()
     ui->spectrogram->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowStandard);
     ui->spectrogramStyle->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowAll && m_settings.m_display3DSpectrogram);
     ui->fftWindow->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowStandard);
+    ui->transformType->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowStandard);
     ui->fftSize->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowStandard);
     ui->fftOverlap->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowAll);
     ui->mathMode->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowAll);
@@ -468,6 +472,13 @@ void GLSpectrumGUI::on_fftWindow_currentIndexChanged(int index)
 {
     qDebug("GLSpectrumGUI::on_fftWindow_currentIndexChanged: %d", index);
     m_settings.m_fftWindow = (FFTWindow::Function) index;
+    applySettings();
+}
+
+void GLSpectrumGUI::on_transformType_currentIndexChanged(int index)
+{
+    qDebug("GLSpectrumGUI::on_transformType_currentIndexChanged: %d", index);
+    m_settings.m_transformType = (SpectrumSettings::TransformType) index;
     applySettings();
 }
 

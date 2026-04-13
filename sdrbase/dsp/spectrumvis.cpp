@@ -1114,9 +1114,11 @@ void SpectrumVis::applySettings(const SpectrumSettings& settings, bool force)
             m_cwtBuffer.resize(static_cast<std::size_t>(fftSize) * kCwtTimeSteps);
             m_cwtBufferFill = 0;
         } else {
-            // Release the weight-table memory when CWT is no longer active.
+            // Release the weight-table and sample-buffer memory when CWT is no longer active.
             m_cwtWeightsFull.clear();
+            m_cwtWeightsFull.shrink_to_fit();
             m_cwtWeightsPos.clear();
+            m_cwtWeightsPos.shrink_to_fit();
             m_cwtBuffer.clear();
             m_cwtBuffer.shrink_to_fit();
             m_cwtBufferFill = 0;

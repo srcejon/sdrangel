@@ -43,7 +43,7 @@ namespace {
 // frequency resolution while keeping the wavelet admissibility condition satisfied.
 static constexpr float kMorletCentralFrequency = 6.0f;
 // Limit summation to bins within 4 sigma of the wavelet centre (in relative units).
-// |j/k - 1| < kSigmaCutoff approximates the full Gaussian with <0.01% error.
+// |j/k - 1| <= kSigmaCutoff; bins beyond this threshold contribute < 0.01% of total weight.
 static constexpr float kSigmaCutoff = 4.0f / kMorletCentralFrequency; // ~0.667
 static constexpr float kHalfOmega0Sq = kMorletCentralFrequency * kMorletCentralFrequency / 2.0f; // 18.0
 } // namespace
@@ -356,11 +356,6 @@ void SpectrumVis::performCWT(bool positiveOnly)
         }
     }
 
-    // Zero any unused bins beyond fftSize (matches processFFT behaviour)
-    for (int i = fftSize; i < m_settings.m_fftSize; i++) {
-        m_powerSpectrum[i] = 0.0f;
-    }
-
     // Track spectrum maximum (linear power, before dB conversion)
     m_specMax = *std::max_element(&m_powerSpectrum[0], &m_powerSpectrum[m_settings.m_fftSize]);
 
@@ -421,6 +416,8 @@ void SpectrumVis::buildCWTWeightTables(int fftSize)
         }
 
         int kAbs = std::abs(k);
+        // kSigmaCutoff * kAbs gives the 4-sigma bin range; +2 adds a small safety margin
+        // to avoid clipping the Gaussian tails at boundary bins.
         int rangeBins = static_cast<int>(kSigmaCutoff * kAbs) + 2;
 
         int jCentMin, jCentMax;
@@ -460,7 +457,7 @@ void SpectrumVis::buildCWTWeightTables(int fftSize)
     for (int i = 0; i < halfSize; i++)
     {
         int k = i + 1;
-        int rangeBins = static_cast<int>(kSigmaCutoff * k) + 2;
+        int rangeBins = static_cast<int>(kSigmaCutoff * k) + 2; // +2: safety margin at boundary bins
         int jMin = std::max(1, k - rangeBins);
         int jMax = std::min(halfSize - 1, k + rangeBins);
 
@@ -1021,7 +1018,7 @@ void SpectrumVis::applySettings(const SpectrumSettings& settings, bool force)
         if (settings.m_transformType == SpectrumSettings::CWT) {
             buildCWTWeightTables(fftSize);
         } else {
-            // Free memory when switching away from CWT
+            // Release the weight-table memory when CWT is no longer active.
             m_cwtWeightsFull.clear();
             m_cwtWeightsPos.clear();
         }

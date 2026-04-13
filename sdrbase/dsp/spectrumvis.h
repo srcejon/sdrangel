@@ -22,6 +22,9 @@
 #ifndef INCLUDE_SPECTRUMVIS_H
 #define INCLUDE_SPECTRUMVIS_H
 
+#include <utility>
+#include <vector>
+
 #include <QObject>
 #include <QRecursiveMutex>
 
@@ -195,6 +198,11 @@ private:
 	std::vector<Real> m_powerSpectrum; //!< displayable power spectrum
     std::vector<Real> m_mathMemory;
 
+    // CWT precomputed weight tables. Each entry is a list of (jNat, pre-normalised weight) pairs.
+    // Rebuilt in buildCWTWeightTables() whenever the FFT size changes.
+    std::vector<std::vector<std::pair<int,float>>> m_cwtWeightsFull; //!< Per-bin tables for two-sided CWT
+    std::vector<std::vector<std::pair<int,float>>> m_cwtWeightsPos;  //!< Per-bin tables for positive-only CWT
+
     SpectrumSettings m_settings;
 	int m_overlapSize;
 	int m_refillSize;
@@ -224,6 +232,7 @@ private:
 
     void performFFT(bool positiveOnly);
     void performCWT(bool positiveOnly);
+    void buildCWTWeightTables(int fftSize);
     void processFFT(const Complex* fftOut, bool reorder, bool positiveOnly, int fftSize);
     void setRunning(bool running) { m_running = running; }
     void applySettings(const SpectrumSettings& settings, bool force = false);

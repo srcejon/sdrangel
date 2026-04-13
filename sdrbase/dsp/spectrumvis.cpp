@@ -37,6 +37,17 @@
 
 #include "spectrumvis.h"
 
+namespace {
+// Morlet wavelet central angular frequency.
+// omega0 = 6 is the standard choice that gives a good trade-off between time and
+// frequency resolution while keeping the wavelet admissibility condition satisfied.
+static constexpr float kMorletCentralFrequency = 6.0f;
+// Limit summation to bins within 4 sigma of the wavelet centre (in relative units).
+// |j/k - 1| < kSigmaCutoff approximates the full Gaussian with <0.01% error.
+static constexpr float kSigmaCutoff = 4.0f / kMorletCentralFrequency; // ~0.667
+static constexpr float kHalfOmega0Sq = kMorletCentralFrequency * kMorletCentralFrequency / 2.0f; // 18.0
+} // namespace
+
 MESSAGE_CLASS_DEFINITION(SpectrumVis::MsgConfigureSpectrumVis, Message)
 MESSAGE_CLASS_DEFINITION(SpectrumVis::MsgConfigureScalingFactor, Message)
 MESSAGE_CLASS_DEFINITION(SpectrumVis::MsgConfigureWSpectrumOpenClose, Message)
@@ -312,89 +323,36 @@ void SpectrumVis::performCWT(bool positiveOnly)
     const int fftSize = m_settings.m_fftSize;
     const int halfSize = fftSize / 2;
 
-    // Compute power spectrum from FFT output (natural/unshifted order: 0..N-1)
+    // Compute linear power spectrum from FFT output (natural/unshifted order: 0..N-1)
     std::vector<float> fftPower(fftSize);
     for (int i = 0; i < fftSize; i++) {
         const Complex& c = fftOut[i];
         fftPower[i] = (c.real() * c.real() + c.imag() * c.imag()) * m_powFFTMul;
     }
 
-    // Morlet wavelet central angular frequency (sigma = omega0/sqrt(2) in frequency).
-    // omega0 = 6 is the standard choice that gives a good trade-off between time and
-    // frequency resolution while keeping the wavelet admissibility condition satisfied.
-    static const float kMorletCentralFrequency = 6.0f;
-    // Limit summation to bins within 4 sigma of the wavelet centre (in relative units).
-    // |j/|k| - 1| < kSigmaCutoff approximates the full Gaussian with <0.01% error.
-    static const float kSigmaCutoff = 4.0f / kMorletCentralFrequency; // ~0.667
-    static const float halfOmega0Sq = kMorletCentralFrequency * kMorletCentralFrequency / 2.0f; // 18.0
-
-    // Compute CWT power for each display bin in centered (reordered) space.
-    // Display bin kOut in [0, fftSize-1] maps to centered frequency k = kOut - halfSize
-    // (k ranges from -halfSize to halfSize-1; k=0 is DC).
-    // FFT natural-order index for centered bin k: (k + fftSize) % fftSize
+    // Accumulate CWT power using the precomputed, pre-normalised weight tables.
+    // Each entry is {jNat, w_normalised}; power for empty bins (DC) stays 0.
     if (positiveOnly)
     {
-        // Only positive-frequency half is valid; duplicate each bin as FFT does
         for (int i = 0; i < halfSize; i++)
         {
-            // positive centered bin: k = i + 1 (skip DC at i=0 -> k=1)
-            int k = i + 1;
-            float rangeF = kSigmaCutoff * k;
-            int rangeBins = static_cast<int>(rangeF) + 2;
-            int jMin = std::max(1, k - rangeBins);
-            int jMax = std::min(halfSize - 1, k + rangeBins);
-
             float power = 0.0f;
-            float norm = 0.0f;
-            for (int j = jMin; j <= jMax; j++) {
-                float ratio = static_cast<float>(j) / static_cast<float>(k);
-                float w = std::exp(-halfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
-                power += fftPower[j] * w;
-                norm += w;
+            for (const auto& entry : m_cwtWeightsPos[i]) {
+                power += fftPower[entry.first] * entry.second;
             }
-
-            float val = (norm > 0.0f) ? power / norm : 0.0f;
-            m_powerSpectrum[i * 2] = val;
-            m_powerSpectrum[i * 2 + 1] = val;
+            m_powerSpectrum[i * 2] = power;
+            m_powerSpectrum[i * 2 + 1] = power;
         }
     }
     else
     {
-        // Full two-sided spectrum; handle positive and negative halves separately
         for (int kOut = 0; kOut < fftSize; kOut++)
         {
-            int k = kOut - halfSize; // centered frequency index
-
-            if (k == 0) { // DC bin: no well-defined scale, set to zero
-                m_powerSpectrum[kOut] = 0.0f;
-                continue;
-            }
-
-            int kAbs = std::abs(k);
-            int rangeBins = static_cast<int>(kSigmaCutoff * kAbs) + 2;
-
-            // Iterate over same-sign bins in centered space
-            int jCentMin, jCentMax;
-            if (k > 0) {
-                jCentMin = std::max(1, k - rangeBins);
-                jCentMax = std::min(halfSize - 1, k + rangeBins);
-            } else {
-                jCentMin = std::max(-halfSize, k - rangeBins);
-                jCentMax = std::min(-1, k + rangeBins);
-            }
-
             float power = 0.0f;
-            float norm = 0.0f;
-            for (int jCent = jCentMin; jCent <= jCentMax; jCent++) {
-                // Convert centered index to natural FFT order
-                int jNat = (jCent + fftSize) % fftSize;
-                float ratio = static_cast<float>(jCent) / static_cast<float>(k);
-                float w = std::exp(-halfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
-                power += fftPower[jNat] * w;
-                norm += w;
+            for (const auto& entry : m_cwtWeightsFull[kOut]) {
+                power += fftPower[entry.first] * entry.second;
             }
-
-            m_powerSpectrum[kOut] = (norm > 0.0f) ? power / norm : 0.0f;
+            m_powerSpectrum[kOut] = power;
         }
     }
 
@@ -444,6 +402,85 @@ void SpectrumVis::performCWT(bool positiveOnly)
             m_settings.m_ssb,
             m_settings.m_usb
         );
+    }
+}
+
+void SpectrumVis::buildCWTWeightTables(int fftSize)
+{
+    const int halfSize = fftSize / 2;
+
+    // --- Full (two-sided) mode ---
+    // For each output bin kOut, k = kOut - halfSize (centered frequency).
+    // DC bin (k == 0) gets an empty list, so performCWT naturally outputs 0.
+    m_cwtWeightsFull.assign(fftSize, {});
+    for (int kOut = 0; kOut < fftSize; kOut++)
+    {
+        int k = kOut - halfSize;
+        if (k == 0) {
+            continue;
+        }
+
+        int kAbs = std::abs(k);
+        int rangeBins = static_cast<int>(kSigmaCutoff * kAbs) + 2;
+
+        int jCentMin, jCentMax;
+        if (k > 0) {
+            jCentMin = std::max(1, k - rangeBins);
+            jCentMax = std::min(halfSize - 1, k + rangeBins);
+        } else {
+            jCentMin = std::max(-halfSize, k - rangeBins);
+            jCentMax = std::min(-1, k + rangeBins);
+        }
+
+        // First pass: compute raw weights and their sum for normalisation
+        float norm = 0.0f;
+        for (int jCent = jCentMin; jCent <= jCentMax; jCent++) {
+            float ratio = static_cast<float>(jCent) / static_cast<float>(k);
+            norm += std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
+        }
+
+        // Second pass: store pre-normalised weights alongside the natural FFT index
+        auto& bin = m_cwtWeightsFull[kOut];
+        bin.reserve(jCentMax - jCentMin + 1);
+        if (norm > 0.0f) {
+            for (int jCent = jCentMin; jCent <= jCentMax; jCent++) {
+                int jNat = (jCent + fftSize) % fftSize;
+                float ratio = static_cast<float>(jCent) / static_cast<float>(k);
+                float w = std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
+                bin.emplace_back(jNat, w / norm);
+            }
+        }
+    }
+
+    // --- Positive-only mode ---
+    // For each output index i, k = i + 1 (positive centered frequency 1..halfSize).
+    // j iterates in natural (unshifted) FFT order which equals centered order for
+    // positive-frequency bins.
+    m_cwtWeightsPos.assign(halfSize, {});
+    for (int i = 0; i < halfSize; i++)
+    {
+        int k = i + 1;
+        int rangeBins = static_cast<int>(kSigmaCutoff * k) + 2;
+        int jMin = std::max(1, k - rangeBins);
+        int jMax = std::min(halfSize - 1, k + rangeBins);
+
+        // First pass: normalisation sum
+        float norm = 0.0f;
+        for (int j = jMin; j <= jMax; j++) {
+            float ratio = static_cast<float>(j) / static_cast<float>(k);
+            norm += std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
+        }
+
+        // Second pass: store pre-normalised (jNat == j for positive bins)
+        auto& bin = m_cwtWeightsPos[i];
+        bin.reserve(jMax - jMin + 1);
+        if (norm > 0.0f) {
+            for (int j = jMin; j <= jMax; j++) {
+                float ratio = static_cast<float>(j) / static_cast<float>(k);
+                float w = std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
+                bin.emplace_back(j, w / norm);
+            }
+        }
     }
 }
 
@@ -976,6 +1013,18 @@ void SpectrumVis::applySettings(const SpectrumSettings& settings, bool force)
     if ((settings.m_wsSpectrumAddress != m_settings.m_wsSpectrumAddress)
      || (settings.m_wsSpectrumPort != m_settings.m_wsSpectrumPort) || force) {
          handleConfigureWSSpectrum(settings.m_wsSpectrumAddress, settings.m_wsSpectrumPort);
+    }
+
+    if ((fftSize != m_settings.m_fftSize)
+     || (settings.m_transformType != m_settings.m_transformType) || force)
+    {
+        if (settings.m_transformType == SpectrumSettings::CWT) {
+            buildCWTWeightTables(fftSize);
+        } else {
+            // Free memory when switching away from CWT
+            m_cwtWeightsFull.clear();
+            m_cwtWeightsPos.clear();
+        }
     }
 
     m_settings = settings;

@@ -203,6 +203,11 @@ private:
     std::vector<std::vector<std::pair<int,float>>> m_cwtWeightsFull; //!< Per-bin tables for two-sided CWT
     std::vector<std::vector<std::pair<int,float>>> m_cwtWeightsPos;  //!< Per-bin tables for positive-only CWT
 
+    // CWT sample accumulation buffer.  kCwtTimeSteps sub-windows of fftSize samples each are
+    // collected here before performCWT() processes them and emits one spectrum row per sub-window.
+    std::vector<Complex> m_cwtBuffer;
+    int m_cwtBufferFill; //!< Number of samples currently held in m_cwtBuffer
+
     SpectrumSettings m_settings;
 	int m_overlapSize;
 	int m_refillSize;

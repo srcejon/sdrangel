@@ -200,6 +200,7 @@ public:
     bool m_displayCursorStats;
     bool m_displayPeakStats;
     TransformType m_transformType; //!< FFT or CWT
+    int m_cwtTimeSteps; //!< CWT history multiplier: N_total = m_cwtTimeSteps * m_fftSize. Valid values: 1, 2, 4, 8.
     QList<SpectrumMemory> m_spectrumMemory;
     QRgb m_spectrumColor;
 

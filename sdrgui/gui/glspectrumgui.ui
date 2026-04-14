@@ -533,6 +533,39 @@
       </widget>
      </item>
      <item>
+      <widget class="QComboBox" name="cwtTimeSteps">
+       <property name="maximumSize">
+        <size>
+         <width>40</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>CWT history depth: N_total = depth × FFT size. Larger depth improves low-frequency resolution at the cost of higher memory usage.</string>
+       </property>
+       <item>
+        <property name="text">
+         <string>1x</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>2x</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>4x</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>8x</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item>
       <widget class="QComboBox" name="fftWindow">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Maximum" vsizetype="Fixed">

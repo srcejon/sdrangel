@@ -234,9 +234,20 @@ void GLSpectrumGUI::displaySettings()
     ui->mathMode->blockSignals(true);
     ui->mathAvgCount->blockSignals(true);
     ui->transformType->blockSignals(true);
+    ui->cwtTimeSteps->blockSignals(true);
 
     ui->fftWindow->setCurrentIndex(m_settings.m_fftWindow);
     ui->transformType->setCurrentIndex((int) m_settings.m_transformType);
+
+    // Map cwtTimeSteps value {1,2,4,8} to combo index {0,1,2,3}
+    {
+        static const int kValidSteps[] = {1, 2, 4, 8};
+        int cwtIdx = 2; // default to 4x
+        for (int i = 0; i < 4; i++) {
+            if (m_settings.m_cwtTimeSteps == kValidSteps[i]) { cwtIdx = i; break; }
+        }
+        ui->cwtTimeSteps->setCurrentIndex(cwtIdx);
+    }
 
     for (int i = SpectrumSettings::m_log2FFTSizeMin; i <= SpectrumSettings::m_log2FFTSizeMax; i++)
     {
@@ -288,6 +299,7 @@ void GLSpectrumGUI::displaySettings()
     ui->mathMode->blockSignals(false);
     ui->mathAvgCount->blockSignals(false);
     ui->transformType->blockSignals(false);
+    ui->cwtTimeSteps->blockSignals(false);
     blockApplySettings(false);
 
     updateMeasurements();
@@ -315,6 +327,8 @@ void GLSpectrumGUI::displayControls()
     ui->spectrogramStyle->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowAll && m_settings.m_display3DSpectrogram);
     ui->fftWindow->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowStandard);
     ui->transformType->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowStandard);
+    ui->cwtTimeSteps->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowStandard
+        && m_settings.m_transformType == SpectrumSettings::CWT);
     ui->fftSize->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowStandard);
     ui->fftOverlap->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowAll);
     ui->mathMode->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowAll);
@@ -479,6 +493,16 @@ void GLSpectrumGUI::on_transformType_currentIndexChanged(int index)
 {
     qDebug("GLSpectrumGUI::on_transformType_currentIndexChanged: %d", index);
     m_settings.m_transformType = (SpectrumSettings::TransformType) index;
+    ui->cwtTimeSteps->setVisible(m_settings.m_showControls >= SpectrumSettings::ShowStandard
+        && m_settings.m_transformType == SpectrumSettings::CWT);
+    applySettings();
+}
+
+void GLSpectrumGUI::on_cwtTimeSteps_currentIndexChanged(int index)
+{
+    static const int kValidSteps[] = {1, 2, 4, 8};
+    qDebug("GLSpectrumGUI::on_cwtTimeSteps_currentIndexChanged: %d", index);
+    m_settings.m_cwtTimeSteps = kValidSteps[index < 0 || index > 3 ? 2 : index];
     applySettings();
 }
 

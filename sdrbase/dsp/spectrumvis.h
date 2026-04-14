@@ -199,22 +199,22 @@ private:
     std::vector<Real> m_mathMemory;
 
     // CWT precomputed weight tables. Each entry is a list of (jNat, pre-normalised weight) pairs.
-    // Rebuilt in buildCWTWeightTables() whenever the FFT size changes.
-    // Indices reference the large N_total = kCwtTimeSteps * fftSize FFT.
+    // Rebuilt in buildCWTWeightTables() whenever the FFT size or CWT time steps change.
+    // Indices reference the large N_total = m_cwtTimeSteps * fftSize FFT.
     std::vector<std::vector<std::pair<int,float>>> m_cwtWeightsFull; //!< Per-bin tables for two-sided CWT
     std::vector<std::vector<std::pair<int,float>>> m_cwtWeightsPos;  //!< Per-bin tables for positive-only CWT
 
-    // CWT large FFT engine (size = kCwtTimeSteps * fftSize).  Using a larger FFT than the
+    // CWT large FFT engine (size = m_cwtTimeSteps * fftSize).  Using a larger FFT than the
     // display fftSize gives low-frequency bins a proportionally finer frequency resolution
     // (constant-Q / scale-dependent resolution), which is the defining property of the CWT.
-    FFTEngine*   m_cwtFft;                  //!< Forward FFT engine of size kCwtTimeSteps * fftSize
+    FFTEngine*   m_cwtFft;                  //!< Forward FFT engine of size m_cwtTimeSteps * fftSize
     unsigned int m_cwtFftEngineSequence;    //!< Engine-pool sequence token for m_cwtFft
     FFTWindow    m_cwtWindow;               //!< Analysis window applied to the large CWT buffer
     Real         m_cwtPowFFTMul;            //!< 1 / (cwtFftSize^2) — normalisation for the large FFT
-    std::vector<float> m_cwtFftPower;       //!< Pre-allocated linear-power buffer (size = kCwtTimeSteps * fftSize)
+    std::vector<float> m_cwtFftPower;       //!< Pre-allocated linear-power buffer (size = m_cwtTimeSteps * fftSize)
 
     // Sliding sample history buffer used by the CWT.
-    // Holds the most recent N_total = kCwtTimeSteps * fftSize samples; a new row is emitted
+    // Holds the most recent N_total = m_cwtTimeSteps * fftSize samples; a new row is emitted
     // every fftSize samples as the window slides forward, giving scale-dependent resolution:
     // low frequencies benefit from the full N_total-sample analysis window while the output
     // rate (one row per fftSize samples) equals the no-overlap FFT rate.
@@ -250,7 +250,7 @@ private:
 
     void performFFT(bool positiveOnly);
     void performCWT(bool positiveOnly);
-    void buildCWTWeightTables(int fftSize);
+    void buildCWTWeightTables(int fftSize, int cwtTimeSteps);
     void processFFT(const Complex* fftOut, bool reorder, bool positiveOnly, int fftSize);
     void setRunning(bool running) { m_running = running; }
     void applySettings(const SpectrumSettings& settings, bool force = false);

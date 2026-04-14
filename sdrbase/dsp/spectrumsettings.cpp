@@ -100,6 +100,7 @@ void SpectrumSettings::resetToDefaults()
 	m_displayCursorStats = false;
 	m_displayPeakStats = false;
     m_transformType = FFT;
+    m_cwtTimeSteps = 4;
 
 	m_spectrumMemory.clear();
 	while (m_spectrumMemory.size() < m_maxSpectrumMemories)
@@ -193,6 +194,7 @@ QByteArray SpectrumSettings::serialize() const
 	s.writeS32(63, (int) m_showControls);
 	s.writeU32(64, m_spectrumColor);
     s.writeS32(65, (int) m_transformType);
+    s.writeS32(66, m_cwtTimeSteps);
 
     s.writeS32(100, m_histogramMarkers.size());
 
@@ -319,6 +321,10 @@ bool SpectrumSettings::deserialize(const QByteArray& data)
 #endif
 		d.readU32(64, &m_spectrumColor, qRgb(255, 255, 63));
 		d.readS32(65, (int *) &m_transformType, (int) FFT);
+		d.readS32(66, &m_cwtTimeSteps, 4);
+		if (m_cwtTimeSteps != 1 && m_cwtTimeSteps != 2 && m_cwtTimeSteps != 4 && m_cwtTimeSteps != 8) {
+			m_cwtTimeSteps = 4;
+		}
 
 		int histogramMarkersSize;
 		d.readS32(100, &histogramMarkersSize, 0);

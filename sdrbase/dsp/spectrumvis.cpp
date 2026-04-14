@@ -534,20 +534,26 @@ void SpectrumVis::buildCWTWeightTables(int fftSize)
             jCentMax = std::min(-1, k + rangeBins);
         }
 
+        // Single pass: accumulate raw Gaussian weights and their sum for normalisation.
+        // Storing raw weights avoids recomputing exp() in the normalisation step.
+        std::vector<float> rawWeights;
+        rawWeights.reserve(static_cast<std::size_t>(jCentMax - jCentMin + 1));
         float norm = 0.0f;
         for (int jCent = jCentMin; jCent <= jCentMax; jCent++) {
             const float ratio = static_cast<float>(jCent) / static_cast<float>(k);
-            norm += std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
+            const float diff  = ratio - 1.0f;
+            const float w = std::exp(-kHalfOmega0Sq * diff * diff);
+            rawWeights.push_back(w);
+            norm += w;
         }
 
         auto& bin = m_cwtWeightsFull[kOut];
-        bin.reserve(jCentMax - jCentMin + 1);
+        bin.reserve(rawWeights.size());
         if (norm > 0.0f) {
-            for (int jCent = jCentMin; jCent <= jCentMax; jCent++) {
-                const int jNat = (jCent + cwtFftSize) % cwtFftSize;
-                const float ratio = static_cast<float>(jCent) / static_cast<float>(k);
-                const float w = std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
-                bin.emplace_back(jNat, w / norm);
+            for (std::size_t idx = 0; idx < rawWeights.size(); ++idx) {
+                const int jCent = jCentMin + static_cast<int>(idx);
+                const int jNat  = (jCent + cwtFftSize) % cwtFftSize;
+                bin.emplace_back(jNat, rawWeights[idx] / norm);
             }
         }
     }
@@ -562,19 +568,23 @@ void SpectrumVis::buildCWTWeightTables(int fftSize)
         const int jMin     = std::max(1, k - rangeBins);
         const int jMax     = std::min(cwtHalf, k + rangeBins);
 
+        // Single pass: accumulate raw Gaussian weights and their sum for normalisation.
+        std::vector<float> rawWeights;
+        rawWeights.reserve(static_cast<std::size_t>(jMax - jMin + 1));
         float norm = 0.0f;
         for (int j = jMin; j <= jMax; j++) {
             const float ratio = static_cast<float>(j) / static_cast<float>(k);
-            norm += std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
+            const float diff  = ratio - 1.0f;
+            const float w = std::exp(-kHalfOmega0Sq * diff * diff);
+            rawWeights.push_back(w);
+            norm += w;
         }
 
         auto& bin = m_cwtWeightsPos[i];
-        bin.reserve(jMax - jMin + 1);
+        bin.reserve(rawWeights.size());
         if (norm > 0.0f) {
-            for (int j = jMin; j <= jMax; j++) {
-                const float ratio = static_cast<float>(j) / static_cast<float>(k);
-                const float w = std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
-                bin.emplace_back(j, w / norm);
+            for (std::size_t idx = 0; idx < rawWeights.size(); ++idx) {
+                bin.emplace_back(jMin + static_cast<int>(idx), rawWeights[idx] / norm);
             }
         }
     }

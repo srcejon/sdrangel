@@ -34,7 +34,7 @@ const PluginDescriptor SSTVDemodPlugin::m_pluginDescriptor = {
     SSTVDemod::m_channelId,
     QStringLiteral("SSTV Demodulator"),
     QStringLiteral("7.24.0"),
-    QStringLiteral("(c) Jon Beniston, M7RCE"),
+    QStringLiteral("(c) Copilot"),
     QStringLiteral("https://github.com/f4exb/sdrangel"),
     true,
     QStringLiteral("https://github.com/f4exb/sdrangel")

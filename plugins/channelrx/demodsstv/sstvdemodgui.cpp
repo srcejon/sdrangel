@@ -22,6 +22,7 @@
 #include <QFileDialog>
 #include <QGraphicsScene>
 #include <QGraphicsPixmapItem>
+#include <QPushButton>
 
 #include "sstvdemodgui.h"
 
@@ -107,12 +108,12 @@ bool SSTVDemodGUI::handleMessage(const Message& message)
         if ((destY + 1) < m_image.height())
         {
             // Copy odd line (row 0 of the block)
-            uchar *srcLine0 = lineImage.scanLine(0);
+            const uchar *srcLine0 = lineImage.scanLine(0);
             uchar *dstLine0 = m_image.scanLine(destY);
             memcpy(dstLine0, srcLine0, (size_t)(lineImage.bytesPerLine()));
 
             // Copy even line (row 1 of the block)
-            uchar *srcLine1 = lineImage.scanLine(1);
+            const uchar *srcLine1 = lineImage.scanLine(1);
             uchar *dstLine1 = m_image.scanLine(destY + 1);
             memcpy(dstLine1, srcLine1, (size_t)(lineImage.bytesPerLine()));
         }

@@ -486,6 +486,12 @@ void SpectrumVis::buildCWTWeightTables(int fftSize, int cwtTimeSteps)
     // of the old fftSize-based tables; this larger absolute bin index means the Gaussian
     // spread also grows proportionally, pulling from more high-resolution FFT bins at every
     // scale — i.e. constant relative bandwidth (constant-Q).
+    //
+    // logCenterBin: map output bin index i (0..n-1) to a log-spaced integer bin in [lo, hi].
+    //   i  – zero-based output slot index
+    //   n  – total number of output slots
+    //   lo – smallest allowed bin (maps to i=0)
+    //   hi – largest allowed bin  (maps to i=n-1)
     auto logCenterBin = [](int i, int n, int lo, int hi) -> int {
         if (n <= 1) return lo;
         const double t = static_cast<double>(i) / static_cast<double>(n - 1);

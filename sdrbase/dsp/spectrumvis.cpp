@@ -1128,6 +1128,7 @@ void SpectrumVis::applySettings(const SpectrumSettings& settings, bool force)
      || (settings.m_cwtTimeSteps != m_settings.m_cwtTimeSteps) || force)
     {
         const int cwtFftSize = fftSize * settings.m_cwtTimeSteps;  // Large N_total-point FFT size
+        FFTFactory *fftFactory = DSPEngine::instance()->getFFTFactory();
 
         if (settings.m_transformType == SpectrumSettings::CWT)
         {

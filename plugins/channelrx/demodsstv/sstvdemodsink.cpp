@@ -202,14 +202,15 @@ void SSTVDemodSink::commitBlock()
 
     for (int x = 0; x < SSTVDEMOD_IMAGE_WIDTH; x++)
     {
-        // Cr and Cb are at half horizontal resolution; interpolate between neighbours
+        // Cr and Cb are at half horizontal resolution
         int cx = x / 2;
-        float cr = m_cr[cx] - 128.0f;
-        float cb = m_cb[cx] - 128.0f;
+        // Convert from frequency (Hz) to pixel value [0..255] then offset to [-128..127]
+        float cr = static_cast<float>(freqToPixel(m_cr[cx])) - 128.0f;
+        float cb = static_cast<float>(freqToPixel(m_cb[cx])) - 128.0f;
 
         // Decode odd scan line (top row of the block)
         {
-            float y = m_yOdd[x];
+            float y = static_cast<float>(freqToPixel(m_yOdd[x]));
             int r = static_cast<int>(y + 1.402f * cr);
             int g = static_cast<int>(y - 0.34414f * cb - 0.71414f * cr);
             int b = static_cast<int>(y + 1.772f * cb);
@@ -221,7 +222,7 @@ void SSTVDemodSink::commitBlock()
 
         // Decode even scan line (bottom row of the block)
         {
-            float y = m_yEven[x];
+            float y = static_cast<float>(freqToPixel(m_yEven[x]));
             int r = static_cast<int>(y + 1.402f * cr);
             int g = static_cast<int>(y - 0.34414f * cb - 0.71414f * cr);
             int b = static_cast<int>(y + 1.772f * cb);

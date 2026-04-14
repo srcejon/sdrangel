@@ -273,7 +273,7 @@
         </property>
         <property name="minimum">
          <number>20</number>
-        </number>
+        </property>
         <property name="maximum">
          <number>50</number>
         </property>

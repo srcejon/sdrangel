@@ -41,6 +41,14 @@ import pywt
 
 
 # ---------------------------------------------------------------------------
+# PCM normalisation constants
+# ---------------------------------------------------------------------------
+_INT16_MAX_FLOAT: float = 32768.0
+_INT32_MAX_FLOAT: float = 2_147_483_648.0
+_UINT8_OFFSET: float = 128.0
+
+
+# ---------------------------------------------------------------------------
 # Audio helpers
 # ---------------------------------------------------------------------------
 
@@ -66,11 +74,11 @@ def load_wav_mono(path: str) -> Tuple[int, np.ndarray]:
 
     # Normalise integer PCM formats to [-1, 1].
     if data.dtype == np.int16:
-        data = data.astype(np.float32) / 32768.0
+        data = data.astype(np.float32) / _INT16_MAX_FLOAT
     elif data.dtype == np.int32:
-        data = data.astype(np.float32) / 2_147_483_648.0
+        data = data.astype(np.float32) / _INT32_MAX_FLOAT
     elif data.dtype == np.uint8:
-        data = (data.astype(np.float32) - 128.0) / 128.0
+        data = (data.astype(np.float32) - _UINT8_OFFSET) / _UINT8_OFFSET
     else:
         data = data.astype(np.float32)
 

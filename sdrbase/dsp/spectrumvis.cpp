@@ -69,6 +69,9 @@ SpectrumVis::SpectrumVis(Real scalef) :
 	m_powerSpectrum(4096),
     m_mathMemory(4096),
 	m_fftBufferFill(0),
+    m_cwtFft(nullptr),
+    m_cwtFftEngineSequence(0),
+    m_cwtPowFFTMul(1.0f),
     m_cwtBufferFill(0),
 	m_needMoreSamples(false),
 	m_scalef(scalef),
@@ -88,6 +91,11 @@ SpectrumVis::~SpectrumVis()
 {
     FFTFactory *fftFactory = DSPEngine::instance()->getFFTFactory();
     fftFactory->releaseEngine(m_settings.m_fftSize, false, m_fftEngineSequence);
+    if (m_cwtFft) {
+        fftFactory->releaseEngine(
+            static_cast<unsigned int>(m_settings.m_fftSize) * kCwtTimeSteps,
+            false, m_cwtFftEngineSequence);
+    }
 }
 
 void SpectrumVis::setScalef(Real scalef)
@@ -161,22 +169,28 @@ void SpectrumVis::feed(const ComplexVector::const_iterator& cbegin, const Comple
 
         if (m_settings.m_transformType == SpectrumSettings::CWT)
         {
-            // CWT uses a separate, larger accumulation buffer (kCwtTimeSteps sub-windows).
-            // No frame overlap: the buffer resets to 0 after every processed frame.
-            const std::size_t cwtFrameSize = static_cast<std::size_t>(m_settings.m_fftSize) * kCwtTimeSteps;
-            std::size_t samplesNeeded = cwtFrameSize - m_cwtBufferFill;
+            // Sliding window: collect fftSize new samples per step.
+            // New samples fill the tail of m_cwtBuffer; on completion the buffer is slid left
+            // by fftSize so the oldest fftSize samples are discarded and the history is kept.
+            // This gives one output row per fftSize samples (same rate as no-overlap FFT).
+            const std::size_t fftStep = static_cast<std::size_t>(m_settings.m_fftSize);
+            const std::size_t cwtTotal = fftStep * kCwtTimeSteps;
+            const std::size_t insertBase = cwtTotal - fftStep;  // start of the new-samples region
+            std::size_t samplesNeeded = fftStep - m_cwtBufferFill;
 
             if (todo >= samplesNeeded)
             {
-                std::copy(begin, begin + samplesNeeded, m_cwtBuffer.begin() + m_cwtBufferFill);
+                std::copy(begin, begin + samplesNeeded, m_cwtBuffer.begin() + insertBase + m_cwtBufferFill);
                 begin += samplesNeeded;
                 performCWT(positiveOnly);
+                // Slide history: discard oldest fftSize samples so the tail is ready for the next step.
+                std::copy(m_cwtBuffer.begin() + fftStep, m_cwtBuffer.end(), m_cwtBuffer.begin());
                 m_cwtBufferFill = 0;
                 m_needMoreSamples = false;
             }
             else
             {
-                std::copy(begin, end, m_cwtBuffer.begin() + m_cwtBufferFill);
+                std::copy(begin, end, m_cwtBuffer.begin() + insertBase + m_cwtBufferFill);
                 begin = end;
                 m_cwtBufferFill += todo;
                 m_needMoreSamples = true;
@@ -238,24 +252,29 @@ void SpectrumVis::feed(const SampleVector::const_iterator& cbegin, const SampleV
 
         if (m_settings.m_transformType == SpectrumSettings::CWT)
         {
-            // CWT uses a separate, larger accumulation buffer (kCwtTimeSteps sub-windows).
-            // No frame overlap: the buffer resets to 0 after every processed frame.
-            const std::size_t cwtFrameSize = static_cast<std::size_t>(m_settings.m_fftSize) * kCwtTimeSteps;
-            std::size_t samplesNeeded = cwtFrameSize - m_cwtBufferFill;
+            // Sliding window: collect fftSize new samples per step.
+            // New samples fill the tail of m_cwtBuffer; on completion the buffer is slid left
+            // by fftSize so the oldest fftSize samples are discarded and the history is kept.
+            // This gives one output row per fftSize samples (same rate as no-overlap FFT).
+            const std::size_t fftStep = static_cast<std::size_t>(m_settings.m_fftSize);
+            const std::size_t cwtTotal = fftStep * kCwtTimeSteps;
+            const std::size_t insertBase = cwtTotal - fftStep;
+            std::size_t samplesNeeded = fftStep - m_cwtBufferFill;
 
             if (todo >= samplesNeeded)
             {
-                auto it = m_cwtBuffer.begin() + m_cwtBufferFill;
+                auto it = m_cwtBuffer.begin() + insertBase + m_cwtBufferFill;
                 for (std::size_t i = 0; i < samplesNeeded; ++i, ++begin) {
                     *it++ = Complex(begin->real() / m_scalef, begin->imag() / m_scalef);
                 }
                 performCWT(positiveOnly);
+                std::copy(m_cwtBuffer.begin() + fftStep, m_cwtBuffer.end(), m_cwtBuffer.begin());
                 m_cwtBufferFill = 0;
                 m_needMoreSamples = false;
             }
             else
             {
-                auto it = m_cwtBuffer.begin() + m_cwtBufferFill;
+                auto it = m_cwtBuffer.begin() + insertBase + m_cwtBufferFill;
                 for (; begin < end; ++begin) {
                     *it++ = Complex(begin->real() / m_scalef, begin->imag() / m_scalef);
                 }
@@ -369,106 +388,108 @@ void SpectrumVis::performFFT(bool positiveOnly)
 
 void SpectrumVis::performCWT(bool positiveOnly)
 {
-    const int fftSize = m_settings.m_fftSize;
-    const int halfSize = fftSize / 2;
+    const int fftSize    = m_settings.m_fftSize;
+    const int cwtFftSize = fftSize * kCwtTimeSteps;  // Large N_total-point FFT size
+    const int halfSize   = fftSize / 2;
 
-    // Reuse a single power buffer across sub-windows to avoid repeated heap allocation.
-    std::vector<float> fftPower(fftSize);
+    // Apply the large analysis window and compute one N_total-point FFT over the full
+    // sliding history buffer.  Using a larger FFT than the display size means that
+    // low-frequency output bins are resolved from proportionally more samples
+    // (constant-Q / scale-dependent resolution) — the defining CWT property.
+    m_cwtWindow.apply(m_cwtBuffer.data(), m_cwtFft->in());
+    m_cwtFft->transform();
 
-    // Each sub-window occupies fftSize samples in m_cwtBuffer (non-overlapping).
-    // One spectrum row is emitted per sub-window, giving kCwtTimeSteps rows per frame.
-    for (int t = 0; t < kCwtTimeSteps; ++t)
+    const Complex* fftOut = m_cwtFft->out();
+
+    // Compute linear power spectrum from the large FFT (natural order: 0..N_total-1).
+    for (int i = 0; i < cwtFftSize; i++) {
+        const Complex& c = fftOut[i];
+        m_cwtFftPower[i] = (c.real() * c.real() + c.imag() * c.imag()) * m_cwtPowFFTMul;
+    }
+
+    // Accumulate CWT power using the precomputed, pre-normalised log-spaced weight tables.
+    // Tables are indexed into the large FFT, giving finer absolute frequency resolution at
+    // low output bins (narrow Gaussian in a high-resolution spectrum).
+    if (positiveOnly)
     {
-        // Apply window function to sub-window at offset t*fftSize and compute FFT.
-        m_window.apply(m_cwtBuffer.data() + static_cast<std::size_t>(t) * fftSize, m_fft->in());
-        m_fft->transform();
+        for (int i = 0; i < halfSize; i++)
+        {
+            float power = 0.0f;
+            for (const auto& entry : m_cwtWeightsPos[i]) {
+                power += m_cwtFftPower[entry.first] * entry.second;
+            }
+            m_powerSpectrum[i * 2]     = power;
+            m_powerSpectrum[i * 2 + 1] = power;
+        }
+    }
+    else
+    {
+        for (int kOut = 0; kOut < fftSize; kOut++)
+        {
+            float power = 0.0f;
+            for (const auto& entry : m_cwtWeightsFull[kOut]) {
+                power += m_cwtFftPower[entry.first] * entry.second;
+            }
+            m_powerSpectrum[kOut] = power;
+        }
+    }
 
-        const Complex* fftOut = m_fft->out();
+    // Track spectrum maximum (linear power, before dB conversion).
+    m_specMax = *std::max_element(&m_powerSpectrum[0], &m_powerSpectrum[fftSize]);
 
-        // Compute linear power spectrum from FFT output (natural/unshifted order: 0..N-1).
+    // Perform math operation on linear value.
+    if (m_settings.m_mathMode != SpectrumSettings::MathModeNone) {
+        mathLinear(m_powerSpectrum);
+    }
+
+    // Convert to dB.
+    if (!m_settings.m_linear) {
         for (int i = 0; i < fftSize; i++) {
-            const Complex& c = fftOut[i];
-            fftPower[i] = (c.real() * c.real() + c.imag() * c.imag()) * m_powFFTMul;
+            m_powerSpectrum[i] = m_mult * log2fapprox(m_powerSpectrum[i]);
         }
+    }
 
-        // Accumulate CWT power using the precomputed, pre-normalised log-spaced weight tables.
-        // Each entry is {jNat, w_normalised}; power for the DC bin stays 0.
-        if (positiveOnly)
-        {
-            for (int i = 0; i < halfSize; i++)
-            {
-                float power = 0.0f;
-                for (const auto& entry : m_cwtWeightsPos[i]) {
-                    power += fftPower[entry.first] * entry.second;
-                }
-                m_powerSpectrum[i * 2] = power;
-                m_powerSpectrum[i * 2 + 1] = power;
-            }
-        }
-        else
-        {
-            for (int kOut = 0; kOut < fftSize; kOut++)
-            {
-                float power = 0.0f;
-                for (const auto& entry : m_cwtWeightsFull[kOut]) {
-                    power += fftPower[entry.first] * entry.second;
-                }
-                m_powerSpectrum[kOut] = power;
-            }
-        }
+    // Perform math operation on dB value.
+    if (m_settings.m_mathMode != SpectrumSettings::MathModeNone) {
+        mathDB(m_powerSpectrum);
+    }
 
-        // Track spectrum maximum (linear power, before dB conversion).
-        m_specMax = *std::max_element(&m_powerSpectrum[0], &m_powerSpectrum[fftSize]);
+    if (m_settings.mathAverageUsed()) {
+        m_mathMovingAverage.nextAverage();
+    }
 
-        // Perform math operation on linear value.
-        if (m_settings.m_mathMode != SpectrumSettings::MathModeNone) {
-            mathLinear(m_powerSpectrum);
-        }
+    // Send the single CWT spectrum row to the visualisation.
+    if (m_glSpectrum) {
+        m_glSpectrum->newSpectrum(&m_powerSpectrum[0], fftSize);
+    }
 
-        // Convert to dB.
-        if (!m_settings.m_linear) {
-            for (int i = 0; i < fftSize; i++) {
-                m_powerSpectrum[i] = m_mult * log2fapprox(m_powerSpectrum[i]);
-            }
-        }
-
-        // Perform math operation on dB value.
-        if (m_settings.m_mathMode != SpectrumSettings::MathModeNone) {
-            mathDB(m_powerSpectrum);
-        }
-
-        if (m_settings.mathAverageUsed()) {
-            m_mathMovingAverage.nextAverage();
-        }
-
-        // Send one row to the visualisation for this time step.
-        if (m_glSpectrum) {
-            m_glSpectrum->newSpectrum(&m_powerSpectrum[0], fftSize);
-        }
-
-        // Web socket spectrum connections.
-        if (m_wsSpectrum.socketOpened())
-        {
-            m_wsSpectrum.newSpectrum(
-                m_powerSpectrum,
-                fftSize,
-                m_centerFrequency,
-                m_sampleRate,
-                m_settings.m_linear,
-                m_settings.m_ssb,
-                m_settings.m_usb
-            );
-        }
+    // Web socket spectrum connections.
+    if (m_wsSpectrum.socketOpened())
+    {
+        m_wsSpectrum.newSpectrum(
+            m_powerSpectrum,
+            fftSize,
+            m_centerFrequency,
+            m_sampleRate,
+            m_settings.m_linear,
+            m_settings.m_ssb,
+            m_settings.m_usb
+        );
     }
 }
 
 void SpectrumVis::buildCWTWeightTables(int fftSize)
 {
-    const int halfSize = fftSize / 2;
+    const int halfSize   = fftSize / 2;
+    const int cwtFftSize = fftSize * kCwtTimeSteps;    // Large N_total-point FFT size
+    const int cwtHalf    = cwtFftSize / 2;             // = halfSize * kCwtTimeSteps
 
-    // Map output slot index i (0..n-1) to a logarithmically spaced FFT bin in [lo, hi].
-    // Uses the standard log-space formula: lo * (hi/lo)^(i/(n-1)).
-    // When n==1 the single slot maps to lo.
+    // Map output display-bin index i (0..n-1) to a log-spaced centre bin in the large FFT.
+    // lo = kCwtTimeSteps maps to the lowest positive frequency (1/fftSize) and
+    // hi = cwtHalf maps to Nyquist.  The result is kCwtTimeSteps times the centre bin
+    // of the old fftSize-based tables; this larger absolute bin index means the Gaussian
+    // spread also grows proportionally, pulling from more high-resolution FFT bins at every
+    // scale — i.e. constant relative bandwidth (constant-Q).
     auto logCenterBin = [](int i, int n, int lo, int hi) -> int {
         if (n <= 1) return lo;
         const double t = static_cast<double>(i) / static_cast<double>(n - 1);
@@ -478,16 +499,8 @@ void SpectrumVis::buildCWTWeightTables(int fftSize)
     };
 
     // --- Full (two-sided) mode ---
-    // Output layout (centered coordinates): kOut=0 → k=-halfSize (most negative),
-    // kOut=halfSize → k=0 (DC, skipped), kOut=fftSize-1 → k=halfSize-1 (most positive).
-    //
-    // Log-spacing:
-    //   Negative side (kOut=0..halfSize-1): halfSize bins log-spaced, |k|=1..halfSize.
-    //     i_neg = halfSize-1-kOut, so i_neg=0 at kOut=halfSize-1 (k=-1) and
-    //     i_neg=halfSize-1 at kOut=0 (k=-halfSize).
-    //   Positive side (kOut=halfSize+1..fftSize-1): halfSize-1 bins log-spaced, k=1..halfSize-1.
-    //     i_pos = kOut-halfSize-1, so i_pos=0 at kOut=halfSize+1 (k=1) and
-    //     i_pos=halfSize-2 at kOut=fftSize-1 (k=halfSize-1).
+    // Output layout (centred): kOut=0 → most-negative, kOut=halfSize → DC (skipped),
+    // kOut=fftSize-1 → most-positive.
     m_cwtWeightsFull.assign(fftSize, {});
     for (int kOut = 0; kOut < fftSize; kOut++)
     {
@@ -498,43 +511,40 @@ void SpectrumVis::buildCWTWeightTables(int fftSize)
         int k;
         if (kOut > halfSize)
         {
-            // Positive side: halfSize-1 output bins, log-spaced k = 1..halfSize-1
-            const int iPosSlot = kOut - halfSize - 1;          // 0..halfSize-2
-            k = logCenterBin(iPosSlot, halfSize - 1, 1, halfSize - 1);
+            // Positive side: halfSize-1 output bins, log-spaced k in [kCwtTimeSteps, cwtHalf - kCwtTimeSteps]
+            const int iPosSlot = kOut - halfSize - 1;
+            k = logCenterBin(iPosSlot, halfSize - 1, kCwtTimeSteps, cwtHalf - kCwtTimeSteps);
         }
         else
         {
-            // Negative side: halfSize output bins, log-spaced |k| = 1..halfSize
-            const int iNegSlot = halfSize - 1 - kOut;          // 0..halfSize-1
-            k = -logCenterBin(iNegSlot, halfSize, 1, halfSize);
+            // Negative side: halfSize output bins, log-spaced |k| in [kCwtTimeSteps, cwtHalf]
+            const int iNegSlot = halfSize - 1 - kOut;
+            k = -logCenterBin(iNegSlot, halfSize, kCwtTimeSteps, cwtHalf);
         }
 
-        const int kAbs = std::abs(k);
-        // kSigmaCutoff * kAbs gives the 4-sigma bin range; +2 adds a small safety margin.
+        const int kAbs     = std::abs(k);
         const int rangeBins = static_cast<int>(kSigmaCutoff * kAbs) + 2;
 
         int jCentMin, jCentMax;
         if (k > 0) {
             jCentMin = std::max(1, k - rangeBins);
-            jCentMax = std::min(halfSize - 1, k + rangeBins);
+            jCentMax = std::min(cwtHalf - 1, k + rangeBins);
         } else {
-            jCentMin = std::max(-halfSize, k - rangeBins);
+            jCentMin = std::max(-cwtHalf, k - rangeBins);
             jCentMax = std::min(-1, k + rangeBins);
         }
 
-        // First pass: compute raw weights and their sum for normalisation.
         float norm = 0.0f;
         for (int jCent = jCentMin; jCent <= jCentMax; jCent++) {
             const float ratio = static_cast<float>(jCent) / static_cast<float>(k);
             norm += std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
         }
 
-        // Second pass: store pre-normalised weights alongside the natural FFT index.
         auto& bin = m_cwtWeightsFull[kOut];
         bin.reserve(jCentMax - jCentMin + 1);
         if (norm > 0.0f) {
             for (int jCent = jCentMin; jCent <= jCentMax; jCent++) {
-                const int jNat = (jCent + fftSize) % fftSize;
+                const int jNat = (jCent + cwtFftSize) % cwtFftSize;
                 const float ratio = static_cast<float>(jCent) / static_cast<float>(k);
                 const float w = std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
                 bin.emplace_back(jNat, w / norm);
@@ -543,25 +553,21 @@ void SpectrumVis::buildCWTWeightTables(int fftSize)
     }
 
     // --- Positive-only mode ---
-    // halfSize output slots, each log-spaced to cover k = 1..halfSize (including Nyquist).
-    // i=0 → k=1 (lowest positive), i=halfSize-1 → k=halfSize (Nyquist).
-    // Natural FFT index for positive bins equals the centered index (jNat == j).
+    // halfSize output slots, each log-spaced to cover k = kCwtTimeSteps..cwtHalf (including Nyquist).
     m_cwtWeightsPos.assign(halfSize, {});
     for (int i = 0; i < halfSize; i++)
     {
-        const int k = logCenterBin(i, halfSize, 1, halfSize);
+        const int k        = logCenterBin(i, halfSize, kCwtTimeSteps, cwtHalf);
         const int rangeBins = static_cast<int>(kSigmaCutoff * k) + 2;
-        const int jMin = std::max(1, k - rangeBins);
-        const int jMax = std::min(halfSize, k + rangeBins); // include Nyquist (halfSize)
+        const int jMin     = std::max(1, k - rangeBins);
+        const int jMax     = std::min(cwtHalf, k + rangeBins);
 
-        // First pass: normalisation sum.
         float norm = 0.0f;
         for (int j = jMin; j <= jMax; j++) {
             const float ratio = static_cast<float>(j) / static_cast<float>(k);
             norm += std::exp(-kHalfOmega0Sq * (ratio - 1.0f) * (ratio - 1.0f));
         }
 
-        // Second pass: store pre-normalised (jNat == j for positive bins).
         auto& bin = m_cwtWeightsPos[i];
         bin.reserve(jMax - jMin + 1);
         if (norm > 0.0f) {
@@ -1108,21 +1114,54 @@ void SpectrumVis::applySettings(const SpectrumSettings& settings, bool force)
     if ((fftSize != m_settings.m_fftSize)
      || (settings.m_transformType != m_settings.m_transformType) || force)
     {
-        if (settings.m_transformType == SpectrumSettings::CWT) {
+        const int cwtFftSize = fftSize * kCwtTimeSteps;  // Large N_total-point FFT size
+
+        if (settings.m_transformType == SpectrumSettings::CWT)
+        {
+            // Release the previous CWT FFT engine when the size changes while CWT is active.
+            if (m_cwtFft) {
+                fftFactory->releaseEngine(
+                    static_cast<unsigned int>(m_settings.m_fftSize) * kCwtTimeSteps,
+                    false, m_cwtFftEngineSequence);
+            }
+            m_cwtFftEngineSequence = fftFactory->getEngine(
+                static_cast<unsigned int>(cwtFftSize), false, &m_cwtFft);
+            m_cwtPowFFTMul = 1.0f / (static_cast<float>(cwtFftSize) * static_cast<float>(cwtFftSize));
             buildCWTWeightTables(fftSize);
-            // Allocate the CWT accumulation buffer: kCwtTimeSteps non-overlapping sub-windows.
-            m_cwtBuffer.resize(static_cast<std::size_t>(fftSize) * kCwtTimeSteps);
+            m_cwtFftPower.resize(static_cast<std::size_t>(cwtFftSize));
+            // Zero-initialise the history buffer so the first kCwtTimeSteps-1 rows start cleanly.
+            m_cwtBuffer.assign(static_cast<std::size_t>(cwtFftSize), Complex{0.0f, 0.0f});
             m_cwtBufferFill = 0;
-        } else {
-            // Release the weight-table and sample-buffer memory when CWT is no longer active.
+        }
+        else if (m_cwtFft)
+        {
+            // Leaving CWT mode: release engine and free all associated memory.
+            fftFactory->releaseEngine(
+                static_cast<unsigned int>(m_settings.m_fftSize) * kCwtTimeSteps,
+                false, m_cwtFftEngineSequence);
+            m_cwtFft = nullptr;
             m_cwtWeightsFull.clear();
             m_cwtWeightsFull.shrink_to_fit();
             m_cwtWeightsPos.clear();
             m_cwtWeightsPos.shrink_to_fit();
             m_cwtBuffer.clear();
             m_cwtBuffer.shrink_to_fit();
+            m_cwtFftPower.clear();
+            m_cwtFftPower.shrink_to_fit();
             m_cwtBufferFill = 0;
         }
+    }
+
+    // Recreate the CWT analysis window whenever its type or the FFT size changes.
+    // This is a fast operation so it is safe to run even if only the window type changed
+    // without a size or mode change (the engine block above handles size/mode changes).
+    if (settings.m_transformType == SpectrumSettings::CWT
+     && ((fftSize != m_settings.m_fftSize)
+      || (settings.m_fftWindow != m_settings.m_fftWindow)
+      || (settings.m_transformType != m_settings.m_transformType)
+      || force))
+    {
+        m_cwtWindow.create(settings.m_fftWindow, fftSize * kCwtTimeSteps);
     }
 
     m_settings = settings;

@@ -200,13 +200,26 @@ private:
 
     // CWT precomputed weight tables. Each entry is a list of (jNat, pre-normalised weight) pairs.
     // Rebuilt in buildCWTWeightTables() whenever the FFT size changes.
+    // Indices reference the large N_total = kCwtTimeSteps * fftSize FFT.
     std::vector<std::vector<std::pair<int,float>>> m_cwtWeightsFull; //!< Per-bin tables for two-sided CWT
     std::vector<std::vector<std::pair<int,float>>> m_cwtWeightsPos;  //!< Per-bin tables for positive-only CWT
 
-    // CWT sample accumulation buffer.  kCwtTimeSteps sub-windows of fftSize samples each are
-    // collected here before performCWT() processes them and emits one spectrum row per sub-window.
+    // CWT large FFT engine (size = kCwtTimeSteps * fftSize).  Using a larger FFT than the
+    // display fftSize gives low-frequency bins a proportionally finer frequency resolution
+    // (constant-Q / scale-dependent resolution), which is the defining property of the CWT.
+    FFTEngine*   m_cwtFft;                  //!< Forward FFT engine of size kCwtTimeSteps * fftSize
+    unsigned int m_cwtFftEngineSequence;    //!< Engine-pool sequence token for m_cwtFft
+    FFTWindow    m_cwtWindow;               //!< Analysis window applied to the large CWT buffer
+    Real         m_cwtPowFFTMul;            //!< 1 / (cwtFftSize^2) — normalisation for the large FFT
+    std::vector<float> m_cwtFftPower;       //!< Pre-allocated linear-power buffer (size = kCwtTimeSteps * fftSize)
+
+    // Sliding sample history buffer used by the CWT.
+    // Holds the most recent N_total = kCwtTimeSteps * fftSize samples; a new row is emitted
+    // every fftSize samples as the window slides forward, giving scale-dependent resolution:
+    // low frequencies benefit from the full N_total-sample analysis window while the output
+    // rate (one row per fftSize samples) equals the no-overlap FFT rate.
     std::vector<Complex> m_cwtBuffer;
-    int m_cwtBufferFill; //!< Number of samples currently held in m_cwtBuffer
+    int m_cwtBufferFill; //!< Number of new samples placed in the current fftSize-sized step (0..fftSize)
 
     SpectrumSettings m_settings;
 	int m_overlapSize;

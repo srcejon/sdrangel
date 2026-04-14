@@ -1,0 +1,65 @@
+project(demodsstv)
+
+set(demodsstv_SOURCES
+    sstvdemod.cpp
+    sstvdemodsettings.cpp
+    sstvdemodbaseband.cpp
+    sstvdemodsink.cpp
+    sstvdemodplugin.cpp
+    sstvdemodwebapiadapter.cpp
+)
+
+set(demodsstv_HEADERS
+    sstvdemod.h
+    sstvdemodsettings.h
+    sstvdemodbaseband.h
+    sstvdemodsink.h
+    sstvdemodplugin.h
+    sstvdemodwebapiadapter.h
+)
+
+include_directories(
+    ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client
+)
+
+if(NOT SERVER_MODE)
+    set(demodsstv_SOURCES
+        ${demodsstv_SOURCES}
+        sstvdemodgui.cpp
+        sstvdemodgui.ui
+    )
+    set(demodsstv_HEADERS
+        ${demodsstv_HEADERS}
+        sstvdemodgui.h
+    )
+
+    set(TARGET_NAME demodsstv)
+    set(TARGET_LIB "Qt::Widgets")
+    set(TARGET_LIB_GUI "sdrgui")
+    set(INSTALL_FOLDER ${INSTALL_PLUGINS_DIR})
+else()
+    set(TARGET_NAME demodssrvssstv)
+    set(TARGET_LIB "")
+    set(TARGET_LIB_GUI "")
+    set(INSTALL_FOLDER ${INSTALL_PLUGINSSRV_DIR})
+endif()
+
+add_library(${TARGET_NAME} SHARED
+    ${demodsstv_SOURCES}
+    ${demodsstv_HEADERS}
+)
+
+target_link_libraries(${TARGET_NAME}
+    Qt::Core
+    ${TARGET_LIB}
+    sdrbase
+    ${TARGET_LIB_GUI}
+    swagger
+)
+
+install(TARGETS ${TARGET_NAME} DESTINATION ${INSTALL_FOLDER})
+
+# Install debug symbols
+if (WIN32)
+    install(FILES $<TARGET_PDB_FILE:${TARGET_NAME}> CONFIGURATIONS Debug RelWithDebInfo DESTINATION ${INSTALL_FOLDER} )
+endif()

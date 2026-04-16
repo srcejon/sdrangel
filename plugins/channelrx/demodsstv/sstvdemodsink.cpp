@@ -133,20 +133,18 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     //
     // fmDemod = A·cos(2π·f_tone·n/Fs) is a real narrowband signal whose
     // instantaneous frequency f_tone (1200–2300 Hz) carries the SSTV data.
-    // To measure f_tone we form the complex analytic signal using a 15-tap
-    // Type-III FIR Hilbert approximation (delay = 7 samples):
+    // To measure f_tone we form the complex analytic signal using a 63-tap
+    // Type-III FIR Hilbert approximation (delay = 31 samples):
     //
-    //   Q[n] = h1·(x[n-6] − x[n-8])         h1 = 2/π
-    //        + h3·(x[n-4] − x[n-10])         h3 = 2/(3π)
-    //        + h5·(x[n-2] − x[n-12])         h5 = 2/(5π)
-    //        + h7·(x[n  ] − x[n-14])         h7 = 2/(7π)
+    //   Q[n] = Σ_{k=1,3,…,31}  (2/(k·π)) · (x[n−31+k] − x[n−31−k])
     //
-    //   z[n] = Complex(x[n-7], Q[n])   → z ≈ A·e^(+j·2π·f_tone·(n-7)/Fs)
+    //   z[n] = Complex(x[n−31], −Q[n])  →  z ≈ A·e^(+j·2π·f_tone·(n−31)/Fs)
     //
     // Phase-discriminating z gives f_tone directly in Hz (fmScaling = Fs/2).
-    // The 7-sample delay on the real component (<1 pixel period) introduces
-    // no blurring; non-flat magnitude across the 1200–2300 Hz band causes
-    // only a small average frequency error that averages away over each pixel.
+    // The 63-tap design achieves ≥98% amplitude accuracy at 1200 Hz, keeping
+    // the per-sample frequency oscillation well within ±20 Hz of the true tone.
+    // The 15-tap predecessor only reached 73% accuracy at 1200 Hz, causing
+    // ~880–1635 Hz oscillation that perpetually reset the sync counter.
     // -----------------------------------------------------------------------
 
     // Write new fmDemod sample into the ring buffer.
@@ -155,20 +153,33 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     // Helper: access x[n-k] from the ring buffer.
     const int idx = m_hilbertIdx;
     auto get = [&](int k) -> Real {
-        return m_hilbertBuf[(idx - k + 15) % 15];
+        return m_hilbertBuf[(idx - k + 63) % 63];
     };
 
-    // Hilbert FIR Q component (sign chosen so z = A·e^(+jωt)).
-    Real hilbert = k_h1 * (get(6) - get(8))
-                 + k_h3 * (get(4) - get(10))
-                 + k_h5 * (get(2) - get(12))
-                 + k_h7 * (get(0) - get(14));
+    // 63-tap Hilbert FIR Q component (odd taps k=1,3,...,31 around centre 31).
+    // Each term: k_hilbert[i] * (get(31-k) - get(31+k)), where k = 2*i+1.
+    Real hilbert = k_hilbert[ 0] * (get(30) - get(32))
+                 + k_hilbert[ 1] * (get(28) - get(34))
+                 + k_hilbert[ 2] * (get(26) - get(36))
+                 + k_hilbert[ 3] * (get(24) - get(38))
+                 + k_hilbert[ 4] * (get(22) - get(40))
+                 + k_hilbert[ 5] * (get(20) - get(42))
+                 + k_hilbert[ 6] * (get(18) - get(44))
+                 + k_hilbert[ 7] * (get(16) - get(46))
+                 + k_hilbert[ 8] * (get(14) - get(48))
+                 + k_hilbert[ 9] * (get(12) - get(50))
+                 + k_hilbert[10] * (get(10) - get(52))
+                 + k_hilbert[11] * (get( 8) - get(54))
+                 + k_hilbert[12] * (get( 6) - get(56))
+                 + k_hilbert[13] * (get( 4) - get(58))
+                 + k_hilbert[14] * (get( 2) - get(60))
+                 + k_hilbert[15] * (get( 0) - get(62));
 
-    // Analytic signal: real part delayed by 7 samples, imaginary = Hilbert FIR.
-    // The FIR computes Q = −sin(ω·(n−7)) (note the sign), so we negate it here
-    // to form z = cos(ω·(n−7)) + j·sin(ω·(n−7)) = e^{+jω·(n−7)}, which gives
-    // positive phase rotation and hence positive frequency from the discriminator.
-    Complex audioAnalytic(get(7), -hilbert);
+    // Analytic signal: real part delayed by 31 samples, imaginary = Hilbert FIR.
+    // The FIR computes Q = −sin(ω·(n−31)) so we negate it to form
+    // z = cos(ω·(n−31)) + j·sin(ω·(n−31)) = e^{+jω·(n−31)},
+    // giving positive phase rotation and hence positive frequency.
+    Complex audioAnalytic(get(31), -hilbert);
 
     // Phase discriminate; m_audioPhaDiscri has fmScaling = Fs/2,
     // so fmDev·(Fs/2) = (2·f/Fs)·(Fs/2) = f → output is f_tone in Hz.
@@ -177,7 +188,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     float freq = m_audioPhaDiscri.phaseDiscriminatorDelta(audioAnalytic, audioMagsq, audioDev);
 
     // Advance ring-buffer write pointer.
-    m_hilbertIdx = (m_hilbertIdx + 1) % 15;
+    m_hilbertIdx = (m_hilbertIdx + 1) % 63;
 
     // -----------------------------------------------------------------------
     // SSTV PD120 state machine; 'freq' is the reconstructed tone frequency (Hz)

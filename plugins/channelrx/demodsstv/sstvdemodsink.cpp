@@ -36,7 +36,9 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pixelSamplePos(0.0f),
     m_pixelSampleCount(0),
     m_lineIndex(0),
-    m_sdftIdx(0)
+    m_sdftIdx(0),
+    m_porchFreqAccum(0.0f),
+    m_aboveThresholdCount(0)
 {
     m_magsq = 0.0;
 
@@ -71,6 +73,8 @@ void SSTVDemodSink::resetDecoder()
     m_pixelSamplePos = 0.0f;
     m_pixelSampleCount = 0;
     m_lineIndex = 0;
+    m_porchFreqAccum = 0.0f;
+    m_aboveThresholdCount = 0;
 
     // Reset the sliding-DFT spectral moment state.
     memset(m_sdftBuf, 0, sizeof(m_sdftBuf));
@@ -180,32 +184,71 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     switch (m_state)
     {
     case WAITING_FOR_SYNC:
-        // Look for frequency dropping to sync level
-        if (freq < SSTVDEMOD_SYNC_THRESHOLD) {
+        // Look for frequency dropping to sync level.
+        // While above the threshold, count consecutive samples to detect the
+        // 1900 Hz leader tone that precedes each transmission's VIS code.
+        if (freq < SSTVDEMOD_SYNC_THRESHOLD)
+        {
+            // If the signal has been above threshold long enough to be a leader
+            // tone, this is the start of a new frame — reset the line counter.
+            if (m_aboveThresholdCount >= SSTVDEMOD_LEADER_SAMPLES) {
+                m_lineIndex = 0;
+            }
+            m_aboveThresholdCount = 0;
             transitionTo(IN_SYNC);
+        }
+        else
+        {
+            m_aboveThresholdCount++;
         }
         break;
 
     case IN_SYNC:
-        // Count samples while at sync level
+        // Count samples while at sync level.
         m_stateSampleCount++;
+
         if (freq >= SSTVDEMOD_SYNC_THRESHOLD)
         {
-            // Sync pulse ended — check if it was long enough to be valid
-            if (m_stateSampleCount >= SSTVDEMOD_SYNC_SAMPLES_MIN) {
+            // Sync pulse ended — accept only if within the valid duration window.
+            // VIS start/stop bits and "0" data bits are 30 ms (1440 samples),
+            // well above SYNC_SAMPLES_MAX (1200 samples = 25 ms), so they are
+            // rejected here, preventing false image-decode triggering.
+            if (m_stateSampleCount >= SSTVDEMOD_SYNC_SAMPLES_MIN &&
+                m_stateSampleCount <= SSTVDEMOD_SYNC_SAMPLES_MAX)
+            {
                 transitionTo(IN_PORCH);
-            } else {
-                // Too short — not a real sync pulse
+            }
+            else
+            {
                 transitionTo(WAITING_FOR_SYNC);
             }
+        }
+        else if (m_stateSampleCount > SSTVDEMOD_SYNC_SAMPLES_MAX)
+        {
+            // Still at sync level but already too long (e.g. a VIS 0-bit that
+            // never rises above the threshold within the valid window).
+            transitionTo(WAITING_FOR_SYNC);
         }
         break;
 
     case IN_PORCH:
-        // Wait for porch period to pass
+        // Wait for the porch period and validate its frequency.
+        // A genuine scan-line porch is at the black level (~1500 Hz); the data
+        // that follows a VIS code bit is at 1100–1300 Hz.  Discarding low-
+        // frequency "porches" eliminates any false syncs that slipped past the
+        // duration check above.
         m_stateSampleCount++;
-        if (m_stateSampleCount >= SSTVDEMOD_PORCH_SAMPLES) {
-            transitionTo(DECODING_Y_ODD);
+        m_porchFreqAccum += freq;
+        if (m_stateSampleCount >= SSTVDEMOD_PORCH_SAMPLES)
+        {
+            const float avgPorchFreq = m_porchFreqAccum / float(m_stateSampleCount);
+            if (avgPorchFreq >= SSTVDEMOD_PORCH_FREQ_MIN) {
+                transitionTo(DECODING_Y_ODD);
+            } else {
+                // Porch frequency too low — the preceding sync was not a real
+                // scan-line sync (most likely a VIS code element).
+                transitionTo(WAITING_FOR_SYNC);
+            }
         }
         break;
 
@@ -318,6 +361,17 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
 {
     m_state = newState;
     m_stateSampleCount = 0;
+
+    // Reset the porch frequency accumulator on every state change so that each
+    // new IN_PORCH entry starts with a clean average.
+    m_porchFreqAccum = 0.0f;
+
+    // When returning to WAITING_FOR_SYNC (rejected sync or end of frame) the
+    // above-threshold counter must restart so that only a genuinely long
+    // unbroken leader tone triggers a frame reset.
+    if (newState == WAITING_FOR_SYNC) {
+        m_aboveThresholdCount = 0;
+    }
 
     // Reset pixel accumulator when starting a new decoding section.
     // Also reset the SDFT window so that the N=128-sample history from the

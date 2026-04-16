@@ -46,18 +46,34 @@
 #define SSTVDEMOD_SYNC_THRESHOLD  1300.0f   // Below this = sync, above = pixel data
 
 // PD120 timing in milliseconds
-#define SSTVDEMOD_SYNC_MS         20.0f     // Sync pulse duration
-#define SSTVDEMOD_PORCH_MS        2.08f     // Porch duration after sync
-// Pixel time = (120000ms - 248*(20+2.08)ms) / (248*1920 pixels) = 0.24052 ms/pixel
-#define SSTVDEMOD_PIXEL_TIME_MS   0.24052f
+#define SSTVDEMOD_SYNC_MS         20.0f     // Scan-line sync pulse duration
+#define SSTVDEMOD_PORCH_MS        2.08f     // Porch duration after sync (at black level, 1500 Hz)
+// Measured pixel clock: 190 µs/pixel (empirically confirmed; gives ~96 s/frame for PD120).
+#define SSTVDEMOD_PIXEL_TIME_MS   0.190f
 
 // Timing in samples at SSTVDEMOD_CHANNEL_SAMPLE_RATE
-#define SSTVDEMOD_SYNC_SAMPLES    ((int)(SSTVDEMOD_SYNC_MS * SSTVDEMOD_CHANNEL_SAMPLE_RATE / 1000.0f))
-#define SSTVDEMOD_PORCH_SAMPLES   ((int)(SSTVDEMOD_PORCH_MS * SSTVDEMOD_CHANNEL_SAMPLE_RATE / 1000.0f))
+#define SSTVDEMOD_SYNC_SAMPLES      ((int)(SSTVDEMOD_SYNC_MS * SSTVDEMOD_CHANNEL_SAMPLE_RATE / 1000.0f))
+#define SSTVDEMOD_PORCH_SAMPLES     ((int)(SSTVDEMOD_PORCH_MS * SSTVDEMOD_CHANNEL_SAMPLE_RATE / 1000.0f))
 #define SSTVDEMOD_SAMPLES_PER_PIXEL (SSTVDEMOD_PIXEL_TIME_MS * SSTVDEMOD_CHANNEL_SAMPLE_RATE / 1000.0f)
 
-// Minimum sync pulse duration to be considered valid (75% of expected)
-#define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))
+// Scan-line sync pulse duration bounds (samples).
+// VIS start/stop bits and VIS "0" data bits are all 30 ms (1440 samples at 48 kHz),
+// which is longer than a real 20 ms scan-line sync.  Rejecting pulses outside
+// [MIN, MAX] prevents the VIS code from being decoded as image data.
+#define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))   // 720  – 15 ms lower bound
+#define SSTVDEMOD_SYNC_SAMPLES_MAX  ((int)(SSTVDEMOD_SYNC_SAMPLES * 1.25f))   // 1200 – 25 ms upper bound (< 30 ms VIS bits)
+
+// Minimum average frequency expected during the porch period (Hz).
+// A real porch is at the black level (1500 Hz); VIS data bits are 1100–1300 Hz.
+// Any "porch" whose average frequency falls below this threshold is treated as
+// VIS code data and the spurious sync is discarded.
+#define SSTVDEMOD_PORCH_FREQ_MIN    1450.0f
+
+// Minimum number of consecutive above-threshold samples that indicate a leader tone
+// (the 1900 Hz preamble transmitted before the VIS code).  Detecting the leader
+// resets the line index so that every new transmission starts at image row 0.
+// 200 ms * 48 kHz = 9600 samples; the actual leader is ≥ 300 ms.
+#define SSTVDEMOD_LEADER_SAMPLES    ((int)(200.0f * SSTVDEMOD_CHANNEL_SAMPLE_RATE / 1000.0f))
 
 
 class SSTVDemod;
@@ -194,6 +210,10 @@ private:
     float m_pixelAccum;        //!< Accumulated frequency value for current pixel
     float m_pixelSamplePos;    //!< Fractional sample position within current pixel period
     int m_pixelSampleCount;    //!< Actual number of samples accumulated in current pixel (denominator for average)
+
+    // VIS-code / leader-tone detection helpers
+    float m_porchFreqAccum;       //!< Accumulated frequency during the porch period (for porch-frequency validation)
+    int   m_aboveThresholdCount;  //!< Consecutive samples with freq ≥ SSTVDEMOD_SYNC_THRESHOLD (leader detection)
 
     // PD120 line buffer: one block = odd + even scan lines
     float m_yOdd[SSTVDEMOD_IMAGE_WIDTH];        //!< Y (luminance) values for odd line

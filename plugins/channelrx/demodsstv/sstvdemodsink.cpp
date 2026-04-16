@@ -165,7 +165,10 @@ void SSTVDemodSink::processOneSample(Complex &ci)
                  + k_h7 * (get(0) - get(14));
 
     // Analytic signal: real part delayed by 7 samples, imaginary = Hilbert FIR.
-    Complex audioAnalytic(get(7), hilbert);
+    // The FIR computes Q = −sin(ω·(n−7)) (note the sign), so we negate it here
+    // to form z = cos(ω·(n−7)) + j·sin(ω·(n−7)) = e^{+jω·(n−7)}, which gives
+    // positive phase rotation and hence positive frequency from the discriminator.
+    Complex audioAnalytic(get(7), -hilbert);
 
     // Phase discriminate; m_audioPhaDiscri has fmScaling = Fs/2,
     // so fmDev·(Fs/2) = (2·f/Fs)·(Fs/2) = f → output is f_tone in Hz.

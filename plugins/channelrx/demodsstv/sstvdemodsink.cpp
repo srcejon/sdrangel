@@ -185,9 +185,16 @@ void SSTVDemodSink::processOneSample(Complex &ci)
 
     // Phase discriminate; m_audioPhaDiscri has fmScaling = Fs/2,
     // so fmDev·(Fs/2) = (2·f/Fs)·(Fs/2) = f → output is f_tone in Hz.
-    double audioMagsq;
-    Real   audioDev;
-    float freq = m_audioPhaDiscri.phaseDiscriminatorDelta(audioAnalytic, audioMagsq, audioDev);
+    //
+    // Use phaseDiscriminator (conj(prev)·current, exact std::atan2) rather than
+    // phaseDiscriminatorDelta (absolute atan2_approximation2), because the
+    // approximation has a ~0.0083 rad step discontinuity at its branch boundary
+    // |z| = 1.  That step fires four times per signal cycle and causes ±63 Hz
+    // frequency spikes regardless of the Hilbert amplitude accuracy:
+    //   spike = 0.0083/π × (Fs/2) = 0.0083/π × 24000 ≈ 63 Hz.
+    // With phaseDiscriminator the angle of (conj(prev)·current) is always ≪ 1 rad
+    // (≈ ω per sample), so the branch boundary is never reached.
+    float freq = m_audioPhaDiscri.phaseDiscriminator(audioAnalytic);
 
     // Advance ring-buffer write pointer.
     m_hilbertIdx = (m_hilbertIdx + 1) % 63;

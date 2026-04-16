@@ -41,7 +41,8 @@ SSTVDemodSink::SSTVDemodSink() :
 
     // Precompute SDFT twiddle factors e^{+j·2π·k/N} for k = SDFT_K_STORE_MIN..SDFT_K_STORE_MAX.
     for (int i = 0; i < SDFT_NUM_BINS; i++) {
-        const float angle = 2.0f * float(M_PI) * float(SDFT_K_STORE_MIN + i) / float(N_SDFT);
+        // Compute in double to preserve M_PI accuracy before narrowing to float.
+        const float angle = static_cast<float>(2.0 * M_PI * double(SDFT_K_STORE_MIN + i) / double(N_SDFT));
         m_sdftTwiddle[i] = Complex(std::cos(angle), std::sin(angle));
     }
 
@@ -169,6 +170,8 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     {
         const int i = k - SDFT_K_STORE_MIN;
         // Hann-window: Xw[k] = 0.5·X[k] − 0.25·X[k−1] − 0.25·X[k+1]
+        // i = k − SDFT_K_STORE_MIN; loop range k=K_SUM_MIN..K_SUM_MAX ensures
+        // i−1 >= 0 (k_sum_min−1 = k_store_min) and i+1 < SDFT_NUM_BINS.
         const Complex xw = 0.5f  * m_sdftBins[i]
                          - 0.25f * m_sdftBins[i - 1]
                          - 0.25f * m_sdftBins[i + 1];

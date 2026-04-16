@@ -161,11 +161,11 @@ private:
     // Bins k=3–7 (1125–2625 Hz) span the full SSTV tone range 1200–2300 Hz.
     // Bins k=2 and k=8 are stored as well to build the Hann correction.
     // -----------------------------------------------------------------------
-    static constexpr int N_SDFT           = 128; //!< Sliding DFT window length (samples)
-    static constexpr int SDFT_K_STORE_MIN = 2;   //!< Lowest stored bin  (= K_SUM_MIN − 1)
-    static constexpr int SDFT_K_STORE_MAX = 8;   //!< Highest stored bin (= K_SUM_MAX + 1)
-    static constexpr int SDFT_K_SUM_MIN   = 3;   //!< First bin in the moment sum
-    static constexpr int SDFT_K_SUM_MAX   = 7;   //!< Last  bin in the moment sum
+    static constexpr int N_SDFT           = 128; //!< Sliding DFT window length (samples); bin width = Fs/N = 375 Hz
+    static constexpr int SDFT_K_STORE_MIN = 2;   //!< Lowest stored bin  (k=2 → 750 Hz; one below K_SUM_MIN for Hann)
+    static constexpr int SDFT_K_STORE_MAX = 8;   //!< Highest stored bin (k=8 → 3000 Hz; one above K_SUM_MAX for Hann)
+    static constexpr int SDFT_K_SUM_MIN   = 3;   //!< First bin in the moment sum (k=3 → 1125 Hz, below sync 1200 Hz)
+    static constexpr int SDFT_K_SUM_MAX   = 7;   //!< Last  bin in the moment sum (k=7 → 2625 Hz, above white 2300 Hz)
     static constexpr int SDFT_NUM_BINS    = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 7
 
     float   m_sdftBuf[N_SDFT];            //!< Circular ring buffer of fmDemod samples

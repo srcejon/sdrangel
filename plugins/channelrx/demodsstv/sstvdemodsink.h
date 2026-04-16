@@ -133,7 +133,20 @@ private:
     MessageQueue *m_messageQueueToChannel;
 
     MovingAverageUtil<Real, double, 16> m_movingAverage;
-    PhaseDiscriminators m_phaseDiscri;   //!< RF FM discriminator
+    PhaseDiscriminators m_phaseDiscri;      //!< RF FM discriminator
+    PhaseDiscriminators m_audioPhaDiscri;   //!< Audio FM discriminator (Stage 2)
+
+    // Hilbert FIR ring buffer for forming the analytic signal from fmDemod.
+    // 15-tap Type-III FIR (unwindowed ideal coefficients), delay = 7 samples.
+    // Coefficients: h[k] = 2/(k*π) for odd k=1,3,5,7; sign chosen so that
+    // z = (x[n-7], hilbert[n]) gives z ≈ A*e^(+jω*(n-7)) for x = A*cos(ω*n).
+    static constexpr float k_h1 = 0.6366f;  //!< 2/π
+    static constexpr float k_h3 = 0.2122f;  //!< 2/(3π)
+    static constexpr float k_h5 = 0.1273f;  //!< 2/(5π)
+    static constexpr float k_h7 = 0.0909f;  //!< 2/(7π)
+
+    Real m_hilbertBuf[15];  //!< Circular ring buffer holding 15 past fmDemod values
+    int  m_hilbertIdx;      //!< Write index into m_hilbertBuf (0..14)
 
     // SSTV decoder state
     SSTVState m_state;

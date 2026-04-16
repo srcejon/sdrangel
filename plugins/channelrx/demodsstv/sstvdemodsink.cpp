@@ -34,9 +34,18 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pixelIndex(0),
     m_pixelAccum(0.0f),
     m_pixelSamplePos(0.0f),
-    m_lineIndex(0)
+    m_lineIndex(0),
+    m_hilbertIdx(0)
 {
     m_magsq = 0.0;
+
+    // Pre-clear the Hilbert FIR delay line.
+    memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
+
+    // Audio phase discriminator: output = instantaneous_freq_Hz directly.
+    // phaseDiscriminatorDelta returns fmDev * fmScaling where
+    // fmDev = Δphase/π = 2*f/Fs, so fmScaling = Fs/2 makes output = f in Hz.
+    m_audioPhaDiscri.setFMScaling(SSTVDEMOD_CHANNEL_SAMPLE_RATE / 2.0f);
 
     applySettings(QStringList(), m_settings, true);
     applyChannelSettings(m_channelSampleRate, m_channelFrequencyOffset, true);
@@ -55,6 +64,11 @@ void SSTVDemodSink::resetDecoder()
     m_pixelAccum = 0.0f;
     m_pixelSamplePos = 0.0f;
     m_lineIndex = 0;
+
+    // Reset the Stage-2 audio FM demodulator.
+    m_audioPhaDiscri.reset();
+    memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
+    m_hilbertIdx = 0;
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -88,10 +102,13 @@ void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const Sample
 void SSTVDemodSink::processOneSample(Complex &ci)
 {
     // -----------------------------------------------------------------------
-    // FM discriminate the RF baseband IQ to recover the instantaneous audio
-    // tone frequency.  phaseDiscriminatorDelta returns:
-    //   fmDemod = instantaneous_freq / m_settings.m_fmDeviation
-    // so multiplying back gives the SSTV tone frequency in Hz directly.
+    // Stage 1 – RF FM demodulation.
+    // phaseDiscriminatorDelta with fmScaling = Fs/(2*fmDeviation) returns
+    //   fmDemod = instantaneous_rf_freq_deviation / fmDeviation
+    // For a signal FM-modulated with an audio tone A·cos(2π·f_tone·t):
+    //   fmDemod ≈ A·cos(2π·f_tone·t)          (real audio waveform, ≤ 1.0)
+    // The SSTV pixel data is encoded in f_tone (1200–2300 Hz), not in the
+    // amplitude.  Stage 2 below extracts that frequency.
     // -----------------------------------------------------------------------
     double magsqRaw;
     Real deviation;
@@ -111,8 +128,53 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         return;
     }
 
-    // Recover tone frequency in Hz from the normalised discriminator output
-    float freq = fmDemod * m_settings.m_fmDeviation;
+    // -----------------------------------------------------------------------
+    // Stage 2 – Audio FM demodulation via Hilbert-transform analytic signal.
+    //
+    // fmDemod = A·cos(2π·f_tone·n/Fs) is a real narrowband signal whose
+    // instantaneous frequency f_tone (1200–2300 Hz) carries the SSTV data.
+    // To measure f_tone we form the complex analytic signal using a 15-tap
+    // Type-III FIR Hilbert approximation (delay = 7 samples):
+    //
+    //   Q[n] = h1·(x[n-6] − x[n-8])         h1 = 2/π
+    //        + h3·(x[n-4] − x[n-10])         h3 = 2/(3π)
+    //        + h5·(x[n-2] − x[n-12])         h5 = 2/(5π)
+    //        + h7·(x[n  ] − x[n-14])         h7 = 2/(7π)
+    //
+    //   z[n] = Complex(x[n-7], Q[n])   → z ≈ A·e^(+j·2π·f_tone·(n-7)/Fs)
+    //
+    // Phase-discriminating z gives f_tone directly in Hz (fmScaling = Fs/2).
+    // The 7-sample delay on the real component (<1 pixel period) introduces
+    // no blurring; non-flat magnitude across the 1200–2300 Hz band causes
+    // only a small average frequency error that averages away over each pixel.
+    // -----------------------------------------------------------------------
+
+    // Write new fmDemod sample into the ring buffer.
+    m_hilbertBuf[m_hilbertIdx] = fmDemod;
+
+    // Helper: access x[n-k] from the ring buffer.
+    const int idx = m_hilbertIdx;
+    auto get = [&](int k) -> Real {
+        return m_hilbertBuf[(idx - k + 15) % 15];
+    };
+
+    // Hilbert FIR Q component (sign chosen so z = A·e^(+jωt)).
+    Real hilbert = k_h1 * (get(6) - get(8))
+                 + k_h3 * (get(4) - get(10))
+                 + k_h5 * (get(2) - get(12))
+                 + k_h7 * (get(0) - get(14));
+
+    // Analytic signal: real part delayed by 7 samples, imaginary = Hilbert FIR.
+    Complex audioAnalytic(get(7), hilbert);
+
+    // Phase discriminate; m_audioPhaDiscri has fmScaling = Fs/2,
+    // so fmDev·(Fs/2) = (2·f/Fs)·(Fs/2) = f → output is f_tone in Hz.
+    double audioMagsq;
+    Real   audioDev;
+    float freq = m_audioPhaDiscri.phaseDiscriminatorDelta(audioAnalytic, audioMagsq, audioDev);
+
+    // Advance ring-buffer write pointer.
+    m_hilbertIdx = (m_hilbertIdx + 1) % 15;
 
     // -----------------------------------------------------------------------
     // SSTV PD120 state machine; 'freq' is the reconstructed tone frequency (Hz)

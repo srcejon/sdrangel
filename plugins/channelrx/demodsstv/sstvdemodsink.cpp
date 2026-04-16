@@ -35,7 +35,8 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pixelAccum(0.0f),
     m_pixelSamplePos(0.0f),
     m_lineIndex(0),
-    m_hilbertIdx(0)
+    m_hilbertIdx(0),
+    m_freqLpFilter(SSTVDEMOD_CHANNEL_SAMPLE_RATE / (2.0f * float(M_PI) * SSTVDEMOD_LPF_CUTOFF_HZ))
 {
     m_magsq = 0.0;
 
@@ -69,6 +70,9 @@ void SSTVDemodSink::resetDecoder()
     m_audioPhaDiscri.reset();
     memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
     m_hilbertIdx = 0;
+
+    // Reset the low-pass filter on the frequency output.
+    m_freqLpFilter.configure(SSTVDEMOD_CHANNEL_SAMPLE_RATE / (2.0f * float(M_PI) * SSTVDEMOD_LPF_CUTOFF_HZ));
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -195,6 +199,11 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     // With phaseDiscriminator the angle of (conj(prev)·current) is always ≪ 1 rad
     // (≈ ω per sample), so the branch boundary is never reached.
     float freq = m_audioPhaDiscri.phaseDiscriminator(audioAnalytic);
+
+    // Apply low-pass filter to suppress noise from the RF FM demodulator.
+    // The filter passes DC and slow pixel transitions while attenuating
+    // high-frequency noise: −10 dB at 10 kHz, −14 dB at Nyquist.
+    m_freqLpFilter.process(freq, freq);
 
     // Advance ring-buffer write pointer.
     m_hilbertIdx = (m_hilbertIdx + 1) % 63;

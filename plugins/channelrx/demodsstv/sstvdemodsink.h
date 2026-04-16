@@ -22,6 +22,7 @@
 #include <QImage>
 
 #include "dsp/channelsamplesink.h"
+#include "dsp/filterrc.h"
 #include "dsp/phasediscri.h"
 #include "dsp/nco.h"
 #include "dsp/interpolator.h"
@@ -56,6 +57,14 @@
 
 // Minimum sync pulse duration to be considered valid (75% of expected)
 #define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))
+
+// Low-pass filter cut-off applied to the instantaneous-frequency output (Hz).
+// The filter suppresses noise from the RF FM demodulator while still passing
+// pixel-rate transitions.  At 3000 Hz the step response reaches 99 % of its
+// final value within 12 samples (≈ 1 pixel period), so horizontal blurring is
+// less than half a pixel.  Noise above 3 kHz is attenuated: −10 dB at 10 kHz,
+// −14 dB at 24 kHz (Nyquist).
+#define SSTVDEMOD_LPF_CUTOFF_HZ   3000.0f
 
 class SSTVDemod;
 
@@ -135,6 +144,7 @@ private:
     MovingAverageUtil<Real, double, 16> m_movingAverage;
     PhaseDiscriminators m_phaseDiscri;      //!< RF FM discriminator
     PhaseDiscriminators m_audioPhaDiscri;   //!< Audio FM discriminator (Stage 2)
+    LowPassFilterRC m_freqLpFilter;         //!< Low-pass filter on instantaneous-frequency output
 
     // Hilbert FIR ring buffer for forming the analytic signal from fmDemod.
     // 63-tap Type-III FIR with Hamming window, delay = 31 samples.

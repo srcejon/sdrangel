@@ -29,9 +29,6 @@ SSTVDemodSink::SSTVDemodSink() :
     m_magsqPeak(0.0f),
     m_magsqCount(0),
     m_messageQueueToChannel(nullptr),
-    m_prevFmDemod(0.0f),
-    m_diffPower(0.0f),
-    m_audioPower(0.0f),
     m_state(WAITING_FOR_SYNC),
     m_stateSampleCount(0),
     m_pixelIndex(0),
@@ -40,6 +37,10 @@ SSTVDemodSink::SSTVDemodSink() :
     m_lineIndex(0)
 {
     m_magsq = 0.0;
+
+    // Stage-2: shift audio tone to near DC before discriminating
+    m_audioNCO.setFreq(-SSTVDEMOD_AUDIO_CENTER_FREQ, SSTVDEMOD_CHANNEL_SAMPLE_RATE);
+    m_audioPhaDiscri.setFMScaling(SSTVDEMOD_CHANNEL_SAMPLE_RATE / (2.0f * SSTVDEMOD_AUDIO_MAX_DEV));
 
     applySettings(QStringList(), m_settings, true);
     applyChannelSettings(m_channelSampleRate, m_channelFrequencyOffset, true);
@@ -59,10 +60,8 @@ void SSTVDemodSink::resetDecoder()
     m_pixelSamplePos = 0.0f;
     m_lineIndex = 0;
 
-    // Reset FM-to-AM detector state so stale samples don't corrupt new reception
-    m_prevFmDemod = 0.0f;
-    m_diffPower   = 0.0f;
-    m_audioPower  = 0.0f;
+    // Reset audio tone discriminator state so stale samples don't corrupt new reception
+    m_audioPhaDiscri.reset();
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -97,8 +96,8 @@ void SSTVDemodSink::processOneSample(Complex &ci)
 {
     // -----------------------------------------------------------------------
     // Stage 1: FM discriminate the RF baseband IQ to recover the audio.
-    // The output fmDemod is the FM-demodulated audio waveform — a sinusoid
-    // oscillating at the SSTV tone frequency (1200–2300 Hz).
+    // fmDemod is the modulating audio waveform — a sinusoid at the SSTV tone
+    // frequency (1200–2300 Hz); it is NOT the tone frequency itself.
     // -----------------------------------------------------------------------
     double magsqRaw;
     Real deviation;
@@ -119,29 +118,27 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     }
 
     // -----------------------------------------------------------------------
-    // FM-to-AM conversion: differentiate fmDemod (the FM-demodulated audio
-    // waveform, a sinusoid at the SSTV tone frequency) so that its amplitude
-    // becomes proportional to that frequency.  Tracking the IIR-smoothed
-    // power of both the audio and its first difference and forming their
-    // ratio gives a normalised amplitude:
-    //   normAmp = sqrt(diffPower / audioPower) = 2*sin(π*f/Fs)
-    // This value is independent of signal level and maps monotonically from
-    // ~0.157 (1200 Hz sync) to ~0.299 (2300 Hz white).  It is converted back
-    // to an equivalent Hz value via linear interpolation so that the existing
-    // state machine thresholds and freqToPixel mapping remain unchanged.
+    // Stage 2: measure the instantaneous SSTV tone frequency.
+    //
+    // fmDemod is a real sinusoid at the SSTV tone frequency (1200–2300 Hz).
+    // Multiplying by a complex NCO at -1750 Hz (the centre of that range)
+    // produces a complex signal rotating at (tone_freq - 1750) Hz.  A second
+    // PhaseDiscriminators instance measures that rotation rate; adding 1750 Hz
+    // back gives the tone frequency.
+    //
+    // Note: because fmDemod is real, the mixing also produces an image at
+    // -(tone_freq + 1750) Hz.  At pixel-accumulation timescales (~11 samples)
+    // this high-frequency image contribution averages toward zero.
     // -----------------------------------------------------------------------
-    Real diff = fmDemod - m_prevFmDemod;
-    m_prevFmDemod = fmDemod;
-    m_diffPower  = SSTVDEMOD_ENVELOPE_ALPHA * m_diffPower  + (1.0f - SSTVDEMOD_ENVELOPE_ALPHA) * diff * diff;
-    m_audioPower = SSTVDEMOD_ENVELOPE_ALPHA * m_audioPower + (1.0f - SSTVDEMOD_ENVELOPE_ALPHA) * fmDemod * fmDemod;
+    Complex audioNco = m_audioNCO.nextIQ();
+    Complex audioComplex(fmDemod * audioNco.real(), fmDemod * audioNco.imag());
 
-    // When there is no signal (audioPower near zero) default to black level so
-    // the state machine stays in WAITING_FOR_SYNC (above the sync threshold).
-    float normAmp = (m_audioPower > 1e-10f) ? sqrtf(m_diffPower / m_audioPower) : SSTVDEMOD_AMP_BLACK;
-    float freq = SSTVDEMOD_BLACK_FREQ
-        + (normAmp - SSTVDEMOD_AMP_BLACK)
-        / (SSTVDEMOD_AMP_WHITE - SSTVDEMOD_AMP_BLACK)
-        * (SSTVDEMOD_WHITE_FREQ - SSTVDEMOD_BLACK_FREQ);
+    double audioMagsq;
+    Real audioDev;
+    Real audioDemod = m_audioPhaDiscri.phaseDiscriminatorDelta(audioComplex, audioMagsq, audioDev);
+
+    // Scale from normalised discriminator output back to Hz
+    float freq = audioDemod * SSTVDEMOD_AUDIO_MAX_DEV + SSTVDEMOD_AUDIO_CENTER_FREQ;
 
     // -----------------------------------------------------------------------
     // SSTV PD120 state machine; 'freq' is the reconstructed tone frequency (Hz)

@@ -57,18 +57,14 @@
 // Minimum sync pulse duration to be considered valid (75% of expected)
 #define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))
 
-// FM-to-AM tone detector
-// The FM-discriminated audio is a sinusoid at the SSTV tone frequency.
-// Differentiating it (first difference) yields a signal whose amplitude is
-// proportional to that frequency.  Tracking the IIR-smoothed power of both
-// the audio and its derivative and forming their ratio gives a normalised
-// amplitude that is independent of signal level:
-//   normAmp = sqrt(diffPower / audioPower) = 2*sin(π*f/Fs)
-// Pre-computed reference values at Fs = 48000 Hz:
-#define SSTVDEMOD_ENVELOPE_ALPHA  0.85f     //!< IIR smoothing coefficient for power envelope
-#define SSTVDEMOD_AMP_SYNC        0.15693f  //!< 2*sin(π*1200/48000) — sync tone level
-#define SSTVDEMOD_AMP_BLACK       0.19603f  //!< 2*sin(π*1500/48000) — black level
-#define SSTVDEMOD_AMP_WHITE       0.29913f  //!< 2*sin(π*2300/48000) — white level
+// Stage-2 audio tone frequency detector
+// After FM demodulation, fmDemod is a real sinusoid at the SSTV tone frequency
+// (1200–2300 Hz).  Multiplying by a complex NCO at the centre of that range
+// shifts the wanted tone near DC; a second PhaseDiscriminators instance then
+// measures the residual rotation rate, which equals (tone_freq - centre_freq).
+// Adding the centre back gives the tone frequency in Hz.
+#define SSTVDEMOD_AUDIO_CENTER_FREQ  1750.0f  //!< Centre of SSTV tone range (Hz)
+#define SSTVDEMOD_AUDIO_MAX_DEV       550.0f  //!< Max deviation from centre: 1750-1200 Hz
 
 class SSTVDemod;
 
@@ -148,10 +144,9 @@ private:
     MovingAverageUtil<Real, double, 16> m_movingAverage;
     PhaseDiscriminators m_phaseDiscri;   //!< Stage-1: RF FM discriminator
 
-    // FM-to-AM tone detector state
-    Real m_prevFmDemod;  //!< Previous FM demod sample for first-difference differentiation
-    Real m_diffPower;    //!< IIR-smoothed power of the differentiated audio
-    Real m_audioPower;   //!< IIR-smoothed power of the FM-demod audio
+    // Stage-2 audio tone frequency detector
+    NCO m_audioNCO;                        //!< NCO at -SSTVDEMOD_AUDIO_CENTER_FREQ for audio mixing
+    PhaseDiscriminators m_audioPhaDiscri;  //!< Phase discriminator for audio tone frequency measurement
 
     // SSTV decoder state
     SSTVState m_state;

@@ -145,28 +145,34 @@ private:
     //
     // The rectangular-window SDFT of the last N_SDFT samples is maintained
     // incrementally with one complex multiply per bin per input sample:
-    //   X[k] ← twiddle[k] · (X[k] + x_new − x_old),   twiddle[k] = e^{+j·2π·k/N}
+    //   Z[k] ← twiddle[k] · (Z[k] + x_new − x_old),   twiddle[k] = e^{+j·2π·k/N}
     //
-    // Hann-window shaping halves the effective main-lobe width and reduces
-    // spectral leakage to below −32 dB:
-    //   Xw[k] = 0.5·X[k] − 0.25·X[k−1] − 0.25·X[k+1]
+    // Note: this recurrence stores Z[k](n) = X[k](n)·e^{+j·2π·k·n/N}, a
+    // phase-rotated form of the true DFT coefficient X[k].  Because the
+    // rotation phase differs between adjacent bins, the Hann-window combination
+    // (0.5·Z[k] − 0.25·Z[k−1] − 0.25·Z[k+1]) does NOT correctly cancel
+    // spectral leakage — it mixes phasors at different rotation rates, causing
+    // per-bin power to oscillate at Fs/N ≈ 375 Hz (~11 pixels) and shifting
+    // the centroid estimate by tens of Hz.  The raw rectangular-window centroid
+    // (using |Z[k]|² = |X[k]|² directly) is mathematically unbiased because
+    // sinc²(k − k₀) is symmetric about k₀, giving a true centroid of k₀ for
+    // any tone frequency k₀ within the bin range.
     //
     // Instantaneous frequency is the power-weighted spectral centroid:
-    //   freq = (Fs/N) · Σ_{k=K_SUM_MIN}^{K_SUM_MAX} k·|Xw[k]|² / Σ |Xw[k]|²
+    //   freq = (Fs/N) · Σ_{k=K_MIN}^{K_MAX} k·|Z[k]|² / Σ |Z[k]|²
     //
     // Averaging N_SDFT=128 samples suppresses noise by √128 ≈ 11× in standard
     // deviation versus a single-sample phase discriminator, while the 2.67 ms
     // window (at 48 kHz) is short relative to the 20 ms SSTV sync pulse.
     //
     // Bins k=3–7 (1125–2625 Hz) span the full SSTV tone range 1200–2300 Hz.
-    // Bins k=2 and k=8 are stored as well to build the Hann correction.
     // -----------------------------------------------------------------------
     static constexpr int N_SDFT           = 128; //!< Sliding DFT window length (samples); bin width = Fs/N = 375 Hz
-    static constexpr int SDFT_K_STORE_MIN = 2;   //!< Lowest stored bin  (k=2 → 750 Hz; one below K_SUM_MIN for Hann)
-    static constexpr int SDFT_K_STORE_MAX = 8;   //!< Highest stored bin (k=8 → 3000 Hz; one above K_SUM_MAX for Hann)
+    static constexpr int SDFT_K_STORE_MIN = 3;   //!< Lowest stored bin  (k=3 → 1125 Hz)
+    static constexpr int SDFT_K_STORE_MAX = 7;   //!< Highest stored bin (k=7 → 2625 Hz)
     static constexpr int SDFT_K_SUM_MIN   = 3;   //!< First bin in the moment sum (k=3 → 1125 Hz, below sync 1200 Hz)
     static constexpr int SDFT_K_SUM_MAX   = 7;   //!< Last  bin in the moment sum (k=7 → 2625 Hz, above white 2300 Hz)
-    static constexpr int SDFT_NUM_BINS    = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 7
+    static constexpr int SDFT_NUM_BINS    = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 5
 
     float   m_sdftBuf[N_SDFT];            //!< Circular ring buffer of fmDemod samples
     Complex m_sdftBins[SDFT_NUM_BINS];    //!< Running SDFT bins k = SDFT_K_STORE_MIN..SDFT_K_STORE_MAX
@@ -181,6 +187,7 @@ private:
     int m_pixelIndex;          //!< Index of current pixel being accumulated (within section)
     float m_pixelAccum;        //!< Accumulated frequency value for current pixel
     float m_pixelSamplePos;    //!< Fractional sample position within current pixel period
+    int m_pixelSampleCount;    //!< Actual number of samples accumulated in current pixel (denominator for average)
 
     // PD120 line buffer: one block = odd + even scan lines
     float m_yOdd[SSTVDEMOD_IMAGE_WIDTH];        //!< Y (luminance) values for odd line

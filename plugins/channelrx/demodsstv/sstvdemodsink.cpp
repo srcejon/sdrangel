@@ -34,6 +34,7 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pixelIndex(0),
     m_pixelAccum(0.0f),
     m_pixelSamplePos(0.0f),
+    m_pixelSampleCount(0),
     m_lineIndex(0),
     m_sdftIdx(0)
 {
@@ -68,6 +69,7 @@ void SSTVDemodSink::resetDecoder()
     m_pixelIndex = 0;
     m_pixelAccum = 0.0f;
     m_pixelSamplePos = 0.0f;
+    m_pixelSampleCount = 0;
     m_lineIndex = 0;
 
     // Reset the sliding-DFT spectral moment state.
@@ -138,18 +140,16 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     // -----------------------------------------------------------------------
     // Stage 2 – Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment).
     //
-    // The rectangular-window DFT of the last N_SDFT samples is maintained
-    // with a single complex multiply per bin per input sample:
-    //   X[k] ← twiddle[k] · (X[k] + x_new − x_old)
+    // The recurrence Z[k] ← twiddle[k]·(Z[k] + x_new − x_old) maintains
+    // a phase-rotated DFT: Z[k](n) = X[k](n)·e^{+j2πkn/N}.  Because the
+    // rotation phases differ between bins, a Hann combination applied to Z[k]
+    // produces oscillating per-bin powers (period N samples ≈ 11 pixels) that
+    // would corrupt the centroid.  Using the raw magnitudes |Z[k]|² = |X[k]|²
+    // gives an unbiased centroid: sinc²(k − k₀) is symmetric about k₀, so
+    // Σ k·|X[k]|² / Σ |X[k]|² = k₀ for any in-range tone frequency k₀.
     //
-    // Hann-window combination halves spectral leakage:
-    //   Xw[k] = 0.5·X[k] − 0.25·X[k−1] − 0.25·X[k+1]
-    //
-    // Power-weighted centroid over SSTV bins (k=3..7, i.e. 1125–2625 Hz):
-    //   freq = (Fs/N) · Σ k·|Xw[k]|² / Σ |Xw[k]|²
-    //
-    // Averaging N_SDFT=128 samples suppresses noise ≈11× compared with the
-    // former single-sample phase discriminator.
+    // Power-weighted centroid over SSTV bins (k=3..7, 1125–2625 Hz):
+    //   freq = (Fs/N) · Σ k·|Z[k]|² / Σ |Z[k]|²
     // -----------------------------------------------------------------------
 
     // Update circular buffer and SDFT bins.
@@ -163,19 +163,13 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         m_sdftBins[i] = m_sdftTwiddle[i] * (m_sdftBins[i] + delta);
     }
 
-    // Compute Hann-windowed spectral moment over bins k = SDFT_K_SUM_MIN..SDFT_K_SUM_MAX.
-    float wMoment = 0.0f; // Σ k · |Xw[k]|²
-    float wPower  = 0.0f; // Σ     |Xw[k]|²
+    // Compute power-weighted spectral centroid over bins k = SDFT_K_SUM_MIN..SDFT_K_SUM_MAX.
+    float wMoment = 0.0f; // Σ k · |Z[k]|²
+    float wPower  = 0.0f; // Σ     |Z[k]|²
     for (int k = SDFT_K_SUM_MIN; k <= SDFT_K_SUM_MAX; k++)
     {
         const int i = k - SDFT_K_STORE_MIN;
-        // Hann-window: Xw[k] = 0.5·X[k] − 0.25·X[k−1] − 0.25·X[k+1]
-        // i = k − SDFT_K_STORE_MIN; loop range k=K_SUM_MIN..K_SUM_MAX ensures
-        // i−1 >= 0 (k_sum_min−1 = k_store_min) and i+1 < SDFT_NUM_BINS.
-        const Complex xw = 0.5f  * m_sdftBins[i]
-                         - 0.25f * m_sdftBins[i - 1]
-                         - 0.25f * m_sdftBins[i + 1];
-        const float p = std::norm(xw); // |Xw[k]|²
+        const float p = std::norm(m_sdftBins[i]); // |Z[k]|²
         wMoment += float(k) * p;
         wPower  += p;
     }
@@ -242,16 +236,20 @@ void SSTVDemodSink::decodePixelSample(float freq, float *buf, int width, SSTVSta
 {
     // Accumulate frequency for the current pixel
     m_pixelAccum += freq;
+    m_pixelSampleCount++;
     m_pixelSamplePos += 1.0f;
 
     // Check if we have accumulated enough samples for one pixel
     if (m_pixelSamplePos >= SSTVDEMOD_SAMPLES_PER_PIXEL)
     {
-        // Compute average frequency for this pixel and store
-        float avgFreq = m_pixelAccum / m_pixelSamplePos;
+        // Divide by the actual number of samples accumulated (not the fractional
+        // position, which includes a carry-over from the previous pixel boundary
+        // and would systematically underestimate the frequency by 4–8%).
+        float avgFreq = m_pixelAccum / float(m_pixelSampleCount);
         buf[m_pixelIndex] = avgFreq;
         m_pixelIndex++;
         m_pixelAccum = 0.0f;
+        m_pixelSampleCount = 0;
         // Keep fractional remainder to maintain timing accuracy
         m_pixelSamplePos -= SSTVDEMOD_SAMPLES_PER_PIXEL;
 
@@ -333,6 +331,7 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
         m_pixelIndex = 0;
         m_pixelAccum = 0.0f;
         m_pixelSamplePos = 0.0f;
+        m_pixelSampleCount = 0;
     }
 }
 

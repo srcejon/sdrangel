@@ -38,10 +38,6 @@ SSTVDemodSink::SSTVDemodSink() :
 {
     m_magsq = 0.0;
 
-    // Stage-2: shift audio tone to near DC before discriminating
-    m_audioNCO.setFreq(-SSTVDEMOD_AUDIO_CENTER_FREQ, SSTVDEMOD_CHANNEL_SAMPLE_RATE);
-    m_audioPhaDiscri.setFMScaling(SSTVDEMOD_CHANNEL_SAMPLE_RATE / (2.0f * SSTVDEMOD_AUDIO_MAX_DEV));
-
     applySettings(QStringList(), m_settings, true);
     applyChannelSettings(m_channelSampleRate, m_channelFrequencyOffset, true);
 
@@ -59,9 +55,6 @@ void SSTVDemodSink::resetDecoder()
     m_pixelAccum = 0.0f;
     m_pixelSamplePos = 0.0f;
     m_lineIndex = 0;
-
-    // Reset audio tone discriminator state so stale samples don't corrupt new reception
-    m_audioPhaDiscri.reset();
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -95,9 +88,10 @@ void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const Sample
 void SSTVDemodSink::processOneSample(Complex &ci)
 {
     // -----------------------------------------------------------------------
-    // Stage 1: FM discriminate the RF baseband IQ to recover the audio.
-    // fmDemod is the modulating audio waveform — a sinusoid at the SSTV tone
-    // frequency (1200–2300 Hz); it is NOT the tone frequency itself.
+    // FM discriminate the RF baseband IQ to recover the instantaneous audio
+    // tone frequency.  phaseDiscriminatorDelta returns:
+    //   fmDemod = instantaneous_freq / m_settings.m_fmDeviation
+    // so multiplying back gives the SSTV tone frequency in Hz directly.
     // -----------------------------------------------------------------------
     double magsqRaw;
     Real deviation;
@@ -117,28 +111,8 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         return;
     }
 
-    // -----------------------------------------------------------------------
-    // Stage 2: measure the instantaneous SSTV tone frequency.
-    //
-    // fmDemod is a real sinusoid at the SSTV tone frequency (1200–2300 Hz).
-    // Multiplying by a complex NCO at -1750 Hz (the centre of that range)
-    // produces a complex signal rotating at (tone_freq - 1750) Hz.  A second
-    // PhaseDiscriminators instance measures that rotation rate; adding 1750 Hz
-    // back gives the tone frequency.
-    //
-    // Note: because fmDemod is real, the mixing also produces an image at
-    // -(tone_freq + 1750) Hz.  At pixel-accumulation timescales (~11 samples)
-    // this high-frequency image contribution averages toward zero.
-    // -----------------------------------------------------------------------
-    Complex audioNco = m_audioNCO.nextIQ();
-    Complex audioComplex(fmDemod * audioNco.real(), fmDemod * audioNco.imag());
-
-    double audioMagsq;
-    Real audioDev;
-    Real audioDemod = m_audioPhaDiscri.phaseDiscriminatorDelta(audioComplex, audioMagsq, audioDev);
-
-    // Scale from normalised discriminator output back to Hz
-    float freq = audioDemod * SSTVDEMOD_AUDIO_MAX_DEV + SSTVDEMOD_AUDIO_CENTER_FREQ;
+    // Recover tone frequency in Hz from the normalised discriminator output
+    float freq = fmDemod * m_settings.m_fmDeviation;
 
     // -----------------------------------------------------------------------
     // SSTV PD120 state machine; 'freq' is the reconstructed tone frequency (Hz)

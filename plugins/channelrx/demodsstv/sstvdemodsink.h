@@ -57,15 +57,6 @@
 // Minimum sync pulse duration to be considered valid (75% of expected)
 #define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))
 
-// Stage-2 audio tone frequency detector
-// After FM demodulation, fmDemod is a real sinusoid at the SSTV tone frequency
-// (1200–2300 Hz).  Multiplying by a complex NCO at the centre of that range
-// shifts the wanted tone near DC; a second PhaseDiscriminators instance then
-// measures the residual rotation rate, which equals (tone_freq - centre_freq).
-// Adding the centre back gives the tone frequency in Hz.
-#define SSTVDEMOD_AUDIO_CENTER_FREQ  1750.0f  //!< Centre of SSTV tone range (Hz)
-#define SSTVDEMOD_AUDIO_MAX_DEV       550.0f  //!< Max deviation from centre: 1750-1200 Hz
-
 class SSTVDemod;
 
 class SSTVDemodSink : public ChannelSampleSink {
@@ -142,11 +133,7 @@ private:
     MessageQueue *m_messageQueueToChannel;
 
     MovingAverageUtil<Real, double, 16> m_movingAverage;
-    PhaseDiscriminators m_phaseDiscri;   //!< Stage-1: RF FM discriminator
-
-    // Stage-2 audio tone frequency detector
-    NCO m_audioNCO;                        //!< NCO at -SSTVDEMOD_AUDIO_CENTER_FREQ for audio mixing
-    PhaseDiscriminators m_audioPhaDiscri;  //!< Phase discriminator for audio tone frequency measurement
+    PhaseDiscriminators m_phaseDiscri;   //!< RF FM discriminator
 
     // SSTV decoder state
     SSTVState m_state;

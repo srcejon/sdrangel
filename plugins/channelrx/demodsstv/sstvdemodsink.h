@@ -63,17 +63,7 @@
 #define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))   // 720  – 15 ms lower bound
 #define SSTVDEMOD_SYNC_SAMPLES_MAX  ((int)(SSTVDEMOD_SYNC_SAMPLES * 1.25f))   // 1200 – 25 ms upper bound (< 30 ms VIS bits)
 
-// Minimum average frequency expected during the porch period (Hz).
-// A real porch is at the black level (1500 Hz); VIS data bits are 1100–1300 Hz.
-// Any "porch" whose average frequency falls below this threshold is treated as
-// VIS code data and the spurious sync is discarded.
-#define SSTVDEMOD_PORCH_FREQ_MIN    1450.0f
 
-// Minimum number of consecutive above-threshold samples that indicate a leader tone
-// (the 1900 Hz preamble transmitted before the VIS code).  Detecting the leader
-// resets the line index so that every new transmission starts at image row 0.
-// 200 ms * 48 kHz = 9600 samples; the actual leader is ≥ 300 ms.
-#define SSTVDEMOD_LEADER_SAMPLES    ((int)(200.0f * SSTVDEMOD_CHANNEL_SAMPLE_RATE / 1000.0f))
 
 
 class SSTVDemod;
@@ -178,10 +168,12 @@ private:
     // freqToPixel() compensates by treating 2248.7 Hz as the white calibration
     // point instead of the true 2300 Hz (see SDFT_MEAS_WHITE_FREQ below).
     //
-    // Cross-section isolation: transitionTo() resets the SDFT buffer and bins
-    // whenever a new decoding section begins, so the N=128-sample history does
-    // not carry over frequencies from the previous section into the first
-    // ~11 pixels of the next one.
+    // The SDFT history is NOT reset at section transitions (Y_odd→Cr→Cb→Y_even).
+    // Adjacent sections share the same 1500–2300 Hz frequency range, so the
+    // ~14-pixel bleed-in from the previous section is mild and self-correcting.
+    // Resetting to zero would force those pixels to 1200 Hz (below black level),
+    // producing green/teal artefacts in the Cr/Cb sections — worse than the
+    // natural contamination.  The SDFT is only fully cleared in resetDecoder().
     // -----------------------------------------------------------------------
     static constexpr int N_SDFT           = 128; //!< Sliding DFT window length (samples); bin width = Fs/N = 375 Hz
     static constexpr int SDFT_K_STORE_MIN = 3;   //!< Lowest stored bin  (k=3 → 1125 Hz)
@@ -210,10 +202,6 @@ private:
     float m_pixelAccum;        //!< Accumulated frequency value for current pixel
     float m_pixelSamplePos;    //!< Fractional sample position within current pixel period
     int m_pixelSampleCount;    //!< Actual number of samples accumulated in current pixel (denominator for average)
-
-    // VIS-code / leader-tone detection helpers
-    float m_porchFreqAccum;       //!< Accumulated frequency during the porch period (for porch-frequency validation)
-    int   m_aboveThresholdCount;  //!< Consecutive samples with freq ≥ SSTVDEMOD_SYNC_THRESHOLD (leader detection)
 
     // PD120 line buffer: one block = odd + even scan lines
     float m_yOdd[SSTVDEMOD_IMAGE_WIDTH];        //!< Y (luminance) values for odd line

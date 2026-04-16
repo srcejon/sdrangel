@@ -36,9 +36,7 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pixelSamplePos(0.0f),
     m_pixelSampleCount(0),
     m_lineIndex(0),
-    m_sdftIdx(0),
-    m_porchFreqAccum(0.0f),
-    m_aboveThresholdCount(0)
+    m_sdftIdx(0)
 {
     m_magsq = 0.0;
 
@@ -73,8 +71,6 @@ void SSTVDemodSink::resetDecoder()
     m_pixelSamplePos = 0.0f;
     m_pixelSampleCount = 0;
     m_lineIndex = 0;
-    m_porchFreqAccum = 0.0f;
-    m_aboveThresholdCount = 0;
 
     // Reset the sliding-DFT spectral moment state.
     memset(m_sdftBuf, 0, sizeof(m_sdftBuf));
@@ -173,10 +169,13 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         wPower  += p;
     }
 
-    // Frequency estimate in Hz; fall back to sync frequency when no signal.
+    // Frequency estimate in Hz; fall back to black level when no signal so that
+    // the first ~14 pixels after a decoder reset produce black rather than an
+    // out-of-range artefact (1200 Hz is below the black level and would cause
+    // green pixels via the YCbCr conversion when Cr/Cb sections start up).
     const float freq = (wPower > 1.0e-10f)
         ? (wMoment / wPower) * (float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / float(N_SDFT))
-        : SSTVDEMOD_SYNC_FREQ;
+        : SSTVDEMOD_BLACK_FREQ;
 
     // -----------------------------------------------------------------------
     // SSTV PD120 state machine; 'freq' is the reconstructed tone frequency (Hz)
@@ -185,21 +184,8 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     {
     case WAITING_FOR_SYNC:
         // Look for frequency dropping to sync level.
-        // While above the threshold, count consecutive samples to detect the
-        // 1900 Hz leader tone that precedes each transmission's VIS code.
-        if (freq < SSTVDEMOD_SYNC_THRESHOLD)
-        {
-            // If the signal has been above threshold long enough to be a leader
-            // tone, this is the start of a new frame — reset the line counter.
-            if (m_aboveThresholdCount >= SSTVDEMOD_LEADER_SAMPLES) {
-                m_lineIndex = 0;
-            }
-            m_aboveThresholdCount = 0;
+        if (freq < SSTVDEMOD_SYNC_THRESHOLD) {
             transitionTo(IN_SYNC);
-        }
-        else
-        {
-            m_aboveThresholdCount++;
         }
         break;
 
@@ -232,23 +218,14 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         break;
 
     case IN_PORCH:
-        // Wait for the porch period and validate its frequency.
-        // A genuine scan-line porch is at the black level (~1500 Hz); the data
-        // that follows a VIS code bit is at 1100–1300 Hz.  Discarding low-
-        // frequency "porches" eliminates any false syncs that slipped past the
-        // duration check above.
+        // Wait for the porch period to elapse then begin decoding.
+        // No frequency validation here: the porch is only 99 samples long while
+        // the SDFT window is 128 samples, so the centroid is always contaminated
+        // by the preceding 1200 Hz sync and would fail any reasonable threshold.
+        // The sync duration check in IN_SYNC is sufficient to reject VIS bits.
         m_stateSampleCount++;
-        m_porchFreqAccum += freq;
-        if (m_stateSampleCount >= SSTVDEMOD_PORCH_SAMPLES)
-        {
-            const float avgPorchFreq = m_porchFreqAccum / float(m_stateSampleCount);
-            if (avgPorchFreq >= SSTVDEMOD_PORCH_FREQ_MIN) {
-                transitionTo(DECODING_Y_ODD);
-            } else {
-                // Porch frequency too low — the preceding sync was not a real
-                // scan-line sync (most likely a VIS code element).
-                transitionTo(WAITING_FOR_SYNC);
-            }
+        if (m_stateSampleCount >= SSTVDEMOD_PORCH_SAMPLES) {
+            transitionTo(DECODING_Y_ODD);
         }
         break;
 
@@ -362,21 +339,12 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
     m_state = newState;
     m_stateSampleCount = 0;
 
-    // Reset the porch frequency accumulator on every state change so that each
-    // new IN_PORCH entry starts with a clean average.
-    m_porchFreqAccum = 0.0f;
-
-    // When returning to WAITING_FOR_SYNC (rejected sync or end of frame) the
-    // above-threshold counter must restart so that only a genuinely long
-    // unbroken leader tone triggers a frame reset.
-    if (newState == WAITING_FOR_SYNC) {
-        m_aboveThresholdCount = 0;
-    }
-
     // Reset pixel accumulator when starting a new decoding section.
-    // Also reset the SDFT window so that the N=128-sample history from the
-    // previous section does not contaminate the first ~11 pixels of the next
-    // one (e.g. Y_odd frequencies bleeding into the Cr centroid estimate).
+    // The SDFT history is intentionally NOT cleared here: adjacent sections
+    // (Y_odd, Cr, Cb, Y_even) all operate in the same 1500–2300 Hz frequency
+    // range, so the ~14-pixel bleed-in from the previous section is mild.
+    // Clearing to zero would force those pixels to fall back to the zero-power
+    // default (1200 Hz), producing green/teal artefacts in the Cr/Cb channels.
     if (newState == DECODING_Y_ODD || newState == DECODING_CR ||
         newState == DECODING_CB   || newState == DECODING_Y_EVEN)
     {
@@ -384,12 +352,6 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
         m_pixelAccum = 0.0f;
         m_pixelSamplePos = 0.0f;
         m_pixelSampleCount = 0;
-
-        memset(m_sdftBuf, 0, sizeof(m_sdftBuf));
-        m_sdftIdx = 0;
-        for (int i = 0; i < SDFT_NUM_BINS; i++) {
-            m_sdftBins[i] = Complex(0.0f, 0.0f);
-        }
     }
 }
 

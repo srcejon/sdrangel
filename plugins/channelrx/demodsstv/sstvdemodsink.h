@@ -57,21 +57,18 @@
 // Minimum sync pulse duration to be considered valid (75% of expected)
 #define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))
 
-// Second-stage audio tone frequency detection
-// After FM demodulation the audio is a sinusoid at the SSTV tone frequency.
-// To recover that frequency we mix with a complex NCO at the centre of the
-// SSTV audio range (1750 Hz) and then apply a second phase discriminator to
-// the resulting baseband complex signal.
-#define SSTVDEMOD_AUDIO_CENTER_FREQ  1750.0f  // Centre of SSTV tone range (Hz)
-#define SSTVDEMOD_AUDIO_MAX_DEV       550.0f  // Max deviation from centre: 1750-1200 Hz
-// Boxcar (moving average) LP filter length for the audio tone detector.
-// N=16 places a spectral null at Fs/N = 3000 Hz, close to the 2950 Hz image
-// produced by mixing a 1200 Hz sync tone with the 1750 Hz centre NCO.
-// This gives ~−35 dB image rejection with a perfectly constant group delay of
-// (N−1)/2 = 7.5 samples (0.16 ms at 48 kHz).  The 2-stage IIR alternative
-// only provides ~−22 dB, which lets the image create ±186 Hz phase noise and
-// resets the IN_SYNC counter every ~10 samples before it reaches SYNC_SAMPLES_MIN.
-#define SSTVDEMOD_AUDIO_LP_LEN        16
+// FM-to-AM tone detector
+// The FM-discriminated audio is a sinusoid at the SSTV tone frequency.
+// Differentiating it (first difference) yields a signal whose amplitude is
+// proportional to that frequency.  Tracking the IIR-smoothed power of both
+// the audio and its derivative and forming their ratio gives a normalised
+// amplitude that is independent of signal level:
+//   normAmp = sqrt(diffPower / audioPower) = 2*sin(π*f/Fs)
+// Pre-computed reference values at Fs = 48000 Hz:
+#define SSTVDEMOD_ENVELOPE_ALPHA  0.85f     //!< IIR smoothing coefficient for power envelope
+#define SSTVDEMOD_AMP_SYNC        0.15693f  //!< 2*sin(π*1200/48000) — sync tone level
+#define SSTVDEMOD_AMP_BLACK       0.19603f  //!< 2*sin(π*1500/48000) — black level
+#define SSTVDEMOD_AMP_WHITE       0.29913f  //!< 2*sin(π*2300/48000) — white level
 
 class SSTVDemod;
 
@@ -151,18 +148,10 @@ private:
     MovingAverageUtil<Real, double, 16> m_movingAverage;
     PhaseDiscriminators m_phaseDiscri;   //!< Stage-1: RF FM discriminator
 
-    // Stage-2 audio tone frequency discriminator
-    // FM demodulation gives the audio *waveform* (a sinusoid at the SSTV tone
-    // frequency).  To recover the tone frequency we shift the audio to baseband
-    // with an NCO at -1750 Hz, low-pass filter, then run a second discriminator.
-    NCO m_audioNCO;                         //!< NCO at SSTVDEMOD_AUDIO_CENTER_FREQ for audio downconversion
-    PhaseDiscriminators m_audioPhaDiscri;   //!< Stage-2: audio phase discriminator
-    // 16-tap FIR boxcar LP: circular buffer + running sum (avoids O(N) per sample)
-    Real m_audioLpBufI[SSTVDEMOD_AUDIO_LP_LEN]; //!< Boxcar LP circular buffer — I channel
-    Real m_audioLpBufQ[SSTVDEMOD_AUDIO_LP_LEN]; //!< Boxcar LP circular buffer — Q channel
-    Real m_audioLpSumI;  //!< Running sum for boxcar LP — I channel
-    Real m_audioLpSumQ;  //!< Running sum for boxcar LP — Q channel
-    int  m_audioLpIdx;   //!< Circular buffer write index
+    // FM-to-AM tone detector state
+    Real m_prevFmDemod;  //!< Previous FM demod sample for first-difference differentiation
+    Real m_diffPower;    //!< IIR-smoothed power of the differentiated audio
+    Real m_audioPower;   //!< IIR-smoothed power of the FM-demod audio
 
     // SSTV decoder state
     SSTVState m_state;

@@ -57,6 +57,17 @@
 // Minimum sync pulse duration to be considered valid (75% of expected)
 #define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))
 
+// Second-stage audio tone frequency detection
+// After FM demodulation the audio is a sinusoid at the SSTV tone frequency.
+// To recover that frequency we mix with a complex NCO at the centre of the
+// SSTV audio range (1750 Hz) and then apply a second phase discriminator to
+// the resulting baseband complex signal.
+#define SSTVDEMOD_AUDIO_CENTER_FREQ  1750.0f  // Centre of SSTV tone range (Hz)
+#define SSTVDEMOD_AUDIO_MAX_DEV       550.0f  // Max deviation from centre: 1750-1200 Hz
+// First-order IIR LP coefficient — two stages cascaded give ≈ 600 Hz cutoff
+// alpha = exp(-2π * 600 / 48000) ≈ 0.9245
+#define SSTVDEMOD_AUDIO_LP_ALPHA      0.9245f
+
 class SSTVDemod;
 
 class SSTVDemodSink : public ChannelSampleSink {
@@ -133,7 +144,18 @@ private:
     MessageQueue *m_messageQueueToChannel;
 
     MovingAverageUtil<Real, double, 16> m_movingAverage;
-    PhaseDiscriminators m_phaseDiscri;
+    PhaseDiscriminators m_phaseDiscri;   //!< Stage-1: RF FM discriminator
+
+    // Stage-2 audio tone frequency discriminator
+    // FM demodulation gives the audio *waveform* (a sinusoid at the SSTV tone
+    // frequency).  To recover the tone frequency we shift the audio to baseband
+    // with an NCO at -1750 Hz, low-pass filter, then run a second discriminator.
+    NCO m_audioNCO;                         //!< NCO at SSTVDEMOD_AUDIO_CENTER_FREQ for audio downconversion
+    PhaseDiscriminators m_audioPhaDiscri;   //!< Stage-2: audio phase discriminator
+    Real m_audioLpI1;   //!< 1st LP filter stage — I state
+    Real m_audioLpQ1;   //!< 1st LP filter stage — Q state
+    Real m_audioLpI2;   //!< 2nd LP filter stage — I state (cascade for better image rejection)
+    Real m_audioLpQ2;   //!< 2nd LP filter stage — Q state
 
     // SSTV decoder state
     SSTVState m_state;
@@ -156,11 +178,6 @@ private:
     void decodePixelSample(float freq, float *buf, int width, SSTVState nextState);
     void commitBlock();
     void transitionTo(SSTVState newState);
-
-    /** Convert FM discriminator output to instantaneous frequency in Hz */
-    float fmDemodToFreq(float fmDemod) const {
-        return fmDemod * m_settings.m_fmDeviation;
-    }
 
     /** Convert frequency (Hz) to pixel luminance value [0..255] */
     static int freqToPixel(float freq) {

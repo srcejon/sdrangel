@@ -35,18 +35,21 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pixelAccum(0.0f),
     m_pixelSamplePos(0.0f),
     m_lineIndex(0),
-    m_hilbertIdx(0),
-    m_freqLpFilter(SSTVDEMOD_CHANNEL_SAMPLE_RATE / (2.0f * float(M_PI) * SSTVDEMOD_LPF_CUTOFF_HZ))
+    m_sdftIdx(0)
 {
     m_magsq = 0.0;
 
-    // Pre-clear the Hilbert FIR delay line.
-    memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
+    // Precompute SDFT twiddle factors e^{+j·2π·k/N} for k = SDFT_K_STORE_MIN..SDFT_K_STORE_MAX.
+    for (int i = 0; i < SDFT_NUM_BINS; i++) {
+        const float angle = 2.0f * float(M_PI) * float(SDFT_K_STORE_MIN + i) / float(N_SDFT);
+        m_sdftTwiddle[i] = Complex(std::cos(angle), std::sin(angle));
+    }
 
-    // Audio phase discriminator: output = instantaneous_freq_Hz directly.
-    // phaseDiscriminatorDelta returns fmDev * fmScaling where
-    // fmDev = Δphase/π = 2*f/Fs, so fmScaling = Fs/2 makes output = f in Hz.
-    m_audioPhaDiscri.setFMScaling(SSTVDEMOD_CHANNEL_SAMPLE_RATE / 2.0f);
+    // Clear the SDFT circular buffer and running bin accumulators.
+    memset(m_sdftBuf, 0, sizeof(m_sdftBuf));
+    for (int i = 0; i < SDFT_NUM_BINS; i++) {
+        m_sdftBins[i] = Complex(0.0f, 0.0f);
+    }
 
     applySettings(QStringList(), m_settings, true);
     applyChannelSettings(m_channelSampleRate, m_channelFrequencyOffset, true);
@@ -66,13 +69,12 @@ void SSTVDemodSink::resetDecoder()
     m_pixelSamplePos = 0.0f;
     m_lineIndex = 0;
 
-    // Reset the Stage-2 audio FM demodulator.
-    m_audioPhaDiscri.reset();
-    memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
-    m_hilbertIdx = 0;
-
-    // Reset the low-pass filter on the frequency output.
-    m_freqLpFilter.configure(SSTVDEMOD_CHANNEL_SAMPLE_RATE / (2.0f * float(M_PI) * SSTVDEMOD_LPF_CUTOFF_HZ));
+    // Reset the sliding-DFT spectral moment state.
+    memset(m_sdftBuf, 0, sizeof(m_sdftBuf));
+    m_sdftIdx = 0;
+    for (int i = 0; i < SDFT_NUM_BINS; i++) {
+        m_sdftBins[i] = Complex(0.0f, 0.0f);
+    }
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -133,80 +135,52 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     }
 
     // -----------------------------------------------------------------------
-    // Stage 2 – Audio FM demodulation via Hilbert-transform analytic signal.
+    // Stage 2 – Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment).
     //
-    // fmDemod = A·cos(2π·f_tone·n/Fs) is a real narrowband signal whose
-    // instantaneous frequency f_tone (1200–2300 Hz) carries the SSTV data.
-    // To measure f_tone we form the complex analytic signal using a 63-tap
-    // Hamming-windowed Type-III FIR Hilbert approximation (delay = 31 samples):
+    // The rectangular-window DFT of the last N_SDFT samples is maintained
+    // with a single complex multiply per bin per input sample:
+    //   X[k] ← twiddle[k] · (X[k] + x_new − x_old)
     //
-    //   Q[n] = Σ_{k=1,3,…,31}  h_w[k] · (x[n−31+k] − x[n−31−k])
-    //   h_w[k] = (2/(k·π)) · (0.54 + 0.46·cos(π·k/31))   (Hamming-windowed)
+    // Hann-window combination halves spectral leakage:
+    //   Xw[k] = 0.5·X[k] − 0.25·X[k−1] − 0.25·X[k+1]
     //
-    //   z[n] = Complex(x[n−31], −Q[n])  →  z ≈ A·e^(+j·2π·f_tone·(n−31)/Fs)
+    // Power-weighted centroid over SSTV bins (k=3..7, i.e. 1125–2625 Hz):
+    //   freq = (Fs/N) · Σ k·|Xw[k]|² / Σ |Xw[k]|²
     //
-    // Phase-discriminating z gives f_tone directly in Hz (fmScaling = Fs/2).
-    // The Hamming window reduces Gibbs-phenomenon amplitude ripple to ±0.4%
-    // across 1200–2300 Hz; without windowing the 63-tap truncated ideal FIR
-    // has ~10% amplitude error at 1500 Hz (imaginary part 90% of real), causing
-    // instantaneous frequency to oscillate ±150 Hz and cross the 1300 Hz sync
-    // threshold — preventing the decoder from ever reaching IN_PORCH.
+    // Averaging N_SDFT=128 samples suppresses noise ≈11× compared with the
+    // former single-sample phase discriminator.
     // -----------------------------------------------------------------------
 
-    // Write new fmDemod sample into the ring buffer.
-    m_hilbertBuf[m_hilbertIdx] = fmDemod;
+    // Update circular buffer and SDFT bins.
+    const float xNew = fmDemod;
+    const float xOld = m_sdftBuf[m_sdftIdx];
+    m_sdftBuf[m_sdftIdx] = xNew;
+    m_sdftIdx = (m_sdftIdx + 1) % N_SDFT;
 
-    // Helper: access x[n-k] from the ring buffer.
-    const int idx = m_hilbertIdx;
-    auto get = [&](int k) -> Real {
-        return m_hilbertBuf[(idx - k + 63) % 63];
-    };
+    const float delta = xNew - xOld;
+    for (int i = 0; i < SDFT_NUM_BINS; i++) {
+        m_sdftBins[i] = m_sdftTwiddle[i] * (m_sdftBins[i] + delta);
+    }
 
-    // 63-tap Hilbert FIR Q component (odd taps k=1,3,...,31 around centre 31).
-    // Each term: k_hilbert[i] * (get(31-k) - get(31+k)), where k = 2*i+1.
-    Real hilbert = k_hilbert[ 0] * (get(30) - get(32))
-                 + k_hilbert[ 1] * (get(28) - get(34))
-                 + k_hilbert[ 2] * (get(26) - get(36))
-                 + k_hilbert[ 3] * (get(24) - get(38))
-                 + k_hilbert[ 4] * (get(22) - get(40))
-                 + k_hilbert[ 5] * (get(20) - get(42))
-                 + k_hilbert[ 6] * (get(18) - get(44))
-                 + k_hilbert[ 7] * (get(16) - get(46))
-                 + k_hilbert[ 8] * (get(14) - get(48))
-                 + k_hilbert[ 9] * (get(12) - get(50))
-                 + k_hilbert[10] * (get(10) - get(52))
-                 + k_hilbert[11] * (get( 8) - get(54))
-                 + k_hilbert[12] * (get( 6) - get(56))
-                 + k_hilbert[13] * (get( 4) - get(58))
-                 + k_hilbert[14] * (get( 2) - get(60))
-                 + k_hilbert[15] * (get( 0) - get(62));
+    // Compute Hann-windowed spectral moment over bins k = SDFT_K_SUM_MIN..SDFT_K_SUM_MAX.
+    float wMoment = 0.0f; // Σ k · |Xw[k]|²
+    float wPower  = 0.0f; // Σ     |Xw[k]|²
+    for (int k = SDFT_K_SUM_MIN; k <= SDFT_K_SUM_MAX; k++)
+    {
+        const int i = k - SDFT_K_STORE_MIN;
+        // Hann-window: Xw[k] = 0.5·X[k] − 0.25·X[k−1] − 0.25·X[k+1]
+        const Complex xw = 0.5f  * m_sdftBins[i]
+                         - 0.25f * m_sdftBins[i - 1]
+                         - 0.25f * m_sdftBins[i + 1];
+        const float p = std::norm(xw); // |Xw[k]|²
+        wMoment += float(k) * p;
+        wPower  += p;
+    }
 
-    // Analytic signal: real part delayed by 31 samples, imaginary = Hilbert FIR.
-    // The FIR computes Q = −sin(ω·(n−31)) so we negate it to form
-    // z = cos(ω·(n−31)) + j·sin(ω·(n−31)) = e^{+jω·(n−31)},
-    // giving positive phase rotation and hence positive frequency.
-    Complex audioAnalytic(get(31), -hilbert);
-
-    // Phase discriminate; m_audioPhaDiscri has fmScaling = Fs/2,
-    // so fmDev·(Fs/2) = (2·f/Fs)·(Fs/2) = f → output is f_tone in Hz.
-    //
-    // Use phaseDiscriminator (conj(prev)·current, exact std::atan2) rather than
-    // phaseDiscriminatorDelta (absolute atan2_approximation2), because the
-    // approximation has a ~0.0083 rad step discontinuity at its branch boundary
-    // |z| = 1.  That step fires four times per signal cycle and causes ±63 Hz
-    // frequency spikes regardless of the Hilbert amplitude accuracy:
-    //   spike = 0.0083/π × (Fs/2) = 0.0083/π × 24000 ≈ 63 Hz.
-    // With phaseDiscriminator the angle of (conj(prev)·current) is always ≪ 1 rad
-    // (≈ ω per sample), so the branch boundary is never reached.
-    float freq = m_audioPhaDiscri.phaseDiscriminator(audioAnalytic);
-
-    // Apply low-pass filter to suppress noise from the RF FM demodulator.
-    // The filter passes DC and slow pixel transitions while attenuating
-    // high-frequency noise: −10 dB at 10 kHz, −14 dB at Nyquist.
-    m_freqLpFilter.process(freq, freq);
-
-    // Advance ring-buffer write pointer.
-    m_hilbertIdx = (m_hilbertIdx + 1) % 63;
+    // Frequency estimate in Hz; fall back to sync frequency when no signal.
+    const float freq = (wPower > 1.0e-10f)
+        ? (wMoment / wPower) * (float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / float(N_SDFT))
+        : SSTVDEMOD_SYNC_FREQ;
 
     // -----------------------------------------------------------------------
     // SSTV PD120 state machine; 'freq' is the reconstructed tone frequency (Hz)

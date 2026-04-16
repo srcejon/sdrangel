@@ -21,8 +21,9 @@
 
 #include <QImage>
 
+#include <cmath>
+
 #include "dsp/channelsamplesink.h"
-#include "dsp/filterrc.h"
 #include "dsp/phasediscri.h"
 #include "dsp/nco.h"
 #include "dsp/interpolator.h"
@@ -58,13 +59,6 @@
 // Minimum sync pulse duration to be considered valid (75% of expected)
 #define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))
 
-// Low-pass filter cut-off applied to the instantaneous-frequency output (Hz).
-// The filter suppresses noise from the RF FM demodulator while still passing
-// pixel-rate transitions.  At 3000 Hz the step response reaches 99 % of its
-// final value within 12 samples (≈ 1 pixel period), so horizontal blurring is
-// less than half a pixel.  Noise above 3 kHz is attenuated: −10 dB at 10 kHz,
-// −14 dB at 24 kHz (Nyquist).
-#define SSTVDEMOD_LPF_CUTOFF_HZ   3000.0f
 
 class SSTVDemod;
 
@@ -143,49 +137,41 @@ private:
 
     MovingAverageUtil<Real, double, 16> m_movingAverage;
     PhaseDiscriminators m_phaseDiscri;      //!< RF FM discriminator
-    PhaseDiscriminators m_audioPhaDiscri;   //!< Audio FM discriminator (Stage 2)
-    LowPassFilterRC m_freqLpFilter;         //!< Low-pass filter on instantaneous-frequency output
 
-    // Hilbert FIR ring buffer for forming the analytic signal from fmDemod.
-    // 63-tap Type-III FIR with Hamming window, delay = 31 samples.
+    // -----------------------------------------------------------------------
+    // Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment equivalent).
     //
-    // Ideal coefficients h[k] = 2/(k·π) for odd k = 1,3,...,31 are multiplied
-    // by the Hamming window evaluated at tap offset k from centre:
-    //   w(k) = 0.54 + 0.46·cos(π·k/31)
+    // Replaces the former Hilbert FIR + phase discriminator + IIR LPF chain.
     //
-    // The Hamming window eliminates Gibbs-phenomenon amplitude ripple that would
-    // otherwise arise from truncating the infinite ideal Hilbert FIR.  Without
-    // windowing the truncated 63-tap FIR has ~10% amplitude error at 1500 Hz
-    // (user-verified: imaginary part was 90% of real), causing the instantaneous
-    // frequency to oscillate 1358–1661 Hz for a constant 1500 Hz input.
-    // With Hamming windowing the amplitude accuracy is ±0.4% across the whole
-    // SSTV tone band (1200–2300 Hz), giving a per-sample frequency error of
-    // only ±5 Hz — well below the 1300 Hz sync threshold.
+    // The rectangular-window SDFT of the last N_SDFT samples is maintained
+    // incrementally with one complex multiply per bin per input sample:
+    //   X[k] ← twiddle[k] · (X[k] + x_new − x_old),   twiddle[k] = e^{+j·2π·k/N}
     //
-    // Sign convention: the code sums (get(31−k) − get(31+k)) for each odd k,
-    // which equals −H{x}[n−31] ≈ sin(ω(n−31)).  Negating in the Complex
-    // constructor gives z = e^{+jω(n−31)} (positive phase rotation).
-    static constexpr float k_hilbert[16] = {
-        0.63512f,  //!< 2/(1·π)  × w(1)
-        0.20773f,  //!< 2/(3·π)  × w(3)
-        0.11996f,  //!< 2/(5·π)  × w(5)
-        0.08085f,  //!< 2/(7·π)  × w(7)
-        0.05811f,  //!< 2/(9·π)  × w(9)
-        0.04298f,  //!< 2/(11·π) × w(11)
-        0.03209f,  //!< 2/(13·π) × w(13)
-        0.02391f,  //!< 2/(15·π) × w(15)
-        0.01761f,  //!< 2/(17·π) × w(17)
-        0.01274f,  //!< 2/(19·π) × w(19)
-        0.00899f,  //!< 2/(21·π) × w(21)
-        0.00617f,  //!< 2/(23·π) × w(23)
-        0.00414f,  //!< 2/(25·π) × w(25)
-        0.00277f,  //!< 2/(27·π) × w(27)
-        0.00196f,  //!< 2/(29·π) × w(29)
-        0.00164f,  //!< 2/(31·π) × w(31)
-    };
+    // Hann-window shaping halves the effective main-lobe width and reduces
+    // spectral leakage to below −32 dB:
+    //   Xw[k] = 0.5·X[k] − 0.25·X[k−1] − 0.25·X[k+1]
+    //
+    // Instantaneous frequency is the power-weighted spectral centroid:
+    //   freq = (Fs/N) · Σ_{k=K_SUM_MIN}^{K_SUM_MAX} k·|Xw[k]|² / Σ |Xw[k]|²
+    //
+    // Averaging N_SDFT=128 samples suppresses noise by √128 ≈ 11× in standard
+    // deviation versus a single-sample phase discriminator, while the 2.67 ms
+    // window (at 48 kHz) is short relative to the 20 ms SSTV sync pulse.
+    //
+    // Bins k=3–7 (1125–2625 Hz) span the full SSTV tone range 1200–2300 Hz.
+    // Bins k=2 and k=8 are stored as well to build the Hann correction.
+    // -----------------------------------------------------------------------
+    static constexpr int N_SDFT           = 128; //!< Sliding DFT window length (samples)
+    static constexpr int SDFT_K_STORE_MIN = 2;   //!< Lowest stored bin  (= K_SUM_MIN − 1)
+    static constexpr int SDFT_K_STORE_MAX = 8;   //!< Highest stored bin (= K_SUM_MAX + 1)
+    static constexpr int SDFT_K_SUM_MIN   = 3;   //!< First bin in the moment sum
+    static constexpr int SDFT_K_SUM_MAX   = 7;   //!< Last  bin in the moment sum
+    static constexpr int SDFT_NUM_BINS    = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 7
 
-    Real m_hilbertBuf[63];  //!< Circular ring buffer holding 63 past fmDemod values
-    int  m_hilbertIdx;      //!< Write index into m_hilbertBuf (0..62)
+    float   m_sdftBuf[N_SDFT];            //!< Circular ring buffer of fmDemod samples
+    Complex m_sdftBins[SDFT_NUM_BINS];    //!< Running SDFT bins k = SDFT_K_STORE_MIN..SDFT_K_STORE_MAX
+    Complex m_sdftTwiddle[SDFT_NUM_BINS]; //!< Twiddle factors e^{+j·2π·k/N} per bin
+    int     m_sdftIdx;                    //!< Next write position in m_sdftBuf (0..N_SDFT−1)
 
     // SSTV decoder state
     SSTVState m_state;

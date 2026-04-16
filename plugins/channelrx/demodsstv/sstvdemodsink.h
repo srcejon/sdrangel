@@ -141,22 +141,9 @@ private:
     // -----------------------------------------------------------------------
     // Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment equivalent).
     //
-    // Replaces the former Hilbert FIR + phase discriminator + IIR LPF chain.
-    //
     // The rectangular-window SDFT of the last N_SDFT samples is maintained
     // incrementally with one complex multiply per bin per input sample:
     //   Z[k] ← twiddle[k] · (Z[k] + x_new − x_old),   twiddle[k] = e^{+j·2π·k/N}
-    //
-    // Note: this recurrence stores Z[k](n) = X[k](n)·e^{+j·2π·k·n/N}, a
-    // phase-rotated form of the true DFT coefficient X[k].  Because the
-    // rotation phase differs between adjacent bins, the Hann-window combination
-    // (0.5·Z[k] − 0.25·Z[k−1] − 0.25·Z[k+1]) does NOT correctly cancel
-    // spectral leakage — it mixes phasors at different rotation rates, causing
-    // per-bin power to oscillate at Fs/N ≈ 375 Hz (~11 pixels) and shifting
-    // the centroid estimate by tens of Hz.  The raw rectangular-window centroid
-    // (using |Z[k]|² = |X[k]|² directly) is mathematically unbiased because
-    // sinc²(k − k₀) is symmetric about k₀, giving a true centroid of k₀ for
-    // any tone frequency k₀ within the bin range.
     //
     // Instantaneous frequency is the power-weighted spectral centroid:
     //   freq = (Fs/N) · Σ_{k=K_MIN}^{K_MAX} k·|Z[k]|² / Σ |Z[k]|²
@@ -166,6 +153,19 @@ private:
     // window (at 48 kHz) is short relative to the 20 ms SSTV sync pulse.
     //
     // Bins k=3–7 (1125–2625 Hz) span the full SSTV tone range 1200–2300 Hz.
+    //
+    // Truncated-range bias: the centroid is only unbiased when summed over
+    // all N/2 bins.  Truncating to k=3..7 causes a systematic downward bias
+    // when k₀ is near the upper edge of the range: at k₀=6.13 (2300 Hz) the
+    // measured centroid is ≈2248.7 Hz (−51 Hz); at k₀=5.07 (1900 Hz) it is
+    // ≈1875.4 Hz (−25 Hz); at k₀=4.0 (1500 Hz, exact bin) it is exact.
+    // freqToPixel() compensates by treating 2248.7 Hz as the white calibration
+    // point instead of the true 2300 Hz (see SDFT_MEAS_WHITE_FREQ below).
+    //
+    // Cross-section isolation: transitionTo() resets the SDFT buffer and bins
+    // whenever a new decoding section begins, so the N=128-sample history does
+    // not carry over frequencies from the previous section into the first
+    // ~11 pixels of the next one.
     // -----------------------------------------------------------------------
     static constexpr int N_SDFT           = 128; //!< Sliding DFT window length (samples); bin width = Fs/N = 375 Hz
     static constexpr int SDFT_K_STORE_MIN = 3;   //!< Lowest stored bin  (k=3 → 1125 Hz)
@@ -173,6 +173,12 @@ private:
     static constexpr int SDFT_K_SUM_MIN   = 3;   //!< First bin in the moment sum (k=3 → 1125 Hz, below sync 1200 Hz)
     static constexpr int SDFT_K_SUM_MAX   = 7;   //!< Last  bin in the moment sum (k=7 → 2625 Hz, above white 2300 Hz)
     static constexpr int SDFT_NUM_BINS    = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 5
+
+    // Calibrated SDFT-centroid output for a true 2300 Hz (white) input tone.
+    // Computed from the exact Dirichlet-kernel centroid at k₀=6.13 (=2300×128/48000)
+    // over bins k=3..7 (N=128, Fs=48000 Hz): centroid=5.9966 → 5.9966×375=2248.7 Hz.
+    // freqToPixel() maps this measured value to pixel 255, correcting the bias.
+    static constexpr float SDFT_MEAS_WHITE_FREQ = 2248.7f; //!< Hz — SDFT centroid output for a true 2300 Hz white tone
 
     float   m_sdftBuf[N_SDFT];            //!< Circular ring buffer of fmDemod samples
     Complex m_sdftBins[SDFT_NUM_BINS];    //!< Running SDFT bins k = SDFT_K_STORE_MIN..SDFT_K_STORE_MAX
@@ -202,9 +208,12 @@ private:
     void commitBlock();
     void transitionTo(SSTVState newState);
 
-    /** Convert frequency (Hz) to pixel luminance value [0..255] */
+    /** Convert frequency (Hz) to pixel luminance value [0..255].
+     *  Uses the calibrated SDFT-measured white frequency (SDFT_MEAS_WHITE_FREQ)
+     *  as the upper reference so that the biased centroid output maps to 255
+     *  for a true white tone, correcting the systematic truncation-range bias. */
     static int freqToPixel(float freq) {
-        float v = (freq - SSTVDEMOD_BLACK_FREQ) * 255.0f / (SSTVDEMOD_WHITE_FREQ - SSTVDEMOD_BLACK_FREQ);
+        float v = (freq - SSTVDEMOD_BLACK_FREQ) * 255.0f / (SDFT_MEAS_WHITE_FREQ - SSTVDEMOD_BLACK_FREQ);
         if (v < 0.0f) { v = 0.0f; }
         if (v > 255.0f) { v = 255.0f; }
         return static_cast<int>(v);

@@ -141,15 +141,10 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     // Stage 2 – Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment).
     //
     // The recurrence Z[k] ← twiddle[k]·(Z[k] + x_new − x_old) maintains
-    // a phase-rotated DFT: Z[k](n) = X[k](n)·e^{+j2πkn/N}.  Because the
-    // rotation phases differ between bins, a Hann combination applied to Z[k]
-    // produces oscillating per-bin powers (period N samples ≈ 11 pixels) that
-    // would corrupt the centroid.  Using the raw magnitudes |Z[k]|² = |X[k]|²
-    // gives an unbiased centroid: sinc²(k − k₀) is symmetric about k₀, so
-    // Σ k·|X[k]|² / Σ |X[k]|² = k₀ for any in-range tone frequency k₀.
-    //
-    // Power-weighted centroid over SSTV bins (k=3..7, 1125–2625 Hz):
-    //   freq = (Fs/N) · Σ k·|Z[k]|² / Σ |Z[k]|²
+    // a phase-rotated DFT bin.  The power-weighted centroid over bins k=3..7
+    // gives the instantaneous tone frequency used for both sync detection and
+    // pixel decoding.  See SDFT_MEAS_WHITE_FREQ in the header for the
+    // bias-correction rationale.
     // -----------------------------------------------------------------------
 
     // Update circular buffer and SDFT bins.
@@ -324,7 +319,10 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
     m_state = newState;
     m_stateSampleCount = 0;
 
-    // Reset pixel accumulator when starting a new decoding section
+    // Reset pixel accumulator when starting a new decoding section.
+    // Also reset the SDFT window so that the N=128-sample history from the
+    // previous section does not contaminate the first ~11 pixels of the next
+    // one (e.g. Y_odd frequencies bleeding into the Cr centroid estimate).
     if (newState == DECODING_Y_ODD || newState == DECODING_CR ||
         newState == DECODING_CB   || newState == DECODING_Y_EVEN)
     {
@@ -332,6 +330,12 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
         m_pixelAccum = 0.0f;
         m_pixelSamplePos = 0.0f;
         m_pixelSampleCount = 0;
+
+        memset(m_sdftBuf, 0, sizeof(m_sdftBuf));
+        m_sdftIdx = 0;
+        for (int i = 0; i < SDFT_NUM_BINS; i++) {
+            m_sdftBins[i] = Complex(0.0f, 0.0f);
+        }
     }
 }
 

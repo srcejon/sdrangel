@@ -28,7 +28,7 @@
    </font>
   </property>
   <property name="focusPolicy">
-   <enum>Qt::StrongFocus</enum>
+   <enum>Qt::FocusPolicy::StrongFocus</enum>
   </property>
   <property name="windowTitle">
    <string>SSTV Demodulator</string>
@@ -61,7 +61,6 @@
     <property name="bottomMargin">
      <number>2</number>
     </property>
-    <!-- Row 1: Frequency offset + channel power -->
     <item>
      <layout class="QHBoxLayout" name="freqLayout">
       <item>
@@ -100,7 +99,7 @@
          <cursorShape>PointingHandCursor</cursorShape>
         </property>
         <property name="focusPolicy">
-         <enum>Qt::StrongFocus</enum>
+         <enum>Qt::FocusPolicy::StrongFocus</enum>
         </property>
         <property name="toolTip">
          <string>Demod shift frequency from center in Hz</string>
@@ -117,14 +116,14 @@
       <item>
        <widget class="Line" name="line">
         <property name="orientation">
-         <enum>Qt::Vertical</enum>
+         <enum>Qt::Orientation::Vertical</enum>
         </property>
        </widget>
       </item>
       <item>
        <spacer name="horizontalSpacer">
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>
@@ -140,7 +139,7 @@
          <string>Channel power (dB)</string>
         </property>
         <property name="layoutDirection">
-         <enum>Qt::RightToLeft</enum>
+         <enum>Qt::LayoutDirection::RightToLeft</enum>
         </property>
         <property name="text">
          <string>0.0</string>
@@ -156,7 +155,6 @@
       </item>
      </layout>
     </item>
-    <!-- Row 2: level meter -->
     <item>
      <layout class="QHBoxLayout" name="levelLayout">
       <item>
@@ -192,7 +190,6 @@
       </item>
      </layout>
     </item>
-    <!-- Row 3: BW and FM deviation sliders -->
     <item>
      <layout class="QHBoxLayout" name="sliderLayout">
       <item>
@@ -217,7 +214,7 @@
          <number>20</number>
         </property>
         <property name="maximum">
-         <number>100</number>
+         <number>400</number>
         </property>
         <property name="pageStep">
          <number>1</number>
@@ -226,7 +223,7 @@
          <number>60</number>
         </property>
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
        </widget>
       </item>
@@ -242,14 +239,14 @@
          <string>6.0k</string>
         </property>
         <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
         </property>
        </widget>
       </item>
       <item>
        <widget class="Line" name="line_2">
         <property name="orientation">
-         <enum>Qt::Vertical</enum>
+         <enum>Qt::Orientation::Vertical</enum>
         </property>
        </widget>
       </item>
@@ -269,13 +266,13 @@
          </sizepolicy>
         </property>
         <property name="toolTip">
-         <string>FM deviation (tone frequency scaling)</string>
+         <string>FM deviation</string>
         </property>
         <property name="minimum">
          <number>20</number>
         </property>
         <property name="maximum">
-         <number>50</number>
+         <number>70</number>
         </property>
         <property name="pageStep">
          <number>1</number>
@@ -284,7 +281,7 @@
          <number>30</number>
         </property>
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
        </widget>
       </item>
@@ -300,13 +297,12 @@
          <string>3.0k</string>
         </property>
         <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
         </property>
        </widget>
       </item>
      </layout>
     </item>
-    <!-- Row 4: buttons -->
     <item>
      <layout class="QHBoxLayout" name="buttonLayout">
       <property name="spacing">
@@ -412,7 +408,7 @@
       <item>
        <spacer name="horizontalSpacer_2">
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>
@@ -426,7 +422,6 @@
     </item>
    </layout>
   </widget>
-  <!-- Image display container -->
   <widget class="QWidget" name="imageContainer" native="true">
    <property name="geometry">
     <rect>

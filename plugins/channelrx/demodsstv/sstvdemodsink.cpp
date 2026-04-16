@@ -29,10 +29,9 @@ SSTVDemodSink::SSTVDemodSink() :
     m_magsqPeak(0.0f),
     m_magsqCount(0),
     m_messageQueueToChannel(nullptr),
-    m_audioLpI1(0.0f),
-    m_audioLpQ1(0.0f),
-    m_audioLpI2(0.0f),
-    m_audioLpQ2(0.0f),
+    m_audioLpSumI(0.0f),
+    m_audioLpSumQ(0.0f),
+    m_audioLpIdx(0),
     m_state(WAITING_FOR_SYNC),
     m_stateSampleCount(0),
     m_pixelIndex(0),
@@ -41,6 +40,11 @@ SSTVDemodSink::SSTVDemodSink() :
     m_lineIndex(0)
 {
     m_magsq = 0.0;
+
+    for (int i = 0; i < SSTVDEMOD_AUDIO_LP_LEN; i++) {
+        m_audioLpBufI[i] = 0.0f;
+        m_audioLpBufQ[i] = 0.0f;
+    }
 
     // Stage-2 audio discriminator: fixed to the SSTV tone range
     m_audioNCO.setFreq(-SSTVDEMOD_AUDIO_CENTER_FREQ, SSTVDEMOD_CHANNEL_SAMPLE_RATE);
@@ -65,10 +69,13 @@ void SSTVDemodSink::resetDecoder()
     m_lineIndex = 0;
 
     // Clear audio LP filter state so stale samples don't corrupt new reception
-    m_audioLpI1 = 0.0f;
-    m_audioLpQ1 = 0.0f;
-    m_audioLpI2 = 0.0f;
-    m_audioLpQ2 = 0.0f;
+    for (int i = 0; i < SSTVDEMOD_AUDIO_LP_LEN; i++) {
+        m_audioLpBufI[i] = 0.0f;
+        m_audioLpBufQ[i] = 0.0f;
+    }
+    m_audioLpSumI = 0.0f;
+    m_audioLpSumQ = 0.0f;
+    m_audioLpIdx = 0;
     m_audioPhaDiscri.reset();
 }
 
@@ -131,33 +138,44 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     // -----------------------------------------------------------------------
     // Stage 2: Recover the instantaneous SSTV tone frequency from the audio.
     //
-    // Strategy: treat the real FM-audio sample as the real part of a complex
-    // signal, shift it to baseband by mixing with NCO at −1750 Hz (the centre
-    // of the 1200–2300 Hz SSTV tone range), reject the image with two
-    // cascaded first-order IIR low-pass filters (≈ 600 Hz cutoff each,
-    // giving ≈ −28 dB at the lowest image frequency of 2950 Hz), then apply
-    // a second phase discriminator.  The result is the tone offset from the
-    // 1750 Hz centre; adding 1750 gives the true tone frequency in Hz — a
-    // stable value during each constant-tone pixel interval.
+    // The real FM-audio sample is mixed with a complex NCO at −1750 Hz
+    // (the centre of the 1200–2300 Hz SSTV range) to shift the wanted tone
+    // to a low baseband frequency.  For a 1200 Hz sync tone this yields
+    // components at −550 Hz (wanted) and −2950 Hz (image from the negative-
+    // frequency mirror of the real signal).  A 16-tap FIR boxcar LP filter
+    // rejects the image (~−35 dB), then a second phase discriminator measures
+    // the baseband rotation rate.  Adding back the 1750 Hz centre gives the
+    // true SSTV tone frequency — a stable value during each constant-tone
+    // pixel or sync interval.
     //
-    // Math note: for audio = A·sin(2π·fa·t), mixing with exp(−j·2π·1750·t)
-    // and LP-filtering leaves a complex component at (fa − 1750) Hz.
-    // phaseDiscriminatorDelta of that signal outputs (fa−1750)/AUDIO_MAX_DEV,
+    // Math: audio = A·sin(2π·fa·t), mixed with exp(−j·2π·1750·t), LP-filtered
+    // → complex component at (fa−1750) Hz.  Discriminator output = (fa−1750)/550,
     // so freq = output·550 + 1750 = fa.
     // -----------------------------------------------------------------------
     Complex audioNco = m_audioNCO.nextIQ();
     Real mixedI = fmDemod * audioNco.real();
     Real mixedQ = fmDemod * audioNco.imag();
 
-    // Two cascaded first-order IIR LP filters (image rejection ≈ −28 dB)
-    m_audioLpI1 = SSTVDEMOD_AUDIO_LP_ALPHA * m_audioLpI1 + (1.0f - SSTVDEMOD_AUDIO_LP_ALPHA) * mixedI;
-    m_audioLpQ1 = SSTVDEMOD_AUDIO_LP_ALPHA * m_audioLpQ1 + (1.0f - SSTVDEMOD_AUDIO_LP_ALPHA) * mixedQ;
-    m_audioLpI2 = SSTVDEMOD_AUDIO_LP_ALPHA * m_audioLpI2 + (1.0f - SSTVDEMOD_AUDIO_LP_ALPHA) * m_audioLpI1;
-    m_audioLpQ2 = SSTVDEMOD_AUDIO_LP_ALPHA * m_audioLpQ2 + (1.0f - SSTVDEMOD_AUDIO_LP_ALPHA) * m_audioLpQ1;
+    // Boxcar (moving average) LP filter — 16 taps, spectral null at 3000 Hz.
+    // Mixing a 1200 Hz tone with the −1750 Hz NCO produces a wanted component
+    // at −550 Hz and an unwanted mirror (image) at −2950 Hz.  The 2-stage IIR
+    // used previously only gave ~−22 dB image rejection, which caused ±186 Hz
+    // phase noise in the discriminator output — enough to push freq above the
+    // 1300 Hz threshold every ~10 samples and reset the IN_SYNC counter.
+    // With N=16 the null at Fs/N = 3000 Hz brings image rejection to ~−35 dB,
+    // reducing the noise to ±44 Hz (max freq 1244 Hz < threshold).
+    // Group delay is perfectly constant at (N−1)/2 = 7.5 samples (0.16 ms).
+    m_audioLpSumI -= m_audioLpBufI[m_audioLpIdx];
+    m_audioLpSumQ -= m_audioLpBufQ[m_audioLpIdx];
+    m_audioLpBufI[m_audioLpIdx] = mixedI;
+    m_audioLpBufQ[m_audioLpIdx] = mixedQ;
+    m_audioLpSumI += mixedI;
+    m_audioLpSumQ += mixedQ;
+    m_audioLpIdx = (m_audioLpIdx + 1) % SSTVDEMOD_AUDIO_LP_LEN;
 
     double audioMagsq;
     Real audioDev;
-    Complex audioComplex(m_audioLpI2, m_audioLpQ2);
+    Complex audioComplex(m_audioLpSumI, m_audioLpSumQ);
     Real audioDemod = m_audioPhaDiscri.phaseDiscriminatorDelta(audioComplex, audioMagsq, audioDev);
 
     // Convert discriminator output to SSTV tone frequency in Hz

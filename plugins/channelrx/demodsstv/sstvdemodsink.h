@@ -64,9 +64,14 @@
 // the resulting baseband complex signal.
 #define SSTVDEMOD_AUDIO_CENTER_FREQ  1750.0f  // Centre of SSTV tone range (Hz)
 #define SSTVDEMOD_AUDIO_MAX_DEV       550.0f  // Max deviation from centre: 1750-1200 Hz
-// First-order IIR LP coefficient — two stages cascaded give ≈ 600 Hz cutoff
-// alpha = exp(-2π * 600 / 48000) ≈ 0.9245
-#define SSTVDEMOD_AUDIO_LP_ALPHA      0.9245f
+// Boxcar (moving average) LP filter length for the audio tone detector.
+// N=16 places a spectral null at Fs/N = 3000 Hz, close to the 2950 Hz image
+// produced by mixing a 1200 Hz sync tone with the 1750 Hz centre NCO.
+// This gives ~−35 dB image rejection with a perfectly constant group delay of
+// (N−1)/2 = 7.5 samples (0.16 ms at 48 kHz).  The 2-stage IIR alternative
+// only provides ~−22 dB, which lets the image create ±186 Hz phase noise and
+// resets the IN_SYNC counter every ~10 samples before it reaches SYNC_SAMPLES_MIN.
+#define SSTVDEMOD_AUDIO_LP_LEN        16
 
 class SSTVDemod;
 
@@ -152,10 +157,12 @@ private:
     // with an NCO at -1750 Hz, low-pass filter, then run a second discriminator.
     NCO m_audioNCO;                         //!< NCO at SSTVDEMOD_AUDIO_CENTER_FREQ for audio downconversion
     PhaseDiscriminators m_audioPhaDiscri;   //!< Stage-2: audio phase discriminator
-    Real m_audioLpI1;   //!< 1st LP filter stage — I state
-    Real m_audioLpQ1;   //!< 1st LP filter stage — Q state
-    Real m_audioLpI2;   //!< 2nd LP filter stage — I state (cascade for better image rejection)
-    Real m_audioLpQ2;   //!< 2nd LP filter stage — Q state
+    // 16-tap FIR boxcar LP: circular buffer + running sum (avoids O(N) per sample)
+    Real m_audioLpBufI[SSTVDEMOD_AUDIO_LP_LEN]; //!< Boxcar LP circular buffer — I channel
+    Real m_audioLpBufQ[SSTVDEMOD_AUDIO_LP_LEN]; //!< Boxcar LP circular buffer — Q channel
+    Real m_audioLpSumI;  //!< Running sum for boxcar LP — I channel
+    Real m_audioLpSumQ;  //!< Running sum for boxcar LP — Q channel
+    int  m_audioLpIdx;   //!< Circular buffer write index
 
     // SSTV decoder state
     SSTVState m_state;

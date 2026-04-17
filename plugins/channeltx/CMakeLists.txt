@@ -28,6 +28,10 @@ if (ENABLE_CHANNELTX_MODNFM)
     add_subdirectory(modnfm)
 endif()
 
+if (ENABLE_CHANNELTX_MODSSTV)
+    add_subdirectory(modsstv)
+endif()
+
 if (ENABLE_CHANNELTX_MODSSB)
     add_subdirectory(modssb)
 endif()

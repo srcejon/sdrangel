@@ -143,7 +143,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     // Stage 2 – Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment).
     //
     // The recurrence Z[k] ← twiddle[k]·(Z[k] + x_new − x_old) maintains
-    // a phase-rotated DFT bin.  The power-weighted centroid over bins k=3..7
+    // a phase-rotated DFT bin.  The power-weighted centroid over bins k=1..4
     // gives the instantaneous tone frequency used for both sync detection and
     // pixel decoding.  See SDFT_MEAS_WHITE_FREQ in the header for the
     // bias-correction rationale.
@@ -221,9 +221,9 @@ void SSTVDemodSink::processOneSample(Complex &ci)
 
     case IN_PORCH:
         // Wait for the porch period to elapse then begin decoding.
-        // No frequency validation here: the porch is only 99 samples long while
-        // the SDFT window is 128 samples, so the centroid is always contaminated
-        // by the preceding 1200 Hz sync and would fail any reasonable threshold.
+        // With N_SDFT=64 (1.33 ms) the window is shorter than the 2.08 ms
+        // porch (99 samples), so by the end of the porch the SDFT contains
+        // only porch-frequency samples and is no longer contaminated by sync.
         // The sync duration check in IN_SYNC is sufficient to reject VIS bits.
         m_stateSampleCount++;
         if (m_stateSampleCount >= SSTVDEMOD_PORCH_SAMPLES) {
@@ -343,7 +343,7 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
     // Reset pixel accumulator when starting a new decoding section.
     // The SDFT history is intentionally NOT cleared here: adjacent sections
     // (Y_odd, Cr, Cb, Y_even) all operate in the same 1500–2300 Hz frequency
-    // range, so the ~14-pixel bleed-in from the previous section is mild.
+    // range, so the ~7-pixel bleed-in from the previous section is mild.
     // Clearing to zero would force those pixels to fall back to the zero-power
     // default (1200 Hz), producing green/teal artefacts in the Cr/Cb channels.
     if (newState == DECODING_Y_ODD || newState == DECODING_CR ||

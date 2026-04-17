@@ -44,15 +44,12 @@
 #define SSTVDEMOD_SYNC_FREQ       1200.0f   // Sync pulse frequency
 #define SSTVDEMOD_BLACK_FREQ      1500.0f   // Black level / start tone
 #define SSTVDEMOD_WHITE_FREQ      2300.0f   // White level
-// Sync threshold: with N_SDFT=64 and bins k=1..3 the SDFT centroid for a 1200 Hz sync
-// tone has a steady-state mean of ~1316 Hz.  A 40-sample MA (SDFT_FREQ_MA_LEN) is
-// applied to suppress the centroid oscillation that occurs at twice the input frequency,
-// leaving a stable ~1316 Hz reading.  1420 Hz sits in the gap between that (~1316 Hz)
-// and the 1500 Hz porch, giving ~84 Hz margin on each side.
-// Note: N_SDFT=32 is not viable — the 1200 Hz sync tone maps to k₀=0.8 which is below
-// k_min=1, so the sync centroid reads above the porch and the FSM cannot detect sync.
-// The minimum viable window size is N_SDFT=42 (k₀_sync=1.05 > 1.0).
-#define SSTVDEMOD_SYNC_THRESHOLD  1420.0f   // Below this = sync, above = pixel data
+// Sync threshold (conceptual boundary, Hz).  Sync tone = 1200 Hz; pixel data starts at
+// 1500 Hz (black level).  The sync detector does NOT compare a frequency estimate against
+// this value; instead it uses a dedicated energy detector (see N_SYNC / SYNC_DETECT_THRESHOLD
+// below) to avoid the instability of frequency estimation near the boundary.  This macro
+// is retained as documentation of the frequency boundary and for potential future use.
+#define SSTVDEMOD_SYNC_THRESHOLD  1420.0f   // Hz — conceptual boundary between sync and pixel data
 
 // PD120 timing in milliseconds
 #define SSTVDEMOD_SYNC_MS         20.0f     // Scan-line sync pulse duration
@@ -231,35 +228,52 @@ private:
     MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqMovAvg; //!< Post-SDFT/Hilbert freq MA; shared by both paths (pixel decode)
 
     // -----------------------------------------------------------------------
-    // Dedicated sync-detection FIR path.
+    // Dedicated sync-tone energy detector.
     //
-    // Two additional MA stages are cascaded on top of m_freqMovAvg to produce
-    // freqSync, used exclusively for sync-threshold decisions in WAITING_FOR_SYNC
-    // and IN_SYNC.  The combined three-stage cascade is a Bartlett-window FIR:
-    //   freqSync = MA₄₀( MA₄₀( freq ) )
+    // The pixel SDFT (N=64, k=1..3) estimates tone frequency for pixel
+    // decoding but is not used for sync detection.  Sync detection uses a
+    // completely separate approach: measure the energy at the exact sync
+    // frequency (1200 Hz) via a single-bin sliding DFT.
     //
-    // vs the single 40-sample MA used for pixel decoding (freq):
-    //   • 6th-order zeros at 1200 Hz and 2400 Hz (vs 2nd-order)
-    //   • First sidelobe attenuation: −39 dB (vs −13 dB)
-    //   • Noise σ reduced ≈ 26% beyond the single-MA floor
+    // Why N_SYNC = 160 and SYNC_K = 4:
+    //   N_SYNC = Fs / (f_black − f_sync) = 48000 / (1500 − 1200) = 160
+    //   SYNC_K = f_sync × N_SYNC / Fs   = 1200 × 160 / 48000    = 4
+    //   This choice places exact DFT nulls at every multiple of Fs/N_SYNC = 300 Hz
+    //   above the bin: 1500, 1800, 2100, 2400 Hz — the entire pixel-data
+    //   frequency range.  The sync detector therefore produces zero output for
+    //   any pure pixel-data tone regardless of its frequency.
     //
-    // A SYNC_DETECT_HOLD-sample hold counter additionally requires freqSync to
-    // stay ≥ threshold for that many consecutive samples before IN_SYNC is exited,
-    // suppressing any residual noise spikes that still reach the threshold.
+    // Energy normalisation:
+    //   The raw bin energy |Z_sync[4]|² is divided by (N_SYNC²/4) × totalPower,
+    //   where totalPower = MA(fmDemod²).  This produces a dimensionless ratio:
+    //     syncRatio = |Z_sync|² / ((N_SYNC²/4) × totalPower)
+    //   For a sustained pure 1200 Hz tone of any amplitude: syncRatio → 1.0
+    //   For any pixel-data tone (1500+ Hz):                  syncRatio → 0.0
+    //   For 1420 Hz (sync/pixel boundary):                   syncRatio ≈ 0.10
+    //   The result is independent of signal amplitude.
     //
-    // Timing compensation:
-    //   The two extra MA stages add exactly 2 × (SDFT_FREQ_MA_LEN / 2) samples
-    //   of additional group delay; the hold counter adds SYNC_DETECT_HOLD more.
-    //   PORCH_SAMPLES_ADJUSTED reduces the porch wait by SYNC_DETECT_EXTRA_DELAY
-    //   so image-start timing is mathematically identical to the original path —
-    //   regardless of signal level or which estimator (SDFT vs Hilbert) is active.
+    // Timing compensation (SYNC_PORCH_SAMPLES):
+    //   After the sync tone ends and the porch (1500 Hz) begins, the
+    //   N_SYNC=160 sample window takes time to flush.  For SYNC_DETECT_THRESHOLD
+    //   = 0.4, the exit is detected after ≈ SYNC_PORCH_DELAY = 88 porch samples.
+    //   SYNC_PORCH_SAMPLES = PORCH_SAMPLES − SYNC_PORCH_DELAY (= 11 samples)
+    //   ensures that by the time decoding starts the full PORCH_SAMPLES have
+    //   elapsed, keeping pixel-start timing identical to the spec.
+    //   At that point the pixel SDFT window (N=64) has had ≥ 99 porch samples —
+    //   more than enough to flush all sync-frequency content before decoding.
     // -----------------------------------------------------------------------
-    static constexpr int SYNC_DETECT_HOLD        = 3;  //!< Consecutive above-threshold samples required to confirm sync end
-    static constexpr int SYNC_DETECT_EXTRA_DELAY = SDFT_FREQ_MA_LEN + SYNC_DETECT_HOLD; //!< Total extra delay: 2×MA_group_delay + hold (= 40 + 3 = 43 samples)
-    static constexpr int PORCH_SAMPLES_ADJUSTED  = SSTVDEMOD_PORCH_SAMPLES - SYNC_DETECT_EXTRA_DELAY; //!< Porch count with sync-detect delay compensation (= 56 samples)
+    static constexpr int   N_SYNC                = 160;   //!< Sync SDFT window length: Fs/(f_black−f_sync) = 48000/300 = 160
+    static constexpr int   SYNC_K                = 4;     //!< Sync SDFT bin: f_sync×N_SYNC/Fs = 1200×160/48000 = 4
+    static constexpr float SYNC_DETECT_THRESHOLD = 0.4f;  //!< Normalised energy threshold: >0.4 → sync, ≤0.4 → pixel/porch
+    static constexpr int   SYNC_PORCH_DELAY      = 88;    //!< Samples into porch before sync energy drops below threshold
+    static constexpr int   SYNC_PORCH_SAMPLES    = SSTVDEMOD_PORCH_SAMPLES - SYNC_PORCH_DELAY; //!< = 11 samples
 
-    MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqSyncMa1; //!< Sync-detect cascade stage 1 (applied to freq)
-    MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqSyncMa2; //!< Sync-detect cascade stage 2 (applied to m_freqSyncMa1 output)
+    float   m_syncSdftBuf[N_SYNC]; //!< Ring buffer for the sync-energy sliding DFT
+    Complex m_syncSdftBin;         //!< Running SDFT bin at bin k=SYNC_K (1200 Hz)
+    Complex m_syncSdftTwiddle;     //!< Twiddle factor e^{+j·2π·SYNC_K/N_SYNC}
+    int     m_syncSdftIdx;         //!< Next write position in m_syncSdftBuf (0..N_SYNC−1)
+
+    MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_syncTotalPowerMa; //!< MA of fmDemod² for sync-ratio normalisation
 
     // -----------------------------------------------------------------------
     // Hilbert instantaneous-frequency estimator (alternative to SDFT above).
@@ -396,8 +410,7 @@ private:
 
     // SSTV decoder state
     SSTVState m_state;
-    int m_stateSampleCount;       //!< Number of samples spent in current state
-    int m_syncExitHoldCount;      //!< Consecutive samples with freqSync >= threshold; reset to 0 on any below-threshold sample
+    int m_stateSampleCount;  //!< Number of samples spent in current state
 
     // Pixel sampling state (sub-pixel accumulation)
     int m_pixelIndex;          //!< Index of current pixel being accumulated (within section)

@@ -43,7 +43,7 @@ SSTVDemodSink::SSTVDemodSink() :
     m_hilbertDcY(0.0f),
     m_hilbertZ(0.0f, 0.0f),
     m_useHilbert(false),
-    m_syncExitHoldCount(0)
+    m_syncSdftIdx(0)
 {
     m_magsq = 0.0;
 
@@ -59,6 +59,14 @@ SSTVDemodSink::SSTVDemodSink() :
     for (int i = 0; i < SDFT_NUM_BINS; i++) {
         m_sdftBins[i] = Complex(0.0f, 0.0f);
     }
+
+    // Precompute sync-energy SDFT twiddle factor e^{+j·2π·SYNC_K/N_SYNC}.
+    {
+        const float angle = static_cast<float>(2.0 * M_PI * double(SYNC_K) / double(N_SYNC));
+        m_syncSdftTwiddle = Complex(std::cos(angle), std::sin(angle));
+    }
+    memset(m_syncSdftBuf, 0, sizeof(m_syncSdftBuf));
+    m_syncSdftBin = Complex(0.0f, 0.0f);
 
     // Clear the Hilbert FIR ring buffer and DC-blocker state.
     memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
@@ -89,9 +97,12 @@ void SSTVDemodSink::resetDecoder()
         m_sdftBins[i] = Complex(0.0f, 0.0f);
     }
     m_freqMovAvg.reset();
-    m_freqSyncMa1.reset();
-    m_freqSyncMa2.reset();
-    m_syncExitHoldCount = 0;
+    m_syncTotalPowerMa.reset();
+
+    // Reset the sync-energy sliding DFT.
+    memset(m_syncSdftBuf, 0, sizeof(m_syncSdftBuf));
+    m_syncSdftBin = Complex(0.0f, 0.0f);
+    m_syncSdftIdx = 0;
 
     // Reset the Hilbert IF estimator state.
     memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
@@ -296,89 +307,93 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     }
 
     // -----------------------------------------------------------------------
-    // Sync-detection path: two extra MA cascade stages → freqSync.
+    // Sync-tone energy detector (runs every sample, state-independent).
     //
-    // freqSync is the output of a 3-stage Bartlett-window FIR (3 cascaded
-    // 40-sample MAs).  It is used ONLY for sync-threshold decisions in the
-    // WAITING_FOR_SYNC and IN_SYNC states; image pixel decoding always uses
-    // freq (single 40-sample MA) to avoid pixel blur.  A hold counter in the
-    // IN_SYNC case additionally filters out sub-SYNC_DETECT_HOLD-sample spikes.
+    // A separate N_SYNC=160 sliding-DFT bin at k=4 (1200 Hz) measures the
+    // fraction of signal energy at the sync frequency.  N_SYNC=160 = Fs/300
+    // places exact nulls at 1500, 1800, 2100, 2400 Hz so pixel-data tones
+    // produce zero energy in this bin.
     //
-    // See SYNC_DETECT_EXTRA_DELAY / PORCH_SAMPLES_ADJUSTED in the header for
-    // the timing-compensation rationale.
+    // syncRatio = |Z_sync|² / ((N_SYNC²/4) × MA(fmDemod²))
+    //   ≈ 1.0 when a sustained 1200 Hz sync tone is present
+    //   ≈ 0.0 for any pixel-data tone (1500–2300 Hz)
+    //   ≈ 0.10 at the sync/pixel boundary (1420 Hz)
+    // Threshold SYNC_DETECT_THRESHOLD = 0.4 sits comfortably above 0.10
+    // and below 1.0, independent of signal amplitude.
     // -----------------------------------------------------------------------
-    m_freqSyncMa1(freq);
-    m_freqSyncMa2(m_freqSyncMa1.instantAverage());
-    const float freqSync = m_freqSyncMa2.instantAverage();
+    const float xNewSync = fmDemod;
+    const float xOldSync = m_syncSdftBuf[m_syncSdftIdx];
+    m_syncSdftBuf[m_syncSdftIdx] = xNewSync;
+    m_syncSdftIdx = (m_syncSdftIdx + 1) % N_SYNC;
+    m_syncSdftBin = m_syncSdftTwiddle * (m_syncSdftBin + xNewSync - xOldSync);
+
+    m_syncTotalPowerMa(fmDemod * fmDemod);
+    const float syncTotalPower = m_syncTotalPowerMa.instantAverage();
+
+    // isSyncTone: true when 1200 Hz sync tone is present, false for pixel data.
+    const bool isSyncTone = (syncTotalPower > 1.0e-10f) &&
+        (std::norm(m_syncSdftBin) >
+            SYNC_DETECT_THRESHOLD * (float(N_SYNC * N_SYNC) / 4.0f) * syncTotalPower);
 
     // -----------------------------------------------------------------------
-    // SSTV PD120 state machine; 'freq' is the smoothed tone frequency (Hz)
+    // SSTV PD120 state machine.
+    // 'freq' (from the pixel SDFT or Hilbert path) is used ONLY for pixel
+    // decoding; sync detection uses isSyncTone exclusively.
     // -----------------------------------------------------------------------
     switch (m_state)
     {
     case WAITING_FOR_SYNC:
-        // Look for frequency dropping to sync level.  freqSync (3-stage cascade
-        // MA) is used here for noise robustness; its extra group delay is fully
-        // compensated by the reduced PORCH_SAMPLES_ADJUSTED count in IN_PORCH.
-        if (freqSync < SSTVDEMOD_SYNC_THRESHOLD) {
+        // isSyncTone becomes true when the sync-bin energy exceeds the
+        // threshold (~72 samples after the 1200 Hz tone starts, at threshold 0.4).
+        if (isSyncTone) {
             transitionTo(IN_SYNC);
         }
         break;
 
     case IN_SYNC:
-        // Count samples while at sync level.
+        // Count samples while the sync tone is present.
         m_stateSampleCount++;
 
-        if (freqSync >= SSTVDEMOD_SYNC_THRESHOLD)
+        if (!isSyncTone)
         {
-            // freqSync exceeded the threshold.  Require SYNC_DETECT_HOLD
-            // consecutive above-threshold samples to confirm genuine sync end;
-            // single-sample noise spikes that still pass the cascade filter
-            // are suppressed here.
-            m_syncExitHoldCount++;
-            if (m_syncExitHoldCount >= SYNC_DETECT_HOLD)
+            // Energy fell below the threshold — sync pulse has ended (or was never
+            // valid).  Accept the duration and transition to porch, or reject and
+            // go back to waiting.
+            //
+            // At SYNC_DETECT_THRESHOLD=0.4 the exit fires ≈ SYNC_PORCH_DELAY=88
+            // samples into the porch (where energy has decayed to threshold).
+            // m_stateSampleCount therefore includes: actual sync pulse
+            // (≈960 samples) + 88 porch samples ≈ 1048 samples — still within
+            // [SYNC_SAMPLES_MIN=720, SYNC_SAMPLES_MAX=1200].
+            // VIS bits (30 ms = 1440 samples) produce a count ≈ 1528 > MAX → rejected.
+            if (m_stateSampleCount >= SSTVDEMOD_SYNC_SAMPLES_MIN &&
+                m_stateSampleCount <= SSTVDEMOD_SYNC_SAMPLES_MAX)
             {
-                // Sync pulse ended — accept only if within the valid duration window.
-                // VIS start/stop bits and "0" data bits are 30 ms (1440 samples),
-                // well above SYNC_SAMPLES_MAX (1200 samples = 25 ms), so they are
-                // rejected here, preventing false image-decode triggering.
-                if (m_stateSampleCount >= SSTVDEMOD_SYNC_SAMPLES_MIN &&
-                    m_stateSampleCount <= SSTVDEMOD_SYNC_SAMPLES_MAX)
-                {
-                    transitionTo(IN_PORCH);
-                }
-                else
-                {
-                    transitionTo(WAITING_FOR_SYNC);
-                }
+                transitionTo(IN_PORCH);
+            }
+            else
+            {
+                transitionTo(WAITING_FOR_SYNC);
             }
         }
-        else
+        else if (m_stateSampleCount > SSTVDEMOD_SYNC_SAMPLES_MAX)
         {
-            // freqSync is still below threshold: reset the hold counter so a
-            // brief noise spike that temporarily reaches the threshold does not
-            // accumulate toward the SYNC_DETECT_HOLD exit criterion.
-            m_syncExitHoldCount = 0;
-        }
-
-        if (m_stateSampleCount > SSTVDEMOD_SYNC_SAMPLES_MAX)
-        {
-            // Still at sync level but already too long (e.g. a VIS 0-bit that
-            // never rises above the threshold within the valid window).
+            // Sync energy has been high for too long (e.g. a VIS 0-bit or
+            // carrier hold that never transitions).  Abort.
             transitionTo(WAITING_FOR_SYNC);
         }
         break;
 
     case IN_PORCH:
-        // Wait for the porch period to elapse then begin decoding.
-        // PORCH_SAMPLES_ADJUSTED = SSTVDEMOD_PORCH_SAMPLES − SYNC_DETECT_EXTRA_DELAY
-        // compensates for the extra group delay introduced by the two cascade MA
-        // stages and the hold counter in the sync-detection path.  This keeps the
-        // image-start timing identical to the original single-MA detection.
-        // The remaining porch count (56 samples ≈ 1.2 ms) is still long enough
-        // for the 64-sample SDFT window to have cleared of sync-frequency content.
+        // The sync exit detection fires ≈ SYNC_PORCH_DELAY samples into the
+        // porch.  SYNC_PORCH_SAMPLES = PORCH_SAMPLES − SYNC_PORCH_DELAY is
+        // the remaining wait to complete the full porch duration, so decoding
+        // starts at the correct timing relative to the image data.
+        // By the time decoding starts the pixel SDFT window (N=64) has had
+        // ≥ PORCH_SAMPLES = 99 samples of porch-frequency content, fully
+        // flushing any residual sync-frequency contribution.
         m_stateSampleCount++;
-        if (m_stateSampleCount >= PORCH_SAMPLES_ADJUSTED) {
+        if (m_stateSampleCount >= SYNC_PORCH_SAMPLES) {
             transitionTo(DECODING_Y_ODD);
         }
         break;
@@ -500,7 +515,6 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
 {
     m_state = newState;
     m_stateSampleCount = 0;
-    m_syncExitHoldCount = 0;
 
     // Reset pixel accumulator when starting a new decoding section.
     // The SDFT history is intentionally NOT cleared here: adjacent sections

@@ -231,60 +231,93 @@ private:
     MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqMovAvg; //!< Post-SDFT freq MA to suppress sync-tone centroid oscillation
 
     // -----------------------------------------------------------------------
-    // Quadrature-mixing instantaneous-frequency estimator (alternative to SDFT).
+    // Hilbert instantaneous-frequency estimator (alternative to SDFT above).
     //
     // Selected by setting m_useHilbert = true.
     //
-    // Why the previous 31-tap Hamming Hilbert FIR failed:
-    //   The FIR's passband starts at approximately Fs×4/N = 48000×4/31 ≈ 6200 Hz.
-    //   SSTV tones (1200–2300 Hz) lie in its deep transition band, giving only
-    //   |H(1200 Hz)| ≈ 0.70 and |H(2300 Hz)| ≈ 0.97.  The amplitude imbalance
-    //   produces an elliptical rather than circular analytic phasor, which makes
-    //   the phase-difference frequency estimate oscillate at 2×f_tone with an
-    //   amplitude ≈ (1/|H|−|H|)×f_tone.  For the 1200 Hz sync tone this gives an
-    //   845–1704 Hz oscillation.  The 3000 Hz IIR post-filter barely attenuated
-    //   this (only −2.1 dB at 2400 Hz).  This is NOT Gibbs phenomenon — it is a
-    //   fundamental consequence of the filter's passband starting too high.  A
-    //   different window (Blackman, Kaiser) would not fix it; a FIR long enough to
-    //   reach |H(1200)| ≈ 1 would need ~255 taps (127-sample group delay, worse
-    //   than the SDFT path).
+    // Step 1 — Analytic signal via 63-tap Hamming-windowed Hilbert FIR:
+    //   For each real input sample x[n] (= fmDemod), the Hilbert transformer
+    //   produces the imaginary part of the analytic signal:
+    //     x̂[n] = Σ_{k=0}^{62} h[k] · x[n−k]
+    //   Only the 32 even-indexed taps (k=0,2,...,62) are non-zero because this
+    //   is a type-III FIR (antisymmetric, zero centre tap at k=31).
+    //   The real part is the input delayed by (N−1)/2 = 31 samples:
+    //     x_r[n] = x[n−31]
+    //   Together: z[n] = x_r[n] + j·x̂[n]
     //
-    // New approach: quadrature mixing + narrowband IIR BPF
+    //   Why 63 taps instead of the 31 used previously:
+    //     The 31-tap filter had |H(1200 Hz)| ≈ 0.70, placing the sync tone
+    //     deep in its transition band.  The resulting elliptical phasor caused
+    //     the phase-difference estimator to oscillate at 2×1200 Hz with an
+    //     amplitude of (1−0.70)/(1+0.70) × 2400 ≈ ±416 Hz, sweeping the sync
+    //     reading from 784 to 1616 Hz.  The 3000 Hz post-LPF barely attenuated
+    //     this (only −2.1 dB at 2400 Hz).
+    //     With 63 taps, |H(1200 Hz)| = 0.985, reducing the oscillation to
+    //     (1−0.985)/(1+0.985) × 2400 ≈ ±18 Hz — negligible for sync detection.
+    //     The group delay increases from 15 to 31 samples (3.4 pixels), which
+    //     is still far less than the SDFT path's ~11 pixels.
     //
-    // Step 1 — Mix to baseband around the SSTV band centre (HILBERT_F_CENTER):
-    //   re_mix[n] = fmDemod[n] · cos(2π·f_c·n/Fs)
-    //   im_mix[n] = fmDemod[n] · −sin(2π·f_c·n/Fs)
-    //   A cos/sin NCO always provides EXACTLY 90° quadrature and unity amplitude,
-    //   so there is no amplitude imbalance and no elliptical-phasor problem.
+    //   The quadrature-mixing + IIR BPF approach was also tried but suffers an
+    //   identical image problem: mixing a real signal down to complex baseband
+    //   produces both a signal component at (f−f_c) and an image at −(f+f_c),
+    //   and a real-coefficient IIR cannot distinguish them.  The image-to-signal
+    //   ratio with a 700 Hz IIR at the sync tone is ≈ 0.30, giving the same
+    //   ±700 Hz oscillation range.  The Hilbert FIR properly forms the one-sided
+    //   (analytic) signal, eliminating the image completely.
     //
-    // Step 2 — First-order IIR BPF (LPF on the complex baseband signal):
-    //   re_bpf[n] = α·re_mix[n] + (1−α)·re_bpf[n−1]
-    //   im_bpf[n] = α·im_mix[n] + (1−α)·im_bpf[n−1]
-    //   Cutoff: HILBERT_BPF_ALPHA → 700 Hz at 48 kHz.
-    //   The ±700 Hz passband admits all SSTV tones (1200–2300 Hz → ±550 Hz at
-    //   baseband) while strongly rejecting the 2×f_tone noise components.
-    //   Group delay (DC) ≈ (1−α)/α ≈ 10.4 samples ≈ 1.1 pixels.
+    // Step 2 — Phase-difference instantaneous frequency:
+    //   f_raw = (Fs/2π) · arg( conj(z[n−1]) · z[n] )
+    //         = (Fs/2π) · atan2( Im(conj(z_prev)·z_curr),
+    //                             Re(conj(z_prev)·z_curr) )
+    //   When |z[n]| is near zero (no signal), f_raw falls back to BLACK_FREQ.
     //
-    // Step 3 — Phase-difference instantaneous frequency:
-    //   The IIR in steady state for a complex rotating tone produces the same
-    //   phase-difference as the input (the IIR phase offset cancels in the diff),
-    //   so the estimate is exact:
-    //   f_raw = (Fs/2π)·arg(conj(z[n−1])·z[n]) + f_c
-    //   When |z[n]| ≈ 0 (no signal), falls back to SSTVDEMOD_BLACK_FREQ.
+    // Step 3 — 1st-order IIR low-pass filter (cutoff 3000 Hz):
+    //   Suppresses wideband FM-demodulator noise above the SSTV tone range.
+    //   The residual ±18 Hz elliptical beat (at 2400 Hz) is further attenuated
+    //   to < 14 Hz by this filter.  Group delay ≈ 2.1 samples ≈ 0.2 pixels.
+    //     f[n] = α·f_raw + (1−α)·f[n−1],   α = HILBERT_LPF_ALPHA
     //
-    // Step 4 — No additional LPF needed: the BPF bandwidth already limits noise.
-    //
-    // Pixel mapping uses freqToPixelDirect() (linear 1500–2300 Hz → 0–255).
+    // Pixel mapping uses freqToPixelDirect(): a simple linear map
+    //   [SSTVDEMOD_BLACK_FREQ, SSTVDEMOD_WHITE_FREQ] → [0, 255]
+    // with no piecewise calibration because the Hilbert estimator is unbiased.
     // -----------------------------------------------------------------------
-    static constexpr float HILBERT_F_CENTER  = 1750.0f;    //!< Hz — SSTV tone band centre; midpoint of 1200–2300 Hz
-    static constexpr float HILBERT_BPF_ALPHA = 0.087557f;  //!< IIR alpha for 700 Hz BPF at 48 kHz: 1 - exp(-2*pi*700/48000)
+    static constexpr int   N_HILBERT          = 63;          //!< Hilbert FIR length (samples); group delay = 31 samples = 3.4 pixels
+    static constexpr int   HILBERT_M          = (N_HILBERT - 1) / 2; //!< Centre tap index = 31
 
-    float   m_hilbertNcoPhase;   //!< NCO phase accumulator for the complex mixer (radians, wrapped to [0, 2π))
-    float   m_hilbertBpfRe;      //!< Complex BPF state, real part
-    float   m_hilbertBpfIm;      //!< Complex BPF state, imaginary part
-    Complex m_hilbertZ;          //!< Previous complex baseband sample z[n−1] for phase-difference calculation
+    // 63-tap Hamming-windowed Hilbert FIR (type III, antisymmetric).
+    // Non-zero only at even indices (odd offsets from centre index 31).
+    // h[k] = (2/(pi*(k-31))) * (0.54 - 0.46*cos(2*pi*k/62)) for odd (k-31), else 0.
+    // Antisymmetry: HILBERT_COEFFS[k] = -HILBERT_COEFFS[62-k].
+    static constexpr float HILBERT_COEFFS[N_HILBERT] = {
+        -0.00164289f, +0.00000000f, -0.00196290f, +0.00000000f,  // k=0..3
+        -0.00276527f, +0.00000000f, -0.00413673f, +0.00000000f,  // k=4..7
+        -0.00617453f, +0.00000000f, -0.00899382f, +0.00000000f,  // k=8..11
+        -0.01274042f, +0.00000000f, -0.01761352f, +0.00000000f,  // k=12..15
+        -0.02390714f, +0.00000000f, -0.03209054f, +0.00000000f,  // k=16..19
+        -0.04297654f, +0.00000000f, -0.05811410f, +0.00000000f,  // k=20..23
+        -0.08085332f, +0.00000000f, -0.11996456f, +0.00000000f,  // k=24..27
+        -0.20772989f, +0.00000000f, -0.63511728f, +0.00000000f,  // k=28..31
+        +0.63511728f, +0.00000000f, +0.20772989f, +0.00000000f,  // k=32..35
+        +0.11996456f, +0.00000000f, +0.08085332f, +0.00000000f,  // k=36..39
+        +0.05811410f, +0.00000000f, +0.04297654f, +0.00000000f,  // k=40..43
+        +0.03209054f, +0.00000000f, +0.02390714f, +0.00000000f,  // k=44..47
+        +0.01761352f, +0.00000000f, +0.01274042f, +0.00000000f,  // k=48..51
+        +0.00899382f, +0.00000000f, +0.00617453f, +0.00000000f,  // k=52..55
+        +0.00413673f, +0.00000000f, +0.00276527f, +0.00000000f,  // k=56..59
+        +0.00196290f, +0.00000000f, +0.00164289f                  // k=60..62
+    };
 
-    bool    m_useHilbert;        //!< true = quadrature-mixing IF path; false = SDFT spectral-centroid path (default)
+    // 1st-order IIR LPF coefficient: alpha = 1 - exp(-2*pi*3000/48000).
+    // y(n) = HILBERT_LPF_ALPHA*x(n) + (1-HILBERT_LPF_ALPHA)*y(n-1)
+    // Time constant = 2.1 samples = 0.2 pixel blur at 190 us/pixel.
+    static constexpr float HILBERT_LPF_ALPHA  = 0.32476809f; //!< IIR alpha for 3000 Hz LPF at 48 kHz
+
+    float   m_hilbertBuf[N_HILBERT];   //!< Circular ring buffer of fmDemod samples for the Hilbert FIR
+    int     m_hilbertIdx;              //!< Next write index in m_hilbertBuf (0..N_HILBERT-1)
+    Complex m_hilbertZ;                //!< Previous analytic sample z[n-1] for phase-difference calculation
+    float   m_hilbertFreqIIR;          //!< IIR LPF state for the Hilbert IF output
+
+    bool    m_useHilbert;              //!< true = Hilbert IF path; false = SDFT spectral-centroid path (default)
 
     // SSTV decoder state
     SSTVState m_state;

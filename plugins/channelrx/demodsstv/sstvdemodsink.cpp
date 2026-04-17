@@ -38,10 +38,9 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pixelSampleCount(0),
     m_lineIndex(0),
     m_sdftIdx(0),
-    m_hilbertNcoPhase(0.0f),
-    m_hilbertBpfRe(0.0f),
-    m_hilbertBpfIm(0.0f),
+    m_hilbertIdx(0),
     m_hilbertZ(0.0f, 0.0f),
+    m_hilbertFreqIIR(SSTVDEMOD_BLACK_FREQ),
     m_useHilbert(false)
 {
     m_magsq = 0.0;
@@ -58,6 +57,9 @@ SSTVDemodSink::SSTVDemodSink() :
     for (int i = 0; i < SDFT_NUM_BINS; i++) {
         m_sdftBins[i] = Complex(0.0f, 0.0f);
     }
+
+    // Clear the Hilbert FIR ring buffer.
+    memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
 
     applySettings(QStringList(), m_settings, true);
     applyChannelSettings(m_channelSampleRate, m_channelFrequencyOffset, true);
@@ -86,11 +88,11 @@ void SSTVDemodSink::resetDecoder()
     }
     m_freqMovAvg.reset();
 
-    // Reset the quadrature-mixing IF estimator state.
-    m_hilbertNcoPhase = 0.0f;
-    m_hilbertBpfRe = 0.0f;
-    m_hilbertBpfIm = 0.0f;
+    // Reset the Hilbert IF estimator state.
+    memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
+    m_hilbertIdx = 0;
     m_hilbertZ = Complex(0.0f, 0.0f);
+    m_hilbertFreqIIR = SSTVDEMOD_BLACK_FREQ;
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -214,47 +216,45 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     else
     {
         // ------------------------------------------------------------------
-        // Quadrature-mixing IF estimator.
+        // Hilbert path: analytic signal phase-difference IF estimator.
         //
-        // Step 1: Mix fmDemod down to complex baseband around HILBERT_F_CENTER
-        //         using a cos/sin NCO.  The NCO always gives exactly 90°
-        //         quadrature and unity amplitude, eliminating the elliptical-
-        //         phasor problem of the previous FIR Hilbert approach.
-        // Step 2: Apply a first-order IIR BPF (700 Hz LPF on the complex
-        //         baseband signal) to remove out-of-band noise and the 2×f_tone
-        //         beat products that caused the earlier oscillations.
-        // Step 3: Phase-difference on consecutive BPF outputs gives the exact
-        //         instantaneous frequency in steady state (the IIR phase offset
-        //         cancels in the difference).  Add HILBERT_F_CENTER to convert
-        //         from baseband Hz back to absolute Hz.
+        // 1. Store fmDemod in the Hilbert ring buffer.
+        // 2. Compute the Hilbert transform output (imaginary part of the
+        //    analytic signal) via the 63-tap FIR (non-zero at even indices
+        //    k=0,2,...,62).
+        // 3. The real part is the input delayed by HILBERT_M=31 samples.
+        // 4. Instantaneous frequency = (Fs/2pi)*arg(conj(z_prev)*z_curr).
+        // 5. Apply the 3000 Hz 1st-order IIR LPF to suppress wideband noise.
         // ------------------------------------------------------------------
 
-        // Complex NCO: advance phase accumulator, wrap to [0, 2π) each sample.
-        m_hilbertNcoPhase += 2.0f * float(M_PI) * HILBERT_F_CENTER / float(SSTVDEMOD_CHANNEL_SAMPLE_RATE);
-        if (m_hilbertNcoPhase >= 2.0f * float(M_PI)) {
-            m_hilbertNcoPhase -= 2.0f * float(M_PI);
+        // Write new sample into the ring buffer.
+        m_hilbertBuf[m_hilbertIdx] = fmDemod;
+        m_hilbertIdx = (m_hilbertIdx + 1) % N_HILBERT;
+
+        // FIR Hilbert transform: convolve with HILBERT_COEFFS (even-index taps only).
+        // k=0 maps to the newest sample, k=62 to the oldest in the ring buffer.
+        float y_h = 0.0f;
+        for (int k = 0; k < N_HILBERT; k += 2)
+        {
+            const int bufIdx = (m_hilbertIdx - 1 - k + N_HILBERT) % N_HILBERT;
+            y_h += HILBERT_COEFFS[k] * m_hilbertBuf[bufIdx];
         }
 
-        // Mix fmDemod to complex baseband: real = cos, imag = -sin.
-        const float mixedRe = fmDemod * std::cos(m_hilbertNcoPhase);
-        const float mixedIm = fmDemod * (-std::sin(m_hilbertNcoPhase));
+        // Real part: input delayed by HILBERT_M samples (centre of FIR window).
+        const float x_r = m_hilbertBuf[(m_hilbertIdx - 1 - HILBERT_M + N_HILBERT) % N_HILBERT];
 
-        // First-order IIR BPF (LPF applied to each quadrature component).
-        m_hilbertBpfRe = HILBERT_BPF_ALPHA * mixedRe + (1.0f - HILBERT_BPF_ALPHA) * m_hilbertBpfRe;
-        m_hilbertBpfIm = HILBERT_BPF_ALPHA * mixedIm + (1.0f - HILBERT_BPF_ALPHA) * m_hilbertBpfIm;
+        // Build complex analytic sample z_curr = x_r + j*y_h.
+        const Complex z_curr(x_r, y_h);
 
-        const Complex z_curr(m_hilbertBpfRe, m_hilbertBpfIm);
-
-        // Phase-difference frequency estimate, shifted back to absolute Hz.
-        // Falls back to SSTVDEMOD_BLACK_FREQ when there is no signal (avoids
-        // atan2(0,0) and gives a safe "no-tone" reading at startup).
+        // Phase-difference instantaneous frequency (Fs/2pi)*arg(conj(z_prev)*z_curr).
+        // Fall back to BLACK_FREQ when the signal power is negligible.
         float rawFreq;
         const float power = std::norm(z_curr);
         if (power > 1.0e-10f)
         {
-            // arg(conj(z_prev)·z_curr) = arg((rp−j·ip)·(rc+j·ic))
-            //   real part = rp·rc + ip·ic
-            //   imag part = rp·ic − ip·rc
+            // conj(z_prev)*z_curr = (rp-j*ip)*(rc+j*ic)
+            //   real part = rp*rc + ip*ic
+            //   imag part = rp*ic - ip*rc
             const float rp = m_hilbertZ.real();
             const float ip = m_hilbertZ.imag();
             const float rc = z_curr.real();
@@ -262,8 +262,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
             const float phiDotReal = rp * rc + ip * ic;
             const float phiDotImag = rp * ic - ip * rc;
             rawFreq = (float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / (2.0f * float(M_PI)))
-                      * std::atan2(phiDotImag, phiDotReal)
-                      + HILBERT_F_CENTER;
+                      * std::atan2(phiDotImag, phiDotReal);
         }
         else
         {
@@ -271,7 +270,11 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         }
 
         m_hilbertZ = z_curr;
-        freq = rawFreq;
+
+        // 1st-order IIR LPF at 3000 Hz to suppress wideband FM-demodulator noise.
+        m_hilbertFreqIIR = HILBERT_LPF_ALPHA * rawFreq
+                           + (1.0f - HILBERT_LPF_ALPHA) * m_hilbertFreqIIR;
+        freq = m_hilbertFreqIIR;
     }
 
     // -----------------------------------------------------------------------

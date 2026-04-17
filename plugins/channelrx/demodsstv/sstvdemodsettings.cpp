@@ -1,6 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 // Copyright (C) 2015 Edouard Griffiths, F4EXB.                                  //
-// Copyright (C) 2021 Jon Beniston, M7RCE                                        //
+// Copyright (C) 2021-2026 Jon Beniston, M7RCE <jon@beniston.com>                //
+// Some code by Copilot / Claude Sonnet                                          //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //

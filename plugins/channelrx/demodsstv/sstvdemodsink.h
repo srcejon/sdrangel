@@ -44,9 +44,11 @@
 #define SSTVDEMOD_SYNC_FREQ       1200.0f   // Sync pulse frequency
 #define SSTVDEMOD_BLACK_FREQ      1500.0f   // Black level / start tone
 #define SSTVDEMOD_WHITE_FREQ      2300.0f   // White level
-// Sync threshold: with N_SDFT=64 the spectral centroid for a true 1200 Hz sync tone
-// measures ~1352 Hz (bin k=1 at 750 Hz captures much of the energy, pulling the centroid
-// up from 1200 Hz).  1420 Hz gives clear separation from the 1500 Hz black level.
+// Sync threshold: with N_SDFT=64 the SDFT centroid for a 1200 Hz sync tone has a
+// steady-state mean of ~1352 Hz (pulled toward the nearest bin, k=2 at 1500 Hz).
+// A 40-sample MA (SDFT_FREQ_MA_LEN) is applied to suppress the ±148 Hz oscillation
+// of the raw centroid that occurs at twice the input frequency, leaving a stable
+// ~1349 Hz reading.  1420 Hz sits in the gap between that and the 1500 Hz porch.
 #define SSTVDEMOD_SYNC_THRESHOLD  1420.0f   // Below this = sync, above = pixel data
 
 // PD120 timing in milliseconds
@@ -156,12 +158,26 @@ private:
     //   Z[k] ← twiddle[k] · (Z[k] + x_new − x_old),   twiddle[k] = e^{+j·2π·k/N}
     //
     // Instantaneous frequency is the power-weighted spectral centroid:
-    //   freq = (Fs/N) · Σ_{k=K_MIN}^{K_MAX} k·|Z[k]|² / Σ |Z[k]|²
+    //   freq_raw = (Fs/N) · Σ_{k=K_MIN}^{K_MAX} k·|Z[k]|² / Σ |Z[k]|²
     //
-    // Averaging N_SDFT=64 samples suppresses noise by √64 = 8× in standard
-    // deviation versus a single-sample phase discriminator, while the 1.33 ms
-    // window (at 48 kHz) is short relative to the 20 ms SSTV sync pulse and
-    // fits inside the 2.08 ms porch period, eliminating sync-to-porch bleed.
+    // Moving-average smoothing (SDFT_FREQ_MA_LEN samples):
+    //   freq = MA(freq_raw)
+    //
+    // N_SDFT=64 reduces horizontal pixel blur to ~9 pixels (vs ~14 for N=128).
+    // The 1.33 ms window fits within the 2.08 ms porch period.
+    //
+    // SDFT oscillation and the need for the MA:
+    //   Because fmDemod = cos(2π·f_tone·t) is a real-valued signal, each SDFT
+    //   bin receives contributions from both positive (k₀=f_tone·N/Fs) and
+    //   negative (k₀_neg=N−k₀) frequency components.  The beat between these
+    //   two components makes every bin magnitude oscillate at 2·f_tone, so the
+    //   power-weighted centroid also oscillates at that rate.  For the 1200 Hz
+    //   sync tone the period is Fs/(2·1200)=20 samples and the centroid swings
+    //   between ~1196 Hz and ~1494 Hz — nearly bridging sync and porch.  No
+    //   fixed threshold can reliably distinguish sync from porch on the raw
+    //   centroid alone.  Applying a SDFT_FREQ_MA_LEN=40-sample MA (one full
+    //   1200 Hz period) completely cancels the oscillation, yielding a stable
+    //   ~1349 Hz reading that sits comfortably below the 1420 Hz threshold.
     //
     // Bins k=1–4 (750–3000 Hz) span the full SSTV tone range 1200–2300 Hz.
     //
@@ -172,24 +188,20 @@ private:
     // bin) it is exact.  freqToPixel() compensates by treating 2249.3 Hz as
     // the white calibration point instead of the true 2300 Hz.
     //
-    // Because the sync tone at 1200 Hz falls between bin k=1 (750 Hz) and
-    // k=2 (1500 Hz), the centroid for a pure 1200 Hz tone measures ~1352 Hz.
-    // SSTVDEMOD_SYNC_THRESHOLD is set to 1420 Hz to accommodate this offset
-    // while still staying below the 1500 Hz black level.
-    //
     // The SDFT history is NOT reset at section transitions (Y_odd→Cr→Cb→Y_even).
     // Adjacent sections share the same 1500–2300 Hz frequency range, so the
-    // ~7-pixel bleed-in from the previous section is mild and self-correcting.
+    // ~9-pixel bleed-in from the previous section is mild and self-correcting.
     // Resetting to zero would force those pixels to 1200 Hz (below black level),
     // producing green/teal artefacts in the Cr/Cb sections — worse than the
     // natural contamination.  The SDFT is only fully cleared in resetDecoder().
     // -----------------------------------------------------------------------
-    static constexpr int N_SDFT           = 64;  //!< Sliding DFT window length (samples); bin width = Fs/N = 750 Hz
-    static constexpr int SDFT_K_STORE_MIN = 1;   //!< Lowest stored bin  (k=1 → 750 Hz)
-    static constexpr int SDFT_K_STORE_MAX = 4;   //!< Highest stored bin (k=4 → 3000 Hz)
-    static constexpr int SDFT_K_SUM_MIN   = 1;   //!< First bin in the moment sum (k=1 → 750 Hz, below sync 1200 Hz)
-    static constexpr int SDFT_K_SUM_MAX   = 4;   //!< Last  bin in the moment sum (k=4 → 3000 Hz, above white 2300 Hz)
-    static constexpr int SDFT_NUM_BINS    = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 4
+    static constexpr int N_SDFT             = 64;  //!< Sliding DFT window length (samples); bin width = Fs/N = 750 Hz
+    static constexpr int SDFT_FREQ_MA_LEN   = 40;  //!< Freq MA length = one period of 1200 Hz sync tone; cancels centroid oscillation
+    static constexpr int SDFT_K_STORE_MIN   = 1;   //!< Lowest stored bin  (k=1 → 750 Hz)
+    static constexpr int SDFT_K_STORE_MAX   = 4;   //!< Highest stored bin (k=4 → 3000 Hz)
+    static constexpr int SDFT_K_SUM_MIN     = 1;   //!< First bin in the moment sum (k=1 → 750 Hz, below sync 1200 Hz)
+    static constexpr int SDFT_K_SUM_MAX     = 4;   //!< Last  bin in the moment sum (k=4 → 3000 Hz, above white 2300 Hz)
+    static constexpr int SDFT_NUM_BINS      = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 4
 
     // Calibrated SDFT-centroid output for a true 2300 Hz (white) input tone.
     // Computed from the exact Dirichlet-kernel centroid at k₀=3.067 (=2300×64/48000)
@@ -201,6 +213,8 @@ private:
     Complex m_sdftBins[SDFT_NUM_BINS];    //!< Running SDFT bins k = SDFT_K_STORE_MIN..SDFT_K_STORE_MAX
     Complex m_sdftTwiddle[SDFT_NUM_BINS]; //!< Twiddle factors e^{+j·2π·k/N} per bin
     int     m_sdftIdx;                    //!< Next write position in m_sdftBuf (0..N_SDFT−1)
+
+    MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqMovAvg; //!< Post-SDFT freq MA to suppress sync-tone centroid oscillation
 
     // SSTV decoder state
     SSTVState m_state;

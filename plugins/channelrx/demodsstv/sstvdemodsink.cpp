@@ -73,12 +73,13 @@ void SSTVDemodSink::resetDecoder()
     m_pixelSampleCount = 0;
     m_lineIndex = 0;
 
-    // Reset the sliding-DFT spectral moment state.
+    // Reset the sliding-DFT spectral moment state and post-SDFT moving average.
     memset(m_sdftBuf, 0, sizeof(m_sdftBuf));
     m_sdftIdx = 0;
     for (int i = 0; i < SDFT_NUM_BINS; i++) {
         m_sdftBins[i] = Complex(0.0f, 0.0f);
     }
+    m_freqMovAvg.reset();
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -172,15 +173,25 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     }
 
     // Frequency estimate in Hz; fall back to black level when no signal so that
-    // the first ~14 pixels after a decoder reset produce black rather than an
+    // the first samples after a decoder reset produce black rather than an
     // out-of-range artefact (1200 Hz is below the black level and would cause
     // green pixels via the YCbCr conversion when Cr/Cb sections start up).
-    const float freq = (wPower > 1.0e-10f)
+    const float rawFreq = (wPower > 1.0e-10f)
         ? (wMoment / wPower) * (float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / float(N_SDFT))
         : SSTVDEMOD_BLACK_FREQ;
 
+    // Apply moving average to cancel the ±148 Hz centroid oscillation that
+    // occurs at 2×f_tone for a real-valued cosine input (beat between the
+    // positive and aliased negative frequency components in the SDFT bins).
+    // SDFT_FREQ_MA_LEN=40 spans exactly one 1200 Hz period, completely
+    // eliminating the sync-tone oscillation and leaving a stable ~1349 Hz
+    // reading.  instantAverage() gives the correct mean during the initial
+    // fill phase after reset (using only the samples seen so far).
+    m_freqMovAvg(rawFreq);
+    const float freq = m_freqMovAvg.instantAverage();
+
     // -----------------------------------------------------------------------
-    // SSTV PD120 state machine; 'freq' is the reconstructed tone frequency (Hz)
+    // SSTV PD120 state machine; 'freq' is the smoothed tone frequency (Hz)
     // -----------------------------------------------------------------------
     switch (m_state)
     {

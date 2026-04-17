@@ -144,10 +144,10 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     // Stage 2 – Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment).
     //
     // The recurrence Z[k] ← twiddle[k]·(Z[k] + x_new − x_old) maintains
-    // a phase-rotated DFT bin.  The power-weighted centroid over bins k=1..4
+    // a phase-rotated DFT bin.  The power-weighted centroid over bins k=1..3
     // gives the instantaneous tone frequency used for both sync detection and
-    // pixel decoding.  See SDFT_MEAS_WHITE_FREQ in the header for the
-    // bias-correction rationale.
+    // pixel decoding.  See SDFT_MEAS_NEUTRAL_FREQ / SDFT_MEAS_WHITE_FREQ in
+    // the header for the piecewise calibration rationale.
     // -----------------------------------------------------------------------
 
     // Update circular buffer and SDFT bins.
@@ -180,11 +180,11 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         ? (wMoment / wPower) * (float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / float(N_SDFT))
         : SSTVDEMOD_BLACK_FREQ;
 
-    // Apply moving average to cancel the ±148 Hz centroid oscillation that
-    // occurs at 2×f_tone for a real-valued cosine input (beat between the
-    // positive and aliased negative frequency components in the SDFT bins).
-    // SDFT_FREQ_MA_LEN=40 spans exactly one 1200 Hz period, completely
-    // eliminating the sync-tone oscillation and leaving a stable ~1349 Hz
+    // Apply moving average to cancel the centroid oscillation that occurs at
+    // 2×f_tone for a real-valued cosine input (beat between the positive and
+    // aliased negative frequency components in the SDFT bins).
+    // SDFT_FREQ_MA_LEN=40 spans exactly two 1200 Hz periods, completely
+    // eliminating the sync-tone oscillation and leaving a stable ~1316 Hz
     // reading.  instantAverage() gives the correct mean during the initial
     // fill phase after reset (using only the samples seen so far).
     m_freqMovAvg(rawFreq);

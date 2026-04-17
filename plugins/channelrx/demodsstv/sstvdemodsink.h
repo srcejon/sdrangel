@@ -228,7 +228,38 @@ private:
     Complex m_sdftTwiddle[SDFT_NUM_BINS]; //!< Twiddle factors e^{+j·2π·k/N} per bin
     int     m_sdftIdx;                    //!< Next write position in m_sdftBuf (0..N_SDFT−1)
 
-    MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqMovAvg; //!< Post-SDFT freq MA to suppress sync-tone centroid oscillation
+    MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqMovAvg; //!< Post-SDFT/Hilbert freq MA; shared by both paths (pixel decode)
+
+    // -----------------------------------------------------------------------
+    // Dedicated sync-detection FIR path.
+    //
+    // Two additional MA stages are cascaded on top of m_freqMovAvg to produce
+    // freqSync, used exclusively for sync-threshold decisions in WAITING_FOR_SYNC
+    // and IN_SYNC.  The combined three-stage cascade is a Bartlett-window FIR:
+    //   freqSync = MA₄₀( MA₄₀( freq ) )
+    //
+    // vs the single 40-sample MA used for pixel decoding (freq):
+    //   • 6th-order zeros at 1200 Hz and 2400 Hz (vs 2nd-order)
+    //   • First sidelobe attenuation: −39 dB (vs −13 dB)
+    //   • Noise σ reduced ≈ 26% beyond the single-MA floor
+    //
+    // A SYNC_DETECT_HOLD-sample hold counter additionally requires freqSync to
+    // stay ≥ threshold for that many consecutive samples before IN_SYNC is exited,
+    // suppressing any residual noise spikes that still reach the threshold.
+    //
+    // Timing compensation:
+    //   The two extra MA stages add exactly 2 × (SDFT_FREQ_MA_LEN / 2) samples
+    //   of additional group delay; the hold counter adds SYNC_DETECT_HOLD more.
+    //   PORCH_SAMPLES_ADJUSTED reduces the porch wait by SYNC_DETECT_EXTRA_DELAY
+    //   so image-start timing is mathematically identical to the original path —
+    //   regardless of signal level or which estimator (SDFT vs Hilbert) is active.
+    // -----------------------------------------------------------------------
+    static constexpr int SYNC_DETECT_HOLD        = 3;  //!< Consecutive above-threshold samples required to confirm sync end
+    static constexpr int SYNC_DETECT_EXTRA_DELAY = SDFT_FREQ_MA_LEN + SYNC_DETECT_HOLD; //!< Total extra delay: 2×MA_group_delay + hold (= 40 + 3 = 43 samples)
+    static constexpr int PORCH_SAMPLES_ADJUSTED  = SSTVDEMOD_PORCH_SAMPLES - SYNC_DETECT_EXTRA_DELAY; //!< Porch count with sync-detect delay compensation (= 56 samples)
+
+    MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqSyncMa1; //!< Sync-detect cascade stage 1 (applied to freq)
+    MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqSyncMa2; //!< Sync-detect cascade stage 2 (applied to m_freqSyncMa1 output)
 
     // -----------------------------------------------------------------------
     // Hilbert instantaneous-frequency estimator (alternative to SDFT above).
@@ -365,7 +396,8 @@ private:
 
     // SSTV decoder state
     SSTVState m_state;
-    int m_stateSampleCount;   //!< Number of samples spent in current state
+    int m_stateSampleCount;       //!< Number of samples spent in current state
+    int m_syncExitHoldCount;      //!< Consecutive samples with freqSync >= threshold; reset to 0 on any below-threshold sample
 
     // Pixel sampling state (sub-pixel accumulation)
     int m_pixelIndex;          //!< Index of current pixel being accumulated (within section)

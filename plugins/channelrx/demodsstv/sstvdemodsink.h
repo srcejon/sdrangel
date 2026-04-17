@@ -312,8 +312,34 @@ private:
     // Time constant = 2.1 samples = 0.2 pixel blur at 190 us/pixel.
     static constexpr float HILBERT_LPF_ALPHA  = 0.32476809f; //!< IIR alpha for 3000 Hz LPF at 48 kHz
 
-    float   m_hilbertBuf[N_HILBERT];   //!< Circular ring buffer of fmDemod samples for the Hilbert FIR
+    // DC-blocking high-pass filter applied to fmDemod before the Hilbert ring buffer.
+    //
+    // The FM discriminator output fmDemod = audio_tone / fmDeviation has a DC component
+    // equal to f_carrier_offset / fmDeviation whenever the receiver is not tuned exactly
+    // to the transmitter carrier.  Even a 2.5 kHz offset with fmDeviation = 5000 Hz gives
+    // DC = 0.5, shifting the analytic phasor z off-centre.  An off-centre phasor produces
+    // an instantaneous-frequency estimate that oscillates at f_tone Hz with amplitude
+    // proportional to |DC/A|, degrading sync detection (0–4000 Hz observed with DC ≈ −0.9).
+    //
+    // The SDFT path is inherently DC-insensitive because it sums only bins k=1..3 (750–
+    // 2250 Hz) and never includes the DC bin k=0.  The Hilbert path must block DC explicitly.
+    //
+    // First-order DC blocker (classic single-zero, single-pole HPF):
+    //   y[n] = x[n] − x[n−1] + R·y[n−1]
+    //   H(z) = (1 − z⁻¹) / (1 − R·z⁻¹)
+    //   f_cutoff ≈ (1−R)·Fs/(2π) ≈ 200 Hz
+    //   Gain at 1200 Hz = 0.9992 (essentially unity; negligible impact on frequency estimate)
+    //   Convergence time constant ≈ 1/(1−R) ≈ 38 samples ≈ 0.8 ms << 20 ms sync period
+    //
+    // The DC block is applied before writing to m_hilbertBuf, so both the delayed real
+    // part (x_r[n] = buf[n−31]) and the imaginary part (Hilbert FIR output) are computed
+    // from the DC-free signal.  No phase mismatch is introduced between the two paths.
+    static constexpr float HILBERT_DC_R = 0.97382f; //!< DC-blocker pole; R = 1 − 2π×200/48000 ≈ 0.9738
+
+    float   m_hilbertBuf[N_HILBERT];   //!< Circular ring buffer of DC-blocked fmDemod samples
     int     m_hilbertIdx;              //!< Next write index in m_hilbertBuf (0..N_HILBERT-1)
+    float   m_hilbertDcXPrev;          //!< Previous raw input x[n-1] for the DC-blocking HPF
+    float   m_hilbertDcY;              //!< Previous HPF output y[n-1] for the DC-blocking HPF
     Complex m_hilbertZ;                //!< Previous analytic sample z[n-1] for phase-difference calculation
     float   m_hilbertFreqIIR;          //!< IIR LPF state for the Hilbert IF output
 

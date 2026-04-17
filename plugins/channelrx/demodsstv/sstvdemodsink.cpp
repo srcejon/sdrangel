@@ -39,6 +39,8 @@ SSTVDemodSink::SSTVDemodSink() :
     m_lineIndex(0),
     m_sdftIdx(0),
     m_hilbertIdx(0),
+    m_hilbertDcXPrev(0.0f),
+    m_hilbertDcY(0.0f),
     m_hilbertZ(0.0f, 0.0f),
     m_hilbertFreqIIR(SSTVDEMOD_BLACK_FREQ),
     m_useHilbert(false)
@@ -58,7 +60,7 @@ SSTVDemodSink::SSTVDemodSink() :
         m_sdftBins[i] = Complex(0.0f, 0.0f);
     }
 
-    // Clear the Hilbert FIR ring buffer.
+    // Clear the Hilbert FIR ring buffer and DC-blocker state.
     memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
 
     applySettings(QStringList(), m_settings, true);
@@ -91,6 +93,8 @@ void SSTVDemodSink::resetDecoder()
     // Reset the Hilbert IF estimator state.
     memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
     m_hilbertIdx = 0;
+    m_hilbertDcXPrev = 0.0f;
+    m_hilbertDcY = 0.0f;
     m_hilbertZ = Complex(0.0f, 0.0f);
     m_hilbertFreqIIR = SSTVDEMOD_BLACK_FREQ;
 }
@@ -228,7 +232,13 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         // ------------------------------------------------------------------
 
         // Write new sample into the ring buffer.
-        m_hilbertBuf[m_hilbertIdx] = fmDemod;
+        // Apply DC-blocking HPF first: y[n] = x[n] - x[n-1] + R*y[n-1].
+        // This removes any carrier-frequency offset that would make the phasor z off-centre
+        // and cause the phase-difference estimator to oscillate at f_tone Hz.
+        const float dcBlocked = fmDemod - m_hilbertDcXPrev + HILBERT_DC_R * m_hilbertDcY;
+        m_hilbertDcXPrev = fmDemod;
+        m_hilbertDcY = dcBlocked;
+        m_hilbertBuf[m_hilbertIdx] = dcBlocked;
         m_hilbertIdx = (m_hilbertIdx + 1) % N_HILBERT;
 
         // FIR Hilbert transform: convolve with HILBERT_COEFFS (even-index taps only).

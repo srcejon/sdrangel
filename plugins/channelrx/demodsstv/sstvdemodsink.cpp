@@ -456,7 +456,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         // porch.  SYNC_PORCH_SAMPLES = PORCH_SAMPLES − SYNC_PORCH_DELAY is
         // the remaining wait to complete the full porch duration, so decoding
         // starts at the correct timing relative to the image data.
-        // By the time decoding starts the pixel SDFT window (N=64) has had
+        // By the time decoding starts the pixel SDFT window (N=32) has had
         // ≥ PORCH_SAMPLES = 99 samples of porch-frequency content, fully
         // flushing any residual sync-frequency contribution.
         m_stateSampleCount++;
@@ -592,7 +592,7 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
     // Reset pixel accumulator when starting a new decoding section.
     // The SDFT history is intentionally NOT cleared here: adjacent sections
     // (Y_odd, Cr, Cb, Y_even) all operate in the same 1500–2300 Hz frequency
-    // range, so the ~7-pixel bleed-in from the previous section is mild.
+    // range, so the ~3-pixel bleed-in from the previous section is mild.
     // Clearing to zero would force those pixels to fall back to the zero-power
     // default (1200 Hz), producing green/teal artefacts in the Cr/Cb channels.
     if (newState == DECODING_Y_ODD || newState == DECODING_CR ||

@@ -163,8 +163,17 @@ private:
     // Moving-average smoothing (SDFT_FREQ_MA_LEN samples):
     //   freq = MA(freq_raw)
     //
-    // N_SDFT=64 reduces horizontal pixel blur to ~11 pixels (vs ~14 for N=128).
-    // The 1.33 ms window fits within the 2.08 ms porch period.
+    // N_SDFT=32 reduces horizontal pixel blur to ~6 pixels (vs ~11 for N=64 or ~14
+    // for N=128).  The 0.67 ms window fits comfortably within the 2.08 ms porch.
+    //
+    // Bins and frequency range (N=32, Fs=48000):
+    //   Bin width = Fs/N = 1500 Hz.
+    //   k=1: 1500 Hz (black level, pixel 0)
+    //   k=2: 3000 Hz (above white level)
+    //   Using k=1..2 covers the SSTV pixel range 1500–2300 Hz with a
+    //   power-weighted centroid that varies from 1500 Hz (all-black, full
+    //   energy in k=1) to ~2344 Hz (full-white, energy shared between k=1
+    //   and k=2).  A piecewise calibration handles the inherent non-linearity.
     //
     // SDFT oscillation and the need for the MA:
     //   Because fmDemod = cos(2π·f_tone·t) is a real-valued signal, each SDFT
@@ -174,19 +183,13 @@ private:
     //   power-weighted centroid also oscillates at that rate.  For the 1200 Hz
     //   sync tone the period is Fs/(2·1200)=20 samples.  Applying a
     //   SDFT_FREQ_MA_LEN=40-sample MA (exactly two 1200 Hz periods) completely
-    //   cancels the sync-tone oscillation, yielding a stable ~1316 Hz reading
-    //   that sits comfortably below the 1420 Hz threshold.
-    //
-    // Bins k=1–3 (750–2250 Hz) span the full SSTV tone range 1200–2300 Hz.
-    // Using three bins instead of four reduces the neutral-chroma bias:
-    //   k=1..4: 1900 Hz (neutral chroma) reads ≈1918 Hz → pixel 142 (bias +14)
-    //           → white appears purple (R=B clipped, G reduced)
-    //   k=1..3: 1900 Hz reads ≈1858 Hz; piecewise calibration maps this
-    //           exactly to pixel 128, giving neutral grey at true neutral chroma.
+    //   cancels the sync-tone oscillation, yielding a stable reading well below
+    //   the pixel-level threshold.  For the Hilbert path, the same MA cancels
+    //   the 1200 Hz and 2400 Hz Hilbert-FIR oscillations (see Hilbert section).
     //
     // Truncated-range bias and piecewise calibration:
     //   The centroid is only unbiased when summed over all N/2 bins.  Using
-    //   k=1..3 introduces a systematic shift in the SSTV pixel range.  Rather
+    //   k=1..2 (with N=32) introduces a systematic non-linear shift.  Rather
     //   than a single linear scale from black (1500 Hz) to white (calibrated
     //   centroid), freqToPixel() uses two calibration points:
     //     • SDFT_MEAS_NEUTRAL_FREQ: measured centroid for a true 1900 Hz tone
@@ -198,27 +201,27 @@ private:
     //
     // The SDFT history is NOT reset at section transitions (Y_odd→Cr→Cb→Y_even).
     // Adjacent sections share the same 1500–2300 Hz frequency range, so the
-    // ~11-pixel bleed-in from the previous section is mild and self-correcting.
+    // ~6-pixel bleed-in from the previous section is mild and self-correcting.
     // Resetting to zero would force those pixels to 1200 Hz (below black level),
     // producing green/teal artefacts in the Cr/Cb sections — worse than the
     // natural contamination.  The SDFT is only fully cleared in resetDecoder().
     // -----------------------------------------------------------------------
-    static constexpr int N_SDFT             = 64;  //!< Sliding DFT window length (samples); bin width = Fs/N = 750 Hz
+    static constexpr int N_SDFT             = 32;  //!< Sliding DFT window length (samples); bin width = Fs/N = 1500 Hz
     static constexpr int SDFT_FREQ_MA_LEN   = 40;  //!< Freq MA length = two periods of 1200 Hz sync tone; cancels centroid oscillation
-    static constexpr int SDFT_K_STORE_MIN   = 1;   //!< Lowest stored bin  (k=1 → 750 Hz)
-    static constexpr int SDFT_K_STORE_MAX   = 3;   //!< Highest stored bin (k=3 → 2250 Hz)
-    static constexpr int SDFT_K_SUM_MIN     = 1;   //!< First bin in the moment sum (k=1 → 750 Hz, below sync 1200 Hz)
-    static constexpr int SDFT_K_SUM_MAX     = 3;   //!< Last  bin in the moment sum (k=3 → 2250 Hz, above white 2300 Hz)
-    static constexpr int SDFT_NUM_BINS      = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 3
+    static constexpr int SDFT_K_STORE_MIN   = 1;   //!< Lowest stored bin  (k=1 → 1500 Hz, black level)
+    static constexpr int SDFT_K_STORE_MAX   = 2;   //!< Highest stored bin (k=2 → 3000 Hz, above white level)
+    static constexpr int SDFT_K_SUM_MIN     = 1;   //!< First bin in the moment sum
+    static constexpr int SDFT_K_SUM_MAX     = 2;   //!< Last  bin in the moment sum
+    static constexpr int SDFT_NUM_BINS      = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 2
 
     // Piecewise calibration: two measured SDFT-centroid outputs used as anchor points.
-    // Both values were obtained by simulation (N=64, k=1..3, MA=40, steady-state mean):
+    // Obtained by simulation (N=32, k=1..2, MA=40, steady-state mean of a pure cosine):
     //   • SDFT_MEAS_NEUTRAL_FREQ: centroid for a true 1900 Hz tone (neutral chroma = pixel 128)
     //   • SDFT_MEAS_WHITE_FREQ:   centroid for a true 2300 Hz tone (full white  = pixel 255)
     // freqToPixel() uses a two-segment linear map: [1500, NEUTRAL]→[0,128] and
     // [NEUTRAL, WHITE]→[128,255], ensuring both neutral chroma and white decode correctly.
-    static constexpr float SDFT_MEAS_NEUTRAL_FREQ = 1858.0f; //!< Hz — SDFT centroid for true 1900 Hz neutral-chroma tone
-    static constexpr float SDFT_MEAS_WHITE_FREQ   = 2245.0f; //!< Hz — SDFT centroid for true 2300 Hz white tone
+    static constexpr float SDFT_MEAS_NEUTRAL_FREQ = 1690.0f; //!< Hz — SDFT centroid for true 1900 Hz neutral-chroma tone (N=32, k=1..2)
+    static constexpr float SDFT_MEAS_WHITE_FREQ   = 2344.0f; //!< Hz — SDFT centroid for true 2300 Hz white tone (N=32, k=1..2)
 
     float   m_sdftBuf[N_SDFT];            //!< Circular ring buffer of fmDemod samples
     Complex m_sdftBins[SDFT_NUM_BINS];    //!< Running SDFT bins k = SDFT_K_STORE_MIN..SDFT_K_STORE_MAX

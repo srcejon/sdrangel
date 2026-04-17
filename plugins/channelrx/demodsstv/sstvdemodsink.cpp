@@ -118,6 +118,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     //   fmDemod ≈ A·cos(2π·f_tone·t)          (real audio waveform, ≤ 1.0)
     // The SSTV pixel data is encoded in f_tone (1200–2300 Hz), not in the
     // amplitude.  Stage 2 below extracts that frequency.
+    // Note that we do not currently support SSB modulated SSTV, only FM.
     // -----------------------------------------------------------------------
     double magsqRaw;
     Real deviation;
@@ -234,11 +235,11 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         break;
 
     case DECODING_CR:
-        decodePixelSample(freq, m_cr, SSTVDEMOD_IMAGE_WIDTH / 2, DECODING_CB);
+        decodePixelSample(freq, m_cr, SSTVDEMOD_IMAGE_WIDTH, DECODING_CB);
         break;
 
     case DECODING_CB:
-        decodePixelSample(freq, m_cb, SSTVDEMOD_IMAGE_WIDTH / 2, DECODING_Y_EVEN);
+        decodePixelSample(freq, m_cb, SSTVDEMOD_IMAGE_WIDTH, DECODING_Y_EVEN);
         break;
 
     case DECODING_Y_EVEN:
@@ -286,17 +287,16 @@ void SSTVDemodSink::commitBlock()
         m_lineIndex = 0;
     }
 
-    // Build two RGB scan lines from Y_odd, Cr, Cb, Y_even (YCbCr 4:2:0 like PD120)
+    // Build two RGB scan lines from Y_odd, Cr, Cb, Y_even
     // Each Cr/Cb value applies to the same horizontal position in both lines
+    // Cr and Cb are at full horizontal resolution, but half vertical resolution
     QImage lineImage(SSTVDEMOD_IMAGE_WIDTH, 2, QImage::Format_RGB32);
 
     for (int x = 0; x < SSTVDEMOD_IMAGE_WIDTH; x++)
     {
-        // Cr and Cb are at half horizontal resolution
-        int cx = x / 2;
         // Convert from frequency (Hz) to pixel value [0..255] then offset to [-128..127]
-        float cr = static_cast<float>(freqToPixel(m_cr[cx])) - 128.0f;
-        float cb = static_cast<float>(freqToPixel(m_cb[cx])) - 128.0f;
+        float cr = static_cast<float>(freqToPixel(m_cr[x])) - 128.0f;
+        float cb = static_cast<float>(freqToPixel(m_cb[x])) - 128.0f;
 
         // Decode odd scan line (top row of the block)
         {

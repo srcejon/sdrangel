@@ -205,8 +205,8 @@ private:
 
     // PD120 line buffer: one block = odd + even scan lines
     float m_yOdd[SSTVDEMOD_IMAGE_WIDTH];        //!< Y (luminance) values for odd line
-    float m_cr[SSTVDEMOD_IMAGE_WIDTH / 2];      //!< Cr (chroma-red) values shared by both lines
-    float m_cb[SSTVDEMOD_IMAGE_WIDTH / 2];      //!< Cb (chroma-blue) values shared by both lines
+    float m_cr[SSTVDEMOD_IMAGE_WIDTH];          //!< Cr (chroma-red) values shared by both lines
+    float m_cb[SSTVDEMOD_IMAGE_WIDTH];          //!< Cb (chroma-blue) values shared by both lines
     float m_yEven[SSTVDEMOD_IMAGE_WIDTH];       //!< Y (luminance) values for even line
 
     int m_lineIndex;    //!< Current block index (0..247, each block = 2 scan lines)

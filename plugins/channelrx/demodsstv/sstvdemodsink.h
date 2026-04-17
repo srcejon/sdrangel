@@ -163,7 +163,7 @@ private:
     // Moving-average smoothing (SDFT_FREQ_MA_LEN samples):
     //   freq = MA(freq_raw)
     //
-    // N_SDFT=32 reduces horizontal pixel blur to ~6 pixels (vs ~11 for N=64 or ~14
+    // N_SDFT=32 reduces horizontal pixel blur to ~3.5 pixels (vs ~7 for N=64 or ~14
     // for N=128).  The 0.67 ms window fits comfortably within the 2.08 ms porch.
     //
     // Bins and frequency range (N=32, Fs=48000):
@@ -233,7 +233,7 @@ private:
     // -----------------------------------------------------------------------
     // Dedicated sync-tone energy detector.
     //
-    // The pixel SDFT (N=64, k=1..3) estimates tone frequency for pixel
+    // The pixel SDFT (N=32, k=1..2) estimates tone frequency for pixel
     // decoding but is not used for sync detection.  Sync detection uses a
     // completely separate approach: measure the energy at the exact sync
     // frequency (1200 Hz) via a single-bin sliding DFT.
@@ -491,8 +491,8 @@ private:
      *  Uses a piecewise-linear map anchored at two measured SDFT calibration points:
      *    [SSTVDEMOD_BLACK_FREQ, SDFT_MEAS_NEUTRAL_FREQ] → [0, 128]  (lower segment)
      *    [SDFT_MEAS_NEUTRAL_FREQ, SDFT_MEAS_WHITE_FREQ] → [128, 255] (upper segment)
-     *  This ensures neutral chroma (1900 Hz → centroid ≈1858 Hz) decodes to exactly
-     *  pixel 128 (no colour bias) and white (2300 Hz → centroid ≈2245 Hz) to 255.
+     *  This ensures neutral chroma (1900 Hz → centroid ≈1690 Hz for N=32, k=1..2) decodes
+     *  to exactly pixel 128 (no colour bias) and white (2300 Hz → centroid ≈2344 Hz) to 255.
      *  Used by the SDFT path (m_useHilbert = false). */
     static int freqToPixel(float freq) {
         float v;

@@ -276,6 +276,59 @@ private:
     MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_syncTotalPowerMa; //!< MA of fmDemod² for sync-ratio normalisation
 
     // -----------------------------------------------------------------------
+    // Sync timing PLL.
+    //
+    // Without the PLL every scan-line transition to IN_PORCH is triggered by
+    // the raw isSyncTone falling edge, whose sample position has noise-driven
+    // jitter of several samples (σ ≈ 10–30 samples at moderate SNR).  At
+    // 9.12 samples/pixel this produces ±1–3 pixel misalignment per line,
+    // making vertical edges in the image look jagged.
+    //
+    // After the first valid sync pulse the PLL tracks the line-block period
+    // with a first-order IIR and uses the smoothed estimate to control the
+    // IN_SYNC → IN_PORCH transition, reducing per-line jitter by a factor of
+    // √(α/2) ≈ 0.22 for PLL_ALPHA=0.1 (σ_pll ≈ 0.22 × σ_raw ≈ sub-pixel).
+    // Clock-frequency differences between transmitter and receiver (typically
+    // < 100 ppm) cause m_pllPeriod to drift by < 2.5 samples/line; PLL_ALPHA
+    // = 0.1 tracks that drift within ~10 lines.
+    //
+    // Phase reference:
+    //   m_pllPhase resets to 0 (minus any overshoot carry-over) each time we
+    //   enter IN_PORCH.  It increments by 1 every sample while m_pllLocked is
+    //   true (i.e., in all states after the first valid sync).
+    //
+    // Expected phase trace (NOMINAL_LINE_PERIOD_SAMPLES = 24406.2):
+    //   0       IN_PORCH entry
+    //   11      DECODING_Y_ODD entry (after SYNC_PORCH_SAMPLES)
+    //   23358   WAITING_FOR_SYNC entry (after 4 × 640 × 9.12 pixel samples)
+    //   24318   isSyncTone rises (sync pulse starts, ~0 gap after Y_even)
+    //   24406   isSyncTone falls (SYNC_PORCH_DELAY=88 samples into porch) ← m_pllPeriod
+    //
+    // Loop update (each line, when isSyncTone falls with a valid duration):
+    //   error      = m_pllPhase − m_pllPeriod
+    //   m_pllPeriod += PLL_ALPHA × error   (clamped to ±10 % of nominal)
+    //
+    // Transition rule:
+    //   m_syncPulseSeen is set when isSyncTone falls with a valid duration.
+    //   The IN_SYNC → IN_PORCH transition fires at m_pllPhase ≥ m_pllPeriod
+    //   (not at the raw isSyncTone-fall sample), with overshoot carried into
+    //   the next period via m_pllPhase -= (int)m_pllPeriod.
+    // -----------------------------------------------------------------------
+    static constexpr float PLL_ALPHA = 0.1f;   //!< Loop gain (time constant ≈ 10 scan-line blocks)
+    // Nominal period (samples): SYNC_PORCH_SAMPLES remaining porch + 4 pixel sections
+    //   + SYNC_SAMPLES of the next sync pulse + SYNC_PORCH_DELAY samples until isSyncTone falls.
+    static constexpr float NOMINAL_LINE_PERIOD_SAMPLES =
+        float(SYNC_PORCH_SAMPLES)
+        + 4.0f * float(SSTVDEMOD_IMAGE_WIDTH) * SSTVDEMOD_SAMPLES_PER_PIXEL
+        + float(SSTVDEMOD_SYNC_SAMPLES)
+        + float(SYNC_PORCH_DELAY);
+
+    bool  m_pllLocked;      //!< True after the first valid sync pulse has been accepted
+    int   m_pllPhase;       //!< Samples since last IN_PORCH entry (PLL phase accumulator)
+    float m_pllPeriod;      //!< Estimated line-block period (samples); initialised to NOMINAL_LINE_PERIOD_SAMPLES
+    bool  m_syncPulseSeen;  //!< True once isSyncTone has fallen with a valid duration in the current IN_SYNC visit
+
+    // -----------------------------------------------------------------------
     // Hilbert instantaneous-frequency estimator (alternative to SDFT above).
     //
     // Selected by setting m_useHilbert = true.

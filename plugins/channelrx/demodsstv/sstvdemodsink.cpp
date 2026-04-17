@@ -43,7 +43,11 @@ SSTVDemodSink::SSTVDemodSink() :
     m_hilbertDcY(0.0f),
     m_hilbertZ(0.0f, 0.0f),
     m_useHilbert(false),
-    m_syncSdftIdx(0)
+    m_syncSdftIdx(0),
+    m_pllLocked(false),
+    m_pllPhase(0),
+    m_pllPeriod(NOMINAL_LINE_PERIOD_SAMPLES),
+    m_syncPulseSeen(false)
 {
     m_magsq = 0.0;
 
@@ -103,6 +107,12 @@ void SSTVDemodSink::resetDecoder()
     memset(m_syncSdftBuf, 0, sizeof(m_syncSdftBuf));
     m_syncSdftBin = Complex(0.0f, 0.0f);
     m_syncSdftIdx = 0;
+
+    // Reset the sync timing PLL.
+    m_pllLocked = false;
+    m_pllPhase = 0;
+    m_pllPeriod = NOMINAL_LINE_PERIOD_SAMPLES;
+    m_syncPulseSeen = false;
 
     // Reset the Hilbert IF estimator state.
     memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
@@ -339,10 +349,26 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     // SSTV PD120 state machine.
     // 'freq' (from the pixel SDFT or Hilbert path) is used ONLY for pixel
     // decoding; sync detection uses isSyncTone exclusively.
+    //
+    // Sync timing PLL: when m_pllLocked is true, m_pllPhase increments every
+    // sample.  The IN_SYNC → IN_PORCH transition is driven by the PLL phase
+    // reaching m_pllPeriod (the smoothed line-period estimate) rather than by
+    // the raw isSyncTone falling edge, eliminating per-line timing jitter.
     // -----------------------------------------------------------------------
+
+    // Advance PLL phase accumulator in all states once locked.
+    if (m_pllLocked) {
+        m_pllPhase++;
+    }
+
     switch (m_state)
     {
     case WAITING_FOR_SYNC:
+        // Lose PLL lock if sync has been absent for more than 1.5 line periods
+        // (signal lost or persistent noise).
+        if (m_pllLocked && m_pllPhase > static_cast<int>(m_pllPeriod * 1.5f)) {
+            m_pllLocked = false;
+        }
         // isSyncTone becomes true when the sync-bin energy exceeds the
         // threshold (~72 samples after the 1200 Hz tone starts, at threshold 0.4).
         if (isSyncTone) {
@@ -354,33 +380,74 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         // Count samples while the sync tone is present.
         m_stateSampleCount++;
 
-        if (!isSyncTone)
+        // On the falling edge of isSyncTone (first occurrence only per visit):
+        // validate the sync-pulse duration and, when the PLL is locked, update
+        // the period estimate.  The actual IN_PORCH transition is deferred to
+        // the PLL-driven check below so that the transition time is controlled
+        // by the smoothed estimate rather than the jittery raw detector.
+        if (!isSyncTone && !m_syncPulseSeen)
         {
-            // Energy fell below the threshold — sync pulse has ended (or was never
-            // valid).  Accept the duration and transition to porch, or reject and
-            // go back to waiting.
-            //
             // At SYNC_DETECT_THRESHOLD=0.4 the exit fires ≈ SYNC_PORCH_DELAY=88
             // samples into the porch (where energy has decayed to threshold).
             // m_stateSampleCount therefore includes: actual sync pulse
             // (≈960 samples) + 88 porch samples ≈ 1048 samples — still within
             // [SYNC_SAMPLES_MIN=720, SYNC_SAMPLES_MAX=1200].
             // VIS bits (30 ms = 1440 samples) produce a count ≈ 1528 > MAX → rejected.
-            if (m_stateSampleCount >= SSTVDEMOD_SYNC_SAMPLES_MIN &&
-                m_stateSampleCount <= SSTVDEMOD_SYNC_SAMPLES_MAX)
+            const bool validDuration = (m_stateSampleCount >= SSTVDEMOD_SYNC_SAMPLES_MIN &&
+                                        m_stateSampleCount <= SSTVDEMOD_SYNC_SAMPLES_MAX);
+            if (validDuration)
             {
-                transitionTo(IN_PORCH);
+                if (m_pllLocked)
+                {
+                    // Update the PLL: in the ideal case m_pllPhase == m_pllPeriod
+                    // exactly when isSyncTone falls.  Any deviation is phase error.
+                    const float error = float(m_pllPhase) - m_pllPeriod;
+                    m_pllPeriod = qBound(
+                        NOMINAL_LINE_PERIOD_SAMPLES * 0.9f,
+                        m_pllPeriod + PLL_ALPHA * error,
+                        NOMINAL_LINE_PERIOD_SAMPLES * 1.1f);
+                    // Mark that a valid sync was seen; the PLL-driven transition
+                    // below fires when m_pllPhase reaches m_pllPeriod.
+                    m_syncPulseSeen = true;
+                }
+                else
+                {
+                    // First valid sync: lock the PLL and enter porch immediately
+                    // using raw timing (no PLL history yet).
+                    m_pllLocked = true;
+                    m_pllPhase = 0;
+                    m_pllPeriod = NOMINAL_LINE_PERIOD_SAMPLES;
+                    m_syncPulseSeen = false;
+                    transitionTo(IN_PORCH);
+                }
             }
             else
             {
+                // Invalid duration (e.g. noise glitch or VIS bit) — reject.
+                m_pllLocked = false;
                 transitionTo(WAITING_FOR_SYNC);
             }
         }
-        else if (m_stateSampleCount > SSTVDEMOD_SYNC_SAMPLES_MAX)
+        else if (m_stateSampleCount > SSTVDEMOD_SYNC_SAMPLES_MAX && !m_syncPulseSeen)
         {
             // Sync energy has been high for too long (e.g. a VIS 0-bit or
             // carrier hold that never transitions).  Abort.
+            m_pllLocked = false;
             transitionTo(WAITING_FOR_SYNC);
+        }
+
+        // PLL-driven transition: once a valid sync pulse has been confirmed,
+        // enter IN_PORCH when the smoothed period estimate is reached.  Any
+        // overshoot is carried into the next period so small delays don't
+        // accumulate.  If the raw detection was early (m_pllPhase < m_pllPeriod
+        // when isSyncTone fell), we wait here in IN_SYNC — overlapping with the
+        // actual porch — until the PLL fires.  This is safe because the pixel
+        // SDFT only starts after IN_PORCH completes.
+        if (m_pllLocked && m_syncPulseSeen && m_pllPhase >= static_cast<int>(m_pllPeriod))
+        {
+            m_pllPhase -= static_cast<int>(m_pllPeriod); // carry overshoot
+            m_syncPulseSeen = false;
+            transitionTo(IN_PORCH);
         }
         break;
 
@@ -515,6 +582,12 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
 {
     m_state = newState;
     m_stateSampleCount = 0;
+
+    // Clear the per-visit sync-seen flag whenever we (re-)enter IN_SYNC so
+    // the PLL update and transition logic start fresh for each sync pulse.
+    if (newState == IN_SYNC) {
+        m_syncPulseSeen = false;
+    }
 
     // Reset pixel accumulator when starting a new decoding section.
     // The SDFT history is intentionally NOT cleared here: adjacent sections

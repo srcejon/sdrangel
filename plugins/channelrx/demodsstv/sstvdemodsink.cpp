@@ -37,7 +37,11 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pixelSamplePos(0.0f),
     m_pixelSampleCount(0),
     m_lineIndex(0),
-    m_sdftIdx(0)
+    m_sdftIdx(0),
+    m_hilbertIdx(0),
+    m_hilbertZ(0.0f, 0.0f),
+    m_hilbertFreqIIR(SSTVDEMOD_BLACK_FREQ),
+    m_useHilbert(false)
 {
     m_magsq = 0.0;
 
@@ -53,6 +57,9 @@ SSTVDemodSink::SSTVDemodSink() :
     for (int i = 0; i < SDFT_NUM_BINS; i++) {
         m_sdftBins[i] = Complex(0.0f, 0.0f);
     }
+
+    // Clear the Hilbert FIR ring buffer.
+    memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
 
     applySettings(QStringList(), m_settings, true);
     applyChannelSettings(m_channelSampleRate, m_channelFrequencyOffset, true);
@@ -80,6 +87,12 @@ void SSTVDemodSink::resetDecoder()
         m_sdftBins[i] = Complex(0.0f, 0.0f);
     }
     m_freqMovAvg.reset();
+
+    // Reset the Hilbert IF estimator state.
+    memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
+    m_hilbertIdx = 0;
+    m_hilbertZ = Complex(0.0f, 0.0f);
+    m_hilbertFreqIIR = SSTVDEMOD_BLACK_FREQ;
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -141,54 +154,127 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     }
 
     // -----------------------------------------------------------------------
-    // Stage 2 – Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment).
+    // Stage 2 – Instantaneous tone-frequency estimation.
     //
-    // The recurrence Z[k] ← twiddle[k]·(Z[k] + x_new − x_old) maintains
-    // a phase-rotated DFT bin.  The power-weighted centroid over bins k=1..3
-    // gives the instantaneous tone frequency used for both sync detection and
-    // pixel decoding.  See SDFT_MEAS_NEUTRAL_FREQ / SDFT_MEAS_WHITE_FREQ in
-    // the header for the piecewise calibration rationale.
+    // Two implementations are available; the active one is selected by m_useHilbert.
+    // Both produce 'freq' in Hz, used by the state machine below.
     // -----------------------------------------------------------------------
+    float freq;
 
-    // Update circular buffer and SDFT bins.
-    const float xNew = fmDemod;
-    const float xOld = m_sdftBuf[m_sdftIdx];
-    m_sdftBuf[m_sdftIdx] = xNew;
-    m_sdftIdx = (m_sdftIdx + 1) % N_SDFT;
-
-    const float delta = xNew - xOld;
-    for (int i = 0; i < SDFT_NUM_BINS; i++) {
-        m_sdftBins[i] = m_sdftTwiddle[i] * (m_sdftBins[i] + delta);
-    }
-
-    // Compute power-weighted spectral centroid over bins k = SDFT_K_SUM_MIN..SDFT_K_SUM_MAX.
-    float wMoment = 0.0f; // Σ k · |Z[k]|²
-    float wPower  = 0.0f; // Σ     |Z[k]|²
-    for (int k = SDFT_K_SUM_MIN; k <= SDFT_K_SUM_MAX; k++)
+    if (!m_useHilbert)
     {
-        const int i = k - SDFT_K_STORE_MIN;
-        const float p = std::norm(m_sdftBins[i]); // |Z[k]|²
-        wMoment += float(k) * p;
-        wPower  += p;
+        // ------------------------------------------------------------------
+        // SDFT path: Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment).
+        //
+        // The recurrence Z[k] ← twiddle[k]·(Z[k] + x_new − x_old) maintains
+        // a phase-rotated DFT bin.  The power-weighted centroid over bins k=1..3
+        // gives the instantaneous tone frequency used for both sync detection and
+        // pixel decoding.  See SDFT_MEAS_NEUTRAL_FREQ / SDFT_MEAS_WHITE_FREQ in
+        // the header for the piecewise calibration rationale.
+        // ------------------------------------------------------------------
+
+        // Update circular buffer and SDFT bins.
+        const float xNew = fmDemod;
+        const float xOld = m_sdftBuf[m_sdftIdx];
+        m_sdftBuf[m_sdftIdx] = xNew;
+        m_sdftIdx = (m_sdftIdx + 1) % N_SDFT;
+
+        const float delta = xNew - xOld;
+        for (int i = 0; i < SDFT_NUM_BINS; i++) {
+            m_sdftBins[i] = m_sdftTwiddle[i] * (m_sdftBins[i] + delta);
+        }
+
+        // Compute power-weighted spectral centroid over bins k = SDFT_K_SUM_MIN..SDFT_K_SUM_MAX.
+        float wMoment = 0.0f; // Σ k · |Z[k]|²
+        float wPower  = 0.0f; // Σ     |Z[k]|²
+        for (int k = SDFT_K_SUM_MIN; k <= SDFT_K_SUM_MAX; k++)
+        {
+            const int i = k - SDFT_K_STORE_MIN;
+            const float p = std::norm(m_sdftBins[i]); // |Z[k]|²
+            wMoment += float(k) * p;
+            wPower  += p;
+        }
+
+        // Frequency estimate in Hz; fall back to black level when no signal so that
+        // the first samples after a decoder reset produce black rather than an
+        // out-of-range artefact (1200 Hz is below the black level and would cause
+        // green pixels via the YCbCr conversion when Cr/Cb sections start up).
+        const float rawFreq = (wPower > 1.0e-10f)
+            ? (wMoment / wPower) * (float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / float(N_SDFT))
+            : SSTVDEMOD_BLACK_FREQ;
+
+        // Apply moving average to cancel the centroid oscillation that occurs at
+        // 2×f_tone for a real-valued cosine input (beat between the positive and
+        // aliased negative frequency components in the SDFT bins).
+        // SDFT_FREQ_MA_LEN=40 spans exactly two 1200 Hz periods, completely
+        // eliminating the sync-tone oscillation and leaving a stable ~1316 Hz
+        // reading.  instantAverage() gives the correct mean during the initial
+        // fill phase after reset (using only the samples seen so far).
+        m_freqMovAvg(rawFreq);
+        freq = m_freqMovAvg.instantAverage();
     }
+    else
+    {
+        // ------------------------------------------------------------------
+        // Hilbert path: analytic signal phase-difference IF estimator.
+        //
+        // 1. Store fmDemod in the Hilbert ring buffer.
+        // 2. Compute the Hilbert transform output (imaginary part of the
+        //    analytic signal) via the 31-tap FIR (non-zero at even indices k=0,2,...,30).
+        // 3. The real part is the input delayed by HILBERT_M=15 samples.
+        // 4. Instantaneous frequency = (Fs/2π)·arg(conj(z_prev)·z_curr).
+        // 5. Apply the 3000 Hz 1st-order IIR LPF.
+        // ------------------------------------------------------------------
 
-    // Frequency estimate in Hz; fall back to black level when no signal so that
-    // the first samples after a decoder reset produce black rather than an
-    // out-of-range artefact (1200 Hz is below the black level and would cause
-    // green pixels via the YCbCr conversion when Cr/Cb sections start up).
-    const float rawFreq = (wPower > 1.0e-10f)
-        ? (wMoment / wPower) * (float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / float(N_SDFT))
-        : SSTVDEMOD_BLACK_FREQ;
+        // Write new sample into the ring buffer.
+        m_hilbertBuf[m_hilbertIdx] = fmDemod;
+        m_hilbertIdx = (m_hilbertIdx + 1) % N_HILBERT;
 
-    // Apply moving average to cancel the centroid oscillation that occurs at
-    // 2×f_tone for a real-valued cosine input (beat between the positive and
-    // aliased negative frequency components in the SDFT bins).
-    // SDFT_FREQ_MA_LEN=40 spans exactly two 1200 Hz periods, completely
-    // eliminating the sync-tone oscillation and leaving a stable ~1316 Hz
-    // reading.  instantAverage() gives the correct mean during the initial
-    // fill phase after reset (using only the samples seen so far).
-    m_freqMovAvg(rawFreq);
-    const float freq = m_freqMovAvg.instantAverage();
+        // FIR Hilbert transform: convolve with HILBERT_COEFFS (even-index taps only).
+        float y_h = 0.0f;
+        for (int k = 0; k < N_HILBERT; k += 2) {
+            // k=0 is newest sample (just written before the index increment);
+            // the index wraps correctly because we incremented m_hilbertIdx already.
+            const int bufIdx = (m_hilbertIdx - 1 - k + N_HILBERT) % N_HILBERT;
+            y_h += HILBERT_COEFFS[k] * m_hilbertBuf[bufIdx];
+        }
+
+        // Real part: input delayed by HILBERT_M samples (centre of FIR window).
+        const float x_r = m_hilbertBuf[(m_hilbertIdx - 1 - HILBERT_M + N_HILBERT) % N_HILBERT];
+
+        // Build complex analytic sample z_curr = x_r + j·y_h.
+        const Complex z_curr(x_r, y_h);
+
+        // Phase-difference instantaneous frequency (Fs/2π)·arg(conj(z_prev)·z_curr).
+        // Fall back to BLACK_FREQ when the signal power is negligible.
+        float rawFreq;
+        const float power = std::norm(z_curr);
+        if (power > 1.0e-10f)
+        {
+            // conj(z_prev)·z_curr = (rp−j·ip)·(rc+j·ic)
+            //   real part = rp·rc + ip·ic
+            //   imag part = rp·ic − ip·rc
+            const float rp = m_hilbertZ.real();
+            const float ip = m_hilbertZ.imag();
+            const float rc = z_curr.real();
+            const float ic = z_curr.imag();
+            const float phiDotReal = rp * rc + ip * ic;
+            const float phiDotImag = rp * ic - ip * rc;
+            rawFreq = (float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / (2.0f * float(M_PI)))
+                      * std::atan2(phiDotImag, phiDotReal);
+        }
+        else
+        {
+            rawFreq = SSTVDEMOD_BLACK_FREQ;
+        }
+
+        m_hilbertZ = z_curr;
+
+        // 1st-order IIR LPF at 3000 Hz to suppress phase-difference noise.
+        m_hilbertFreqIIR = HILBERT_LPF_ALPHA * rawFreq
+                           + (1.0f - HILBERT_LPF_ALPHA) * m_hilbertFreqIIR;
+        freq = m_hilbertFreqIIR;
+    }
 
     // -----------------------------------------------------------------------
     // SSTV PD120 state machine; 'freq' is the smoothed tone frequency (Hz)
@@ -306,13 +392,21 @@ void SSTVDemodSink::commitBlock()
 
     for (int x = 0; x < SSTVDEMOD_IMAGE_WIDTH; x++)
     {
-        // Convert from frequency (Hz) to pixel value [0..255] then offset to [-128..127]
-        float cr = static_cast<float>(freqToPixel(m_cr[x])) - 128.0f;
-        float cb = static_cast<float>(freqToPixel(m_cb[x])) - 128.0f;
+        // Convert from frequency (Hz) to pixel value [0..255] then offset to [-128..127].
+        // SDFT path uses the piecewise-calibrated map; Hilbert path uses the direct linear map.
+        float cr, cb;
+        if (m_useHilbert) {
+            cr = static_cast<float>(freqToPixelDirect(m_cr[x])) - 128.0f;
+            cb = static_cast<float>(freqToPixelDirect(m_cb[x])) - 128.0f;
+        } else {
+            cr = static_cast<float>(freqToPixel(m_cr[x])) - 128.0f;
+            cb = static_cast<float>(freqToPixel(m_cb[x])) - 128.0f;
+        }
 
         // Decode odd scan line (top row of the block)
         {
-            float y = static_cast<float>(freqToPixel(m_yOdd[x]));
+            float y = m_useHilbert ? static_cast<float>(freqToPixelDirect(m_yOdd[x]))
+                                   : static_cast<float>(freqToPixel(m_yOdd[x]));
             int r = static_cast<int>(y + 1.402f * cr);
             int g = static_cast<int>(y - 0.34414f * cb - 0.71414f * cr);
             int b = static_cast<int>(y + 1.772f * cb);
@@ -324,7 +418,8 @@ void SSTVDemodSink::commitBlock()
 
         // Decode even scan line (bottom row of the block)
         {
-            float y = static_cast<float>(freqToPixel(m_yEven[x]));
+            float y = m_useHilbert ? static_cast<float>(freqToPixelDirect(m_yEven[x]))
+                                   : static_cast<float>(freqToPixel(m_yEven[x]));
             int r = static_cast<int>(y + 1.402f * cr);
             int g = static_cast<int>(y - 0.34414f * cb - 0.71414f * cr);
             int b = static_cast<int>(y + 1.772f * cb);

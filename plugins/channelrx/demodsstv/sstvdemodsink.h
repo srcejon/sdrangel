@@ -230,6 +230,69 @@ private:
 
     MovingAverageUtil<float, double, SDFT_FREQ_MA_LEN> m_freqMovAvg; //!< Post-SDFT freq MA to suppress sync-tone centroid oscillation
 
+    // -----------------------------------------------------------------------
+    // Hilbert instantaneous-frequency estimator (alternative to SDFT above).
+    //
+    // Selected by setting m_useHilbert = true.
+    //
+    // Step 1 — Analytic signal via 31-tap Hamming-windowed Hilbert FIR:
+    //   For each real input sample x[n] (= fmDemod), the Hilbert transformer
+    //   produces the imaginary part of the analytic signal:
+    //     x̂[n] = Σ_{k=0}^{30} h[k] · x[n−k]   (HILBERT_COEFFS, even k only)
+    //   The real part is the input delayed by (N−1)/2 = 15 samples:
+    //     x_r[n] = x[n−15]
+    //   Together: z[n] = x_r[n] + j·x̂[n]
+    //
+    //   The filter is type-III FIR (antisymmetric, zero centre tap) so only the
+    //   16 even-indexed coefficients (k=0,2,...,30) are non-zero.  Group delay
+    //   is exactly (N−1)/2 = 15 samples ≈ 1.6 pixels — far lower than the ~11
+    //   pixels of the SDFT+MA path.
+    //
+    // Step 2 — Phase-difference instantaneous frequency:
+    //   f_raw = (Fs/2π) · arg( conj(z[n−1]) · z[n] )
+    //         = (Fs/2π) · atan2( Im(conj(z_prev)·z_curr),
+    //                             Re(conj(z_prev)·z_curr) )
+    //   When |z[n]| is near zero (no signal), f_raw falls back to BLACK_FREQ.
+    //
+    // Step 3 — 1st-order IIR low-pass filter (cutoff 3000 Hz):
+    //   A pure SSTV tone produces a constant instantaneous frequency, so only
+    //   noise from the phase-difference step needs suppression.  3000 Hz sits
+    //   just above the highest SSTV audio tone (2300 Hz) and gives a ~3-sample
+    //   time constant (≈ 0.3 pixel blur) via:
+    //     f[n] = α·f_raw + (1−α)·f[n−1],   α = HILBERT_LPF_ALPHA
+    //
+    // Pixel mapping uses freqToPixelDirect(): a simple linear map
+    //   [SSTVDEMOD_BLACK_FREQ, SSTVDEMOD_WHITE_FREQ] → [0, 255]
+    // with no piecewise calibration because the Hilbert estimator is unbiased.
+    // -----------------------------------------------------------------------
+    static constexpr int   N_HILBERT          = 31;          //!< Hilbert FIR length (samples); group delay = 15 samples ≈ 1.6 pixels
+    static constexpr int   HILBERT_M          = (N_HILBERT - 1) / 2; //!< Centre tap index = 15
+
+    // 31-tap Hamming-windowed Hilbert FIR (type III, antisymmetric).
+    // Non-zero only at even indices (odd offsets from centre index 15).
+    // h[k] = (2/(π·(k−15))) · (0.54 − 0.46·cos(2π·k/30)) for odd (k−15), else 0.
+    // Antisymmetry: HILBERT_COEFFS[k] = −HILBERT_COEFFS[30−k].
+    static constexpr float HILBERT_COEFFS[N_HILBERT] = {
+        -0.00339531f, 0.0f, -0.00586518f, 0.0f, -0.01343846f, 0.0f,  // k=0..5
+        -0.02814229f, 0.0f, -0.05348362f, 0.0f, -0.09803944f, 0.0f,  // k=6..11
+        -0.19356378f, 0.0f, -0.63022040f, 0.0f,                       // k=12..15
+        +0.63022040f, 0.0f, +0.19356378f, 0.0f, +0.09803944f, 0.0f,  // k=16..21
+        +0.05348362f, 0.0f, +0.02814229f, 0.0f, +0.01343846f, 0.0f,  // k=22..27
+        +0.00586518f, 0.0f, +0.00339531f                               // k=28..30
+    };
+
+    // 1st-order IIR LPF coefficient: α = 1 − exp(−2π·3000/48000).
+    // y(n) = HILBERT_LPF_ALPHA·x(n) + (1−HILBERT_LPF_ALPHA)·y(n−1)
+    // Time constant ≈ 3.1 samples ≈ 0.3 pixel blur at 190 µs/pixel.
+    static constexpr float HILBERT_LPF_ALPHA  = 0.32476809f; //!< IIR α for 3000 Hz LPF at 48 kHz
+
+    float   m_hilbertBuf[N_HILBERT];   //!< Circular ring buffer of fmDemod samples for the Hilbert FIR
+    int     m_hilbertIdx;              //!< Next write index in m_hilbertBuf (0..N_HILBERT−1)
+    Complex m_hilbertZ;                //!< Previous analytic sample z[n−1] for phase-difference calculation
+    float   m_hilbertFreqIIR;          //!< IIR LPF state for the Hilbert IF output
+
+    bool    m_useHilbert;              //!< true = Hilbert IF path; false = SDFT spectral-centroid path (default)
+
     // SSTV decoder state
     SSTVState m_state;
     int m_stateSampleCount;   //!< Number of samples spent in current state
@@ -253,12 +316,13 @@ private:
     void commitBlock();
     void transitionTo(SSTVState newState);
 
-    /** Convert frequency (Hz) to pixel luminance value [0..255].
+    /** Convert SDFT centroid frequency (Hz) to pixel luminance value [0..255].
      *  Uses a piecewise-linear map anchored at two measured SDFT calibration points:
      *    [SSTVDEMOD_BLACK_FREQ, SDFT_MEAS_NEUTRAL_FREQ] → [0, 128]  (lower segment)
      *    [SDFT_MEAS_NEUTRAL_FREQ, SDFT_MEAS_WHITE_FREQ] → [128, 255] (upper segment)
      *  This ensures neutral chroma (1900 Hz → centroid ≈1858 Hz) decodes to exactly
-     *  pixel 128 (no colour bias) and white (2300 Hz → centroid ≈2245 Hz) to 255. */
+     *  pixel 128 (no colour bias) and white (2300 Hz → centroid ≈2245 Hz) to 255.
+     *  Used by the SDFT path (m_useHilbert = false). */
     static int freqToPixel(float freq) {
         float v;
         if (freq <= SDFT_MEAS_NEUTRAL_FREQ) {
@@ -266,6 +330,16 @@ private:
         } else {
             v = 128.0f + (freq - SDFT_MEAS_NEUTRAL_FREQ) * 127.0f / (SDFT_MEAS_WHITE_FREQ - SDFT_MEAS_NEUTRAL_FREQ);
         }
+        return static_cast<int>(qBound(0.0f, v, 255.0f));
+    }
+
+    /** Convert true instantaneous frequency (Hz) to pixel luminance value [0..255].
+     *  Uses a simple linear map [SSTVDEMOD_BLACK_FREQ, SSTVDEMOD_WHITE_FREQ] → [0, 255]
+     *  with no piecewise calibration, because the Hilbert IF estimator is unbiased.
+     *  Used by the Hilbert path (m_useHilbert = true). */
+    static int freqToPixelDirect(float freq) {
+        const float v = (freq - SSTVDEMOD_BLACK_FREQ) * 255.0f /
+                        (SSTVDEMOD_WHITE_FREQ - SSTVDEMOD_BLACK_FREQ);
         return static_cast<int>(qBound(0.0f, v, 255.0f));
     }
 };

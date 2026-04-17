@@ -58,7 +58,7 @@ public:
     virtual QByteArray getGeometryBytes() const { return m_settings.m_geometryBytes; }
     virtual QString getTitle() const { return m_settings.m_title; }
     virtual QColor getTitleColor() const { return m_settings.m_rgbColor; }
-    virtual void setHidden(bool hidden) { m_settings.m_hidden = hidden; }
+    virtual void zetHidden(bool hidden) { m_settings.m_hidden = hidden; }
     virtual bool getHidden() const { return m_settings.m_hidden; }
     virtual ChannelMarker& getChannelMarker() { return m_channelMarker; }
     virtual int getStreamIndex() const { return m_settings.m_streamIndex; }

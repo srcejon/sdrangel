@@ -271,11 +271,31 @@ private:
     //                             Re(conj(z_prev)·z_curr) )
     //   When |z[n]| is near zero (no signal), f_raw falls back to BLACK_FREQ.
     //
-    // Step 3 — 1st-order IIR low-pass filter (cutoff 3000 Hz):
-    //   Suppresses wideband FM-demodulator noise above the SSTV tone range.
-    //   The residual ±18 Hz elliptical beat (at 2400 Hz) is further attenuated
-    //   to < 14 Hz by this filter.  Group delay ≈ 2.1 samples ≈ 0.2 pixels.
-    //     f[n] = α·f_raw + (1−α)·f[n−1],   α = HILBERT_LPF_ALPHA
+    // Step 3 — 40-sample moving average (shared with SDFT path, m_freqMovAvg):
+    //   The phase-difference estimator on a real (non-analytic) input produces
+    //   two systematic oscillations in f_raw that must be suppressed:
+    //
+    //   (a) At 2×f_tone (2400 Hz for sync): the Hilbert FIR has |H(1200 Hz)| = 0.985 < 1,
+    //       so the analytic phasor is slightly elliptical (semi-axes 1 and 0.985).
+    //       The instantaneous-frequency of an ellipse oscillates at 2θ, giving
+    //       ≈ ±18 Hz at 2400 Hz.
+    //   (b) At f_tone (1200 Hz): any residual DC offset in the DC-blocked signal
+    //       (e.g., during the DC blocker convergence transient) shifts the phasor
+    //       off-centre, producing a component in atan2 that oscillates at f_tone.
+    //
+    //   The 3000 Hz IIR LPF previously used here attenuated these components by
+    //   only −7 dB (1200 Hz) and −2 dB (2400 Hz) — clearly insufficient.
+    //
+    //   A 40-sample MA (SDFT_FREQ_MA_LEN = 40 = Fs/1200) has exact nulls at every
+    //   multiple of Fs/40 = 1200 Hz, completely eliminating both (a) and (b):
+    //     |H_MA(1200)| = |sin(π·1200·40/Fs)| / (40·|sin(π·1200/Fs)|) = |sin(π)|/… = 0
+    //     |H_MA(2400)| = |sin(2π)| /… = 0
+    //   Group delay = 19.5 samples ≈ 2.1 pixels; combined with the 31-sample Hilbert
+    //   FIR delay the total latency is 50.5 samples ≈ 5.5 pixels — still less than
+    //   the SDFT path (~11 pixels).
+    //
+    //   Since the SDFT and Hilbert paths are mutually exclusive (m_useHilbert flag),
+    //   the shared m_freqMovAvg instance is used; it is reset in resetDecoder().
     //
     // Pixel mapping uses freqToPixelDirect(): a simple linear map
     //   [SSTVDEMOD_BLACK_FREQ, SSTVDEMOD_WHITE_FREQ] → [0, 255]
@@ -307,10 +327,8 @@ private:
         +0.00196290f, +0.00000000f, +0.00164289f                  // k=60..62
     };
 
-    // 1st-order IIR LPF coefficient: alpha = 1 - exp(-2*pi*3000/48000).
-    // y(n) = HILBERT_LPF_ALPHA*x(n) + (1-HILBERT_LPF_ALPHA)*y(n-1)
-    // Time constant = 2.1 samples = 0.2 pixel blur at 190 us/pixel.
-    static constexpr float HILBERT_LPF_ALPHA  = 0.32476809f; //!< IIR alpha for 3000 Hz LPF at 48 kHz
+    // NOTE: the Hilbert path now shares m_freqMovAvg (see Step 3 comment above) and
+    // no longer uses the HILBERT_LPF_ALPHA IIR filter.
 
     // DC-blocking high-pass filter applied to fmDemod before the Hilbert ring buffer.
     //
@@ -341,7 +359,7 @@ private:
     float   m_hilbertDcXPrev;          //!< Previous raw input x[n-1] for the DC-blocking HPF
     float   m_hilbertDcY;              //!< Previous HPF output y[n-1] for the DC-blocking HPF
     Complex m_hilbertZ;                //!< Previous analytic sample z[n-1] for phase-difference calculation
-    float   m_hilbertFreqIIR;          //!< IIR LPF state for the Hilbert IF output
+    // Post-smoothing uses m_freqMovAvg (shared with SDFT path; paths are mutually exclusive).
 
     bool    m_useHilbert;              //!< true = Hilbert IF path; false = SDFT spectral-centroid path (default)
 

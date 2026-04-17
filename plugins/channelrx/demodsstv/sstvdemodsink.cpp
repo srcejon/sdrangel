@@ -42,7 +42,6 @@ SSTVDemodSink::SSTVDemodSink() :
     m_hilbertDcXPrev(0.0f),
     m_hilbertDcY(0.0f),
     m_hilbertZ(0.0f, 0.0f),
-    m_hilbertFreqIIR(SSTVDEMOD_BLACK_FREQ),
     m_useHilbert(false)
 {
     m_magsq = 0.0;
@@ -96,7 +95,7 @@ void SSTVDemodSink::resetDecoder()
     m_hilbertDcXPrev = 0.0f;
     m_hilbertDcY = 0.0f;
     m_hilbertZ = Complex(0.0f, 0.0f);
-    m_hilbertFreqIIR = SSTVDEMOD_BLACK_FREQ;
+    // m_freqMovAvg is reset above (shared with SDFT path).
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -281,10 +280,15 @@ void SSTVDemodSink::processOneSample(Complex &ci)
 
         m_hilbertZ = z_curr;
 
-        // 1st-order IIR LPF at 3000 Hz to suppress wideband FM-demodulator noise.
-        m_hilbertFreqIIR = HILBERT_LPF_ALPHA * rawFreq
-                           + (1.0f - HILBERT_LPF_ALPHA) * m_hilbertFreqIIR;
-        freq = m_hilbertFreqIIR;
+        // 40-sample moving average (same filter used by the SDFT path).
+        // Spans exactly two periods of 1200 Hz (Fs/40 = 1200 Hz), giving exact nulls at
+        // all multiples of 1200 Hz.  This completely cancels the two systematic artifacts
+        // of the phase-difference estimator on a real cosine input:
+        //   • 2×f_tone (2400 Hz) — from the slightly elliptical Hilbert phasor (|H|=0.985)
+        //   • f_tone  (1200 Hz) — from any residual DC offset in the DC-blocked signal
+        // See SDFT_FREQ_MA_LEN comment in the header for the rationale.
+        m_freqMovAvg(rawFreq);
+        freq = m_freqMovAvg.instantAverage();
     }
 
     // -----------------------------------------------------------------------

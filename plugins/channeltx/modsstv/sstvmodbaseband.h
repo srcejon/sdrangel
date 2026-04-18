@@ -67,16 +67,6 @@ public:
         explicit MsgStartStop(bool start) : Message(), m_start(start) {}
     };
 
-    class MsgLoadImage : public Message {
-        MESSAGE_CLASS_DECLARATION
-    public:
-        const QImage& getImage() const { return m_image; }
-        static MsgLoadImage* create(const QImage& image) { return new MsgLoadImage(image); }
-    private:
-        QImage m_image;
-        explicit MsgLoadImage(const QImage& image) : Message(), m_image(image) {}
-    };
-
     SSTVModBaseband();
     ~SSTVModBaseband();
     void reset();

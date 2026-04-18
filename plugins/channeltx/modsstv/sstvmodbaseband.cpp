@@ -26,7 +26,6 @@
 
 MESSAGE_CLASS_DEFINITION(SSTVModBaseband::MsgConfigureSSTVModBaseband, Message)
 MESSAGE_CLASS_DEFINITION(SSTVModBaseband::MsgStartStop, Message)
-MESSAGE_CLASS_DEFINITION(SSTVModBaseband::MsgLoadImage, Message)
 
 SSTVModBaseband::SSTVModBaseband()
 {
@@ -138,13 +137,6 @@ bool SSTVModBaseband::handleMessage(const Message& cmd)
         } else {
             m_source.stopTransmit();
         }
-        return true;
-    }
-    else if (MsgLoadImage::match(cmd))
-    {
-        QMutexLocker mutexLocker(&m_mutex);
-        const auto& msg = static_cast<const MsgLoadImage&>(cmd);
-        m_source.loadImage(msg.getImage());
         return true;
     }
     else if (DSPSignalNotification::match(cmd))

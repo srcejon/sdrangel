@@ -102,9 +102,6 @@ public:
     void pullOne(Sample& sample) final;
     void prefetch(unsigned int nbSamples) final;
 
-    /** Load an image (pre-scaled to 640×496 YCbCr internally). */
-    void loadImage(const QImage& image);
-
     /** Start transmitting from the beginning of the image. */
     void startTransmit();
 

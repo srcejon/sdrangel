@@ -34,7 +34,6 @@
 
 MESSAGE_CLASS_DEFINITION(SSTVMod::MsgConfigureSSTVMod, Message)
 MESSAGE_CLASS_DEFINITION(SSTVMod::MsgStartStop, Message)
-MESSAGE_CLASS_DEFINITION(SSTVMod::MsgLoadImage, Message)
 MESSAGE_CLASS_DEFINITION(SSTVMod::MsgReportTransmitComplete, Message)
 
 const char* const SSTVMod::m_channelIdURI = "sdrangel.channeltx.modsstv";
@@ -159,16 +158,6 @@ bool SSTVMod::handleMessage(const Message& cmd)
         if (m_running)
         {
             auto *bbMsg = SSTVModBaseband::MsgStartStop::create(msg.getStart());
-            m_basebandSource->getInputMessageQueue()->push(bbMsg);
-        }
-        return true;
-    }
-    else if (MsgLoadImage::match(cmd))
-    {
-        const auto& msg = static_cast<const MsgLoadImage&>(cmd);
-        if (m_running)
-        {
-            auto *bbMsg = SSTVModBaseband::MsgLoadImage::create(msg.getImage());
             m_basebandSource->getInputMessageQueue()->push(bbMsg);
         }
         return true;

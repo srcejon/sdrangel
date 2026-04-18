@@ -183,10 +183,6 @@ void SSTVModGUI::loadImage()
     QPixmap pix = QPixmap::fromImage(image);
     //ui->imagePreview->setPixmap(pix.scaled(ui->imagePreview->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
     ui->imagePreview->setPixmap(pix);
-
-    // Forward image to the modulator
-    SSTVMod::MsgLoadImage *msg = SSTVMod::MsgLoadImage::create(image);
-    m_sstvMod->getInputMessageQueue()->push(msg);
 }
 
 void SSTVModGUI::on_startStop_toggled(bool checked)

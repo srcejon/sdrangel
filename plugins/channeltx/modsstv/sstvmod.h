@@ -69,17 +69,6 @@ public:
         explicit MsgStartStop(bool start) : Message(), m_start(start) {}
     };
 
-    /** Load an image from a path or a QImage. */
-    class MsgLoadImage : public Message {
-        MESSAGE_CLASS_DECLARATION
-    public:
-        const QImage& getImage() const { return m_image; }
-        static MsgLoadImage* create(const QImage& image) { return new MsgLoadImage(image); }
-    private:
-        QImage m_image;
-        explicit MsgLoadImage(const QImage& image) : Message(), m_image(image) {}
-    };
-
     /** Sent to the GUI when transmission completes. */
     class MsgReportTransmitComplete : public Message {
         MESSAGE_CLASS_DECLARATION

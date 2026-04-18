@@ -109,45 +109,46 @@ void SSTVModSource::prefetch(unsigned int /*nbSamples*/)
 // Public control
 // ---------------------------------------------------------------------------
 
-void SSTVModSource::loadImage(const QImage& image)
-{
-    QMutexLocker lock(&m_mutex);
-    // Scale to PD120 dimensions
-    QImage scaled = image.scaled(SSTV_IMAGE_WIDTH, SSTV_IMAGE_HEIGHT, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
-                        .convertToFormat(QImage::Format_RGB888);
-
-    m_imageData.resize(SSTV_IMAGE_WIDTH * SSTV_IMAGE_HEIGHT * 3);
-    const uchar* src = scaled.constBits();
-    memcpy(m_imageData.data(), src, m_imageData.size());
-    m_imageValid = true;
-    qDebug() << "SSTVModSource::loadImage: loaded" << SSTV_IMAGE_WIDTH << "×" << SSTV_IMAGE_HEIGHT;
-}
-
 void SSTVModSource::startTransmit()
 {
     QMutexLocker lock(&m_mutex);
-    if (!m_imageValid) {
-        qWarning("SSTVModSource::startTransmit: no image loaded");
-        return;
-    }
-    qDebug("SSTVModSource::startTransmit: starting PD120 transmission");
-    m_linePair = 0;
-    m_pixelIndex = 0;
-    m_pixelFrac = 0.0f;
-    m_fmPhasor = 0.0f;
-    m_tonePhasor = 0.0f;
-    // Build VIS byte: 7 data bits + even-parity bit
-    uint8_t vis7 = SSTV_VIS_CODE & 0x7F;
-    int ones = 0;
-    for (int i = 0; i < 7; i++) {
-        if (vis7 & (1 << i)) {
-            ++ones;
+
+    QImage image(m_settings.m_imagePath);
+    if (!image.isNull())
+    {
+        // Scale to PD120 dimensions
+        QImage scaled = image.scaled(SSTV_IMAGE_WIDTH, SSTV_IMAGE_HEIGHT, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+            .convertToFormat(QImage::Format_RGB888);
+
+        m_imageData.resize(SSTV_IMAGE_WIDTH * SSTV_IMAGE_HEIGHT * 3);
+        const uchar* src = scaled.constBits();
+        memcpy(m_imageData.data(), src, m_imageData.size());
+        m_imageValid = true;
+        qDebug() << "SSTVModSource::loadImage: loaded" << SSTV_IMAGE_WIDTH << "×" << SSTV_IMAGE_HEIGHT;
+
+        qDebug("SSTVModSource::startTransmit: starting PD120 transmission");
+        m_linePair = 0;
+        m_pixelIndex = 0;
+        m_pixelFrac = 0.0f;
+        m_fmPhasor = 0.0f;
+        m_tonePhasor = 0.0f;
+        // Build VIS byte: 7 data bits + even-parity bit
+        uint8_t vis7 = SSTV_VIS_CODE & 0x7F;
+        int ones = 0;
+        for (int i = 0; i < 7; i++) {
+            if (vis7 & (1 << i)) {
+                ++ones;
+            }
         }
+        // Even parity: bit7 set if odd number of 1s in bits 0-6
+        m_visData = vis7 | ((ones & 1) ? 0x80 : 0x00);
+        m_visBit = 0;
+        enterState(State::LEADER1, SSTV_LEADER_SAMPLES);
     }
-    // Even parity: bit7 set if odd number of 1s in bits 0-6
-    m_visData = vis7 | ((ones & 1) ? 0x80 : 0x00);
-    m_visBit = 0;
-    enterState(State::LEADER1, SSTV_LEADER_SAMPLES);
+    else
+    {
+        m_imageValid = false;
+    }
 }
 
 void SSTVModSource::stopTransmit()

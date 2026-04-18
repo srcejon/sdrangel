@@ -28,6 +28,7 @@
 SSTVDemodSettings::SSTVDemodSettings() :
     m_channelMarker(nullptr),
     m_scopeGUI(nullptr),
+    m_spectrumGUI(nullptr),
     m_rollupState(nullptr)
 {
     resetToDefaults();
@@ -88,6 +89,9 @@ QByteArray SSTVDemodSettings::serialize() const
 
     if (m_scopeGUI) {
         s.writeBlob(32, m_scopeGUI->serialize());
+    }
+    if (m_spectrumGUI) {
+        s.writeBlob(33, m_spectrumGUI->serialize());
     }
 
     return s.final();
@@ -153,6 +157,11 @@ bool SSTVDemodSettings::deserialize(const QByteArray& data)
         {
             d.readBlob(32, &bytetmp);
             m_scopeGUI->deserialize(bytetmp);
+        }
+        if (m_spectrumGUI)
+        {
+            d.readBlob(33, &bytetmp);
+            m_spectrumGUI->deserialize(bytetmp);
         }
 
         return true;

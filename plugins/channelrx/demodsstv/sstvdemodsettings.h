@@ -46,6 +46,7 @@ struct SSTVDemodSettings
     uint16_t m_reverseAPIDeviceIndex;
     uint16_t m_reverseAPIChannelIndex;
     Serializable *m_scopeGUI;
+    Serializable *m_spectrumGUI;
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;
@@ -58,6 +59,7 @@ struct SSTVDemodSettings
     void setChannelMarker(Serializable *channelMarker) { m_channelMarker = channelMarker; }
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
     void setScopeGUI(Serializable *scopeGUI) { m_scopeGUI = scopeGUI; }
+    void setSpectrumGUI(Serializable *spectrumGUI) { m_spectrumGUI = spectrumGUI; }
     QByteArray serialize() const;
     bool deserialize(const QByteArray& data);
     void applySettings(const QStringList& settingsKeys, const SSTVDemodSettings& settings);

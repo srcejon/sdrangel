@@ -34,6 +34,9 @@ SSTVDemodBaseband::SSTVDemodBaseband() :
 
     m_sampleFifo.setSize(SampleSinkFifo::getSizePolicy(48000));
     m_channelizer = new DownChannelizer(&m_sink);
+
+    m_scopeSink.setNbStreams(SSTVDemodSettings::m_scopeStreams);
+    m_sink.setScopeSink(&m_scopeSink);
 }
 
 SSTVDemodBaseband::~SSTVDemodBaseband()

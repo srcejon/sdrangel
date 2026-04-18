@@ -20,6 +20,9 @@
 #include <QDebug>
 #include <QImage>
 
+#include "dsp/scopevis.h"
+#include "dsp/basebandsamplesink.h"
+
 #include "sstvdemod.h"
 #include "sstvdemodsink.h"
 
@@ -30,6 +33,10 @@ SSTVDemodSink::SSTVDemodSink() :
     m_magsqPeak(0.0f),
     m_magsqCount(0),
     m_messageQueueToChannel(nullptr),
+    m_scopeSink(nullptr),
+    m_spectrumSink(nullptr),
+    m_sampleBufferIndex(0),
+    m_specBufferIndex(0),
     m_state(WAITING_FOR_SYNC),
     m_stateSampleCount(0),
     m_pixelIndex(0),
@@ -75,6 +82,12 @@ SSTVDemodSink::SSTVDemodSink() :
     // Clear the Hilbert FIR ring buffer and DC-blocker state.
     memset(m_hilbertBuf, 0, sizeof(m_hilbertBuf));
 
+    // Initialise scope and spectrum sample buffers.
+    for (int i = 0; i < SSTVDemodSettings::m_scopeStreams; i++) {
+        m_sampleBuffer[i].resize(m_sampleBufferSize);
+    }
+    m_specBuffer.resize(m_specBufferSize);
+
     applySettings(QStringList(), m_settings, true);
     applyChannelSettings(m_channelSampleRate, m_channelFrequencyOffset, true);
 
@@ -83,6 +96,45 @@ SSTVDemodSink::SSTVDemodSink() :
 
 SSTVDemodSink::~SSTVDemodSink()
 {}
+
+void SSTVDemodSink::sampleToScope(Real fmDemod, Real freq, Real isSyncTone, Real pllLocked, Real state)
+{
+    if (m_scopeSink)
+    {
+        m_sampleBuffer[0][m_sampleBufferIndex] = Complex(fmDemod, 0.0f);
+        m_sampleBuffer[1][m_sampleBufferIndex] = Complex(freq, 0.0f);
+        m_sampleBuffer[2][m_sampleBufferIndex] = Complex(isSyncTone, 0.0f);
+        m_sampleBuffer[3][m_sampleBufferIndex] = Complex(pllLocked, 0.0f);
+        m_sampleBuffer[4][m_sampleBufferIndex] = Complex(state, 0.0f);
+        m_sampleBufferIndex++;
+
+        if (m_sampleBufferIndex == m_sampleBufferSize)
+        {
+            std::vector<ComplexVector::const_iterator> vbegin;
+
+            for (int i = 0; i < SSTVDemodSettings::m_scopeStreams; i++) {
+                vbegin.push_back(m_sampleBuffer[i].begin());
+            }
+
+            m_scopeSink->feed(vbegin, m_sampleBufferSize);
+            m_sampleBufferIndex = 0;
+        }
+    }
+}
+
+void SSTVDemodSink::sampleToSpectrum(Real fmDemod)
+{
+    if (m_spectrumSink)
+    {
+        m_specBuffer[m_specBufferIndex++] = Sample(fmDemod * SDR_RX_SCALEF, 0);
+
+        if (m_specBufferIndex == m_specBufferSize)
+        {
+            m_spectrumSink->feed(m_specBuffer.begin(), m_specBuffer.end(), false);
+            m_specBufferIndex = 0;
+        }
+    }
+}
 
 void SSTVDemodSink::resetDecoder()
 {
@@ -178,6 +230,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     m_magsqCount++;
 
     if (!m_settings.m_decodeEnabled) {
+        sampleToSpectrum(fmDemod);
         return;
     }
 
@@ -481,6 +534,10 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         decodePixelSample(freq, m_yEven, SSTVDEMOD_IMAGE_WIDTH, WAITING_FOR_SYNC);
         break;
     }
+
+    // Feed scope and spectrum with demodulated signals.
+    sampleToSpectrum(fmDemod);
+    sampleToScope(fmDemod, freq, isSyncTone ? 1.0f : 0.0f, m_pllLocked ? 1.0f : 0.0f, float(m_state));
 }
 
 void SSTVDemodSink::decodePixelSample(float freq, float *buf, int width, SSTVState nextState)

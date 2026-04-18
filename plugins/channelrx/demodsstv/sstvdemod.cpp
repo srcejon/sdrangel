@@ -122,6 +122,7 @@ void SSTVDemod::start()
 
     m_basebandSink->reset();
     m_basebandSink->startWork();
+    m_basebandSink->setSpectrumSink(&m_spectrumVis);
     m_thread.start();
 
     DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);

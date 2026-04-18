@@ -29,6 +29,7 @@
 #include "device/deviceuiset.h"
 #include "dsp/dspengine.h"
 #include "dsp/dspcommands.h"
+#include "dsp/glscopesettings.h"
 #include "ui_sstvdemodgui.h"
 #include "plugin/pluginapi.h"
 #include "util/db.h"
@@ -322,6 +323,8 @@ SSTVDemodGUI::SSTVDemodGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, Baseb
     m_doApplySettings(true),
     m_basebandSampleRate(0),
     m_tickCount(0),
+    m_scopeVis(nullptr),
+    m_spectrumVis(nullptr),
     m_scene(nullptr),
     m_pixmapItem(nullptr)
 {
@@ -339,6 +342,40 @@ SSTVDemodGUI::SSTVDemodGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, Baseb
 
     connect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick())); // 50 ms
 
+    m_scopeVis = m_sstvDemod->getScopeSink();
+    m_scopeVis->setGLScope(ui->glScope);
+    ui->glScope->connectTimer(MainCore::instance()->getMasterTimer());
+    ui->scopeGUI->setBuddies(m_scopeVis->getInputMessageQueue(), m_scopeVis, ui->glScope);
+    ui->scopeGUI->setStreams(QStringList({"FM demod", "Freq (Hz)", "Sync tone", "PLL locked", "State"}));
+
+    // Set up a default trace for the FM demod signal
+    ui->scopeGUI->setPreTrigger(1);
+    GLScopeSettings::TraceData traceData;
+    traceData.m_projectionType = Projector::ProjectionReal;
+    traceData.m_amp = 1.0;
+    traceData.m_ofs = 0.0;
+    ui->scopeGUI->changeTrace(0, traceData);
+    ui->scopeGUI->focusOnTrace(0);
+
+    GLScopeSettings::TriggerData triggerData;
+    triggerData.m_triggerLevel = 0.1;
+    triggerData.m_triggerLevelCoarse = 10;
+    triggerData.m_triggerPositiveEdge = true;
+    ui->scopeGUI->changeTrigger(0, triggerData);
+    ui->scopeGUI->focusOnTrigger(0);
+
+    m_scopeVis->setLiveRate(SSTVDEMOD_CHANNEL_SAMPLE_RATE);
+
+    m_spectrumVis = m_sstvDemod->getSpectrumVis();
+    m_spectrumVis->setGLSpectrum(ui->glSpectrum);
+    ui->glSpectrum->setCenterFrequency(0);
+    ui->glSpectrum->setSampleRate(SSTVDEMOD_CHANNEL_SAMPLE_RATE);
+    ui->glSpectrum->setDisplayedDecimalCount(1);
+    ui->glSpectrum->setDisplayWaterfall(true);
+    ui->glSpectrum->setDisplayMaxHold(false);
+    ui->glSpectrum->setDisplayHistogram(false);
+    ui->spectrumGUI->setBuddies(m_spectrumVis->getInputMessageQueue(), m_spectrumVis, ui->glSpectrum);
+
     ui->deltaFrequencyLabel->setText(QString("%1f").arg(QChar(0x94, 0x03)));
     ui->deltaFrequency->setColorMapper(ColorMapper(ColorMapper::GrayGold));
     ui->deltaFrequency->setValueRange(false, 7, -9999999, 9999999);
@@ -354,6 +391,7 @@ SSTVDemodGUI::SSTVDemodGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, Baseb
 
     setTitleColor(m_channelMarker.getColor());
     m_settings.setChannelMarker(&m_channelMarker);
+    m_settings.setScopeGUI(ui->scopeGUI);
     m_settings.setRollupState(&m_rollupState);
 
     m_deviceUISet->addChannelMarker(&m_channelMarker);

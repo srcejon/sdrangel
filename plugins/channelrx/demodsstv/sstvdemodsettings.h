@@ -45,15 +45,19 @@ struct SSTVDemodSettings
     uint16_t m_reverseAPIPort;
     uint16_t m_reverseAPIDeviceIndex;
     uint16_t m_reverseAPIChannelIndex;
+    Serializable *m_scopeGUI;
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;
     bool m_hidden;
 
+    static const int m_scopeStreams = 5; //!< Number of scope streams: fmDemod, freq, isSyncTone, pllLocked, state
+
     SSTVDemodSettings();
     void resetToDefaults();
     void setChannelMarker(Serializable *channelMarker) { m_channelMarker = channelMarker; }
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
+    void setScopeGUI(Serializable *scopeGUI) { m_scopeGUI = scopeGUI; }
     QByteArray serialize() const;
     bool deserialize(const QByteArray& data);
     void applySettings(const QStringList& settingsKeys, const SSTVDemodSettings& settings);

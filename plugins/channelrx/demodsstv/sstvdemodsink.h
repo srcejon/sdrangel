@@ -21,10 +21,12 @@
 #define INCLUDE_SSTVDEMODSINK_H
 
 #include <QImage>
+#include <QVector>
 
 #include <cmath>
 
 #include "dsp/channelsamplesink.h"
+#include "dsp/dsptypes.h"
 #include "dsp/phasediscri.h"
 #include "dsp/nco.h"
 #include "dsp/interpolator.h"
@@ -71,7 +73,8 @@
 
 
 
-
+class ScopeVis;
+class BasebandSampleSink;
 class SSTVDemod;
 
 class SSTVDemodSink : public ChannelSampleSink {
@@ -92,6 +95,8 @@ public:
 
     virtual void feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end);
 
+    void setScopeSink(ScopeVis* scopeSink) { m_scopeSink = scopeSink; }
+    void setSpectrumSink(BasebandSampleSink* spectrumSink) { m_spectrumSink = spectrumSink; }
     void applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force = false);
     void applySettings(const QStringList& settingsKeys, const SSTVDemodSettings& settings, bool force = false);
     void setMessageQueueToChannel(MessageQueue *messageQueue) { m_messageQueueToChannel = messageQueue; }
@@ -133,6 +138,17 @@ private:
     SSTVDemodSettings m_settings;
     int m_channelSampleRate;
     int m_channelFrequencyOffset;
+
+    ScopeVis *m_scopeSink;                //!< Scope GUI to display demod waveforms
+    BasebandSampleSink *m_spectrumSink;   //!< Spectrum GUI to display fmDemod spectrum
+
+    ComplexVector m_sampleBuffer[SSTVDemodSettings::m_scopeStreams];
+    static const int m_sampleBufferSize = SSTVDEMOD_CHANNEL_SAMPLE_RATE / 20;
+    int m_sampleBufferIndex;
+
+    SampleVector m_specBuffer;
+    static const int m_specBufferSize = SSTVDEMOD_CHANNEL_SAMPLE_RATE / 20;
+    int m_specBufferIndex;
 
     NCO m_nco;
     Interpolator m_interpolator;
@@ -486,6 +502,8 @@ private:
     void decodePixelSample(float freq, float *buf, int width, SSTVState nextState);
     void commitBlock();
     void transitionTo(SSTVState newState);
+    void sampleToScope(Real fmDemod, Real freq, Real isSyncTone, Real pllLocked, Real state);
+    void sampleToSpectrum(Real fmDemod);
 
     /** Convert SDFT centroid frequency (Hz) to pixel luminance value [0..255].
      *  Uses a piecewise-linear map anchored at two measured SDFT calibration points:

@@ -27,6 +27,7 @@
 
 #include "channel/channelgui.h"
 #include "dsp/channelmarker.h"
+#include "dsp/scopevis.h"
 #include "util/messagequeue.h"
 #include "settings/rollupstate.h"
 
@@ -36,6 +37,7 @@ class PluginAPI;
 class DeviceUISet;
 class BasebandSampleSink;
 class SSTVDemod;
+class SpectrumVis;
 
 namespace Ui {
     class SSTVDemodGUI;
@@ -82,6 +84,9 @@ private:
     int m_basebandSampleRate;
     uint32_t m_tickCount;
     MessageQueue m_inputMessageQueue;
+
+    ScopeVis *m_scopeVis;
+    SpectrumVis *m_spectrumVis;
 
     QImage m_image;
     QPixmap m_pixmap;

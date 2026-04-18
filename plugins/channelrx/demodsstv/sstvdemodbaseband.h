@@ -24,6 +24,7 @@
 #include <QRecursiveMutex>
 
 #include "dsp/samplesinkfifo.h"
+#include "dsp/scopevis.h"
 #include "util/message.h"
 #include "util/messagequeue.h"
 
@@ -31,6 +32,7 @@
 
 class DownChannelizer;
 class SSTVDemod;
+class BasebandSampleSink;
 
 class SSTVDemodBaseband : public QObject
 {
@@ -78,6 +80,8 @@ public:
     bool isRunning() const { return m_running; }
     void setFifoLabel(const QString& label) { m_sampleFifo.setLabel(label); }
     void resetDecoder() { m_sink.resetDecoder(); }
+    ScopeVis *getScopeSink() { return &m_scopeSink; }
+    void setSpectrumSink(BasebandSampleSink *spectrumSink) { m_sink.setSpectrumSink(spectrumSink); }
 
 private:
     SampleSinkFifo m_sampleFifo;
@@ -85,6 +89,7 @@ private:
     SSTVDemodSink m_sink;
     MessageQueue m_inputMessageQueue;
     SSTVDemodSettings m_settings;
+    ScopeVis m_scopeSink;
     bool m_running;
     QRecursiveMutex m_mutex;
 

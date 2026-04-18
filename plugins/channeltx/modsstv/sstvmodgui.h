@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) 2024 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Some code by Copilot / Claude Sonnet                                          //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -42,7 +43,7 @@ class SSTVModGUI : public ChannelGUI
 
 public:
     static SSTVModGUI* create(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSampleSource *channelTx);
-    void destroy() override;
+    virtual void destroy();
 
     void resetToDefaults() override;
     QByteArray serialize() const override;
@@ -86,6 +87,7 @@ private:
     bool handleMessage(const Message& message);
     void makeUIConnections();
     void updateAbsoluteCenterFrequency();
+    void loadImage();
 
     void leaveEvent(QEvent*) override;
     void enterEvent(EnterEventType*) override;

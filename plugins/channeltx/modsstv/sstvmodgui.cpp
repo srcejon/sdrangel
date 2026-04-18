@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) 2024 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Some code by Copilot / Claude Sonnet                                          //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -158,25 +159,34 @@ void SSTVModGUI::on_loadImage_clicked(bool /*checked*/)
         return;
     }
 
-    QImage image(fileName);
-    if (image.isNull())
-    {
-        qWarning() << "SSTVModGUI::on_loadImage_clicked: failed to load" << fileName;
-        return;
-    }
-
     m_settings.m_imagePath = fileName;
     ui->imagePath->setText(QFileInfo(fileName).fileName());
 
-    // Display preview (scale to fit the label)
+    applySettings(QStringList("imagePath"));
+
+    loadImage();
+}
+
+void SSTVModGUI::loadImage()
+{
+    QImage image(m_settings.m_imagePath);
+    if (image.isNull())
+    {
+        qWarning() << "SSTVModGUI::on_loadImage_clicked: failed to load" << m_settings.m_imagePath;
+        return;
+    }
+
+    // Scale image to SSTV format
+    image = image.scaled(640, 480);
+
+    // Display preview
     QPixmap pix = QPixmap::fromImage(image);
-    ui->imagePreview->setPixmap(pix.scaled(ui->imagePreview->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    //ui->imagePreview->setPixmap(pix.scaled(ui->imagePreview->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    ui->imagePreview->setPixmap(pix);
 
     // Forward image to the modulator
     SSTVMod::MsgLoadImage *msg = SSTVMod::MsgLoadImage::create(image);
     m_sstvMod->getInputMessageQueue()->push(msg);
-
-    applySettings(QStringList("imagePath"));
 }
 
 void SSTVModGUI::on_startStop_toggled(bool checked)
@@ -234,7 +244,7 @@ void SSTVModGUI::onMenuDialogCalled(const QPoint& p)
 
         if (m_deviceUISet->m_deviceMIMOEngine)
         {
-            m_settings.m_streamIndex = dialog.getStreamIndex();
+            m_settings.m_streamIndex = dialog.getSelectedStreamIndex();
             m_channelMarker.clearStreamIndexes();
             m_channelMarker.addStreamIndex(m_settings.m_streamIndex);
         }
@@ -290,6 +300,9 @@ SSTVModGUI::SSTVModGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandS
 
     connect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
 
+    ui->deltaFrequency->setColorMapper(ColorMapper(ColorMapper::GrayGold));
+    ui->deltaFrequency->setValueRange(false, 7, -9999999, 9999999);
+
     m_channelMarker.blockSignals(true);
     m_channelMarker.setColor(Qt::red);
     m_channelMarker.setBandwidth(16000);
@@ -299,6 +312,8 @@ SSTVModGUI::SSTVModGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandS
     m_channelMarker.blockSignals(false);
     m_channelMarker.setVisible(true);
 
+    setTitleColor(m_channelMarker.getColor());
+
     m_deviceUISet->addChannelMarker(&m_channelMarker);
 
     connect(&m_channelMarker, SIGNAL(changedByCursor()), this, SLOT(channelMarkerChangedByCursor()));
@@ -307,14 +322,12 @@ SSTVModGUI::SSTVModGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandS
     m_settings.setChannelMarker(&m_channelMarker);
     m_settings.setRollupState(&m_rollupState);
 
-    // Dial popup for delta frequency
-    DialPopup::addPopupsToChildDials(this);
-
     displaySettings();
     makeUIConnections();
     applySettings(QStringList(), true);
-    getRollupContents()->restoreState(m_rollupState);
     updateAbsoluteCenterFrequency();
+    DialPopup::addPopupsToChildDials(this);
+    m_resizer.enableChildMouseTracking();
 }
 
 SSTVModGUI::~SSTVModGUI()
@@ -367,8 +380,10 @@ void SSTVModGUI::displaySettings()
     ui->fmDeviation->setValue(fmDevVal);
     ui->fmDevText->setText(QString("%1k").arg(m_settings.m_fmDeviation / 1000.0f, 0, 'f', 1));
 
-    if (!m_settings.m_imagePath.isEmpty()) {
+    if (!m_settings.m_imagePath.isEmpty())
+    {
         ui->imagePath->setText(QFileInfo(m_settings.m_imagePath).fileName());
+        loadImage();
     }
 
     getRollupContents()->restoreState(m_rollupState);
@@ -377,14 +392,16 @@ void SSTVModGUI::displaySettings()
     blockApplySettings(false);
 }
 
-void SSTVModGUI::leaveEvent(QEvent*)
+void SSTVModGUI::leaveEvent(QEvent* event)
 {
     m_channelMarker.setHighlighted(false);
+    ChannelGUI::leaveEvent(event);
 }
 
-void SSTVModGUI::enterEvent(EnterEventType*)
+void SSTVModGUI::enterEvent(EnterEventType* event)
 {
     m_channelMarker.setHighlighted(true);
+    ChannelGUI::enterEvent(event);
 }
 
 void SSTVModGUI::makeUIConnections()

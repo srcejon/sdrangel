@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) 2024 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Some code by Copilot / Claude Sonnet                                          //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -28,7 +29,7 @@
 const PluginDescriptor SSTVModPlugin::m_pluginDescriptor = {
     SSTVMod::m_channelId,
     QStringLiteral("SSTV Modulator"),
-    QStringLiteral("7.23.2"),
+    QStringLiteral("7.25.0"),
     QStringLiteral("(c) Jon Beniston, M7RCE"),
     QStringLiteral("https://github.com/srcejon/sdrangel"),
     true,

@@ -101,24 +101,36 @@ bool SSTVDemodGUI::handleMessage(const Message& message)
         // Initialise or grow the display image as lines arrive
         if (m_image.isNull() || (m_image.width() == 0))
         {
-            const SSTVDemodSettings::PDModeParams modeParams = SSTVDemodSettings::getPDModeParams(m_settings.m_pdMode);
+            const SSTVDemodSettings::SSTVModeParams modeParams = SSTVDemodSettings::getModeParams(m_settings.m_sstvMode);
             m_image = QImage(modeParams.width, modeParams.height, QImage::Format_RGB32);
             m_image.fill(Qt::black);
         }
 
-        // Copy the two decoded scan lines into the correct position in the image
-        int destY = lineIndex * 2;
-        if ((destY + 1) < m_image.height())
+        if (lineImage.height() == 2)
         {
-            // Copy odd line (row 0 of the block)
-            const uchar *srcLine0 = lineImage.scanLine(0);
-            uchar *dstLine0 = m_image.scanLine(destY);
-            memcpy(dstLine0, srcLine0, (size_t)(lineImage.bytesPerLine()));
+            // PD / Robot36: 2-row block, lineIndex is the pair index
+            int destY = lineIndex * 2;
+            if ((destY + 1) < m_image.height())
+            {
+                const uchar *srcLine0 = lineImage.scanLine(0);
+                uchar *dstLine0 = m_image.scanLine(destY);
+                memcpy(dstLine0, srcLine0, (size_t)(lineImage.bytesPerLine()));
 
-            // Copy even line (row 1 of the block)
-            const uchar *srcLine1 = lineImage.scanLine(1);
-            uchar *dstLine1 = m_image.scanLine(destY + 1);
-            memcpy(dstLine1, srcLine1, (size_t)(lineImage.bytesPerLine()));
+                const uchar *srcLine1 = lineImage.scanLine(1);
+                uchar *dstLine1 = m_image.scanLine(destY + 1);
+                memcpy(dstLine1, srcLine1, (size_t)(lineImage.bytesPerLine()));
+            }
+        }
+        else
+        {
+            // Scottie / Martin: 1-row, lineIndex is the absolute row
+            int destY = lineIndex;
+            if (destY < m_image.height())
+            {
+                const uchar *srcLine0 = lineImage.scanLine(0);
+                uchar *dstLine0 = m_image.scanLine(destY);
+                memcpy(dstLine0, srcLine0, (size_t)(lineImage.bytesPerLine()));
+            }
         }
 
         m_pixmap.convertFromImage(m_image);
@@ -212,10 +224,10 @@ void SSTVDemodGUI::on_modulation_currentIndexChanged(int index)
     applySettings(QStringList("modulation"), false);
 }
 
-void SSTVDemodGUI::on_pdMode_currentIndexChanged(int index)
+void SSTVDemodGUI::on_sstvMode_currentIndexChanged(int index)
 {
-    m_settings.m_pdMode = static_cast<SSTVDemodSettings::PDMode>(index);
-    applySettings(QStringList("pdMode"), false);
+    m_settings.m_sstvMode = static_cast<SSTVDemodSettings::SSTVMode>(index);
+    applySettings(QStringList("sstvMode"), false);
     // Clear the display when the mode changes: the image geometry changes
     resetImage();
     m_sstvDemod->getInputMessageQueue()->push(SSTVDemod::MsgResetDecoder::create());
@@ -483,7 +495,7 @@ void SSTVDemodGUI::displaySettings()
     ui->fmDev->setVisible(isFM);
     ui->fmDevText->setVisible(isFM);
 
-    ui->pdMode->setCurrentIndex((int) m_settings.m_pdMode);
+    ui->sstvMode->setCurrentIndex((int) m_settings.m_sstvMode);
 
     ui->startStop->setChecked(m_settings.m_decodeEnabled);
 
@@ -509,7 +521,7 @@ void SSTVDemodGUI::makeUIConnections()
     QObject::connect(ui->rfBW, &QSlider::valueChanged, this, &SSTVDemodGUI::on_rfBW_valueChanged);
     QObject::connect(ui->fmDev, &QSlider::valueChanged, this, &SSTVDemodGUI::on_fmDev_valueChanged);
     QObject::connect(ui->modulation, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SSTVDemodGUI::on_modulation_currentIndexChanged);
-    QObject::connect(ui->pdMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SSTVDemodGUI::on_pdMode_currentIndexChanged);
+    QObject::connect(ui->sstvMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SSTVDemodGUI::on_sstvMode_currentIndexChanged);
     QObject::connect(ui->startStop, &ButtonSwitch::clicked, this, &SSTVDemodGUI::on_startStop_clicked);
     QObject::connect(ui->resetDecoder, &QPushButton::clicked, this, &SSTVDemodGUI::on_resetDecoder_clicked);
     QObject::connect(ui->saveImage, &QPushButton::clicked, this, &SSTVDemodGUI::on_saveImage_clicked);

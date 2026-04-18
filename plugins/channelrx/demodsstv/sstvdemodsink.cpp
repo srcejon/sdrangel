@@ -49,6 +49,13 @@ SSTVDemodSink::SSTVDemodSink() :
     m_modeSamplesPerPixel(SSTVDEMOD_SAMPLES_PER_PIXEL),
     m_nominalLinePeriod(NOMINAL_LINE_PERIOD_SAMPLES),
     m_lineIndex(0),
+    m_syncSamplesMin(SSTVDEMOD_SYNC_SAMPLES_MIN),
+    m_syncSamplesMax(SSTVDEMOD_SYNC_SAMPLES_MAX),
+    m_porchSamplesRemaining(SYNC_PORCH_SAMPLES),
+    m_pixelSkipAtStart(0.0f),
+    m_modeInterSectionSamples(0),
+    m_modeChromaSamplesPerPixel(0.0f),
+    m_modeChromaWidth(0),
     m_sdftIdx(0),
     m_hilbertIdx(0),
     m_hilbertDcXPrev(0.0f),
@@ -150,6 +157,9 @@ void SSTVDemodSink::resetDecoder()
     m_pixelSamplePos = 0.0f;
     m_pixelSampleCount = 0;
     m_lineIndex = 0;
+
+    memset(m_scPendingGreen, 0, sizeof(m_scPendingGreen));
+    memset(m_scPendingBlue,  0, sizeof(m_scPendingBlue));
 
     // Reset the sliding-DFT spectral moment state and post-SDFT moving average.
     memset(m_sdftBuf, 0, sizeof(m_sdftBuf));
@@ -461,8 +471,8 @@ void SSTVDemodSink::processOneSample(Complex &ci)
             // (≈960 samples) + 88 porch samples ≈ 1048 samples — still within
             // [SYNC_SAMPLES_MIN=720, SYNC_SAMPLES_MAX=1200].
             // VIS bits (30 ms = 1440 samples) produce a count ≈ 1528 > MAX → rejected.
-            const bool validDuration = (m_stateSampleCount >= SSTVDEMOD_SYNC_SAMPLES_MIN &&
-                                        m_stateSampleCount <= SSTVDEMOD_SYNC_SAMPLES_MAX);
+            const bool validDuration = (m_stateSampleCount >= m_syncSamplesMin &&
+                                        m_stateSampleCount <= m_syncSamplesMax);
             if (validDuration)
             {
                 if (m_pllLocked)
@@ -496,7 +506,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
                 transitionTo(WAITING_FOR_SYNC);
             }
         }
-        else if (m_stateSampleCount > SSTVDEMOD_SYNC_SAMPLES_MAX && !m_syncPulseSeen)
+        else if (m_stateSampleCount > m_syncSamplesMax && !m_syncPulseSeen)
         {
             // Sync energy has been high for too long (e.g. a VIS 0-bit or
             // carrier hold that never transitions).  Abort.
@@ -520,16 +530,12 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         break;
 
     case IN_PORCH:
-        // The sync exit detection fires ≈ SYNC_PORCH_DELAY samples into the
-        // porch.  SYNC_PORCH_SAMPLES = PORCH_SAMPLES − SYNC_PORCH_DELAY is
-        // the remaining wait to complete the full porch duration, so decoding
-        // starts at the correct timing relative to the image data.
-        // By the time decoding starts the pixel SDFT window (N=32) has had
-        // ≥ PORCH_SAMPLES = 99 samples of porch-frequency content, fully
-        // flushing any residual sync-frequency contribution.
         m_stateSampleCount++;
-        if (m_stateSampleCount >= SYNC_PORCH_SAMPLES) {
-            transitionTo(DECODING_Y_ODD);
+        if (m_stateSampleCount >= m_porchSamplesRemaining)
+        {
+            SSTVState firstState = getFirstDecodeState();
+            transitionTo(firstState);
+            m_pixelSamplePos = m_pixelSkipAtStart;
         }
         break;
 
@@ -547,6 +553,70 @@ void SSTVDemodSink::processOneSample(Complex &ci)
 
     case DECODING_Y_EVEN:
         decodePixelSample(freq, m_yEven, m_modeWidth, WAITING_FOR_SYNC);
+        break;
+
+    // ---- Robot36 ----
+    case DECODING_R36_Y:
+        decodePixelSampleEx(freq, m_yOdd, m_modeWidth, m_modeSamplesPerPixel, DECODING_R36_SEP);
+        break;
+
+    case DECODING_R36_SEP:
+        m_stateSampleCount++;
+        if (m_stateSampleCount >= m_modeInterSectionSamples) {
+            transitionTo(DECODING_R36_CHROMA);
+        }
+        break;
+
+    case DECODING_R36_CHROMA:
+    {
+        float *chromaBuf = (m_lineIndex % 2 == 0) ? m_cr : m_cb;
+        decodePixelSampleEx(freq, chromaBuf, m_modeChromaWidth, m_modeChromaSamplesPerPixel, WAITING_FOR_SYNC);
+        if (m_state == WAITING_FOR_SYNC)
+        {
+            commitBlockRobot36();
+        }
+        break;
+    }
+
+    // ---- Scottie ----
+    case DECODING_SC_RED:
+        decodePixelSampleEx(freq, m_cr, m_modeWidth, m_modeSamplesPerPixel, DECODING_SC_GREEN);
+        break;
+
+    case DECODING_SC_GREEN:
+        decodePixelSampleEx(freq, m_yOdd, m_modeWidth, m_modeSamplesPerPixel, DECODING_SC_PORCH);
+        break;
+
+    case DECODING_SC_PORCH:
+        m_stateSampleCount++;
+        if (m_stateSampleCount >= m_modeInterSectionSamples) {
+            transitionTo(DECODING_SC_BLUE);
+        }
+        break;
+
+    case DECODING_SC_BLUE:
+        decodePixelSampleEx(freq, m_cb, m_modeWidth, m_modeSamplesPerPixel, WAITING_FOR_SYNC);
+        if (m_state == WAITING_FOR_SYNC)
+        {
+            commitBlockScottie();
+        }
+        break;
+
+    // ---- Martin ----
+    case DECODING_MT_GREEN:
+        decodePixelSampleEx(freq, m_yOdd, m_modeWidth, m_modeSamplesPerPixel, DECODING_MT_BLUE);
+        break;
+
+    case DECODING_MT_BLUE:
+        decodePixelSampleEx(freq, m_cb, m_modeWidth, m_modeSamplesPerPixel, DECODING_MT_RED);
+        break;
+
+    case DECODING_MT_RED:
+        decodePixelSampleEx(freq, m_cr, m_modeWidth, m_modeSamplesPerPixel, WAITING_FOR_SYNC);
+        if (m_state == WAITING_FOR_SYNC)
+        {
+            commitBlockMartin();
+        }
         break;
     }
 
@@ -667,8 +737,12 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
     // range, so the ~3-pixel bleed-in from the previous section is mild.
     // Clearing to zero would force those pixels to fall back to the zero-power
     // default (1200 Hz), producing green/teal artefacts in the Cr/Cb channels.
-    if (newState == DECODING_Y_ODD || newState == DECODING_CR ||
-        newState == DECODING_CB   || newState == DECODING_Y_EVEN)
+    if (newState == DECODING_Y_ODD    || newState == DECODING_CR   ||
+        newState == DECODING_CB       || newState == DECODING_Y_EVEN ||
+        newState == DECODING_R36_Y    || newState == DECODING_R36_CHROMA ||
+        newState == DECODING_SC_RED   || newState == DECODING_SC_GREEN ||
+        newState == DECODING_SC_BLUE  || newState == DECODING_MT_GREEN ||
+        newState == DECODING_MT_BLUE  || newState == DECODING_MT_RED)
     {
         m_pixelIndex = 0;
         m_pixelAccum = 0.0f;
@@ -725,7 +799,7 @@ void SSTVDemodSink::applySettings(const QStringList& settingsKeys, const SSTVDem
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    if (force || settingsKeys.contains("pdMode")) {
+    if (force || settingsKeys.contains("sstvMode")) {
         applyMode();
         resetDecoder();
     }
@@ -733,17 +807,202 @@ void SSTVDemodSink::applySettings(const QStringList& settingsKeys, const SSTVDem
 
 void SSTVDemodSink::applyMode()
 {
-    const SSTVDemodSettings::PDModeParams p = SSTVDemodSettings::getPDModeParams(m_settings.m_pdMode);
+    const SSTVDemodSettings::SSTVModeParams p = SSTVDemodSettings::getModeParams(m_settings.m_sstvMode);
+
     m_modeWidth           = p.width;
     m_modeHeight          = p.height;
-    m_modeLinePairs       = p.linePairs;
+    m_modeLinePairs       = p.linesTotal;
     m_modeSamplesPerPixel = p.pixelTimeMs * float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / 1000.0f;
 
-    // Recompute nominal PLL line period for the new mode:
-    //   = remaining porch + 4 pixel sections + next sync pulse + sync-energy decay
-    m_nominalLinePeriod =
-        float(SYNC_PORCH_SAMPLES)
-        + 4.0f * float(m_modeWidth) * m_modeSamplesPerPixel
-        + float(SSTVDEMOD_SYNC_SAMPLES)
-        + float(SYNC_PORCH_DELAY);
+    // Mode-specific sync acceptance window
+    const int syncSamples = (int)(p.syncMs * float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / 1000.0f + 0.5f);
+    m_syncSamplesMin = (int)(syncSamples * 0.75f);
+    m_syncSamplesMax = (int)(syncSamples * 1.25f) + SYNC_PORCH_DELAY;
+
+    // Mode-specific porch handling (SYNC_PORCH_DELAY = 88 samples)
+    const int porchSamples = (int)(p.porchMs * float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / 1000.0f + 0.5f);
+    m_porchSamplesRemaining = std::max(0, porchSamples - SYNC_PORCH_DELAY);
+    m_pixelSkipAtStart      = float(std::max(0, SYNC_PORCH_DELAY - porchSamples));
+
+    // Inter-section separator (Robot36) / inter-channel porch (Scottie)
+    m_modeInterSectionSamples = (int)(p.separatorMs * float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / 1000.0f + 0.5f);
+
+    // Robot36 chroma
+    m_modeChromaWidth           = p.chromaWidth;
+    m_modeChromaSamplesPerPixel = p.chromaPixelTimeMs * float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / 1000.0f;
+
+    // PLL nominal line period (used as initial estimate)
+    float lineSectionSamples;
+    if (p.family == SSTVDemodSettings::SSTVModeFamily::PD) {
+        lineSectionSamples = float(m_porchSamplesRemaining)
+            + 4.0f * float(m_modeWidth) * m_modeSamplesPerPixel;
+    } else if (p.family == SSTVDemodSettings::SSTVModeFamily::Robot36) {
+        lineSectionSamples = float(m_porchSamplesRemaining)
+            + float(m_modeWidth) * m_modeSamplesPerPixel
+            + float(m_modeInterSectionSamples)
+            + float(m_modeChromaWidth) * m_modeChromaSamplesPerPixel;
+    } else {
+        // Scottie / Martin: 3 colour channels + optional inter-section
+        lineSectionSamples = -m_pixelSkipAtStart
+            + 3.0f * float(m_modeWidth) * m_modeSamplesPerPixel
+            + float(m_modeInterSectionSamples);
+    }
+    m_nominalLinePeriod = lineSectionSamples + float(syncSamples) + float(SYNC_PORCH_DELAY);
+    m_pllPeriod = m_nominalLinePeriod;
+}
+
+void SSTVDemodSink::decodePixelSampleEx(float freq, float *buf, int width, float samplesPerPixel, SSTVState nextState)
+{
+    m_pixelAccum += freq;
+    m_pixelSampleCount++;
+    m_pixelSamplePos += 1.0f;
+
+    if (m_pixelSamplePos >= samplesPerPixel)
+    {
+        float avgFreq = m_pixelAccum / float(m_pixelSampleCount);
+        buf[m_pixelIndex] = avgFreq;
+        m_pixelIndex++;
+        m_pixelAccum = 0.0f;
+        m_pixelSampleCount = 0;
+        m_pixelSamplePos -= samplesPerPixel;
+
+        if (m_pixelIndex >= width)
+        {
+            transitionTo(nextState);
+        }
+    }
+}
+
+SSTVDemodSink::SSTVState SSTVDemodSink::getFirstDecodeState() const
+{
+    const SSTVDemodSettings::SSTVModeParams p = SSTVDemodSettings::getModeParams(m_settings.m_sstvMode);
+    switch (p.family)
+    {
+        case SSTVDemodSettings::SSTVModeFamily::PD:      return DECODING_Y_ODD;
+        case SSTVDemodSettings::SSTVModeFamily::Robot36: return DECODING_R36_Y;
+        case SSTVDemodSettings::SSTVModeFamily::Scottie: return DECODING_SC_RED;
+        case SSTVDemodSettings::SSTVModeFamily::Martin:  return DECODING_MT_GREEN;
+        default:                                          return DECODING_Y_ODD;
+    }
+}
+
+void SSTVDemodSink::commitBlockRobot36()
+{
+    if (m_lineIndex % 2 == 0)
+    {
+        // Even line: save Y; Cr is already in m_cr. Wait for odd line.
+        memcpy(m_yEven, m_yOdd, m_modeWidth * sizeof(float));
+    }
+    else
+    {
+        // Odd line: m_yEven=even-line Y, m_yOdd=odd-line Y, m_cr=Cr, m_cb=Cb
+        QImage lineImage(m_modeWidth, 2, QImage::Format_RGB32);
+
+        for (int x = 0; x < m_modeWidth; x++)
+        {
+            // Chroma index: 2 image pixels share one chroma pixel (half horizontal res)
+            int cx = x / 2;
+            float cr, cb;
+            if (m_useHilbert) {
+                cr = static_cast<float>(freqToPixelDirect(m_cr[cx])) - 128.0f;
+                cb = static_cast<float>(freqToPixelDirect(m_cb[cx])) - 128.0f;
+            } else {
+                cr = static_cast<float>(freqToPixel(m_cr[cx])) - 128.0f;
+                cb = static_cast<float>(freqToPixel(m_cb[cx])) - 128.0f;
+            }
+
+            // Even line (row 0 of block)
+            {
+                float y = m_useHilbert ? static_cast<float>(freqToPixelDirect(m_yEven[x]))
+                                       : static_cast<float>(freqToPixel(m_yEven[x]));
+                int r = qBound(0, (int)(y + 1.402f * cr),                     255);
+                int g = qBound(0, (int)(y - 0.34414f * cb - 0.71414f * cr),   255);
+                int b = qBound(0, (int)(y + 1.772f * cb),                     255);
+                lineImage.setPixel(x, 0, qRgb(r, g, b));
+            }
+            // Odd line (row 1 of block)
+            {
+                float y = m_useHilbert ? static_cast<float>(freqToPixelDirect(m_yOdd[x]))
+                                       : static_cast<float>(freqToPixel(m_yOdd[x]));
+                int r = qBound(0, (int)(y + 1.402f * cr),                     255);
+                int g = qBound(0, (int)(y - 0.34414f * cb - 0.71414f * cr),   255);
+                int b = qBound(0, (int)(y + 1.772f * cb),                     255);
+                lineImage.setPixel(x, 1, qRgb(r, g, b));
+            }
+        }
+
+        const int pairIndex = m_lineIndex / 2;  // integer division; m_lineIndex is odd here
+        if (m_messageQueueToChannel) {
+            m_messageQueueToChannel->push(SSTVDemod::MsgImage::create(lineImage, pairIndex));
+        }
+    }
+
+    m_lineIndex++;
+    if (m_lineIndex >= m_modeHeight) {
+        m_lineIndex = 0;
+    }
+}
+
+void SSTVDemodSink::commitBlockScottie()
+{
+    // Build single-line image from: pending Green (prev cycle), pending Blue (prev cycle), Red (m_cr this cycle)
+    QImage lineImage(m_modeWidth, 1, QImage::Format_RGB32);
+
+    for (int x = 0; x < m_modeWidth; x++)
+    {
+        int r, g, b;
+        if (m_useHilbert) {
+            r = freqToPixelDirect(m_cr[x]);
+            g = freqToPixelDirect(m_scPendingGreen[x]);
+            b = freqToPixelDirect(m_scPendingBlue[x]);
+        } else {
+            r = freqToPixel(m_cr[x]);
+            g = freqToPixel(m_scPendingGreen[x]);
+            b = freqToPixel(m_scPendingBlue[x]);
+        }
+        lineImage.setPixel(x, 0, qRgb(r, g, b));
+    }
+
+    if (m_messageQueueToChannel) {
+        m_messageQueueToChannel->push(SSTVDemod::MsgImage::create(lineImage, m_lineIndex));
+    }
+
+    // Save current Green (m_yOdd) and Blue (m_cb) as pending for the next line
+    memcpy(m_scPendingGreen, m_yOdd, m_modeWidth * sizeof(float));
+    memcpy(m_scPendingBlue,  m_cb,   m_modeWidth * sizeof(float));
+
+    m_lineIndex++;
+    if (m_lineIndex >= m_modeHeight) {
+        m_lineIndex = 0;
+    }
+}
+
+void SSTVDemodSink::commitBlockMartin()
+{
+    // Martin: Green=m_yOdd, Blue=m_cb, Red=m_cr
+    QImage lineImage(m_modeWidth, 1, QImage::Format_RGB32);
+
+    for (int x = 0; x < m_modeWidth; x++)
+    {
+        int r, g, b;
+        if (m_useHilbert) {
+            r = freqToPixelDirect(m_cr[x]);
+            g = freqToPixelDirect(m_yOdd[x]);
+            b = freqToPixelDirect(m_cb[x]);
+        } else {
+            r = freqToPixel(m_cr[x]);
+            g = freqToPixel(m_yOdd[x]);
+            b = freqToPixel(m_cb[x]);
+        }
+        lineImage.setPixel(x, 0, qRgb(r, g, b));
+    }
+
+    if (m_messageQueueToChannel) {
+        m_messageQueueToChannel->push(SSTVDemod::MsgImage::create(lineImage, m_lineIndex));
+    }
+
+    m_lineIndex++;
+    if (m_lineIndex >= m_modeHeight) {
+        m_lineIndex = 0;
+    }
 }

@@ -313,7 +313,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QComboBox" name="pdMode">
+       <widget class="QComboBox" name="sstvMode">
         <property name="minimumSize">
          <size>
           <width>70</width>
@@ -356,6 +356,36 @@
         <item>
          <property name="text">
           <string>PD-290</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Robot36</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Scottie S1</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Scottie S2</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Scottie DX</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Martin M1</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Martin M2</string>
          </property>
         </item>
        </widget>

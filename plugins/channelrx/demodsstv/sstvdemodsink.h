@@ -67,12 +67,10 @@
 #define SSTVDEMOD_PORCH_SAMPLES     ((int)(SSTVDEMOD_PORCH_MS * SSTVDEMOD_CHANNEL_SAMPLE_RATE / 1000.0f))
 #define SSTVDEMOD_SAMPLES_PER_PIXEL (SSTVDEMOD_PIXEL_TIME_MS * SSTVDEMOD_CHANNEL_SAMPLE_RATE / 1000.0f)
 
-// Scan-line sync pulse duration bounds (samples).
-// VIS start/stop bits and VIS "0" data bits are all 30 ms (1440 samples at 48 kHz),
-// which is longer than a real 20 ms scan-line sync.  Rejecting pulses outside
-// [MIN, MAX] prevents the VIS code from being decoded as image data.
+// Scan-line sync pulse duration bounds (samples) for PD120 — used as default initialisers only.
+// Mode-specific bounds are computed in applyMode() and stored in m_syncSamplesMin / m_syncSamplesMax.
 #define SSTVDEMOD_SYNC_SAMPLES_MIN  ((int)(SSTVDEMOD_SYNC_SAMPLES * 0.75f))   // 720  – 15 ms lower bound
-#define SSTVDEMOD_SYNC_SAMPLES_MAX  ((int)(SSTVDEMOD_SYNC_SAMPLES * 1.25f))   // 1200 – 25 ms upper bound (< 30 ms VIS bits)
+#define SSTVDEMOD_SYNC_SAMPLES_MAX  ((int)(SSTVDEMOD_SYNC_SAMPLES * 1.25f) + SYNC_PORCH_DELAY)  // 1288 – upper bound
 
 
 
@@ -90,7 +88,20 @@ public:
         DECODING_Y_ODD,    //!< Decoding Y (luminance) for odd scan line (pixels 0..639)
         DECODING_CR,       //!< Decoding Cr (red-difference chroma) for both lines (pixels 0..319)
         DECODING_CB,       //!< Decoding Cb (blue-difference chroma) for both lines (pixels 0..319)
-        DECODING_Y_EVEN    //!< Decoding Y (luminance) for even scan line (pixels 0..639)
+        DECODING_Y_EVEN,   //!< Decoding Y (luminance) for even scan line (pixels 0..639)
+        // Robot36 states
+        DECODING_R36_Y,      //!< Robot36: decoding Y (luminance) for current scan line
+        DECODING_R36_SEP,    //!< Robot36: waiting through the 4.5 ms Y–chroma separator
+        DECODING_R36_CHROMA, //!< Robot36: decoding Cr (even lines) or Cb (odd lines) chroma
+        // Scottie states (after sync: porch + Red + Green + porch + Blue)
+        DECODING_SC_RED,     //!< Scottie: decoding Red channel of current line
+        DECODING_SC_GREEN,   //!< Scottie: decoding Green channel of current line
+        DECODING_SC_PORCH,   //!< Scottie: waiting through 1.5 ms inter-channel porch (G → B)
+        DECODING_SC_BLUE,    //!< Scottie: decoding Blue channel of current line
+        // Martin states (after sync+porch: Green + Blue + Red, no separators)
+        DECODING_MT_GREEN,   //!< Martin: decoding Green channel
+        DECODING_MT_BLUE,    //!< Martin: decoding Blue channel
+        DECODING_MT_RED,     //!< Martin: decoding Red channel
     };
 
     SSTVDemodSink();
@@ -502,8 +513,12 @@ private:
     float m_cb[SSTVDEMOD_MAX_IMAGE_WIDTH];     //!< Cb (chroma-blue) values shared by both lines
     float m_yEven[SSTVDEMOD_MAX_IMAGE_WIDTH];  //!< Y (luminance) values for even line
 
+    // Pending Scottie green/blue from the previous decode cycle
+    float m_scPendingGreen[SSTVDEMOD_MAX_IMAGE_WIDTH];
+    float m_scPendingBlue[SSTVDEMOD_MAX_IMAGE_WIDTH];
+
     // -----------------------------------------------------------------------
-    // Runtime mode parameters — refreshed by applyMode() whenever m_pdMode changes.
+    // Runtime mode parameters — refreshed by applyMode() whenever m_sstvMode changes.
     // -----------------------------------------------------------------------
     int   m_modeWidth;           //!< Active image width  (pixels)
     int   m_modeHeight;          //!< Active image height (pixels)
@@ -511,15 +526,29 @@ private:
     float m_modeSamplesPerPixel; //!< Active samples per pixel (fractional)
     float m_nominalLinePeriod;   //!< Active nominal PLL line-period (samples)
 
+    // Mode-specific timing (refreshed by applyMode())
+    int   m_syncSamplesMin;         //!< Min acceptable sync+porch count (mode-dependent)
+    int   m_syncSamplesMax;         //!< Max acceptable sync+porch count (mode-dependent)
+    int   m_porchSamplesRemaining;  //!< IN_PORCH countdown after SYNC_PORCH_DELAY
+    float m_pixelSkipAtStart;       //!< Pixel accumulator pre-load for short porches
+    int   m_modeInterSectionSamples; //!< Samples for inter-section gap (Robot36 sep / Scottie G→B porch)
+    float m_modeChromaSamplesPerPixel; //!< Robot36 chroma samples per pixel
+    int   m_modeChromaWidth;        //!< Robot36 chroma pixels per line (160); 0 otherwise
+
     int m_lineIndex;    //!< Current block index (0..linePairs−1, each block = 2 scan lines)
 
     void processOneSample(Complex &ci);
     void decodePixelSample(float freq, float *buf, int width, SSTVState nextState);
+    void decodePixelSampleEx(float freq, float *buf, int width, float samplesPerPixel, SSTVState nextState);
     void commitBlock();
+    void commitBlockRobot36();
+    void commitBlockScottie();
+    void commitBlockMartin();
     void transitionTo(SSTVState newState);
     void sampleToScope(Real fmDemod, Real freq, Real isSyncTone, Real pllLocked, Real state);
     void sampleToSpectrum(Real fmDemod);
-    void applyMode(); //!< Refresh runtime mode parameters from m_settings.m_pdMode
+    void applyMode(); //!< Refresh runtime mode parameters from m_settings.m_sstvMode
+    SSTVState getFirstDecodeState() const;
 
     /** Convert SDFT centroid frequency (Hz) to pixel luminance value [0..255].
      *  Uses a piecewise-linear map anchored at two measured SDFT calibration points:

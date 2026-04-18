@@ -33,18 +33,25 @@ SSTVModSettings::SSTVModSettings() :
     resetToDefaults();
 }
 
-SSTVModSettings::PDModeParams SSTVModSettings::getPDModeParams(PDMode mode)
+SSTVModSettings::SSTVModeParams SSTVModSettings::getModeParams(SSTVMode mode)
 {
+    //               family        W    H    lines  syncMs  porchMs  sepMs  chromaW  chromaPxMs pixelMs  vis
     switch (mode)
     {
-        case PDMode::PD50:  return { 320,  256,  128, 0.286f, 93 };
-        case PDMode::PD90:  return { 320,  256,  128, 0.532f, 99 };
-        case PDMode::PD120: return { 640,  496,  248, 0.190f, 95 };
-        case PDMode::PD160: return { 512,  400,  200, 0.382f, 98 };
-        case PDMode::PD180: return { 640,  496,  248, 0.286f, 96 };
-        case PDMode::PD240: return { 640,  496,  248, 0.382f, 97 };
-        case PDMode::PD290: return { 800,  616,  308, 0.286f, 94 };
-        default:            return { 640,  496,  248, 0.190f, 95 }; // fallback to PD-120
+        case SSTVMode::PD50:      return { SSTVModeFamily::PD,      320,  256,  128, 20.0f, 2.08f, 0.0f,   0, 0.0f,  0.286f, 93 };
+        case SSTVMode::PD90:      return { SSTVModeFamily::PD,      320,  256,  128, 20.0f, 2.08f, 0.0f,   0, 0.0f,  0.532f, 99 };
+        case SSTVMode::PD120:     return { SSTVModeFamily::PD,      640,  496,  248, 20.0f, 2.08f, 0.0f,   0, 0.0f,  0.190f, 95 };
+        case SSTVMode::PD160:     return { SSTVModeFamily::PD,      512,  400,  200, 20.0f, 2.08f, 0.0f,   0, 0.0f,  0.382f, 98 };
+        case SSTVMode::PD180:     return { SSTVModeFamily::PD,      640,  496,  248, 20.0f, 2.08f, 0.0f,   0, 0.0f,  0.286f, 96 };
+        case SSTVMode::PD240:     return { SSTVModeFamily::PD,      640,  496,  248, 20.0f, 2.08f, 0.0f,   0, 0.0f,  0.382f, 97 };
+        case SSTVMode::PD290:     return { SSTVModeFamily::PD,      800,  616,  308, 20.0f, 2.08f, 0.0f,   0, 0.0f,  0.286f, 94 };
+        case SSTVMode::Robot36:   return { SSTVModeFamily::Robot36, 320,  240,  240,  9.0f, 3.0f,  4.5f, 160, 0.275f, 0.275f,  8 };
+        case SSTVMode::ScottieS1: return { SSTVModeFamily::Scottie, 320,  256,  256,  9.0f, 1.5f,  1.5f,   0, 0.0f,  0.432f, 60 };
+        case SSTVMode::ScottieS2: return { SSTVModeFamily::Scottie, 320,  256,  256,  9.0f, 1.5f,  1.5f,   0, 0.0f,  0.2752f,56 };
+        case SSTVMode::ScottieDX: return { SSTVModeFamily::Scottie, 320,  256,  256,  9.0f, 1.5f,  1.5f,   0, 0.0f,  1.08f,  76 };
+        case SSTVMode::MartinM1:  return { SSTVModeFamily::Martin,  320,  256,  256,  4.862f, 0.572f, 0.0f, 0, 0.0f,  0.4576f,44 };
+        case SSTVMode::MartinM2:  return { SSTVModeFamily::Martin,  320,  256,  256,  4.862f, 0.572f, 0.0f, 0, 0.0f,  0.2288f,40 };
+        default:                  return { SSTVModeFamily::PD,      640,  496,  248, 20.0f, 2.08f, 0.0f,   0, 0.0f,  0.190f, 95 };
     }
 }
 
@@ -54,7 +61,7 @@ void SSTVModSettings::resetToDefaults()
     m_rfBandwidth = 16000.0f;
     m_fmDeviation = 5000.0f;
     m_modulation = ModulationFM;
-    m_pdMode = PDMode::PD120;
+    m_sstvMode = SSTVMode::PD120;
     m_imagePath = QString();
     m_repeat = false;
     m_rgbColor = QColor(255, 0, 0).rgb();
@@ -77,7 +84,7 @@ QByteArray SSTVModSettings::serialize() const
     s.writeFloat(2, m_rfBandwidth);
     s.writeFloat(3, m_fmDeviation);
     s.writeS32(4, (int) m_modulation);
-    s.writeS32(22, (int) m_pdMode);
+    s.writeS32(22, (int) m_sstvMode);
     s.writeString(5, m_imagePath);
     s.writeBool(21, m_repeat);
     s.writeU32(6, m_rgbColor);
@@ -129,8 +136,8 @@ bool SSTVModSettings::deserialize(const QByteArray& data)
         d.readFloat(3, &m_fmDeviation, 5000.0f);
         d.readS32(4, &tmp, 0);
         m_modulation = (Modulation) tmp;
-        d.readS32(22, &tmp, (int) PDMode::PD120);
-        m_pdMode = (tmp >= 0 && tmp <= 6) ? static_cast<PDMode>(tmp) : PDMode::PD120;
+        d.readS32(22, &tmp, (int) SSTVMode::PD120);
+        m_sstvMode = (tmp >= 0 && tmp <= 12) ? static_cast<SSTVMode>(tmp) : SSTVMode::PD120;
         d.readString(5, &m_imagePath, QString());
         d.readBool(21, &m_repeat, false);
         d.readU32(6, &m_rgbColor, QColor(255, 0, 0).rgb());
@@ -192,8 +199,8 @@ void SSTVModSettings::applySettings(const QStringList& settingsKeys, const SSTVM
     if (settingsKeys.contains("modulation")) {
         m_modulation = settings.m_modulation;
     }
-    if (settingsKeys.contains("pdMode")) {
-        m_pdMode = settings.m_pdMode;
+    if (settingsKeys.contains("sstvMode")) {
+        m_sstvMode = settings.m_sstvMode;
     }
     if (settingsKeys.contains("imagePath")) {
         m_imagePath = settings.m_imagePath;
@@ -252,8 +259,8 @@ QString SSTVModSettings::getDebugString(const QStringList& settingsKeys, bool fo
     if (settingsKeys.contains("modulation") || force) {
         ostr << " m_modulation: " << m_modulation;
     }
-    if (settingsKeys.contains("pdMode") || force) {
-        ostr << " m_pdMode: " << (int) m_pdMode;
+    if (settingsKeys.contains("sstvMode") || force) {
+        ostr << " m_sstvMode: " << (int) m_sstvMode;
     }
     if (settingsKeys.contains("imagePath") || force) {
         ostr << " m_imagePath: " << m_imagePath.toStdString();

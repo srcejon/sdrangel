@@ -108,17 +108,14 @@ void SSTVModSource::modulateSample()
     else
     {
         // Handle pixel sections differently (fractional samples per pixel)
-        if (m_state == State::LINE_Y_ODD  ||
-            m_state == State::LINE_CR     ||
-            m_state == State::LINE_CB     ||
-            m_state == State::LINE_Y_EVEN)
+        if (isPixelState(m_state))
         {
             m_pixelFrac += 1.0f;
-            if (m_pixelFrac >= m_modePixelSamples)
+            if (m_pixelFrac >= m_currentPixelSamples)
             {
-                m_pixelFrac -= m_modePixelSamples;
+                m_pixelFrac -= m_currentPixelSamples;
                 ++m_pixelIndex;
-                if (m_pixelIndex >= m_modeWidth)
+                if (m_pixelIndex >= m_currentSectionWidth)
                 {
                     // Section complete
                     advanceState();
@@ -126,7 +123,7 @@ void SSTVModSource::modulateSample()
                 else
                 {
                     // Update tone for next pixel
-                    m_currentFreq = getPixelFreqForColumn(m_linePair, m_state, m_pixelIndex);
+                    m_currentFreq = getPixelFreq(m_linePair, m_state, m_pixelIndex);
                 }
             }
             return;
@@ -156,8 +153,8 @@ void SSTVModSource::startTransmit()
         m_imageValid = true;
         qDebug() << "SSTVModSource::loadImage: loaded" << m_modeWidth << "×" << m_modeHeight;
 
-        const SSTVModSettings::PDModeParams modeParams = SSTVModSettings::getPDModeParams(m_settings.m_pdMode);
-        qDebug("SSTVModSource::startTransmit: starting PD transmission (mode %d)", (int) m_settings.m_pdMode);
+        const SSTVModSettings::SSTVModeParams modeParams = SSTVModSettings::getModeParams(m_settings.m_sstvMode);
+        qDebug("SSTVModSource::startTransmit: starting SSTV transmission (mode %d)", (int) m_settings.m_sstvMode);
         m_linePair = 0;
         m_pixelIndex = 0;
         m_pixelFrac = 0.0f;
@@ -202,18 +199,23 @@ void SSTVModSource::applySettings(const QStringList& settingsKeys, const SSTVMod
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    if (force || settingsKeys.contains("pdMode")) {
+    if (force || settingsKeys.contains("sstvMode")) {
         applyMode();
     }
 }
 
 void SSTVModSource::applyMode()
 {
-    const SSTVModSettings::PDModeParams p = SSTVModSettings::getPDModeParams(m_settings.m_pdMode);
-    m_modeWidth        = p.width;
-    m_modeHeight       = p.height;
-    m_modeLinePairs    = p.linePairs;
-    m_modePixelSamples = p.pixelTimeMs * float(SSTV_SAMPLE_RATE) / 1000.0f;
+    const SSTVModSettings::SSTVModeParams p = SSTVModSettings::getModeParams(m_settings.m_sstvMode);
+    m_modeWidth             = p.width;
+    m_modeHeight            = p.height;
+    m_modeLinePairs         = p.linesTotal;
+    m_modePixelSamples      = p.pixelTimeMs * float(SSTV_SAMPLE_RATE) / 1000.0f;
+    m_modeSyncSamples       = (int)(p.syncMs  * float(SSTV_SAMPLE_RATE) / 1000.0f + 0.5f);
+    m_modePorchSamples      = (int)(p.porchMs * float(SSTV_SAMPLE_RATE) / 1000.0f + 0.5f);
+    m_modeSeparatorSamples  = (int)(p.separatorMs * float(SSTV_SAMPLE_RATE) / 1000.0f + 0.5f);
+    m_modeChromaWidth       = p.chromaWidth;
+    m_modeChromaPixelSamples = p.chromaPixelTimeMs * float(SSTV_SAMPLE_RATE) / 1000.0f;
 }
 
 void SSTVModSource::applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force)
@@ -275,38 +277,63 @@ void SSTVModSource::sampleToScope(Complex sample)
     }
 }
 
+void SSTVModSource::finishTransmission()
+{
+    if (m_settings.m_repeat)
+    {
+        startTransmit();
+    }
+    else
+    {
+        m_state = State::DONE;
+        m_stateSamples = 0;
+        emit transmitComplete();
+        m_state = State::IDLE;
+    }
+}
+
+bool SSTVModSource::isPixelState(State s) const
+{
+    switch (s)
+    {
+        case State::LINE_Y_ODD:
+        case State::LINE_CR:
+        case State::LINE_CB:
+        case State::LINE_Y_EVEN:
+        case State::R36_Y:
+        case State::R36_CHROMA:
+        case State::SC_GREEN:
+        case State::SC_BLUE:
+        case State::SC_RED:
+        case State::MT_GREEN:
+        case State::MT_BLUE:
+        case State::MT_RED:
+            return true;
+        default:
+            return false;
+    }
+}
+
 /** Map pixel luminance/chroma value [0..255] to SSTV tone frequency [Hz]. */
 float SSTVModSource::pixelToFreq(int value) const
 {
     return SSTV_BLACK_FREQ + (float(value) / 255.0f) * (SSTV_WHITE_FREQ - SSTV_BLACK_FREQ);
 }
 
-/** Return the tone frequency for pixel column `col` of the current section.
- *
- *  The image is encoded as PD120 YCbCr:
- *   Y_odd  – luminance of line 2*linePair
- *   Cr     – red chroma for both lines (averaged)
- *   Cb     – blue chroma for both lines (averaged)
- *   Y_even – luminance of line 2*linePair+1
- *
- *  RGB → YCbCr conversion (JPEG / ITU-R BT.601 full-range):
- *   Y  = 0.299R + 0.587G + 0.114B
- *   Cb = 128 − 0.1687R − 0.3313G + 0.5B
- *   Cr = 128 + 0.5R   − 0.4187G − 0.0813B
- */
-float SSTVModSource::getPixelFreqForColumn(int linePair, State section, int col) const
+/** Return the tone frequency for pixel column `col` of the current section. */
+float SSTVModSource::getPixelFreq(int line, State section, int col) const
 {
     if (!m_imageValid || m_imageData.isEmpty()) {
         return SSTV_BLACK_FREQ;
     }
 
-    const int lineOdd  = 2 * linePair;
-    const int lineEven = 2 * linePair + 1;
+    const int lineOdd  = 2 * line;
+    const int lineEven = 2 * line + 1;
 
-    auto getPixel = [&](int line, int x) -> const uchar*
+    auto getPixel = [&](int l, int x) -> const uchar*
     {
-        int lineClamp = qBound(0, line, m_modeHeight - 1);
-        int xClamp    = qBound(0, x,    m_modeWidth  - 1);
+        int lineClamp = qBound(0, l, m_modeHeight - 1);
+        int xClamp    = qBound(0, x, m_modeWidth  - 1);
         return reinterpret_cast<const uchar*>(
             m_imageData.constData() + (lineClamp * m_modeWidth + xClamp) * 3
         );
@@ -349,6 +376,54 @@ float SSTVModSource::getPixelFreqForColumn(int linePair, State section, int col)
         {
             float y = 0.299f * rE + 0.587f * gE + 0.114f * bE;
             value = qBound(0, (int) y, 255);
+            break;
+        }
+        // Robot36: Y section — luminance of current scan line
+        case State::R36_Y:
+        {
+            const uchar* p = getPixel(line, col);
+            float y = 0.299f * p[0] + 0.587f * p[1] + 0.114f * p[2];
+            value = qBound(0, (int) y, 255);
+            break;
+        }
+        // Robot36: chroma section — Cr for even lines, Cb for odd lines
+        // Each chroma pixel col covers image columns 2*col and 2*col+1
+        case State::R36_CHROMA:
+        {
+            const uchar* p0 = getPixel(line, 2 * col);
+            const uchar* p1 = getPixel(line, 2 * col + 1);
+            float r = (p0[0] + p1[0]) * 0.5f;
+            float g = (p0[1] + p1[1]) * 0.5f;
+            float b = (p0[2] + p1[2]) * 0.5f;
+            if (line % 2 == 0) {
+                // Even line: Cr
+                value = qBound(0, (int)(128.0f + 0.5f * r - 0.4187f * g - 0.0813f * b), 255);
+            } else {
+                // Odd line: Cb
+                value = qBound(0, (int)(128.0f - 0.1687f * r - 0.3313f * g + 0.5f * b), 255);
+            }
+            break;
+        }
+        // Scottie and Martin: direct RGB channels
+        case State::SC_GREEN:
+        case State::MT_GREEN:
+        {
+            const uchar* p = getPixel(line, col);
+            value = qBound(0, (int) p[1], 255);
+            break;
+        }
+        case State::SC_BLUE:
+        case State::MT_BLUE:
+        {
+            const uchar* p = getPixel(line, col);
+            value = qBound(0, (int) p[2], 255);
+            break;
+        }
+        case State::SC_RED:
+        case State::MT_RED:
+        {
+            const uchar* p = getPixel(line, col);
+            value = qBound(0, (int) p[0], 255);
             break;
         }
         default:
@@ -443,10 +518,49 @@ void SSTVModSource::enterState(State s, int samples)
         case State::LINE_CR:
         case State::LINE_CB:
         case State::LINE_Y_EVEN:
+            m_currentSectionWidth  = m_modeWidth;
+            m_currentPixelSamples  = m_modePixelSamples;
             m_pixelIndex = 0;
             m_pixelFrac  = 0.0f;
             m_stateSamples = 0; // pixel sections are driven by m_pixelFrac, not m_stateSamples
-            m_currentFreq = getPixelFreqForColumn(m_linePair, s, 0);
+            m_currentFreq = getPixelFreq(m_linePair, s, 0);
+            break;
+        // New non-pixel timed states
+        case State::R36_SYNC:
+        case State::SC_SYNC:
+        case State::MT_SYNC:
+            m_currentFreq = SSTV_SYNC_FREQ;
+            break;
+        case State::R36_PORCH:
+        case State::SC_INIT_PORCH:
+        case State::SC_PORCH:
+        case State::SC_PORCH2:
+        case State::MT_PORCH:
+        case State::R36_SEP:
+            m_currentFreq = SSTV_PORCH_FREQ;
+            break;
+        // New pixel states
+        case State::R36_Y:
+        case State::SC_GREEN:
+        case State::SC_BLUE:
+        case State::SC_RED:
+        case State::MT_GREEN:
+        case State::MT_BLUE:
+        case State::MT_RED:
+            m_currentSectionWidth  = m_modeWidth;
+            m_currentPixelSamples  = m_modePixelSamples;
+            m_pixelIndex = 0;
+            m_pixelFrac  = 0.0f;
+            m_stateSamples = 0;
+            m_currentFreq = getPixelFreq(m_linePair, s, 0);
+            break;
+        case State::R36_CHROMA:
+            m_currentSectionWidth  = m_modeChromaWidth;
+            m_currentPixelSamples  = m_modeChromaPixelSamples;
+            m_pixelIndex = 0;
+            m_pixelFrac  = 0.0f;
+            m_stateSamples = 0;
+            m_currentFreq = getPixelFreq(m_linePair, s, 0);
             break;
         default:
             break;
@@ -486,12 +600,22 @@ void SSTVModSource::advanceState()
             }
             break;
         case State::VIS_STOP:
-            // First scan-line pair
+        {
             m_linePair = 0;
-            enterState(State::LINE_SYNC, SSTV_SYNC_SAMPLES);
+            const SSTVModSettings::SSTVModeFamily family = SSTVModSettings::getModeParams(m_settings.m_sstvMode).family;
+            if (family == SSTVModSettings::SSTVModeFamily::PD) {
+                enterState(State::LINE_SYNC, m_modeSyncSamples);
+            } else if (family == SSTVModSettings::SSTVModeFamily::Robot36) {
+                enterState(State::R36_SYNC, m_modeSyncSamples);
+            } else if (family == SSTVModSettings::SSTVModeFamily::Scottie) {
+                enterState(State::SC_INIT_PORCH, m_modePorchSamples);
+            } else {
+                enterState(State::MT_SYNC, m_modeSyncSamples);
+            }
             break;
+        }
         case State::LINE_SYNC:
-            enterState(State::LINE_PORCH, SSTV_PORCH_SAMPLES);
+            enterState(State::LINE_PORCH, m_modePorchSamples);
             break;
         case State::LINE_PORCH:
             enterState(State::LINE_Y_ODD, 0);
@@ -509,22 +633,96 @@ void SSTVModSource::advanceState()
             ++m_linePair;
             if (m_linePair < m_modeLinePairs)
             {
-                enterState(State::LINE_SYNC, SSTV_SYNC_SAMPLES);
+                enterState(State::LINE_SYNC, m_modeSyncSamples);
             }
             else
             {
-                qDebug("SSTVModSource: transmission complete");
-                if (m_settings.m_repeat)
-                {
-                    startTransmit();
-                }
-                else
-                {
-                    m_state = State::DONE;
-                    m_stateSamples = 0;
-                    emit transmitComplete();
-                    m_state = State::IDLE;
-                }
+                qDebug("SSTVModSource: PD transmission complete");
+                finishTransmission();
+            }
+            break;
+
+        // ---- Robot36 ----
+        case State::R36_SYNC:
+            enterState(State::R36_PORCH, m_modePorchSamples);
+            break;
+        case State::R36_PORCH:
+            enterState(State::R36_Y, 0);
+            break;
+        case State::R36_Y:
+            enterState(State::R36_SEP, m_modeSeparatorSamples);
+            break;
+        case State::R36_SEP:
+            enterState(State::R36_CHROMA, 0);
+            break;
+        case State::R36_CHROMA:
+            ++m_linePair;
+            if (m_linePair < m_modeLinePairs)
+            {
+                enterState(State::R36_SYNC, m_modeSyncSamples);
+            }
+            else
+            {
+                qDebug("SSTVModSource: Robot36 transmission complete");
+                finishTransmission();
+            }
+            break;
+
+        // ---- Scottie ----
+        case State::SC_INIT_PORCH:
+            enterState(State::SC_GREEN, 0);
+            break;
+        case State::SC_GREEN:
+            enterState(State::SC_PORCH, m_modePorchSamples);
+            break;
+        case State::SC_PORCH:
+            enterState(State::SC_BLUE, 0);
+            break;
+        case State::SC_BLUE:
+            enterState(State::SC_SYNC, m_modeSyncSamples);
+            break;
+        case State::SC_SYNC:
+            enterState(State::SC_PORCH2, m_modePorchSamples);
+            break;
+        case State::SC_PORCH2:
+            enterState(State::SC_RED, 0);
+            break;
+        case State::SC_RED:
+            ++m_linePair;
+            if (m_linePair < m_modeHeight)
+            {
+                enterState(State::SC_GREEN, 0);
+            }
+            else
+            {
+                qDebug("SSTVModSource: Scottie transmission complete");
+                finishTransmission();
+            }
+            break;
+
+        // ---- Martin ----
+        case State::MT_SYNC:
+            enterState(State::MT_PORCH, m_modePorchSamples);
+            break;
+        case State::MT_PORCH:
+            enterState(State::MT_GREEN, 0);
+            break;
+        case State::MT_GREEN:
+            enterState(State::MT_BLUE, 0);
+            break;
+        case State::MT_BLUE:
+            enterState(State::MT_RED, 0);
+            break;
+        case State::MT_RED:
+            ++m_linePair;
+            if (m_linePair < m_modeHeight)
+            {
+                enterState(State::MT_SYNC, m_modeSyncSamples);
+            }
+            else
+            {
+                qDebug("SSTVModSource: Martin transmission complete");
+                finishTransmission();
             }
             break;
         default:

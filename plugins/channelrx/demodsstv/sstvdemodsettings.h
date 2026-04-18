@@ -36,34 +36,54 @@ struct SSTVDemodSettings
         ModulationLSB = 2   //!< Lower sideband (LSB) SSB demodulation
     };
 
-    /** SSTV PD image mode selection. */
-    enum class PDMode {
-        PD50  = 0,
-        PD90  = 1,
-        PD120 = 2,
-        PD160 = 3,
-        PD180 = 4,
-        PD240 = 5,
-        PD290 = 6
+    /** SSTV mode family — determines the scan-line structure. */
+    enum class SSTVModeFamily {
+        PD,       //!< PD family: YCbCr, line-pair based, 4 sections per pair
+        Robot36,  //!< Robot 36: YCbCr, individual lines, Y + separator + chroma
+        Scottie,  //!< Scottie family: RGB, individual lines, G + porch + B + sync + porch + R
+        Martin    //!< Martin family: RGB, individual lines, G + B + R (no separator)
     };
 
-    /** Mode-specific timing and dimension parameters for a PD mode. */
-    struct PDModeParams {
-        int     width;          //!< Image width in pixels
-        int     height;         //!< Image height in pixels (must be even; height/2 = number of line pairs)
-        int     linePairs;      //!< Number of scan-line pairs (= height / 2)
-        float   pixelTimeMs;    //!< Duration of one pixel scan in milliseconds
-        uint8_t visCode;        //!< 7-bit VIS identification code for this mode
+    /** SSTV image mode selection. */
+    enum class SSTVMode {
+        PD50      = 0,
+        PD90      = 1,
+        PD120     = 2,
+        PD160     = 3,
+        PD180     = 4,
+        PD240     = 5,
+        PD290     = 6,
+        Robot36   = 7,
+        ScottieS1 = 8,
+        ScottieS2 = 9,
+        ScottieDX = 10,
+        MartinM1  = 11,
+        MartinM2  = 12
     };
 
-    /** Return the PDModeParams for the given \p mode. */
-    static PDModeParams getPDModeParams(PDMode mode);
+    /** Mode-specific timing and dimension parameters. */
+    struct SSTVModeParams {
+        SSTVModeFamily family;         //!< Mode family (determines state-machine structure)
+        int     width;                 //!< Image width in pixels
+        int     height;                //!< Image height in pixels
+        int     linesTotal;            //!< PD: line pairs (height/2); others: individual scan lines
+        float   syncMs;                //!< Sync pulse duration (ms)
+        float   porchMs;               //!< Porch duration after sync (ms)
+        float   separatorMs;           //!< Inter-section gap (ms): Robot36 Y↔chroma sep; Scottie G↔B porch; 0 for Martin/PD
+        int     chromaWidth;           //!< Chroma pixels per line for Robot36 (width/2 = 160); 0 for others
+        float   chromaPixelTimeMs;     //!< Robot36 chroma pixel duration (ms); 0 for others
+        float   pixelTimeMs;           //!< Main pixel channel duration per pixel (ms)
+        uint8_t visCode;               //!< 7-bit VIS identification code
+    };
+
+    /** Return the SSTVModeParams for the given \p mode. */
+    static SSTVModeParams getModeParams(SSTVMode mode);
 
     qint32 m_inputFrequencyOffset;  //!< Frequency offset from device centre (Hz)
     float m_rfBandwidth;            //!< RF pre-filter bandwidth (Hz)
     float m_fmDeviation;            //!< FM deviation used for tone scaling (Hz)
     Modulation m_modulation;        //!< Demodulation type (FM / USB / LSB)
-    PDMode m_pdMode;                //!< SSTV PD image mode
+    SSTVMode m_sstvMode;            //!< SSTV image mode
     bool m_decodeEnabled;           //!< Enable SSTV image decoding
     bool m_autoSave;                //!< Automatically save received images
     QString m_autoSavePath;         //!< Directory to auto-save images

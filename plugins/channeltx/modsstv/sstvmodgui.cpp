@@ -144,10 +144,10 @@ void SSTVModGUI::on_modulation_currentIndexChanged(int index)
     applySettings(QStringList("modulation"));
 }
 
-void SSTVModGUI::on_pdMode_currentIndexChanged(int index)
+void SSTVModGUI::on_sstvMode_currentIndexChanged(int index)
 {
-    m_settings.m_pdMode = static_cast<SSTVModSettings::PDMode>(index);
-    applySettings(QStringList("pdMode"));
+    m_settings.m_sstvMode = static_cast<SSTVModSettings::SSTVMode>(index);
+    applySettings(QStringList("sstvMode"));
     // Reload the image so it is rescaled to the new mode dimensions
     if (!m_settings.m_imagePath.isEmpty()) {
         loadImage();
@@ -193,7 +193,7 @@ void SSTVModGUI::loadImage()
     }
 
     // Scale image to active mode dimensions
-    const SSTVModSettings::PDModeParams modeParams = SSTVModSettings::getPDModeParams(m_settings.m_pdMode);
+    const SSTVModSettings::SSTVModeParams modeParams = SSTVModSettings::getModeParams(m_settings.m_sstvMode);
     image = image.scaled(modeParams.width, modeParams.height);
 
     // Display preview
@@ -446,7 +446,7 @@ void SSTVModGUI::displaySettings()
     ui->fmDeviation->setVisible(isFM);
     ui->fmDevText->setVisible(isFM);
 
-    ui->pdMode->setCurrentIndex((int) m_settings.m_pdMode);
+    ui->sstvMode->setCurrentIndex((int) m_settings.m_sstvMode);
 
     int fmDevVal = (int)(m_settings.m_fmDeviation / 100.0f);
     ui->fmDeviation->setValue(fmDevVal);
@@ -483,7 +483,7 @@ void SSTVModGUI::makeUIConnections()
     QObject::connect(ui->deltaFrequency, &ValueDialZ::changed, this, &SSTVModGUI::on_deltaFrequency_changed);
     QObject::connect(ui->rfBW, &QSlider::valueChanged, this, &SSTVModGUI::on_rfBW_valueChanged);
     QObject::connect(ui->modulation, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SSTVModGUI::on_modulation_currentIndexChanged);
-    QObject::connect(ui->pdMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SSTVModGUI::on_pdMode_currentIndexChanged);
+    QObject::connect(ui->sstvMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SSTVModGUI::on_sstvMode_currentIndexChanged);
     QObject::connect(ui->fmDeviation, &QSlider::valueChanged, this, &SSTVModGUI::on_fmDeviation_valueChanged);
     QObject::connect(ui->loadImage, &QToolButton::clicked, this, &SSTVModGUI::on_loadImage_clicked);
     QObject::connect(ui->startStop, &QToolButton::toggled, this, &SSTVModGUI::on_startStop_toggled);

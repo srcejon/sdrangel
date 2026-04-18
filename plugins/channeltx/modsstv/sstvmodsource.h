@@ -36,7 +36,7 @@ class ChannelAPI;
 
 // -----------------------------------------------------------------------
 // PD120 timing constants (all at 48000 Hz sample rate) — kept as reference defaults.
-// The active mode is driven at runtime by SSTVModSettings::m_pdMode.
+// The active mode is driven at runtime by SSTVModSettings::m_sstvMode.
 // -----------------------------------------------------------------------
 // PD120: 640×496 image (248 pairs of scan lines).  Each pair:
 //   sync   20ms   1200 Hz
@@ -140,6 +140,12 @@ private:
         LINE_CR,
         LINE_CB,
         LINE_Y_EVEN,
+        // Robot36 states
+        R36_SYNC,    R36_PORCH,   R36_Y,       R36_SEP,     R36_CHROMA,
+        // Scottie states
+        SC_INIT_PORCH, SC_GREEN,  SC_PORCH,    SC_BLUE,     SC_SYNC,  SC_PORCH2, SC_RED,
+        // Martin states
+        MT_SYNC,     MT_PORCH,    MT_GREEN,    MT_BLUE,     MT_RED,
         DONE
     };
 
@@ -175,6 +181,13 @@ private:
     int   m_modeHeight       = SSTV_IMAGE_HEIGHT;    //!< Active image height (pixels)
     int   m_modeLinePairs    = SSTV_LINE_PAIRS;      //!< Active number of scan-line pairs
     float m_modePixelSamples = SSTV_PIXEL_SAMPLES;  //!< Active samples per pixel (fractional)
+    int   m_modeSyncSamples      = 960;   //!< Samples for sync pulse
+    int   m_modePorchSamples     = 99;    //!< Samples for porch
+    int   m_modeSeparatorSamples = 0;     //!< Samples for inter-section separator (Robot36/Scottie)
+    int   m_modeChromaWidth      = 0;     //!< Chroma pixels per line (Robot36: 160, others: 0)
+    float m_modeChromaPixelSamples = 0.0f; //!< Samples per chroma pixel (Robot36)
+    int   m_currentSectionWidth  = SSTV_IMAGE_WIDTH; //!< Width of current pixel section
+    float m_currentPixelSamples  = SSTV_PIXEL_SAMPLES; //!< Samples per pixel in current section
 
     // FM phasor (only used in FM mode)
     float m_fmPhasor = 0.0f;
@@ -213,12 +226,14 @@ private:
     void advanceState();
     void enterState(State s, int samples);
     float pixelToFreq(int value) const;
-    float getPixelFreqForColumn(int linePair, State section, int col) const;
+    float getPixelFreq(int line, State section, int col) const;
+    bool isPixelState(State s) const;
+    void finishTransmission();
     void modulateSample();
     Complex generateSample();
     void sampleToSpectrum(Complex sample);
     void sampleToScope(Complex sample);
-    void applyMode(); //!< Refresh runtime mode parameters from m_settings.m_pdMode
+    void applyMode(); //!< Refresh runtime mode parameters from m_settings.m_sstvMode
 };
 
 #endif // PLUGINS_CHANNELTX_MODSSTV_SSTVMODSOURCE_H_

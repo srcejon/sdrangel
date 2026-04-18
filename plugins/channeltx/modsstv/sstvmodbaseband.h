@@ -24,6 +24,7 @@
 #include <QImage>
 
 #include "dsp/samplesourcefifo.h"
+#include "dsp/scopevis.h"
 #include "util/message.h"
 #include "util/messagequeue.h"
 
@@ -32,6 +33,7 @@
 
 class UpChannelizer;
 class ChannelAPI;
+class BasebandSampleSink;
 
 class SSTVModBaseband : public QObject
 {
@@ -74,6 +76,8 @@ public:
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     double getMagSq() const { return m_source.getMagSq(); }
     int getChannelSampleRate() const;
+    void setSpectrumSampleSink(BasebandSampleSink *sampleSink) { m_source.setSpectrumSink(sampleSink); }
+    ScopeVis *getScopeSink() { return &m_scopeSink; }
     void setChannel(ChannelAPI *channel);
 
 signals:
@@ -86,6 +90,7 @@ private:
     SSTVModSource m_source;
     MessageQueue m_inputMessageQueue;
     SSTVModSettings m_settings;
+    ScopeVis m_scopeSink;
     QRecursiveMutex m_mutex;
 
     void processFifo(SampleVector& data, unsigned int iBegin, unsigned int iEnd);

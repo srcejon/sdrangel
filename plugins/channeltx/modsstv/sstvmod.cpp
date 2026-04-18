@@ -26,6 +26,7 @@
 #include "SWGWorkspaceInfo.h"
 
 #include "dsp/dspcommands.h"
+#include "dsp/scopevis.h"
 #include "device/deviceapi.h"
 #include "maincore.h"
 
@@ -41,7 +42,8 @@ const char* const SSTVMod::m_channelId    = "SSTVMod";
 
 SSTVMod::SSTVMod(DeviceAPI *deviceAPI) :
     ChannelAPI(m_channelIdURI, ChannelAPI::StreamSingleSource),
-    m_deviceAPI(deviceAPI)
+    m_deviceAPI(deviceAPI),
+    m_spectrumVis(SDR_TX_SCALEF)
 {
     setObjectName(m_channelId);
     applySettings(QStringList(), m_settings, true);
@@ -93,6 +95,7 @@ void SSTVMod::start()
     m_thread = new QThread(this);
     m_basebandSource = new SSTVModBaseband();
     m_basebandSource->setChannel(this);
+    m_basebandSource->setSpectrumSampleSink(&m_spectrumVis);
     m_basebandSource->reset();
     m_basebandSource->moveToThread(m_thread);
 
@@ -264,6 +267,11 @@ double SSTVMod::getMagSq() const
         return m_basebandSource->getMagSq();
     }
     return 0.0;
+}
+
+ScopeVis *SSTVMod::getScopeSink()
+{
+    return m_basebandSource->getScopeSink();
 }
 
 uint32_t SSTVMod::getNumberOfDeviceStreams() const

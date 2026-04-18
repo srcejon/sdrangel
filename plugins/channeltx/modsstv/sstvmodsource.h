@@ -29,6 +29,8 @@
 
 #include "sstvmodsettings.h"
 
+class BasebandSampleSink;
+class ScopeVis;
 class ChannelAPI;
 
 // -----------------------------------------------------------------------
@@ -111,6 +113,8 @@ public:
     bool isTransmitting() const { return m_state != State::IDLE; }
     double getMagSq() const { return m_magsq; }
 
+    void setSpectrumSink(BasebandSampleSink *sampleSink) { m_spectrumSink = sampleSink; }
+    void setScopeSink(ScopeVis *scopeSink) { m_scopeSink = scopeSink; }
     void setChannel(ChannelAPI *channel) { m_channel = channel; }
     void applySettings(const QStringList& settingsKeys, const SSTVModSettings& settings, bool force = false);
     void applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force = false);
@@ -143,6 +147,18 @@ private:
     ChannelAPI *m_channel = nullptr;
 
     NCO  m_carrierNco;         //!< Shifts signal to channel frequency offset
+
+    // Spectrum and scope sinks for audio waveform visualisation
+    BasebandSampleSink* m_spectrumSink = nullptr;
+    ScopeVis*           m_scopeSink    = nullptr;
+
+    SampleVector m_scopeSampleBuffer;
+    static const int m_scopeSampleBufferSize = SSTV_SAMPLE_RATE / 20; // 2400
+    int m_scopeSampleBufferIndex = 0;
+
+    SampleVector m_specSampleBuffer;
+    static const int m_specSampleBufferSize = 1024;
+    int m_specSampleBufferIndex = 0;
 
     // FM phasor (only used in FM mode)
     float m_fmPhasor = 0.0f;
@@ -183,6 +199,8 @@ private:
     float pixelToFreq(int value) const;
     float getPixelFreqForColumn(int linePair, State section, int col) const;
     Complex generateSample();
+    void sampleToSpectrum(Complex sample);
+    void sampleToScope(Complex sample);
 };
 
 #endif // PLUGINS_CHANNELTX_MODSSTV_SSTVMODSOURCE_H_

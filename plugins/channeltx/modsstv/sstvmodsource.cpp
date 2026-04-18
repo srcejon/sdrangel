@@ -20,11 +20,15 @@
 #include <QDebug>
 
 #include "dsp/dsptypes.h"
+#include "dsp/basebandsamplesink.h"
+#include "dsp/scopevis.h"
 #include "sstvmodsource.h"
 
 SSTVModSource::SSTVModSource(QObject *parent)
     : QObject(parent)
 {
+    m_scopeSampleBuffer.resize(m_scopeSampleBufferSize);
+    m_specSampleBuffer.resize(m_specSampleBufferSize);
     applySettings(QStringList(), m_settings, true);
     applyChannelSettings(m_channelSampleRate, m_channelFrequencyOffset, true);
 }
@@ -185,6 +189,44 @@ void SSTVModSource::applyChannelSettings(int channelSampleRate, int channelFrequ
 // Private helpers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Spectrum / scope feed helpers
+// ---------------------------------------------------------------------------
+
+void SSTVModSource::sampleToSpectrum(Complex sample)
+{
+    if (m_spectrumSink)
+    {
+        Real r = std::real(sample) * SDR_TX_SCALEF;
+        Real i = std::imag(sample) * SDR_TX_SCALEF;
+        m_specSampleBuffer[m_specSampleBufferIndex++] = Sample(r, i);
+
+        if (m_specSampleBufferIndex == m_specSampleBufferSize)
+        {
+            m_spectrumSink->feed(m_specSampleBuffer.begin(), m_specSampleBuffer.end(), false);
+            m_specSampleBufferIndex = 0;
+        }
+    }
+}
+
+void SSTVModSource::sampleToScope(Complex sample)
+{
+    if (m_scopeSink)
+    {
+        Real r = std::real(sample) * SDR_RX_SCALEF;
+        Real i = std::imag(sample) * SDR_RX_SCALEF;
+        m_scopeSampleBuffer[m_scopeSampleBufferIndex++] = Sample(r, i);
+
+        if (m_scopeSampleBufferIndex == m_scopeSampleBufferSize)
+        {
+            std::vector<SampleVector::const_iterator> vbegin;
+            vbegin.push_back(m_scopeSampleBuffer.begin());
+            m_scopeSink->feed(vbegin, m_scopeSampleBufferSize);
+            m_scopeSampleBufferIndex = 0;
+        }
+    }
+}
+
 /** Map pixel luminance/chroma value [0..255] to SSTV tone frequency [Hz]. */
 float SSTVModSource::pixelToFreq(int value) const
 {
@@ -316,6 +358,11 @@ Complex SSTVModSource::generateSample()
         ci.real( std::cos(m_tonePhasor) * scale);
         ci.imag(-std::sin(m_tonePhasor) * scale);
     }
+
+    // Feed the audio tone (real SSTV sub-carrier) to spectrum and scope.
+    // Represented as a complex with audio on the real axis, 0 on imaginary.
+    sampleToSpectrum(Complex(audio, 0.0f));
+    sampleToScope(Complex(audio, 0.0f));
 
     return ci;
 }

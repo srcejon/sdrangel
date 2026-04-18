@@ -32,6 +32,8 @@
 class PluginAPI;
 class DeviceUISet;
 class BasebandSampleSource;
+class SpectrumVis;
+class ScopeVis;
 
 namespace Ui {
     class SSTVModGUI;
@@ -75,6 +77,8 @@ private:
     bool m_doApplySettings = true;
 
     SSTVMod* m_sstvMod;
+    SpectrumVis* m_spectrumVis;
+    ScopeVis* m_scopeVis;
     MovingAverageUtil<double, double, 20> m_channelPowerDbAvg;
     MessageQueue m_inputMessageQueue;
 

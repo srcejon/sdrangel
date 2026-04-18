@@ -27,6 +27,10 @@
 #include "util/db.h"
 #include "dsp/dspengine.h"
 #include "dsp/dspcommands.h"
+#include "dsp/spectrumvis.h"
+#include "dsp/scopevis.h"
+#include "dsp/glscopesettings.h"
+#include "gui/glspectrum.h"
 #include "gui/crightclickenabler.h"
 #include "gui/basicchannelsettingsdialog.h"
 #include "gui/dialpopup.h"
@@ -34,6 +38,7 @@
 #include "maincore.h"
 
 #include "ui_sstvmodgui.h"
+#include "sstvmodsource.h"
 #include "sstvmodgui.h"
 
 
@@ -295,6 +300,55 @@ SSTVModGUI::SSTVModGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandS
     m_sstvMod->setMessageQueueToGUI(getInputMessageQueue());
 
     connect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
+
+    // Scope setup
+    m_scopeVis = m_sstvMod->getScopeSink();
+    m_scopeVis->setGLScope(ui->glScope);
+    ui->glScope->connectTimer(MainCore::instance()->getMasterTimer());
+    ui->scopeGUI->setBuddies(m_scopeVis->getInputMessageQueue(), m_scopeVis, ui->glScope);
+
+    ui->scopeGUI->setPreTrigger(1);
+    GLScopeSettings::TraceData traceDataI, traceDataQ;
+    traceDataI.m_projectionType = Projector::ProjectionReal;
+    traceDataI.m_amp = 1.0;
+    traceDataI.m_ofs = 0.0;
+    traceDataQ.m_projectionType = Projector::ProjectionImag;
+    traceDataQ.m_amp = 1.0;
+    traceDataQ.m_ofs = 0.0;
+    ui->scopeGUI->changeTrace(0, traceDataI);
+    ui->scopeGUI->addTrace(traceDataQ);
+    ui->scopeGUI->setDisplayMode(GLScopeSettings::DisplayPol);
+    ui->scopeGUI->focusOnTrace(0);
+
+    GLScopeSettings::TriggerData triggerData;
+    triggerData.m_triggerLevel = 0.1;
+    triggerData.m_triggerLevelCoarse = 10;
+    triggerData.m_triggerPositiveEdge = true;
+    ui->scopeGUI->changeTrigger(0, triggerData);
+    ui->scopeGUI->focusOnTrigger(0);
+
+    m_scopeVis->setLiveRate(SSTV_SAMPLE_RATE);
+
+    // Spectrum setup
+    m_spectrumVis = m_sstvMod->getSpectrumVis();
+    m_spectrumVis->setGLSpectrum(ui->glSpectrum);
+    ui->spectrumGUI->setBuddies(m_spectrumVis, ui->glSpectrum);
+
+    ui->glSpectrum->setCenterFrequency(0);
+    ui->glSpectrum->setSampleRate(SSTV_SAMPLE_RATE);
+    ui->glSpectrum->setLsbDisplay(false);
+
+    SpectrumSettings spectrumSettings = m_spectrumVis->getSettings();
+    spectrumSettings.m_ssb = false;
+    spectrumSettings.m_displayCurrent = true;
+    spectrumSettings.m_displayWaterfall = false;
+    spectrumSettings.m_displayMaxHold = false;
+    spectrumSettings.m_displayHistogram = false;
+    SpectrumVis::MsgConfigureSpectrumVis *specMsg = SpectrumVis::MsgConfigureSpectrumVis::create(spectrumSettings, false);
+    m_spectrumVis->getInputMessageQueue()->push(specMsg);
+
+    ui->scopeContainer->setVisible(false);
+    ui->spectrumContainer->setVisible(false);
 
     ui->deltaFrequency->setColorMapper(ColorMapper(ColorMapper::GrayGold));
     ui->deltaFrequency->setValueRange(false, 7, -9999999, 9999999);

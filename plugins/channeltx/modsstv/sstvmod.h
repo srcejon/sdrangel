@@ -24,6 +24,7 @@
 #include <QImage>
 
 #include "dsp/basebandsamplesource.h"
+#include "dsp/spectrumvis.h"
 #include "channel/channelapi.h"
 #include "util/message.h"
 
@@ -34,6 +35,7 @@ class QNetworkReply;
 class QThread;
 class DeviceAPI;
 class SSTVModBaseband;
+class ScopeVis;
 class ObjectPipe;
 
 class SSTVMod : public BasebandSampleSource, public ChannelAPI
@@ -121,6 +123,8 @@ public:
 
     double getMagSq() const;
     uint32_t getNumberOfDeviceStreams() const;
+    SpectrumVis *getSpectrumVis() { return &m_spectrumVis; }
+    ScopeVis *getScopeSink();
 
     static const char* const m_channelIdURI;
     static const char* const m_channelId;
@@ -131,6 +135,7 @@ private:
     bool             m_running = false;
     SSTVModBaseband* m_basebandSource = nullptr;
     SSTVModSettings  m_settings;
+    SpectrumVis      m_spectrumVis;
     int              m_basebandSampleRate = 0;
     qint64           m_centerFrequency = 0;
 

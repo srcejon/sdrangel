@@ -40,6 +40,7 @@ void SSTVModSettings::resetToDefaults()
     m_fmDeviation = 5000.0f;
     m_modulation = ModulationFM;
     m_imagePath = QString();
+    m_repeat = false;
     m_rgbColor = QColor(255, 0, 0).rgb();
     m_title = "SSTV Modulator";
     m_streamIndex = 0;
@@ -61,6 +62,7 @@ QByteArray SSTVModSettings::serialize() const
     s.writeFloat(3, m_fmDeviation);
     s.writeS32(4, (int) m_modulation);
     s.writeString(5, m_imagePath);
+    s.writeBool(21, m_repeat);
     s.writeU32(6, m_rgbColor);
     s.writeString(7, m_title);
     s.writeS32(8, m_streamIndex);
@@ -111,6 +113,7 @@ bool SSTVModSettings::deserialize(const QByteArray& data)
         d.readS32(4, &tmp, 0);
         m_modulation = (Modulation) tmp;
         d.readString(5, &m_imagePath, QString());
+        d.readBool(21, &m_repeat, false);
         d.readU32(6, &m_rgbColor, QColor(255, 0, 0).rgb());
         d.readString(7, &m_title, "SSTV Modulator");
         d.readS32(8, &m_streamIndex, 0);
@@ -173,6 +176,9 @@ void SSTVModSettings::applySettings(const QStringList& settingsKeys, const SSTVM
     if (settingsKeys.contains("imagePath")) {
         m_imagePath = settings.m_imagePath;
     }
+    if (settingsKeys.contains("repeat")) {
+        m_repeat = settings.m_repeat;
+    }
     if (settingsKeys.contains("rgbColor")) {
         m_rgbColor = settings.m_rgbColor;
     }
@@ -226,6 +232,9 @@ QString SSTVModSettings::getDebugString(const QStringList& settingsKeys, bool fo
     }
     if (settingsKeys.contains("imagePath") || force) {
         ostr << " m_imagePath: " << m_imagePath.toStdString();
+    }
+    if (settingsKeys.contains("repeat") || force) {
+        ostr << " m_repeat: " << m_repeat;
     }
     if (settingsKeys.contains("title") || force) {
         ostr << " m_title: " << m_title.toStdString();

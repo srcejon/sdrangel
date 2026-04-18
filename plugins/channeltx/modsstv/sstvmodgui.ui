@@ -347,6 +347,20 @@
         </widget>
        </item>
        <item>
+        <widget class="ButtonSwitch" name="repeat">
+         <property name="toolTip">
+          <string>Repeat transmission when complete</string>
+         </property>
+         <property name="text">
+          <string>...</string>
+         </property>
+         <property name="icon">
+          <iconset resource="../../../sdrgui/resources/res.qrc">
+           <normaloff>:/playloop.png</normaloff>:/playloop.png</iconset>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QToolButton" name="loadImage">
          <property name="toolTip">
           <string>Load image from PNG or JPEG file</string>
@@ -574,6 +588,11 @@
    <extends>QWidget</extends>
    <header>gui/glspectrumgui.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ButtonSwitch</class>
+   <extends>QToolButton</extends>
+   <header>gui/buttonswitch.h</header>
   </customwidget>
  </customwidgets>
  <resources>

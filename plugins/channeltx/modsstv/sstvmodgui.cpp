@@ -317,7 +317,7 @@ SSTVModGUI::SSTVModGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandS
     traceDataQ.m_ofs = 0.0;
     ui->scopeGUI->changeTrace(0, traceDataI);
     ui->scopeGUI->addTrace(traceDataQ);
-    ui->scopeGUI->setDisplayMode(GLScopeSettings::DisplayPol);
+    ui->scopeGUI->setDisplayMode(GLScopeSettings::DisplayX);
     ui->scopeGUI->focusOnTrace(0);
 
     GLScopeSettings::TriggerData triggerData;

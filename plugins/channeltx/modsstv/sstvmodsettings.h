@@ -54,11 +54,15 @@ struct SSTVModSettings
 
     Serializable *m_channelMarker;
     Serializable *m_rollupState;
+    Serializable *m_spectrumGUI;
+    Serializable *m_scopeGUI;
 
     SSTVModSettings();
     void resetToDefaults();
     void setChannelMarker(Serializable *channelMarker) { m_channelMarker = channelMarker; }
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
+    void setSpectrumGUI(Serializable *spectrumGUI) { m_spectrumGUI = spectrumGUI; }
+    void setScopeGUI(Serializable *scopeGUI) { m_scopeGUI = scopeGUI; }
     QByteArray serialize() const;
     bool deserialize(const QByteArray& data);
     void applySettings(const QStringList& settingsKeys, const SSTVModSettings& settings);

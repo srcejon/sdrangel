@@ -371,6 +371,8 @@ SSTVModGUI::SSTVModGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandS
 
     m_settings.setChannelMarker(&m_channelMarker);
     m_settings.setRollupState(&m_rollupState);
+    m_settings.setSpectrumGUI(ui->spectrumGUI);
+    m_settings.setScopeGUI(ui->scopeGUI);
 
     displaySettings();
     makeUIConnections();

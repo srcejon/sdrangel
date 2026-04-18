@@ -391,6 +391,7 @@ SSTVDemodGUI::SSTVDemodGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, Baseb
     setTitleColor(m_channelMarker.getColor());
     m_settings.setChannelMarker(&m_channelMarker);
     m_settings.setScopeGUI(ui->scopeGUI);
+    m_settings.setSpectrumGUI(ui->spectrumGUI);
     m_settings.setRollupState(&m_rollupState);
 
     m_deviceUISet->addChannelMarker(&m_channelMarker);

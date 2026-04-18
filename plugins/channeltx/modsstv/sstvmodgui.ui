@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>360</width>
-    <height>420</height>
+    <height>1020</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -438,7 +438,7 @@
      <x>19</x>
      <y>240</y>
      <width>261</width>
-     <height>161</height>
+     <height>291</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="imageContainer">
@@ -471,13 +471,14 @@
      </widget>
     </item>
    </layout>
+  </widget>
   <widget class="QWidget" name="spectrumContainer" native="true">
    <property name="geometry">
     <rect>
-     <x>0</x>
-     <y>430</y>
-     <width>360</width>
-     <height>331</height>
+     <x>20</x>
+     <y>570</y>
+     <width>251</width>
+     <height>131</height>
     </rect>
    </property>
    <property name="sizePolicy">
@@ -535,10 +536,10 @@
   <widget class="QWidget" name="scopeContainer" native="true">
    <property name="geometry">
     <rect>
-     <x>0</x>
-     <y>770</y>
-     <width>360</width>
-     <height>311</height>
+     <x>20</x>
+     <y>740</y>
+     <width>251</width>
+     <height>241</height>
     </rect>
    </property>
    <property name="sizePolicy">

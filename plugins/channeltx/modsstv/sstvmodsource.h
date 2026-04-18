@@ -25,6 +25,7 @@
 
 #include "dsp/channelsamplesource.h"
 #include "dsp/nco.h"
+#include "dsp/interpolator.h"
 #include "util/movingaverage.h"
 
 #include "sstvmodsettings.h"
@@ -148,6 +149,12 @@ private:
 
     NCO  m_carrierNco;         //!< Shifts signal to channel frequency offset
 
+    // Interpolator: upsamples from SSTV_SAMPLE_RATE to m_channelSampleRate
+    Interpolator m_interpolator;
+    Real         m_interpolatorDistance = 1.0f;
+    Real         m_interpolatorDistanceRemain = 0.0f;
+    Complex      m_modSample;              //!< Latest baseband sample from modulateSample()
+
     // Spectrum and scope sinks for audio waveform visualisation
     BasebandSampleSink* m_spectrumSink = nullptr;
     ScopeVis*           m_scopeSink    = nullptr;
@@ -198,6 +205,7 @@ private:
     void enterState(State s, int samples);
     float pixelToFreq(int value) const;
     float getPixelFreqForColumn(int linePair, State section, int col) const;
+    void modulateSample();
     Complex generateSample();
     void sampleToSpectrum(Complex sample);
     void sampleToScope(Complex sample);

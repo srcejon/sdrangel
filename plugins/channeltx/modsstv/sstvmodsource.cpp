@@ -52,14 +52,27 @@ void SSTVModSource::pullOne(Sample& sample)
 {
     QMutexLocker lock(&m_mutex);
 
-    if (m_state == State::IDLE)
+    Complex ci;
+
+    if (m_interpolatorDistance > 1.0f) // decimate
     {
-        sample.m_real = 0;
-        sample.m_imag = 0;
-        return;
+        modulateSample();
+
+        while (!m_interpolator.decimate(&m_interpolatorDistanceRemain, m_modSample, &ci))
+        {
+            modulateSample();
+        }
+    }
+    else // interpolate
+    {
+        if (m_interpolator.interpolate(&m_interpolatorDistanceRemain, m_modSample, &ci))
+        {
+            modulateSample();
+        }
     }
 
-    Complex ci = generateSample();
+    m_interpolatorDistanceRemain += m_interpolatorDistance;
+
     ci *= m_carrierNco.nextIQ();
 
     const double magsq = (ci.real() * ci.real() + ci.imag() * ci.imag()) / (SDR_TX_SCALED * SDR_TX_SCALED);
@@ -68,6 +81,24 @@ void SSTVModSource::pullOne(Sample& sample)
 
     sample.m_real = (FixReal) ci.real();
     sample.m_imag = (FixReal) ci.imag();
+}
+
+void SSTVModSource::prefetch(unsigned int /*nbSamples*/)
+{
+    // Nothing to prefetch for a purely generated signal
+}
+
+/** Generate and store one baseband sample at SSTV_SAMPLE_RATE into m_modSample,
+ *  then advance the encoder state machine by one SSTV_SAMPLE_RATE sample. */
+void SSTVModSource::modulateSample()
+{
+    if (m_state == State::IDLE)
+    {
+        m_modSample = Complex(0.0f, 0.0f);
+        return;
+    }
+
+    m_modSample = generateSample();
 
     // Advance state machine
     if (m_stateSamples > 0)
@@ -102,11 +133,6 @@ void SSTVModSource::pullOne(Sample& sample)
         }
         advanceState();
     }
-}
-
-void SSTVModSource::prefetch(unsigned int /*nbSamples*/)
-{
-    // Nothing to prefetch for a purely generated signal
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +207,14 @@ void SSTVModSource::applyChannelSettings(int channelSampleRate, int channelFrequ
     if ((channelFrequencyOffset != m_channelFrequencyOffset) || (channelSampleRate != m_channelSampleRate) || force) {
         m_carrierNco.setFreq(channelFrequencyOffset, channelSampleRate);
     }
+
+    if ((channelSampleRate != m_channelSampleRate) || force)
+    {
+        m_interpolatorDistanceRemain = 0.0f;
+        m_interpolatorDistance = static_cast<Real>(SSTV_SAMPLE_RATE) / static_cast<Real>(channelSampleRate);
+        m_interpolator.create(48, SSTV_SAMPLE_RATE, m_settings.m_rfBandwidth / 2.2, 3.0);
+    }
+
     m_channelSampleRate = channelSampleRate;
     m_channelFrequencyOffset = channelFrequencyOffset;
 }

@@ -48,6 +48,10 @@ SSTVMod::SSTVMod(DeviceAPI *deviceAPI) :
     setObjectName(m_channelId);
     applySettings(QStringList(), m_settings, true);
 
+    m_basebandSource = new SSTVModBaseband();
+    m_basebandSource->setChannel(this);
+    m_basebandSource->setSpectrumSampleSink(&m_spectrumVis);
+
     m_deviceAPI->addChannelSource(this);
     m_deviceAPI->addChannelSourceAPI(this);
 
@@ -72,6 +76,8 @@ SSTVMod::~SSTVMod()
     m_deviceAPI->removeChannelSourceAPI(this);
     m_deviceAPI->removeChannelSource(this, true);
     stop();
+
+    delete m_basebandSource;
 }
 
 void SSTVMod::setDeviceAPI(DeviceAPI *deviceAPI)
@@ -93,13 +99,9 @@ void SSTVMod::start()
     }
     qDebug("SSTVMod::start");
     m_thread = new QThread(this);
-    m_basebandSource = new SSTVModBaseband();
-    m_basebandSource->setChannel(this);
-    m_basebandSource->setSpectrumSampleSink(&m_spectrumVis);
     m_basebandSource->reset();
     m_basebandSource->moveToThread(m_thread);
 
-    QObject::connect(m_thread, &QThread::finished, m_basebandSource, &QObject::deleteLater);
     QObject::connect(m_thread, &QThread::finished, m_thread, &QThread::deleteLater);
     QObject::connect(m_basebandSource, &SSTVModBaseband::transmitComplete, this, &SSTVMod::onTransmitComplete);
 

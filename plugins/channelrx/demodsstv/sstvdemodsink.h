@@ -563,7 +563,7 @@ private:
         VIS_IDLE,        //!< No header in progress
         VIS_BREAK,       //!< First leader complete; waiting for 1200 Hz break
         VIS_LEADER2,     //!< Break passed; collecting second 1900 Hz leader
-        VIS_START_BIT,   //!< Second leader complete; waiting for 30 ms start bit
+        VIS_START_BIT,   //!< Second leader complete; waiting then counting one VIS_BIT_SAMPLES window for the start bit
         VIS_BITS,        //!< Decoding 8 VIS bits
         VIS_STOP_BIT     //!< All bits received; waiting for stop bit to pass
     };
@@ -572,7 +572,6 @@ private:
     static constexpr int VIS_LEADER_MIN_SAMPLES = 9600;   //!< Min leader duration: 200 ms
     static constexpr int VIS_BREAK_MIN_SAMPLES  = 240;    //!< Min break duration:  5 ms
     static constexpr int VIS_BREAK_MAX_SAMPLES  = 960;    //!< Max break duration: 20 ms
-    static constexpr int VIS_START_MIN_SAMPLES  = 1000;   //!< Min start-bit duration: ~21 ms
     static constexpr int VIS_BIT_SAMPLES        = 1440;   //!< Samples per VIS bit: 30 ms
     static constexpr int VIS_LEADER_PIXEL_MIN   = 96;     //!< Leader tone pixel lower bound (128 − 32)
     static constexpr int VIS_LEADER_PIXEL_MAX   = 160;    //!< Leader tone pixel upper bound (128 + 32)

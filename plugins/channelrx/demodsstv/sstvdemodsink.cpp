@@ -702,12 +702,22 @@ void SSTVDemodSink::processOneSample(Complex &ci)
             break;
 
         case VIS_START_BIT:
-            // Detect the 30 ms 1200 Hz VIS start bit.
-            if (isSyncTone) {
-                m_visStateSamples++;
-            } else {
-                if (m_visStateSamples >= VIS_START_MIN_SAMPLES) {
-                    // Start bit confirmed — begin collecting data bits.
+            // Detect the 30 ms 1200 Hz VIS start bit, then count exactly one
+            // VIS_BIT_SAMPLES window before entering VIS_BITS.
+            //
+            // IMPORTANT: the sync energy detector cannot reject 1100 Hz and
+            // 1300 Hz VIS data bits — they are only 100 Hz from the 1200 Hz
+            // sync bin and produce isSyncTone = true (leakage ≈ 83%).
+            // The previous approach of waiting for isSyncTone to fall could
+            // not exit this state. Instead, use isSyncTone rising as a
+            // one-time timing reference, then count a fixed VIS_BIT_SAMPLES
+            // duration unconditionally before transitioning to VIS_BITS.
+            if (isSyncTone || m_visStateSamples > 0)
+            {
+                // Count from the first isSyncTone sample through one full
+                // bit-period (1440 samples = 30 ms), regardless of isSyncTone state.
+                if (++m_visStateSamples >= VIS_BIT_SAMPLES)
+                {
                     m_visState = VIS_BITS;
                     m_visBitCount = 0;
                     m_visByte = 0;
@@ -716,10 +726,8 @@ void SSTVDemodSink::processOneSample(Complex &ci)
                     m_goertzel1300_s1 = 0.0f;
                     m_goertzel1300_s2 = 0.0f;
                     m_goertzelCount = 0;
-                } else {
-                    m_visState = VIS_IDLE;
+                    m_visStateSamples = 0;
                 }
-                m_visStateSamples = 0;
             }
             break;
 

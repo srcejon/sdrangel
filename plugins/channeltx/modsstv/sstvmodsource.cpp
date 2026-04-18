@@ -500,10 +500,17 @@ void SSTVModSource::advanceState()
             else
             {
                 qDebug("SSTVModSource: transmission complete");
-                m_state = State::DONE;
-                m_stateSamples = 0;
-                emit transmitComplete();
-                m_state = State::IDLE;
+                if (m_settings.m_repeat)
+                {
+                    startTransmit();
+                }
+                else
+                {
+                    m_state = State::DONE;
+                    m_stateSamples = 0;
+                    emit transmitComplete();
+                    m_state = State::IDLE;
+                }
             }
             break;
         default:

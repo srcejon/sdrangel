@@ -31,6 +31,7 @@
 #include "dsp/scopevis.h"
 #include "dsp/glscopesettings.h"
 #include "gui/glspectrum.h"
+#include "gui/buttonswitch.h"
 #include "gui/crightclickenabler.h"
 #include "gui/basicchannelsettingsdialog.h"
 #include "gui/dialpopup.h"
@@ -206,6 +207,12 @@ void SSTVModGUI::on_startStop_toggled(bool checked)
         SSTVMod::MsgStartStop *msg = SSTVMod::MsgStartStop::create(false);
         m_sstvMod->getInputMessageQueue()->push(msg);
     }
+}
+
+void SSTVModGUI::on_repeat_toggled(bool checked)
+{
+    m_settings.m_repeat = checked;
+    applySettings(QStringList("repeat"));
 }
 
 void SSTVModGUI::onWidgetRolled(QWidget* /*widget*/, bool /*rollDown*/)
@@ -438,6 +445,8 @@ void SSTVModGUI::displaySettings()
         loadImage();
     }
 
+    ui->repeat->setChecked(m_settings.m_repeat);
+
     getRollupContents()->restoreState(m_rollupState);
     updateAbsoluteCenterFrequency();
 
@@ -464,6 +473,7 @@ void SSTVModGUI::makeUIConnections()
     QObject::connect(ui->fmDeviation, &QSlider::valueChanged, this, &SSTVModGUI::on_fmDeviation_valueChanged);
     QObject::connect(ui->loadImage, &QToolButton::clicked, this, &SSTVModGUI::on_loadImage_clicked);
     QObject::connect(ui->startStop, &QToolButton::toggled, this, &SSTVModGUI::on_startStop_toggled);
+    QObject::connect(ui->repeat, &ButtonSwitch::toggled, this, &SSTVModGUI::on_repeat_toggled);
 }
 
 void SSTVModGUI::updateAbsoluteCenterFrequency()

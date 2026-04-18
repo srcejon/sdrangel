@@ -39,6 +39,7 @@ struct SSTVModSettings
     float     m_fmDeviation;            //!< FM peak deviation (Hz) – only used when m_modulation == ModulationFM
     Modulation m_modulation;            //!< RF modulation type
     QString   m_imagePath;              //!< Path to the image file to transmit (PNG or JPEG)
+    bool      m_repeat;                 //!< Repeat transmission when complete
 
     quint32   m_rgbColor;
     QString   m_title;

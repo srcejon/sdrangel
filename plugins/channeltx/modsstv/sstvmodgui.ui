@@ -415,6 +415,20 @@
         </widget>
        </item>
        <item>
+        <widget class="ButtonSwitch" name="repeat">
+         <property name="toolTip">
+          <string>Repeat transmission when complete</string>
+         </property>
+         <property name="text">
+          <string>...</string>
+         </property>
+         <property name="icon">
+          <iconset resource="../../../sdrgui/resources/res.qrc">
+           <normaloff>:/playloop.png</normaloff>:/playloop.png</iconset>
+         </property>
+        </widget>
+       </item>
+       <item>
         <spacer name="controlSpacer">
          <property name="orientation">
           <enum>Qt::Orientation::Horizontal</enum>
@@ -632,7 +646,14 @@
    <header>gui/glspectrumgui.h</header>
    <container>1</container>
   </customwidget>
+  <customwidget>
+   <class>ButtonSwitch</class>
+   <extends>QToolButton</extends>
+   <header>gui/buttonswitch.h</header>
+  </customwidget>
  </customwidgets>
- <resources/>
+ <resources>
+  <include location="../../../sdrgui/resources/res.qrc"/>
+ </resources>
  <connections/>
 </ui>

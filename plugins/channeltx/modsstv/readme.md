@@ -37,6 +37,7 @@ A standard VIS (Vertical Interval Signalling) preamble is transmitted before the
 - Image path label shows the currently loaded file name
 - **Image preview**: Shows the loaded image scaled to fit
 - **Start**: Start/stop the SSTV transmission
+- **Repeat**: When checked, the image is retransmitted automatically once the previous transmission completes
 - **Power**: Channel transmit power (dB)
 
 ## Usage

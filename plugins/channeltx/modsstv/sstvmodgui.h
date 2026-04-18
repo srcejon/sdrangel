@@ -104,6 +104,7 @@ private slots:
     void on_fmDeviation_valueChanged(int value);
     void on_loadImage_clicked(bool checked);
     void on_startStop_toggled(bool checked);
+    void on_repeat_toggled(bool checked);
     void onWidgetRolled(QWidget* widget, bool rollDown);
     void onMenuDialogCalled(const QPoint& p);
     void tick();

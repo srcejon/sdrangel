@@ -537,6 +537,62 @@ private:
 
     int m_lineIndex;    //!< Current block index (0..linePairs−1, each block = 2 scan lines)
 
+    // -----------------------------------------------------------------------
+    // VIS (Vertical Interval Signalling) header detector.
+    //
+    // Runs in parallel with the main decoder state machine, listening for the
+    // standard SSTV preamble sequence that precedes every image transmission:
+    //
+    //   Leader 1  : 300 ms @ 1900 Hz (neutral grey, pixel ≈ 128)
+    //   Break     : 10 ms  @ 1200 Hz (sync tone, isSyncTone = true)
+    //   Leader 2  : 300 ms @ 1900 Hz
+    //   VIS start : 30 ms  @ 1200 Hz (start bit, isSyncTone = true)
+    //   VIS bits  : 8 × 30 ms — each either 1100 Hz (binary 1) or 1300 Hz (binary 0)
+    //   VIS stop  : 30 ms  @ 1200 Hz
+    //
+    // When a valid VIS code is decoded the main decoder is reset (so image
+    // acquisition starts from line 0) and a MsgVIS is sent to the GUI.
+    //
+    // VIS bit detection uses two Goertzel single-bin DFTs evaluated over each
+    // 30 ms (VIS_BIT_SAMPLES = 1440) window:
+    //   k_1100 = 1100 × 1440 / 48000 = 33  (exact integer bin)
+    //   k_1300 = 1300 × 1440 / 48000 = 39  (exact integer bin)
+    // The bit is 1 when the 1100 Hz Goertzel energy exceeds the 1300 Hz energy.
+    // -----------------------------------------------------------------------
+    enum VISState {
+        VIS_IDLE,        //!< No header in progress
+        VIS_BREAK,       //!< First leader complete; waiting for 1200 Hz break
+        VIS_LEADER2,     //!< Break passed; collecting second 1900 Hz leader
+        VIS_START_BIT,   //!< Second leader complete; waiting for 30 ms start bit
+        VIS_BITS,        //!< Decoding 8 VIS bits
+        VIS_STOP_BIT     //!< All bits received; waiting for stop bit to pass
+    };
+
+    // VIS timing constants (samples at SSTVDEMOD_CHANNEL_SAMPLE_RATE = 48000 Hz)
+    static constexpr int VIS_LEADER_MIN_SAMPLES = 9600;   //!< Min leader duration: 200 ms
+    static constexpr int VIS_BREAK_MIN_SAMPLES  = 240;    //!< Min break duration:  5 ms
+    static constexpr int VIS_BREAK_MAX_SAMPLES  = 960;    //!< Max break duration: 20 ms
+    static constexpr int VIS_START_MIN_SAMPLES  = 1000;   //!< Min start-bit duration: ~21 ms
+    static constexpr int VIS_BIT_SAMPLES        = 1440;   //!< Samples per VIS bit: 30 ms
+    static constexpr int VIS_LEADER_PIXEL_MIN   = 96;     //!< Leader tone pixel lower bound (128 − 32)
+    static constexpr int VIS_LEADER_PIXEL_MAX   = 160;    //!< Leader tone pixel upper bound (128 + 32)
+
+    // Goertzel coefficients: 2·cos(2π·k/N) with N = VIS_BIT_SAMPLES = 1440
+    //   k_1100 = 1100 × 1440 / 48000 = 33   → 2·cos(2π·33/1440) ≈ 1.97926
+    //   k_1300 = 1300 × 1440 / 48000 = 39   → 2·cos(2π·39/1440) ≈ 1.97121
+    static constexpr float GOERTZEL_1100_COEFF = 1.97926f; //!< 2·cos(2π·33/1440) for 1100 Hz
+    static constexpr float GOERTZEL_1300_COEFF = 1.97121f; //!< 2·cos(2π·39/1440) for 1300 Hz
+
+    VISState m_visState;           //!< Current VIS header detector state
+    int      m_visStateSamples;    //!< Samples accumulated in current VIS sub-state
+    int      m_visBitCount;        //!< Number of VIS bits decoded so far (0–8)
+    int      m_visByte;            //!< Accumulated VIS byte (bits shifted in LSB-first)
+    float    m_goertzel1100_s1;    //!< Goertzel delay-1 register for 1100 Hz
+    float    m_goertzel1100_s2;    //!< Goertzel delay-2 register for 1100 Hz
+    float    m_goertzel1300_s1;    //!< Goertzel delay-1 register for 1300 Hz
+    float    m_goertzel1300_s2;    //!< Goertzel delay-2 register for 1300 Hz
+    int      m_goertzelCount;      //!< Samples fed to Goertzel for the current bit
+
     void processOneSample(Complex &ci);
     void decodePixelSample(float freq, float *buf, int width, SSTVState nextState);
     void decodePixelSampleEx(float freq, float *buf, int width, float samplesPerPixel, SSTVState nextState);

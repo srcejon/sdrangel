@@ -38,6 +38,7 @@
 MESSAGE_CLASS_DEFINITION(SSTVDemod::MsgConfigureSSTVDemod, Message)
 MESSAGE_CLASS_DEFINITION(SSTVDemod::MsgImage, Message)
 MESSAGE_CLASS_DEFINITION(SSTVDemod::MsgResetDecoder, Message)
+MESSAGE_CLASS_DEFINITION(SSTVDemod::MsgVIS, Message)
 
 const char * const SSTVDemod::m_channelIdURI = "sdrangel.channel.sstvdemod";
 const char * const SSTVDemod::m_channelId = "SSTVDemod";
@@ -182,6 +183,16 @@ bool SSTVDemod::handleMessage(const Message& cmd)
         // Forward reset to the baseband sink
         MsgResetDecoder *fwd = MsgResetDecoder::create();
         m_basebandSink->getInputMessageQueue()->push(fwd);
+        return true;
+    }
+    else if (MsgVIS::match(cmd))
+    {
+        // Forward decoded VIS code to the GUI
+        const MsgVIS& visMsg = (const MsgVIS&) cmd;
+        if (getMessageQueueToGUI())
+        {
+            getMessageQueueToGUI()->push(MsgVIS::create(visMsg.getVisCode(), visMsg.getParityOK()));
+        }
         return true;
     }
     else

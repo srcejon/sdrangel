@@ -90,6 +90,30 @@ public:
         {}
     };
 
+    /** Sent from sink to GUI when a VIS code has been decoded from the vertical sync header */
+    class MsgVIS : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        int  getVisCode()  const { return m_visCode; }
+        bool getParityOK() const { return m_parityOK; }
+
+        static MsgVIS* create(int visCode, bool parityOK)
+        {
+            return new MsgVIS(visCode, parityOK);
+        }
+
+    private:
+        int  m_visCode;
+        bool m_parityOK;
+
+        MsgVIS(int visCode, bool parityOK) :
+            Message(),
+            m_visCode(visCode),
+            m_parityOK(parityOK)
+        {}
+    };
+
     /** Sent from GUI to reset the decoder and clear the image */
     class MsgResetDecoder : public Message {
         MESSAGE_CLASS_DECLARATION

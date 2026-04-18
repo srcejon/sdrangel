@@ -150,6 +150,43 @@ bool SSTVDemodGUI::handleMessage(const Message& message)
 
         return true;
     }
+    else if (SSTVDemod::MsgVIS::match(message))
+    {
+        const SSTVDemod::MsgVIS& visMsg = (const SSTVDemod::MsgVIS&) message;
+        const int visCode = visMsg.getVisCode();
+        const bool parityOK = visMsg.getParityOK();
+
+        // Map the 7-bit VIS code to a human-readable mode name.
+        QString modeName;
+        switch (visCode)
+        {
+            case 8:   modeName = "Robot 36";    break;
+            case 40:  modeName = "Martin M2";   break;
+            case 44:  modeName = "Martin M1";   break;
+            case 56:  modeName = "Scottie S2";  break;
+            case 60:  modeName = "Scottie S1";  break;
+            case 76:  modeName = "Scottie DX";  break;
+            case 93:  modeName = "PD-50";       break;
+            case 94:  modeName = "PD-290";      break;
+            case 95:  modeName = "PD-120";      break;
+            case 96:  modeName = "PD-180";      break;
+            case 97:  modeName = "PD-240";      break;
+            case 98:  modeName = "PD-160";      break;
+            case 99:  modeName = "PD-90";       break;
+            default:  modeName = QString("Unknown");  break;
+        }
+
+        const QString visText = parityOK
+            ? QString("%1 (VIS %2)").arg(modeName).arg(visCode)
+            : QString("%1 (VIS %2, parity error)").arg(modeName).arg(visCode);
+        ui->visCode->setText(visText);
+
+        // Clear the image when a new VIS is received so the display is ready
+        // for the fresh image.
+        resetImage();
+
+        return true;
+    }
     else if (DSPSignalNotification::match(message))
     {
         DSPSignalNotification& notif = (DSPSignalNotification&) message;

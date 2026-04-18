@@ -406,6 +406,40 @@
      </layout>
     </item>
     <item>
+     <layout class="QHBoxLayout" name="visLayout">
+      <item>
+       <widget class="QLabel" name="visCodeLabel">
+        <property name="text">
+         <string>VIS</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="visCode">
+        <property name="toolTip">
+         <string>Decoded VIS code from the vertical sync header</string>
+        </property>
+        <property name="text">
+         <string>---</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacerVIS">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
      <layout class="QHBoxLayout" name="modLayout">
       <item>
        <widget class="QLabel" name="modulationLabel">

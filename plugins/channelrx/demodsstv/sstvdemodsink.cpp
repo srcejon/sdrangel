@@ -66,7 +66,16 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pllLocked(false),
     m_pllPhase(0),
     m_pllPeriod(NOMINAL_LINE_PERIOD_SAMPLES),
-    m_syncPulseSeen(false)
+    m_syncPulseSeen(false),
+    m_visState(VIS_IDLE),
+    m_visStateSamples(0),
+    m_visBitCount(0),
+    m_visByte(0),
+    m_goertzel1100_s1(0.0f),
+    m_goertzel1100_s2(0.0f),
+    m_goertzel1300_s1(0.0f),
+    m_goertzel1300_s2(0.0f),
+    m_goertzelCount(0)
 {
     m_magsq = 0.0;
 
@@ -188,6 +197,17 @@ void SSTVDemodSink::resetDecoder()
     m_hilbertDcY = 0.0f;
     m_hilbertZ = Complex(0.0f, 0.0f);
     // m_freqMovAvg is reset above (shared with SDFT path).
+
+    // Reset the VIS header detector.
+    m_visState = VIS_IDLE;
+    m_visStateSamples = 0;
+    m_visBitCount = 0;
+    m_visByte = 0;
+    m_goertzel1100_s1 = 0.0f;
+    m_goertzel1100_s2 = 0.0f;
+    m_goertzel1300_s1 = 0.0f;
+    m_goertzel1300_s2 = 0.0f;
+    m_goertzelCount = 0;
 }
 
 void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -618,6 +638,168 @@ void SSTVDemodSink::processOneSample(Complex &ci)
             commitBlockMartin();
         }
         break;
+    }
+
+    // -----------------------------------------------------------------------
+    // VIS / VSS header detector (runs every sample, parallel to the main
+    // decoder state machine).
+    //
+    // Detects the standard SSTV preamble: leader–break–leader–start–bits–stop.
+    // When a complete valid VIS sequence is found the main decoder is reset
+    // (so line acquisition restarts from line 0) and MsgVIS is sent to the GUI.
+    // -----------------------------------------------------------------------
+    {
+        // Compute pixel value (calibrated for the active frequency estimator path)
+        // used to detect the 1900 Hz leader tone (pixel ≈ 128, band ±32).
+        const int visPixel = m_useHilbert ? freqToPixelDirect(freq) : freqToPixel(freq);
+        const bool isLeaderTone = !isSyncTone
+                                  && (visPixel >= VIS_LEADER_PIXEL_MIN)
+                                  && (visPixel <= VIS_LEADER_PIXEL_MAX);
+
+        switch (m_visState)
+        {
+        case VIS_IDLE:
+            // Count consecutive samples at the 1900 Hz leader frequency.
+            if (isLeaderTone) {
+                m_visStateSamples++;
+                if (m_visStateSamples >= VIS_LEADER_MIN_SAMPLES) {
+                    m_visState = VIS_BREAK;
+                    m_visStateSamples = 0;
+                }
+            } else {
+                m_visStateSamples = 0;
+            }
+            break;
+
+        case VIS_BREAK:
+            // Wait for the short 1200 Hz break (~10 ms) immediately after the leader.
+            if (isSyncTone) {
+                m_visStateSamples++;
+            } else {
+                if (m_visStateSamples >= VIS_BREAK_MIN_SAMPLES &&
+                    m_visStateSamples <= VIS_BREAK_MAX_SAMPLES) {
+                    // Valid break: start counting the second leader.
+                    m_visState = VIS_LEADER2;
+                } else {
+                    m_visState = VIS_IDLE;
+                }
+                m_visStateSamples = 0;
+            }
+            break;
+
+        case VIS_LEADER2:
+            // Count consecutive samples at the 1900 Hz leader frequency.
+            if (isLeaderTone) {
+                m_visStateSamples++;
+                if (m_visStateSamples >= VIS_LEADER_MIN_SAMPLES) {
+                    m_visState = VIS_START_BIT;
+                    m_visStateSamples = 0;
+                }
+            } else if (!isSyncTone) {
+                m_visState = VIS_IDLE;
+                m_visStateSamples = 0;
+            }
+            break;
+
+        case VIS_START_BIT:
+            // Detect the 30 ms 1200 Hz VIS start bit.
+            if (isSyncTone) {
+                m_visStateSamples++;
+            } else {
+                if (m_visStateSamples >= VIS_START_MIN_SAMPLES) {
+                    // Start bit confirmed — begin collecting data bits.
+                    m_visState = VIS_BITS;
+                    m_visBitCount = 0;
+                    m_visByte = 0;
+                    m_goertzel1100_s1 = 0.0f;
+                    m_goertzel1100_s2 = 0.0f;
+                    m_goertzel1300_s1 = 0.0f;
+                    m_goertzel1300_s2 = 0.0f;
+                    m_goertzelCount = 0;
+                } else {
+                    m_visState = VIS_IDLE;
+                }
+                m_visStateSamples = 0;
+            }
+            break;
+
+        case VIS_BITS:
+        {
+            // Feed the current sample into the Goertzel filters for 1100 Hz and
+            // 1300 Hz.  Both are exact DFT bins for N = VIS_BIT_SAMPLES = 1440.
+            const float s0_1100 = audioSample
+                                  + GOERTZEL_1100_COEFF * m_goertzel1100_s1
+                                  - m_goertzel1100_s2;
+            m_goertzel1100_s2 = m_goertzel1100_s1;
+            m_goertzel1100_s1 = s0_1100;
+
+            const float s0_1300 = audioSample
+                                  + GOERTZEL_1300_COEFF * m_goertzel1300_s1
+                                  - m_goertzel1300_s2;
+            m_goertzel1300_s2 = m_goertzel1300_s1;
+            m_goertzel1300_s1 = s0_1300;
+
+            m_goertzelCount++;
+
+            if (m_goertzelCount >= VIS_BIT_SAMPLES)
+            {
+                // End of bit window: compute terminal Goertzel power.
+                const float p1100 = m_goertzel1100_s1 * m_goertzel1100_s1
+                                    + m_goertzel1100_s2 * m_goertzel1100_s2
+                                    - GOERTZEL_1100_COEFF * m_goertzel1100_s1 * m_goertzel1100_s2;
+                const float p1300 = m_goertzel1300_s1 * m_goertzel1300_s1
+                                    + m_goertzel1300_s2 * m_goertzel1300_s2
+                                    - GOERTZEL_1300_COEFF * m_goertzel1300_s1 * m_goertzel1300_s2;
+
+                // 1100 Hz = binary 1; 1300 Hz = binary 0.  VIS bits are LSB-first.
+                const int bit = (p1100 > p1300) ? 1 : 0;
+                m_visByte |= (bit << m_visBitCount);
+                m_visBitCount++;
+
+                // Reset Goertzel for the next bit.
+                m_goertzel1100_s1 = 0.0f;
+                m_goertzel1100_s2 = 0.0f;
+                m_goertzel1300_s1 = 0.0f;
+                m_goertzel1300_s2 = 0.0f;
+                m_goertzelCount = 0;
+
+                if (m_visBitCount >= 8)
+                {
+                    // All 8 bits received (bits 0–6 = VIS code, bit 7 = even parity).
+                    const int visCode = m_visByte & 0x7F;
+                    const int parityBit = (m_visByte >> 7) & 1;
+                    int onesCount = 0;
+                    for (int i = 0; i < 7; i++) {
+                        onesCount += (visCode >> i) & 1;
+                    }
+                    const bool parityOK = ((onesCount + parityBit) % 2) == 0;
+
+                    // Notify the GUI with the decoded VIS code.
+                    if (m_messageQueueToChannel) {
+                        m_messageQueueToChannel->push(
+                            SSTVDemod::MsgVIS::create(visCode, parityOK));
+                    }
+
+                    // Reset the image decoder so acquisition starts from line 0.
+                    resetDecoder();
+                    // Override the VIS_IDLE set by resetDecoder() to absorb the
+                    // stop bit before resuming normal sync hunting.
+                    m_visState = VIS_STOP_BIT;
+                    m_visStateSamples = 0;
+                }
+            }
+            break;
+        }
+
+        case VIS_STOP_BIT:
+            // Absorb the 30 ms 1200 Hz stop bit, then return to VIS_IDLE.
+            m_visStateSamples++;
+            if (m_visStateSamples > VIS_BIT_SAMPLES / 2 && !isSyncTone) {
+                m_visState = VIS_IDLE;
+                m_visStateSamples = 0;
+            }
+            break;
+        }
     }
 
     // Feed scope and spectrum with demodulated signals.

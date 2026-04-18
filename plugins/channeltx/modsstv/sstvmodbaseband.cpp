@@ -23,13 +23,14 @@
 #include "dsp/dspcommands.h"
 
 #include "sstvmodbaseband.h"
+#include "sstvmodsource.h"
 
 MESSAGE_CLASS_DEFINITION(SSTVModBaseband::MsgConfigureSSTVModBaseband, Message)
 MESSAGE_CLASS_DEFINITION(SSTVModBaseband::MsgStartStop, Message)
 
 SSTVModBaseband::SSTVModBaseband()
 {
-    m_sampleFifo.resize(SampleSourceFifo::getSizePolicy(48000));
+    m_sampleFifo.resize(SampleSourceFifo::getSizePolicy(SSTV_SAMPLE_RATE));
     m_channelizer = new UpChannelizer(&m_source);
     m_source.setScopeSink(&m_scopeSink);
 
@@ -158,10 +159,9 @@ bool SSTVModBaseband::handleMessage(const Message& cmd)
 
 void SSTVModBaseband::applySettings(const QStringList& settingsKeys, const SSTVModSettings& settings, bool force)
 {
-    if ((settingsKeys.contains("inputFrequencyOffset") || force) &&
-        settings.m_inputFrequencyOffset != m_settings.m_inputFrequencyOffset)
+    if ((settingsKeys.contains("inputFrequencyOffset") && (m_settings.m_inputFrequencyOffset != settings.m_inputFrequencyOffset)) || force)
     {
-        m_channelizer->setChannelization(48000, settings.m_inputFrequencyOffset);
+        m_channelizer->setChannelization(SSTV_SAMPLE_RATE, settings.m_inputFrequencyOffset);
         m_source.applyChannelSettings(m_channelizer->getChannelSampleRate(), m_channelizer->getChannelFrequencyOffset());
     }
 

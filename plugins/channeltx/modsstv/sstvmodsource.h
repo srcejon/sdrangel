@@ -142,7 +142,7 @@ private:
     };
 
     SSTVModSettings m_settings;
-    int m_channelSampleRate = 48000;
+    int m_channelSampleRate = SSTV_SAMPLE_RATE;
     int m_channelFrequencyOffset = 0;
     ChannelAPI *m_channel = nullptr;
 

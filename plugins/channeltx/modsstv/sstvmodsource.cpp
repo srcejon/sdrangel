@@ -178,7 +178,7 @@ void SSTVModSource::applySettings(const QStringList& settingsKeys, const SSTVMod
 
 void SSTVModSource::applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force)
 {
-    if ((channelFrequencyOffset != m_channelFrequencyOffset) || force) {
+    if ((channelFrequencyOffset != m_channelFrequencyOffset) || (channelSampleRate != m_channelSampleRate) || force) {
         m_carrierNco.setFreq(channelFrequencyOffset, channelSampleRate);
     }
     m_channelSampleRate = channelSampleRate;

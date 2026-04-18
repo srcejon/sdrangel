@@ -38,7 +38,10 @@
 // Internal audio sample rate for SSTV processing (Hz)
 #define SSTVDEMOD_CHANNEL_SAMPLE_RATE  48000
 
-// PD120 image dimensions
+// Maximum image width across all supported PD modes (PD-290 = 800 px)
+#define SSTVDEMOD_MAX_IMAGE_WIDTH   800
+
+// PD120 image dimensions (kept for reference; runtime dimensions come from settings)
 #define SSTVDEMOD_IMAGE_WIDTH   640
 #define SSTVDEMOD_IMAGE_HEIGHT  496   // 248 pairs of scan lines
 
@@ -336,6 +339,8 @@ private:
     static constexpr float PLL_ALPHA = 0.1f;   //!< Loop gain (time constant ≈ 10 scan-line blocks)
     // Nominal period (samples): SYNC_PORCH_SAMPLES remaining porch + 4 pixel sections
     //   + SYNC_SAMPLES of the next sync pulse + SYNC_PORCH_DELAY samples until isSyncTone falls.
+    // Nominal period for PD-120 (samples): used only as an initialiser default.
+    // The runtime period m_nominalLinePeriod is recomputed per mode in applyMode().
     static constexpr float NOMINAL_LINE_PERIOD_SAMPLES =
         float(SYNC_PORCH_SAMPLES)
         + 4.0f * float(SSTVDEMOD_IMAGE_WIDTH) * SSTVDEMOD_SAMPLES_PER_PIXEL
@@ -344,7 +349,7 @@ private:
 
     bool  m_pllLocked;      //!< True after the first valid sync pulse has been accepted
     int   m_pllPhase;       //!< Samples since last IN_PORCH entry (PLL phase accumulator)
-    float m_pllPeriod;      //!< Estimated line-block period (samples); initialised to NOMINAL_LINE_PERIOD_SAMPLES
+    float m_pllPeriod;      //!< Estimated line-block period (samples); initialised to m_nominalLinePeriod
     bool  m_syncPulseSeen;  //!< True once isSyncTone has fallen with a valid duration in the current IN_SYNC visit
 
     // -----------------------------------------------------------------------
@@ -490,13 +495,23 @@ private:
     float m_pixelSamplePos;    //!< Fractional sample position within current pixel period
     int m_pixelSampleCount;    //!< Actual number of samples accumulated in current pixel (denominator for average)
 
-    // PD120 line buffer: one block = odd + even scan lines
-    float m_yOdd[SSTVDEMOD_IMAGE_WIDTH];        //!< Y (luminance) values for odd line
-    float m_cr[SSTVDEMOD_IMAGE_WIDTH];          //!< Cr (chroma-red) values shared by both lines
-    float m_cb[SSTVDEMOD_IMAGE_WIDTH];          //!< Cb (chroma-blue) values shared by both lines
-    float m_yEven[SSTVDEMOD_IMAGE_WIDTH];       //!< Y (luminance) values for even line
+    // PD mode line buffers — dimensioned to the maximum supported width (PD-290 = 800 px).
+    // Only the first m_modeWidth elements are used at any given time.
+    float m_yOdd[SSTVDEMOD_MAX_IMAGE_WIDTH];   //!< Y (luminance) values for odd line
+    float m_cr[SSTVDEMOD_MAX_IMAGE_WIDTH];     //!< Cr (chroma-red) values shared by both lines
+    float m_cb[SSTVDEMOD_MAX_IMAGE_WIDTH];     //!< Cb (chroma-blue) values shared by both lines
+    float m_yEven[SSTVDEMOD_MAX_IMAGE_WIDTH];  //!< Y (luminance) values for even line
 
-    int m_lineIndex;    //!< Current block index (0..247, each block = 2 scan lines)
+    // -----------------------------------------------------------------------
+    // Runtime mode parameters — refreshed by applyMode() whenever m_pdMode changes.
+    // -----------------------------------------------------------------------
+    int   m_modeWidth;           //!< Active image width  (pixels)
+    int   m_modeHeight;          //!< Active image height (pixels)
+    int   m_modeLinePairs;       //!< Active number of scan-line pairs (= m_modeHeight / 2)
+    float m_modeSamplesPerPixel; //!< Active samples per pixel (fractional)
+    float m_nominalLinePeriod;   //!< Active nominal PLL line-period (samples)
+
+    int m_lineIndex;    //!< Current block index (0..linePairs−1, each block = 2 scan lines)
 
     void processOneSample(Complex &ci);
     void decodePixelSample(float freq, float *buf, int width, SSTVState nextState);
@@ -504,6 +519,7 @@ private:
     void transitionTo(SSTVState newState);
     void sampleToScope(Real fmDemod, Real freq, Real isSyncTone, Real pllLocked, Real state);
     void sampleToSpectrum(Real fmDemod);
+    void applyMode(); //!< Refresh runtime mode parameters from m_settings.m_pdMode
 
     /** Convert SDFT centroid frequency (Hz) to pixel luminance value [0..255].
      *  Uses a piecewise-linear map anchored at two measured SDFT calibration points:

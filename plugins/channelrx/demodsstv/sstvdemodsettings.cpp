@@ -34,12 +34,28 @@ SSTVDemodSettings::SSTVDemodSettings() :
     resetToDefaults();
 }
 
+SSTVDemodSettings::PDModeParams SSTVDemodSettings::getPDModeParams(PDMode mode)
+{
+    switch (mode)
+    {
+        case PDMode::PD50:  return { 320,  256,  128, 0.286f, 93 };
+        case PDMode::PD90:  return { 320,  256,  128, 0.532f, 99 };
+        case PDMode::PD120: return { 640,  496,  248, 0.190f, 95 };
+        case PDMode::PD160: return { 512,  400,  200, 0.382f, 98 };
+        case PDMode::PD180: return { 640,  496,  248, 0.286f, 96 };
+        case PDMode::PD240: return { 640,  496,  248, 0.382f, 97 };
+        case PDMode::PD290: return { 800,  616,  308, 0.286f, 94 };
+        default:            return { 640,  496,  248, 0.190f, 95 }; // fallback to PD-120
+    }
+}
+
 void SSTVDemodSettings::resetToDefaults()
 {
     m_inputFrequencyOffset = 0;
     m_rfBandwidth = 20000.0f;
     m_fmDeviation = 5000.0f;
     m_modulation = ModulationFM;
+    m_pdMode = PDMode::PD120;
     m_decodeEnabled = true;
     m_autoSave = false;
     m_autoSavePath = "";
@@ -65,6 +81,7 @@ QByteArray SSTVDemodSettings::serialize() const
     s.writeReal(3, m_rfBandwidth);
     s.writeReal(4, m_fmDeviation);
     s.writeS32(34, (int) m_modulation);
+    s.writeS32(35, (int) m_pdMode);
     s.writeBool(5, m_decodeEnabled);
     s.writeBool(6, m_autoSave);
     s.writeString(7, m_autoSavePath);
@@ -122,6 +139,11 @@ bool SSTVDemodSettings::deserialize(const QByteArray& data)
             int itmp;
             d.readS32(34, &itmp, (int) ModulationFM);
             m_modulation = (itmp >= 0 && itmp <= 2) ? static_cast<Modulation>(itmp) : ModulationFM;
+        }
+        {
+            int itmp;
+            d.readS32(35, &itmp, (int) PDMode::PD120);
+            m_pdMode = (itmp >= 0 && itmp <= 6) ? static_cast<PDMode>(itmp) : PDMode::PD120;
         }
         d.readBool(5, &m_decodeEnabled, true);
         d.readBool(6, &m_autoSave, false);
@@ -194,6 +216,9 @@ void SSTVDemodSettings::applySettings(const QStringList& settingsKeys, const SST
     if (settingsKeys.contains("modulation")) {
         m_modulation = settings.m_modulation;
     }
+    if (settingsKeys.contains("pdMode")) {
+        m_pdMode = settings.m_pdMode;
+    }
     if (settingsKeys.contains("decodeEnabled")) {
         m_decodeEnabled = settings.m_decodeEnabled;
     }
@@ -250,6 +275,9 @@ QString SSTVDemodSettings::getDebugString(const QStringList& settingsKeys, bool 
     }
     if (settingsKeys.contains("modulation") || force) {
         ostr << " m_modulation: " << m_modulation;
+    }
+    if (settingsKeys.contains("pdMode") || force) {
+        ostr << " m_pdMode: " << (int) m_pdMode;
     }
     if (settingsKeys.contains("decodeEnabled") || force) {
         ostr << " m_decodeEnabled: " << m_decodeEnabled;

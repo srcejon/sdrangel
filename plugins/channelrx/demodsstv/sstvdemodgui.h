@@ -112,6 +112,7 @@ private slots:
     void on_rfBW_valueChanged(int index);
     void on_fmDev_valueChanged(int value);
     void on_modulation_currentIndexChanged(int index);
+    void on_pdMode_currentIndexChanged(int index);
     void on_startStop_clicked(bool checked = false);
     void on_resetDecoder_clicked();
     void on_saveImage_clicked();

@@ -36,10 +36,34 @@ struct SSTVDemodSettings
         ModulationLSB = 2   //!< Lower sideband (LSB) SSB demodulation
     };
 
+    /** SSTV PD image mode selection. */
+    enum class PDMode {
+        PD50  = 0,
+        PD90  = 1,
+        PD120 = 2,
+        PD160 = 3,
+        PD180 = 4,
+        PD240 = 5,
+        PD290 = 6
+    };
+
+    /** Mode-specific timing and dimension parameters for a PD mode. */
+    struct PDModeParams {
+        int     width;          //!< Image width in pixels
+        int     height;         //!< Image height in pixels (must be even; height/2 = number of line pairs)
+        int     linePairs;      //!< Number of scan-line pairs (= height / 2)
+        float   pixelTimeMs;    //!< Duration of one pixel scan in milliseconds
+        uint8_t visCode;        //!< 7-bit VIS identification code for this mode
+    };
+
+    /** Return the PDModeParams for the given \p mode. */
+    static PDModeParams getPDModeParams(PDMode mode);
+
     qint32 m_inputFrequencyOffset;  //!< Frequency offset from device centre (Hz)
     float m_rfBandwidth;            //!< RF pre-filter bandwidth (Hz)
     float m_fmDeviation;            //!< FM deviation used for tone scaling (Hz)
     Modulation m_modulation;        //!< Demodulation type (FM / USB / LSB)
+    PDMode m_pdMode;                //!< SSTV PD image mode
     bool m_decodeEnabled;           //!< Enable SSTV image decoding
     bool m_autoSave;                //!< Automatically save received images
     QString m_autoSavePath;         //!< Directory to auto-save images

@@ -35,7 +35,8 @@ class ScopeVis;
 class ChannelAPI;
 
 // -----------------------------------------------------------------------
-// PD120 timing constants (all at 48000 Hz sample rate)
+// PD120 timing constants (all at 48000 Hz sample rate) — kept as reference defaults.
+// The active mode is driven at runtime by SSTVModSettings::m_pdMode.
 // -----------------------------------------------------------------------
 // PD120: 640×496 image (248 pairs of scan lines).  Each pair:
 //   sync   20ms   1200 Hz
@@ -167,6 +168,14 @@ private:
     static const int m_specSampleBufferSize = 1024;
     int m_specSampleBufferIndex = 0;
 
+    // -----------------------------------------------------------------------
+    // Runtime mode parameters — updated by applySettings() / applyMode()
+    // -----------------------------------------------------------------------
+    int   m_modeWidth        = SSTV_IMAGE_WIDTH;     //!< Active image width  (pixels)
+    int   m_modeHeight       = SSTV_IMAGE_HEIGHT;    //!< Active image height (pixels)
+    int   m_modeLinePairs    = SSTV_LINE_PAIRS;      //!< Active number of scan-line pairs
+    float m_modePixelSamples = SSTV_PIXEL_SAMPLES;  //!< Active samples per pixel (fractional)
+
     // FM phasor (only used in FM mode)
     float m_fmPhasor = 0.0f;
 
@@ -209,6 +218,7 @@ private:
     Complex generateSample();
     void sampleToSpectrum(Complex sample);
     void sampleToScope(Complex sample);
+    void applyMode(); //!< Refresh runtime mode parameters from m_settings.m_pdMode
 };
 
 #endif // PLUGINS_CHANNELTX_MODSSTV_SSTVMODSOURCE_H_

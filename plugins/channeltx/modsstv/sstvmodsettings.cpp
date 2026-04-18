@@ -33,12 +33,28 @@ SSTVModSettings::SSTVModSettings() :
     resetToDefaults();
 }
 
+SSTVModSettings::PDModeParams SSTVModSettings::getPDModeParams(PDMode mode)
+{
+    switch (mode)
+    {
+        case PDMode::PD50:  return { 320,  256,  128, 0.286f, 93 };
+        case PDMode::PD90:  return { 320,  256,  128, 0.532f, 99 };
+        case PDMode::PD120: return { 640,  496,  248, 0.190f, 95 };
+        case PDMode::PD160: return { 512,  400,  200, 0.382f, 98 };
+        case PDMode::PD180: return { 640,  496,  248, 0.286f, 96 };
+        case PDMode::PD240: return { 640,  496,  248, 0.382f, 97 };
+        case PDMode::PD290: return { 800,  616,  308, 0.286f, 94 };
+        default:            return { 640,  496,  248, 0.190f, 95 }; // fallback to PD-120
+    }
+}
+
 void SSTVModSettings::resetToDefaults()
 {
     m_inputFrequencyOffset = 0;
     m_rfBandwidth = 16000.0f;
     m_fmDeviation = 5000.0f;
     m_modulation = ModulationFM;
+    m_pdMode = PDMode::PD120;
     m_imagePath = QString();
     m_repeat = false;
     m_rgbColor = QColor(255, 0, 0).rgb();
@@ -61,6 +77,7 @@ QByteArray SSTVModSettings::serialize() const
     s.writeFloat(2, m_rfBandwidth);
     s.writeFloat(3, m_fmDeviation);
     s.writeS32(4, (int) m_modulation);
+    s.writeS32(22, (int) m_pdMode);
     s.writeString(5, m_imagePath);
     s.writeBool(21, m_repeat);
     s.writeU32(6, m_rgbColor);
@@ -112,6 +129,8 @@ bool SSTVModSettings::deserialize(const QByteArray& data)
         d.readFloat(3, &m_fmDeviation, 5000.0f);
         d.readS32(4, &tmp, 0);
         m_modulation = (Modulation) tmp;
+        d.readS32(22, &tmp, (int) PDMode::PD120);
+        m_pdMode = (tmp >= 0 && tmp <= 6) ? static_cast<PDMode>(tmp) : PDMode::PD120;
         d.readString(5, &m_imagePath, QString());
         d.readBool(21, &m_repeat, false);
         d.readU32(6, &m_rgbColor, QColor(255, 0, 0).rgb());
@@ -173,6 +192,9 @@ void SSTVModSettings::applySettings(const QStringList& settingsKeys, const SSTVM
     if (settingsKeys.contains("modulation")) {
         m_modulation = settings.m_modulation;
     }
+    if (settingsKeys.contains("pdMode")) {
+        m_pdMode = settings.m_pdMode;
+    }
     if (settingsKeys.contains("imagePath")) {
         m_imagePath = settings.m_imagePath;
     }
@@ -229,6 +251,9 @@ QString SSTVModSettings::getDebugString(const QStringList& settingsKeys, bool fo
     }
     if (settingsKeys.contains("modulation") || force) {
         ostr << " m_modulation: " << m_modulation;
+    }
+    if (settingsKeys.contains("pdMode") || force) {
+        ostr << " m_pdMode: " << (int) m_pdMode;
     }
     if (settingsKeys.contains("imagePath") || force) {
         ostr << " m_imagePath: " << m_imagePath.toStdString();

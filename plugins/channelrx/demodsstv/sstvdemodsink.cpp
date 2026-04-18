@@ -43,6 +43,11 @@ SSTVDemodSink::SSTVDemodSink() :
     m_pixelAccum(0.0f),
     m_pixelSamplePos(0.0f),
     m_pixelSampleCount(0),
+    m_modeWidth(SSTVDEMOD_IMAGE_WIDTH),
+    m_modeHeight(SSTVDEMOD_IMAGE_HEIGHT),
+    m_modeLinePairs(SSTVDEMOD_IMAGE_HEIGHT / 2),
+    m_modeSamplesPerPixel(SSTVDEMOD_SAMPLES_PER_PIXEL),
+    m_nominalLinePeriod(NOMINAL_LINE_PERIOD_SAMPLES),
     m_lineIndex(0),
     m_sdftIdx(0),
     m_hilbertIdx(0),
@@ -163,7 +168,7 @@ void SSTVDemodSink::resetDecoder()
     // Reset the sync timing PLL.
     m_pllLocked = false;
     m_pllPhase = 0;
-    m_pllPeriod = NOMINAL_LINE_PERIOD_SAMPLES;
+    m_pllPeriod = m_nominalLinePeriod;
     m_syncPulseSeen = false;
 
     // Reset the Hilbert IF estimator state.
@@ -429,7 +434,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     case WAITING_FOR_SYNC:
         // Lose PLL lock if sync has been absent for more than 1.5 line periods
         // (signal lost or persistent noise).
-        if (m_pllLocked && m_pllPhase > static_cast<int>(m_pllPeriod * 1.5f)) {
+        if (m_pllLocked && m_pllPhase > static_cast<int>(m_nominalLinePeriod * 1.5f)) {
             m_pllLocked = false;
         }
         // isSyncTone becomes true when the sync-bin energy exceeds the
@@ -466,9 +471,9 @@ void SSTVDemodSink::processOneSample(Complex &ci)
                     // exactly when isSyncTone falls.  Any deviation is phase error.
                     const float error = float(m_pllPhase) - m_pllPeriod;
                     m_pllPeriod = qBound(
-                        NOMINAL_LINE_PERIOD_SAMPLES * 0.9f,
+                        m_nominalLinePeriod * 0.9f,
                         m_pllPeriod + PLL_ALPHA * error,
-                        NOMINAL_LINE_PERIOD_SAMPLES * 1.1f);
+                        m_nominalLinePeriod * 1.1f);
                     // Mark that a valid sync was seen; the PLL-driven transition
                     // below fires when m_pllPhase reaches m_pllPeriod.
                     m_syncPulseSeen = true;
@@ -479,7 +484,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
                     // using raw timing (no PLL history yet).
                     m_pllLocked = true;
                     m_pllPhase = 0;
-                    m_pllPeriod = NOMINAL_LINE_PERIOD_SAMPLES;
+                    m_pllPeriod = m_nominalLinePeriod;
                     m_syncPulseSeen = false;
                     transitionTo(IN_PORCH);
                 }
@@ -529,19 +534,19 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         break;
 
     case DECODING_Y_ODD:
-        decodePixelSample(freq, m_yOdd, SSTVDEMOD_IMAGE_WIDTH, DECODING_CR);
+        decodePixelSample(freq, m_yOdd, m_modeWidth, DECODING_CR);
         break;
 
     case DECODING_CR:
-        decodePixelSample(freq, m_cr, SSTVDEMOD_IMAGE_WIDTH, DECODING_CB);
+        decodePixelSample(freq, m_cr, m_modeWidth, DECODING_CB);
         break;
 
     case DECODING_CB:
-        decodePixelSample(freq, m_cb, SSTVDEMOD_IMAGE_WIDTH, DECODING_Y_EVEN);
+        decodePixelSample(freq, m_cb, m_modeWidth, DECODING_Y_EVEN);
         break;
 
     case DECODING_Y_EVEN:
-        decodePixelSample(freq, m_yEven, SSTVDEMOD_IMAGE_WIDTH, WAITING_FOR_SYNC);
+        decodePixelSample(freq, m_yEven, m_modeWidth, WAITING_FOR_SYNC);
         break;
     }
 
@@ -558,7 +563,7 @@ void SSTVDemodSink::decodePixelSample(float freq, float *buf, int width, SSTVSta
     m_pixelSamplePos += 1.0f;
 
     // Check if we have accumulated enough samples for one pixel
-    if (m_pixelSamplePos >= SSTVDEMOD_SAMPLES_PER_PIXEL)
+    if (m_pixelSamplePos >= m_modeSamplesPerPixel)
     {
         // Divide by the actual number of samples accumulated (not the fractional
         // position, which includes a carry-over from the previous pixel boundary
@@ -569,7 +574,7 @@ void SSTVDemodSink::decodePixelSample(float freq, float *buf, int width, SSTVSta
         m_pixelAccum = 0.0f;
         m_pixelSampleCount = 0;
         // Keep fractional remainder to maintain timing accuracy
-        m_pixelSamplePos -= SSTVDEMOD_SAMPLES_PER_PIXEL;
+        m_pixelSamplePos -= m_modeSamplesPerPixel;
 
         // Check if we've decoded all pixels in this section
         if (m_pixelIndex >= width)
@@ -585,16 +590,16 @@ void SSTVDemodSink::decodePixelSample(float freq, float *buf, int width, SSTVSta
 
 void SSTVDemodSink::commitBlock()
 {
-    if (m_lineIndex >= SSTVDEMOD_IMAGE_HEIGHT / 2) {
+    if (m_lineIndex >= m_modeLinePairs) {
         m_lineIndex = 0;
     }
 
     // Build two RGB scan lines from Y_odd, Cr, Cb, Y_even
     // Each Cr/Cb value applies to the same horizontal position in both lines
     // Cr and Cb are at full horizontal resolution, but half vertical resolution
-    QImage lineImage(SSTVDEMOD_IMAGE_WIDTH, 2, QImage::Format_RGB32);
+    QImage lineImage(m_modeWidth, 2, QImage::Format_RGB32);
 
-    for (int x = 0; x < SSTVDEMOD_IMAGE_WIDTH; x++)
+    for (int x = 0; x < m_modeWidth; x++)
     {
         // Convert from frequency (Hz) to pixel value [0..255] then offset to [-128..127].
         // SDFT path uses the piecewise-calibrated map; Hilbert path uses the direct linear map.
@@ -640,7 +645,7 @@ void SSTVDemodSink::commitBlock()
     }
 
     m_lineIndex++;
-    if (m_lineIndex >= SSTVDEMOD_IMAGE_HEIGHT / 2) {
+    if (m_lineIndex >= m_modeLinePairs) {
         m_lineIndex = 0;
     }
 }
@@ -719,4 +724,26 @@ void SSTVDemodSink::applySettings(const QStringList& settingsKeys, const SSTVDem
     } else {
         m_settings.applySettings(settingsKeys, settings);
     }
+
+    if (force || settingsKeys.contains("pdMode")) {
+        applyMode();
+        resetDecoder();
+    }
+}
+
+void SSTVDemodSink::applyMode()
+{
+    const SSTVDemodSettings::PDModeParams p = SSTVDemodSettings::getPDModeParams(m_settings.m_pdMode);
+    m_modeWidth           = p.width;
+    m_modeHeight          = p.height;
+    m_modeLinePairs       = p.linePairs;
+    m_modeSamplesPerPixel = p.pixelTimeMs * float(SSTVDEMOD_CHANNEL_SAMPLE_RATE) / 1000.0f;
+
+    // Recompute nominal PLL line period for the new mode:
+    //   = remaining porch + 4 pixel sections + next sync pulse + sync-energy decay
+    m_nominalLinePeriod =
+        float(SYNC_PORCH_SAMPLES)
+        + 4.0f * float(m_modeWidth) * m_modeSamplesPerPixel
+        + float(SSTVDEMOD_SYNC_SAMPLES)
+        + float(SYNC_PORCH_DELAY);
 }

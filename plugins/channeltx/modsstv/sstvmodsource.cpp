@@ -114,11 +114,11 @@ void SSTVModSource::modulateSample()
             m_state == State::LINE_Y_EVEN)
         {
             m_pixelFrac += 1.0f;
-            if (m_pixelFrac >= SSTV_PIXEL_SAMPLES)
+            if (m_pixelFrac >= m_modePixelSamples)
             {
-                m_pixelFrac -= SSTV_PIXEL_SAMPLES;
+                m_pixelFrac -= m_modePixelSamples;
                 ++m_pixelIndex;
-                if (m_pixelIndex >= SSTV_IMAGE_WIDTH)
+                if (m_pixelIndex >= m_modeWidth)
                 {
                     // Section complete
                     advanceState();
@@ -146,24 +146,25 @@ void SSTVModSource::startTransmit()
     QImage image(m_settings.m_imagePath);
     if (!image.isNull())
     {
-        // Scale to PD120 dimensions
-        QImage scaled = image.scaled(SSTV_IMAGE_WIDTH, SSTV_IMAGE_HEIGHT, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+        // Scale to active mode dimensions
+        QImage scaled = image.scaled(m_modeWidth, m_modeHeight, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
             .convertToFormat(QImage::Format_RGB888);
 
-        m_imageData.resize(SSTV_IMAGE_WIDTH * SSTV_IMAGE_HEIGHT * 3);
+        m_imageData.resize(m_modeWidth * m_modeHeight * 3);
         const uchar* src = scaled.constBits();
         memcpy(m_imageData.data(), src, m_imageData.size());
         m_imageValid = true;
-        qDebug() << "SSTVModSource::loadImage: loaded" << SSTV_IMAGE_WIDTH << "×" << SSTV_IMAGE_HEIGHT;
+        qDebug() << "SSTVModSource::loadImage: loaded" << m_modeWidth << "×" << m_modeHeight;
 
-        qDebug("SSTVModSource::startTransmit: starting PD120 transmission");
+        const SSTVModSettings::PDModeParams modeParams = SSTVModSettings::getPDModeParams(m_settings.m_pdMode);
+        qDebug("SSTVModSource::startTransmit: starting PD transmission (mode %d)", (int) m_settings.m_pdMode);
         m_linePair = 0;
         m_pixelIndex = 0;
         m_pixelFrac = 0.0f;
         m_fmPhasor = 0.0f;
         m_tonePhasor = 0.0f;
         // Build VIS byte: 7 data bits + even-parity bit
-        uint8_t vis7 = SSTV_VIS_CODE & 0x7F;
+        uint8_t vis7 = modeParams.visCode & 0x7F;
         int ones = 0;
         for (int i = 0; i < 7; i++) {
             if (vis7 & (1 << i)) {
@@ -200,6 +201,19 @@ void SSTVModSource::applySettings(const QStringList& settingsKeys, const SSTVMod
     } else {
         m_settings.applySettings(settingsKeys, settings);
     }
+
+    if (force || settingsKeys.contains("pdMode")) {
+        applyMode();
+    }
+}
+
+void SSTVModSource::applyMode()
+{
+    const SSTVModSettings::PDModeParams p = SSTVModSettings::getPDModeParams(m_settings.m_pdMode);
+    m_modeWidth        = p.width;
+    m_modeHeight       = p.height;
+    m_modeLinePairs    = p.linePairs;
+    m_modePixelSamples = p.pixelTimeMs * float(SSTV_SAMPLE_RATE) / 1000.0f;
 }
 
 void SSTVModSource::applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force)
@@ -291,10 +305,10 @@ float SSTVModSource::getPixelFreqForColumn(int linePair, State section, int col)
 
     auto getPixel = [&](int line, int x) -> const uchar*
     {
-        int lineClamp = qBound(0, line, SSTV_IMAGE_HEIGHT - 1);
-        int xClamp    = qBound(0, x,    SSTV_IMAGE_WIDTH  - 1);
+        int lineClamp = qBound(0, line, m_modeHeight - 1);
+        int xClamp    = qBound(0, x,    m_modeWidth  - 1);
         return reinterpret_cast<const uchar*>(
-            m_imageData.constData() + (lineClamp * SSTV_IMAGE_WIDTH + xClamp) * 3
+            m_imageData.constData() + (lineClamp * m_modeWidth + xClamp) * 3
         );
     };
 
@@ -493,7 +507,7 @@ void SSTVModSource::advanceState()
             break;
         case State::LINE_Y_EVEN:
             ++m_linePair;
-            if (m_linePair < SSTV_LINE_PAIRS)
+            if (m_linePair < m_modeLinePairs)
             {
                 enterState(State::LINE_SYNC, SSTV_SYNC_SAMPLES);
             }

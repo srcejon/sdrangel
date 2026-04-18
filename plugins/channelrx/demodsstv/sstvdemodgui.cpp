@@ -101,7 +101,8 @@ bool SSTVDemodGUI::handleMessage(const Message& message)
         // Initialise or grow the display image as lines arrive
         if (m_image.isNull() || (m_image.width() == 0))
         {
-            m_image = QImage(SSTVDEMOD_IMAGE_WIDTH, SSTVDEMOD_IMAGE_HEIGHT, QImage::Format_RGB32);
+            const SSTVDemodSettings::PDModeParams modeParams = SSTVDemodSettings::getPDModeParams(m_settings.m_pdMode);
+            m_image = QImage(modeParams.width, modeParams.height, QImage::Format_RGB32);
             m_image.fill(Qt::black);
         }
 
@@ -209,6 +210,15 @@ void SSTVDemodGUI::on_modulation_currentIndexChanged(int index)
     ui->fmDev->setVisible(isFM);
     ui->fmDevText->setVisible(isFM);
     applySettings(QStringList("modulation"), false);
+}
+
+void SSTVDemodGUI::on_pdMode_currentIndexChanged(int index)
+{
+    m_settings.m_pdMode = static_cast<SSTVDemodSettings::PDMode>(index);
+    applySettings(QStringList("pdMode"), false);
+    // Clear the display when the mode changes: the image geometry changes
+    resetImage();
+    m_sstvDemod->getInputMessageQueue()->push(SSTVDemod::MsgResetDecoder::create());
 }
 
 void SSTVDemodGUI::on_startStop_clicked(bool checked)
@@ -473,6 +483,8 @@ void SSTVDemodGUI::displaySettings()
     ui->fmDev->setVisible(isFM);
     ui->fmDevText->setVisible(isFM);
 
+    ui->pdMode->setCurrentIndex((int) m_settings.m_pdMode);
+
     ui->startStop->setChecked(m_settings.m_decodeEnabled);
 
     updateIndexLabel();
@@ -497,6 +509,7 @@ void SSTVDemodGUI::makeUIConnections()
     QObject::connect(ui->rfBW, &QSlider::valueChanged, this, &SSTVDemodGUI::on_rfBW_valueChanged);
     QObject::connect(ui->fmDev, &QSlider::valueChanged, this, &SSTVDemodGUI::on_fmDev_valueChanged);
     QObject::connect(ui->modulation, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SSTVDemodGUI::on_modulation_currentIndexChanged);
+    QObject::connect(ui->pdMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SSTVDemodGUI::on_pdMode_currentIndexChanged);
     QObject::connect(ui->startStop, &ButtonSwitch::clicked, this, &SSTVDemodGUI::on_startStop_clicked);
     QObject::connect(ui->resetDecoder, &QPushButton::clicked, this, &SSTVDemodGUI::on_resetDecoder_clicked);
     QObject::connect(ui->saveImage, &QPushButton::clicked, this, &SSTVDemodGUI::on_saveImage_clicked);

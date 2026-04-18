@@ -101,6 +101,7 @@ private slots:
     void on_deltaFrequency_changed(qint64 value);
     void on_rfBW_valueChanged(int value);
     void on_modulation_currentIndexChanged(int index);
+    void on_pdMode_currentIndexChanged(int index);
     void on_fmDeviation_valueChanged(int value);
     void on_loadImage_clicked(bool checked);
     void on_startStop_toggled(bool checked);

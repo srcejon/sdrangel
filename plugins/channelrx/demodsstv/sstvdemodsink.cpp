@@ -706,13 +706,26 @@ void SSTVDemodSink::processOneSample(Complex &ci)
 
         case VIS_LEADER2:
             // Count consecutive samples at the 1900 Hz leader frequency.
+            //
+            // Guard: only reset to VIS_IDLE for a non-leader non-sync sample
+            // once counting has started (m_visStateSamples > 0).
+            //
+            // Rationale: when entering VIS_LEADER2 the frequency estimator
+            // needs a brief warm-up period to stabilise from 1200 Hz (break)
+            // to 1900 Hz (leader2).  During that warm-up isSyncTone is false
+            // and visPixel is below VIS_LEADER_PIXEL_MIN (it is still near the
+            // 1200 Hz sync frequency), so isLeaderTone is also false.  Without
+            // the m_visStateSamples > 0 guard the "else if (!isSyncTone)" branch
+            // would fire on the very first sample and immediately reset to
+            // VIS_IDLE, preventing VIS_START_BIT from ever being reached.
             if (isLeaderTone) {
                 m_visStateSamples++;
                 if (m_visStateSamples >= VIS_LEADER_MIN_SAMPLES) {
                     m_visState = VIS_START_BIT;
                     m_visStateSamples = 0;
                 }
-            } else if (!isSyncTone) {
+            } else if (!isSyncTone && m_visStateSamples > 0) {
+                // Lost the leader after counting had begun — restart.
                 m_visState = VIS_IDLE;
                 m_visStateSamples = 0;
             }

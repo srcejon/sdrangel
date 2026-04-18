@@ -177,7 +177,7 @@ void SSTVModGUI::loadImage()
     }
 
     // Scale image to SSTV format
-    image = image.scaled(640, 480);
+    image = image.scaled(640, 496);
 
     // Display preview
     QPixmap pix = QPixmap::fromImage(image);

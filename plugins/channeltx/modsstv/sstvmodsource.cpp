@@ -269,50 +269,52 @@ float SSTVModSource::getPixelFreqForColumn(int linePair, State section, int col)
 }
 
 /** Generate one complex baseband sample at the current SSTV tone frequency.
- *  The phasor is continuous across state transitions so there are no clicks. */
+ *
+ *  Step 1: advance the audio-tone phasor at m_currentFreq to produce a real
+ *          sinusoidal audio sample (the SSTV sub-carrier tone).
+ *  Step 2: modulate that audio onto the baseband carrier:
+ *    FM  – integrate audio sample into the FM carrier phase using fmDeviation.
+ *          Δφ = 2π × fmDeviation[Hz] × audio / sampleRate
+ *    USB – output the analytic signal of the tone: exp(+j·ωt)
+ *    LSB – output the conjugate analytic signal:   exp(−j·ωt)
+ *
+ *  Both phasors are continuous across state transitions so there are no clicks. */
 Complex SSTVModSource::generateSample()
 {
+    const float twoPi = 2.0f * static_cast<float>(M_PI);
+    const float scale = 0.891235351562f * SDR_TX_SCALEF; // -1 dB
+
+    // Advance SSTV audio-tone phasor (shared by all modulation modes)
+    m_tonePhasor += twoPi * m_currentFreq / static_cast<float>(SSTV_SAMPLE_RATE);
+    if (m_tonePhasor > static_cast<float>(M_PI)) {
+        m_tonePhasor -= twoPi;
+    }
+    const float audio = std::cos(m_tonePhasor); // real SSTV audio tone [-1 .. +1]
+
     Complex ci;
 
     if (m_settings.m_modulation == SSTVModSettings::ModulationFM)
     {
-        // FM: the SSTV tone frequency drives the FM carrier directly.
-        // The audio signal is a tone at m_currentFreq; its normalised amplitude
-        // is m_currentFreq / fmDeviation (so that full deviation = 1).
-        // Phase advance per sample = 2π × m_currentFreq / sampleRate
-        // (This is equivalent to FM-modulating a cosine at the SSTV frequency
-        //  because for a constant-frequency audio signal the instantaneous
-        //  carrier frequency equals the audio tone frequency × deviation scale.)
-        const float phaseInc = 2.0f * static_cast<float>(M_PI) * m_currentFreq / static_cast<float>(SSTV_SAMPLE_RATE);
-        m_fmPhasor += phaseInc;
+        // FM: integrate audio amplitude into carrier phase.
+        // At peak (audio = ±1) the instantaneous frequency deviates by ±fmDeviation Hz.
+        m_fmPhasor += twoPi * m_settings.m_fmDeviation * audio / static_cast<float>(SSTV_SAMPLE_RATE);
         if (m_fmPhasor > static_cast<float>(M_PI)) {
-            m_fmPhasor -= 2.0f * static_cast<float>(M_PI);
+            m_fmPhasor -= twoPi;
         }
-        const float scale = 0.891235351562f * SDR_TX_SCALEF; // -1 dB
         ci.real(std::cos(m_fmPhasor) * scale);
         ci.imag(std::sin(m_fmPhasor) * scale);
     }
-    else
+    else if (m_settings.m_modulation == SSTVModSettings::ModulationUSB)
     {
-        // SSB (USB or LSB): treat the SSTV signal as the analytic representation
-        // of a single audio tone. For USB the sideband sits at carrier + f_tone;
-        // for LSB at carrier - f_tone.
-        const float scale = 0.891235351562f * SDR_TX_SCALEF;
-        const float phaseInc = 2.0f * static_cast<float>(M_PI) * m_currentFreq / static_cast<float>(SSTV_SAMPLE_RATE);
-        m_tonePhasor += phaseInc;
-        if (m_tonePhasor > static_cast<float>(M_PI)) {
-            m_tonePhasor -= 2.0f * static_cast<float>(M_PI);
-        }
-        if (m_settings.m_modulation == SSTVModSettings::ModulationUSB)
-        {
-            ci.real( std::cos(m_tonePhasor) * scale);
-            ci.imag( std::sin(m_tonePhasor) * scale);
-        }
-        else // LSB
-        {
-            ci.real( std::cos(m_tonePhasor) * scale);
-            ci.imag(-std::sin(m_tonePhasor) * scale);
-        }
+        // USB SSB: analytic signal exp(+j·2π·f_tone·t)
+        ci.real( std::cos(m_tonePhasor) * scale);
+        ci.imag( std::sin(m_tonePhasor) * scale);
+    }
+    else // LSB
+    {
+        // LSB SSB: conjugate analytic signal exp(−j·2π·f_tone·t)
+        ci.real( std::cos(m_tonePhasor) * scale);
+        ci.imag(-std::sin(m_tonePhasor) * scale);
     }
 
     return ci;

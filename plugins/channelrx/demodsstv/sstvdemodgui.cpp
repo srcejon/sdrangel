@@ -370,11 +370,10 @@ SSTVDemodGUI::SSTVDemodGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, Baseb
     m_spectrumVis->setGLSpectrum(ui->glSpectrum);
     ui->glSpectrum->setCenterFrequency(0);
     ui->glSpectrum->setSampleRate(SSTVDEMOD_CHANNEL_SAMPLE_RATE);
-    ui->glSpectrum->setDisplayedDecimalCount(1);
     ui->glSpectrum->setDisplayWaterfall(true);
     ui->glSpectrum->setDisplayMaxHold(false);
     ui->glSpectrum->setDisplayHistogram(false);
-    ui->spectrumGUI->setBuddies(m_spectrumVis->getInputMessageQueue(), m_spectrumVis, ui->glSpectrum);
+    ui->spectrumGUI->setBuddies(m_spectrumVis, ui->glSpectrum);
 
     ui->deltaFrequencyLabel->setText(QString("%1f").arg(QChar(0x94, 0x03)));
     ui->deltaFrequency->setColorMapper(ColorMapper(ColorMapper::GrayGold));

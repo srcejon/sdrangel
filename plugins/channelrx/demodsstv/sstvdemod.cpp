@@ -45,6 +45,7 @@ const char * const SSTVDemod::m_channelId = "SSTVDemod";
 SSTVDemod::SSTVDemod(DeviceAPI *deviceAPI) :
         ChannelAPI(m_channelIdURI, ChannelAPI::StreamSingleSink),
         m_deviceAPI(deviceAPI),
+        m_spectrumVis(SDR_RX_SCALEF),
         m_basebandSampleRate(0)
 {
     setObjectName(m_channelId);

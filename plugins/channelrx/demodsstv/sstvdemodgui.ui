@@ -304,6 +304,52 @@
      </layout>
     </item>
     <item>
+     <layout class="QHBoxLayout" name="modLayout">
+      <item>
+       <widget class="QLabel" name="modulationLabel">
+        <property name="text">
+         <string>Mod</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="modulation">
+        <property name="toolTip">
+         <string>Demodulation mode: FM, USB (upper sideband SSB), or LSB (lower sideband SSB)</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>FM</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>USB</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>LSB</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacerMod">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
      <layout class="QHBoxLayout" name="buttonLayout">
       <property name="spacing">
        <number>4</number>
@@ -638,6 +684,7 @@
   <tabstop>deltaFrequency</tabstop>
   <tabstop>rfBW</tabstop>
   <tabstop>fmDev</tabstop>
+  <tabstop>modulation</tabstop>
   <tabstop>startStop</tabstop>
   <tabstop>resetDecoder</tabstop>
   <tabstop>saveImage</tabstop>

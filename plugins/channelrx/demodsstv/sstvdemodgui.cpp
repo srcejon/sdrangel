@@ -23,6 +23,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsPixmapItem>
 #include <QPushButton>
+#include <QComboBox>
 
 #include "sstvdemodgui.h"
 
@@ -197,6 +198,17 @@ void SSTVDemodGUI::on_fmDev_valueChanged(int value)
     ui->fmDevText->setText(QString("%1k").arg(value / 10.0, 0, 'f', 1));
     m_settings.m_fmDeviation = value * 100.0f;
     applySettings(QStringList("fmDeviation"), false);
+}
+
+void SSTVDemodGUI::on_modulation_currentIndexChanged(int index)
+{
+    m_settings.m_modulation = static_cast<SSTVDemodSettings::Modulation>(index);
+    // Show FM deviation controls only for FM mode; they are not used for SSB
+    const bool isFM = (m_settings.m_modulation == SSTVDemodSettings::ModulationFM);
+    ui->fmDevLabel->setVisible(isFM);
+    ui->fmDev->setVisible(isFM);
+    ui->fmDevText->setVisible(isFM);
+    applySettings(QStringList("modulation"), false);
 }
 
 void SSTVDemodGUI::on_startStop_clicked(bool checked)
@@ -455,6 +467,12 @@ void SSTVDemodGUI::displaySettings()
     ui->fmDevText->setText(QString("%1k").arg(m_settings.m_fmDeviation / 1000.0, 0, 'f', 1));
     ui->fmDev->setValue((int)(m_settings.m_fmDeviation / 100.0f));
 
+    ui->modulation->setCurrentIndex((int) m_settings.m_modulation);
+    const bool isFM = (m_settings.m_modulation == SSTVDemodSettings::ModulationFM);
+    ui->fmDevLabel->setVisible(isFM);
+    ui->fmDev->setVisible(isFM);
+    ui->fmDevText->setVisible(isFM);
+
     ui->startStop->setChecked(m_settings.m_decodeEnabled);
 
     updateIndexLabel();
@@ -478,6 +496,7 @@ void SSTVDemodGUI::makeUIConnections()
     QObject::connect(ui->deltaFrequency, &ValueDialZ::changed, this, &SSTVDemodGUI::on_deltaFrequency_changed);
     QObject::connect(ui->rfBW, &QSlider::valueChanged, this, &SSTVDemodGUI::on_rfBW_valueChanged);
     QObject::connect(ui->fmDev, &QSlider::valueChanged, this, &SSTVDemodGUI::on_fmDev_valueChanged);
+    QObject::connect(ui->modulation, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SSTVDemodGUI::on_modulation_currentIndexChanged);
     QObject::connect(ui->startStop, &ButtonSwitch::clicked, this, &SSTVDemodGUI::on_startStop_clicked);
     QObject::connect(ui->resetDecoder, &QPushButton::clicked, this, &SSTVDemodGUI::on_resetDecoder_clicked);
     QObject::connect(ui->saveImage, &QPushButton::clicked, this, &SSTVDemodGUI::on_saveImage_clicked);

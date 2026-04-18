@@ -29,9 +29,17 @@ class Serializable;
 
 struct SSTVDemodSettings
 {
+    /** Demodulation type */
+    enum Modulation {
+        ModulationFM  = 0,  //!< FM (wideband) demodulation
+        ModulationUSB = 1,  //!< Upper sideband (USB) SSB demodulation
+        ModulationLSB = 2   //!< Lower sideband (LSB) SSB demodulation
+    };
+
     qint32 m_inputFrequencyOffset;  //!< Frequency offset from device centre (Hz)
     float m_rfBandwidth;            //!< RF pre-filter bandwidth (Hz)
     float m_fmDeviation;            //!< FM deviation used for tone scaling (Hz)
+    Modulation m_modulation;        //!< Demodulation type (FM / USB / LSB)
     bool m_decodeEnabled;           //!< Enable SSTV image decoding
     bool m_autoSave;                //!< Automatically save received images
     QString m_autoSavePath;         //!< Directory to auto-save images

@@ -206,18 +206,28 @@ void SSTVDemodSink::feed(const SampleVector::const_iterator& begin, const Sample
 void SSTVDemodSink::processOneSample(Complex &ci)
 {
     // -----------------------------------------------------------------------
-    // Stage 1 – RF FM demodulation.
-    // phaseDiscriminatorDelta with fmScaling = Fs/(2*fmDeviation) returns
+    // Stage 1 – Demodulation.
+    //
+    // For FM: use the phase discriminator to extract the audio tone.
     //   fmDemod = instantaneous_rf_freq_deviation / fmDeviation
-    // For a signal FM-modulated with an audio tone A·cos(2π·f_tone·t):
-    //   fmDemod ≈ A·cos(2π·f_tone·t)          (real audio waveform, ≤ 1.0)
-    // The SSTV pixel data is encoded in f_tone (1200–2300 Hz), not in the
-    // amplitude.  Stage 2 below extracts that frequency.
-    // Note that we do not currently support SSB modulated SSTV, only FM.
+    // For USB/LSB (SSB): the complex baseband signal ci already encodes the
+    //   audio tone as its instantaneous frequency.  The real part of ci gives
+    //   the audio tone directly:
+    //     USB: ci = A·exp(+j·2π·f_tone·t)  →  ci.real() = A·cos(2π·f_tone·t)
+    //     LSB: ci = A·exp(−j·2π·f_tone·t)  →  ci.real() = A·cos(2π·f_tone·t)
+    //   (the real parts are identical; the sideband selection affects only the
+    //   imaginary sign, not the tone frequency content).
+    //   The result is normalised by SDR_RX_SCALEF to bring it into the same
+    //   ~[−1, +1] range as fmDemod, keeping Stage 2 thresholds valid.
     // -----------------------------------------------------------------------
     double magsqRaw;
     Real deviation;
     Real fmDemod = m_phaseDiscri.phaseDiscriminatorDelta(ci, magsqRaw, deviation);
+
+    // audioSample is the Stage 1 output fed to Stage 2, sync detector and output
+    const Real audioSample = (m_settings.m_modulation != SSTVDemodSettings::ModulationFM)
+        ? (ci.real() / SDR_RX_SCALEF)
+        : fmDemod;
 
     // Update signal power levels
     Real magsq = magsqRaw / (SDR_RX_SCALED * SDR_RX_SCALED);
@@ -230,7 +240,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     m_magsqCount++;
 
     if (!m_settings.m_decodeEnabled) {
-        sampleToSpectrum(fmDemod);
+        sampleToSpectrum(audioSample);
         return;
     }
 
@@ -255,7 +265,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         // ------------------------------------------------------------------
 
         // Update circular buffer and SDFT bins.
-        const float xNew = fmDemod;
+        const float xNew = audioSample;
         const float xOld = m_sdftBuf[m_sdftIdx];
         m_sdftBuf[m_sdftIdx] = xNew;
         m_sdftIdx = (m_sdftIdx + 1) % N_SDFT;
@@ -312,8 +322,8 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         // Apply DC-blocking HPF first: y[n] = x[n] - x[n-1] + R*y[n-1].
         // This removes any carrier-frequency offset that would make the phasor z off-centre
         // and cause the phase-difference estimator to oscillate at f_tone Hz.
-        const float dcBlocked = fmDemod - m_hilbertDcXPrev + HILBERT_DC_R * m_hilbertDcY;
-        m_hilbertDcXPrev = fmDemod;
+        const float dcBlocked = audioSample - m_hilbertDcXPrev + HILBERT_DC_R * m_hilbertDcY;
+        m_hilbertDcXPrev = audioSample;
         m_hilbertDcY = dcBlocked;
         m_hilbertBuf[m_hilbertIdx] = dcBlocked;
         m_hilbertIdx = (m_hilbertIdx + 1) % N_HILBERT;
@@ -384,13 +394,13 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     // Threshold SYNC_DETECT_THRESHOLD = 0.4 sits comfortably above 0.10
     // and below 1.0, independent of signal amplitude.
     // -----------------------------------------------------------------------
-    const float xNewSync = fmDemod;
+    const float xNewSync = audioSample;
     const float xOldSync = m_syncSdftBuf[m_syncSdftIdx];
     m_syncSdftBuf[m_syncSdftIdx] = xNewSync;
     m_syncSdftIdx = (m_syncSdftIdx + 1) % N_SYNC;
     m_syncSdftBin = m_syncSdftTwiddle * (m_syncSdftBin + xNewSync - xOldSync);
 
-    m_syncTotalPowerMa(fmDemod * fmDemod);
+    m_syncTotalPowerMa(audioSample * audioSample);
     const float syncTotalPower = m_syncTotalPowerMa.instantAverage();
 
     // isSyncTone: true when 1200 Hz sync tone is present, false for pixel data.
@@ -536,8 +546,8 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     }
 
     // Feed scope and spectrum with demodulated signals.
-    sampleToSpectrum(fmDemod);
-    sampleToScope(fmDemod, freq, isSyncTone ? 1.0f : 0.0f, m_pllLocked ? 1.0f : 0.0f, float(m_state));
+    sampleToSpectrum(audioSample);
+    sampleToScope(audioSample, freq, isSyncTone ? 1.0f : 0.0f, m_pllLocked ? 1.0f : 0.0f, float(m_state));
 }
 
 void SSTVDemodSink::decodePixelSample(float freq, float *buf, int width, SSTVState nextState)

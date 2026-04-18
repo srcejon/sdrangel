@@ -672,18 +672,35 @@ void SSTVDemodSink::processOneSample(Complex &ci)
             break;
 
         case VIS_BREAK:
-            // Wait for the short 1200 Hz break (~10 ms) immediately after the leader.
-            if (isSyncTone) {
-                m_visStateSamples++;
-            } else {
-                if (m_visStateSamples >= VIS_BREAK_MIN_SAMPLES &&
-                    m_visStateSamples <= VIS_BREAK_MAX_SAMPLES) {
-                    // Valid break: start counting the second leader.
-                    m_visState = VIS_LEADER2;
+            // Wait for the 10 ms 1200 Hz break that follows the first leader.
+            //
+            // Two-phase detection (same rationale as VIS_START_BIT):
+            //
+            //   Phase 1 (m_visStateSamples == 0): we are still in the trailing
+            //     samples of the first leader (1900 Hz, isSyncTone = false).
+            //     Ignore all non-sync samples; only the first isSyncTone rising
+            //     edge (the actual break) starts counting.
+            //
+            //   Phase 2 (m_visStateSamples > 0): sync is present and being
+            //     counted.  When isSyncTone falls, validate the duration.
+            //
+            // Without phase 1 the code would see the leader tail (isSyncTone =
+            // false, count = 0 < VIS_BREAK_MIN_SAMPLES) and immediately fall
+            // back to VIS_IDLE, preventing VIS_LEADER2 from ever being reached.
+            if (isSyncTone || m_visStateSamples > 0)
+            {
+                if (isSyncTone) {
+                    m_visStateSamples++;
                 } else {
-                    m_visState = VIS_IDLE;
+                    // Break has ended — validate its duration.
+                    if (m_visStateSamples >= VIS_BREAK_MIN_SAMPLES &&
+                        m_visStateSamples <= VIS_BREAK_MAX_SAMPLES) {
+                        m_visState = VIS_LEADER2;
+                    } else {
+                        m_visState = VIS_IDLE;
+                    }
+                    m_visStateSamples = 0;
                 }
-                m_visStateSamples = 0;
             }
             break;
 

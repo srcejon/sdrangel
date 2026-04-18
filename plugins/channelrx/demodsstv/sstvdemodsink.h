@@ -561,7 +561,7 @@ private:
     // -----------------------------------------------------------------------
     enum VISState {
         VIS_IDLE,        //!< No header in progress
-        VIS_BREAK,       //!< First leader complete; waiting for 1200 Hz break
+        VIS_BREAK,       //!< First leader complete; waiting for isSyncTone rising edge then counting the 1200 Hz break
         VIS_LEADER2,     //!< Break passed; collecting second 1900 Hz leader
         VIS_START_BIT,   //!< Second leader complete; waiting then counting one VIS_BIT_SAMPLES window for the start bit
         VIS_BITS,        //!< Decoding 8 VIS bits

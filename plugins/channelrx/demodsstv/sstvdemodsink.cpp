@@ -555,7 +555,40 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         {
             SSTVState firstState = getFirstDecodeState();
             transitionTo(firstState);
-            m_pixelSamplePos = m_pixelSkipAtStart;
+            // Compensate for the SYNC_PORCH_DELAY samples consumed while waiting for
+            // the sync energy to fall below threshold.  When m_pixelSkipAtStart is
+            // less than one pixel period (Scottie / PD / Robot36) a plain pre-load of
+            // m_pixelSamplePos is sufficient and produces no phantom pixels.
+            //
+            // When m_pixelSkipAtStart >= m_modeSamplesPerPixel (Martin M1/M2, and
+            // Scottie S2), the direct pre-load fires phantom pixels — each from only
+            // one real sample at the wrong image position (~3 columns into the image
+            // placed at columns 0/1).  Instead, advance m_pixelIndex by the integer
+            // count of full pixel-widths already elapsed and set m_pixelSamplePos to
+            // the fractional intra-pixel remainder only, so every decoded pixel fires
+            // from the correct number of samples at the right position.  The skipped
+            // pixel slots are pre-filled from the current frequency estimate: the MA
+            // output at this moment approximates the signal over the missed samples,
+            // so white content stays near-white and black content stays near-black.
+            const int skipPixels = int(m_pixelSkipAtStart / m_modeSamplesPerPixel);
+            m_pixelSamplePos = m_pixelSkipAtStart - float(skipPixels) * m_modeSamplesPerPixel;
+            m_pixelIndex = skipPixels;
+            if (skipPixels > 0)
+            {
+                float *firstBuf = nullptr;
+                switch (firstState)
+                {
+                    case DECODING_MT_GREEN: firstBuf = m_yOdd; break;
+                    case DECODING_SC_RED:   firstBuf = m_cr;   break;
+                    default:                                    break;
+                }
+                if (firstBuf)
+                {
+                    for (int i = 0; i < skipPixels; i++) {
+                        firstBuf[i] = freq;
+                    }
+                }
+            }
         }
         break;
 

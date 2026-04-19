@@ -530,7 +530,7 @@ private:
     int   m_syncSamplesMin;         //!< Min acceptable sync+porch count (mode-dependent)
     int   m_syncSamplesMax;         //!< Max acceptable sync+porch count (mode-dependent)
     int   m_porchSamplesRemaining;  //!< IN_PORCH countdown after SYNC_PORCH_DELAY
-    float m_pixelSkipAtStart;       //!< Pixel accumulator pre-load for short porches
+    float m_pixelSkipAtStart;       //!< Samples into first channel already elapsed when IN_PORCH fires (= SYNC_PORCH_DELAY − porchSamples, clamped to 0); decomposed in IN_PORCH into integer skipPixels and fractional m_pixelSamplePos
     int   m_modeInterSectionSamples; //!< Samples for inter-section gap (Robot36 sep / Scottie G→B porch)
     float m_modeChromaSamplesPerPixel; //!< Robot36 chroma samples per pixel
     int   m_modeChromaWidth;        //!< Robot36 chroma pixels per line (160); 0 otherwise

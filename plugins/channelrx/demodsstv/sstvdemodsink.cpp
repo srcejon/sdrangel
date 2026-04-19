@@ -966,26 +966,8 @@ void SSTVDemodSink::transitionTo(SSTVState newState)
     {
         m_pixelIndex = 0;
         m_pixelAccum = 0.0f;
+        m_pixelSamplePos = 0.0f;
         m_pixelSampleCount = 0;
-
-        // For Martin/Scottie modes, m_pixelSkipAtStart compensates for the
-        // SYNC_PORCH_DELAY samples that the sync detector takes to drop below
-        // threshold after the porch begins.  The first channel gets this offset
-        // applied by IN_PORCH (which calls transitionTo then overwrites
-        // m_pixelSamplePos).  Channels 2 and 3 must apply the same offset here
-        // so all colour channels start at the same position within their window.
-        // Without this, channels 2+ start m_pixelSkipAtStart samples early,
-        // producing visible colour fringing on vertical edges (green left /
-        // red right) in Martin and Scottie modes.
-        if (newState == DECODING_MT_BLUE  || newState == DECODING_MT_RED  ||
-            newState == DECODING_SC_GREEN || newState == DECODING_SC_BLUE)
-        {
-            m_pixelSamplePos = m_pixelSkipAtStart;
-        }
-        else
-        {
-            m_pixelSamplePos = 0.0f;
-        }
     }
 }
 

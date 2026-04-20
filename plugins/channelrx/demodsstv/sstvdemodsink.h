@@ -219,15 +219,17 @@ private:
     //
     // Truncated-range bias and piecewise calibration:
     //   The centroid is only unbiased when summed over all N/2 bins.  Using
-    //   k=1..2 (with N=32) introduces a systematic non-linear shift.  Rather
-    //   than a single linear scale from black (1500 Hz) to white (calibrated
-    //   centroid), freqToPixel() uses two calibration points:
-    //     • SDFT_MEAS_NEUTRAL_FREQ: measured centroid for a true 1900 Hz tone
-    //       (= neutral chroma centre, should map to pixel 128).
-    //     • SDFT_MEAS_WHITE_FREQ:   measured centroid for a true 2300 Hz tone
-    //       (= full white, should map to pixel 255).
-    //   A piecewise-linear map anchored at both points ensures neutral chroma
-    //   decodes to exactly 128 and white to 255, eliminating the colour bias.
+    //   k=1..2 (with N=32) introduces a systematic non-linear frequency shift
+    //   that varies from 0 Hz at 1500 Hz to −210 Hz near 1900 Hz.  A two-point
+    //   calibration only corrects at the two anchor frequencies, leaving up to
+    //   38-pixel errors at intermediate tones (e.g., 1700 Hz).
+    //
+    //   freqToPixel() instead uses a 17-point lookup table computed by simulation
+    //   of a pure cosine at every 50 Hz step from 1500 Hz to 2300 Hz (N=32, k=1..2,
+    //   MA=40, Fs=48000 Hz, 6000-sample steady-state mean).  Each entry stores the
+    //   measured centroid for that step; the corresponding pixel is i×(255/16) for
+    //   the i-th entry (uniformly spaced across the 255-pixel range).  Piecewise
+    //   linear interpolation between entries achieves sub-pixel accuracy everywhere.
     //
     // The SDFT history is NOT reset at section transitions (Y_odd→Cr→Cb→Y_even).
     // Adjacent sections share the same 1500–2300 Hz frequency range, so the
@@ -244,14 +246,17 @@ private:
     static constexpr int SDFT_K_SUM_MAX     = 2;   //!< Last  bin in the moment sum
     static constexpr int SDFT_NUM_BINS      = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 2
 
-    // Piecewise calibration: two measured SDFT-centroid outputs used as anchor points.
-    // Obtained by simulation (N=32, k=1..2, MA=40, steady-state mean of a pure cosine):
-    //   • SDFT_MEAS_NEUTRAL_FREQ: centroid for a true 1900 Hz tone (neutral chroma = pixel 128)
-    //   • SDFT_MEAS_WHITE_FREQ:   centroid for a true 2300 Hz tone (full white  = pixel 255)
-    // freqToPixel() uses a two-segment linear map: [1500, NEUTRAL]→[0,128] and
-    // [NEUTRAL, WHITE]→[128,255], ensuring both neutral chroma and white decode correctly.
-    static constexpr float SDFT_MEAS_NEUTRAL_FREQ = 1690.0f; //!< Hz — SDFT centroid for true 1900 Hz neutral-chroma tone (N=32, k=1..2)
-    static constexpr float SDFT_MEAS_WHITE_FREQ   = 2344.0f; //!< Hz — SDFT centroid for true 2300 Hz white tone (N=32, k=1..2)
+    // Centroid calibration lookup table: 17 entries at 50 Hz steps from 1500 Hz to 2300 Hz.
+    // SDFT_CALIB_CENTROIDS[i] = steady-state mean SDFT centroid (Hz) for a true tone at
+    // (1500 + 50·i) Hz.  Entry spacing in pixel space is exactly 255/16 ≈ 15.9375 per step.
+    // Computed by simulation (pure cosine, N=32, k=1..2, MA=40, Fs=48000 Hz).
+    static constexpr int   SDFT_CALIB_N     = 17;   //!< Number of centroid calibration entries
+    static constexpr float SDFT_CALIB_STEP  = 255.0f / 16.0f; //!< Pixel increment per calibration step (255/16)
+    static constexpr float SDFT_CALIB_CENTROIDS[SDFT_CALIB_N] = {
+        1500.0f, 1502.0f, 1508.5f, 1520.4f, 1538.6f, 1563.9f, 1597.1f,
+        1638.9f, 1689.5f, 1749.0f, 1817.2f, 1893.2f, 1975.9f, 2064.1f,
+        2156.0f, 2249.8f, 2343.6f
+    };
 
     float   m_sdftBuf[N_SDFT];            //!< Circular ring buffer of fmDemod samples
     Complex m_sdftBins[SDFT_NUM_BINS];    //!< Running SDFT bins k = SDFT_K_STORE_MIN..SDFT_K_STORE_MAX
@@ -606,20 +611,29 @@ private:
     SSTVState getFirstDecodeState() const;
 
     /** Convert SDFT centroid frequency (Hz) to pixel luminance value [0..255].
-     *  Uses a piecewise-linear map anchored at two measured SDFT calibration points:
-     *    [SSTVDEMOD_BLACK_FREQ, SDFT_MEAS_NEUTRAL_FREQ] → [0, 128]  (lower segment)
-     *    [SDFT_MEAS_NEUTRAL_FREQ, SDFT_MEAS_WHITE_FREQ] → [128, 255] (upper segment)
-     *  This ensures neutral chroma (1900 Hz → centroid ≈1690 Hz for N=32, k=1..2) decodes
-     *  to exactly pixel 128 (no colour bias) and white (2300 Hz → centroid ≈2344 Hz) to 255.
+     *  Uses a 17-point piecewise-linear lookup table (SDFT_CALIB_CENTROIDS) that maps
+     *  the non-linear centroid response back to a uniform [0..255] pixel scale.
+     *  Each table entry covers 50 Hz of true input frequency (1500–2300 Hz in steps of 50 Hz)
+     *  and 255/16 ≈ 15.94 pixel units.  The table was computed by simulation of a pure
+     *  cosine at each 50 Hz step (N=32, k=1..2, MA=40, Fs=48000 Hz, steady-state mean).
      *  Used by the SDFT path (m_useHilbert = false). */
-    static int freqToPixel(float freq) {
-        float v;
-        if (freq <= SDFT_MEAS_NEUTRAL_FREQ) {
-            v = (freq - SSTVDEMOD_BLACK_FREQ) * 128.0f / (SDFT_MEAS_NEUTRAL_FREQ - SSTVDEMOD_BLACK_FREQ);
-        } else {
-            v = 128.0f + (freq - SDFT_MEAS_NEUTRAL_FREQ) * 127.0f / (SDFT_MEAS_WHITE_FREQ - SDFT_MEAS_NEUTRAL_FREQ);
+    static int freqToPixel(float freq)
+    {
+        if (freq <= SDFT_CALIB_CENTROIDS[0])
+            return 0;
+        if (freq >= SDFT_CALIB_CENTROIDS[SDFT_CALIB_N - 1])
+            return 255;
+        for (int i = 1; i < SDFT_CALIB_N; i++)
+        {
+            if (freq <= SDFT_CALIB_CENTROIDS[i])
+            {
+                const float t = (freq - SDFT_CALIB_CENTROIDS[i - 1]) /
+                                (SDFT_CALIB_CENTROIDS[i] - SDFT_CALIB_CENTROIDS[i - 1]);
+                const float v = (float(i - 1) + t) * SDFT_CALIB_STEP;
+                return static_cast<int>(qBound(0.0f, v, 255.0f));
+            }
         }
-        return static_cast<int>(qBound(0.0f, v, 255.0f));
+        return 255;
     }
 
     /** Convert true instantaneous frequency (Hz) to pixel luminance value [0..255].

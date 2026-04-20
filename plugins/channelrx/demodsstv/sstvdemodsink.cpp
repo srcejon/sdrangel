@@ -293,10 +293,10 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         // SDFT path: Sliding-DFT spectral moment (MATLAB 'instfreq' tfmoment).
         //
         // The recurrence Z[k] ← twiddle[k]·(Z[k] + x_new − x_old) maintains
-        // a phase-rotated DFT bin.  The power-weighted centroid over bins k=1..3
+        // a phase-rotated DFT bin.  The power-weighted centroid over bins k=1..2
         // gives the instantaneous tone frequency used for both sync detection and
-        // pixel decoding.  See SDFT_MEAS_NEUTRAL_FREQ / SDFT_MEAS_WHITE_FREQ in
-        // the header for the piecewise calibration rationale.
+        // pixel decoding.  freqToPixel() uses SDFT_CALIB_CENTROIDS to invert the
+        // non-linear centroid-vs-frequency relationship; see the header for details.
         // ------------------------------------------------------------------
 
         // Update circular buffer and SDFT bins.

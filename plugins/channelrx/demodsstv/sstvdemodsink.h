@@ -222,12 +222,12 @@ private:
     //   k=1..2 (with N=32) introduces a systematic non-linear frequency shift
     //   that varies from 0 Hz at 1500 Hz to −210 Hz near 1900 Hz.
     //
-    //   centroidToFreq() inverts this non-linearity using a 17-point lookup table
-    //   (SDFT_CALIB_CENTROIDS) computed by simulation of a pure cosine at every
-    //   50 Hz step from 1500 Hz to 2300 Hz (N=32, k=1..2, MA=40, Fs=48000 Hz,
-    //   6000-sample steady-state mean).  Piecewise-linear interpolation gives a
-    //   linearised frequency estimate that matches the true tone to within ±2 Hz
-    //   at calibration points.
+    //   centroidToFreq() inverts this non-linearity using a 9-point lookup table
+    //   (SDFT_CALIB_CENTROIDS) derived from hardware measurements: each entry is the
+    //   observed steady-state MA centroid when a pure tone at the corresponding
+    //   true frequency (1500–2300 Hz in 100 Hz steps) is applied.  Piecewise-linear
+    //   interpolation between entries linearises the response across the full SSTV
+    //   pixel range.  Tones below 1500 Hz are clamped to 1500 Hz.
     //
     //   This linearised value replaces the raw centroid as the output of the SDFT
     //   path, so both paths (SDFT and Hilbert) produce the same "true Hz" quantity.
@@ -248,17 +248,16 @@ private:
     static constexpr int SDFT_K_SUM_MAX     = 2;   //!< Last  bin in the moment sum
     static constexpr int SDFT_NUM_BINS      = SDFT_K_STORE_MAX - SDFT_K_STORE_MIN + 1; // 2
 
-    // Centroid calibration lookup table: 17 entries at 50 Hz steps from 1500 Hz to 2300 Hz.
-    // SDFT_CALIB_CENTROIDS[i] = steady-state mean SDFT centroid (Hz) for a true tone at
+    // Centroid calibration lookup table: 9 entries at 100 Hz steps from 1500 Hz to 2300 Hz.
+    // SDFT_CALIB_CENTROIDS[i] = measured steady-state MA centroid (Hz) for a true tone at
     // (SDFT_CALIB_TRUE_MIN + SDFT_CALIB_TRUE_STEP·i) Hz.
-    // Computed by simulation (pure cosine, N=32, k=1..2, MA=40, Fs=48000 Hz).
-    static constexpr int   SDFT_CALIB_N         = 17;      //!< Number of centroid calibration entries
+    // Derived from hardware measurements (not simulation): the raw SDFT centroid output
+    // was observed at each 100 Hz step across the SSTV pixel range.
+    static constexpr int   SDFT_CALIB_N         = 9;       //!< Number of centroid calibration entries
     static constexpr float SDFT_CALIB_TRUE_MIN  = 1500.0f; //!< True frequency (Hz) for first table entry
-    static constexpr float SDFT_CALIB_TRUE_STEP = 50.0f;   //!< True-frequency step (Hz) between entries
+    static constexpr float SDFT_CALIB_TRUE_STEP = 100.0f;  //!< True-frequency step (Hz) between entries
     static constexpr float SDFT_CALIB_CENTROIDS[SDFT_CALIB_N] = {
-        1500.0f, 1502.0f, 1508.5f, 1520.4f, 1538.6f, 1563.9f, 1597.1f,
-        1638.9f, 1689.5f, 1749.0f, 1817.2f, 1893.2f, 1975.9f, 2064.1f,
-        2156.0f, 2249.8f, 2343.6f
+        1511.0f, 1520.0f, 1550.0f, 1616.0f, 1712.0f, 1840.0f, 1980.0f, 2160.0f, 2320.0f
     };
 
     float   m_sdftBuf[N_SDFT];            //!< Circular ring buffer of fmDemod samples
@@ -615,7 +614,8 @@ private:
 
     /** Convert SDFT power-weighted centroid (Hz) to estimated true tone frequency (Hz).
      *  Inverts the non-linear centroid-vs-frequency response of the N=32, k=1..2 SDFT
-     *  using SDFT_CALIB_CENTROIDS (17-point table, 50 Hz steps, 1500–2300 Hz).
+     *  using SDFT_CALIB_CENTROIDS (9-point hardware-measured table, 100 Hz steps, 1500–2300 Hz).
+     *  Tones below 1500 Hz are clamped to 1500 Hz (SSTV pixel range starts at 1500 Hz).
      *  Piecewise-linear interpolation between table entries.
      *  Applied by the SDFT path immediately after the moving-average filter so that
      *  the output 'freq' is a linearised frequency in Hz — the same quantity produced

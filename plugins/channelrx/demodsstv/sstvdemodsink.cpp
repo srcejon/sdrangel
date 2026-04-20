@@ -294,9 +294,8 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         //
         // The recurrence Z[k] ← twiddle[k]·(Z[k] + x_new − x_old) maintains
         // a phase-rotated DFT bin.  The power-weighted centroid over bins k=1..2
-        // gives the instantaneous tone frequency used for both sync detection and
-        // pixel decoding.  freqToPixel() uses SDFT_CALIB_CENTROIDS to invert the
-        // non-linear centroid-vs-frequency relationship; see the header for details.
+        // gives a raw frequency estimate which is then linearised by centroidToFreq()
+        // so that both paths (SDFT and Hilbert) output the same "true Hz" quantity.
         // ------------------------------------------------------------------
 
         // Update circular buffer and SDFT bins.
@@ -333,11 +332,11 @@ void SSTVDemodSink::processOneSample(Complex &ci)
         // 2×f_tone for a real-valued cosine input (beat between the positive and
         // aliased negative frequency components in the SDFT bins).
         // SDFT_FREQ_MA_LEN=40 spans exactly two 1200 Hz periods, completely
-        // eliminating the sync-tone oscillation and leaving a stable ~1316 Hz
-        // reading.  instantAverage() gives the correct mean during the initial
-        // fill phase after reset (using only the samples seen so far).
+        // eliminating the sync-tone oscillation and leaving a stable reading.
+        // Then centroidToFreq() inverts the non-linear centroid response so that
+        // freq is a linearised true-frequency estimate matching the Hilbert path.
         m_freqMovAvg(rawFreq);
-        freq = m_freqMovAvg.instantAverage();
+        freq = centroidToFreq(m_freqMovAvg.instantAverage());
     }
     else
     {
@@ -684,7 +683,7 @@ void SSTVDemodSink::processOneSample(Complex &ci)
     {
         // Compute pixel value (calibrated for the active frequency estimator path)
         // used to detect the 1900 Hz leader tone (pixel ≈ 128, band ±32).
-        const int visPixel = m_useHilbert ? freqToPixelDirect(freq) : freqToPixel(freq);
+        const int visPixel = freqToPixelDirect(freq);
         const bool isLeaderTone = !isSyncTone
                                   && (visPixel >= VIS_LEADER_PIXEL_MIN)
                                   && (visPixel <= VIS_LEADER_PIXEL_MAX);
@@ -925,20 +924,14 @@ void SSTVDemodSink::commitBlock()
     for (int x = 0; x < m_modeWidth; x++)
     {
         // Convert from frequency (Hz) to pixel value [0..255] then offset to [-128..127].
-        // SDFT path uses the piecewise-calibrated map; Hilbert path uses the direct linear map.
-        float cr, cb;
-        if (m_useHilbert) {
-            cr = static_cast<float>(freqToPixelDirect(m_cr[x])) - 128.0f;
-            cb = static_cast<float>(freqToPixelDirect(m_cb[x])) - 128.0f;
-        } else {
-            cr = static_cast<float>(freqToPixel(m_cr[x])) - 128.0f;
-            cb = static_cast<float>(freqToPixel(m_cb[x])) - 128.0f;
-        }
+        // Both paths (SDFT and Hilbert) now output linearised true-Hz values, so a single
+        // direct linear map is used for all pixel decoding.
+        const float cr = static_cast<float>(freqToPixelDirect(m_cr[x])) - 128.0f;
+        const float cb = static_cast<float>(freqToPixelDirect(m_cb[x])) - 128.0f;
 
         // Decode odd scan line (top row of the block)
         {
-            float y = m_useHilbert ? static_cast<float>(freqToPixelDirect(m_yOdd[x]))
-                                   : static_cast<float>(freqToPixel(m_yOdd[x]));
+            float y = static_cast<float>(freqToPixelDirect(m_yOdd[x]));
             int r = static_cast<int>(y + 1.402f * cr);
             int g = static_cast<int>(y - 0.34414f * cb - 0.71414f * cr);
             int b = static_cast<int>(y + 1.772f * cb);
@@ -950,8 +943,7 @@ void SSTVDemodSink::commitBlock()
 
         // Decode even scan line (bottom row of the block)
         {
-            float y = m_useHilbert ? static_cast<float>(freqToPixelDirect(m_yEven[x]))
-                                   : static_cast<float>(freqToPixel(m_yEven[x]));
+            float y = static_cast<float>(freqToPixelDirect(m_yEven[x]));
             int r = static_cast<int>(y + 1.402f * cr);
             int g = static_cast<int>(y - 0.34414f * cb - 0.71414f * cr);
             int b = static_cast<int>(y + 1.772f * cb);
@@ -1155,19 +1147,13 @@ void SSTVDemodSink::commitBlockRobot36()
         {
             // Chroma index: 2 image pixels share one chroma pixel (half horizontal res)
             int cx = x / 2;
-            float cr, cb;
-            if (m_useHilbert) {
-                cr = static_cast<float>(freqToPixelDirect(m_cr[cx])) - 128.0f;
-                cb = static_cast<float>(freqToPixelDirect(m_cb[cx])) - 128.0f;
-            } else {
-                cr = static_cast<float>(freqToPixel(m_cr[cx])) - 128.0f;
-                cb = static_cast<float>(freqToPixel(m_cb[cx])) - 128.0f;
-            }
+            // Both paths now output linearised true-Hz values; use direct linear map.
+            const float cr = static_cast<float>(freqToPixelDirect(m_cr[cx])) - 128.0f;
+            const float cb = static_cast<float>(freqToPixelDirect(m_cb[cx])) - 128.0f;
 
             // Even line (row 0 of block)
             {
-                float y = m_useHilbert ? static_cast<float>(freqToPixelDirect(m_yEven[x]))
-                                       : static_cast<float>(freqToPixel(m_yEven[x]));
+                float y = static_cast<float>(freqToPixelDirect(m_yEven[x]));
                 int r = qBound(0, (int)(y + 1.402f * cr),                     255);
                 int g = qBound(0, (int)(y - 0.34414f * cb - 0.71414f * cr),   255);
                 int b = qBound(0, (int)(y + 1.772f * cb),                     255);
@@ -1175,8 +1161,7 @@ void SSTVDemodSink::commitBlockRobot36()
             }
             // Odd line (row 1 of block)
             {
-                float y = m_useHilbert ? static_cast<float>(freqToPixelDirect(m_yOdd[x]))
-                                       : static_cast<float>(freqToPixel(m_yOdd[x]));
+                float y = static_cast<float>(freqToPixelDirect(m_yOdd[x]));
                 int r = qBound(0, (int)(y + 1.402f * cr),                     255);
                 int g = qBound(0, (int)(y - 0.34414f * cb - 0.71414f * cr),   255);
                 int b = qBound(0, (int)(y + 1.772f * cb),                     255);
@@ -1204,15 +1189,10 @@ void SSTVDemodSink::commitBlockScottie()
     for (int x = 0; x < m_modeWidth; x++)
     {
         int r, g, b;
-        if (m_useHilbert) {
-            r = freqToPixelDirect(m_cr[x]);
-            g = freqToPixelDirect(m_scPendingGreen[x]);
-            b = freqToPixelDirect(m_scPendingBlue[x]);
-        } else {
-            r = freqToPixel(m_cr[x]);
-            g = freqToPixel(m_scPendingGreen[x]);
-            b = freqToPixel(m_scPendingBlue[x]);
-        }
+        // Both paths now output linearised true-Hz values; use direct linear map.
+        r = freqToPixelDirect(m_cr[x]);
+        g = freqToPixelDirect(m_scPendingGreen[x]);
+        b = freqToPixelDirect(m_scPendingBlue[x]);
         lineImage.setPixel(x, 0, qRgb(r, g, b));
     }
 
@@ -1238,15 +1218,10 @@ void SSTVDemodSink::commitBlockMartin()
     for (int x = 0; x < m_modeWidth; x++)
     {
         int r, g, b;
-        if (m_useHilbert) {
-            r = freqToPixelDirect(m_cr[x]);
-            g = freqToPixelDirect(m_yOdd[x]);
-            b = freqToPixelDirect(m_cb[x]);
-        } else {
-            r = freqToPixel(m_cr[x]);
-            g = freqToPixel(m_yOdd[x]);
-            b = freqToPixel(m_cb[x]);
-        }
+        // Both paths now output linearised true-Hz values; use direct linear map.
+        r = freqToPixelDirect(m_cr[x]);
+        g = freqToPixelDirect(m_yOdd[x]);
+        b = freqToPixelDirect(m_cb[x]);
         lineImage.setPixel(x, 0, qRgb(r, g, b));
     }
 

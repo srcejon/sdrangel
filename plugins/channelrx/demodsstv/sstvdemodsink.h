@@ -217,19 +217,21 @@ private:
     //   the pixel-level threshold.  For the Hilbert path, the same MA cancels
     //   the 1200 Hz and 2400 Hz Hilbert-FIR oscillations (see Hilbert section).
     //
-    // Truncated-range bias and piecewise calibration:
+    // Centroid linearisation (centroidToFreq):
     //   The centroid is only unbiased when summed over all N/2 bins.  Using
     //   k=1..2 (with N=32) introduces a systematic non-linear frequency shift
-    //   that varies from 0 Hz at 1500 Hz to −210 Hz near 1900 Hz.  A two-point
-    //   calibration only corrects at the two anchor frequencies, leaving up to
-    //   38-pixel errors at intermediate tones (e.g., 1700 Hz).
+    //   that varies from 0 Hz at 1500 Hz to −210 Hz near 1900 Hz.
     //
-    //   freqToPixel() instead uses a 17-point lookup table computed by simulation
-    //   of a pure cosine at every 50 Hz step from 1500 Hz to 2300 Hz (N=32, k=1..2,
-    //   MA=40, Fs=48000 Hz, 6000-sample steady-state mean).  Each entry stores the
-    //   measured centroid for that step; the corresponding pixel is i×(255/16) for
-    //   the i-th entry (uniformly spaced across the 255-pixel range).  Piecewise
-    //   linear interpolation between entries achieves sub-pixel accuracy everywhere.
+    //   centroidToFreq() inverts this non-linearity using a 17-point lookup table
+    //   (SDFT_CALIB_CENTROIDS) computed by simulation of a pure cosine at every
+    //   50 Hz step from 1500 Hz to 2300 Hz (N=32, k=1..2, MA=40, Fs=48000 Hz,
+    //   6000-sample steady-state mean).  Piecewise-linear interpolation gives a
+    //   linearised frequency estimate that matches the true tone to within ±2 Hz
+    //   at calibration points.
+    //
+    //   This linearised value replaces the raw centroid as the output of the SDFT
+    //   path, so both paths (SDFT and Hilbert) produce the same "true Hz" quantity.
+    //   freqToPixelDirect() then maps both to pixels with a single linear formula.
     //
     // The SDFT history is NOT reset at section transitions (Y_odd→Cr→Cb→Y_even).
     // Adjacent sections share the same 1500–2300 Hz frequency range, so the
@@ -248,10 +250,11 @@ private:
 
     // Centroid calibration lookup table: 17 entries at 50 Hz steps from 1500 Hz to 2300 Hz.
     // SDFT_CALIB_CENTROIDS[i] = steady-state mean SDFT centroid (Hz) for a true tone at
-    // (1500 + 50·i) Hz.  Entry spacing in pixel space is exactly 255/16 ≈ 15.9375 per step.
+    // (SDFT_CALIB_TRUE_MIN + SDFT_CALIB_TRUE_STEP·i) Hz.
     // Computed by simulation (pure cosine, N=32, k=1..2, MA=40, Fs=48000 Hz).
-    static constexpr int   SDFT_CALIB_N     = 17;   //!< Number of centroid calibration entries
-    static constexpr float SDFT_CALIB_STEP  = 255.0f / 16.0f; //!< Pixel increment per calibration step (255/16)
+    static constexpr int   SDFT_CALIB_N         = 17;      //!< Number of centroid calibration entries
+    static constexpr float SDFT_CALIB_TRUE_MIN  = 1500.0f; //!< True frequency (Hz) for first table entry
+    static constexpr float SDFT_CALIB_TRUE_STEP = 50.0f;   //!< True-frequency step (Hz) between entries
     static constexpr float SDFT_CALIB_CENTROIDS[SDFT_CALIB_N] = {
         1500.0f, 1502.0f, 1508.5f, 1520.4f, 1538.6f, 1563.9f, 1597.1f,
         1638.9f, 1689.5f, 1749.0f, 1817.2f, 1893.2f, 1975.9f, 2064.1f,
@@ -436,8 +439,8 @@ private:
     //   the shared m_freqMovAvg instance is used; it is reset in resetDecoder().
     //
     // Pixel mapping uses freqToPixelDirect(): a simple linear map
-    //   [SSTVDEMOD_BLACK_FREQ, SSTVDEMOD_WHITE_FREQ] → [0, 255]
-    // with no piecewise calibration because the Hilbert estimator is unbiased.
+    //   [SSTVDEMOD_BLACK_FREQ, SSTVDEMOD_WHITE_FREQ] → [0, 255].
+    //   Both paths produce a linearised true-Hz estimate so the same map applies.
     // -----------------------------------------------------------------------
     static constexpr int   N_HILBERT          = 63;          //!< Hilbert FIR length (samples); group delay = 31 samples = 3.4 pixels
     static constexpr int   HILBERT_M          = (N_HILBERT - 1) / 2; //!< Centre tap index = 31
@@ -610,36 +613,35 @@ private:
     void applyMode(); //!< Refresh runtime mode parameters from m_settings.m_sstvMode
     SSTVState getFirstDecodeState() const;
 
-    /** Convert SDFT centroid frequency (Hz) to pixel luminance value [0..255].
-     *  Uses a 17-point piecewise-linear lookup table (SDFT_CALIB_CENTROIDS) that maps
-     *  the non-linear centroid response back to a uniform [0..255] pixel scale.
-     *  Each table entry covers 50 Hz of true input frequency (1500–2300 Hz in steps of 50 Hz)
-     *  and 255/16 ≈ 15.94 pixel units.  The table was computed by simulation of a pure
-     *  cosine at each 50 Hz step (N=32, k=1..2, MA=40, Fs=48000 Hz, steady-state mean).
-     *  Used by the SDFT path (m_useHilbert = false). */
-    static int freqToPixel(float freq)
+    /** Convert SDFT power-weighted centroid (Hz) to estimated true tone frequency (Hz).
+     *  Inverts the non-linear centroid-vs-frequency response of the N=32, k=1..2 SDFT
+     *  using SDFT_CALIB_CENTROIDS (17-point table, 50 Hz steps, 1500–2300 Hz).
+     *  Piecewise-linear interpolation between table entries.
+     *  Applied by the SDFT path immediately after the moving-average filter so that
+     *  the output 'freq' is a linearised frequency in Hz — the same quantity produced
+     *  by the Hilbert path. */
+    static float centroidToFreq(float centroid)
     {
-        if (freq <= SDFT_CALIB_CENTROIDS[0])
-            return 0;
-        if (freq >= SDFT_CALIB_CENTROIDS[SDFT_CALIB_N - 1])
-            return 255;
+        if (centroid <= SDFT_CALIB_CENTROIDS[0])
+            return SDFT_CALIB_TRUE_MIN;
+        if (centroid >= SDFT_CALIB_CENTROIDS[SDFT_CALIB_N - 1])
+            return SDFT_CALIB_TRUE_MIN + float(SDFT_CALIB_N - 1) * SDFT_CALIB_TRUE_STEP;
         for (int i = 1; i < SDFT_CALIB_N; i++)
         {
-            if (freq <= SDFT_CALIB_CENTROIDS[i])
+            if (centroid <= SDFT_CALIB_CENTROIDS[i])
             {
-                const float t = (freq - SDFT_CALIB_CENTROIDS[i - 1]) /
+                const float t = (centroid - SDFT_CALIB_CENTROIDS[i - 1]) /
                                 (SDFT_CALIB_CENTROIDS[i] - SDFT_CALIB_CENTROIDS[i - 1]);
-                const float v = (float(i - 1) + t) * SDFT_CALIB_STEP;
-                return static_cast<int>(qBound(0.0f, v, 255.0f));
+                return SDFT_CALIB_TRUE_MIN + (float(i - 1) + t) * SDFT_CALIB_TRUE_STEP;
             }
         }
-        return 255;
+        return SDFT_CALIB_TRUE_MIN + float(SDFT_CALIB_N - 1) * SDFT_CALIB_TRUE_STEP;
     }
 
     /** Convert true instantaneous frequency (Hz) to pixel luminance value [0..255].
-     *  Uses a simple linear map [SSTVDEMOD_BLACK_FREQ, SSTVDEMOD_WHITE_FREQ] → [0, 255]
-     *  with no piecewise calibration, because the Hilbert IF estimator is unbiased.
-     *  Used by the Hilbert path (m_useHilbert = true). */
+     *  Uses a simple linear map [SSTVDEMOD_BLACK_FREQ, SSTVDEMOD_WHITE_FREQ] → [0, 255].
+     *  Used by both paths: the Hilbert path (unbiased IF estimator) and the SDFT path
+     *  (after centroidToFreq() has linearised the centroid). */
     static int freqToPixelDirect(float freq) {
         const float v = (freq - SSTVDEMOD_BLACK_FREQ) * 255.0f /
                         (SSTVDEMOD_WHITE_FREQ - SSTVDEMOD_BLACK_FREQ);

@@ -157,6 +157,7 @@ private:
     bool m_imageSaved;
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
+    bool m_alpacaFrameRequestPending;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
@@ -175,8 +176,8 @@ private:
 
     void reportFrameToGUI(const QImage& image);
     QString buildAlpacaBaseUrl() const;
-    QStringList queryAlpacaCameras();
-    QImage captureAlpacaImage();
+    QStringList parseAlpacaCameraList(const QByteArray& payload) const;
+    QImage parseAlpacaImage(const QByteArray& payload) const;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void setupQtCapture();

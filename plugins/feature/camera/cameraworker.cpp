@@ -18,9 +18,7 @@
 #include <algorithm>
 
 #include <QDebug>
-#include <QBuffer>
 #include <QDateTime>
-#include <QEventLoop>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -57,7 +55,8 @@ CameraWorker::CameraWorker() :
     m_capturing(false),
     m_imageSaved(false),
     m_captureTimer(this),
-    m_networkManager(nullptr)
+    m_networkManager(nullptr),
+    m_alpacaFrameRequestPending(false)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     , m_qtCamera(nullptr)
     , m_videoSink(nullptr)
@@ -180,30 +179,57 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
 
 void CameraWorker::reportCameraList()
 {
-    QStringList cameraIds;
-
     if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca)
     {
-        cameraIds = queryAlpacaCameras();
-
-        if (cameraIds.isEmpty()) {
-            cameraIds.append(QString("alpaca:%1").arg(m_settings.m_alpacaCameraId));
-        }
-    }
-    else
-    {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
-
-        for (const QCameraDevice& camera : cameras)
+        if (!m_networkManager)
         {
-            const QString id = QString::fromUtf8(camera.id());
-            cameraIds.append(id.isEmpty() ? camera.description() : id);
+            QStringList cameraIds;
+            cameraIds.append(QString("alpaca:%1").arg(m_settings.m_alpacaCameraId));
+
+            if (m_msgQueueToGUI) {
+                m_msgQueueToGUI->push(MsgReportCameraList::create(cameraIds));
+            }
+
+            return;
         }
-#else
-        cameraIds.append("Qt camera API unavailable (Qt6 required)");
-#endif
+
+        QNetworkRequest request(QUrl(buildAlpacaBaseUrl() + "/management/v1/configureddevices"));
+        QNetworkReply *reply = m_networkManager->get(request);
+
+        QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            QStringList cameraIds;
+
+            if (reply->error() == QNetworkReply::NoError) {
+                cameraIds = parseAlpacaCameraList(reply->readAll());
+            }
+
+            if (cameraIds.isEmpty()) {
+                cameraIds.append(QString("alpaca:%1").arg(m_settings.m_alpacaCameraId));
+            }
+
+            if (m_msgQueueToGUI) {
+                m_msgQueueToGUI->push(MsgReportCameraList::create(cameraIds));
+            }
+
+            reply->deleteLater();
+        });
+
+        return;
     }
+
+    QStringList cameraIds;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
+
+    for (const QCameraDevice& camera : cameras)
+    {
+        const QString id = QString::fromUtf8(camera.id());
+        cameraIds.append(id.isEmpty() ? camera.description() : id);
+    }
+#else
+    cameraIds.append("Qt camera API unavailable (Qt6 required)");
+#endif
 
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportCameraList::create(cameraIds));
@@ -221,6 +247,7 @@ void CameraWorker::startCapture()
 
     if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca)
     {
+        m_alpacaFrameRequestPending = false;
         const int intervalMs = std::max(10, 1000 / std::max(1, m_settings.m_framesPerSecond));
         m_captureTimer.start(intervalMs);
         captureTick();
@@ -251,11 +278,38 @@ void CameraWorker::captureTick()
         return;
     }
 
-    const QImage image = captureAlpacaImage();
-
-    if (!image.isNull()) {
-        processNewFrame(image);
+    if (!m_networkManager || m_alpacaFrameRequestPending) {
+        return;
     }
+
+    m_alpacaFrameRequestPending = true;
+
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/image").arg(m_settings.m_alpacaCameraId));
+    QUrlQuery query;
+    query.addQueryItem("ClientID", "1");
+    query.addQueryItem("ClientTransactionID", QString::number(QDateTime::currentMSecsSinceEpoch()));
+    url.setQuery(query);
+
+    QNetworkRequest request(url);
+    QNetworkReply *reply = m_networkManager->get(request);
+
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        m_alpacaFrameRequestPending = false;
+
+        if (!m_capturing) {
+            reply->deleteLater();
+            return;
+        }
+
+        QImage image = createPlaceholderFrame();
+
+        if (reply->error() == QNetworkReply::NoError) {
+            image = parseAlpacaImage(reply->readAll());
+        }
+
+        processNewFrame(image);
+        reply->deleteLater();
+    });
 }
 
 void CameraWorker::processNewFrame(const QImage& image)
@@ -283,28 +337,9 @@ QString CameraWorker::buildAlpacaBaseUrl() const
         .arg(m_settings.m_alpacaPort);
 }
 
-QStringList CameraWorker::queryAlpacaCameras()
+QStringList CameraWorker::parseAlpacaCameraList(const QByteArray& payload) const
 {
     QStringList result;
-
-    if (!m_networkManager) {
-        return result;
-    }
-
-    QNetworkRequest request(QUrl(buildAlpacaBaseUrl() + "/management/v1/configureddevices"));
-    QNetworkReply *reply = m_networkManager->get(request);
-
-    QEventLoop loop;
-    QTimer timeoutTimer;
-    timeoutTimer.setSingleShot(true);
-    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    timeoutTimer.start(3000);
-    loop.exec();
-
-    const QByteArray payload = reply->readAll();
-    reply->deleteLater();
-
     const QJsonDocument doc = QJsonDocument::fromJson(payload);
 
     if (!doc.isObject()) {
@@ -344,37 +379,8 @@ QStringList CameraWorker::queryAlpacaCameras()
     return result;
 }
 
-QImage CameraWorker::captureAlpacaImage()
+QImage CameraWorker::parseAlpacaImage(const QByteArray& payload) const
 {
-    if (!m_networkManager) {
-        return createPlaceholderFrame();
-    }
-
-    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/image").arg(m_settings.m_alpacaCameraId));
-    QUrlQuery query;
-    query.addQueryItem("ClientID", "1");
-    query.addQueryItem("ClientTransactionID", QString::number(QDateTime::currentMSecsSinceEpoch()));
-    url.setQuery(query);
-
-    QNetworkRequest request(url);
-    QNetworkReply *reply = m_networkManager->get(request);
-
-    QEventLoop loop;
-    QTimer timeoutTimer;
-    timeoutTimer.setSingleShot(true);
-    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    timeoutTimer.start(3000);
-    loop.exec();
-
-    const QByteArray payload = reply->readAll();
-    const bool hadError = reply->error() != QNetworkReply::NoError;
-    reply->deleteLater();
-
-    if (hadError) {
-        return createPlaceholderFrame();
-    }
-
     QImage image;
     image.loadFromData(payload);
 

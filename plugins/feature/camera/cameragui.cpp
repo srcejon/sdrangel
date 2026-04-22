@@ -146,7 +146,6 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     displaySettings();
     applySettings(true);
-    makeUIConnections();
     m_resizer.enableChildMouseTracking();
 }
 
@@ -198,10 +197,6 @@ void CameraGUI::applySettings(bool force)
     m_camera->getInputMessageQueue()->push(msg);
 
     m_settingsKeys.clear();
-}
-
-void CameraGUI::makeUIConnections()
-{
 }
 
 void CameraGUI::updateImageWidget()

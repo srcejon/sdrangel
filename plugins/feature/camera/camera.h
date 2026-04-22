@@ -1,0 +1,117 @@
+///////////////////////////////////////////////////////////////////////////////////
+// Copyright (C) 2026 Edouard Griffiths, F4EXB <f4exb06@gmail.com>               //
+//                                                                               //
+// This program is free software; you can redistribute it and/or modify          //
+// it under the terms of the GNU General Public License as published by          //
+// the Free Software Foundation as version 3 of the License, or                  //
+// (at your option) any later version.                                           //
+//                                                                               //
+// This program is distributed in the hope that it will be useful,               //
+// but WITHOUT ANY WARRANTY; without even the implied warranty of                //
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                  //
+// GNU General Public License V3 for more details.                               //
+//                                                                               //
+// You should have received a copy of the GNU General Public License             //
+// along with this program. If not, see <http://www.gnu.org/licenses/>.          //
+///////////////////////////////////////////////////////////////////////////////////
+
+#ifndef INCLUDE_FEATURE_CAMERA_H_
+#define INCLUDE_FEATURE_CAMERA_H_
+
+#include <QThread>
+#include "feature/feature.h"
+#include "util/message.h"
+#include "camerasettings.h"
+
+class WebAPIAdapterInterface;
+class CameraWorker;
+
+class Camera : public Feature
+{
+    Q_OBJECT
+public:
+    class MsgConfigureCamera : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const CameraSettings& getSettings() const { return m_settings; }
+        const QList<QString>& getSettingsKeys() const { return m_settingsKeys; }
+        bool getForce() const { return m_force; }
+
+        static MsgConfigureCamera* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
+        {
+            return new MsgConfigureCamera(settings, settingsKeys, force);
+        }
+
+    private:
+        CameraSettings m_settings;
+        QList<QString> m_settingsKeys;
+        bool m_force;
+
+        MsgConfigureCamera(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
+            Message(),
+            m_settings(settings),
+            m_settingsKeys(settingsKeys),
+            m_force(force)
+        { }
+    };
+
+    class MsgStartStop : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool getStartStop() const { return m_startStop; }
+
+        static MsgStartStop* create(bool startStop)
+        {
+            return new MsgStartStop(startStop);
+        }
+
+    private:
+        bool m_startStop;
+
+        MsgStartStop(bool startStop) :
+            Message(),
+            m_startStop(startStop)
+        { }
+    };
+
+    class MsgRefreshCameraList : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgRefreshCameraList* create()
+        {
+            return new MsgRefreshCameraList();
+        }
+
+    private:
+        MsgRefreshCameraList() : Message() {}
+    };
+
+    Camera(WebAPIAdapterInterface *webAPIAdapterInterface);
+    virtual ~Camera();
+    virtual void destroy() { delete this; }
+    virtual bool handleMessage(const Message& cmd);
+
+    virtual void getIdentifier(QString& id) const { id = objectName(); }
+    virtual QString getIdentifier() const { return objectName(); }
+    virtual void getTitle(QString& title) const { title = m_settings.m_title; }
+
+    virtual QByteArray serialize() const;
+    virtual bool deserialize(const QByteArray& data);
+
+    static const char* const m_featureIdURI;
+    static const char* const m_featureId;
+
+private:
+    QThread *m_thread;
+    CameraWorker *m_worker;
+    CameraSettings m_settings;
+
+    void startWorker();
+    void stopWorker();
+    void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
+};
+
+#endif // INCLUDE_FEATURE_CAMERA_H_

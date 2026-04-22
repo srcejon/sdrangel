@@ -1,0 +1,97 @@
+///////////////////////////////////////////////////////////////////////////////////
+// Copyright (C) 2026 Edouard Griffiths, F4EXB <f4exb06@gmail.com>               //
+//                                                                               //
+// This program is free software; you can redistribute it and/or modify          //
+// it under the terms of the GNU General Public License as published by          //
+// the Free Software Foundation as version 3 of the License, or                  //
+// (at your option) any later version.                                           //
+//                                                                               //
+// This program is distributed in the hope that it will be useful,               //
+// but WITHOUT ANY WARRANTY; without even the implied warranty of                //
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                  //
+// GNU General Public License V3 for more details.                               //
+//                                                                               //
+// You should have received a copy of the GNU General Public License             //
+// along with this program. If not, see <http://www.gnu.org/licenses/>.          //
+///////////////////////////////////////////////////////////////////////////////////
+
+#ifndef INCLUDE_FEATURE_CAMERAGUI_H_
+#define INCLUDE_FEATURE_CAMERAGUI_H_
+
+#include <QImage>
+
+#include "feature/featuregui.h"
+#include "util/messagequeue.h"
+#include "settings/rollupstate.h"
+#include "camerasettings.h"
+
+class PluginAPI;
+class FeatureUISet;
+class Camera;
+class Message;
+
+namespace Ui {
+    class CameraGUI;
+}
+
+class CameraGUI : public FeatureGUI {
+    Q_OBJECT
+public:
+    static CameraGUI* create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature);
+    virtual void destroy();
+
+    void resetToDefaults();
+    QByteArray serialize() const;
+    bool deserialize(const QByteArray& data);
+    virtual MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
+    virtual void setWorkspaceIndex(int index);
+    virtual int getWorkspaceIndex() const { return m_settings.m_workspaceIndex; }
+    virtual void setGeometryBytes(const QByteArray& blob) { m_settings.m_geometryBytes = blob; }
+    virtual QByteArray getGeometryBytes() const { return m_settings.m_geometryBytes; }
+
+private:
+    Ui::CameraGUI* ui;
+    PluginAPI* m_pluginAPI;
+    FeatureUISet* m_featureUISet;
+    CameraSettings m_settings;
+    QList<QString> m_settingsKeys;
+    RollupState m_rollupState;
+    bool m_doApplySettings;
+
+    Camera* m_camera;
+    MessageQueue m_inputMessageQueue;
+    QImage m_lastImage;
+
+    explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
+    virtual ~CameraGUI();
+
+    void blockApplySettings(bool block);
+    void applySettings(bool force = false);
+    void displaySettings();
+    bool handleMessage(const Message& message);
+    void makeUIConnections();
+    void updateImageWidget();
+
+private slots:
+    void handleInputMessages();
+    void on_startStop_clicked(bool checked);
+    void on_refreshCamerasButton_clicked();
+    void on_apiCombo_currentIndexChanged(int index);
+    void on_cameraCombo_currentTextChanged(const QString& text);
+    void on_resolutionWidth_valueChanged(int value);
+    void on_resolutionHeight_valueChanged(int value);
+    void on_fpsSpin_valueChanged(int value);
+    void on_exposureSpin_valueChanged(int value);
+    void on_isoSpin_valueChanged(int value);
+    void on_alpacaHostEdit_editingFinished();
+    void on_alpacaPortSpin_valueChanged(int value);
+    void on_alpacaCameraIdSpin_valueChanged(int value);
+    void on_saveImageCheck_toggled(bool checked);
+    void on_imagePathEdit_editingFinished();
+    void on_imagePathButton_clicked();
+    void on_saveVideoCheck_toggled(bool checked);
+    void on_videoPathEdit_editingFinished();
+    void on_videoPathButton_clicked();
+};
+
+#endif // INCLUDE_FEATURE_CAMERAGUI_H_

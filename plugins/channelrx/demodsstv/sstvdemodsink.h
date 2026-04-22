@@ -224,10 +224,11 @@ private:
     //
     //   centroidToFreq() inverts this non-linearity using a 9-point lookup table
     //   (SDFT_CALIB_CENTROIDS) derived from hardware measurements: each entry is the
-    //   observed steady-state MA centroid when a pure tone at the corresponding
-    //   true frequency (1500–2300 Hz in 100 Hz steps) is applied.  Piecewise-linear
-    //   interpolation between entries linearises the response across the full SSTV
-    //   pixel range.  Tones below 1500 Hz are clamped to 1500 Hz.
+    //   midpoint of the observed MA-centroid oscillation range when a pure tone at the
+    //   corresponding true frequency (1500–2300 Hz in 100 Hz steps) is applied.
+    //   Entries at 1800, 2000, and 2200 Hz are linearly interpolated from measured
+    //   neighbours.  Piecewise-linear interpolation between entries linearises the
+    //   response across the full SSTV pixel range.  Tones below 1500 Hz are clamped.
     //
     //   This linearised value replaces the raw centroid as the output of the SDFT
     //   path, so both paths (SDFT and Hilbert) produce the same "true Hz" quantity.
@@ -251,13 +252,19 @@ private:
     // Centroid calibration lookup table: 9 entries at 100 Hz steps from 1500 Hz to 2300 Hz.
     // SDFT_CALIB_CENTROIDS[i] = measured steady-state MA centroid (Hz) for a true tone at
     // (SDFT_CALIB_TRUE_MIN + SDFT_CALIB_TRUE_STEP·i) Hz.
-    // Derived from hardware measurements (not simulation): the raw SDFT centroid output
-    // was observed at each 100 Hz step across the SSTV pixel range.
+    // Derived from hardware measurements (not simulation): the raw SDFT MA-centroid output
+    // oscillates slightly at each tone; the midpoint of the observed oscillation range is used.
+    // Entries at 1800, 2000, 2200 Hz are linearly interpolated from the measured neighbours.
+    // Measured oscillation ranges (true Hz → centroid range → midpoint used):
+    //   1500 → 1500–1583 → 1541.5    1600 → 1520–1617 → 1568.5    1700 → 1678–1711 → 1694.5
+    //   1900 → 1875–1915 → 1895.0    2100 → 2088–2127 → 2107.5    2300 → 2290–2300 → 2295.0
     static constexpr int   SDFT_CALIB_N         = 9;       //!< Number of centroid calibration entries
     static constexpr float SDFT_CALIB_TRUE_MIN  = 1500.0f; //!< True frequency (Hz) for first table entry
     static constexpr float SDFT_CALIB_TRUE_STEP = 100.0f;  //!< True-frequency step (Hz) between entries
     static constexpr float SDFT_CALIB_CENTROIDS[SDFT_CALIB_N] = {
-        1511.0f, 1520.0f, 1550.0f, 1616.0f, 1712.0f, 1840.0f, 1980.0f, 2160.0f, 2320.0f
+        // 1500 Hz   1600 Hz   1700 Hz   1800 Hz*  1900 Hz   2000 Hz*  2100 Hz   2200 Hz*  2300 Hz
+        // (* interpolated)
+        1541.5f,  1568.5f,  1694.5f,  1794.75f, 1895.0f,  2001.25f, 2107.5f,  2201.25f, 2295.0f
     };
 
     float   m_sdftBuf[N_SDFT];            //!< Circular ring buffer of fmDemod samples

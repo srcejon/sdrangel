@@ -34,7 +34,7 @@ This specifies the bandwidth of a LPF that is applied to the input signal to lim
 
 <h3>5: Dev - Frequency deviation</h3>
 
-Adjusts the expected frequency deviation in 0.1 kHz steps from 1 to 5 kHz. Typical value to RS41 is 2.4kHz.
+Adjusts the expected peak frequency deviation in 0.1 kHz steps from 1 to 5 kHz. Typical value to RS41 is ±2.4kHz.
 
 <h3>6: TH - Correlation Threshold</h3>
 

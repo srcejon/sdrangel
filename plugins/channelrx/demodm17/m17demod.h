@@ -286,6 +286,7 @@ private:
     bool m_running;
 	M17DemodSettings m_settings;
     int m_basebandSampleRate; //!< stored from device message used when starting baseband sink
+    qint64 m_centerFrequency;
     BasebandSampleSink *m_scopeXYSink;
     QNetworkAccessManager *m_networkManager;
     QNetworkRequest m_networkRequest;

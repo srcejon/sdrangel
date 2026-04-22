@@ -58,7 +58,8 @@ WDSPRx::WDSPRx(DeviceAPI *deviceAPI) :
         m_basebandSink(nullptr),
         m_running(false),
         m_spectrumVis(SDR_RX_SCALEF),
-        m_basebandSampleRate(0)
+        m_basebandSampleRate(0),
+        m_centerFrequency(0)
 {
 	setObjectName(m_channelId);
 
@@ -168,11 +169,10 @@ void WDSPRx::start()
         &QThread::deleteLater
     );
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
-
     m_thread->start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     WDSPRxBaseband::MsgConfigureWDSPRxBaseband *msg = WDSPRxBaseband::MsgConfigureWDSPRxBaseband::create(QStringList(), m_settings, true);
     m_basebandSink->getInputMessageQueue()->push(msg);
@@ -210,6 +210,7 @@ bool WDSPRx::handleMessage(const Message& cmd)
         qDebug() << "WDSPRx::handleMessage: DSPSignalNotification";
         auto& notif = (const DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         // Forward to the sink
         if (m_running) {
             m_basebandSink->getInputMessageQueue()->push(new DSPSignalNotification(notif));

@@ -32,7 +32,7 @@ This specifies the bandwidth of a LPF that is applied to the output signal to li
 
 <h3>6: Frequency deviation</h3>
 
-Adjusts the frequency deviation in 0.1 kHz steps from 1 to 6 kHz. Typical values are 2.5 kHz and 5 kHz.
+Adjusts the frequency peak deviation in 0.1 kHz steps from 1 to 6 kHz. Typical values are ±2.5 kHz and ±5 kHz.
 
 <h3>7: Gain</h3>
 

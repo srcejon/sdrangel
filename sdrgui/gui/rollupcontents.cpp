@@ -122,7 +122,7 @@ int RollupContents::arrangeRollups()
                 }
                 int h = 0;
                 if (r->hasHeightForWidth()) {
-                    h = r->heightForWidth(width() - 4);
+                    h = r->heightForWidth(width() - 4); // FIXME: This is preferred height for the given width, not the minimum height.
                 } else {
                     h = r->minimumSizeHint().height();
                 }

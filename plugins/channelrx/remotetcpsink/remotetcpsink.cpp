@@ -54,6 +54,7 @@ RemoteTCPSink::RemoteTCPSink(DeviceAPI *deviceAPI) :
         ChannelAPI(m_channelIdURI, ChannelAPI::StreamSingleSink),
         m_deviceAPI(deviceAPI),
         m_basebandSampleRate(0),
+        m_centerFrequency(0),
         m_clients(0),
         m_removeRequest(nullptr)
 {
@@ -145,9 +146,8 @@ void RemoteTCPSink::start()
     m_basebandSink->startWork();
     m_thread.start();
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     MsgConfigureRemoteTCPSink* msg = MsgConfigureRemoteTCPSink::create(m_settings, QStringList(), true, true);
     m_basebandSink->getInputMessageQueue()->push(msg);
@@ -180,6 +180,7 @@ bool RemoteTCPSink::handleMessage(const Message& cmd)
     {
         const DSPSignalNotification& notif = (const DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         qDebug() << "RemoteTCPSink::handleMessage: DSPSignalNotification: m_basebandSampleRate:" << m_basebandSampleRate;
 
         // Forward to the sink

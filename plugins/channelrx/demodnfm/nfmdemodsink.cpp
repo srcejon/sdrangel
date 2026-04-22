@@ -317,7 +317,7 @@ void NFMDemodSink::applySettings(const QStringList& settingsKeys, const NFMDemod
         Real lowCut = -Real(settings.m_fmDeviation) / m_channelSampleRate;
         Real hiCut  = Real(settings.m_fmDeviation) / m_channelSampleRate;
         m_rfFilter.create_filter(lowCut, hiCut);
-        m_phaseDiscri.setFMScaling(Real(m_audioSampleRate) / (2.0f * settings.m_fmDeviation));
+        m_phaseDiscri.setFMScaling(Real(m_audioSampleRate) / settings.m_fmDeviation);
     }
 
     if ((settingsKeys.contains("afBandwidth") && (settings.m_afBandwidth != m_settings.m_afBandwidth)) || force)
@@ -386,7 +386,7 @@ void NFMDemodSink::applyAudioSampleRate(unsigned int sampleRate)
     }
 
     m_afSquelch.setThreshold(m_squelchLevel);
-    m_phaseDiscri.setFMScaling(Real(sampleRate) / (2.0f * m_settings.m_fmDeviation));
+    m_phaseDiscri.setFMScaling(Real(sampleRate) / m_settings.m_fmDeviation); // m_fmDeviation is full rather than peak deviation, so the usual factor of 2 is cancelled
     m_audioFifo.setSize(sampleRate);
     m_squelchDelayLine.resize(sampleRate/2);
     m_interpolatorDistance = Real(m_channelSampleRate) / Real(sampleRate);

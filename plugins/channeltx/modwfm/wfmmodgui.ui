@@ -302,7 +302,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Modulation percentage</string>
+         <string>Peak frequency deviation</string>
         </property>
         <property name="maximum">
          <number>100</number>
@@ -327,7 +327,7 @@
          </size>
         </property>
         <property name="text">
-         <string>50k</string>
+         <string>±50k</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>

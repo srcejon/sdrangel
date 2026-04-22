@@ -36,7 +36,7 @@ struct AISDemodSettings
     qint32 m_baud;
     qint32 m_inputFrequencyOffset;
     Real m_rfBandwidth;
-    Real m_fmDeviation;
+    Real m_fmDeviation; //!< Peak deviation to give modulation index of 0.5 for 9600 baud
     Real m_correlationThreshold;
     QString m_filterMMSI;
     bool m_udpEnabled;

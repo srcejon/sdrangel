@@ -160,6 +160,7 @@ private:
     SSBDemodSettings m_settings;
     SpectrumVis m_spectrumVis;
     int m_basebandSampleRate; //!< stored from device message used when starting baseband sink
+    qint64 m_centerFrequency;
 
     QNetworkAccessManager *m_networkManager;
     QNetworkRequest m_networkRequest;

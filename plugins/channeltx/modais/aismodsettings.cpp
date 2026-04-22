@@ -35,7 +35,7 @@ void AISModSettings::resetToDefaults()
     m_inputFrequencyOffset = 0;
     m_baud = 9600; // nominal value
     m_rfBandwidth = 25000.0f; // 12.5k for narrow, 25k for wide (narrow is obsolete)
-    m_fmDeviation = 4800.0f; // To give modulation index of 0.5 for 9600 baud
+    m_fmDeviation = 4800.0f; // Peak deviation - To give modulation index of 0.5 for 9600 baud
     m_gain = -1.0f; // To avoid overflow, which results in out-of-band RF
     m_channelMute = false;
     m_repeat = false;

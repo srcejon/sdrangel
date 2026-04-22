@@ -15,6 +15,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <algorithm>
 #include <QColor>
 #include <sstream>
 
@@ -109,9 +110,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(7, &m_framesPerSecond, 10);
         d.readS32(8, &m_exposureTimeMs, 50);
         d.readS32(9, &m_isoSensitivity, 400);
+        m_resolutionWidth = std::max(16, m_resolutionWidth);
+        m_resolutionHeight = std::max(16, m_resolutionHeight);
+        m_framesPerSecond = std::max(1, m_framesPerSecond);
+        m_exposureTimeMs = std::max(1, m_exposureTimeMs);
+        m_isoSensitivity = std::max(1, m_isoSensitivity);
         d.readString(10, &m_alpacaHost, "127.0.0.1");
         d.readU32(11, &utmp, 11111);
-        m_alpacaPort = static_cast<uint16_t>(utmp > 65535 ? 11111 : utmp);
+        m_alpacaPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
         d.readS32(12, &m_alpacaCameraId, 0);
         d.readBool(13, &m_saveImage, false);
         d.readString(14, &m_imageFileName, "camera.jpg");
@@ -150,19 +156,19 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_cameraId = settings.m_cameraId;
     }
     if (settingsKeys.contains("resolutionWidth")) {
-        m_resolutionWidth = settings.m_resolutionWidth;
+        m_resolutionWidth = std::max(16, settings.m_resolutionWidth);
     }
     if (settingsKeys.contains("resolutionHeight")) {
-        m_resolutionHeight = settings.m_resolutionHeight;
+        m_resolutionHeight = std::max(16, settings.m_resolutionHeight);
     }
     if (settingsKeys.contains("framesPerSecond")) {
-        m_framesPerSecond = settings.m_framesPerSecond;
+        m_framesPerSecond = std::max(1, settings.m_framesPerSecond);
     }
     if (settingsKeys.contains("exposureTimeMs")) {
-        m_exposureTimeMs = settings.m_exposureTimeMs;
+        m_exposureTimeMs = std::max(1, settings.m_exposureTimeMs);
     }
     if (settingsKeys.contains("isoSensitivity")) {
-        m_isoSensitivity = settings.m_isoSensitivity;
+        m_isoSensitivity = std::max(1, settings.m_isoSensitivity);
     }
     if (settingsKeys.contains("alpacaHost")) {
         m_alpacaHost = settings.m_alpacaHost;

@@ -16,6 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cmath>
 
 #include <QDebug>
 #include <QDateTime>
@@ -43,6 +44,10 @@
 #endif
 
 #include "cameraworker.h"
+
+namespace {
+constexpr int ALPACA_CLIENT_ID = 1;
+}
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
@@ -248,7 +253,7 @@ void CameraWorker::startCapture()
     if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca)
     {
         m_alpacaFrameRequestPending = false;
-        const int intervalMs = std::max(10, 1000 / std::max(1, m_settings.m_framesPerSecond));
+        const int intervalMs = std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond))));
         m_captureTimer.start(intervalMs);
         captureTick();
     }
@@ -286,7 +291,7 @@ void CameraWorker::captureTick()
 
     QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/image").arg(m_settings.m_alpacaCameraId));
     QUrlQuery query;
-    query.addQueryItem("ClientID", "1");
+    query.addQueryItem("ClientID", QString::number(ALPACA_CLIENT_ID));
     query.addQueryItem("ClientTransactionID", QString::number(QDateTime::currentMSecsSinceEpoch()));
     url.setQuery(query);
 

@@ -16,11 +16,3 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include "camerawebapiadapter.h"
-
-CameraWebAPIAdapter::CameraWebAPIAdapter()
-{
-}
-
-CameraWebAPIAdapter::~CameraWebAPIAdapter()
-{
-}

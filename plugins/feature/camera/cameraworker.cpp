@@ -74,8 +74,8 @@ CameraWorker::~CameraWorker()
 
 void CameraWorker::startWork()
 {
-    connect(&m_inputMessageQueue, SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
-    connect(&m_captureTimer, SIGNAL(timeout()), this, SLOT(captureTick()));
+    QObject::connect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraWorker::handleInputMessages);
+    QObject::connect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
 
     if (!m_networkManager) {
         m_networkManager = new QNetworkAccessManager(this);
@@ -89,8 +89,8 @@ void CameraWorker::startWork()
 
 void CameraWorker::stopWork()
 {
-    disconnect(&m_inputMessageQueue, SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
-    disconnect(&m_captureTimer, SIGNAL(timeout()), this, SLOT(captureTick()));
+    QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraWorker::handleInputMessages);
+    QObject::disconnect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
     stopCapture();
     m_inputMessageQueue.clear();
 }
@@ -297,8 +297,8 @@ QStringList CameraWorker::queryAlpacaCameras()
     QEventLoop loop;
     QTimer timeoutTimer;
     timeoutTimer.setSingleShot(true);
-    connect(&timeoutTimer, SIGNAL(timeout()), &loop, SLOT(quit()));
-    connect(reply, SIGNAL(finished()), &loop, SLOT(quit()));
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     timeoutTimer.start(3000);
     loop.exec();
 
@@ -362,8 +362,8 @@ QImage CameraWorker::captureAlpacaImage()
     QEventLoop loop;
     QTimer timeoutTimer;
     timeoutTimer.setSingleShot(true);
-    connect(&timeoutTimer, SIGNAL(timeout()), &loop, SLOT(quit()));
-    connect(reply, SIGNAL(finished()), &loop, SLOT(quit()));
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     timeoutTimer.start(3000);
     loop.exec();
 

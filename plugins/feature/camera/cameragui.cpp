@@ -202,7 +202,6 @@ void CameraGUI::applySettings(bool force)
 
 void CameraGUI::makeUIConnections()
 {
-    connect(this, SIGNAL(customContextMenuRequested(const QPoint&)), this, SLOT(handleInputMessages()));
 }
 
 void CameraGUI::updateImageWidget()

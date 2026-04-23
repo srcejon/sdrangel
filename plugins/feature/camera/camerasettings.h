@@ -67,6 +67,11 @@ struct CameraSettings
     QColor m_dateTimeColor;   ///< Colour for the date/time overlay text
     bool m_diffMask;          ///< Show pixel differences from previous frame
     int m_dilationSize;       ///< Kernel radius for diff-mask dilation: 0..20
+    int    m_overlayFontIndex;  ///< OpenCV Hershey font index: 0..7
+    double m_overlayFontScale;  ///< Font scale for cv::putText: 0.3..3.0
+    bool   m_motionDetect;      ///< Enable MOG2 background subtractor
+    QColor m_motionBoxColor;    ///< Bounding box colour for motion contours
+    int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
 
     CameraSettings();
     ~CameraSettings() = default;

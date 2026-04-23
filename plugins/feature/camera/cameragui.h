@@ -21,6 +21,7 @@
 #include <QColor>
 #include <QDateTime>
 #include <QImage>
+#include <opencv2/video/background_segm.hpp>
 
 #include "feature/featuregui.h"
 #include "util/messagequeue.h"
@@ -68,6 +69,7 @@ private:
     QDateTime m_captureDateTime;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
+    mutable cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
 
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     virtual ~CameraGUI();
@@ -81,6 +83,7 @@ private:
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateImageWidget();
     [[nodiscard]] QImage applyPostProcessing(const QImage& input) const;
+    static void updateColorButton(QToolButton* btn, const QColor& color);
 
 private slots:
     void handleInputMessages();
@@ -116,6 +119,11 @@ private slots:
     void on_diffMaskButton_toggled(bool checked);
     void on_dilationSpin_valueChanged(int value);
     void on_histogramButton_clicked();
+    void on_overlayFontCombo_currentIndexChanged(int index);
+    void on_overlayFontScaleSpin_valueChanged(double value);
+    void on_motionDetectButton_toggled(bool checked);
+    void on_minContourAreaSpin_valueChanged(int value);
+    void on_motionBoxColorButton_clicked();
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

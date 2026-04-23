@@ -21,6 +21,7 @@
 #include <QPixmap>
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/video/background_segm.hpp>
 
 #include "feature/featureuiset.h"
 
@@ -268,6 +269,12 @@ void CameraGUI::displaySettings()
     ui->overlayDateTimeButton->setChecked(m_settings.m_overlayDateTime);
     ui->diffMaskButton->setChecked(m_settings.m_diffMask);
     ui->dilationSpin->setValue(m_settings.m_dilationSize);
+    ui->overlayFontCombo->setCurrentIndex(m_settings.m_overlayFontIndex);
+    ui->overlayFontScaleSpin->setValue(m_settings.m_overlayFontScale);
+    ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
+    ui->minContourAreaSpin->setValue(m_settings.m_minContourArea);
+    updateColorButton(ui->dateTimeColorButton, m_settings.m_dateTimeColor);
+    updateColorButton(ui->motionBoxColorButton, m_settings.m_motionBoxColor);
     updateAlpacaVisibility();
 }
 
@@ -327,6 +334,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->diffMaskButton, &QToolButton::toggled, this, &CameraGUI::on_diffMaskButton_toggled);
     QObject::connect(ui->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
     QObject::connect(ui->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
+    QObject::connect(ui->overlayFontCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_overlayFontCombo_currentIndexChanged);
+    QObject::connect(ui->overlayFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayFontScaleSpin_valueChanged);
+    QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
+    QObject::connect(ui->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
+    QObject::connect(ui->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
 }
 
 void CameraGUI::updateAlpacaVisibility()
@@ -671,7 +683,8 @@ QImage CameraGUI::applyPostProcessing(const QImage& input) const
     const bool needsAny = needsBrightContrast
         || m_settings.m_invertColors
         || m_settings.m_overlayDateTime
-        || (m_settings.m_diffMask && !m_previousImage.isNull());
+        || (m_settings.m_diffMask && !m_previousImage.isNull())
+        || m_settings.m_motionDetect;
 
     if (!needsAny) {
         return input;
@@ -729,17 +742,51 @@ QImage CameraGUI::applyPostProcessing(const QImage& input) const
         bgrMat = result;
     }
 
+    // Motion detection — MOG2 background subtractor
+    if (m_settings.m_motionDetect)
+    {
+        if (!m_bgSubtractor) {
+            m_bgSubtractor = cv::createBackgroundSubtractorMOG2();
+        }
+
+        cv::Mat fgMask;
+        m_bgSubtractor->apply(bgrMat, fgMask);
+
+        // Remove shadows (value 127) — keep only definite foreground (255)
+        cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
+
+        // Find and draw contours above minimum area threshold
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+        const QColor& bc = m_settings.m_motionBoxColor;
+        const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red()); // BGR
+        for (const auto& contour : contours)
+        {
+            if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea))
+            {
+                cv::rectangle(bgrMat, cv::boundingRect(contour), boxColor, 2);
+            }
+        }
+    }
+
     // Date/time overlay — apply before final colour conversion
     if (m_settings.m_overlayDateTime)
     {
         const QString text = m_captureDateTime.toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
         const QColor& c = m_settings.m_dateTimeColor;
         const cv::Scalar textColor(c.blue(), c.green(), c.red()); // BGR
+        static const int kHersheyFonts[] = {
+            cv::FONT_HERSHEY_SIMPLEX, cv::FONT_HERSHEY_PLAIN, cv::FONT_HERSHEY_DUPLEX,
+            cv::FONT_HERSHEY_COMPLEX, cv::FONT_HERSHEY_TRIPLEX, cv::FONT_HERSHEY_COMPLEX_SMALL,
+            cv::FONT_HERSHEY_SCRIPT_SIMPLEX, cv::FONT_HERSHEY_SCRIPT_COMPLEX
+        };
+        const int fontFace = kHersheyFonts[qBound(0, m_settings.m_overlayFontIndex, 7)];
         cv::putText(bgrMat,
                     text.toStdString(),
                     cv::Point(4, bgrMat.rows - 6),
-                    cv::FONT_HERSHEY_SIMPLEX,
-                    0.5,
+                    fontFace,
+                    m_settings.m_overlayFontScale,
                     textColor,
                     1,
                     cv::LINE_AA);
@@ -794,6 +841,7 @@ void CameraGUI::on_dateTimeColorButton_clicked()
     if (color.isValid())
     {
         m_settings.m_dateTimeColor = color;
+        updateColorButton(ui->dateTimeColorButton, m_settings.m_dateTimeColor);
         m_settingsKeys.append("dateTimeColor");
         applySettings();
         updateImageWidget();
@@ -825,5 +873,62 @@ void CameraGUI::on_histogramButton_clicked()
     {
         CameraHistogramDialog dialog(m_lastImage, this);
         dialog.exec();
+    }
+}
+
+/*static*/ void CameraGUI::updateColorButton(QToolButton* btn, const QColor& color)
+{
+    const int luminance = color.red() * 299 + color.green() * 587 + color.blue() * 114;
+    const QString textColor = (luminance > 128000) ? QStringLiteral("black") : QStringLiteral("white");
+    btn->setStyleSheet(
+        QString("background-color: %1; color: %2;").arg(color.name(), textColor));
+}
+
+void CameraGUI::on_overlayFontCombo_currentIndexChanged(int index)
+{
+    m_settings.m_overlayFontIndex = index;
+    m_settingsKeys.append("overlayFontIndex");
+    applySettings();
+    updateImageWidget();
+}
+
+void CameraGUI::on_overlayFontScaleSpin_valueChanged(double value)
+{
+    m_settings.m_overlayFontScale = value;
+    m_settingsKeys.append("overlayFontScale");
+    applySettings();
+    updateImageWidget();
+}
+
+void CameraGUI::on_motionDetectButton_toggled(bool checked)
+{
+    m_settings.m_motionDetect = checked;
+    if (!checked) {
+        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
+    }
+    m_settingsKeys.append("motionDetect");
+    applySettings();
+    updateImageWidget();
+}
+
+void CameraGUI::on_minContourAreaSpin_valueChanged(int value)
+{
+    m_settings.m_minContourArea = value;
+    m_settingsKeys.append("minContourArea");
+    applySettings();
+    updateImageWidget();
+}
+
+void CameraGUI::on_motionBoxColorButton_clicked()
+{
+    const QColor color = QColorDialog::getColor(m_settings.m_motionBoxColor, this, tr("Select bounding box colour"));
+
+    if (color.isValid())
+    {
+        m_settings.m_motionBoxColor = color;
+        updateColorButton(ui->motionBoxColorButton, color);
+        m_settingsKeys.append("motionBoxColor");
+        applySettings();
+        updateImageWidget();
     }
 }

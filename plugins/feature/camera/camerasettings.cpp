@@ -62,6 +62,11 @@ void CameraSettings::resetToDefaults()
     m_dateTimeColor = Qt::white;
     m_diffMask = false;
     m_dilationSize = 3;
+    m_overlayFontIndex = 0;
+    m_overlayFontScale = 0.5;
+    m_motionDetect = false;
+    m_motionBoxColor = Qt::red;
+    m_minContourArea = 100;
 }
 
 QByteArray CameraSettings::serialize() const
@@ -104,6 +109,11 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(30, m_dateTimeColor.rgba());
     s.writeBool(31, m_diffMask);
     s.writeS32(32, m_dilationSize);
+    s.writeS32(33, m_overlayFontIndex);
+    s.writeDouble(34, m_overlayFontScale);
+    s.writeBool(35, m_motionDetect);
+    s.writeU32(36, m_motionBoxColor.rgba());
+    s.writeS32(37, m_minContourArea);
 
     return s.final();
 }
@@ -177,6 +187,17 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_brightness = qBound(-100.0, m_brightness, 100.0);
         m_contrast = qBound(0.1, m_contrast, 3.0);
         m_dilationSize = qBound(0, m_dilationSize, 20);
+
+        d.readS32(33, &m_overlayFontIndex, 0);
+        d.readDouble(34, &m_overlayFontScale, 0.5);
+        d.readBool(35, &m_motionDetect, false);
+        uint32_t motionBoxColorRgba = QColor(Qt::red).rgba();
+        d.readU32(36, &motionBoxColorRgba, QColor(Qt::red).rgba());
+        m_motionBoxColor = QColor::fromRgba(motionBoxColorRgba);
+        d.readS32(37, &m_minContourArea, 100);
+        m_overlayFontIndex = qBound(0, m_overlayFontIndex, 7);
+        m_overlayFontScale = qBound(0.3, m_overlayFontScale, 3.0);
+        m_minContourArea = qBound(0, m_minContourArea, 10000);
 
         return true;
     }
@@ -277,6 +298,21 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("dilationSize")) {
         m_dilationSize = qBound(0, settings.m_dilationSize, 20);
     }
+    if (settingsKeys.contains("overlayFontIndex")) {
+        m_overlayFontIndex = qBound(0, settings.m_overlayFontIndex, 7);
+    }
+    if (settingsKeys.contains("overlayFontScale")) {
+        m_overlayFontScale = qBound(0.3, settings.m_overlayFontScale, 3.0);
+    }
+    if (settingsKeys.contains("motionDetect")) {
+        m_motionDetect = settings.m_motionDetect;
+    }
+    if (settingsKeys.contains("motionBoxColor")) {
+        m_motionBoxColor = settings.m_motionBoxColor;
+    }
+    if (settingsKeys.contains("minContourArea")) {
+        m_minContourArea = qBound(0, settings.m_minContourArea, 10000);
+    }
 }
 
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
@@ -363,6 +399,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("dilationSize") || force) {
         ostr << " m_dilationSize: " << m_dilationSize;
+    }
+    if (settingsKeys.contains("overlayFontIndex") || force) {
+        ostr << " m_overlayFontIndex: " << m_overlayFontIndex;
+    }
+    if (settingsKeys.contains("overlayFontScale") || force) {
+        ostr << " m_overlayFontScale: " << m_overlayFontScale;
+    }
+    if (settingsKeys.contains("motionDetect") || force) {
+        ostr << " m_motionDetect: " << m_motionDetect;
+    }
+    if (settingsKeys.contains("minContourArea") || force) {
+        ostr << " m_minContourArea: " << m_minContourArea;
     }
 
     return QString(ostr.str().c_str());

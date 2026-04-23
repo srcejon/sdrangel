@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) 2026 Edouard Griffiths, F4EXB <f4exb06@gmail.com>               //
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -99,6 +99,28 @@ bool CameraGUI::handleMessage(const Message& message)
 
         return true;
     }
+    else if (CameraWorker::MsgReportResolutions::match(message))
+    {
+        const CameraWorker::MsgReportResolutions& report = (CameraWorker::MsgReportResolutions&) message;
+        const QString current = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
+
+        ui->resolutionCombo->blockSignals(true);
+        ui->resolutionCombo->clear();
+
+        for (const QSize& size : report.getResolutions()) {
+            ui->resolutionCombo->addItem(QString("%1x%2").arg(size.width()).arg(size.height()));
+        }
+
+        const int idx = ui->resolutionCombo->findText(current);
+        if (idx >= 0) {
+            ui->resolutionCombo->setCurrentIndex(idx);
+        } else if (ui->resolutionCombo->count() > 0) {
+            ui->resolutionCombo->setCurrentIndex(0);
+        }
+
+        ui->resolutionCombo->blockSignals(false);
+        return true;
+    }
     else if (CameraWorker::MsgReportFrame::match(message))
     {
         const CameraWorker::MsgReportFrame& report = (CameraWorker::MsgReportFrame&) message;
@@ -146,6 +168,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     displaySettings();
     applySettings(true);
+    makeUIConnections();
     m_resizer.enableChildMouseTracking();
 }
 
@@ -173,8 +196,13 @@ void CameraGUI::displaySettings()
     ui->startStop->setChecked(m_settings.m_captureActive);
     ui->apiCombo->setCurrentIndex(static_cast<int>(m_settings.m_cameraAPI));
     ui->cameraCombo->setCurrentText(m_settings.m_cameraId);
-    ui->resolutionWidth->setValue(m_settings.m_resolutionWidth);
-    ui->resolutionHeight->setValue(m_settings.m_resolutionHeight);
+
+    const QString resText = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
+    const int resIdx = ui->resolutionCombo->findText(resText);
+    if (resIdx >= 0) {
+        ui->resolutionCombo->setCurrentIndex(resIdx);
+    }
+
     ui->fpsSpin->setValue(m_settings.m_framesPerSecond);
     ui->exposureSpin->setValue(m_settings.m_exposureTimeMs);
     ui->isoSpin->setValue(m_settings.m_isoSensitivity);
@@ -185,6 +213,7 @@ void CameraGUI::displaySettings()
     ui->imagePathEdit->setText(m_settings.m_imageFileName);
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
     ui->videoPathEdit->setText(m_settings.m_videoFileName);
+    updateAlpacaVisibility();
 }
 
 void CameraGUI::applySettings(bool force)
@@ -212,7 +241,42 @@ void CameraGUI::updateImageWidget()
     ));
 }
 
-void CameraGUI::on_startStop_clicked(bool checked)
+void CameraGUI::makeUIConnections()
+{
+    QObject::connect(ui->startStop, &QPushButton::clicked, this, &CameraGUI::on_startStop_clicked);
+    QObject::connect(ui->refreshCamerasButton, &QPushButton::clicked, this, &CameraGUI::on_refreshCamerasButton_clicked);
+    QObject::connect(ui->apiCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_apiCombo_currentIndexChanged);
+    QObject::connect(ui->cameraCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_cameraCombo_currentTextChanged);
+    QObject::connect(ui->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
+    QObject::connect(ui->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
+    QObject::connect(ui->exposureSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
+    QObject::connect(ui->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
+    QObject::connect(ui->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
+    QObject::connect(ui->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
+    QObject::connect(ui->alpacaCameraIdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaCameraIdSpin_valueChanged);
+    QObject::connect(ui->saveImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveImageCheck_toggled);
+    QObject::connect(ui->imagePathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_imagePathEdit_editingFinished);
+    QObject::connect(ui->imagePathButton, &QPushButton::clicked, this, &CameraGUI::on_imagePathButton_clicked);
+    QObject::connect(ui->saveVideoCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveVideoCheck_toggled);
+    QObject::connect(ui->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
+    QObject::connect(ui->videoPathButton, &QPushButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
+}
+
+void CameraGUI::updateAlpacaVisibility()
+{
+    const bool alpaca = (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca);
+
+    ui->resolutionLabel->setVisible(!alpaca);
+    ui->resolutionCombo->setVisible(!alpaca);
+    ui->alpacaHostLabel->setVisible(alpaca);
+    ui->alpacaHostEdit->setVisible(alpaca);
+    ui->alpacaPortLabel->setVisible(alpaca);
+    ui->alpacaPortSpin->setVisible(alpaca);
+    ui->alpacaCameraIdLabel->setVisible(alpaca);
+    ui->alpacaCameraIdSpin->setVisible(alpaca);
+}
+
+
 {
     m_settings.m_captureActive = checked;
     m_settingsKeys.append("captureActive");
@@ -229,6 +293,7 @@ void CameraGUI::on_apiCombo_currentIndexChanged(int index)
 {
     m_settings.m_cameraAPI = static_cast<CameraSettings::CameraAPI>(index);
     m_settingsKeys.append("cameraAPI");
+    updateAlpacaVisibility();
     applySettings();
 }
 
@@ -239,18 +304,19 @@ void CameraGUI::on_cameraCombo_currentTextChanged(const QString& text)
     applySettings();
 }
 
-void CameraGUI::on_resolutionWidth_valueChanged(int value)
+void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
 {
-    m_settings.m_resolutionWidth = value;
-    m_settingsKeys.append("resolutionWidth");
-    applySettings();
-}
+    (void) index;
+    const QStringList parts = ui->resolutionCombo->currentText().split('x');
 
-void CameraGUI::on_resolutionHeight_valueChanged(int value)
-{
-    m_settings.m_resolutionHeight = value;
-    m_settingsKeys.append("resolutionHeight");
-    applySettings();
+    if (parts.size() == 2)
+    {
+        m_settings.m_resolutionWidth = parts[0].trimmed().toInt();
+        m_settings.m_resolutionHeight = parts[1].trimmed().toInt();
+        m_settingsKeys.append("resolutionWidth");
+        m_settingsKeys.append("resolutionHeight");
+        applySettings();
+    }
 }
 
 void CameraGUI::on_fpsSpin_valueChanged(int value)

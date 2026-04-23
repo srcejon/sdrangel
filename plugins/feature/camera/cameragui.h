@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) 2026 Edouard Griffiths, F4EXB <f4exb06@gmail.com>               //
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -69,6 +69,8 @@ private:
     void applySettings(bool force = false);
     void displaySettings();
     bool handleMessage(const Message& message);
+    void makeUIConnections();
+    void updateAlpacaVisibility();
     void updateImageWidget();
 
 private slots:
@@ -77,8 +79,7 @@ private slots:
     void on_refreshCamerasButton_clicked();
     void on_apiCombo_currentIndexChanged(int index);
     void on_cameraCombo_currentTextChanged(const QString& text);
-    void on_resolutionWidth_valueChanged(int value);
-    void on_resolutionHeight_valueChanged(int value);
+    void on_resolutionCombo_currentIndexChanged(int index);
     void on_fpsSpin_valueChanged(int value);
     void on_exposureSpin_valueChanged(int value);
     void on_isoSpin_valueChanged(int value);

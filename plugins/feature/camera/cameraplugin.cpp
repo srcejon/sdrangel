@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) 2026 Edouard Griffiths, F4EXB <f4exb06@gmail.com>               //
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -29,10 +29,10 @@ const PluginDescriptor CameraPlugin::m_pluginDescriptor = {
     Camera::m_featureId,
     QStringLiteral("Camera"),
     QStringLiteral("7.24.0"),
-    QStringLiteral("(c) Edouard Griffiths, F4EXB"),
-    QStringLiteral("https://github.com/f4exb/sdrangel"),
+    QStringLiteral("(c) Jon Beniston, M7RCE"),
+    QStringLiteral("https://github.com/srcejon/sdrangel"),
     true,
-    QStringLiteral("https://github.com/f4exb/sdrangel")
+    QStringLiteral("https://github.com/srcejon/sdrangel")
 };
 
 CameraPlugin::CameraPlugin(QObject* parent) :

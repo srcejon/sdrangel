@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) 2026 Edouard Griffiths, F4EXB <f4exb06@gmail.com>               //
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -33,12 +33,12 @@
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
 #include <QCameraDevice>
-#include <QCameraExposure>
 #include <QCameraFormat>
 #include <QMediaCaptureSession>
 #include <QMediaDevices>
 #include <QMediaRecorder>
 #include <QMediaFormat>
+#include <QSet>
 #include <QVideoFrame>
 #include <QVideoSink>
 #endif
@@ -53,6 +53,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportResolutions, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportFrame, Message)
 
 CameraWorker::CameraWorker() :
@@ -180,6 +181,13 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     if (force || settingsKeys.contains("cameraAPI") || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort")) {
         reportCameraList();
     }
+
+    if (force
+        || settingsKeys.contains("cameraAPI")
+        || settingsKeys.contains("cameraId"))
+    {
+        reportResolutions();
+    }
 }
 
 void CameraWorker::reportCameraList()
@@ -241,7 +249,43 @@ void CameraWorker::reportCameraList()
     }
 }
 
-void CameraWorker::startCapture()
+void CameraWorker::reportResolutions()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIQtCamera)
+    {
+        const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
+        QList<QSize> resolutions;
+
+        for (const QCameraDevice& device : cameras)
+        {
+            const QString id = QString::fromUtf8(device.id());
+            if ((id == m_settings.m_cameraId) || (device.description() == m_settings.m_cameraId))
+            {
+                QSet<QString> seen;
+                for (const QCameraFormat& format : device.videoFormats())
+                {
+                    const QString key = QString("%1x%2")
+                        .arg(format.resolution().width())
+                        .arg(format.resolution().height());
+                    if (!seen.contains(key))
+                    {
+                        seen.insert(key);
+                        resolutions.append(format.resolution());
+                    }
+                }
+                break;
+            }
+        }
+
+        if (m_msgQueueToGUI) {
+            m_msgQueueToGUI->push(MsgReportResolutions::create(resolutions));
+        }
+    }
+#endif
+}
+
+
 {
     if (m_capturing) {
         return;
@@ -452,14 +496,9 @@ void CameraWorker::setupQtCapture()
         m_qtCamera->setCameraFormat(chosenFormat);
     }
 
-    QCameraExposure *exposure = m_qtCamera->exposure();
-
-    if (exposure)
-    {
-        exposure->setExposureMode(QCameraExposure::ExposureManual);
-        exposure->setManualExposureTime(std::max(1, m_settings.m_exposureTimeMs) / 1000.0f);
-        exposure->setManualIsoSensitivity(std::max(1, m_settings.m_isoSensitivity));
-    }
+    m_qtCamera->setExposureMode(QCamera::ExposureManual);
+    m_qtCamera->setManualExposureTime(m_settings.m_exposureTimeMs / 1000.0f);
+    m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
 
     m_captureSession->setCamera(m_qtCamera);
     m_captureSession->setVideoOutput(m_videoSink);

@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) 2026 Edouard Griffiths, F4EXB <f4exb06@gmail.com>               //
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -19,6 +19,7 @@
 #define INCLUDE_FEATURE_CAMERAWORKER_H_
 
 #include <QObject>
+#include <QSize>
 #include <QTimer>
 #include <QImage>
 #include <QRecursiveMutex>
@@ -120,6 +121,26 @@ public:
         { }
     };
 
+    class MsgReportResolutions : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QList<QSize>& getResolutions() const { return m_resolutions; }
+
+        static MsgReportResolutions* create(const QList<QSize>& resolutions)
+        {
+            return new MsgReportResolutions(resolutions);
+        }
+
+    private:
+        QList<QSize> m_resolutions;
+
+        MsgReportResolutions(const QList<QSize>& resolutions) :
+            Message(),
+            m_resolutions(resolutions)
+        { }
+    };
+
     class MsgReportFrame : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -176,6 +197,7 @@ private:
 
     void reportFrameToGUI(const QImage& image);
     QString buildAlpacaBaseUrl() const;
+    void reportResolutions();
     QStringList parseAlpacaCameraList(const QByteArray& payload) const;
     QImage parseAlpacaImage(const QByteArray& payload) const;
 

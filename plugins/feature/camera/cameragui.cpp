@@ -277,6 +277,7 @@ void CameraGUI::updateAlpacaVisibility()
 }
 
 
+void CameraGUI::on_startStop_clicked(bool checked)
 {
     m_settings.m_captureActive = checked;
     m_settingsKeys.append("captureActive");

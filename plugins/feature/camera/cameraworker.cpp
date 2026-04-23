@@ -286,6 +286,7 @@ void CameraWorker::reportResolutions()
 }
 
 
+void CameraWorker::startCapture()
 {
     if (m_capturing) {
         return;

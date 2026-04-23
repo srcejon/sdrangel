@@ -267,11 +267,7 @@ void CameraGUI::updateImageWidget()
         return;
     }
 
-    ui->imageLabel->setPixmap(QPixmap::fromImage(m_lastImage).scaled(
-        ui->imageLabel->size(),
-        Qt::KeepAspectRatio,
-        Qt::SmoothTransformation
-    ));
+    ui->imageLabel->setPixmap(QPixmap::fromImage(m_lastImage));
 }
 
 void CameraGUI::makeUIConnections()

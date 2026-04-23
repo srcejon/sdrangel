@@ -515,7 +515,7 @@ void CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged(int index)
     applySettings();
 }
 
-
+void CameraGUI::on_saveImageCheck_toggled(bool checked)
 {
     m_settings.m_saveImage = checked;
     m_settingsKeys.append("saveImage");

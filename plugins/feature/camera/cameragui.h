@@ -24,6 +24,7 @@
 #include "util/messagequeue.h"
 #include "settings/rollupstate.h"
 #include "camerasettings.h"
+#include "cameraworker.h"
 
 class PluginAPI;
 class FeatureUISet;

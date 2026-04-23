@@ -60,7 +60,7 @@ CameraWorker::CameraWorker() :
     m_captureTimer(this),
     m_networkManager(nullptr),
     m_alpacaFrameRequestPending(false),
-    m_alpacaClientId(QRandomGenerator::global()->bounded(quint64(1), quint64(std::numeric_limits<quint32>::max()) + 1)),
+    m_alpacaClientId(QRandomGenerator::global()->generate() % std::numeric_limits<quint32>::max() + 1u),
     m_alpacaClientTransactionId(1)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     , m_qtCamera(nullptr)

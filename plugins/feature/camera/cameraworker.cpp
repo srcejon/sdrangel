@@ -778,6 +778,8 @@ void CameraWorker::alpacaPollStatus()
         checkDone();
     });
 }
+
+QString CameraWorker::buildAlpacaBaseUrl() const
 {
     return QString("http://%1:%2")
         .arg(m_settings.m_alpacaHost)

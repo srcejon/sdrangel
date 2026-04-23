@@ -536,48 +536,14 @@
       <item>
        <widget class="QComboBox" name="overlayFontCombo">
         <property name="toolTip">
-         <string>Font for date/time overlay</string>
+         <string>Font family for date/time overlay</string>
         </property>
-        <item>
-         <property name="text">
-          <string>Simplex</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Plain</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Duplex</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Complex</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Triplex</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Complex small</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Script simplex</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Script complex</string>
-         </property>
-        </item>
+        <property name="minimumContentsLength">
+         <number>8</number>
+        </property>
+        <property name="sizeAdjustPolicy">
+         <enum>QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon</enum>
+        </property>
        </widget>
       </item>
       <item>
@@ -590,22 +556,22 @@
       <item>
        <widget class="QDoubleSpinBox" name="overlayFontScaleSpin">
         <property name="toolTip">
-         <string>Font scale for date/time overlay</string>
+         <string>Font point size for date/time overlay</string>
         </property>
         <property name="decimals">
-         <number>1</number>
+         <number>0</number>
         </property>
         <property name="minimum">
-         <double>0.300000000000000</double>
+         <double>4.000000000000000</double>
         </property>
         <property name="maximum">
-         <double>10.000000000000000</double>
+         <double>144.000000000000000</double>
         </property>
         <property name="singleStep">
-         <double>0.100000000000000</double>
+         <double>1.000000000000000</double>
         </property>
         <property name="value">
-         <double>0.500000000000000</double>
+         <double>12.000000000000000</double>
         </property>
        </widget>
       </item>

@@ -22,12 +22,15 @@
 #include <limits>
 
 #include <QDebug>
+#include <QFont>
+#include <QFontMetrics>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QPainter>
 #include <QRandomGenerator>
 #include <QSharedPointer>
 #include <QtEndian>
@@ -272,7 +275,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     // Detect whether any post-processing parameter changed
     static const QStringList kPostProcessingKeys = {
         "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
-        "diffMask", "dilationSize", "overlayFontIndex", "overlayFontScale",
+        "diffMask", "dilationSize", "overlayFontFamily", "overlayFontScale",
         "motionDetect", "motionBoxColor", "minContourArea",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale"
     };
@@ -804,8 +807,8 @@ void CameraWorker::reportFrameToGUI(const QImage& image)
  *   2. Colour inversion
  *   3. Diff mask against the previous raw frame
  *   4. MOG2 motion detection with bounding boxes
- *   5. Date/time text overlay
- *   6. Spectrum view image overlay
+ *   5. Spectrum view image overlay
+ *   6. Date/time text overlay (rendered with QPainter onto the final QImage)
  *
  * Returns the processed image, or a copy of @p input when no effects are active.
  * Must be called from the worker thread only (modifies m_bgSubtractor).
@@ -900,23 +903,8 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
 
     if (m_settings.m_overlayDateTime)
     {
-        const QString text = m_captureDateTime.toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
-        const QColor& c = m_settings.m_dateTimeColor;
-        const cv::Scalar textColor(c.blue(), c.green(), c.red());
-        static const int kHersheyFonts[] = {
-            cv::FONT_HERSHEY_SIMPLEX, cv::FONT_HERSHEY_PLAIN, cv::FONT_HERSHEY_DUPLEX,
-            cv::FONT_HERSHEY_COMPLEX, cv::FONT_HERSHEY_TRIPLEX, cv::FONT_HERSHEY_COMPLEX_SMALL,
-            cv::FONT_HERSHEY_SCRIPT_SIMPLEX, cv::FONT_HERSHEY_SCRIPT_COMPLEX
-        };
-        const int fontFace = kHersheyFonts[qBound(0, m_settings.m_overlayFontIndex, 7)];
-        cv::putText(bgrMat,
-                    text.toStdString(),
-                    cv::Point(4, bgrMat.rows - 6),
-                    fontFace,
-                    m_settings.m_overlayFontScale,
-                    textColor,
-                    1,
-                    cv::LINE_AA);
+        // Date/time text is rendered after the cv::Mat pipeline using QPainter,
+        // which gives access to the full system font library.
     }
 
     if (needsSpectrumOverlay)
@@ -981,10 +969,28 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
     }
 
     cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);
-    const QImage result(bgrMat.data, bgrMat.cols, bgrMat.rows,
-                        static_cast<qsizetype>(bgrMat.step[0]),
-                        QImage::Format_RGB888);
-    return result.copy();
+    const QImage rawResult(bgrMat.data, bgrMat.cols, bgrMat.rows,
+                           static_cast<qsizetype>(bgrMat.step[0]),
+                           QImage::Format_RGB888);
+    QImage result = rawResult.copy(); // detach from cv::Mat memory
+
+    if (m_settings.m_overlayDateTime)
+    {
+        const QString text = m_captureDateTime.toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
+        QFont font;
+        if (!m_settings.m_overlayFontFamily.isEmpty()) {
+            font.setFamily(m_settings.m_overlayFontFamily);
+        }
+        font.setPointSizeF(m_settings.m_overlayFontScale);
+        const QFontMetrics fm(font);
+        QPainter painter(&result);
+        painter.setRenderHint(QPainter::TextAntialiasing);
+        painter.setFont(font);
+        painter.setPen(m_settings.m_dateTimeColor);
+        painter.drawText(4, result.height() - fm.descent() - 2, text);
+    }
+
+    return result;
 }
 
 void CameraWorker::alpacaQueryCameraCapabilities()

@@ -17,6 +17,7 @@
 
 #include <QColorDialog>
 #include <QFileDialog>
+#include <QFontDatabase>
 #include <QPixmap>
 
 #include "feature/featureuiset.h"
@@ -207,6 +208,14 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     connect(getInputMessageQueue(), SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
 
+    // Populate font family combo from system fonts
+    ui->overlayFontCombo->blockSignals(true);
+    const QStringList families = QFontDatabase::families();
+    for (const QString& family : families) {
+        ui->overlayFontCombo->addItem(family);
+    }
+    ui->overlayFontCombo->blockSignals(false);
+
     m_settings.setRollupState(&m_rollupState);
 
     displaySettings();
@@ -281,7 +290,7 @@ void CameraGUI::displaySettings()
     ui->overlayDateTimeButton->setChecked(m_settings.m_overlayDateTime);
     ui->diffMaskButton->setChecked(m_settings.m_diffMask);
     ui->dilationSpin->setValue(m_settings.m_dilationSize);
-    ui->overlayFontCombo->setCurrentIndex(m_settings.m_overlayFontIndex);
+    ui->overlayFontCombo->setCurrentText(m_settings.m_overlayFontFamily);
     ui->overlayFontScaleSpin->setValue(m_settings.m_overlayFontScale);
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
     ui->minContourAreaSpin->setValue(m_settings.m_minContourArea);
@@ -763,16 +772,17 @@ void CameraGUI::on_histogramButton_clicked()
 
 /*static*/ void CameraGUI::updateColorButton(QToolButton* btn, const QColor& color)
 {
-    const int luminance = color.red() * 299 + color.green() * 587 + color.blue() * 114;
-    const QString textColor = (luminance > 128000) ? QStringLiteral("black") : QStringLiteral("white");
-    btn->setStyleSheet(
-        QString("background-color: %1; color: %2;").arg(color.name(), textColor));
+    QPixmap px(16, 16);
+    px.fill(color);
+    btn->setIcon(QIcon(px));
+    btn->setStyleSheet(QString());
 }
 
 void CameraGUI::on_overlayFontCombo_currentIndexChanged(int index)
 {
-    m_settings.m_overlayFontIndex = index;
-    m_settingsKeys.append("overlayFontIndex");
+    (void) index;
+    m_settings.m_overlayFontFamily = ui->overlayFontCombo->currentText();
+    m_settingsKeys.append("overlayFontFamily");
     applySettings();
 }
 

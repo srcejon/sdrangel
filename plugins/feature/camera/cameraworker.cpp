@@ -411,7 +411,7 @@ static void alpacaPutIntProperty(
 
 void CameraWorker::alpacaSetCameraParams()
 {
-    // Chain: binX -> binY -> gain -> readoutMode -> startExposure
+    // Chain: binX -> binY -> gain -> offset -> readoutMode -> startExposure
     const QString baseUrl = buildAlpacaBaseUrl();
     const int camId = m_settings.m_alpacaCameraId;
 
@@ -894,24 +894,27 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
 
         // First pass: find minimum and maximum pixel values for black-level correction and linear scaling to 8-bit
         int minVal = std::numeric_limits<int>::max();
-        int maxVal = 0;
+        int maxVal = std::numeric_limits<int>::min();
         for (const QJsonValue& col : value) {
             for (const QJsonValue& pix : col.toArray()) {
                 const int v = pix.toInt(0);
-                minVal = std::min(minVal, v);
-                maxVal = std::max(maxVal, v);
+                if (v < minVal) { minVal = v; }
+                if (v > maxVal) { maxVal = v; }
             }
         }
-        if (minVal > maxVal) { minVal = 0; }
-        const int range = std::max(1, maxVal - minVal);
-        const double scale = 255.0 / range;
+        const int range = maxVal - minVal;
+        // Uniform image: map to mid-gray to avoid division by zero
+        const double scale = (range > 0) ? (255.0 / range) : 0.0;
+        const int uniformGray = (range == 0) ? (minVal > 0 ? 128 : 0) : 0;
 
         // Build scaled raw array (column-major), with black-level subtracted
         QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
             const QJsonArray col = value[x].toArray();
             for (int y = 0; y < height; ++y) {
-                raw[x][y] = qBound(0, static_cast<int>((col[y].toInt(0) - minVal) * scale), 255);
+                raw[x][y] = (range > 0)
+                    ? qBound(0, static_cast<int>((col[y].toInt(0) - minVal) * scale), 255)
+                    : uniformGray;
             }
         }
 
@@ -997,18 +1000,20 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
 
         // First pass: find minimum and maximum pixel values across all planes for black-level correction and linear scaling
         int minVal = std::numeric_limits<int>::max();
-        int maxVal = 0;
+        int maxVal = std::numeric_limits<int>::min();
         for (const QJsonArray* plane : {&planeR, &planeG, &planeB}) {
             for (const QJsonValue& col : *plane) {
                 for (const QJsonValue& pix : col.toArray()) {
                     const int v = pix.toInt(0);
-                    minVal = std::min(minVal, v);
-                    maxVal = std::max(maxVal, v);
+                    if (v < minVal) { minVal = v; }
+                    if (v > maxVal) { maxVal = v; }
                 }
             }
         }
-        if (minVal > maxVal) { minVal = 0; }
-        const double scale = 255.0 / std::max(1, maxVal - minVal);
+        const int range3 = maxVal - minVal;
+        // Uniform image: map to mid-gray to avoid division by zero
+        const double scale = (range3 > 0) ? (255.0 / range3) : 0.0;
+        const int uniformGray3 = (range3 == 0) ? (minVal > 0 ? 128 : 0) : 0;
 
         QImage image(width, height, QImage::Format_RGB32);
         for (int x = 0; x < width; ++x) {
@@ -1016,9 +1021,9 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             const QJsonArray colG = planeG[x].toArray();
             const QJsonArray colB = planeB[x].toArray();
             for (int y = 0; y < height; ++y) {
-                const int r = qBound(0, static_cast<int>((colR[y].toInt(0) - minVal) * scale), 255);
-                const int g = qBound(0, static_cast<int>((colG[y].toInt(0) - minVal) * scale), 255);
-                const int b = qBound(0, static_cast<int>((colB[y].toInt(0) - minVal) * scale), 255);
+                const int r = (range3 > 0) ? qBound(0, static_cast<int>((colR[y].toInt(0) - minVal) * scale), 255) : uniformGray3;
+                const int g = (range3 > 0) ? qBound(0, static_cast<int>((colG[y].toInt(0) - minVal) * scale), 255) : uniformGray3;
+                const int b = (range3 > 0) ? qBound(0, static_cast<int>((colB[y].toInt(0) - minVal) * scale), 255) : uniformGray3;
                 reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
             }
         }

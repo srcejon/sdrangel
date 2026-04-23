@@ -34,6 +34,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <QColor>
+#include <QDateTime>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
@@ -41,8 +42,6 @@
 #include <QCameraFormat>
 #include <QMediaCaptureSession>
 #include <QMediaDevices>
-#include <QMediaRecorder>
-#include <QMediaFormat>
 #include <QSet>
 #include <QVideoFrame>
 #include <QVideoSink>
@@ -75,7 +74,6 @@ CameraWorker::CameraWorker() :
     , m_qtCamera(nullptr)
     , m_videoSink(nullptr)
     , m_captureSession(nullptr)
-    , m_mediaRecorder(nullptr)
 #endif
 {
 }
@@ -174,14 +172,31 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("alpacaBinY")
         || settingsKeys.contains("alpacaGain")
         || settingsKeys.contains("alpacaOffset")
-        || settingsKeys.contains("alpacaReadoutMode")
-        || settingsKeys.contains("saveVideo")
-        || settingsKeys.contains("videoFileName");
+        || settingsKeys.contains("alpacaReadoutMode");
+
+    // Detect whether any post-processing parameter changed
+    static const QStringList kPostProcessingKeys = {
+        "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
+        "diffMask", "dilationSize", "overlayFontIndex", "overlayFontScale",
+        "motionDetect", "motionBoxColor", "minContourArea"
+    };
+    const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
+        [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
 
     if (force) {
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
+    }
+
+    // Reset diff-mask history when the feature is toggled off
+    if ((force && !m_settings.m_diffMask) || (settingsKeys.contains("diffMask") && !m_settings.m_diffMask)) {
+        m_previousRawFrame = QImage();
+    }
+
+    // Reset MOG2 state when motion detection is toggled off
+    if ((force && !m_settings.m_motionDetect) || (settingsKeys.contains("motionDetect") && !m_settings.m_motionDetect)) {
+        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
     }
 
     if (settingsKeys.contains("captureActive") || force)
@@ -196,6 +211,15 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     {
         stopCapture();
         startCapture();
+    }
+
+    // Manage VideoWriter independently of camera restart
+    if (settingsKeys.contains("saveVideo") || settingsKeys.contains("videoFileName"))
+    {
+        if (m_videoWriter.isOpened()) {
+            m_videoWriter.release();
+        }
+        // VideoWriter will be (re-)opened on the next frame if saveVideo is enabled
     }
 
     if (force || settingsKeys.contains("cameraAPI") || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort")) {
@@ -230,6 +254,12 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         } else {
             m_statusTimer.stop();
         }
+    }
+
+    // If a post-processing parameter changed and we have a stored raw frame, reprocess and push to GUI
+    if (postProcessChanged && !m_lastRawFrame.isNull()) {
+        const QImage processed = applyPostProcessing(m_lastRawFrame);
+        reportFrameToGUI(processed);
     }
 }
 
@@ -359,6 +389,10 @@ void CameraWorker::stopCapture()
 {
     m_capturing = false;
     m_captureTimer.stop();
+
+    if (m_videoWriter.isOpened()) {
+        m_videoWriter.release();
+    }
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     cleanupQtCapture();
@@ -592,12 +626,50 @@ void CameraWorker::alpacaFetchImageArray()
 
 void CameraWorker::processNewFrame(const QImage& image)
 {
-    reportFrameToGUI(image);
+    m_captureDateTime = QDateTime::currentDateTime();
 
+    // Apply all post-processing effects; result is what the GUI will display
+    const QImage processed = applyPostProcessing(image);
+
+    // Advance the raw-frame history (used by diff mask on the next frame)
+    m_previousRawFrame = m_lastRawFrame;
+    m_lastRawFrame = image;
+
+    reportFrameToGUI(processed);
+
+    // Save a single JPEG of the raw frame per capture session
     if (m_settings.m_saveImage && !m_imageSaved && !m_settings.m_imageFileName.isEmpty())
     {
         image.save(m_settings.m_imageFileName, "JPEG");
         m_imageSaved = true;
+    }
+
+    // Write video frame (raw or post-processed, depending on setting)
+    if (m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
+    {
+        // Lazily open the VideoWriter on the first frame so we know the frame size
+        if (!m_videoWriter.isOpened())
+        {
+            const int fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
+            m_videoWriter.open(
+                m_settings.m_videoFileName.toStdString(),
+                fourcc,
+                std::max(1, m_settings.m_framesPerSecond),
+                cv::Size(image.width(), image.height()),
+                true);
+        }
+
+        if (m_videoWriter.isOpened())
+        {
+            const QImage& frameToWrite = m_settings.m_videoPostProcess ? processed : image;
+            const QImage rgb = frameToWrite.convertToFormat(QImage::Format_RGB888);
+            cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
+                        const_cast<uchar*>(rgb.bits()),
+                        static_cast<size_t>(rgb.bytesPerLine()));
+            cv::Mat bgrMat;
+            cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+            m_videoWriter.write(bgrMat);
+        }
     }
 }
 
@@ -606,6 +678,130 @@ void CameraWorker::reportFrameToGUI(const QImage& image)
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportFrame::create(image));
     }
+}
+
+/**
+ * Applies all enabled post-processing effects to @p input in order:
+ *   1. Brightness/contrast adjustment
+ *   2. Colour inversion
+ *   3. Diff mask against the previous raw frame
+ *   4. MOG2 motion detection with bounding boxes
+ *   5. Date/time text overlay
+ *
+ * Returns the processed image, or a copy of @p input when no effects are active.
+ * Must be called from the worker thread only (modifies m_bgSubtractor).
+ */
+QImage CameraWorker::applyPostProcessing(const QImage& input)
+{
+    static constexpr int kDiffThreshold = 30;
+
+    const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
+    const bool needsAny = needsBrightContrast
+        || m_settings.m_invertColors
+        || m_settings.m_overlayDateTime
+        || (m_settings.m_diffMask && !m_previousRawFrame.isNull())
+        || m_settings.m_motionDetect;
+
+    if (!needsAny) {
+        return input;
+    }
+
+    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
+    cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
+                const_cast<uchar*>(rgb.bits()),
+                static_cast<size_t>(rgb.bytesPerLine()));
+    cv::Mat bgrMat;
+    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+
+    if (needsBrightContrast)
+    {
+        cv::Mat adjusted;
+        cv::convertScaleAbs(bgrMat, adjusted, m_settings.m_contrast, m_settings.m_brightness);
+        bgrMat = adjusted;
+    }
+
+    if (m_settings.m_invertColors) {
+        cv::bitwise_not(bgrMat, bgrMat);
+    }
+
+    if (m_settings.m_diffMask && !m_previousRawFrame.isNull()
+        && m_previousRawFrame.width() == input.width()
+        && m_previousRawFrame.height() == input.height())
+    {
+        const QImage prevRgb = m_previousRawFrame.convertToFormat(QImage::Format_RGB888);
+        cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
+                        const_cast<uchar*>(prevRgb.bits()),
+                        static_cast<size_t>(prevRgb.bytesPerLine()));
+        cv::Mat prevBgr;
+        cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
+
+        cv::Mat gray, prevGray, diff, mask;
+        cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
+        cv::absdiff(gray, prevGray, diff);
+        cv::threshold(diff, mask, kDiffThreshold, 255, cv::THRESH_BINARY);
+
+        if (m_settings.m_dilationSize > 0)
+        {
+            const int ksize = 2 * m_settings.m_dilationSize + 1;
+            const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+            cv::dilate(mask, mask, kernel);
+        }
+
+        cv::Mat result = cv::Mat::zeros(bgrMat.size(), bgrMat.type());
+        cv::bitwise_and(bgrMat, bgrMat, result, mask);
+        bgrMat = result;
+    }
+
+    if (m_settings.m_motionDetect)
+    {
+        if (!m_bgSubtractor) {
+            m_bgSubtractor = cv::createBackgroundSubtractorMOG2();
+        }
+
+        cv::Mat fgMask;
+        m_bgSubtractor->apply(bgrMat, fgMask);
+        cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
+
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+        const QColor& bc = m_settings.m_motionBoxColor;
+        const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
+        for (const auto& contour : contours)
+        {
+            if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea)) {
+                cv::rectangle(bgrMat, cv::boundingRect(contour), boxColor, 2);
+            }
+        }
+    }
+
+    if (m_settings.m_overlayDateTime)
+    {
+        const QString text = m_captureDateTime.toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
+        const QColor& c = m_settings.m_dateTimeColor;
+        const cv::Scalar textColor(c.blue(), c.green(), c.red());
+        static const int kHersheyFonts[] = {
+            cv::FONT_HERSHEY_SIMPLEX, cv::FONT_HERSHEY_PLAIN, cv::FONT_HERSHEY_DUPLEX,
+            cv::FONT_HERSHEY_COMPLEX, cv::FONT_HERSHEY_TRIPLEX, cv::FONT_HERSHEY_COMPLEX_SMALL,
+            cv::FONT_HERSHEY_SCRIPT_SIMPLEX, cv::FONT_HERSHEY_SCRIPT_COMPLEX
+        };
+        const int fontFace = kHersheyFonts[qBound(0, m_settings.m_overlayFontIndex, 7)];
+        cv::putText(bgrMat,
+                    text.toStdString(),
+                    cv::Point(4, bgrMat.rows - 6),
+                    fontFace,
+                    m_settings.m_overlayFontScale,
+                    textColor,
+                    1,
+                    cv::LINE_AA);
+    }
+
+    cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);
+    const QImage result(bgrMat.data, bgrMat.cols, bgrMat.rows,
+                        static_cast<qsizetype>(bgrMat.step[0]),
+                        QImage::Format_RGB888);
+    return result.copy();
 }
 
 void CameraWorker::alpacaQueryCameraCapabilities()
@@ -1333,27 +1529,11 @@ void CameraWorker::setupQtCapture()
 
     connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraWorker::processQtVideoFrame);
 
-    if (m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
-    {
-        m_mediaRecorder = new QMediaRecorder(this);
-        m_mediaRecorder->setMediaFormat(QMediaFormat(QMediaFormat::MPEG4));
-        m_mediaRecorder->setOutputLocation(QUrl::fromLocalFile(m_settings.m_videoFileName));
-        m_captureSession->setRecorder(m_mediaRecorder);
-        m_mediaRecorder->record();
-    }
-
     m_qtCamera->start();
 }
 
 void CameraWorker::cleanupQtCapture()
 {
-    if (m_mediaRecorder)
-    {
-        m_mediaRecorder->stop();
-        m_mediaRecorder->deleteLater();
-        m_mediaRecorder = nullptr;
-    }
-
     if (m_qtCamera)
     {
         m_qtCamera->stop();

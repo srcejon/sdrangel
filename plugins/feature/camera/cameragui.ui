@@ -337,6 +337,19 @@
           </property>
          </widget>
         </item>
+        <item>
+         <widget class="ButtonSwitch" name="videoPostProcessButton">
+          <property name="toolTip">
+           <string>Record post-processed video (when off, raw frames are recorded)</string>
+          </property>
+          <property name="text">
+           <string>Post</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
      </layout>

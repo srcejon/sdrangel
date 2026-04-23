@@ -19,9 +19,7 @@
 #define INCLUDE_FEATURE_CAMERAGUI_H_
 
 #include <QColor>
-#include <QDateTime>
 #include <QImage>
-#include <opencv2/video/background_segm.hpp>
 
 #include "feature/featuregui.h"
 #include "util/messagequeue.h"
@@ -64,12 +62,9 @@ private:
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
-    QImage m_lastImage;
-    QImage m_previousImage;
-    QDateTime m_captureDateTime;
+    QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
-    mutable cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
 
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     virtual ~CameraGUI();
@@ -82,7 +77,6 @@ private:
     void updateAlpacaVisibility();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateImageWidget();
-    [[nodiscard]] QImage applyPostProcessing(const QImage& input) const;
     static void updateColorButton(QToolButton* btn, const QColor& color);
 
 private slots:
@@ -111,6 +105,7 @@ private slots:
     void on_saveVideoCheck_toggled(bool checked);
     void on_videoPathEdit_editingFinished();
     void on_videoPathButton_clicked();
+    void on_videoPostProcessButton_toggled(bool checked);
     void on_brightnessSlider_valueChanged(int value);
     void on_contrastSlider_valueChanged(int value);
     void on_invertColorsButton_toggled(bool checked);

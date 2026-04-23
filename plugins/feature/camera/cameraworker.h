@@ -22,7 +22,13 @@
 #include <QSize>
 #include <QTimer>
 #include <QImage>
+#include <QDateTime>
 #include <QRecursiveMutex>
+
+#include <opencv2/core/core.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/video/background_segm.hpp>
+#include <opencv2/videoio.hpp>
 
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -34,7 +40,6 @@ class QNetworkAccessManager;
 class QCamera;
 class QVideoSink;
 class QMediaCaptureSession;
-class QMediaRecorder;
 class QVideoFrame;
 #endif
 
@@ -299,11 +304,19 @@ private:
     bool m_alpacaImageBytesSupported; // true = try ImageBytes binary protocol; false = use JSON
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature every 2 s
 
+    // Post-processing state (moved here from GUI)
+    QImage m_lastRawFrame;       // last raw frame captured, kept for reprocessing on settings change
+    QImage m_previousRawFrame;   // raw frame before m_lastRawFrame, used by diff mask
+    QDateTime m_captureDateTime; // timestamp of the last raw frame
+    cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor; // MOG2 state
+
+    // Video output
+    cv::VideoWriter m_videoWriter; // OpenCV video writer (works for both Alpaca and Qt cameras)
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
     QVideoSink *m_videoSink;
     QMediaCaptureSession *m_captureSession;
-    QMediaRecorder *m_mediaRecorder;
 #endif
 
     bool handleMessage(const Message& cmd);
@@ -313,6 +326,9 @@ private:
     void stopCapture();
     void processNewFrame(const QImage& image);
     QImage createPlaceholderFrame() const;
+
+    // Post-processing
+    [[nodiscard]] QImage applyPostProcessing(const QImage& input);
 
     void reportFrameToGUI(const QImage& image);
     QString buildAlpacaBaseUrl() const;

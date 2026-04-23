@@ -16,12 +16,8 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QColorDialog>
-#include <QDateTime>
 #include <QFileDialog>
 #include <QPixmap>
-#include <opencv2/core/core.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/video/background_segm.hpp>
 
 #include "feature/featureuiset.h"
 
@@ -130,9 +126,7 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (CameraWorker::MsgReportFrame::match(message))
     {
         const CameraWorker::MsgReportFrame& report = (CameraWorker::MsgReportFrame&) message;
-        m_previousImage = m_lastImage;
         m_lastImage = report.getImage();
-        m_captureDateTime = QDateTime::currentDateTime();
         updateImageWidget();
         return true;
     }
@@ -261,6 +255,7 @@ void CameraGUI::displaySettings()
     ui->imagePathEdit->setText(m_settings.m_imageFileName);
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
     ui->videoPathEdit->setText(m_settings.m_videoFileName);
+    ui->videoPostProcessButton->setChecked(m_settings.m_videoPostProcess);
     ui->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
     ui->brightnessValue->setText(QString::number(m_settings.m_brightness, 'f', 0));
     ui->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
@@ -296,8 +291,7 @@ void CameraGUI::updateImageWidget()
         return;
     }
 
-    const QImage processed = applyPostProcessing(m_lastImage);
-    ui->imageLabel->setPixmap(QPixmap::fromImage(processed));
+    ui->imageLabel->setPixmap(QPixmap::fromImage(m_lastImage));
 }
 
 void CameraGUI::makeUIConnections()
@@ -326,6 +320,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->saveVideoCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveVideoCheck_toggled);
     QObject::connect(ui->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
     QObject::connect(ui->videoPathButton, &QPushButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
+    QObject::connect(ui->videoPostProcessButton, &QToolButton::toggled, this, &CameraGUI::on_videoPostProcessButton_toggled);
     QObject::connect(ui->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
     QObject::connect(ui->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
     QObject::connect(ui->invertColorsButton, &QToolButton::toggled, this, &CameraGUI::on_invertColorsButton_toggled);
@@ -368,11 +363,6 @@ void CameraGUI::updateAlpacaVisibility()
     ui->alpacaReadoutModeLabel->setVisible(alpaca);
     ui->alpacaReadoutModeCombo->setVisible(alpaca);
     ui->alpacaStatusGroup->setVisible(alpaca);
-
-    // Video saving only makes sense for Qt camera
-    ui->saveVideoCheck->setVisible(!alpaca);
-    ui->videoPathEdit->setVisible(!alpaca);
-    ui->videoPathButton->setVisible(!alpaca);
 }
 
 
@@ -665,139 +655,11 @@ void CameraGUI::on_videoPathButton_clicked()
     }
 }
 
-/**
- * Applies the enabled post-processing effects to @p input in order:
- *   1. Brightness/contrast adjustment (cv::convertScaleAbs)
- *   2. Colour inversion (cv::bitwise_not)
- *   3. Diff mask against the previous frame (cv::absdiff + threshold + optional dilation)
- *   4. Date/time text overlay (cv::putText)
- *
- * Returns the processed image, or @p input unchanged when no effects are active.
- */
-QImage CameraGUI::applyPostProcessing(const QImage& input) const
+void CameraGUI::on_videoPostProcessButton_toggled(bool checked)
 {
-    // Pixel difference magnitude (0-255) below which a pixel is considered unchanged.
-    static constexpr int kDiffThreshold = 30;
-
-    const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
-    const bool needsAny = needsBrightContrast
-        || m_settings.m_invertColors
-        || m_settings.m_overlayDateTime
-        || (m_settings.m_diffMask && !m_previousImage.isNull())
-        || m_settings.m_motionDetect;
-
-    if (!needsAny) {
-        return input;
-    }
-
-    // Convert to RGB888 and create an OpenCV BGR mat
-    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
-    cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                const_cast<uchar*>(rgb.bits()),
-                static_cast<size_t>(rgb.bytesPerLine()));
-    cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-
-    // Brightness / contrast
-    if (needsBrightContrast)
-    {
-        cv::Mat adjusted;
-        cv::convertScaleAbs(bgrMat, adjusted, m_settings.m_contrast, m_settings.m_brightness);
-        bgrMat = adjusted;
-    }
-
-    // Invert colours
-    if (m_settings.m_invertColors) {
-        cv::bitwise_not(bgrMat, bgrMat);
-    }
-
-    // Diff mask
-    if (m_settings.m_diffMask && !m_previousImage.isNull()
-        && m_previousImage.width() == input.width()
-        && m_previousImage.height() == input.height())
-    {
-        const QImage prevRgb = m_previousImage.convertToFormat(QImage::Format_RGB888);
-        cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
-                        const_cast<uchar*>(prevRgb.bits()),
-                        static_cast<size_t>(prevRgb.bytesPerLine()));
-        cv::Mat prevBgr;
-        cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
-
-        cv::Mat gray, prevGray, diff, mask;
-        cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
-        cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
-        cv::absdiff(gray, prevGray, diff);
-        cv::threshold(diff, mask, kDiffThreshold, 255, cv::THRESH_BINARY);
-
-        if (m_settings.m_dilationSize > 0)
-        {
-            const int ksize = 2 * m_settings.m_dilationSize + 1;
-            const cv::Mat kernel = cv::getStructuringElement(
-                cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
-            cv::dilate(mask, mask, kernel);
-        }
-
-        cv::Mat result = cv::Mat::zeros(bgrMat.size(), bgrMat.type());
-        cv::bitwise_and(bgrMat, bgrMat, result, mask);
-        bgrMat = result;
-    }
-
-    // Motion detection — MOG2 background subtractor
-    if (m_settings.m_motionDetect)
-    {
-        if (!m_bgSubtractor) {
-            m_bgSubtractor = cv::createBackgroundSubtractorMOG2();
-        }
-
-        cv::Mat fgMask;
-        m_bgSubtractor->apply(bgrMat, fgMask);
-
-        // Remove shadows (value 127) — keep only definite foreground (255)
-        cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
-
-        // Find and draw contours above minimum area threshold
-        std::vector<std::vector<cv::Point>> contours;
-        cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-
-        const QColor& bc = m_settings.m_motionBoxColor;
-        const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red()); // BGR
-        for (const auto& contour : contours)
-        {
-            if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea))
-            {
-                cv::rectangle(bgrMat, cv::boundingRect(contour), boxColor, 2);
-            }
-        }
-    }
-
-    // Date/time overlay — apply before final colour conversion
-    if (m_settings.m_overlayDateTime)
-    {
-        const QString text = m_captureDateTime.toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
-        const QColor& c = m_settings.m_dateTimeColor;
-        const cv::Scalar textColor(c.blue(), c.green(), c.red()); // BGR
-        static const int kHersheyFonts[] = {
-            cv::FONT_HERSHEY_SIMPLEX, cv::FONT_HERSHEY_PLAIN, cv::FONT_HERSHEY_DUPLEX,
-            cv::FONT_HERSHEY_COMPLEX, cv::FONT_HERSHEY_TRIPLEX, cv::FONT_HERSHEY_COMPLEX_SMALL,
-            cv::FONT_HERSHEY_SCRIPT_SIMPLEX, cv::FONT_HERSHEY_SCRIPT_COMPLEX
-        };
-        const int fontFace = kHersheyFonts[qBound(0, m_settings.m_overlayFontIndex, 7)];
-        cv::putText(bgrMat,
-                    text.toStdString(),
-                    cv::Point(4, bgrMat.rows - 6),
-                    fontFace,
-                    m_settings.m_overlayFontScale,
-                    textColor,
-                    1,
-                    cv::LINE_AA);
-    }
-
-    // Convert back to RGB
-    cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);
-    const QImage result(bgrMat.data, bgrMat.cols, bgrMat.rows,
-                        static_cast<qsizetype>(bgrMat.step[0]),
-                        QImage::Format_RGB888);
-    return result.copy();
+    m_settings.m_videoPostProcess = checked;
+    m_settingsKeys.append("videoPostProcess");
+    applySettings();
 }
 
 void CameraGUI::on_brightnessSlider_valueChanged(int value)
@@ -806,7 +668,6 @@ void CameraGUI::on_brightnessSlider_valueChanged(int value)
     ui->brightnessValue->setText(QString::number(value));
     m_settingsKeys.append("brightness");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_contrastSlider_valueChanged(int value)
@@ -815,7 +676,6 @@ void CameraGUI::on_contrastSlider_valueChanged(int value)
     ui->contrastValue->setText(QString::number(m_settings.m_contrast, 'f', 2));
     m_settingsKeys.append("contrast");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_invertColorsButton_toggled(bool checked)
@@ -823,7 +683,6 @@ void CameraGUI::on_invertColorsButton_toggled(bool checked)
     m_settings.m_invertColors = checked;
     m_settingsKeys.append("invertColors");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_overlayDateTimeButton_toggled(bool checked)
@@ -831,7 +690,6 @@ void CameraGUI::on_overlayDateTimeButton_toggled(bool checked)
     m_settings.m_overlayDateTime = checked;
     m_settingsKeys.append("overlayDateTime");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_dateTimeColorButton_clicked()
@@ -844,19 +702,14 @@ void CameraGUI::on_dateTimeColorButton_clicked()
         updateColorButton(ui->dateTimeColorButton, m_settings.m_dateTimeColor);
         m_settingsKeys.append("dateTimeColor");
         applySettings();
-        updateImageWidget();
     }
 }
 
 void CameraGUI::on_diffMaskButton_toggled(bool checked)
 {
     m_settings.m_diffMask = checked;
-    if (!checked) {
-        m_previousImage = QImage();
-    }
     m_settingsKeys.append("diffMask");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_dilationSpin_valueChanged(int value)
@@ -864,7 +717,6 @@ void CameraGUI::on_dilationSpin_valueChanged(int value)
     m_settings.m_dilationSize = value;
     m_settingsKeys.append("dilationSize");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_histogramButton_clicked()
@@ -889,7 +741,6 @@ void CameraGUI::on_overlayFontCombo_currentIndexChanged(int index)
     m_settings.m_overlayFontIndex = index;
     m_settingsKeys.append("overlayFontIndex");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_overlayFontScaleSpin_valueChanged(double value)
@@ -897,18 +748,13 @@ void CameraGUI::on_overlayFontScaleSpin_valueChanged(double value)
     m_settings.m_overlayFontScale = value;
     m_settingsKeys.append("overlayFontScale");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_motionDetectButton_toggled(bool checked)
 {
     m_settings.m_motionDetect = checked;
-    if (!checked) {
-        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
-    }
     m_settingsKeys.append("motionDetect");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_minContourAreaSpin_valueChanged(int value)
@@ -916,7 +762,6 @@ void CameraGUI::on_minContourAreaSpin_valueChanged(int value)
     m_settings.m_minContourArea = value;
     m_settingsKeys.append("minContourArea");
     applySettings();
-    updateImageWidget();
 }
 
 void CameraGUI::on_motionBoxColorButton_clicked()
@@ -929,6 +774,5 @@ void CameraGUI::on_motionBoxColorButton_clicked()
         updateColorButton(ui->motionBoxColorButton, color);
         m_settingsKeys.append("motionBoxColor");
         applySettings();
-        updateImageWidget();
     }
 }

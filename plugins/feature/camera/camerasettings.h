@@ -72,6 +72,7 @@ struct CameraSettings
     bool   m_motionDetect;      ///< Enable MOG2 background subtractor
     QColor m_motionBoxColor;    ///< Bounding box colour for motion contours
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
+    bool   m_videoPostProcess;  ///< When true, write post-processed frames to video; when false, write raw frames
 
     CameraSettings();
     ~CameraSettings() = default;

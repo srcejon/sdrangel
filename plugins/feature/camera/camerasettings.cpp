@@ -67,6 +67,7 @@ void CameraSettings::resetToDefaults()
     m_motionDetect = false;
     m_motionBoxColor = Qt::red;
     m_minContourArea = 100;
+    m_videoPostProcess = false;
 }
 
 QByteArray CameraSettings::serialize() const
@@ -114,6 +115,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(35, m_motionDetect);
     s.writeU32(36, m_motionBoxColor.rgba());
     s.writeS32(37, m_minContourArea);
+    s.writeBool(38, m_videoPostProcess);
 
     return s.final();
 }
@@ -198,6 +200,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_overlayFontIndex = qBound(0, m_overlayFontIndex, 7);
         m_overlayFontScale = qBound(0.3, m_overlayFontScale, 3.0);
         m_minContourArea = qBound(0, m_minContourArea, 10000);
+        d.readBool(38, &m_videoPostProcess, false);
 
         return true;
     }
@@ -313,6 +316,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("minContourArea")) {
         m_minContourArea = qBound(0, settings.m_minContourArea, 10000);
     }
+    if (settingsKeys.contains("videoPostProcess")) {
+        m_videoPostProcess = settings.m_videoPostProcess;
+    }
 }
 
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
@@ -411,6 +417,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("minContourArea") || force) {
         ostr << " m_minContourArea: " << m_minContourArea;
+    }
+    if (settingsKeys.contains("videoPostProcess") || force) {
+        ostr << " m_videoPostProcess: " << m_videoPostProcess;
     }
 
     return QString(ostr.str().c_str());

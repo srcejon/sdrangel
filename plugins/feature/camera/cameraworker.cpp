@@ -498,7 +498,7 @@ void CameraWorker::setupQtCapture()
     }
 
     m_qtCamera->setExposureMode(QCamera::ExposureManual);
-    m_qtCamera->setManualExposureTime(m_settings.m_exposureTimeMs / 1000.0f);
+    m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
     m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
 
     m_captureSession->setCamera(m_qtCamera);

@@ -312,11 +312,18 @@ void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
 
     if (parts.size() == 2)
     {
-        m_settings.m_resolutionWidth = parts[0].trimmed().toInt();
-        m_settings.m_resolutionHeight = parts[1].trimmed().toInt();
-        m_settingsKeys.append("resolutionWidth");
-        m_settingsKeys.append("resolutionHeight");
-        applySettings();
+        bool ok1 = false, ok2 = false;
+        const int width = parts[0].trimmed().toInt(&ok1);
+        const int height = parts[1].trimmed().toInt(&ok2);
+
+        if (ok1 && ok2 && width > 0 && height > 0)
+        {
+            m_settings.m_resolutionWidth = width;
+            m_settings.m_resolutionHeight = height;
+            m_settingsKeys.append("resolutionWidth");
+            m_settingsKeys.append("resolutionHeight");
+            applySettings();
+        }
     }
 }
 

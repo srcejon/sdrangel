@@ -347,7 +347,7 @@
    <property name="geometry">
     <rect>
      <x>0</x>
-     <y>558</y>
+     <y>580</y>
      <width>428</width>
      <height>272</height>
     </rect>
@@ -389,7 +389,7 @@
          <number>0</number>
         </property>
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
        </widget>
       </item>
@@ -405,7 +405,7 @@
          <string>0</string>
         </property>
         <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignVCenter</set>
+         <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
         </property>
        </widget>
       </item>
@@ -432,7 +432,7 @@
          <number>100</number>
         </property>
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
        </widget>
       </item>
@@ -448,7 +448,7 @@
          <string>1.00</string>
         </property>
         <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignVCenter</set>
+         <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
         </property>
        </widget>
       </item>
@@ -467,6 +467,33 @@
        </widget>
       </item>
       <item>
+       <widget class="QToolButton" name="histogramButton">
+        <property name="toolTip">
+         <string>Show histogram</string>
+        </property>
+        <property name="text">
+         <string>Hist</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_2">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="fontLayout">
+      <item>
        <widget class="ButtonSwitch" name="overlayDateTimeButton">
         <property name="toolTip">
          <string>Overlay date and time</string>
@@ -482,57 +509,10 @@
          <string>Select date/time text colour</string>
         </property>
         <property name="text">
-         <string>...</string>
+         <string/>
         </property>
        </widget>
       </item>
-      <item>
-       <widget class="ButtonSwitch" name="diffMaskButton">
-        <property name="toolTip">
-         <string>Show differences from previous image</string>
-        </property>
-        <property name="text">
-         <string>Diff</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="dilationLabel">
-        <property name="text">
-         <string>Dilation</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QSpinBox" name="dilationSpin">
-        <property name="toolTip">
-         <string>Dilation kernel size for diff mask</string>
-        </property>
-        <property name="minimum">
-         <number>0</number>
-        </property>
-        <property name="maximum">
-         <number>20</number>
-        </property>
-        <property name="value">
-         <number>3</number>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="histogramButton">
-        <property name="toolTip">
-         <string>Show histogram</string>
-        </property>
-        <property name="text">
-         <string>Hist</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="fontLayout">
       <item>
        <widget class="QLabel" name="overlayFontLabel">
         <property name="text">
@@ -599,27 +579,80 @@
         <property name="toolTip">
          <string>Font scale for date/time overlay</string>
         </property>
+        <property name="decimals">
+         <number>1</number>
+        </property>
         <property name="minimum">
          <double>0.300000000000000</double>
         </property>
         <property name="maximum">
-         <double>3.000000000000000</double>
+         <double>10.000000000000000</double>
         </property>
         <property name="singleStep">
          <double>0.100000000000000</double>
-        </property>
-        <property name="decimals">
-         <number>1</number>
         </property>
         <property name="value">
          <double>0.500000000000000</double>
         </property>
        </widget>
       </item>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
      </layout>
     </item>
     <item>
      <layout class="QHBoxLayout" name="motionLayout">
+      <item>
+       <widget class="ButtonSwitch" name="diffMaskButton">
+        <property name="toolTip">
+         <string>Show differences from previous image</string>
+        </property>
+        <property name="text">
+         <string>Diff</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="dilationLabel">
+        <property name="text">
+         <string>Dilation</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QSpinBox" name="dilationSpin">
+        <property name="toolTip">
+         <string>Dilation kernel size for diff mask</string>
+        </property>
+        <property name="minimum">
+         <number>0</number>
+        </property>
+        <property name="maximum">
+         <number>20</number>
+        </property>
+        <property name="value">
+         <number>3</number>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="Line" name="line">
+        <property name="orientation">
+         <enum>Qt::Orientation::Vertical</enum>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="ButtonSwitch" name="motionDetectButton">
         <property name="toolTip">
@@ -659,9 +692,22 @@
          <string>Select bounding box colour</string>
         </property>
         <property name="text">
-         <string>...</string>
+         <string/>
         </property>
        </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_3">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
       </item>
      </layout>
     </item>
@@ -671,7 +717,7 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>862</y>
+     <y>872</y>
      <width>391</width>
      <height>201</height>
     </rect>
@@ -791,6 +837,18 @@
     </sizepolicy>
    </property>
    <layout class="QHBoxLayout" name="horizontalLayout">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
     <item>
      <widget class="ScaledImage" name="imageLabel">
       <property name="sizePolicy">

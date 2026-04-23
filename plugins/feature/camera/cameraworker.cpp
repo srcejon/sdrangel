@@ -17,15 +17,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <QDebug>
-#include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QRandomGenerator>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QColor>
@@ -45,10 +46,6 @@
 
 #include "cameraworker.h"
 
-namespace {
-constexpr int ALPACA_CLIENT_ID = 1;
-}
-
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
@@ -62,7 +59,9 @@ CameraWorker::CameraWorker() :
     m_imageSaved(false),
     m_captureTimer(this),
     m_networkManager(nullptr),
-    m_alpacaFrameRequestPending(false)
+    m_alpacaFrameRequestPending(false),
+    m_alpacaClientId(QRandomGenerator::global()->bounded(quint64(1), quint64(std::numeric_limits<quint32>::max()) + 1)),
+    m_alpacaClientTransactionId(1)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     , m_qtCamera(nullptr)
     , m_videoSink(nullptr)
@@ -336,8 +335,8 @@ void CameraWorker::captureTick()
 
     QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/image").arg(m_settings.m_alpacaCameraId));
     QUrlQuery query;
-    query.addQueryItem("ClientID", QString::number(ALPACA_CLIENT_ID));
-    query.addQueryItem("ClientTransactionID", QString::number(QDateTime::currentMSecsSinceEpoch()));
+    query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+    query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
     url.setQuery(query);
 
     QNetworkRequest request(url);

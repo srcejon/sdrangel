@@ -179,6 +179,8 @@ private:
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
     bool m_alpacaFrameRequestPending;
+    quint32 m_alpacaClientId;
+    quint32 m_alpacaClientTransactionId;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;

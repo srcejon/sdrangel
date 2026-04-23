@@ -614,7 +614,8 @@ void CameraWorker::alpacaQueryCameraCapabilities()
         return;
     }
 
-    // Reset ImageBytes support flag so we probe again for the new camera
+    // Reset ImageBytes support flag so we re-probe support for the new camera;
+    // cameras on the same Alpaca server may have different capabilities.
     m_alpacaImageBytesSupported = true;
 
     const QString baseUrl = buildAlpacaBaseUrl();
@@ -1058,6 +1059,7 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
 }
 
 // Alpaca ImageBytes binary format (ASCOM Alpaca spec):
+// https://ascom-standards.org/api/?urls.primaryName=ASCOM%20Alpaca%20Device%20API#/Camera/get__device_type___device_number__imagearray
 //
 //   Byte  0- 3: MetaDataVersion  (int32 LE) — must be 1
 //   Byte  4- 7: ErrorNumber      (int32 LE) — 0 = success
@@ -1129,8 +1131,9 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
     const char*   pixels         = payload.constData() + dataStart;
     const qsizetype pixelDataLen = payload.size() - dataStart;
 
-    // Read one pixel value (any supported element type) at a given byte offset, returning double
-    auto readPixel = [&](qsizetype byteOffset) -> double {
+    // Read one pixel value as double (any supported element type) at a given byte offset.
+    // Using double avoids overflow during the min/max scan and subsequent scaling.
+    auto readPixelAsDouble = [&](qsizetype byteOffset) -> double {
         if (byteOffset + elementSize > pixelDataLen) {
             return 0.0;
         }
@@ -1143,9 +1146,10 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
             case kElementTypeInt32:
                 return static_cast<double>(qFromLittleEndian<qint32>(p));
             case kElementTypeDouble: {
+                // Use memcpy + assume little-endian host (x86/x64/ARM — all Qt-supported platforms).
+                // Qt does not provide qFromLittleEndian<double> for all versions.
                 double v;
                 std::memcpy(&v, p, sizeof(v));
-                // Assume little-endian host (standard on x86/x64/ARM with Qt)
                 return v;
             }
             default:
@@ -1172,7 +1176,7 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
         double maxVal = std::numeric_limits<double>::lowest();
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
-                const double v = readPixel(static_cast<qsizetype>(x * height + y) * elementSize);
+                const double v = readPixelAsDouble(static_cast<qsizetype>(x * height + y) * elementSize);
                 if (v < minVal) { minVal = v; }
                 if (v > maxVal) { maxVal = v; }
             }
@@ -1184,7 +1188,7 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
         QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
-                const double v = readPixel(static_cast<qsizetype>(x * height + y) * elementSize);
+                const double v = readPixelAsDouble(static_cast<qsizetype>(x * height + y) * elementSize);
                 raw[x][y] = (range > 0.0)
                     ? qBound(0, static_cast<int>((v - minVal) * scale), 255)
                     : uniformGray;
@@ -1209,7 +1213,7 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
         }
 
         auto pixelAt = [&](int plane, int x, int y) -> double {
-            return readPixel(static_cast<qsizetype>(plane * width * height + x * height + y) * elementSize);
+            return readPixelAsDouble(static_cast<qsizetype>(plane * width * height + x * height + y) * elementSize);
         };
 
         // First pass: min/max across all planes for black-level correction

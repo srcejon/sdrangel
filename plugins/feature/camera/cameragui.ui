@@ -939,6 +939,147 @@
       </item>
      </layout>
     </item>
+    <item>
+     <layout class="QHBoxLayout" name="yoloLayout">
+      <item>
+       <widget class="ButtonSwitch" name="yoloButton">
+        <property name="toolTip">
+         <string>Run YOLO object detection on each frame</string>
+        </property>
+        <property name="text">
+         <string>YOLO</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="yoloModelPathEdit">
+        <property name="toolTip">
+         <string>Path to YOLO ONNX model file</string>
+        </property>
+        <property name="placeholderText">
+         <string>model.onnx</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="yoloModelPathButton">
+        <property name="toolTip">
+         <string>Browse for ONNX model file</string>
+        </property>
+        <property name="text">
+         <string>...</string>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>30</width>
+          <height>16777215</height>
+         </size>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="yoloLabelsLabel">
+        <property name="text">
+         <string>Labels</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="yoloLabelsPathEdit">
+        <property name="toolTip">
+         <string>Path to plain-text class labels file (one name per line)</string>
+        </property>
+        <property name="placeholderText">
+         <string>coco.names</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="yoloLabelsPathButton">
+        <property name="toolTip">
+         <string>Browse for class labels file</string>
+        </property>
+        <property name="text">
+         <string>...</string>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>30</width>
+          <height>16777215</height>
+         </size>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="yoloConfLabel">
+        <property name="text">
+         <string>Conf</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDoubleSpinBox" name="yoloConfSpin">
+        <property name="toolTip">
+         <string>Minimum confidence threshold for detections (0-1)</string>
+        </property>
+        <property name="decimals">
+         <number>2</number>
+        </property>
+        <property name="minimum">
+         <double>0.010000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>1.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.050000000000000</double>
+        </property>
+        <property name="value">
+         <double>0.500000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="yoloNmsLabel">
+        <property name="text">
+         <string>NMS</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDoubleSpinBox" name="yoloNmsSpin">
+        <property name="toolTip">
+         <string>Non-maximum suppression IoU threshold (0-1)</string>
+        </property>
+        <property name="decimals">
+         <number>2</number>
+        </property>
+        <property name="minimum">
+         <double>0.010000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>1.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.050000000000000</double>
+        </property>
+        <property name="value">
+         <double>0.450000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="yoloBoxColorButton">
+        <property name="toolTip">
+         <string>Select bounding box colour</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
    </layout>
   </widget>
   <widget class="QWidget" name="horizontalLayoutWidget">

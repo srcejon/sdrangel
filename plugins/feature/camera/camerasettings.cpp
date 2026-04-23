@@ -76,6 +76,12 @@ void CameraSettings::resetToDefaults()
     m_spectrumOffsetX = 0;
     m_spectrumOffsetY = 0;
     m_spectrumScale = 1.0;
+    m_yoloEnabled = false;
+    m_yoloModelPath.clear();
+    m_yoloLabelsPath.clear();
+    m_yoloConfThreshold = 0.5;
+    m_yoloNmsThreshold = 0.45;
+    m_yoloBoxColor = Qt::green;
 }
 
 QByteArray CameraSettings::serialize() const
@@ -132,6 +138,12 @@ QByteArray CameraSettings::serialize() const
     s.writeString(44, m_dateTimeFormat);
     s.writeS32(45, m_dateTimePosX);
     s.writeS32(46, m_dateTimePosY);
+    s.writeBool(47, m_yoloEnabled);
+    s.writeString(48, m_yoloModelPath);
+    s.writeString(49, m_yoloLabelsPath);
+    s.writeDouble(50, m_yoloConfThreshold);
+    s.writeDouble(51, m_yoloNmsThreshold);
+    s.writeU32(52, m_yoloBoxColor.rgba());
 
     return s.final();
 }
@@ -229,6 +241,16 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(46, &m_dateTimePosY, 0);
         m_dateTimePosX = qBound(0, m_dateTimePosX, 4096);
         m_dateTimePosY = qBound(0, m_dateTimePosY, 4096);
+        d.readBool(47, &m_yoloEnabled, false);
+        d.readString(48, &m_yoloModelPath, "");
+        d.readString(49, &m_yoloLabelsPath, "");
+        d.readDouble(50, &m_yoloConfThreshold, 0.5);
+        d.readDouble(51, &m_yoloNmsThreshold, 0.45);
+        m_yoloConfThreshold = qBound(0.0, m_yoloConfThreshold, 1.0);
+        m_yoloNmsThreshold = qBound(0.0, m_yoloNmsThreshold, 1.0);
+        uint32_t yoloBoxColorRgba = QColor(Qt::green).rgba();
+        d.readU32(52, &yoloBoxColorRgba, QColor(Qt::green).rgba());
+        m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
 
         return true;
     }
@@ -371,6 +393,24 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("dateTimePosY")) {
         m_dateTimePosY = qBound(0, settings.m_dateTimePosY, 4096);
     }
+    if (settingsKeys.contains("yoloEnabled")) {
+        m_yoloEnabled = settings.m_yoloEnabled;
+    }
+    if (settingsKeys.contains("yoloModelPath")) {
+        m_yoloModelPath = settings.m_yoloModelPath;
+    }
+    if (settingsKeys.contains("yoloLabelsPath")) {
+        m_yoloLabelsPath = settings.m_yoloLabelsPath;
+    }
+    if (settingsKeys.contains("yoloConfThreshold")) {
+        m_yoloConfThreshold = qBound(0.0, settings.m_yoloConfThreshold, 1.0);
+    }
+    if (settingsKeys.contains("yoloNmsThreshold")) {
+        m_yoloNmsThreshold = qBound(0.0, settings.m_yoloNmsThreshold, 1.0);
+    }
+    if (settingsKeys.contains("yoloBoxColor")) {
+        m_yoloBoxColor = settings.m_yoloBoxColor;
+    }
 }
 
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
@@ -496,6 +536,21 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("dateTimePosY") || force) {
         ostr << " m_dateTimePosY: " << m_dateTimePosY;
+    }
+    if (settingsKeys.contains("yoloEnabled") || force) {
+        ostr << " m_yoloEnabled: " << m_yoloEnabled;
+    }
+    if (settingsKeys.contains("yoloModelPath") || force) {
+        ostr << " m_yoloModelPath: " << m_yoloModelPath.toStdString();
+    }
+    if (settingsKeys.contains("yoloLabelsPath") || force) {
+        ostr << " m_yoloLabelsPath: " << m_yoloLabelsPath.toStdString();
+    }
+    if (settingsKeys.contains("yoloConfThreshold") || force) {
+        ostr << " m_yoloConfThreshold: " << m_yoloConfThreshold;
+    }
+    if (settingsKeys.contains("yoloNmsThreshold") || force) {
+        ostr << " m_yoloNmsThreshold: " << m_yoloNmsThreshold;
     }
 
     return QString(ostr.str().c_str());

@@ -128,6 +128,14 @@ private slots:
     void on_spectrumOffsetXSlider_valueChanged(int value);
     void on_spectrumOffsetYSlider_valueChanged(int value);
     void on_spectrumScaleSpin_valueChanged(double value);
+    void on_yoloButton_toggled(bool checked);
+    void on_yoloModelPathEdit_editingFinished();
+    void on_yoloModelPathButton_clicked();
+    void on_yoloLabelsPathEdit_editingFinished();
+    void on_yoloLabelsPathButton_clicked();
+    void on_yoloConfSpin_valueChanged(double value);
+    void on_yoloNmsSpin_valueChanged(double value);
+    void on_yoloBoxColorButton_clicked();
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

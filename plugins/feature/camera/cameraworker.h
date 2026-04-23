@@ -29,6 +29,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/video/background_segm.hpp>
 #include <opencv2/videoio.hpp>
+#include <opencv2/dnn/dnn.hpp>
 
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -334,6 +335,12 @@ private:
     QDateTime m_captureDateTime; // timestamp of the last raw frame
     cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor; // MOG2 state
 
+    // YOLO DNN state
+    cv::dnn::Net m_yoloNet;              ///< Loaded ONNX model (empty until first use)
+    QString m_yoloLoadedModelPath;       ///< Path that m_yoloNet was loaded from
+    QStringList m_yoloLabels;            ///< Class names loaded from m_yoloLabelsPath
+    QString m_yoloLoadedLabelsPath;      ///< Path that m_yoloLabels was loaded from
+
     // Video output
     cv::VideoWriter m_videoWriter; // OpenCV video writer (works for both Alpaca and Qt cameras)
 
@@ -356,6 +363,7 @@ private:
 
     // Post-processing
     [[nodiscard]] QImage applyPostProcessing(const QImage& input);
+    void runYoloDetections(cv::Mat& bgrMat);
 
     void reportFrameToGUI(const QImage& image);
     QString buildAlpacaBaseUrl() const;

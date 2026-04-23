@@ -313,6 +313,12 @@ void CameraGUI::displaySettings()
     ui->spectrumOffsetYSlider->setValue(m_settings.m_spectrumOffsetY);
     ui->spectrumOffsetYValue->setText(QString::number(m_settings.m_spectrumOffsetY));
     ui->spectrumScaleSpin->setValue(m_settings.m_spectrumScale);
+    ui->yoloButton->setChecked(m_settings.m_yoloEnabled);
+    ui->yoloModelPathEdit->setText(m_settings.m_yoloModelPath);
+    ui->yoloLabelsPathEdit->setText(m_settings.m_yoloLabelsPath);
+    ui->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
+    ui->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
+    updateColorButton(ui->yoloBoxColorButton, m_settings.m_yoloBoxColor);
     updateAlpacaVisibility();
     updateEnabledControls();
 }
@@ -386,6 +392,14 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->spectrumOffsetXSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetXSlider_valueChanged);
     QObject::connect(ui->spectrumOffsetYSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetYSlider_valueChanged);
     QObject::connect(ui->spectrumScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_spectrumScaleSpin_valueChanged);
+    QObject::connect(ui->yoloButton, &QToolButton::toggled, this, &CameraGUI::on_yoloButton_toggled);
+    QObject::connect(ui->yoloModelPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloModelPathEdit_editingFinished);
+    QObject::connect(ui->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
+    QObject::connect(ui->yoloLabelsPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloLabelsPathEdit_editingFinished);
+    QObject::connect(ui->yoloLabelsPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloLabelsPathButton_clicked);
+    QObject::connect(ui->yoloConfSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloConfSpin_valueChanged);
+    QObject::connect(ui->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
+    QObject::connect(ui->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
 }
 
 void CameraGUI::updateAlpacaVisibility()
@@ -849,6 +863,18 @@ void CameraGUI::updateEnabledControls()
     ui->spectrumOffsetYValue->setEnabled(specActive);
     ui->spectrumScaleLabel->setEnabled(specActive);
     ui->spectrumScaleSpin->setEnabled(specActive);
+
+    const bool yoloActive = m_settings.m_yoloEnabled;
+    ui->yoloModelPathEdit->setEnabled(yoloActive);
+    ui->yoloModelPathButton->setEnabled(yoloActive);
+    ui->yoloLabelsLabel->setEnabled(yoloActive);
+    ui->yoloLabelsPathEdit->setEnabled(yoloActive);
+    ui->yoloLabelsPathButton->setEnabled(yoloActive);
+    ui->yoloConfLabel->setEnabled(yoloActive);
+    ui->yoloConfSpin->setEnabled(yoloActive);
+    ui->yoloNmsLabel->setEnabled(yoloActive);
+    ui->yoloNmsSpin->setEnabled(yoloActive);
+    ui->yoloBoxColorButton->setEnabled(yoloActive);
 }
 
 void CameraGUI::on_overlayFontCombo_currentIndexChanged(int index)
@@ -930,4 +956,83 @@ void CameraGUI::on_spectrumScaleSpin_valueChanged(double value)
     m_settings.m_spectrumScale = value;
     m_settingsKeys.append("spectrumScale");
     applySettings();
+}
+
+void CameraGUI::on_yoloButton_toggled(bool checked)
+{
+    m_settings.m_yoloEnabled = checked;
+    m_settingsKeys.append("yoloEnabled");
+    updateEnabledControls();
+    applySettings();
+}
+
+void CameraGUI::on_yoloModelPathEdit_editingFinished()
+{
+    m_settings.m_yoloModelPath = ui->yoloModelPathEdit->text();
+    m_settingsKeys.append("yoloModelPath");
+    applySettings();
+}
+
+void CameraGUI::on_yoloModelPathButton_clicked()
+{
+    const QString fileName = QFileDialog::getOpenFileName(
+        this, tr("Select YOLO ONNX model"), m_settings.m_yoloModelPath,
+        tr("ONNX model (*.onnx);;All files (*)"));
+
+    if (!fileName.isEmpty())
+    {
+        m_settings.m_yoloModelPath = fileName;
+        ui->yoloModelPathEdit->setText(fileName);
+        m_settingsKeys.append("yoloModelPath");
+        applySettings();
+    }
+}
+
+void CameraGUI::on_yoloLabelsPathEdit_editingFinished()
+{
+    m_settings.m_yoloLabelsPath = ui->yoloLabelsPathEdit->text();
+    m_settingsKeys.append("yoloLabelsPath");
+    applySettings();
+}
+
+void CameraGUI::on_yoloLabelsPathButton_clicked()
+{
+    const QString fileName = QFileDialog::getOpenFileName(
+        this, tr("Select class labels file"), m_settings.m_yoloLabelsPath,
+        tr("Names file (*.names *.txt);;All files (*)"));
+
+    if (!fileName.isEmpty())
+    {
+        m_settings.m_yoloLabelsPath = fileName;
+        ui->yoloLabelsPathEdit->setText(fileName);
+        m_settingsKeys.append("yoloLabelsPath");
+        applySettings();
+    }
+}
+
+void CameraGUI::on_yoloConfSpin_valueChanged(double value)
+{
+    m_settings.m_yoloConfThreshold = value;
+    m_settingsKeys.append("yoloConfThreshold");
+    applySettings();
+}
+
+void CameraGUI::on_yoloNmsSpin_valueChanged(double value)
+{
+    m_settings.m_yoloNmsThreshold = value;
+    m_settingsKeys.append("yoloNmsThreshold");
+    applySettings();
+}
+
+void CameraGUI::on_yoloBoxColorButton_clicked()
+{
+    const QColor color = QColorDialog::getColor(m_settings.m_yoloBoxColor, this, tr("Select bounding box colour"));
+
+    if (color.isValid())
+    {
+        m_settings.m_yoloBoxColor = color;
+        updateColorButton(ui->yoloBoxColorButton, color);
+        m_settingsKeys.append("yoloBoxColor");
+        applySettings();
+    }
 }

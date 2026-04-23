@@ -32,6 +32,8 @@
 #include <QNetworkRequest>
 #include <QPainter>
 #include <QRandomGenerator>
+#include <QFile>
+#include <QTextStream>
 #include <QSharedPointer>
 #include <QtEndian>
 #include <QUrl>
@@ -278,7 +280,8 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "diffMask", "dilationSize", "overlayFontFamily", "overlayFontScale",
         "motionDetect", "motionBoxColor", "minContourArea",
-        "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale"
+        "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
+        "yoloEnabled", "yoloModelPath", "yoloLabelsPath", "yoloConfThreshold", "yoloNmsThreshold", "yoloBoxColor"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
         [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
@@ -297,6 +300,18 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     // Reset MOG2 state when motion detection is toggled off
     if ((force && !m_settings.m_motionDetect) || (settingsKeys.contains("motionDetect") && !m_settings.m_motionDetect)) {
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
+    }
+
+    // Drop cached YOLO net if the model path changed so it will be reloaded lazily
+    if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath)) {
+        m_yoloNet = cv::dnn::Net();
+        m_yoloLoadedModelPath.clear();
+    }
+
+    // Drop cached YOLO labels if the labels path changed
+    if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath)) {
+        m_yoloLabels.clear();
+        m_yoloLoadedLabelsPath.clear();
     }
 
     if (settingsKeys.contains("captureActive") || force)
@@ -826,6 +841,7 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
         || m_settings.m_overlayDateTime
         || (m_settings.m_diffMask && !m_previousRawFrame.isNull())
         || m_settings.m_motionDetect
+        || (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty())
         || needsSpectrumOverlay;
 
     if (!needsAny) {
@@ -900,6 +916,11 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
                 cv::rectangle(bgrMat, cv::boundingRect(contour), boxColor, 2);
             }
         }
+    }
+
+    if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty())
+    {
+        runYoloDetections(bgrMat);
     }
 
     if (m_settings.m_overlayDateTime)
@@ -999,6 +1020,245 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
     }
 
     return result;
+}
+
+void CameraWorker::runYoloDetections(cv::Mat& bgrMat)
+{
+    // Lazily load class labels
+    if (m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath)
+    {
+        m_yoloLabels.clear();
+        m_yoloLoadedLabelsPath.clear();
+
+        if (!m_settings.m_yoloLabelsPath.isEmpty())
+        {
+            QFile f(m_settings.m_yoloLabelsPath);
+            if (f.open(QIODevice::ReadOnly | QIODevice::Text))
+            {
+                QTextStream ts(&f);
+                while (!ts.atEnd())
+                {
+                    const QString line = ts.readLine().trimmed();
+                    if (!line.isEmpty()) {
+                        m_yoloLabels.append(line);
+                    }
+                }
+                m_yoloLoadedLabelsPath = m_settings.m_yoloLabelsPath;
+            }
+            else
+            {
+                qWarning() << "CameraWorker::runYoloDetections: cannot open labels file:" << m_settings.m_yoloLabelsPath;
+            }
+        }
+    }
+
+    // Lazily load the ONNX model
+    if (m_yoloLoadedModelPath != m_settings.m_yoloModelPath)
+    {
+        m_yoloNet = cv::dnn::Net();
+        m_yoloLoadedModelPath.clear();
+
+        if (!m_settings.m_yoloModelPath.isEmpty())
+        {
+            try
+            {
+                m_yoloNet = cv::dnn::readNetFromONNX(m_settings.m_yoloModelPath.toStdString());
+                m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
+                m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+                m_yoloLoadedModelPath = m_settings.m_yoloModelPath;
+                qDebug() << "CameraWorker::runYoloDetections: loaded model" << m_settings.m_yoloModelPath;
+            }
+            catch (const cv::Exception& e)
+            {
+                qWarning() << "CameraWorker::runYoloDetections: failed to load model:" << e.what();
+                return;
+            }
+        }
+        else
+        {
+            return;
+        }
+    }
+
+    if (m_yoloNet.empty()) {
+        return;
+    }
+
+    // Build a 640×640 blob from the frame (letterboxing handled by the model)
+    const int inputSize = 640;
+    const float scaleX = static_cast<float>(bgrMat.cols) / inputSize;
+    const float scaleY = static_cast<float>(bgrMat.rows) / inputSize;
+
+    cv::Mat blob;
+    cv::dnn::blobFromImage(bgrMat, blob, 1.0 / 255.0,
+                           cv::Size(inputSize, inputSize),
+                           cv::Scalar(), /*swapRB=*/true, /*crop=*/false);
+
+    m_yoloNet.setInput(blob);
+
+    std::vector<cv::Mat> outputs;
+    try
+    {
+        m_yoloNet.forward(outputs, m_yoloNet.getUnconnectedOutLayersNames());
+    }
+    catch (const cv::Exception& e)
+    {
+        qWarning() << "CameraWorker::runYoloDetections: inference failed:" << e.what();
+        return;
+    }
+
+    if (outputs.empty()) {
+        return;
+    }
+
+    // Parse detections. Supports two common YOLO ONNX output layouts:
+    //
+    // YOLOv8 / YOLOv9 / YOLOv10:  [1, (4 + numClasses), numAnchors]
+    //   rows = 4 + numClasses, cols = numAnchors, no explicit objectness score.
+    //
+    // YOLOv5 / YOLOv7:             [1, numAnchors, (5 + numClasses)]
+    //   rows = numAnchors, cols = 5 + numClasses, col[4] is objectness.
+    //
+    // We detect which layout is in use by checking which dimension is larger.
+
+    cv::Mat det = outputs[0];
+    if (det.dims == 3) {
+        // Squeeze the batch dimension: [1, rows, cols] → [rows, cols]
+        det = det.reshape(1, det.size[1]);
+    }
+    // det is now a 2D matrix [rows × cols]
+
+    const float confThresh = static_cast<float>(m_settings.m_yoloConfThreshold);
+    const float nmsThresh  = static_cast<float>(m_settings.m_yoloNmsThreshold);
+
+    std::vector<cv::Rect> boxes;
+    std::vector<float>    scores;
+    std::vector<int>      classIds;
+
+    // Determine which layout we have
+    // YOLOv8 style: rows <= ~200 (4 + nClasses), cols >> rows
+    const bool isV8Style = (det.rows < det.cols);
+
+    if (isV8Style)
+    {
+        // det: [4 + numClasses, numAnchors]
+        // Each column is one anchor: [cx, cy, w, h, cls0, cls1, ...]
+        const int numAnchors = det.cols;
+        const int numClasses = det.rows - 4;
+        if (numClasses <= 0) {
+            return;
+        }
+
+        for (int a = 0; a < numAnchors; ++a)
+        {
+            // Find the class with the highest score
+            float bestScore = 0.0f;
+            int   bestClass = 0;
+            for (int c = 0; c < numClasses; ++c)
+            {
+                const float s = det.at<float>(4 + c, a);
+                if (s > bestScore) {
+                    bestScore = s;
+                    bestClass = c;
+                }
+            }
+            if (bestScore < confThresh) {
+                continue;
+            }
+
+            const float cx = det.at<float>(0, a) * scaleX;
+            const float cy = det.at<float>(1, a) * scaleY;
+            const float  w = det.at<float>(2, a) * scaleX;
+            const float  h = det.at<float>(3, a) * scaleY;
+
+            const int x1 = static_cast<int>(cx - w / 2.0f);
+            const int y1 = static_cast<int>(cy - h / 2.0f);
+
+            boxes.push_back(cv::Rect(x1, y1, static_cast<int>(w), static_cast<int>(h)));
+            scores.push_back(bestScore);
+            classIds.push_back(bestClass);
+        }
+    }
+    else
+    {
+        // YOLOv5 style: [numAnchors, 5 + numClasses]
+        const int numAnchors = det.rows;
+        const int numClasses = det.cols - 5;
+        if (numClasses < 0) {
+            return;
+        }
+
+        for (int a = 0; a < numAnchors; ++a)
+        {
+            const float objectness = det.at<float>(a, 4);
+            if (objectness < confThresh) {
+                continue;
+            }
+
+            float bestScore = 0.0f;
+            int   bestClass = 0;
+            for (int c = 0; c < numClasses; ++c)
+            {
+                const float s = objectness * det.at<float>(a, 5 + c);
+                if (s > bestScore) {
+                    bestScore = s;
+                    bestClass = c;
+                }
+            }
+            if (bestScore < confThresh) {
+                continue;
+            }
+
+            const float cx = det.at<float>(a, 0) * scaleX;
+            const float cy = det.at<float>(a, 1) * scaleY;
+            const float  w = det.at<float>(a, 2) * scaleX;
+            const float  h = det.at<float>(a, 3) * scaleY;
+
+            const int x1 = static_cast<int>(cx - w / 2.0f);
+            const int y1 = static_cast<int>(cy - h / 2.0f);
+
+            boxes.push_back(cv::Rect(x1, y1, static_cast<int>(w), static_cast<int>(h)));
+            scores.push_back(bestScore);
+            classIds.push_back(bestClass);
+        }
+    }
+
+    // Apply NMS
+    std::vector<int> indices;
+    cv::dnn::NMSBoxes(boxes, scores, confThresh, nmsThresh, indices);
+
+    // Draw bounding boxes and labels
+    const QColor& bc = m_settings.m_yoloBoxColor;
+    const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
+    const cv::Scalar textBg(0, 0, 0);
+
+    for (int idx : indices)
+    {
+        const cv::Rect& box = boxes[idx];
+        cv::rectangle(bgrMat, box, boxColor, 2);
+
+        // Build label text
+        QString label;
+        if (!m_yoloLabels.isEmpty() && classIds[idx] < m_yoloLabels.size()) {
+            label = m_yoloLabels[classIds[idx]];
+        } else {
+            label = QStringLiteral("cls%1").arg(classIds[idx]);
+        }
+        label += QStringLiteral(" %1%").arg(static_cast<int>(scores[idx] * 100.0f + 0.5f));
+
+        const std::string labelStd = label.toStdString();
+        int baseLine = 0;
+        const cv::Size textSize = cv::getTextSize(labelStd, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
+
+        const int labelY = std::max(box.y, textSize.height + 2);
+        cv::rectangle(bgrMat,
+                      cv::Point(box.x, labelY - textSize.height - 2),
+                      cv::Point(box.x + textSize.width, labelY + baseLine),
+                      textBg, cv::FILLED);
+        cv::putText(bgrMat, labelStd,
+                    cv::Point(box.x, labelY),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, boxColor, 1, cv::LINE_AA);
+    }
 }
 
 void CameraWorker::alpacaQueryCameraCapabilities()

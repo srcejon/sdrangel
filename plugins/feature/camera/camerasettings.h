@@ -84,6 +84,14 @@ struct CameraSettings
     int    m_spectrumOffsetY;   ///< Y offset (px) for the top-left corner of the spectrum overlay: -4096..4096
     double m_spectrumScale;     ///< Scale factor applied to the spectrum image before compositing: 0.1..4.0
 
+    // YOLO object-detection settings
+    bool   m_yoloEnabled;        ///< Run YOLO ONNX inference and draw bounding boxes
+    QString m_yoloModelPath;     ///< Path to the .onnx model file
+    QString m_yoloLabelsPath;    ///< Path to a plain-text file with one class name per line (optional)
+    double m_yoloConfThreshold;  ///< Minimum confidence to keep a detection: 0.0..1.0
+    double m_yoloNmsThreshold;   ///< IoU threshold for non-maximum suppression: 0.0..1.0
+    QColor m_yoloBoxColor;       ///< Bounding-box colour when no per-class colour is available
+
     CameraSettings();
     ~CameraSettings() = default;
     void resetToDefaults();

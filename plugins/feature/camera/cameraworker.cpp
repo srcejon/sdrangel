@@ -275,6 +275,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     // Detect whether any post-processing parameter changed
     static const QStringList kPostProcessingKeys = {
         "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
+        "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "diffMask", "dilationSize", "overlayFontFamily", "overlayFontScale",
         "motionDetect", "motionBoxColor", "minContourArea",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale"
@@ -976,7 +977,10 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
 
     if (m_settings.m_overlayDateTime)
     {
-        const QString text = m_captureDateTime.toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
+        const QString fmt = m_settings.m_dateTimeFormat.isEmpty()
+                            ? QStringLiteral("yyyy-MM-dd hh:mm:ss")
+                            : m_settings.m_dateTimeFormat;
+        const QString text = m_captureDateTime.toString(fmt);
         QFont font;
         if (!m_settings.m_overlayFontFamily.isEmpty()) {
             font.setFamily(m_settings.m_overlayFontFamily);
@@ -987,7 +991,11 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
         painter.setRenderHint(QPainter::TextAntialiasing);
         painter.setFont(font);
         painter.setPen(m_settings.m_dateTimeColor);
-        painter.drawText(4, result.height() - fm.descent() - 2, text);
+        const int x = m_settings.m_dateTimePosX;
+        const int y = (m_settings.m_dateTimePosY > 0)
+                      ? m_settings.m_dateTimePosY
+                      : result.height() - fm.descent() - 2;
+        painter.drawText(x, y, text);
     }
 
     return result;

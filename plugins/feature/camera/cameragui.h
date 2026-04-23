@@ -77,6 +77,7 @@ private:
     void updateAlpacaVisibility();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateImageWidget();
+    void updateEnabledControls();
     static void updateColorButton(QToolButton* btn, const QColor& color);
 
 private slots:
@@ -111,6 +112,9 @@ private slots:
     void on_invertColorsButton_toggled(bool checked);
     void on_overlayDateTimeButton_toggled(bool checked);
     void on_dateTimeColorButton_clicked();
+    void on_dateTimeFormatEdit_editingFinished();
+    void on_dateTimePosXSlider_valueChanged(int value);
+    void on_dateTimePosYSlider_valueChanged(int value);
     void on_diffMaskButton_toggled(bool checked);
     void on_dilationSpin_valueChanged(int value);
     void on_histogramButton_clicked();
@@ -121,8 +125,8 @@ private slots:
     void on_motionBoxColorButton_clicked();
     void on_spectrumOverlayButton_toggled(bool checked);
     void on_spectrumDeviceCombo_currentIndexChanged(int index);
-    void on_spectrumOffsetXSpin_valueChanged(int value);
-    void on_spectrumOffsetYSpin_valueChanged(int value);
+    void on_spectrumOffsetXSlider_valueChanged(int value);
+    void on_spectrumOffsetYSlider_valueChanged(int value);
     void on_spectrumScaleSpin_valueChanged(double value);
 };
 

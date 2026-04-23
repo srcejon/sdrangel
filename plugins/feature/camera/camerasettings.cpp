@@ -60,6 +60,9 @@ void CameraSettings::resetToDefaults()
     m_invertColors = false;
     m_overlayDateTime = false;
     m_dateTimeColor = Qt::white;
+    m_dateTimeFormat = QStringLiteral("yyyy-MM-dd hh:mm:ss");
+    m_dateTimePosX = 4;
+    m_dateTimePosY = 0;
     m_diffMask = false;
     m_dilationSize = 3;
     m_overlayFontFamily.clear();
@@ -126,6 +129,9 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(41, m_spectrumOffsetX);
     s.writeS32(42, m_spectrumOffsetY);
     s.writeDouble(43, m_spectrumScale);
+    s.writeString(44, m_dateTimeFormat);
+    s.writeS32(45, m_dateTimePosX);
+    s.writeS32(46, m_dateTimePosY);
 
     return s.final();
 }
@@ -218,6 +224,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_spectrumOffsetY = qBound(-4096, m_spectrumOffsetY, 4096);
         d.readDouble(43, &m_spectrumScale, 1.0);
         m_spectrumScale = qBound(0.1, m_spectrumScale, 4.0);
+        d.readString(44, &m_dateTimeFormat, "yyyy-MM-dd hh:mm:ss");
+        d.readS32(45, &m_dateTimePosX, 4);
+        d.readS32(46, &m_dateTimePosY, 0);
+        m_dateTimePosX = qBound(0, m_dateTimePosX, 4096);
+        m_dateTimePosY = qBound(0, m_dateTimePosY, 4096);
 
         return true;
     }
@@ -351,6 +362,15 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("spectrumScale")) {
         m_spectrumScale = qBound(0.1, settings.m_spectrumScale, 4.0);
     }
+    if (settingsKeys.contains("dateTimeFormat")) {
+        m_dateTimeFormat = settings.m_dateTimeFormat;
+    }
+    if (settingsKeys.contains("dateTimePosX")) {
+        m_dateTimePosX = qBound(0, settings.m_dateTimePosX, 4096);
+    }
+    if (settingsKeys.contains("dateTimePosY")) {
+        m_dateTimePosY = qBound(0, settings.m_dateTimePosY, 4096);
+    }
 }
 
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
@@ -467,6 +487,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("spectrumScale") || force) {
         ostr << " m_spectrumScale: " << m_spectrumScale;
+    }
+    if (settingsKeys.contains("dateTimeFormat") || force) {
+        ostr << " m_dateTimeFormat: " << m_dateTimeFormat.toStdString();
+    }
+    if (settingsKeys.contains("dateTimePosX") || force) {
+        ostr << " m_dateTimePosX: " << m_dateTimePosX;
+    }
+    if (settingsKeys.contains("dateTimePosY") || force) {
+        ostr << " m_dateTimePosY: " << m_dateTimePosY;
     }
 
     return QString(ostr.str().c_str());

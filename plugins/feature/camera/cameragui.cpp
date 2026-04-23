@@ -160,7 +160,6 @@ bool CameraGUI::handleMessage(const Message& message)
 
         ui->spectrumDeviceCombo->blockSignals(true);
         ui->spectrumDeviceCombo->clear();
-        ui->spectrumDeviceCombo->addItem(QString()); // empty entry = no device selected
         for (const QString& id : report.getDeviceLongIds()) {
             ui->spectrumDeviceCombo->addItem(id);
         }
@@ -288,6 +287,11 @@ void CameraGUI::displaySettings()
     ui->contrastValue->setText(QString::number(m_settings.m_contrast, 'f', 2));
     ui->invertColorsButton->setChecked(m_settings.m_invertColors);
     ui->overlayDateTimeButton->setChecked(m_settings.m_overlayDateTime);
+    ui->dateTimeFormatEdit->setText(m_settings.m_dateTimeFormat);
+    ui->dateTimePosXSlider->setValue(m_settings.m_dateTimePosX);
+    ui->dateTimePosXValue->setText(QString::number(m_settings.m_dateTimePosX));
+    ui->dateTimePosYSlider->setValue(m_settings.m_dateTimePosY);
+    ui->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
     ui->diffMaskButton->setChecked(m_settings.m_diffMask);
     ui->dilationSpin->setValue(m_settings.m_dilationSize);
     ui->overlayFontCombo->setCurrentText(m_settings.m_overlayFontFamily);
@@ -298,16 +302,19 @@ void CameraGUI::displaySettings()
     updateColorButton(ui->motionBoxColorButton, m_settings.m_motionBoxColor);
     ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
     {
-        // Select the saved device in the spectrum combo (item 0 is the blank "none" entry)
+        // Select the saved device in the spectrum combo
         const int idx = ui->spectrumDeviceCombo->findText(m_settings.m_spectrumDevice);
         ui->spectrumDeviceCombo->blockSignals(true);
         ui->spectrumDeviceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
         ui->spectrumDeviceCombo->blockSignals(false);
     }
-    ui->spectrumOffsetXSpin->setValue(m_settings.m_spectrumOffsetX);
-    ui->spectrumOffsetYSpin->setValue(m_settings.m_spectrumOffsetY);
+    ui->spectrumOffsetXSlider->setValue(m_settings.m_spectrumOffsetX);
+    ui->spectrumOffsetXValue->setText(QString::number(m_settings.m_spectrumOffsetX));
+    ui->spectrumOffsetYSlider->setValue(m_settings.m_spectrumOffsetY);
+    ui->spectrumOffsetYValue->setText(QString::number(m_settings.m_spectrumOffsetY));
     ui->spectrumScaleSpin->setValue(m_settings.m_spectrumScale);
     updateAlpacaVisibility();
+    updateEnabledControls();
 }
 
 void CameraGUI::applySettings(bool force)
@@ -363,6 +370,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->invertColorsButton, &QToolButton::toggled, this, &CameraGUI::on_invertColorsButton_toggled);
     QObject::connect(ui->overlayDateTimeButton, &QToolButton::toggled, this, &CameraGUI::on_overlayDateTimeButton_toggled);
     QObject::connect(ui->dateTimeColorButton, &QToolButton::clicked, this, &CameraGUI::on_dateTimeColorButton_clicked);
+    QObject::connect(ui->dateTimeFormatEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_dateTimeFormatEdit_editingFinished);
+    QObject::connect(ui->dateTimePosXSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosXSlider_valueChanged);
+    QObject::connect(ui->dateTimePosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosYSlider_valueChanged);
     QObject::connect(ui->diffMaskButton, &QToolButton::toggled, this, &CameraGUI::on_diffMaskButton_toggled);
     QObject::connect(ui->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
     QObject::connect(ui->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
@@ -373,8 +383,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
     QObject::connect(ui->spectrumOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_spectrumOverlayButton_toggled);
     QObject::connect(ui->spectrumDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_spectrumDeviceCombo_currentIndexChanged);
-    QObject::connect(ui->spectrumOffsetXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_spectrumOffsetXSpin_valueChanged);
-    QObject::connect(ui->spectrumOffsetYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_spectrumOffsetYSpin_valueChanged);
+    QObject::connect(ui->spectrumOffsetXSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetXSlider_valueChanged);
+    QObject::connect(ui->spectrumOffsetYSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetYSlider_valueChanged);
     QObject::connect(ui->spectrumScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_spectrumScaleSpin_valueChanged);
 }
 
@@ -731,6 +741,7 @@ void CameraGUI::on_overlayDateTimeButton_toggled(bool checked)
 {
     m_settings.m_overlayDateTime = checked;
     m_settingsKeys.append("overlayDateTime");
+    updateEnabledControls();
     applySettings();
 }
 
@@ -747,10 +758,34 @@ void CameraGUI::on_dateTimeColorButton_clicked()
     }
 }
 
+void CameraGUI::on_dateTimeFormatEdit_editingFinished()
+{
+    m_settings.m_dateTimeFormat = ui->dateTimeFormatEdit->text();
+    m_settingsKeys.append("dateTimeFormat");
+    applySettings();
+}
+
+void CameraGUI::on_dateTimePosXSlider_valueChanged(int value)
+{
+    m_settings.m_dateTimePosX = value;
+    ui->dateTimePosXValue->setText(QString::number(value));
+    m_settingsKeys.append("dateTimePosX");
+    applySettings();
+}
+
+void CameraGUI::on_dateTimePosYSlider_valueChanged(int value)
+{
+    m_settings.m_dateTimePosY = value;
+    ui->dateTimePosYValue->setText(QString::number(value));
+    m_settingsKeys.append("dateTimePosY");
+    applySettings();
+}
+
 void CameraGUI::on_diffMaskButton_toggled(bool checked)
 {
     m_settings.m_diffMask = checked;
     m_settingsKeys.append("diffMask");
+    updateEnabledControls();
     applySettings();
 }
 
@@ -778,6 +813,44 @@ void CameraGUI::on_histogramButton_clicked()
     btn->setStyleSheet(QString());
 }
 
+void CameraGUI::updateEnabledControls()
+{
+    const bool dtActive = m_settings.m_overlayDateTime;
+    ui->dateTimeColorButton->setEnabled(dtActive);
+    ui->overlayFontLabel->setEnabled(dtActive);
+    ui->overlayFontCombo->setEnabled(dtActive);
+    ui->overlayFontSizeLabel->setEnabled(dtActive);
+    ui->overlayFontScaleSpin->setEnabled(dtActive);
+    ui->dateTimeFormatLabel->setEnabled(dtActive);
+    ui->dateTimeFormatEdit->setEnabled(dtActive);
+    ui->dateTimePosXLabel->setEnabled(dtActive);
+    ui->dateTimePosXSlider->setEnabled(dtActive);
+    ui->dateTimePosXValue->setEnabled(dtActive);
+    ui->dateTimePosYLabel->setEnabled(dtActive);
+    ui->dateTimePosYSlider->setEnabled(dtActive);
+    ui->dateTimePosYValue->setEnabled(dtActive);
+
+    const bool diffActive = m_settings.m_diffMask;
+    ui->dilationLabel->setEnabled(diffActive);
+    ui->dilationSpin->setEnabled(diffActive);
+
+    const bool motionActive = m_settings.m_motionDetect;
+    ui->minContourAreaLabel->setEnabled(motionActive);
+    ui->minContourAreaSpin->setEnabled(motionActive);
+    ui->motionBoxColorButton->setEnabled(motionActive);
+
+    const bool specActive = m_settings.m_overlaySpectrum;
+    ui->spectrumDeviceCombo->setEnabled(specActive);
+    ui->spectrumOffsetXLabel->setEnabled(specActive);
+    ui->spectrumOffsetXSlider->setEnabled(specActive);
+    ui->spectrumOffsetXValue->setEnabled(specActive);
+    ui->spectrumOffsetYLabel->setEnabled(specActive);
+    ui->spectrumOffsetYSlider->setEnabled(specActive);
+    ui->spectrumOffsetYValue->setEnabled(specActive);
+    ui->spectrumScaleLabel->setEnabled(specActive);
+    ui->spectrumScaleSpin->setEnabled(specActive);
+}
+
 void CameraGUI::on_overlayFontCombo_currentIndexChanged(int index)
 {
     (void) index;
@@ -797,6 +870,7 @@ void CameraGUI::on_motionDetectButton_toggled(bool checked)
 {
     m_settings.m_motionDetect = checked;
     m_settingsKeys.append("motionDetect");
+    updateEnabledControls();
     applySettings();
 }
 
@@ -824,27 +898,29 @@ void CameraGUI::on_spectrumOverlayButton_toggled(bool checked)
 {
     m_settings.m_overlaySpectrum = checked;
     m_settingsKeys.append("overlaySpectrum");
+    updateEnabledControls();
     applySettings();
 }
 
 void CameraGUI::on_spectrumDeviceCombo_currentIndexChanged(int index)
 {
-    // Index 0 is the blank "none" entry
-    m_settings.m_spectrumDevice = (index > 0) ? ui->spectrumDeviceCombo->currentText() : QString();
+    m_settings.m_spectrumDevice = ui->spectrumDeviceCombo->itemText(index);
     m_settingsKeys.append("spectrumDevice");
     applySettings();
 }
 
-void CameraGUI::on_spectrumOffsetXSpin_valueChanged(int value)
+void CameraGUI::on_spectrumOffsetXSlider_valueChanged(int value)
 {
     m_settings.m_spectrumOffsetX = value;
+    ui->spectrumOffsetXValue->setText(QString::number(value));
     m_settingsKeys.append("spectrumOffsetX");
     applySettings();
 }
 
-void CameraGUI::on_spectrumOffsetYSpin_valueChanged(int value)
+void CameraGUI::on_spectrumOffsetYSlider_valueChanged(int value)
 {
     m_settings.m_spectrumOffsetY = value;
+    ui->spectrumOffsetYValue->setText(QString::number(value));
     m_settingsKeys.append("spectrumOffsetY");
     applySettings();
 }

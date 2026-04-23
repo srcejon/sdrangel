@@ -68,6 +68,11 @@ void CameraSettings::resetToDefaults()
     m_motionBoxColor = Qt::red;
     m_minContourArea = 100;
     m_videoPostProcess = false;
+    m_overlaySpectrum = false;
+    m_spectrumDevice.clear();
+    m_spectrumOffsetX = 0;
+    m_spectrumOffsetY = 0;
+    m_spectrumScale = 1.0;
 }
 
 QByteArray CameraSettings::serialize() const
@@ -116,6 +121,11 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(36, m_motionBoxColor.rgba());
     s.writeS32(37, m_minContourArea);
     s.writeBool(38, m_videoPostProcess);
+    s.writeBool(39, m_overlaySpectrum);
+    s.writeString(40, m_spectrumDevice);
+    s.writeS32(41, m_spectrumOffsetX);
+    s.writeS32(42, m_spectrumOffsetY);
+    s.writeDouble(43, m_spectrumScale);
 
     return s.final();
 }
@@ -201,6 +211,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_overlayFontScale = qBound(0.3, m_overlayFontScale, 3.0);
         m_minContourArea = qBound(0, m_minContourArea, 10000);
         d.readBool(38, &m_videoPostProcess, false);
+        d.readBool(39, &m_overlaySpectrum, false);
+        d.readString(40, &m_spectrumDevice, "");
+        d.readS32(41, &m_spectrumOffsetX, 0);
+        d.readS32(42, &m_spectrumOffsetY, 0);
+        m_spectrumOffsetX = qBound(-4096, m_spectrumOffsetX, 4096);
+        m_spectrumOffsetY = qBound(-4096, m_spectrumOffsetY, 4096);
+        d.readDouble(43, &m_spectrumScale, 1.0);
+        m_spectrumScale = qBound(0.1, m_spectrumScale, 4.0);
 
         return true;
     }
@@ -319,6 +337,21 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("videoPostProcess")) {
         m_videoPostProcess = settings.m_videoPostProcess;
     }
+    if (settingsKeys.contains("overlaySpectrum")) {
+        m_overlaySpectrum = settings.m_overlaySpectrum;
+    }
+    if (settingsKeys.contains("spectrumDevice")) {
+        m_spectrumDevice = settings.m_spectrumDevice;
+    }
+    if (settingsKeys.contains("spectrumOffsetX")) {
+        m_spectrumOffsetX = qBound(-4096, settings.m_spectrumOffsetX, 4096);
+    }
+    if (settingsKeys.contains("spectrumOffsetY")) {
+        m_spectrumOffsetY = qBound(-4096, settings.m_spectrumOffsetY, 4096);
+    }
+    if (settingsKeys.contains("spectrumScale")) {
+        m_spectrumScale = qBound(0.1, settings.m_spectrumScale, 4.0);
+    }
 }
 
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
@@ -420,6 +453,21 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_videoPostProcess;
+    }
+    if (settingsKeys.contains("overlaySpectrum") || force) {
+        ostr << " m_overlaySpectrum: " << m_overlaySpectrum;
+    }
+    if (settingsKeys.contains("spectrumDevice") || force) {
+        ostr << " m_spectrumDevice: " << m_spectrumDevice.toStdString();
+    }
+    if (settingsKeys.contains("spectrumOffsetX") || force) {
+        ostr << " m_spectrumOffsetX: " << m_spectrumOffsetX;
+    }
+    if (settingsKeys.contains("spectrumOffsetY") || force) {
+        ostr << " m_spectrumOffsetY: " << m_spectrumOffsetY;
+    }
+    if (settingsKeys.contains("spectrumScale") || force) {
+        ostr << " m_spectrumScale: " << m_spectrumScale;
     }
 
     return QString(ostr.str().c_str());

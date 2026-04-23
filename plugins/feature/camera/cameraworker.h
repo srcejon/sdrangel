@@ -254,6 +254,27 @@ public:
         { }
     };
 
+    // Sent when the set of available spectrum-view devices changes
+    class MsgReportAvailableDevices : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QStringList& getDeviceLongIds() const { return m_deviceLongIds; }
+
+        static MsgReportAvailableDevices* create(const QStringList& deviceLongIds)
+        {
+            return new MsgReportAvailableDevices(deviceLongIds);
+        }
+
+    private:
+        QStringList m_deviceLongIds;
+
+        MsgReportAvailableDevices(const QStringList& deviceLongIds) :
+            Message(),
+            m_deviceLongIds(deviceLongIds)
+        { }
+    };
+
     // Sent periodically to update live status fields (camerastate, ccdtemperature)
     class MsgReportAlpacaStatus : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -317,6 +338,7 @@ private:
     cv::VideoWriter m_videoWriter; // OpenCV video writer (works for both Alpaca and Qt cameras)
 
     QImage m_spectrumViewImage;
+    QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
@@ -361,6 +383,8 @@ private slots:
     void handleDeviceMessageQueue(MessageQueue* messageQueue);
     void captureTick();
     void statusTick();
+    void onAvailableDevicesChanged(const QStringList& renameFrom, const QStringList& renameTo,
+                                   const QStringList& removed, const QStringList& added);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAWORKER_H_

@@ -119,6 +119,11 @@ private slots:
     void on_motionDetectButton_toggled(bool checked);
     void on_minContourAreaSpin_valueChanged(int value);
     void on_motionBoxColorButton_clicked();
+    void on_spectrumOverlayButton_toggled(bool checked);
+    void on_spectrumDeviceCombo_currentIndexChanged(int index);
+    void on_spectrumOffsetXSpin_valueChanged(int value);
+    void on_spectrumOffsetYSpin_valueChanged(int value);
+    void on_spectrumScaleSpin_valueChanged(double value);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

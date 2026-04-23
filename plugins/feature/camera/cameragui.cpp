@@ -152,6 +152,23 @@ bool CameraGUI::handleMessage(const Message& message)
 
         return true;
     }
+    else if (CameraWorker::MsgReportAvailableDevices::match(message))
+    {
+        const CameraWorker::MsgReportAvailableDevices& report = (CameraWorker::MsgReportAvailableDevices&) message;
+        const QString currentDevice = m_settings.m_spectrumDevice;
+
+        ui->spectrumDeviceCombo->blockSignals(true);
+        ui->spectrumDeviceCombo->clear();
+        ui->spectrumDeviceCombo->addItem(QString()); // empty entry = no device selected
+        for (const QString& id : report.getDeviceLongIds()) {
+            ui->spectrumDeviceCombo->addItem(id);
+        }
+        const int idx = ui->spectrumDeviceCombo->findText(currentDevice);
+        ui->spectrumDeviceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+        ui->spectrumDeviceCombo->blockSignals(false);
+
+        return true;
+    }
 
     return false;
 }
@@ -270,6 +287,17 @@ void CameraGUI::displaySettings()
     ui->minContourAreaSpin->setValue(m_settings.m_minContourArea);
     updateColorButton(ui->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(ui->motionBoxColorButton, m_settings.m_motionBoxColor);
+    ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
+    {
+        // Select the saved device in the spectrum combo (item 0 is the blank "none" entry)
+        const int idx = ui->spectrumDeviceCombo->findText(m_settings.m_spectrumDevice);
+        ui->spectrumDeviceCombo->blockSignals(true);
+        ui->spectrumDeviceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+        ui->spectrumDeviceCombo->blockSignals(false);
+    }
+    ui->spectrumOffsetXSpin->setValue(m_settings.m_spectrumOffsetX);
+    ui->spectrumOffsetYSpin->setValue(m_settings.m_spectrumOffsetY);
+    ui->spectrumScaleSpin->setValue(m_settings.m_spectrumScale);
     updateAlpacaVisibility();
 }
 
@@ -334,6 +362,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
     QObject::connect(ui->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
     QObject::connect(ui->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
+    QObject::connect(ui->spectrumOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_spectrumOverlayButton_toggled);
+    QObject::connect(ui->spectrumDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_spectrumDeviceCombo_currentIndexChanged);
+    QObject::connect(ui->spectrumOffsetXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_spectrumOffsetXSpin_valueChanged);
+    QObject::connect(ui->spectrumOffsetYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_spectrumOffsetYSpin_valueChanged);
+    QObject::connect(ui->spectrumScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_spectrumScaleSpin_valueChanged);
 }
 
 void CameraGUI::updateAlpacaVisibility()
@@ -775,4 +808,40 @@ void CameraGUI::on_motionBoxColorButton_clicked()
         m_settingsKeys.append("motionBoxColor");
         applySettings();
     }
+}
+
+void CameraGUI::on_spectrumOverlayButton_toggled(bool checked)
+{
+    m_settings.m_overlaySpectrum = checked;
+    m_settingsKeys.append("overlaySpectrum");
+    applySettings();
+}
+
+void CameraGUI::on_spectrumDeviceCombo_currentIndexChanged(int index)
+{
+    // Index 0 is the blank "none" entry
+    m_settings.m_spectrumDevice = (index > 0) ? ui->spectrumDeviceCombo->currentText() : QString();
+    m_settingsKeys.append("spectrumDevice");
+    applySettings();
+}
+
+void CameraGUI::on_spectrumOffsetXSpin_valueChanged(int value)
+{
+    m_settings.m_spectrumOffsetX = value;
+    m_settingsKeys.append("spectrumOffsetX");
+    applySettings();
+}
+
+void CameraGUI::on_spectrumOffsetYSpin_valueChanged(int value)
+{
+    m_settings.m_spectrumOffsetY = value;
+    m_settingsKeys.append("spectrumOffsetY");
+    applySettings();
+}
+
+void CameraGUI::on_spectrumScaleSpin_valueChanged(double value)
+{
+    m_settings.m_spectrumScale = value;
+    m_settingsKeys.append("spectrumScale");
+    applySettings();
 }

@@ -58,6 +58,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportResolutions, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
@@ -71,7 +72,8 @@ CameraWorker::CameraWorker() :
     m_alpacaClientTransactionId(1),
     m_alpacaSensorType(0),
     m_alpacaImageBytesSupported(true),
-    m_statusTimer(this)
+    m_statusTimer(this),
+    m_spectrumPipeSource(nullptr)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     , m_qtCamera(nullptr)
     , m_videoSink(nullptr)
@@ -83,6 +85,11 @@ CameraWorker::CameraWorker() :
         &AvailableDeviceHandler::messageEnqueued,
         this,
         &CameraWorker::handleDeviceMessageQueue);
+    QObject::connect(
+        &m_availableDeviceHandler,
+        &AvailableDeviceHandler::devicesChanged,
+        this,
+        &CameraWorker::onAvailableDevicesChanged);
     m_availableDeviceHandler.scanAvailableDevices();
 }
 
@@ -94,6 +101,11 @@ CameraWorker::~CameraWorker()
         &AvailableDeviceHandler::messageEnqueued,
         this,
         &CameraWorker::handleDeviceMessageQueue);
+    QObject::disconnect(
+        &m_availableDeviceHandler,
+        &AvailableDeviceHandler::devicesChanged,
+        this,
+        &CameraWorker::onAvailableDevicesChanged);
 }
 
 void CameraWorker::startWork()
@@ -107,6 +119,19 @@ void CameraWorker::startWork()
     }
 
     reportCameraList();
+
+    // Notify GUI of already-known spectrum-view devices
+    if (m_msgQueueToGUI)
+    {
+        const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
+        QStringList longIds;
+        longIds.reserve(devices.size());
+        for (const auto& device : devices) {
+            longIds.append(device.getLongId());
+        }
+        m_msgQueueToGUI->push(MsgReportAvailableDevices::create(longIds));
+    }
+
     if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca) {
         alpacaQueryCameraCapabilities();
         m_statusTimer.start(2000);
@@ -150,6 +175,42 @@ void CameraWorker::handleDeviceMessageQueue(MessageQueue* messageQueue)
     }
 }
 
+void CameraWorker::onAvailableDevicesChanged(const QStringList& renameFrom, const QStringList& renameTo,
+                                              const QStringList& removed, const QStringList& added)
+{
+    (void) renameFrom;
+    (void) renameTo;
+    (void) removed;
+    (void) added;
+
+    // Re-resolve the selected device pointer in case the device list changed
+    m_spectrumPipeSource = nullptr;
+    if (!m_settings.m_spectrumDevice.isEmpty())
+    {
+        const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
+        for (const auto& device : devices)
+        {
+            if (device.getLongId() == m_settings.m_spectrumDevice)
+            {
+                m_spectrumPipeSource = device.m_object;
+                break;
+            }
+        }
+    }
+
+    if (!m_msgQueueToGUI) {
+        return;
+    }
+
+    const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
+    QStringList longIds;
+    longIds.reserve(devices.size());
+    for (const auto& device : devices) {
+        longIds.append(device.getLongId());
+    }
+    m_msgQueueToGUI->push(MsgReportAvailableDevices::create(longIds));
+}
+
 bool CameraWorker::handleMessage(const Message& cmd)
 {
     if (MsgConfigureCameraWorker::match(cmd))
@@ -177,7 +238,10 @@ bool CameraWorker::handleMessage(const Message& cmd)
     else if (MainCore::MsgImage::match(cmd))
     {
         MainCore::MsgImage& imgMsg = (MainCore::MsgImage&) cmd;
-        m_spectrumViewImage = imgMsg.getImage();
+        // Only accept images from the selected device; if none is selected, accept all
+        if (!m_spectrumPipeSource || imgMsg.getPipeSource() == m_spectrumPipeSource) {
+            m_spectrumViewImage = imgMsg.getImage();
+        }
         return true;
     }
 
@@ -209,7 +273,8 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     static const QStringList kPostProcessingKeys = {
         "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
         "diffMask", "dilationSize", "overlayFontIndex", "overlayFontScale",
-        "motionDetect", "motionBoxColor", "minContourArea"
+        "motionDetect", "motionBoxColor", "minContourArea",
+        "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
         [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
@@ -285,6 +350,26 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         } else {
             m_statusTimer.stop();
         }
+    }
+
+    // Resolve the device object pointer when spectrumDevice setting changes
+    if (force || settingsKeys.contains("spectrumDevice"))
+    {
+        m_spectrumPipeSource = nullptr;
+        if (!m_settings.m_spectrumDevice.isEmpty())
+        {
+            const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
+            for (const auto& device : devices)
+            {
+                if (device.getLongId() == m_settings.m_spectrumDevice)
+                {
+                    m_spectrumPipeSource = device.m_object;
+                    break;
+                }
+            }
+        }
+        // When the device changes, clear the cached image to avoid showing a stale overlay
+        m_spectrumViewImage = QImage();
     }
 
     // If a post-processing parameter changed and we have a stored raw frame, reprocess and push to GUI
@@ -720,6 +805,7 @@ void CameraWorker::reportFrameToGUI(const QImage& image)
  *   3. Diff mask against the previous raw frame
  *   4. MOG2 motion detection with bounding boxes
  *   5. Date/time text overlay
+ *   6. Spectrum view image overlay
  *
  * Returns the processed image, or a copy of @p input when no effects are active.
  * Must be called from the worker thread only (modifies m_bgSubtractor).
@@ -729,12 +815,14 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
     // Pixel grayscale difference (0–255) below which a pixel is considered unchanged between frames.
     static constexpr int kDiffThreshold = 30;
 
+    const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsBrightContrast
         || m_settings.m_invertColors
         || m_settings.m_overlayDateTime
         || (m_settings.m_diffMask && !m_previousRawFrame.isNull())
-        || m_settings.m_motionDetect;
+        || m_settings.m_motionDetect
+        || needsSpectrumOverlay;
 
     if (!needsAny) {
         return input;
@@ -829,6 +917,67 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
                     textColor,
                     1,
                     cv::LINE_AA);
+    }
+
+    if (needsSpectrumOverlay)
+    {
+        // Scale the spectrum image if a non-unity scale is requested
+        QImage specSrc = m_spectrumViewImage;
+        if (qAbs(m_settings.m_spectrumScale - 1.0) > 1e-4)
+        {
+            const int sw = static_cast<int>(specSrc.width()  * m_settings.m_spectrumScale);
+            const int sh = static_cast<int>(specSrc.height() * m_settings.m_spectrumScale);
+            if (sw > 0 && sh > 0) {
+                specSrc = specSrc.scaled(sw, sh, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            }
+        }
+
+        const QImage specRgb = specSrc.convertToFormat(QImage::Format_RGBA8888);
+        const int dstW = bgrMat.cols;
+        const int dstH = bgrMat.rows;
+        const int ox = m_settings.m_spectrumOffsetX;
+        const int oy = m_settings.m_spectrumOffsetY;
+        const int sw = specRgb.width();
+        const int sh = specRgb.height();
+
+        // Determine the intersection of the spectrum image with the camera frame
+        const int srcX0 = std::max(0, -ox);
+        const int srcY0 = std::max(0, -oy);
+        const int srcX1 = std::min(sw, dstW - ox);
+        const int srcY1 = std::min(sh, dstH - oy);
+
+        for (int sy = srcY0; sy < srcY1; ++sy)
+        {
+            const uchar* srcRow = specRgb.constScanLine(sy);
+            const int dy = oy + sy;
+            uchar* dstRow = bgrMat.ptr<uchar>(dy);
+
+            for (int sx = srcX0; sx < srcX1; ++sx)
+            {
+                const int srcPx = sx * 4;
+                const uchar alpha = srcRow[srcPx + 3];
+                if (alpha == 0) {
+                    continue;
+                }
+                const int dx = (ox + sx) * 3;
+                if (alpha == 255)
+                {
+                    // Fully opaque: direct copy (note: bgrMat is BGR, specRgb is RGBA)
+                    dstRow[dx]     = srcRow[srcPx + 2]; // B
+                    dstRow[dx + 1] = srcRow[srcPx + 1]; // G
+                    dstRow[dx + 2] = srcRow[srcPx];     // R
+                }
+                else
+                {
+                    // Alpha-blend
+                    const int a = alpha;
+                    const int invA = 255 - a;
+                    dstRow[dx]     = static_cast<uchar>((srcRow[srcPx + 2] * a + dstRow[dx]     * invA) / 255);
+                    dstRow[dx + 1] = static_cast<uchar>((srcRow[srcPx + 1] * a + dstRow[dx + 1] * invA) / 255);
+                    dstRow[dx + 2] = static_cast<uchar>((srcRow[srcPx]     * a + dstRow[dx + 2] * invA) / 255);
+                }
+            }
+        }
     }
 
     cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);

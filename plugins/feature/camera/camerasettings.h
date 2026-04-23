@@ -74,6 +74,13 @@ struct CameraSettings
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
     bool   m_videoPostProcess;  ///< When true, write post-processed frames to video; when false, write raw frames
 
+    // Spectrum overlay settings
+    bool   m_overlaySpectrum;   ///< Enable overlaying the spectrum view image on the post-processed frame
+    QString m_spectrumDevice;   ///< Long ID of the device whose spectrum view to overlay (e.g. "R0 HackRF")
+    int    m_spectrumOffsetX;   ///< X offset (px) for the top-left corner of the spectrum overlay: -4096..4096
+    int    m_spectrumOffsetY;   ///< Y offset (px) for the top-left corner of the spectrum overlay: -4096..4096
+    double m_spectrumScale;     ///< Scale factor applied to the spectrum image before compositing: 0.1..4.0
+
     CameraSettings();
     ~CameraSettings() = default;
     void resetToDefaults();

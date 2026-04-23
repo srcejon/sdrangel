@@ -724,6 +724,121 @@
       </item>
      </layout>
     </item>
+    <item>
+     <layout class="QHBoxLayout" name="spectrumOverlayLayout">
+      <item>
+       <widget class="ButtonSwitch" name="spectrumOverlayButton">
+        <property name="toolTip">
+         <string>Overlay spectrum view on post-processed image</string>
+        </property>
+        <property name="text">
+         <string>Spec</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="spectrumDeviceCombo">
+        <property name="toolTip">
+         <string>Device whose spectrum view to overlay</string>
+        </property>
+        <property name="minimumContentsLength">
+         <number>8</number>
+        </property>
+        <property name="sizeAdjustPolicy">
+         <enum>QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="spectrumOffsetXLabel">
+        <property name="text">
+         <string>X</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QSpinBox" name="spectrumOffsetXSpin">
+        <property name="toolTip">
+         <string>Spectrum overlay X offset (px)</string>
+        </property>
+        <property name="minimum">
+         <number>-4096</number>
+        </property>
+        <property name="maximum">
+         <number>4096</number>
+        </property>
+        <property name="value">
+         <number>0</number>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="spectrumOffsetYLabel">
+        <property name="text">
+         <string>Y</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QSpinBox" name="spectrumOffsetYSpin">
+        <property name="toolTip">
+         <string>Spectrum overlay Y offset (px)</string>
+        </property>
+        <property name="minimum">
+         <number>-4096</number>
+        </property>
+        <property name="maximum">
+         <number>4096</number>
+        </property>
+        <property name="value">
+         <number>0</number>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="spectrumScaleLabel">
+        <property name="text">
+         <string>Scale</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDoubleSpinBox" name="spectrumScaleSpin">
+        <property name="toolTip">
+         <string>Spectrum overlay scale factor</string>
+        </property>
+        <property name="decimals">
+         <number>2</number>
+        </property>
+        <property name="minimum">
+         <double>0.100000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>4.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.050000000000000</double>
+        </property>
+        <property name="value">
+         <double>1.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_4">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
    </layout>
   </widget>
   <widget class="QWidget" name="horizontalLayoutWidget">

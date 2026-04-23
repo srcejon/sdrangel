@@ -650,6 +650,8 @@ void CameraWorker::processNewFrame(const QImage& image)
         // Lazily open the VideoWriter on the first frame so we know the frame size
         if (!m_videoWriter.isOpened())
         {
+            // 'mp4v' (MPEG-4 Part 2) is widely supported by OpenCV across all platforms.
+            // The output file extension (.mp4) determines the container format.
             const int fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
             m_videoWriter.open(
                 m_settings.m_videoFileName.toStdString(),
@@ -693,6 +695,7 @@ void CameraWorker::reportFrameToGUI(const QImage& image)
  */
 QImage CameraWorker::applyPostProcessing(const QImage& input)
 {
+    // Pixel grayscale difference (0–255) below which a pixel is considered unchanged between frames.
     static constexpr int kDiffThreshold = 30;
 
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);

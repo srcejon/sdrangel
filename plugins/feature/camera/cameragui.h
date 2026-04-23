@@ -61,6 +61,7 @@ private:
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
     QImage m_lastImage;
+    bool m_alpacaHasNamedGains; // true if gains list has named entries
 
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     virtual ~CameraGUI();
@@ -71,6 +72,7 @@ private:
     bool handleMessage(const Message& message);
     void makeUIConnections();
     void updateAlpacaVisibility();
+    void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateImageWidget();
 
 private slots:
@@ -86,6 +88,11 @@ private slots:
     void on_alpacaHostEdit_editingFinished();
     void on_alpacaPortSpin_valueChanged(int value);
     void on_alpacaCameraIdSpin_valueChanged(int value);
+    void on_alpacaBinXSpin_valueChanged(int value);
+    void on_alpacaBinYSpin_valueChanged(int value);
+    void on_alpacaGainCombo_currentIndexChanged(int index);
+    void on_alpacaGainSpin_valueChanged(int value);
+    void on_alpacaReadoutModeCombo_currentIndexChanged(int index);
     void on_saveImageCheck_toggled(bool checked);
     void on_imagePathEdit_editingFinished();
     void on_imagePathButton_clicked();

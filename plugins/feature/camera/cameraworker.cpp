@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 
 #include <QDebug>
@@ -27,6 +28,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRandomGenerator>
+#include <QSharedPointer>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QColor>
@@ -52,6 +54,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportResolutions, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportFrame, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
@@ -61,7 +64,8 @@ CameraWorker::CameraWorker() :
     m_networkManager(nullptr),
     m_alpacaFrameRequestPending(false),
     m_alpacaClientId(QRandomGenerator::global()->bounded(quint64(1), quint64(std::numeric_limits<quint32>::max()) + 1)),
-    m_alpacaClientTransactionId(1)
+    m_alpacaClientTransactionId(1),
+    m_alpacaSensorType(0)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     , m_qtCamera(nullptr)
     , m_videoSink(nullptr)
@@ -86,6 +90,9 @@ void CameraWorker::startWork()
     }
 
     reportCameraList();
+    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca) {
+        alpacaQueryCameraCapabilities();
+    }
     if (m_settings.m_captureActive) {
         startCapture();
     }
@@ -154,6 +161,10 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("alpacaHost")
         || settingsKeys.contains("alpacaPort")
         || settingsKeys.contains("alpacaCameraId")
+        || settingsKeys.contains("alpacaBinX")
+        || settingsKeys.contains("alpacaBinY")
+        || settingsKeys.contains("alpacaGain")
+        || settingsKeys.contains("alpacaReadoutMode")
         || settingsKeys.contains("saveVideo")
         || settingsKeys.contains("videoFileName");
 
@@ -186,6 +197,18 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("cameraId"))
     {
         reportResolutions();
+    }
+
+    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca
+        && m_networkManager
+        && (force
+            || settingsKeys.contains("cameraAPI")
+            || settingsKeys.contains("alpacaHost")
+            || settingsKeys.contains("alpacaPort")
+            || settingsKeys.contains("alpacaCameraId")
+            || settingsKeys.contains("cameraId")))
+    {
+        alpacaQueryCameraCapabilities();
     }
 }
 
@@ -332,7 +355,80 @@ void CameraWorker::captureTick()
     }
 
     m_alpacaFrameRequestPending = true;
-    alpacaStartExposure();
+    alpacaSetCameraParams();
+}
+
+// Helper: PUT a simple integer property on the Alpaca camera synchronously (via async reply),
+// then invoke the continuation lambda.
+static void alpacaPutIntProperty(
+    QNetworkAccessManager *nam,
+    const QString& baseUrl,
+    int cameraId,
+    const QString& property,
+    const QString& bodyKey,
+    int value,
+    quint32 clientId,
+    quint32& transactionId,
+    std::function<void()> continuation)
+{
+    QUrl url(baseUrl + QString("/api/v1/camera/%1/%2").arg(cameraId).arg(property));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QUrlQuery body;
+    body.addQueryItem(bodyKey, QString::number(value));
+    body.addQueryItem("ClientID", QString::number(clientId));
+    body.addQueryItem("ClientTransactionID", QString::number(transactionId++));
+
+    QNetworkReply *reply = nam->put(request, body.toString(QUrl::FullyEncoded).toUtf8());
+
+    QObject::connect(reply, &QNetworkReply::finished, reply, [reply, property, continuation]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            qDebug() << "CameraWorker: PUT" << property << "error:" << reply->errorString();
+        }
+        reply->deleteLater();
+        continuation();
+    });
+}
+
+void CameraWorker::alpacaSetCameraParams()
+{
+    // Chain: binX -> binY -> gain -> readoutMode -> startExposure
+    const QString baseUrl = buildAlpacaBaseUrl();
+    const int camId = m_settings.m_alpacaCameraId;
+
+    auto doStartExposure = [this]() {
+        if (m_capturing) {
+            alpacaStartExposure();
+        } else {
+            m_alpacaFrameRequestPending = false;
+        }
+    };
+
+    auto doReadoutMode = [this, baseUrl, camId, doStartExposure]() {
+        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        alpacaPutIntProperty(m_networkManager, baseUrl, camId, "readoutmode", "ReadoutMode",
+            m_settings.m_alpacaReadoutMode, m_alpacaClientId, m_alpacaClientTransactionId, doStartExposure);
+    };
+
+    auto doGain = [this, baseUrl, camId, doReadoutMode]() {
+        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        if (m_settings.m_alpacaGain >= 0) {
+            alpacaPutIntProperty(m_networkManager, baseUrl, camId, "gain", "Gain",
+                m_settings.m_alpacaGain, m_alpacaClientId, m_alpacaClientTransactionId, doReadoutMode);
+        } else {
+            doReadoutMode();
+        }
+    };
+
+    auto doBinY = [this, baseUrl, camId, doGain]() {
+        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        alpacaPutIntProperty(m_networkManager, baseUrl, camId, "biny", "BinY",
+            m_settings.m_alpacaBinY, m_alpacaClientId, m_alpacaClientTransactionId, doGain);
+    };
+
+    alpacaPutIntProperty(m_networkManager, baseUrl, camId, "binx", "BinX",
+        m_settings.m_alpacaBinX, m_alpacaClientId, m_alpacaClientTransactionId, doBinY);
 }
 
 void CameraWorker::alpacaStartExposure()
@@ -463,6 +559,132 @@ void CameraWorker::reportFrameToGUI(const QImage& image)
     }
 }
 
+void CameraWorker::alpacaQueryCameraCapabilities()
+{
+    if (!m_networkManager) {
+        return;
+    }
+
+    const QString baseUrl = buildAlpacaBaseUrl();
+    const int camId = m_settings.m_alpacaCameraId;
+
+    // Struct to accumulate results from parallel requests
+    struct CapInfo {
+        int maxBinX = 1;
+        int maxBinY = 1;
+        QStringList gains;
+        int gainMin = 0;
+        int gainMax = 0;
+        QStringList readoutModes;
+        QString sensorName;
+        int sensorType = 0;
+        double pixelSizeX = 0.0;
+        double pixelSizeY = 0.0;
+        int cameraSizeX = 0;
+        int cameraSizeY = 0;
+        double ccdTemperature = 0.0;
+        bool ccdTemperatureValid = false;
+        int pending = 0;
+    };
+
+    auto info = QSharedPointer<CapInfo>::create();
+
+    // Properties to query: name, JSON Value key, handler
+    static const QStringList properties = {
+        "maxbinx", "maxbiny", "gains", "gainmin", "gainmax",
+        "readoutmodes", "sensorname", "sensortype",
+        "pixelsizex", "pixelsizey", "cameraxsize", "cameraysize",
+        "ccdtemperature"
+    };
+
+    info->pending = properties.size();
+
+    auto checkDone = [this, info]() {
+        info->pending--;
+        if (info->pending > 0) {
+            return;
+        }
+
+        m_alpacaSensorType = info->sensorType;
+
+        if (m_msgQueueToGUI) {
+            m_msgQueueToGUI->push(MsgReportAlpacaCameraInfo::create(
+                info->maxBinX, info->maxBinY,
+                info->gains, info->gainMin, info->gainMax,
+                info->readoutModes,
+                info->sensorName, info->sensorType,
+                info->pixelSizeX, info->pixelSizeY,
+                info->cameraSizeX, info->cameraSizeY,
+                info->ccdTemperature, info->ccdTemperatureValid));
+        }
+    };
+
+    auto query = [this, baseUrl, camId, info, checkDone](const QString& prop) {
+        QUrl url(baseUrl + QString("/api/v1/camera/%1/%2").arg(camId).arg(prop));
+        QUrlQuery q;
+        q.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+        q.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+        url.setQuery(q);
+
+        QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+
+        QObject::connect(reply, &QNetworkReply::finished, reply, [reply, prop, info, checkDone]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+                if (doc.isObject()) {
+                    const QJsonObject root = doc.object();
+                    const int errNum = root.value("ErrorNumber").toInt(0);
+                    if (errNum == 0) {
+                        const QJsonValue val = root.value("Value");
+                        if (prop == "maxbinx") {
+                            info->maxBinX = std::max(1, val.toInt(1));
+                        } else if (prop == "maxbiny") {
+                            info->maxBinY = std::max(1, val.toInt(1));
+                        } else if (prop == "gains") {
+                            if (val.isArray()) {
+                                for (const QJsonValue& g : val.toArray()) {
+                                    info->gains.append(g.toString());
+                                }
+                            }
+                        } else if (prop == "gainmin") {
+                            info->gainMin = val.toInt(0);
+                        } else if (prop == "gainmax") {
+                            info->gainMax = val.toInt(0);
+                        } else if (prop == "readoutmodes") {
+                            if (val.isArray()) {
+                                for (const QJsonValue& m : val.toArray()) {
+                                    info->readoutModes.append(m.toString());
+                                }
+                            }
+                        } else if (prop == "sensorname") {
+                            info->sensorName = val.toString();
+                        } else if (prop == "sensortype") {
+                            info->sensorType = val.toInt(0);
+                        } else if (prop == "pixelsizex") {
+                            info->pixelSizeX = val.toDouble(0.0);
+                        } else if (prop == "pixelsizey") {
+                            info->pixelSizeY = val.toDouble(0.0);
+                        } else if (prop == "cameraxsize") {
+                            info->cameraSizeX = val.toInt(0);
+                        } else if (prop == "cameraysize") {
+                            info->cameraSizeY = val.toInt(0);
+                        } else if (prop == "ccdtemperature") {
+                            info->ccdTemperature = val.toDouble(0.0);
+                            info->ccdTemperatureValid = true;
+                        }
+                    }
+                }
+            }
+            reply->deleteLater();
+            checkDone();
+        });
+    };
+
+    for (const QString& prop : properties) {
+        query(prop);
+    }
+}
+
 QString CameraWorker::buildAlpacaBaseUrl() const
 {
     return QString("http://%1:%2")
@@ -536,8 +758,8 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
     }
 
     // Alpaca imagearray layout:
-    //   Rank 2 (monochrome): Value[column][row]
-    //   Rank 3 (colour):     Value[plane][column][row], plane 0=R, 1=G, 2=B
+    //   Rank 2 (monochrome or Bayer): Value[column][row]
+    //   Rank 3 (colour):              Value[plane][column][row], plane 0=R, 1=G, 2=B
     if (rank == 2)
     {
         const int width = value.size();
@@ -559,12 +781,73 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
         }
         const double scale = 255.0 / maxVal;
 
-        QImage image(width, height, QImage::Format_Grayscale8);
+        // Build scaled raw array (column-major)
+        QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
             const QJsonArray col = value[x].toArray();
             for (int y = 0; y < height; ++y) {
-                const auto gray = static_cast<uchar>(qBound(0, static_cast<int>(col[y].toInt(0) * scale), 255));
-                image.scanLine(y)[x] = gray;
+                raw[x][y] = qBound(0, static_cast<int>(col[y].toInt(0) * scale), 255);
+            }
+        }
+
+        // Bayer demosaicing for sensorType 2 (RGGB), 3 (CMYG), 4 (CMYG2), 5 (LRGB)
+        // sensorType 0 = Monochrome, 1 = Colour (handled by rank 3 normally)
+        const bool isBayer = (m_alpacaSensorType >= 2 && m_alpacaSensorType <= 5);
+        if (isBayer)
+        {
+            // Simple bilinear Bayer demosaicing for RGGB (sensorType 2).
+            // RGGB pattern (bayerOffsetX/Y assumed 0):
+            //   (even x, even y) = R
+            //   (odd  x, even y) = G1
+            //   (even x, odd  y) = G2
+            //   (odd  x, odd  y) = B
+            //
+            // For CMYG/CMYG2/LRGB (sensorType 3-5) we fall back to greyscale
+            // as those require colour-matrix transforms beyond the scope here.
+            if (m_alpacaSensorType == 2)
+            {
+                QImage image(width, height, QImage::Format_RGB32);
+                auto clamp = [](int v) { return qBound(0, v, 255); };
+                auto safe  = [&raw, width, height](int x, int y) -> int {
+                    return raw[qBound(0, x, width-1)][qBound(0, y, height-1)];
+                };
+
+                for (int x = 0; x < width; ++x) {
+                    for (int y = 0; y < height; ++y) {
+                        int r, g, b;
+                        if ((x % 2 == 0) && (y % 2 == 0)) {
+                            // R site
+                            r = raw[x][y];
+                            g = clamp((safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4);
+                            b = clamp((safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4);
+                        } else if ((x % 2 == 1) && (y % 2 == 0)) {
+                            // G1 site (R row)
+                            r = clamp((safe(x-1,y) + safe(x+1,y)) / 2);
+                            g = raw[x][y];
+                            b = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
+                        } else if ((x % 2 == 0) && (y % 2 == 1)) {
+                            // G2 site (B row)
+                            r = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
+                            g = raw[x][y];
+                            b = clamp((safe(x-1,y) + safe(x+1,y)) / 2);
+                        } else {
+                            // B site
+                            b = raw[x][y];
+                            g = clamp((safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4);
+                            r = clamp((safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4);
+                        }
+                        reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
+                    }
+                }
+                return image;
+            }
+        }
+
+        // Monochrome (sensorType 0 or 1 returning rank 2, or unsupported Bayer types)
+        QImage image(width, height, QImage::Format_Grayscale8);
+        for (int x = 0; x < width; ++x) {
+            for (int y = 0; y < height; ++y) {
+                image.scanLine(y)[x] = static_cast<uchar>(raw[x][y]);
             }
         }
         return image;

@@ -161,6 +161,82 @@ public:
         { }
     };
 
+    class MsgReportAlpacaCameraInfo : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        int getMaxBinX() const { return m_maxBinX; }
+        int getMaxBinY() const { return m_maxBinY; }
+        const QStringList& getGains() const { return m_gains; }
+        int getGainMin() const { return m_gainMin; }
+        int getGainMax() const { return m_gainMax; }
+        const QStringList& getReadoutModes() const { return m_readoutModes; }
+        const QString& getSensorName() const { return m_sensorName; }
+        int getSensorType() const { return m_sensorType; }
+        double getPixelSizeX() const { return m_pixelSizeX; }
+        double getPixelSizeY() const { return m_pixelSizeY; }
+        int getCameraSizeX() const { return m_cameraSizeX; }
+        int getCameraSizeY() const { return m_cameraSizeY; }
+        double getCcdTemperature() const { return m_ccdTemperature; }
+        bool isCcdTemperatureValid() const { return m_ccdTemperatureValid; }
+
+        static MsgReportAlpacaCameraInfo* create(
+            int maxBinX, int maxBinY,
+            const QStringList& gains, int gainMin, int gainMax,
+            const QStringList& readoutModes,
+            const QString& sensorName, int sensorType,
+            double pixelSizeX, double pixelSizeY,
+            int cameraSizeX, int cameraSizeY,
+            double ccdTemperature, bool ccdTemperatureValid)
+        {
+            return new MsgReportAlpacaCameraInfo(
+                maxBinX, maxBinY, gains, gainMin, gainMax, readoutModes,
+                sensorName, sensorType, pixelSizeX, pixelSizeY,
+                cameraSizeX, cameraSizeY, ccdTemperature, ccdTemperatureValid);
+        }
+
+    private:
+        int m_maxBinX;
+        int m_maxBinY;
+        QStringList m_gains;
+        int m_gainMin;
+        int m_gainMax;
+        QStringList m_readoutModes;
+        QString m_sensorName;
+        int m_sensorType;
+        double m_pixelSizeX;
+        double m_pixelSizeY;
+        int m_cameraSizeX;
+        int m_cameraSizeY;
+        double m_ccdTemperature;
+        bool m_ccdTemperatureValid;
+
+        MsgReportAlpacaCameraInfo(
+            int maxBinX, int maxBinY,
+            const QStringList& gains, int gainMin, int gainMax,
+            const QStringList& readoutModes,
+            const QString& sensorName, int sensorType,
+            double pixelSizeX, double pixelSizeY,
+            int cameraSizeX, int cameraSizeY,
+            double ccdTemperature, bool ccdTemperatureValid) :
+            Message(),
+            m_maxBinX(maxBinX),
+            m_maxBinY(maxBinY),
+            m_gains(gains),
+            m_gainMin(gainMin),
+            m_gainMax(gainMax),
+            m_readoutModes(readoutModes),
+            m_sensorName(sensorName),
+            m_sensorType(sensorType),
+            m_pixelSizeX(pixelSizeX),
+            m_pixelSizeY(pixelSizeY),
+            m_cameraSizeX(cameraSizeX),
+            m_cameraSizeY(cameraSizeY),
+            m_ccdTemperature(ccdTemperature),
+            m_ccdTemperatureValid(ccdTemperatureValid)
+        { }
+    };
+
     CameraWorker();
     ~CameraWorker();
 
@@ -181,6 +257,7 @@ private:
     bool m_alpacaFrameRequestPending;
     quint32 m_alpacaClientId;
     quint32 m_alpacaClientTransactionId;
+    int m_alpacaSensorType; // 0=Mono, 1=Colour, 2=RGGB, 3=CMYG, 4=CMYG2, 5=LRGB
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
@@ -206,6 +283,8 @@ private:
     void alpacaStartExposure();
     void alpacaCheckImageReady();
     void alpacaFetchImageArray();
+    void alpacaQueryCameraCapabilities();
+    void alpacaSetCameraParams();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void setupQtCapture();

@@ -44,6 +44,10 @@ struct CameraSettings
     QString m_alpacaHost;
     uint16_t m_alpacaPort;
     int m_alpacaCameraId;
+    int m_alpacaBinX;
+    int m_alpacaBinY;
+    int m_alpacaGain;         // index into named gains list, or numeric value; -1 = do not set
+    int m_alpacaReadoutMode;  // index into readoutmodes list
     bool m_saveImage;
     QString m_imageFileName;
     bool m_saveVideo;

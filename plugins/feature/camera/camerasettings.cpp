@@ -43,6 +43,10 @@ void CameraSettings::resetToDefaults()
     m_alpacaHost = "127.0.0.1";
     m_alpacaPort = 11111;
     m_alpacaCameraId = 0;
+    m_alpacaBinX = 1;
+    m_alpacaBinY = 1;
+    m_alpacaGain = -1;
+    m_alpacaReadoutMode = 0;
     m_saveImage = false;
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
@@ -80,6 +84,10 @@ QByteArray CameraSettings::serialize() const
 
     s.writeS32(19, m_workspaceIndex);
     s.writeBlob(20, m_geometryBytes);
+    s.writeS32(21, m_alpacaBinX);
+    s.writeS32(22, m_alpacaBinY);
+    s.writeS32(23, m_alpacaGain);
+    s.writeS32(24, m_alpacaReadoutMode);
 
     return s.final();
 }
@@ -133,6 +141,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
 
         d.readS32(19, &m_workspaceIndex, 0);
         d.readBlob(20, &m_geometryBytes);
+        d.readS32(21, &m_alpacaBinX, 1);
+        d.readS32(22, &m_alpacaBinY, 1);
+        d.readS32(23, &m_alpacaGain, -1);
+        d.readS32(24, &m_alpacaReadoutMode, 0);
+        m_alpacaBinX = std::max(1, m_alpacaBinX);
+        m_alpacaBinY = std::max(1, m_alpacaBinY);
 
         return true;
     }
@@ -178,6 +192,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("alpacaCameraId")) {
         m_alpacaCameraId = settings.m_alpacaCameraId;
+    }
+    if (settingsKeys.contains("alpacaBinX")) {
+        m_alpacaBinX = std::max(1, settings.m_alpacaBinX);
+    }
+    if (settingsKeys.contains("alpacaBinY")) {
+        m_alpacaBinY = std::max(1, settings.m_alpacaBinY);
+    }
+    if (settingsKeys.contains("alpacaGain")) {
+        m_alpacaGain = settings.m_alpacaGain;
+    }
+    if (settingsKeys.contains("alpacaReadoutMode")) {
+        m_alpacaReadoutMode = std::max(0, settings.m_alpacaReadoutMode);
     }
     if (settingsKeys.contains("saveImage")) {
         m_saveImage = settings.m_saveImage;
@@ -232,6 +258,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("alpacaCameraId") || force) {
         ostr << " m_alpacaCameraId: " << m_alpacaCameraId;
+    }
+    if (settingsKeys.contains("alpacaBinX") || force) {
+        ostr << " m_alpacaBinX: " << m_alpacaBinX;
+    }
+    if (settingsKeys.contains("alpacaBinY") || force) {
+        ostr << " m_alpacaBinY: " << m_alpacaBinY;
+    }
+    if (settingsKeys.contains("alpacaGain") || force) {
+        ostr << " m_alpacaGain: " << m_alpacaGain;
+    }
+    if (settingsKeys.contains("alpacaReadoutMode") || force) {
+        ostr << " m_alpacaReadoutMode: " << m_alpacaReadoutMode;
     }
     if (settingsKeys.contains("saveImage") || force) {
         ostr << " m_saveImage: " << m_saveImage;

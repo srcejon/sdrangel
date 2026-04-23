@@ -128,6 +128,12 @@ bool CameraGUI::handleMessage(const Message& message)
         updateImageWidget();
         return true;
     }
+    else if (CameraWorker::MsgReportAlpacaCameraInfo::match(message))
+    {
+        const CameraWorker::MsgReportAlpacaCameraInfo& info = (CameraWorker::MsgReportAlpacaCameraInfo&) message;
+        updateAlpacaCapabilities(info);
+        return true;
+    }
 
     return false;
 }
@@ -149,7 +155,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     ui(new Ui::CameraGUI),
     m_pluginAPI(pluginAPI),
     m_featureUISet(featureUISet),
-    m_doApplySettings(true)
+    m_doApplySettings(true),
+    m_alpacaHasNamedGains(false)
 {
     m_feature = feature;
     setAttribute(Qt::WA_DeleteOnClose, true);
@@ -209,6 +216,16 @@ void CameraGUI::displaySettings()
     ui->alpacaHostEdit->setText(m_settings.m_alpacaHost);
     ui->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
     ui->alpacaCameraIdSpin->setValue(m_settings.m_alpacaCameraId);
+    ui->alpacaBinXSpin->setValue(m_settings.m_alpacaBinX);
+    ui->alpacaBinYSpin->setValue(m_settings.m_alpacaBinY);
+
+    if (m_alpacaHasNamedGains) {
+        ui->alpacaGainCombo->setCurrentIndex(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
+    } else {
+        ui->alpacaGainSpin->setValue(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
+    }
+
+    ui->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_alpacaReadoutMode);
     ui->saveImageCheck->setChecked(m_settings.m_saveImage);
     ui->imagePathEdit->setText(m_settings.m_imageFileName);
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
@@ -254,6 +271,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
     QObject::connect(ui->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
     QObject::connect(ui->alpacaCameraIdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaCameraIdSpin_valueChanged);
+    QObject::connect(ui->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
+    QObject::connect(ui->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
+    QObject::connect(ui->alpacaGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaGainCombo_currentIndexChanged);
+    QObject::connect(ui->alpacaGainSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaGainSpin_valueChanged);
+    QObject::connect(ui->alpacaReadoutModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged);
     QObject::connect(ui->saveImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveImageCheck_toggled);
     QObject::connect(ui->imagePathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_imagePathEdit_editingFinished);
     QObject::connect(ui->imagePathButton, &QPushButton::clicked, this, &CameraGUI::on_imagePathButton_clicked);
@@ -274,8 +296,97 @@ void CameraGUI::updateAlpacaVisibility()
     ui->alpacaPortSpin->setVisible(alpaca);
     ui->alpacaCameraIdLabel->setVisible(alpaca);
     ui->alpacaCameraIdSpin->setVisible(alpaca);
+    ui->alpacaBinXLabel->setVisible(alpaca);
+    ui->alpacaBinXSpin->setVisible(alpaca);
+    ui->alpacaBinYLabel->setVisible(alpaca);
+    ui->alpacaBinYSpin->setVisible(alpaca);
+    ui->alpacaGainLabel->setVisible(alpaca);
+    ui->alpacaGainCombo->setVisible(alpaca && m_alpacaHasNamedGains);
+    ui->alpacaGainSpin->setVisible(alpaca && !m_alpacaHasNamedGains);
+    ui->alpacaReadoutModeLabel->setVisible(alpaca);
+    ui->alpacaReadoutModeCombo->setVisible(alpaca);
+    ui->alpacaStatusGroup->setVisible(alpaca);
+
+    // Video saving only makes sense for Qt camera
+    ui->saveVideoCheck->setVisible(!alpaca);
+    ui->videoPathEdit->setVisible(!alpaca);
+    ui->videoPathButton->setVisible(!alpaca);
 }
 
+
+void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info)
+{
+    blockApplySettings(true);
+
+    // Bin X
+    ui->alpacaBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
+    ui->alpacaBinXSpin->setValue(qBound(1, m_settings.m_alpacaBinX, info.getMaxBinX()));
+
+    // Bin Y
+    ui->alpacaBinYSpin->setMaximum(std::max(1, info.getMaxBinY()));
+    ui->alpacaBinYSpin->setValue(qBound(1, m_settings.m_alpacaBinY, info.getMaxBinY()));
+
+    // Gain
+    m_alpacaHasNamedGains = !info.getGains().isEmpty();
+    if (m_alpacaHasNamedGains)
+    {
+        ui->alpacaGainCombo->blockSignals(true);
+        ui->alpacaGainCombo->clear();
+        ui->alpacaGainCombo->addItems(info.getGains());
+        const int gainIdx = (m_settings.m_alpacaGain >= 0 && m_settings.m_alpacaGain < info.getGains().size())
+            ? m_settings.m_alpacaGain : 0;
+        ui->alpacaGainCombo->setCurrentIndex(gainIdx);
+        ui->alpacaGainCombo->blockSignals(false);
+    }
+    else
+    {
+        ui->alpacaGainSpin->setMinimum(info.getGainMin());
+        ui->alpacaGainSpin->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
+        const int gainVal = (m_settings.m_alpacaGain >= 0) ? m_settings.m_alpacaGain : info.getGainMin();
+        ui->alpacaGainSpin->setValue(qBound(info.getGainMin(), gainVal, info.getGainMax()));
+    }
+
+    // Readout mode
+    ui->alpacaReadoutModeCombo->blockSignals(true);
+    ui->alpacaReadoutModeCombo->clear();
+    ui->alpacaReadoutModeCombo->addItems(info.getReadoutModes());
+    if (m_settings.m_alpacaReadoutMode < info.getReadoutModes().size()) {
+        ui->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_alpacaReadoutMode);
+    }
+    ui->alpacaReadoutModeCombo->blockSignals(false);
+
+    // Status labels
+    ui->sensorNameLabel->setText(info.getSensorName().isEmpty() ? "-" : info.getSensorName());
+
+    static const QStringList sensorTypeNames = {
+        "Monochrome", "Colour", "RGGB", "CMYG", "CMYG2", "LRGB"
+    };
+    const int st = info.getSensorType();
+    ui->sensorTypeLabel->setText((st >= 0 && st < sensorTypeNames.size()) ? sensorTypeNames[st] : QString::number(st));
+
+    if (info.getPixelSizeX() > 0 || info.getPixelSizeY() > 0) {
+        ui->pixelSizeLabel->setText(QString("%1 × %2")
+            .arg(info.getPixelSizeX(), 0, 'f', 2)
+            .arg(info.getPixelSizeY(), 0, 'f', 2));
+    } else {
+        ui->pixelSizeLabel->setText("-");
+    }
+
+    if (info.getCameraSizeX() > 0 || info.getCameraSizeY() > 0) {
+        ui->cameraSizeLabel->setText(QString("%1 × %2").arg(info.getCameraSizeX()).arg(info.getCameraSizeY()));
+    } else {
+        ui->cameraSizeLabel->setText("-");
+    }
+
+    if (info.isCcdTemperatureValid()) {
+        ui->ccdTempLabel->setText(QString::number(info.getCcdTemperature(), 'f', 1));
+    } else {
+        ui->ccdTempLabel->setText("-");
+    }
+
+    updateAlpacaVisibility();
+    blockApplySettings(false);
+}
 
 void CameraGUI::on_startStop_clicked(bool checked)
 {
@@ -369,7 +480,42 @@ void CameraGUI::on_alpacaCameraIdSpin_valueChanged(int value)
     applySettings();
 }
 
-void CameraGUI::on_saveImageCheck_toggled(bool checked)
+void CameraGUI::on_alpacaBinXSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaBinX = value;
+    m_settingsKeys.append("alpacaBinX");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaBinYSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaBinY = value;
+    m_settingsKeys.append("alpacaBinY");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaGainCombo_currentIndexChanged(int index)
+{
+    m_settings.m_alpacaGain = index;
+    m_settingsKeys.append("alpacaGain");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaGainSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaGain = value;
+    m_settingsKeys.append("alpacaGain");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_alpacaReadoutMode = index;
+    m_settingsKeys.append("alpacaReadoutMode");
+    applySettings();
+}
+
+
 {
     m_settings.m_saveImage = checked;
     m_settingsKeys.append("saveImage");

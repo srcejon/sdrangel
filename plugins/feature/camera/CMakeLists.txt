@@ -21,10 +21,12 @@ if(NOT SERVER_MODE)
         ${camera_SOURCES}
         cameragui.cpp
         cameragui.ui
+        camerahistogramdialog.cpp
     )
     set(camera_HEADERS
         ${camera_HEADERS}
         cameragui.h
+        camerahistogramdialog.h
     )
 
     set(TARGET_NAME ${PLUGINS_PREFIX}featurecamera)
@@ -48,12 +50,16 @@ if(NOT BUILD_SHARED_LIBS)
     set_property(GLOBAL APPEND PROPERTY STATIC_PLUGINS_PROPERTY ${TARGET_NAME})
 endif()
 
+include_directories(${OpenCV_INCLUDE_DIRS})
+
 target_link_libraries(${TARGET_NAME} PRIVATE
     Qt::Core
     Qt::Network
     Qt::Gui
     Qt::Multimedia
     ${TARGET_LIB}
+    $<$<NOT:$<BOOL:${SERVER_MODE}>>:Qt::Charts>
+    "${OpenCV_LIBS}"
     sdrbase
     ${TARGET_LIB_GUI}
 )

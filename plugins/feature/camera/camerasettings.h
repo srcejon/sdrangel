@@ -19,6 +19,7 @@
 #define INCLUDE_FEATURE_CAMERASETTINGS_H_
 
 #include <QByteArray>
+#include <QColor>
 #include <QString>
 #include <QStringList>
 
@@ -57,6 +58,15 @@ struct CameraSettings
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;
+
+    // Post-processing settings
+    double m_brightness;      ///< Brightness adjustment: -100.0..100.0
+    double m_contrast;        ///< Contrast multiplier: 0.1..3.0
+    bool m_invertColors;      ///< Invert all colour channels
+    bool m_overlayDateTime;   ///< Draw current date/time on frame
+    QColor m_dateTimeColor;   ///< Colour for the date/time overlay text
+    bool m_diffMask;          ///< Show pixel differences from previous frame
+    int m_dilationSize;       ///< Kernel radius for diff-mask dilation: 0..20
 
     CameraSettings();
     ~CameraSettings() = default;

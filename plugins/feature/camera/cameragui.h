@@ -18,6 +18,8 @@
 #ifndef INCLUDE_FEATURE_CAMERAGUI_H_
 #define INCLUDE_FEATURE_CAMERAGUI_H_
 
+#include <QColor>
+#include <QDateTime>
 #include <QImage>
 
 #include "feature/featuregui.h"
@@ -62,6 +64,8 @@ private:
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
     QImage m_lastImage;
+    QImage m_previousImage;
+    QDateTime m_captureDateTime;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
 
@@ -76,6 +80,7 @@ private:
     void updateAlpacaVisibility();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateImageWidget();
+    [[nodiscard]] QImage applyPostProcessing(const QImage& input) const;
 
 private slots:
     void handleInputMessages();
@@ -103,6 +108,14 @@ private slots:
     void on_saveVideoCheck_toggled(bool checked);
     void on_videoPathEdit_editingFinished();
     void on_videoPathButton_clicked();
+    void on_brightnessSlider_valueChanged(int value);
+    void on_contrastSlider_valueChanged(int value);
+    void on_invertColorsButton_toggled(bool checked);
+    void on_overlayDateTimeButton_toggled(bool checked);
+    void on_dateTimeColorButton_clicked();
+    void on_diffMaskButton_toggled(bool checked);
+    void on_dilationSpin_valueChanged(int value);
+    void on_histogramButton_clicked();
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

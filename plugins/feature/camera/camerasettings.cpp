@@ -55,6 +55,13 @@ void CameraSettings::resetToDefaults()
     m_captureActive = false;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
+    m_brightness = 0.0;
+    m_contrast = 1.0;
+    m_invertColors = false;
+    m_overlayDateTime = false;
+    m_dateTimeColor = Qt::white;
+    m_diffMask = false;
+    m_dilationSize = 3;
 }
 
 QByteArray CameraSettings::serialize() const
@@ -90,6 +97,13 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(23, m_alpacaGain);
     s.writeS32(24, m_alpacaReadoutMode);
     s.writeS32(25, m_alpacaOffset);
+    s.writeDouble(26, m_brightness);
+    s.writeDouble(27, m_contrast);
+    s.writeBool(28, m_invertColors);
+    s.writeBool(29, m_overlayDateTime);
+    s.writeU32(30, m_dateTimeColor.rgba());
+    s.writeBool(31, m_diffMask);
+    s.writeS32(32, m_dilationSize);
 
     return s.final();
 }
@@ -150,6 +164,19 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(25, &m_alpacaOffset, -1);
         m_alpacaBinX = std::max(1, m_alpacaBinX);
         m_alpacaBinY = std::max(1, m_alpacaBinY);
+
+        d.readDouble(26, &m_brightness, 0.0);
+        d.readDouble(27, &m_contrast, 1.0);
+        d.readBool(28, &m_invertColors, false);
+        d.readBool(29, &m_overlayDateTime, false);
+        uint32_t colorRgba = Qt::white;
+        d.readU32(30, &colorRgba, Qt::white);
+        m_dateTimeColor = QColor::fromRgba(colorRgba);
+        d.readBool(31, &m_diffMask, false);
+        d.readS32(32, &m_dilationSize, 3);
+        m_brightness = qBound(-100.0, m_brightness, 100.0);
+        m_contrast = qBound(0.1, m_contrast, 3.0);
+        m_dilationSize = qBound(0, m_dilationSize, 20);
 
         return true;
     }
@@ -229,7 +256,27 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
     }
-}
+    if (settingsKeys.contains("brightness")) {
+        m_brightness = qBound(-100.0, settings.m_brightness, 100.0);
+    }
+    if (settingsKeys.contains("contrast")) {
+        m_contrast = qBound(0.1, settings.m_contrast, 3.0);
+    }
+    if (settingsKeys.contains("invertColors")) {
+        m_invertColors = settings.m_invertColors;
+    }
+    if (settingsKeys.contains("overlayDateTime")) {
+        m_overlayDateTime = settings.m_overlayDateTime;
+    }
+    if (settingsKeys.contains("dateTimeColor")) {
+        m_dateTimeColor = settings.m_dateTimeColor;
+    }
+    if (settingsKeys.contains("diffMask")) {
+        m_diffMask = settings.m_diffMask;
+    }
+    if (settingsKeys.contains("dilationSize")) {
+        m_dilationSize = qBound(0, settings.m_dilationSize, 20);
+    }
 
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
 {
@@ -294,6 +341,27 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("captureActive") || force) {
         ostr << " m_captureActive: " << m_captureActive;
+    }
+    if (settingsKeys.contains("brightness") || force) {
+        ostr << " m_brightness: " << m_brightness;
+    }
+    if (settingsKeys.contains("contrast") || force) {
+        ostr << " m_contrast: " << m_contrast;
+    }
+    if (settingsKeys.contains("invertColors") || force) {
+        ostr << " m_invertColors: " << m_invertColors;
+    }
+    if (settingsKeys.contains("overlayDateTime") || force) {
+        ostr << " m_overlayDateTime: " << m_overlayDateTime;
+    }
+    if (settingsKeys.contains("dateTimeColor") || force) {
+        ostr << " m_dateTimeColor: " << m_dateTimeColor.name().toStdString();
+    }
+    if (settingsKeys.contains("diffMask") || force) {
+        ostr << " m_diffMask: " << m_diffMask;
+    }
+    if (settingsKeys.contains("dilationSize") || force) {
+        ostr << " m_dilationSize: " << m_dilationSize;
     }
 
     return QString(ostr.str().c_str());

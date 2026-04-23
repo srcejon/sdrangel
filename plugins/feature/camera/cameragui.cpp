@@ -665,14 +665,13 @@ QImage CameraGUI::applyPostProcessing(const QImage& input) const
         return input;
     }
 
-    // Convert to RGB888 and create an OpenCV BGR mat (deep copy)
+    // Convert to RGB888 and create an OpenCV BGR mat
     const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
     cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
                 const_cast<uchar*>(rgb.bits()),
                 static_cast<size_t>(rgb.bytesPerLine()));
     cv::Mat bgrMat;
-    mat.copyTo(bgrMat);
-    cv::cvtColor(bgrMat, bgrMat, cv::COLOR_RGB2BGR);
+    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 
     // Brightness / contrast
     if (needsBrightContrast)
@@ -697,8 +696,7 @@ QImage CameraGUI::applyPostProcessing(const QImage& input) const
                         const_cast<uchar*>(prevRgb.bits()),
                         static_cast<size_t>(prevRgb.bytesPerLine()));
         cv::Mat prevBgr;
-        prevMat.copyTo(prevBgr);
-        cv::cvtColor(prevBgr, prevBgr, cv::COLOR_RGB2BGR);
+        cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
 
         cv::Mat gray, prevGray, diff, mask;
         cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);

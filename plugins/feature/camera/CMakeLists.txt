@@ -50,7 +50,7 @@ if(NOT BUILD_SHARED_LIBS)
     set_property(GLOBAL APPEND PROPERTY STATIC_PLUGINS_PROPERTY ${TARGET_NAME})
 endif()
 
-include_directories(${OpenCV_INCLUDE_DIRS})
+target_include_directories(${TARGET_NAME} PRIVATE ${OpenCV_INCLUDE_DIRS})
 
 target_link_libraries(${TARGET_NAME} PRIVATE
     Qt::Core

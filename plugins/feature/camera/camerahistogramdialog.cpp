@@ -38,8 +38,7 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
                 const_cast<uchar*>(rgb.bits()),
                 static_cast<size_t>(rgb.bytesPerLine()));
     cv::Mat bgrMat;
-    mat.copyTo(bgrMat);
-    cv::cvtColor(bgrMat, bgrMat, cv::COLOR_RGB2BGR);
+    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 
     // Split into B, G, R channels
     std::vector<cv::Mat> channels;
@@ -55,7 +54,7 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
     chart->legend()->setVisible(true);
 
     // Channel order from cv::split on BGR: 0=B, 1=G, 2=R
-    const struct { int idx; const char* name; QColor colour; } channelDefs[] = {
+    const struct { int idx; const char* name; QColor color; } channelDefs[] = {
         {2, "Red",   Qt::red},
         {1, "Green", Qt::green},
         {0, "Blue",  Qt::blue}
@@ -69,7 +68,7 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
 
         auto* series = new QLineSeries();
         series->setName(tr(def.name));
-        QPen pen(def.colour);
+        QPen pen(def.color);
         pen.setWidth(1);
         series->setPen(pen);
 

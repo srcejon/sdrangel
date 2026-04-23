@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <limits>
 
@@ -29,6 +30,7 @@
 #include <QNetworkRequest>
 #include <QRandomGenerator>
 #include <QSharedPointer>
+#include <QtEndian>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QColor>
@@ -67,6 +69,7 @@ CameraWorker::CameraWorker() :
     m_alpacaClientId(QRandomGenerator::global()->bounded(quint64(1), quint64(std::numeric_limits<quint32>::max()) + 1)),
     m_alpacaClientTransactionId(1),
     m_alpacaSensorType(0),
+    m_alpacaImageBytesSupported(true),
     m_statusTimer(this)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     , m_qtCamera(nullptr)
@@ -548,7 +551,13 @@ void CameraWorker::alpacaFetchImageArray()
     query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
     url.setQuery(query);
 
-    QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+    QNetworkRequest request(url);
+    // Signal support for the faster binary ImageBytes protocol; server falls back to JSON if unsupported
+    if (m_alpacaImageBytesSupported) {
+        request.setRawHeader("Accept", "application/imagebytes");
+    }
+
+    QNetworkReply *reply = m_networkManager->get(request);
 
     QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         m_alpacaFrameRequestPending = false;
@@ -561,7 +570,19 @@ void CameraWorker::alpacaFetchImageArray()
         QImage image = createPlaceholderFrame();
 
         if (reply->error() == QNetworkReply::NoError) {
-            image = parseAlpacaImageArray(reply->readAll());
+            const QByteArray data = reply->readAll();
+            const QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
+            if (contentType.contains(QLatin1String("application/imagebytes"), Qt::CaseInsensitive)) {
+                m_alpacaImageBytesSupported = true;
+                image = parseAlpacaImageBytes(data);
+            } else {
+                // Server returned JSON — either it doesn't support ImageBytes or we didn't request it
+                if (m_alpacaImageBytesSupported) {
+                    qDebug() << "CameraWorker::alpacaFetchImageArray: server returned JSON; disabling ImageBytes for this camera";
+                    m_alpacaImageBytesSupported = false;
+                }
+                image = parseAlpacaImageArray(data);
+            }
         }
 
         processNewFrame(image);
@@ -592,6 +613,9 @@ void CameraWorker::alpacaQueryCameraCapabilities()
     if (!m_networkManager) {
         return;
     }
+
+    // Reset ImageBytes support flag so we probe again for the new camera
+    m_alpacaImageBytesSupported = true;
 
     const QString baseUrl = buildAlpacaBaseUrl();
     const int camId = m_settings.m_alpacaCameraId;
@@ -920,65 +944,7 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
 
         // Bayer demosaicing for sensorType 2 (RGGB), 3 (CMYG), 4 (CMYG2), 5 (LRGB)
         // sensorType 0 = Monochrome, 1 = Colour (handled by rank 3 normally)
-        const bool isBayer = (m_alpacaSensorType >= 2 && m_alpacaSensorType <= 5);
-        if (isBayer)
-        {
-            // Simple bilinear Bayer demosaicing for RGGB (sensorType 2).
-            // RGGB pattern (bayerOffsetX/Y assumed 0):
-            //   (even x, even y) = R
-            //   (odd  x, even y) = G1
-            //   (even x, odd  y) = G2
-            //   (odd  x, odd  y) = B
-            //
-            // For CMYG/CMYG2/LRGB (sensorType 3-5) we fall back to greyscale
-            // as those require colour-matrix transforms beyond the scope here.
-            if (m_alpacaSensorType == 2)
-            {
-                QImage image(width, height, QImage::Format_RGB32);
-                auto clamp = [](int v) { return qBound(0, v, 255); };
-                auto safe  = [&raw, width, height](int x, int y) -> int {
-                    return raw[qBound(0, x, width-1)][qBound(0, y, height-1)];
-                };
-
-                for (int x = 0; x < width; ++x) {
-                    for (int y = 0; y < height; ++y) {
-                        int r, g, b;
-                        if ((x % 2 == 0) && (y % 2 == 0)) {
-                            // R site
-                            r = raw[x][y];
-                            g = clamp((safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4);
-                            b = clamp((safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4);
-                        } else if ((x % 2 == 1) && (y % 2 == 0)) {
-                            // G1 site (R row)
-                            r = clamp((safe(x-1,y) + safe(x+1,y)) / 2);
-                            g = raw[x][y];
-                            b = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
-                        } else if ((x % 2 == 0) && (y % 2 == 1)) {
-                            // G2 site (B row)
-                            r = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
-                            g = raw[x][y];
-                            b = clamp((safe(x-1,y) + safe(x+1,y)) / 2);
-                        } else {
-                            // B site
-                            b = raw[x][y];
-                            g = clamp((safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4);
-                            r = clamp((safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4);
-                        }
-                        reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
-                    }
-                }
-                return image;
-            }
-        }
-
-        // Monochrome (sensorType 0 or 1 returning rank 2, or unsupported Bayer types)
-        QImage image(width, height, QImage::Format_Grayscale8);
-        for (int x = 0; x < width; ++x) {
-            for (int y = 0; y < height; ++y) {
-                image.scanLine(y)[x] = static_cast<uchar>(raw[x][y]);
-            }
-        }
-        return image;
+        return renderRawPixelArray(raw, width, height);
     }
     else if (rank == 3)
     {
@@ -1024,6 +990,256 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
                 const int r = (range3 > 0) ? qBound(0, static_cast<int>((colR[y].toInt(0) - minVal) * scale), 255) : uniformGray3;
                 const int g = (range3 > 0) ? qBound(0, static_cast<int>((colG[y].toInt(0) - minVal) * scale), 255) : uniformGray3;
                 const int b = (range3 > 0) ? qBound(0, static_cast<int>((colB[y].toInt(0) - minVal) * scale), 255) : uniformGray3;
+                reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
+            }
+        }
+        return image;
+    }
+
+    return createPlaceholderFrame();
+}
+
+QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const
+{
+    // Bayer demosaicing for sensorType 2 (RGGB).
+    // RGGB pattern (bayerOffsetX/Y assumed 0):
+    //   (even x, even y) = R
+    //   (odd  x, even y) = G1
+    //   (even x, odd  y) = G2
+    //   (odd  x, odd  y) = B
+    // For CMYG/CMYG2/LRGB (sensorType 3-5) we fall back to greyscale
+    // as those require colour-matrix transforms beyond the scope here.
+    if (m_alpacaSensorType == 2)
+    {
+        QImage image(width, height, QImage::Format_RGB32);
+        auto clamp = [](int v) { return qBound(0, v, 255); };
+        auto safe  = [&raw, width, height](int x, int y) -> int {
+            return raw[qBound(0, x, width-1)][qBound(0, y, height-1)];
+        };
+
+        for (int x = 0; x < width; ++x) {
+            for (int y = 0; y < height; ++y) {
+                int r, g, b;
+                if ((x % 2 == 0) && (y % 2 == 0)) {
+                    // R site
+                    r = raw[x][y];
+                    g = clamp((safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4);
+                    b = clamp((safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4);
+                } else if ((x % 2 == 1) && (y % 2 == 0)) {
+                    // G1 site (R row)
+                    r = clamp((safe(x-1,y) + safe(x+1,y)) / 2);
+                    g = raw[x][y];
+                    b = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
+                } else if ((x % 2 == 0) && (y % 2 == 1)) {
+                    // G2 site (B row)
+                    r = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
+                    g = raw[x][y];
+                    b = clamp((safe(x-1,y) + safe(x+1,y)) / 2);
+                } else {
+                    // B site
+                    b = raw[x][y];
+                    g = clamp((safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4);
+                    r = clamp((safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4);
+                }
+                reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
+            }
+        }
+        return image;
+    }
+
+    // Monochrome (sensorType 0 or 1 returning rank 2, or unsupported Bayer types 3-5)
+    QImage image(width, height, QImage::Format_Grayscale8);
+    for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+            image.scanLine(y)[x] = static_cast<uchar>(raw[x][y]);
+        }
+    }
+    return image;
+}
+
+// Alpaca ImageBytes binary format (ASCOM Alpaca spec):
+//
+//   Byte  0- 3: MetaDataVersion  (int32 LE) — must be 1
+//   Byte  4- 7: ErrorNumber      (int32 LE) — 0 = success
+//   Byte  8-11: ClientTransactionID (int32 LE)
+//   Byte 12-15: ServerTransactionID (int32 LE)
+//   Byte 16-19: DataStart        (int32 LE) — byte offset to pixel data, typically 44
+//   Byte 20-23: ImageElementType (int32 LE) — original element type: 1=byte,2=int16,3=int32,6=double
+//   Byte 24-27: TransmissionElementType (int32 LE) — wire type (same codes)
+//   Byte 28-31: Rank             (int32 LE) — 2 or 3
+//   Byte 32-35: Dimension1       (int32 LE) — rank2: width; rank3: number of planes
+//   Byte 36-39: Dimension2       (int32 LE) — rank2: height; rank3: width
+//   Byte 40-43: Dimension3       (int32 LE) — rank2: unused (0); rank3: height
+//
+// Pixel data is column-major within each rank-2 plane: pixel[x][y] at index (x*height + y)
+// For rank 3: pixel[plane][x][y] at index (plane*width*height + x*height + y)
+QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
+{
+    static constexpr int kHeaderSize = 44;
+    static constexpr qint32 kElementTypeByte   = 1;
+    static constexpr qint32 kElementTypeInt16  = 2;
+    static constexpr qint32 kElementTypeInt32  = 3;
+    static constexpr qint32 kElementTypeDouble = 6;
+
+    if (payload.size() < kHeaderSize) {
+        qDebug() << "CameraWorker::parseAlpacaImageBytes: payload too small" << payload.size();
+        return createPlaceholderFrame();
+    }
+
+    const char* hdr = payload.constData();
+
+    const qint32 metadataVersion  = qFromLittleEndian<qint32>(hdr + 0);
+    const qint32 errorNumber      = qFromLittleEndian<qint32>(hdr + 4);
+    // clientTransactionID        = qFromLittleEndian<qint32>(hdr + 8);  // informational
+    // serverTransactionID        = qFromLittleEndian<qint32>(hdr + 12); // informational
+    const qint32 dataStart        = qFromLittleEndian<qint32>(hdr + 16);
+    // imageElementType           = qFromLittleEndian<qint32>(hdr + 20); // original ADU type
+    const qint32 transmissionType = qFromLittleEndian<qint32>(hdr + 24);
+    const qint32 rank             = qFromLittleEndian<qint32>(hdr + 28);
+    const qint32 dim1             = qFromLittleEndian<qint32>(hdr + 32);
+    const qint32 dim2             = qFromLittleEndian<qint32>(hdr + 36);
+    const qint32 dim3             = qFromLittleEndian<qint32>(hdr + 40);
+
+    if (metadataVersion != 1) {
+        qDebug() << "CameraWorker::parseAlpacaImageBytes: unsupported MetaDataVersion" << metadataVersion;
+        return createPlaceholderFrame();
+    }
+
+    if (errorNumber != 0) {
+        qDebug() << "CameraWorker::parseAlpacaImageBytes: Alpaca error" << errorNumber;
+        return createPlaceholderFrame();
+    }
+
+    if (dataStart < kHeaderSize || dataStart > payload.size()) {
+        qDebug() << "CameraWorker::parseAlpacaImageBytes: invalid DataStart" << dataStart;
+        return createPlaceholderFrame();
+    }
+
+    int elementSize = 0;
+    switch (transmissionType) {
+        case kElementTypeByte:   elementSize = 1; break;
+        case kElementTypeInt16:  elementSize = 2; break;
+        case kElementTypeInt32:  elementSize = 4; break;
+        case kElementTypeDouble: elementSize = 8; break;
+        default:
+            qDebug() << "CameraWorker::parseAlpacaImageBytes: unknown TransmissionElementType" << transmissionType;
+            return createPlaceholderFrame();
+    }
+
+    const char*   pixels         = payload.constData() + dataStart;
+    const qsizetype pixelDataLen = payload.size() - dataStart;
+
+    // Read one pixel value (any supported element type) at a given byte offset, returning double
+    auto readPixel = [&](qsizetype byteOffset) -> double {
+        if (byteOffset + elementSize > pixelDataLen) {
+            return 0.0;
+        }
+        const char* p = pixels + byteOffset;
+        switch (transmissionType) {
+            case kElementTypeByte:
+                return static_cast<double>(static_cast<quint8>(*p));
+            case kElementTypeInt16:
+                return static_cast<double>(qFromLittleEndian<qint16>(p));
+            case kElementTypeInt32:
+                return static_cast<double>(qFromLittleEndian<qint32>(p));
+            case kElementTypeDouble: {
+                double v;
+                std::memcpy(&v, p, sizeof(v));
+                // Assume little-endian host (standard on x86/x64/ARM with Qt)
+                return v;
+            }
+            default:
+                return 0.0;
+        }
+    };
+
+    if (rank == 2)
+    {
+        const int width  = static_cast<int>(dim1);
+        const int height = static_cast<int>(dim2);
+        if (width <= 0 || height <= 0) {
+            return createPlaceholderFrame();
+        }
+        const qsizetype required = static_cast<qsizetype>(width) * height * elementSize;
+        if (pixelDataLen < required) {
+            qDebug() << "CameraWorker::parseAlpacaImageBytes: insufficient pixel data for rank 2:"
+                     << pixelDataLen << "<" << required;
+            return createPlaceholderFrame();
+        }
+
+        // First pass: min/max for black-level correction and linear scaling to 8-bit
+        double minVal = std::numeric_limits<double>::max();
+        double maxVal = std::numeric_limits<double>::lowest();
+        for (int x = 0; x < width; ++x) {
+            for (int y = 0; y < height; ++y) {
+                const double v = readPixel(static_cast<qsizetype>(x * height + y) * elementSize);
+                if (v < minVal) { minVal = v; }
+                if (v > maxVal) { maxVal = v; }
+            }
+        }
+        const double range = maxVal - minVal;
+        const double scale = (range > 0.0) ? (255.0 / range) : 0.0;
+        const int uniformGray = (range == 0.0) ? (minVal > 0.0 ? 128 : 0) : 0;
+
+        QVector<QVector<int>> raw(width, QVector<int>(height, 0));
+        for (int x = 0; x < width; ++x) {
+            for (int y = 0; y < height; ++y) {
+                const double v = readPixel(static_cast<qsizetype>(x * height + y) * elementSize);
+                raw[x][y] = (range > 0.0)
+                    ? qBound(0, static_cast<int>((v - minVal) * scale), 255)
+                    : uniformGray;
+            }
+        }
+
+        return renderRawPixelArray(raw, width, height);
+    }
+    else if (rank == 3)
+    {
+        const int planes = static_cast<int>(dim1);
+        const int width  = static_cast<int>(dim2);
+        const int height = static_cast<int>(dim3);
+        if (planes < 3 || width <= 0 || height <= 0) {
+            return createPlaceholderFrame();
+        }
+        const qsizetype required = static_cast<qsizetype>(planes) * width * height * elementSize;
+        if (pixelDataLen < required) {
+            qDebug() << "CameraWorker::parseAlpacaImageBytes: insufficient pixel data for rank 3:"
+                     << pixelDataLen << "<" << required;
+            return createPlaceholderFrame();
+        }
+
+        auto pixelAt = [&](int plane, int x, int y) -> double {
+            return readPixel(static_cast<qsizetype>(plane * width * height + x * height + y) * elementSize);
+        };
+
+        // First pass: min/max across all planes for black-level correction
+        double minVal = std::numeric_limits<double>::max();
+        double maxVal = std::numeric_limits<double>::lowest();
+        for (int p = 0; p < 3; ++p) {
+            for (int x = 0; x < width; ++x) {
+                for (int y = 0; y < height; ++y) {
+                    const double v = pixelAt(p, x, y);
+                    if (v < minVal) { minVal = v; }
+                    if (v > maxVal) { maxVal = v; }
+                }
+            }
+        }
+        const double range3 = maxVal - minVal;
+        const double scale = (range3 > 0.0) ? (255.0 / range3) : 0.0;
+        const int uniformGray3 = (range3 == 0.0) ? (minVal > 0.0 ? 128 : 0) : 0;
+
+        QImage image(width, height, QImage::Format_RGB32);
+        for (int x = 0; x < width; ++x) {
+            for (int y = 0; y < height; ++y) {
+                const int r = (range3 > 0.0)
+                    ? qBound(0, static_cast<int>((pixelAt(0, x, y) - minVal) * scale), 255)
+                    : uniformGray3;
+                const int g = (range3 > 0.0)
+                    ? qBound(0, static_cast<int>((pixelAt(1, x, y) - minVal) * scale), 255)
+                    : uniformGray3;
+                const int b = (range3 > 0.0)
+                    ? qBound(0, static_cast<int>((pixelAt(2, x, y) - minVal) * scale), 255)
+                    : uniformGray3;
                 reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
             }
         }

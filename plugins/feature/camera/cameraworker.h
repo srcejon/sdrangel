@@ -295,7 +295,8 @@ private:
     bool m_alpacaFrameRequestPending;
     quint32 m_alpacaClientId;
     quint32 m_alpacaClientTransactionId;
-    int m_alpacaSensorType; // 0=Mono, 1=Colour, 2=RGGB, 3=CMYG, 4=CMYG2, 5=LRGB
+    int m_alpacaSensorType;          // 0=Mono, 1=Colour, 2=RGGB, 3=CMYG, 4=CMYG2, 5=LRGB
+    bool m_alpacaImageBytesSupported; // true = try ImageBytes binary protocol; false = use JSON
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature every 2 s
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -318,6 +319,8 @@ private:
     void reportResolutions();
     QStringList parseAlpacaCameraList(const QByteArray& payload) const;
     QImage parseAlpacaImageArray(const QByteArray& payload) const;
+    QImage parseAlpacaImageBytes(const QByteArray& payload) const;
+    QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const;
 
     void alpacaStartExposure();
     void alpacaCheckImageReady();

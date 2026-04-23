@@ -169,8 +169,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(27, &m_contrast, 1.0);
         d.readBool(28, &m_invertColors, false);
         d.readBool(29, &m_overlayDateTime, false);
-        uint32_t colorRgba = Qt::white;
-        d.readU32(30, &colorRgba, Qt::white);
+        uint32_t colorRgba = QColor(Qt::white).rgba();
+        d.readU32(30, &colorRgba, QColor(Qt::white).rgba());
         m_dateTimeColor = QColor::fromRgba(colorRgba);
         d.readBool(31, &m_diffMask, false);
         d.readS32(32, &m_dilationSize, 3);
@@ -277,6 +277,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("dilationSize")) {
         m_dilationSize = qBound(0, settings.m_dilationSize, 20);
     }
+}
 
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
 {

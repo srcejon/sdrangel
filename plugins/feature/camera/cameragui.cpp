@@ -653,8 +653,20 @@ void CameraGUI::on_videoPathButton_clicked()
     }
 }
 
+/**
+ * Applies the enabled post-processing effects to @p input in order:
+ *   1. Brightness/contrast adjustment (cv::convertScaleAbs)
+ *   2. Colour inversion (cv::bitwise_not)
+ *   3. Diff mask against the previous frame (cv::absdiff + threshold + optional dilation)
+ *   4. Date/time text overlay (cv::putText)
+ *
+ * Returns the processed image, or @p input unchanged when no effects are active.
+ */
 QImage CameraGUI::applyPostProcessing(const QImage& input) const
 {
+    // Pixel difference magnitude (0-255) below which a pixel is considered unchanged.
+    static constexpr int kDiffThreshold = 30;
+
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsBrightContrast
         || m_settings.m_invertColors
@@ -702,7 +714,7 @@ QImage CameraGUI::applyPostProcessing(const QImage& input) const
         cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
         cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
         cv::absdiff(gray, prevGray, diff);
-        cv::threshold(diff, mask, 30, 255, cv::THRESH_BINARY);
+        cv::threshold(diff, mask, kDiffThreshold, 255, cv::THRESH_BINARY);
 
         if (m_settings.m_dilationSize > 0)
         {

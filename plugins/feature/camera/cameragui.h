@@ -62,7 +62,8 @@ private:
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
     QImage m_lastImage;
-    bool m_alpacaHasNamedGains; // true if gains list has named entries
+    bool m_alpacaHasNamedGains;   // true if gains list has named entries
+    bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
 
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     virtual ~CameraGUI();
@@ -93,6 +94,8 @@ private slots:
     void on_alpacaBinYSpin_valueChanged(int value);
     void on_alpacaGainCombo_currentIndexChanged(int index);
     void on_alpacaGainSpin_valueChanged(int value);
+    void on_alpacaOffsetCombo_currentIndexChanged(int index);
+    void on_alpacaOffsetSpin_valueChanged(int value);
     void on_alpacaReadoutModeCombo_currentIndexChanged(int index);
     void on_saveImageCheck_toggled(bool checked);
     void on_imagePathEdit_editingFinished();

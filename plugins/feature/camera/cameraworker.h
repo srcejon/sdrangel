@@ -170,6 +170,9 @@ public:
         const QStringList& getGains() const { return m_gains; }
         int getGainMin() const { return m_gainMin; }
         int getGainMax() const { return m_gainMax; }
+        const QStringList& getOffsets() const { return m_offsets; }
+        int getOffsetMin() const { return m_offsetMin; }
+        int getOffsetMax() const { return m_offsetMax; }
         const QStringList& getReadoutModes() const { return m_readoutModes; }
         const QString& getSensorName() const { return m_sensorName; }
         int getSensorType() const { return m_sensorType; }
@@ -183,6 +186,7 @@ public:
         static MsgReportAlpacaCameraInfo* create(
             int maxBinX, int maxBinY,
             const QStringList& gains, int gainMin, int gainMax,
+            const QStringList& offsets, int offsetMin, int offsetMax,
             const QStringList& readoutModes,
             const QString& sensorName, int sensorType,
             double pixelSizeX, double pixelSizeY,
@@ -190,8 +194,8 @@ public:
             double ccdTemperature, bool ccdTemperatureValid)
         {
             return new MsgReportAlpacaCameraInfo(
-                maxBinX, maxBinY, gains, gainMin, gainMax, readoutModes,
-                sensorName, sensorType, pixelSizeX, pixelSizeY,
+                maxBinX, maxBinY, gains, gainMin, gainMax, offsets, offsetMin, offsetMax,
+                readoutModes, sensorName, sensorType, pixelSizeX, pixelSizeY,
                 cameraSizeX, cameraSizeY, ccdTemperature, ccdTemperatureValid);
         }
 
@@ -201,6 +205,9 @@ public:
         QStringList m_gains;
         int m_gainMin;
         int m_gainMax;
+        QStringList m_offsets;
+        int m_offsetMin;
+        int m_offsetMax;
         QStringList m_readoutModes;
         QString m_sensorName;
         int m_sensorType;
@@ -214,6 +221,7 @@ public:
         MsgReportAlpacaCameraInfo(
             int maxBinX, int maxBinY,
             const QStringList& gains, int gainMin, int gainMax,
+            const QStringList& offsets, int offsetMin, int offsetMax,
             const QStringList& readoutModes,
             const QString& sensorName, int sensorType,
             double pixelSizeX, double pixelSizeY,
@@ -225,6 +233,9 @@ public:
             m_gains(gains),
             m_gainMin(gainMin),
             m_gainMax(gainMax),
+            m_offsets(offsets),
+            m_offsetMin(offsetMin),
+            m_offsetMax(offsetMax),
             m_readoutModes(readoutModes),
             m_sensorName(sensorName),
             m_sensorType(sensorType),

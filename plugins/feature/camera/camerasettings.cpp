@@ -46,6 +46,7 @@ void CameraSettings::resetToDefaults()
     m_alpacaBinX = 1;
     m_alpacaBinY = 1;
     m_alpacaGain = -1;
+    m_alpacaOffset = -1;
     m_alpacaReadoutMode = 0;
     m_saveImage = false;
     m_imageFileName = "camera.jpg";
@@ -88,6 +89,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(22, m_alpacaBinY);
     s.writeS32(23, m_alpacaGain);
     s.writeS32(24, m_alpacaReadoutMode);
+    s.writeS32(25, m_alpacaOffset);
 
     return s.final();
 }
@@ -145,6 +147,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(22, &m_alpacaBinY, 1);
         d.readS32(23, &m_alpacaGain, -1);
         d.readS32(24, &m_alpacaReadoutMode, 0);
+        d.readS32(25, &m_alpacaOffset, -1);
         m_alpacaBinX = std::max(1, m_alpacaBinX);
         m_alpacaBinY = std::max(1, m_alpacaBinY);
 
@@ -201,6 +204,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("alpacaGain")) {
         m_alpacaGain = settings.m_alpacaGain;
+    }
+    if (settingsKeys.contains("alpacaOffset")) {
+        m_alpacaOffset = settings.m_alpacaOffset;
     }
     if (settingsKeys.contains("alpacaReadoutMode")) {
         m_alpacaReadoutMode = std::max(0, settings.m_alpacaReadoutMode);
@@ -267,6 +273,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("alpacaGain") || force) {
         ostr << " m_alpacaGain: " << m_alpacaGain;
+    }
+    if (settingsKeys.contains("alpacaOffset") || force) {
+        ostr << " m_alpacaOffset: " << m_alpacaOffset;
     }
     if (settingsKeys.contains("alpacaReadoutMode") || force) {
         ostr << " m_alpacaReadoutMode: " << m_alpacaReadoutMode;

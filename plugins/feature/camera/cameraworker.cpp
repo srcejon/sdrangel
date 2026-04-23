@@ -170,6 +170,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("alpacaBinX")
         || settingsKeys.contains("alpacaBinY")
         || settingsKeys.contains("alpacaGain")
+        || settingsKeys.contains("alpacaOffset")
         || settingsKeys.contains("alpacaReadoutMode")
         || settingsKeys.contains("saveVideo")
         || settingsKeys.contains("videoFileName");
@@ -428,13 +429,23 @@ void CameraWorker::alpacaSetCameraParams()
             m_settings.m_alpacaReadoutMode, m_alpacaClientId, m_alpacaClientTransactionId, doStartExposure);
     };
 
-    auto doGain = [this, baseUrl, camId, doReadoutMode]() {
+    auto doOffset = [this, baseUrl, camId, doReadoutMode]() {
+        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        if (m_settings.m_alpacaOffset >= 0) {
+            alpacaPutIntProperty(m_networkManager, baseUrl, camId, "offset", "Offset",
+                m_settings.m_alpacaOffset, m_alpacaClientId, m_alpacaClientTransactionId, doReadoutMode);
+        } else {
+            doReadoutMode();
+        }
+    };
+
+    auto doGain = [this, baseUrl, camId, doOffset]() {
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
         if (m_settings.m_alpacaGain >= 0) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "gain", "Gain",
-                m_settings.m_alpacaGain, m_alpacaClientId, m_alpacaClientTransactionId, doReadoutMode);
+                m_settings.m_alpacaGain, m_alpacaClientId, m_alpacaClientTransactionId, doOffset);
         } else {
-            doReadoutMode();
+            doOffset();
         }
     };
 
@@ -592,6 +603,9 @@ void CameraWorker::alpacaQueryCameraCapabilities()
         QStringList gains;
         int gainMin = 0;
         int gainMax = 0;
+        QStringList offsets;
+        int offsetMin = 0;
+        int offsetMax = 0;
         QStringList readoutModes;
         QString sensorName;
         int sensorType = 0;
@@ -609,6 +623,7 @@ void CameraWorker::alpacaQueryCameraCapabilities()
     // Properties to query: name, JSON Value key, handler
     static const QStringList properties = {
         "maxbinx", "maxbiny", "gains", "gainmin", "gainmax",
+        "offsets", "offsetmin", "offsetmax",
         "readoutmodes", "sensorname", "sensortype",
         "pixelsizex", "pixelsizey", "cameraxsize", "cameraysize",
         "ccdtemperature"
@@ -628,6 +643,7 @@ void CameraWorker::alpacaQueryCameraCapabilities()
             m_msgQueueToGUI->push(MsgReportAlpacaCameraInfo::create(
                 info->maxBinX, info->maxBinY,
                 info->gains, info->gainMin, info->gainMax,
+                info->offsets, info->offsetMin, info->offsetMax,
                 info->readoutModes,
                 info->sensorName, info->sensorType,
                 info->pixelSizeX, info->pixelSizeY,
@@ -667,6 +683,16 @@ void CameraWorker::alpacaQueryCameraCapabilities()
                             info->gainMin = val.toInt(0);
                         } else if (prop == "gainmax") {
                             info->gainMax = val.toInt(0);
+                        } else if (prop == "offsets") {
+                            if (val.isArray()) {
+                                for (const QJsonValue& o : val.toArray()) {
+                                    info->offsets.append(o.toString());
+                                }
+                            }
+                        } else if (prop == "offsetmin") {
+                            info->offsetMin = val.toInt(0);
+                        } else if (prop == "offsetmax") {
+                            info->offsetMax = val.toInt(0);
                         } else if (prop == "readoutmodes") {
                             if (val.isArray()) {
                                 for (const QJsonValue& m : val.toArray()) {
@@ -866,21 +892,26 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             return createPlaceholderFrame();
         }
 
-        // First pass: find maximum pixel value for linear scaling to 8-bit
-        int maxVal = 1;
+        // First pass: find minimum and maximum pixel values for black-level correction and linear scaling to 8-bit
+        int minVal = std::numeric_limits<int>::max();
+        int maxVal = 0;
         for (const QJsonValue& col : value) {
             for (const QJsonValue& pix : col.toArray()) {
-                maxVal = std::max(maxVal, pix.toInt(0));
+                const int v = pix.toInt(0);
+                minVal = std::min(minVal, v);
+                maxVal = std::max(maxVal, v);
             }
         }
-        const double scale = 255.0 / maxVal;
+        if (minVal > maxVal) { minVal = 0; }
+        const int range = std::max(1, maxVal - minVal);
+        const double scale = 255.0 / range;
 
-        // Build scaled raw array (column-major)
+        // Build scaled raw array (column-major), with black-level subtracted
         QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
             const QJsonArray col = value[x].toArray();
             for (int y = 0; y < height; ++y) {
-                raw[x][y] = qBound(0, static_cast<int>(col[y].toInt(0) * scale), 255);
+                raw[x][y] = qBound(0, static_cast<int>((col[y].toInt(0) - minVal) * scale), 255);
             }
         }
 
@@ -964,16 +995,20 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             return createPlaceholderFrame();
         }
 
-        // First pass: find maximum pixel value across all planes for linear scaling
-        int maxVal = 1;
+        // First pass: find minimum and maximum pixel values across all planes for black-level correction and linear scaling
+        int minVal = std::numeric_limits<int>::max();
+        int maxVal = 0;
         for (const QJsonArray* plane : {&planeR, &planeG, &planeB}) {
             for (const QJsonValue& col : *plane) {
                 for (const QJsonValue& pix : col.toArray()) {
-                    maxVal = std::max(maxVal, pix.toInt(0));
+                    const int v = pix.toInt(0);
+                    minVal = std::min(minVal, v);
+                    maxVal = std::max(maxVal, v);
                 }
             }
         }
-        const double scale = 255.0 / maxVal;
+        if (minVal > maxVal) { minVal = 0; }
+        const double scale = 255.0 / std::max(1, maxVal - minVal);
 
         QImage image(width, height, QImage::Format_RGB32);
         for (int x = 0; x < width; ++x) {
@@ -981,9 +1016,9 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             const QJsonArray colG = planeG[x].toArray();
             const QJsonArray colB = planeB[x].toArray();
             for (int y = 0; y < height; ++y) {
-                const int r = qBound(0, static_cast<int>(colR[y].toInt(0) * scale), 255);
-                const int g = qBound(0, static_cast<int>(colG[y].toInt(0) * scale), 255);
-                const int b = qBound(0, static_cast<int>(colB[y].toInt(0) * scale), 255);
+                const int r = qBound(0, static_cast<int>((colR[y].toInt(0) - minVal) * scale), 255);
+                const int g = qBound(0, static_cast<int>((colG[y].toInt(0) - minVal) * scale), 255);
+                const int b = qBound(0, static_cast<int>((colB[y].toInt(0) - minVal) * scale), 255);
                 reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
             }
         }

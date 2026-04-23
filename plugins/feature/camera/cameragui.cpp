@@ -172,7 +172,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_pluginAPI(pluginAPI),
     m_featureUISet(featureUISet),
     m_doApplySettings(true),
-    m_alpacaHasNamedGains(false)
+    m_alpacaHasNamedGains(false),
+    m_alpacaHasNamedOffsets(false)
 {
     m_feature = feature;
     setAttribute(Qt::WA_DeleteOnClose, true);
@@ -241,6 +242,12 @@ void CameraGUI::displaySettings()
         ui->alpacaGainSpin->setValue(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
     }
 
+    if (m_alpacaHasNamedOffsets) {
+        ui->alpacaOffsetCombo->setCurrentIndex(m_settings.m_alpacaOffset >= 0 ? m_settings.m_alpacaOffset : 0);
+    } else {
+        ui->alpacaOffsetSpin->setValue(m_settings.m_alpacaOffset >= 0 ? m_settings.m_alpacaOffset : 0);
+    }
+
     ui->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_alpacaReadoutMode);
     ui->saveImageCheck->setChecked(m_settings.m_saveImage);
     ui->imagePathEdit->setText(m_settings.m_imageFileName);
@@ -287,6 +294,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
     QObject::connect(ui->alpacaGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaGainCombo_currentIndexChanged);
     QObject::connect(ui->alpacaGainSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaGainSpin_valueChanged);
+    QObject::connect(ui->alpacaOffsetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaOffsetCombo_currentIndexChanged);
+    QObject::connect(ui->alpacaOffsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaOffsetSpin_valueChanged);
     QObject::connect(ui->alpacaReadoutModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged);
     QObject::connect(ui->saveImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveImageCheck_toggled);
     QObject::connect(ui->imagePathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_imagePathEdit_editingFinished);
@@ -302,6 +311,8 @@ void CameraGUI::updateAlpacaVisibility()
 
     ui->resolutionLabel->setVisible(!alpaca);
     ui->resolutionCombo->setVisible(!alpaca);
+    ui->isoLabel->setVisible(!alpaca);
+    ui->isoSpin->setVisible(!alpaca);
     ui->alpacaHostLabel->setVisible(alpaca);
     ui->alpacaHostEdit->setVisible(alpaca);
     ui->alpacaPortLabel->setVisible(alpaca);
@@ -315,6 +326,9 @@ void CameraGUI::updateAlpacaVisibility()
     ui->alpacaGainLabel->setVisible(alpaca);
     ui->alpacaGainCombo->setVisible(alpaca && m_alpacaHasNamedGains);
     ui->alpacaGainSpin->setVisible(alpaca && !m_alpacaHasNamedGains);
+    ui->alpacaOffsetLabel->setVisible(alpaca);
+    ui->alpacaOffsetCombo->setVisible(alpaca && m_alpacaHasNamedOffsets);
+    ui->alpacaOffsetSpin->setVisible(alpaca && !m_alpacaHasNamedOffsets);
     ui->alpacaReadoutModeLabel->setVisible(alpaca);
     ui->alpacaReadoutModeCombo->setVisible(alpaca);
     ui->alpacaStatusGroup->setVisible(alpaca);
@@ -366,6 +380,26 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
         ui->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_alpacaReadoutMode);
     }
     ui->alpacaReadoutModeCombo->blockSignals(false);
+
+    // Offset
+    m_alpacaHasNamedOffsets = !info.getOffsets().isEmpty();
+    if (m_alpacaHasNamedOffsets)
+    {
+        ui->alpacaOffsetCombo->blockSignals(true);
+        ui->alpacaOffsetCombo->clear();
+        ui->alpacaOffsetCombo->addItems(info.getOffsets());
+        const int offsetIdx = (m_settings.m_alpacaOffset >= 0 && m_settings.m_alpacaOffset < info.getOffsets().size())
+            ? m_settings.m_alpacaOffset : 0;
+        ui->alpacaOffsetCombo->setCurrentIndex(offsetIdx);
+        ui->alpacaOffsetCombo->blockSignals(false);
+    }
+    else
+    {
+        ui->alpacaOffsetSpin->setMinimum(info.getOffsetMin());
+        ui->alpacaOffsetSpin->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
+        const int offsetVal = (m_settings.m_alpacaOffset >= 0) ? m_settings.m_alpacaOffset : info.getOffsetMin();
+        ui->alpacaOffsetSpin->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
+    }
 
     // Status labels
     ui->sensorNameLabel->setText(info.getSensorName().isEmpty() ? "-" : info.getSensorName());
@@ -517,6 +551,20 @@ void CameraGUI::on_alpacaGainSpin_valueChanged(int value)
 {
     m_settings.m_alpacaGain = value;
     m_settingsKeys.append("alpacaGain");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaOffsetCombo_currentIndexChanged(int index)
+{
+    m_settings.m_alpacaOffset = index;
+    m_settingsKeys.append("alpacaOffset");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaOffsetSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaOffset = value;
+    m_settingsKeys.append("alpacaOffset");
     applySettings();
 }
 

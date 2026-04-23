@@ -60,7 +60,7 @@ CameraWorker::CameraWorker() :
     m_captureTimer(this),
     m_networkManager(nullptr),
     m_alpacaFrameRequestPending(false),
-    m_alpacaClientId(QRandomGenerator::global()->generate() % std::numeric_limits<quint32>::max() + 1u),
+    m_alpacaClientId(QRandomGenerator::global()->bounded(quint64(1), quint64(std::numeric_limits<quint32>::max()) + 1)),
     m_alpacaClientTransactionId(1)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     , m_qtCamera(nullptr)
@@ -557,13 +557,13 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
                 maxVal = std::max(maxVal, pix.toInt(0));
             }
         }
-        const int divisor = std::max(1, maxVal / 255);
+        const double scale = 255.0 / maxVal;
 
         QImage image(width, height, QImage::Format_Grayscale8);
         for (int x = 0; x < width; ++x) {
             const QJsonArray col = value[x].toArray();
             for (int y = 0; y < height; ++y) {
-                const auto gray = static_cast<uchar>(qBound(0, col[y].toInt(0) / divisor, 255));
+                const auto gray = static_cast<uchar>(qBound(0, static_cast<int>(col[y].toInt(0) * scale), 255));
                 image.scanLine(y)[x] = gray;
             }
         }
@@ -596,7 +596,7 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
                 }
             }
         }
-        const int divisor = std::max(1, maxVal / 255);
+        const double scale = 255.0 / maxVal;
 
         QImage image(width, height, QImage::Format_RGB32);
         for (int x = 0; x < width; ++x) {
@@ -604,9 +604,9 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             const QJsonArray colG = planeG[x].toArray();
             const QJsonArray colB = planeB[x].toArray();
             for (int y = 0; y < height; ++y) {
-                const int r = qBound(0, colR[y].toInt(0) / divisor, 255);
-                const int g = qBound(0, colG[y].toInt(0) / divisor, 255);
-                const int b = qBound(0, colB[y].toInt(0) / divisor, 255);
+                const int r = qBound(0, static_cast<int>(colR[y].toInt(0) * scale), 255);
+                const int g = qBound(0, static_cast<int>(colG[y].toInt(0) * scale), 255);
+                const int b = qBound(0, static_cast<int>(colB[y].toInt(0) * scale), 255);
                 reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
             }
         }

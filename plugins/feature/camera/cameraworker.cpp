@@ -1066,22 +1066,28 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
 //   Byte  8-11: ClientTransactionID (int32 LE)
 //   Byte 12-15: ServerTransactionID (int32 LE)
 //   Byte 16-19: DataStart        (int32 LE) — byte offset to pixel data, typically 44
-//   Byte 20-23: ImageElementType (int32 LE) — original element type: 1=byte,2=int16,3=int32,6=double
-//   Byte 24-27: TransmissionElementType (int32 LE) — wire type (same codes)
+//   Byte 20-23: ImageElementType (int32 LE) — original ADU element type (ASCOM ImageArrayElementTypes enum)
+//   Byte 24-27: TransmissionElementType (int32 LE) — wire type (same enum)
 //   Byte 28-31: Rank             (int32 LE) — 2 or 3
 //   Byte 32-35: Dimension1       (int32 LE) — rank2: width; rank3: number of planes
 //   Byte 36-39: Dimension2       (int32 LE) — rank2: height; rank3: width
 //   Byte 40-43: Dimension3       (int32 LE) — rank2: unused (0); rank3: height
 //
+// ASCOM ImageArrayElementTypes enum:
+//   1=Int16, 2=Int32, 3=Double, 4=Single, 5=UInt64, 6=Byte, 7=Int64, 8=UInt16, 9=UInt32
+//
 // Pixel data is column-major within each rank-2 plane: pixel[x][y] at index (x*height + y)
 // For rank 3: pixel[plane][x][y] at index (plane*width*height + x*height + y)
 QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
 {
-    static constexpr int kHeaderSize = 44;
-    static constexpr qint32 kElementTypeByte   = 1;
-    static constexpr qint32 kElementTypeInt16  = 2;
-    static constexpr qint32 kElementTypeInt32  = 3;
-    static constexpr qint32 kElementTypeDouble = 6;
+    static constexpr int    kHeaderSize         = 44;
+    // ASCOM ImageArrayElementTypes enum values
+    static constexpr qint32 kElementTypeInt16   = 1;
+    static constexpr qint32 kElementTypeInt32   = 2;
+    static constexpr qint32 kElementTypeDouble  = 3;
+    static constexpr qint32 kElementTypeSingle  = 4;
+    static constexpr qint32 kElementTypeByte    = 6;
+    static constexpr qint32 kElementTypeUInt16  = 8;
 
     if (payload.size() < kHeaderSize) {
         qDebug() << "CameraWorker::parseAlpacaImageBytes: payload too small" << payload.size();
@@ -1119,10 +1125,12 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
 
     int elementSize = 0;
     switch (transmissionType) {
-        case kElementTypeByte:   elementSize = 1; break;
         case kElementTypeInt16:  elementSize = 2; break;
         case kElementTypeInt32:  elementSize = 4; break;
         case kElementTypeDouble: elementSize = 8; break;
+        case kElementTypeSingle: elementSize = 4; break;
+        case kElementTypeByte:   elementSize = 1; break;
+        case kElementTypeUInt16: elementSize = 2; break;
         default:
             qDebug() << "CameraWorker::parseAlpacaImageBytes: unknown TransmissionElementType" << transmissionType;
             return createPlaceholderFrame();
@@ -1139,8 +1147,6 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
         }
         const char* p = pixels + byteOffset;
         switch (transmissionType) {
-            case kElementTypeByte:
-                return static_cast<double>(static_cast<quint8>(*p));
             case kElementTypeInt16:
                 return static_cast<double>(qFromLittleEndian<qint16>(p));
             case kElementTypeInt32:
@@ -1152,6 +1158,15 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
                 std::memcpy(&v, p, sizeof(v));
                 return v;
             }
+            case kElementTypeSingle: {
+                float v;
+                std::memcpy(&v, p, sizeof(v));
+                return static_cast<double>(v);
+            }
+            case kElementTypeByte:
+                return static_cast<double>(static_cast<quint8>(*p));
+            case kElementTypeUInt16:
+                return static_cast<double>(qFromLittleEndian<quint16>(p));
             default:
                 return 0.0;
         }

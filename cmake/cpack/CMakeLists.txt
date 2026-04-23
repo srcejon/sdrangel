@@ -146,8 +146,8 @@ elseif(WIN32 OR MINGW)
     )
   endforeach(ffmpeg_dll)
 
-  # modatv.dll
-  file(GLOB OPENCV_DLLS "${OpenCV_LIBS_BIN_DIR}/opencv_world*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+  # modatv.dll/camera.dll
+  file(GLOB OPENCV_DLLS "${OpenCV_LIBS_BIN_DIR}/opencv_*${CMAKE_SHARED_LIBRARY_SUFFIX}")
   foreach(opencv_dll ${OPENCV_DLLS})
     get_filename_component(opencv_dll_name "${opencv_dll}"  NAME)
     add_custom_target(copy_ffmpeg_${opencv_dll_name} ALL

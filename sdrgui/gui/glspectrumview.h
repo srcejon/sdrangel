@@ -265,6 +265,7 @@ public:
     void setCalibrationInterpMode(SpectrumSettings::CalibrationInterpolationMode mode);
     void setIsDeviceSpectrum(bool isDeviceSpectrum) { m_isDeviceSpectrum = isDeviceSpectrum; }
     bool isDeviceSpectrum() const { return m_isDeviceSpectrum; }
+    void setPipeProducer(QObject* pipeProducer);
     void setFrequencyZooming(float frequencyZoomFactor, float frequencyZoomPos);
     void setWaterfallTimeFormat(SpectrumSettings::WaterfallTimeUnits waterfallTimeUnits, const QString& format);
     void setStatusLine(bool displayRBW, bool displayCursorStats, bool displayPeakStats);
@@ -513,6 +514,9 @@ private:
 
     QVector<SpectrumSettings::SpectrumMemory> m_spectrumMemory;
 
+    // For sending renders of spectrum to a pipe
+    QObject* m_pipeProducer = nullptr;
+
 #ifdef ENABLE_PROFILER
     QString m_profileName;
 #endif
@@ -644,6 +648,8 @@ private:
     {
         return std::clamp(value, 0, 255);
     }
+
+    void sendDisplayToPipe();
 
 private slots:
     void cleanup();

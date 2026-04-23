@@ -382,7 +382,9 @@ void AddSampleSourceFSM::addDevice()
     m_deviceAPI = new DeviceAPI(DeviceAPI::StreamSingleRx, m_deviceSetIndex, m_dspDeviceSourceEngine, nullptr, nullptr);
 
     m_deviceUISet->m_deviceAPI = m_deviceAPI;
+    m_deviceUISet->m_spectrum->setPipeProducer(m_deviceAPI);
     deviceSet->m_deviceAPI = m_deviceAPI;
+
     QList<QString> channelNames;
     m_mainWindow->m_pluginManager->listRxChannels(channelNames);
     m_deviceUISet->setNumberOfAvailableRxChannels(channelNames.size());
@@ -496,7 +498,9 @@ void AddSampleSinkFSM::addDevice()
     m_deviceAPI = new DeviceAPI(DeviceAPI::StreamSingleTx, m_deviceSetIndex, nullptr, m_dspDeviceSinkEngine, nullptr);
 
     m_deviceUISet->m_deviceAPI = m_deviceAPI;
+    m_deviceUISet->m_spectrum->setPipeProducer(m_deviceAPI);
     deviceSet->m_deviceAPI = m_deviceAPI;
+
     QList<QString> channelNames;
     m_mainWindow->m_pluginManager->listTxChannels(channelNames);
     m_deviceUISet->setNumberOfAvailableTxChannels(channelNames.size());
@@ -611,7 +615,9 @@ void AddSampleMIMOFSM::addDevice()
     m_deviceAPI = new DeviceAPI(DeviceAPI::StreamMIMO, m_deviceSetIndex, nullptr, nullptr, m_dspDeviceMIMOEngine);
 
     m_deviceUISet->m_deviceAPI = m_deviceAPI;
+    m_deviceUISet->m_spectrum->setPipeProducer(m_deviceAPI);
     deviceSet->m_deviceAPI = m_deviceAPI;
+
     QList<QString> mimoChannelNames;
     m_mainWindow->m_pluginManager->listMIMOChannels(mimoChannelNames);
     m_deviceUISet->setNumberOfAvailableMIMOChannels(mimoChannelNames.size());

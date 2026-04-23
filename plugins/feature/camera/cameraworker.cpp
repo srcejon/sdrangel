@@ -47,6 +47,7 @@
 #include <QVideoSink>
 #endif
 
+#include "maincore.h"
 #include "cameraworker.h"
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
@@ -60,6 +61,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
+    m_availableDeviceHandler({}, QStringList{"spectrumview"}),
     m_capturing(false),
     m_imageSaved(false),
     m_captureTimer(this),
@@ -76,11 +78,22 @@ CameraWorker::CameraWorker() :
     , m_captureSession(nullptr)
 #endif
 {
+    QObject::connect(
+        &m_availableDeviceHandler,
+        &AvailableDeviceHandler::messageEnqueued,
+        this,
+        &CameraWorker::handleDeviceMessageQueue);
+    m_availableDeviceHandler.scanAvailableDevices();
 }
 
 CameraWorker::~CameraWorker()
 {
     stopWork();
+    QObject::disconnect(
+        &m_availableDeviceHandler,
+        &AvailableDeviceHandler::messageEnqueued,
+        this,
+        &CameraWorker::handleDeviceMessageQueue);
 }
 
 void CameraWorker::startWork()
@@ -125,6 +138,18 @@ void CameraWorker::handleInputMessages()
     }
 }
 
+void CameraWorker::handleDeviceMessageQueue(MessageQueue* messageQueue)
+{
+    Message* message;
+
+    while ((message = messageQueue->pop()) != nullptr)
+    {
+        if (handleMessage(*message)) {
+            delete message;
+        }
+    }
+}
+
 bool CameraWorker::handleMessage(const Message& cmd)
 {
     if (MsgConfigureCameraWorker::match(cmd))
@@ -147,6 +172,12 @@ bool CameraWorker::handleMessage(const Message& cmd)
     else if (MsgRefreshCameraList::match(cmd))
     {
         reportCameraList();
+        return true;
+    }
+    else if (MainCore::MsgImage::match(cmd))
+    {
+        MainCore::MsgImage& imgMsg = (MainCore::MsgImage&) cmd;
+        m_spectrumViewImage = imgMsg.getImage();
         return true;
     }
 

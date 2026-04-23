@@ -32,6 +32,7 @@
 
 #include "util/message.h"
 #include "util/messagequeue.h"
+#include "availabledevicehandler.h"
 #include "camerasettings.h"
 
 class QNetworkAccessManager;
@@ -293,6 +294,8 @@ private:
     MessageQueue *m_msgQueueToGUI;
     QRecursiveMutex m_mutex;
     CameraSettings m_settings;
+    AvailableDeviceHandler m_availableDeviceHandler;
+    AvailableDeviceList m_availableDevices;
     bool m_capturing;
     bool m_imageSaved;
     QTimer m_captureTimer;
@@ -312,6 +315,8 @@ private:
 
     // Video output
     cv::VideoWriter m_videoWriter; // OpenCV video writer (works for both Alpaca and Qt cameras)
+
+    QImage m_spectrumViewImage;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
@@ -353,6 +358,7 @@ private:
 
 private slots:
     void handleInputMessages();
+    void handleDeviceMessageQueue(MessageQueue* messageQueue);
     void captureTick();
     void statusTick();
 };

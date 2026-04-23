@@ -72,6 +72,7 @@ MESSAGE_CLASS_DEFINITION(MainCore::MsgStarTrackerTarget, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgStarTrackerDisplaySettings, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgStarTrackerDisplayLoSSettings, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgSkyMapTarget, Message)
+MESSAGE_CLASS_DEFINITION(MainCore::MsgImage, Message)
 
 MainCore::MainCore()
 {
@@ -438,6 +439,31 @@ void MainCore::updateWakeLock()
     }
 }
 #endif
+
+
+AvailableDeviceList MainCore::getAvailableDevices(const QStringList& uris)
+{
+    AvailableDeviceList list;
+
+    for (const auto deviceSet : m_deviceSets)
+    {
+        // FIXME: uris
+
+        qDebug() << "getHardwareId" << deviceSet->m_deviceAPI->getHardwareId();
+        qDebug() << "getSamplingDeviceId" << deviceSet->m_deviceAPI->getSamplingDeviceId();
+
+        QChar type = getDeviceSetTypeId(deviceSet);
+        AvailableDevice item {
+            type,
+            deviceSet->m_deviceAPI->getDeviceSetIndex(),
+            deviceSet->m_deviceAPI->getHardwareId(),
+            deviceSet->m_deviceAPI
+        };
+        list.append(item);
+    }
+
+    return list;
+}
 
 AvailableChannelOrFeatureList MainCore::getAvailableChannels(const QStringList& uris)
 {

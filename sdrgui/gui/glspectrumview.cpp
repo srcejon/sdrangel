@@ -5334,6 +5334,8 @@ void GLSpectrumView::tick()
     {
         m_displayChanged = false;
         update();
+
+        sendDisplayToPipe();
     }
 }
 
@@ -5894,6 +5896,33 @@ void GLSpectrumView::getDisplayedSpectrumCopy(std::vector<Real>& copy, bool zoom
             copy.assign(m_currentSpectrum + m_fftMin, m_currentSpectrum + m_fftMax);
         } else {
             copy.assign(m_currentSpectrum, m_currentSpectrum + m_fftSize);
+        }
+    }
+}
+
+// Set the object (tpyically DeviceAPI) that will be the source of messages sent via "spectrumview" pipe
+void GLSpectrumView::setPipeProducer(QObject* pipeProducer)
+{
+    m_pipeProducer = pipeProducer;
+}
+
+void GLSpectrumView::sendDisplayToPipe()
+{
+    if (m_pipeProducer)
+    {
+        QList<ObjectPipe*> messagePipes;
+        MainCore::instance()->getMessagePipes().getMessagePipes(m_pipeProducer, "spectrumview", messagePipes);
+
+        if (!messagePipes.isEmpty())
+        {
+            QImage image = grab().toImage();
+
+            for (const auto& pipe : messagePipes)
+            {
+                MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+                MainCore::MsgImage *msg = MainCore::MsgImage::create(m_pipeProducer, image);
+                messageQueue->push(msg);
+            }
         }
     }
 }

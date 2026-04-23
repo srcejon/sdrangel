@@ -309,6 +309,8 @@ set(sdrbase_SOURCES
 
     availablechannelorfeature.cpp
     availablechannelorfeaturehandler.cpp
+    availabledevice.cpp
+    availabledevicehandler.cpp
     mainparser.cpp
     maincore.cpp
     remotetcpsinkstarter.cpp
@@ -573,6 +575,8 @@ set(sdrbase_HEADERS
 
     availablechannelorfeature.h
     availablechannelorfeaturehandler.h
+    availabledevice.h
+    availabledevicehandler.h
     mainparser.h
     maincore.h
     remotetcpsinkstarter.h

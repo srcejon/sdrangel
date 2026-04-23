@@ -512,7 +512,11 @@
          <string>Overlay date and time</string>
         </property>
         <property name="text">
-         <string>T</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/info.png</normaloff>:/info.png</iconset>
         </property>
        </widget>
       </item>
@@ -538,11 +542,11 @@
         <property name="toolTip">
          <string>Font family for date/time overlay</string>
         </property>
-        <property name="minimumContentsLength">
-         <number>8</number>
-        </property>
         <property name="sizeAdjustPolicy">
          <enum>QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon</enum>
+        </property>
+        <property name="minimumContentsLength">
+         <number>8</number>
         </property>
        </widget>
       </item>
@@ -707,11 +711,11 @@
         <property name="toolTip">
          <string>Device whose spectrum view to overlay</string>
         </property>
-        <property name="minimumContentsLength">
-         <number>8</number>
-        </property>
         <property name="sizeAdjustPolicy">
          <enum>QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon</enum>
+        </property>
+        <property name="minimumContentsLength">
+         <number>8</number>
         </property>
        </widget>
       </item>

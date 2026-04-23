@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>430</width>
-    <height>560</height>
+    <height>1097</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -27,6 +27,9 @@
      <width>428</width>
      <height>558</height>
     </rect>
+   </property>
+   <property name="windowTitle">
+    <string>Settings</string>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout">
     <property name="leftMargin">
@@ -69,8 +72,16 @@
       </item>
       <item row="1" column="1">
        <widget class="QComboBox" name="apiCombo">
-        <item><property name="text"><string>ASCOM Alpaca</string></property></item>
-        <item><property name="text"><string>Qt camera (Qt6)</string></property></item>
+        <item>
+         <property name="text">
+          <string>ASCOM Alpaca</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Qt camera (Qt6)</string>
+         </property>
+        </item>
        </widget>
       </item>
       <item row="2" column="0">
@@ -82,81 +93,365 @@
       </item>
       <item row="2" column="1">
        <widget class="QComboBox" name="cameraCombo">
-        <property name="editable"><bool>true</bool></property>
+        <property name="editable">
+         <bool>true</bool>
+        </property>
        </widget>
       </item>
       <item row="3" column="0">
        <widget class="QLabel" name="resolutionLabel">
-        <property name="text"><string>Resolution</string></property>
+        <property name="text">
+         <string>Resolution</string>
+        </property>
        </widget>
       </item>
       <item row="3" column="1">
        <widget class="QComboBox" name="resolutionCombo"/>
       </item>
-      <item row="4" column="0"><widget class="QLabel" name="fpsLabel"><property name="text"><string>Frames/s</string></property></widget></item>
-      <item row="4" column="1"><widget class="QSpinBox" name="fpsSpin"><property name="minimum"><number>1</number></property><property name="maximum"><number>240</number></property></widget></item>
-      <item row="5" column="0"><widget class="QLabel" name="exposureLabel"><property name="text"><string>Exposure (ms)</string></property></widget></item>
-      <item row="5" column="1"><widget class="QSpinBox" name="exposureSpin"><property name="minimum"><number>1</number></property><property name="maximum"><number>60000</number></property></widget></item>
-      <item row="6" column="0"><widget class="QLabel" name="isoLabel"><property name="text"><string>ISO</string></property></widget></item>
-      <item row="6" column="1"><widget class="QSpinBox" name="isoSpin"><property name="minimum"><number>1</number></property><property name="maximum"><number>25600</number></property></widget></item>
-      <item row="7" column="0"><widget class="QLabel" name="alpacaHostLabel"><property name="text"><string>Alpaca host</string></property></widget></item>
-      <item row="7" column="1"><widget class="QLineEdit" name="alpacaHostEdit"/></item>
-      <item row="8" column="0"><widget class="QLabel" name="alpacaPortLabel"><property name="text"><string>Alpaca port</string></property></widget></item>
-      <item row="8" column="1"><widget class="QSpinBox" name="alpacaPortSpin"><property name="maximum"><number>65535</number></property></widget></item>
-      <item row="9" column="0"><widget class="QLabel" name="alpacaCameraIdLabel"><property name="text"><string>Alpaca camera ID</string></property></widget></item>
-      <item row="9" column="1"><widget class="QSpinBox" name="alpacaCameraIdSpin"><property name="maximum"><number>1024</number></property></widget></item>
-      <item row="10" column="0"><widget class="QLabel" name="alpacaBinXLabel"><property name="text"><string>Bin X</string></property></widget></item>
-      <item row="10" column="1"><widget class="QSpinBox" name="alpacaBinXSpin"><property name="minimum"><number>1</number></property><property name="maximum"><number>16</number></property></widget></item>
-      <item row="11" column="0"><widget class="QLabel" name="alpacaBinYLabel"><property name="text"><string>Bin Y</string></property></widget></item>
-      <item row="11" column="1"><widget class="QSpinBox" name="alpacaBinYSpin"><property name="minimum"><number>1</number></property><property name="maximum"><number>16</number></property></widget></item>
-      <item row="12" column="0"><widget class="QLabel" name="alpacaGainLabel"><property name="text"><string>Gain</string></property></widget></item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="fpsLabel">
+        <property name="text">
+         <string>Frames/s</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QSpinBox" name="fpsSpin">
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>240</number>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="exposureLabel">
+        <property name="text">
+         <string>Exposure (ms)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QSpinBox" name="exposureSpin">
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>60000</number>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="0">
+       <widget class="QLabel" name="isoLabel">
+        <property name="text">
+         <string>ISO</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <widget class="QSpinBox" name="isoSpin">
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>25600</number>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="0">
+       <widget class="QLabel" name="alpacaHostLabel">
+        <property name="text">
+         <string>Alpaca host</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <widget class="QLineEdit" name="alpacaHostEdit"/>
+      </item>
+      <item row="8" column="0">
+       <widget class="QLabel" name="alpacaPortLabel">
+        <property name="text">
+         <string>Alpaca port</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="1">
+       <widget class="QSpinBox" name="alpacaPortSpin">
+        <property name="maximum">
+         <number>65535</number>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="0">
+       <widget class="QLabel" name="alpacaCameraIdLabel">
+        <property name="text">
+         <string>Alpaca camera ID</string>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="1">
+       <widget class="QSpinBox" name="alpacaCameraIdSpin">
+        <property name="maximum">
+         <number>1024</number>
+        </property>
+       </widget>
+      </item>
+      <item row="10" column="0">
+       <widget class="QLabel" name="alpacaBinXLabel">
+        <property name="text">
+         <string>Bin X</string>
+        </property>
+       </widget>
+      </item>
+      <item row="10" column="1">
+       <widget class="QSpinBox" name="alpacaBinXSpin">
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>16</number>
+        </property>
+       </widget>
+      </item>
+      <item row="11" column="0">
+       <widget class="QLabel" name="alpacaBinYLabel">
+        <property name="text">
+         <string>Bin Y</string>
+        </property>
+       </widget>
+      </item>
+      <item row="11" column="1">
+       <widget class="QSpinBox" name="alpacaBinYSpin">
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>16</number>
+        </property>
+       </widget>
+      </item>
+      <item row="12" column="0">
+       <widget class="QLabel" name="alpacaGainLabel">
+        <property name="text">
+         <string>Gain</string>
+        </property>
+       </widget>
+      </item>
       <item row="12" column="1">
        <layout class="QHBoxLayout" name="gainLayout">
-        <item><widget class="QComboBox" name="alpacaGainCombo"/></item>
-        <item><widget class="QSpinBox" name="alpacaGainSpin"><property name="minimum"><number>0</number></property><property name="maximum"><number>10000</number></property></widget></item>
+        <item>
+         <widget class="QComboBox" name="alpacaGainCombo"/>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="alpacaGainSpin">
+          <property name="minimum">
+           <number>0</number>
+          </property>
+          <property name="maximum">
+           <number>10000</number>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
-      <item row="13" column="0"><widget class="QLabel" name="alpacaReadoutModeLabel"><property name="text"><string>Readout mode</string></property></widget></item>
-      <item row="13" column="1"><widget class="QComboBox" name="alpacaReadoutModeCombo"/></item>
-      <item row="14" column="0"><widget class="QCheckBox" name="saveImageCheck"><property name="text"><string>Save JPEG</string></property></widget></item>
+      <item row="13" column="0">
+       <widget class="QLabel" name="alpacaReadoutModeLabel">
+        <property name="text">
+         <string>Readout mode</string>
+        </property>
+       </widget>
+      </item>
+      <item row="13" column="1">
+       <widget class="QComboBox" name="alpacaReadoutModeCombo"/>
+      </item>
+      <item row="14" column="0">
+       <widget class="QCheckBox" name="saveImageCheck">
+        <property name="text">
+         <string>Save JPEG</string>
+        </property>
+       </widget>
+      </item>
       <item row="14" column="1">
        <layout class="QHBoxLayout" name="imageSaveLayout">
-        <item><widget class="QLineEdit" name="imagePathEdit"/></item>
-        <item><widget class="QPushButton" name="imagePathButton"><property name="text"><string>...</string></property></widget></item>
+        <item>
+         <widget class="QLineEdit" name="imagePathEdit"/>
+        </item>
+        <item>
+         <widget class="QToolButton" name="imagePathButton">
+          <property name="text">
+           <string/>
+          </property>
+          <property name="icon">
+           <iconset resource="../../../sdrgui/resources/res.qrc">
+            <normaloff>:/load.png</normaloff>:/load.png</iconset>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
-      <item row="15" column="0"><widget class="QCheckBox" name="saveVideoCheck"><property name="text"><string>Save MP4</string></property></widget></item>
+      <item row="15" column="0">
+       <widget class="QCheckBox" name="saveVideoCheck">
+        <property name="text">
+         <string>Save MP4</string>
+        </property>
+       </widget>
+      </item>
       <item row="15" column="1">
        <layout class="QHBoxLayout" name="videoSaveLayout">
-        <item><widget class="QLineEdit" name="videoPathEdit"/></item>
-        <item><widget class="QPushButton" name="videoPathButton"><property name="text"><string>...</string></property></widget></item>
+        <item>
+         <widget class="QLineEdit" name="videoPathEdit"/>
+        </item>
+        <item>
+         <widget class="QToolButton" name="videoPathButton">
+          <property name="text">
+           <string/>
+          </property>
+          <property name="icon">
+           <iconset resource="../../../sdrgui/resources/res.qrc">
+            <normaloff>:/load.png</normaloff>:/load.png</iconset>
+          </property>
+         </widget>
+        </item>
        </layout>
-      </item>
-      <item row="16" column="0" colspan="2">
-       <widget class="QGroupBox" name="alpacaStatusGroup">
-        <property name="title"><string>Camera info</string></property>
-        <layout class="QFormLayout" name="alpacaStatusLayout">
-         <item row="0" column="0"><widget class="QLabel" name="sensorNameTextLabel"><property name="text"><string>Sensor</string></property></widget></item>
-         <item row="0" column="1"><widget class="QLabel" name="sensorNameLabel"><property name="text"><string>-</string></property></widget></item>
-         <item row="1" column="0"><widget class="QLabel" name="sensorTypeTextLabel"><property name="text"><string>Sensor type</string></property></widget></item>
-         <item row="1" column="1"><widget class="QLabel" name="sensorTypeLabel"><property name="text"><string>-</string></property></widget></item>
-         <item row="2" column="0"><widget class="QLabel" name="pixelSizeTextLabel"><property name="text"><string>Pixel size (µm)</string></property></widget></item>
-         <item row="2" column="1"><widget class="QLabel" name="pixelSizeLabel"><property name="text"><string>-</string></property></widget></item>
-         <item row="3" column="0"><widget class="QLabel" name="cameraSizeTextLabel"><property name="text"><string>Sensor size (px)</string></property></widget></item>
-         <item row="3" column="1"><widget class="QLabel" name="cameraSizeLabel"><property name="text"><string>-</string></property></widget></item>
-         <item row="4" column="0"><widget class="QLabel" name="ccdTempTextLabel"><property name="text"><string>CCD temp (°C)</string></property></widget></item>
-         <item row="4" column="1"><widget class="QLabel" name="ccdTempLabel"><property name="text"><string>-</string></property></widget></item>
-        </layout>
-       </widget>
       </item>
      </layout>
     </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="horizontalLayoutWidget">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>590</y>
+     <width>391</width>
+     <height>174</height>
+    </rect>
+   </property>
+   <layout class="QHBoxLayout" name="statusContainer">
+    <property name="windowTitle" stdset="0">
+     <string>Status</string>
+    </property>
     <item>
-     <widget class="QLabel" name="imageLabel">
-      <property name="minimumSize"><size><width>400</width><height>240</height></size></property>
-      <property name="frameShape"><enum>QFrame::Box</enum></property>
-      <property name="text"><string>Camera preview</string></property>
-      <property name="alignment"><set>Qt::AlignCenter</set></property>
+     <widget class="QGroupBox" name="alpacaStatusGroup">
+      <property name="title">
+       <string>Camera info</string>
+      </property>
+      <layout class="QFormLayout" name="alpacaStatusLayout">
+       <item row="0" column="0">
+        <widget class="QLabel" name="sensorNameTextLabel">
+         <property name="text">
+          <string>Sensor</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLabel" name="sensorNameLabel">
+         <property name="text">
+          <string>-</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="sensorTypeTextLabel">
+         <property name="text">
+          <string>Sensor type</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLabel" name="sensorTypeLabel">
+         <property name="text">
+          <string>-</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="pixelSizeTextLabel">
+         <property name="text">
+          <string>Pixel size (µm)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QLabel" name="pixelSizeLabel">
+         <property name="text">
+          <string>-</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLabel" name="cameraSizeTextLabel">
+         <property name="text">
+          <string>Sensor size (px)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QLabel" name="cameraSizeLabel">
+         <property name="text">
+          <string>-</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="0">
+        <widget class="QLabel" name="ccdTempTextLabel">
+         <property name="text">
+          <string>CCD temp (°C)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QLabel" name="ccdTempLabel">
+         <property name="text">
+          <string>-</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="horizontalLayoutWidget_2">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>790</y>
+     <width>402</width>
+     <height>242</height>
+    </rect>
+   </property>
+   <property name="windowTitle">
+    <string>Image</string>
+   </property>
+   <layout class="QHBoxLayout" name="horizontalLayout">
+    <item>
+     <widget class="ScaledImage" name="imageLabel">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>400</width>
+        <height>240</height>
+       </size>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::Shape::NoFrame</enum>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Shadow::Sunken</enum>
+      </property>
+      <property name="text">
+       <string>Camera preview</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignmentFlag::AlignCenter</set>
+      </property>
      </widget>
     </item>
    </layout>
@@ -169,7 +464,14 @@
    <header>gui/rollupcontents.h</header>
    <container>1</container>
   </customwidget>
+  <customwidget>
+   <class>ScaledImage</class>
+   <extends>QLabel</extends>
+   <header>gui/scaledimage.h</header>
+  </customwidget>
  </customwidgets>
- <resources/>
+ <resources>
+  <include location="../../../sdrgui/resources/res.qrc"/>
+ </resources>
  <connections/>
 </ui>

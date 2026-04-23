@@ -332,15 +332,99 @@ void CameraWorker::captureTick()
     }
 
     m_alpacaFrameRequestPending = true;
+    alpacaStartExposure();
+}
 
-    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/image").arg(m_settings.m_alpacaCameraId));
+void CameraWorker::alpacaStartExposure()
+{
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/startexposure").arg(m_settings.m_alpacaCameraId));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    const double durationSecs = m_settings.m_exposureTimeMs / 1000.0;
+    QUrlQuery body;
+    body.addQueryItem("Duration", QString::number(durationSecs, 'f', 3));
+    body.addQueryItem("Light", "True");
+    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+
+    QNetworkReply *reply = m_networkManager->put(request, body.toString(QUrl::FullyEncoded).toUtf8());
+
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+
+        if (!m_capturing) {
+            m_alpacaFrameRequestPending = false;
+            return;
+        }
+
+        if (reply->error() != QNetworkReply::NoError) {
+            qDebug() << "CameraWorker::alpacaStartExposure: error:" << reply->errorString();
+            m_alpacaFrameRequestPending = false;
+            return;
+        }
+
+        // Wait for the exposure duration before polling imageready
+        QTimer::singleShot(m_settings.m_exposureTimeMs, this, [this]() {
+            if (m_capturing) {
+                alpacaCheckImageReady();
+            } else {
+                m_alpacaFrameRequestPending = false;
+            }
+        });
+    });
+}
+
+void CameraWorker::alpacaCheckImageReady()
+{
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imageready").arg(m_settings.m_alpacaCameraId));
     QUrlQuery query;
     query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
     query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
     url.setQuery(query);
 
-    QNetworkRequest request(url);
-    QNetworkReply *reply = m_networkManager->get(request);
+    QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+
+        if (!m_capturing) {
+            m_alpacaFrameRequestPending = false;
+            return;
+        }
+
+        bool ready = false;
+        if (reply->error() == QNetworkReply::NoError) {
+            const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+            if (doc.isObject()) {
+                ready = doc.object().value("Value").toBool(false);
+            }
+        }
+
+        if (ready) {
+            alpacaFetchImageArray();
+        } else {
+            // Image not yet ready — poll again after a short delay
+            QTimer::singleShot(100, this, [this]() {
+                if (m_capturing) {
+                    alpacaCheckImageReady();
+                } else {
+                    m_alpacaFrameRequestPending = false;
+                }
+            });
+        }
+    });
+}
+
+void CameraWorker::alpacaFetchImageArray()
+{
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imagearray").arg(m_settings.m_alpacaCameraId));
+    QUrlQuery query;
+    query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+    query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    url.setQuery(query);
+
+    QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
 
     QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         m_alpacaFrameRequestPending = false;
@@ -353,7 +437,7 @@ void CameraWorker::captureTick()
         QImage image = createPlaceholderFrame();
 
         if (reply->error() == QNetworkReply::NoError) {
-            image = parseAlpacaImage(reply->readAll());
+            image = parseAlpacaImageArray(reply->readAll());
         }
 
         processNewFrame(image);
@@ -428,16 +512,108 @@ QStringList CameraWorker::parseAlpacaCameraList(const QByteArray& payload) const
     return result;
 }
 
-QImage CameraWorker::parseAlpacaImage(const QByteArray& payload) const
+QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
 {
-    QImage image;
-    image.loadFromData(payload);
-
-    if (image.isNull()) {
+    const QJsonDocument doc = QJsonDocument::fromJson(payload);
+    if (!doc.isObject()) {
         return createPlaceholderFrame();
     }
 
-    return image;
+    const QJsonObject root = doc.object();
+
+    const int errorNumber = root.value("ErrorNumber").toInt(0);
+    if (errorNumber != 0) {
+        qDebug() << "CameraWorker::parseAlpacaImageArray: Alpaca error" << errorNumber
+                 << root.value("ErrorMessage").toString();
+        return createPlaceholderFrame();
+    }
+
+    const int rank = root.value("Rank").toInt(0);
+    const QJsonArray value = root.value("Value").toArray();
+
+    if (value.isEmpty()) {
+        return createPlaceholderFrame();
+    }
+
+    // Alpaca imagearray layout:
+    //   Rank 2 (monochrome): Value[column][row]
+    //   Rank 3 (colour):     Value[plane][column][row], plane 0=R, 1=G, 2=B
+    if (rank == 2)
+    {
+        const int width = value.size();
+        if (width == 0) {
+            return createPlaceholderFrame();
+        }
+        const QJsonArray firstCol = value[0].toArray();
+        const int height = firstCol.size();
+        if (height == 0) {
+            return createPlaceholderFrame();
+        }
+
+        // First pass: find maximum pixel value for linear scaling to 8-bit
+        int maxVal = 1;
+        for (const QJsonValue& col : value) {
+            for (const QJsonValue& pix : col.toArray()) {
+                maxVal = std::max(maxVal, pix.toInt(0));
+            }
+        }
+        const int divisor = std::max(1, maxVal / 255);
+
+        QImage image(width, height, QImage::Format_Grayscale8);
+        for (int x = 0; x < width; ++x) {
+            const QJsonArray col = value[x].toArray();
+            for (int y = 0; y < height; ++y) {
+                const auto gray = static_cast<uchar>(qBound(0, col[y].toInt(0) / divisor, 255));
+                image.scanLine(y)[x] = gray;
+            }
+        }
+        return image;
+    }
+    else if (rank == 3)
+    {
+        if (value.size() < 3) {
+            return createPlaceholderFrame();
+        }
+        const QJsonArray planeR = value[0].toArray();
+        const QJsonArray planeG = value[1].toArray();
+        const QJsonArray planeB = value[2].toArray();
+
+        const int width = planeR.size();
+        if (width == 0) {
+            return createPlaceholderFrame();
+        }
+        const int height = planeR[0].toArray().size();
+        if (height == 0) {
+            return createPlaceholderFrame();
+        }
+
+        // First pass: find maximum pixel value across all planes for linear scaling
+        int maxVal = 1;
+        for (const QJsonArray* plane : {&planeR, &planeG, &planeB}) {
+            for (const QJsonValue& col : *plane) {
+                for (const QJsonValue& pix : col.toArray()) {
+                    maxVal = std::max(maxVal, pix.toInt(0));
+                }
+            }
+        }
+        const int divisor = std::max(1, maxVal / 255);
+
+        QImage image(width, height, QImage::Format_RGB32);
+        for (int x = 0; x < width; ++x) {
+            const QJsonArray colR = planeR[x].toArray();
+            const QJsonArray colG = planeG[x].toArray();
+            const QJsonArray colB = planeB[x].toArray();
+            for (int y = 0; y < height; ++y) {
+                const int r = qBound(0, colR[y].toInt(0) / divisor, 255);
+                const int g = qBound(0, colG[y].toInt(0) / divisor, 255);
+                const int b = qBound(0, colB[y].toInt(0) / divisor, 255);
+                reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
+            }
+        }
+        return image;
+    }
+
+    return createPlaceholderFrame();
 }
 
 QImage CameraWorker::createPlaceholderFrame() const

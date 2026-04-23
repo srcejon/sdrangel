@@ -201,7 +201,11 @@ private:
     QString buildAlpacaBaseUrl() const;
     void reportResolutions();
     QStringList parseAlpacaCameraList(const QByteArray& payload) const;
-    QImage parseAlpacaImage(const QByteArray& payload) const;
+    QImage parseAlpacaImageArray(const QByteArray& payload) const;
+
+    void alpacaStartExposure();
+    void alpacaCheckImageReady();
+    void alpacaFetchImageArray();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void setupQtCapture();

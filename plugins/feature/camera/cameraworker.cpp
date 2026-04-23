@@ -55,6 +55,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportResolutions, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
@@ -65,7 +66,8 @@ CameraWorker::CameraWorker() :
     m_alpacaFrameRequestPending(false),
     m_alpacaClientId(QRandomGenerator::global()->bounded(quint64(1), quint64(std::numeric_limits<quint32>::max()) + 1)),
     m_alpacaClientTransactionId(1),
-    m_alpacaSensorType(0)
+    m_alpacaSensorType(0),
+    m_statusTimer(this)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     , m_qtCamera(nullptr)
     , m_videoSink(nullptr)
@@ -84,6 +86,7 @@ void CameraWorker::startWork()
 {
     QObject::connect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraWorker::handleInputMessages);
     QObject::connect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
+    QObject::connect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
 
     if (!m_networkManager) {
         m_networkManager = new QNetworkAccessManager(this);
@@ -92,6 +95,7 @@ void CameraWorker::startWork()
     reportCameraList();
     if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca) {
         alpacaQueryCameraCapabilities();
+        m_statusTimer.start(2000);
     }
     if (m_settings.m_captureActive) {
         startCapture();
@@ -102,7 +106,9 @@ void CameraWorker::stopWork()
 {
     QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraWorker::handleInputMessages);
     QObject::disconnect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
+    QObject::disconnect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
     stopCapture();
+    m_statusTimer.stop();
     m_inputMessageQueue.clear();
 }
 
@@ -209,6 +215,17 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
             || settingsKeys.contains("cameraId")))
     {
         alpacaQueryCameraCapabilities();
+    }
+
+    if (force || settingsKeys.contains("cameraAPI"))
+    {
+        if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca) {
+            if (!m_statusTimer.isActive()) {
+                m_statusTimer.start(2000);
+            }
+        } else {
+            m_statusTimer.stop();
+        }
     }
 }
 
@@ -685,7 +702,82 @@ void CameraWorker::alpacaQueryCameraCapabilities()
     }
 }
 
-QString CameraWorker::buildAlpacaBaseUrl() const
+void CameraWorker::statusTick()
+{
+    if (m_networkManager && m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca) {
+        alpacaPollStatus();
+    }
+}
+
+void CameraWorker::alpacaPollStatus()
+{
+    const QString baseUrl = buildAlpacaBaseUrl();
+    const int camId = m_settings.m_alpacaCameraId;
+
+    // Accumulate results from two parallel GETs
+    struct StatusInfo {
+        int cameraState = -1;
+        double ccdTemperature = 0.0;
+        bool ccdTemperatureValid = false;
+        int pending = 0;
+    };
+
+    auto status = QSharedPointer<StatusInfo>::create();
+    status->pending = 2;
+
+    auto checkDone = [this, status]() {
+        status->pending--;
+        if (status->pending > 0) {
+            return;
+        }
+        if (m_msgQueueToGUI) {
+            m_msgQueueToGUI->push(MsgReportAlpacaStatus::create(
+                status->cameraState,
+                status->ccdTemperature,
+                status->ccdTemperatureValid));
+        }
+    };
+
+    auto makeGet = [this, baseUrl, camId](const QString& prop) {
+        QUrl url(baseUrl + QString("/api/v1/camera/%1/%2").arg(camId).arg(prop));
+        QUrlQuery q;
+        q.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+        q.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+        url.setQuery(q);
+        return m_networkManager->get(QNetworkRequest(url));
+    };
+
+    QNetworkReply *stateReply = makeGet("camerastate");
+    QObject::connect(stateReply, &QNetworkReply::finished, stateReply, [stateReply, status, checkDone]() {
+        if (stateReply->error() == QNetworkReply::NoError) {
+            const QJsonDocument doc = QJsonDocument::fromJson(stateReply->readAll());
+            if (doc.isObject()) {
+                const QJsonObject root = doc.object();
+                if (root.value("ErrorNumber").toInt(0) == 0) {
+                    status->cameraState = root.value("Value").toInt(-1);
+                }
+            }
+        }
+        stateReply->deleteLater();
+        checkDone();
+    });
+
+    QNetworkReply *tempReply = makeGet("ccdtemperature");
+    QObject::connect(tempReply, &QNetworkReply::finished, tempReply, [tempReply, status, checkDone]() {
+        if (tempReply->error() == QNetworkReply::NoError) {
+            const QJsonDocument doc = QJsonDocument::fromJson(tempReply->readAll());
+            if (doc.isObject()) {
+                const QJsonObject root = doc.object();
+                if (root.value("ErrorNumber").toInt(0) == 0) {
+                    status->ccdTemperature = root.value("Value").toDouble(0.0);
+                    status->ccdTemperatureValid = true;
+                }
+            }
+        }
+        tempReply->deleteLater();
+        checkDone();
+    });
+}
 {
     return QString("http://%1:%2")
         .arg(m_settings.m_alpacaHost)

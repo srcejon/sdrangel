@@ -339,69 +339,83 @@
       </property>
       <layout class="QFormLayout" name="alpacaStatusLayout">
        <item row="0" column="0">
-        <widget class="QLabel" name="sensorNameTextLabel">
+        <widget class="QLabel" name="cameraStateTextLabel">
          <property name="text">
-          <string>Sensor</string>
+          <string>Camera state</string>
          </property>
         </widget>
        </item>
        <item row="0" column="1">
-        <widget class="QLabel" name="sensorNameLabel">
+        <widget class="QLabel" name="cameraStateLabel">
          <property name="text">
           <string>-</string>
          </property>
         </widget>
        </item>
        <item row="1" column="0">
-        <widget class="QLabel" name="sensorTypeTextLabel">
+        <widget class="QLabel" name="sensorNameTextLabel">
          <property name="text">
-          <string>Sensor type</string>
+          <string>Sensor</string>
          </property>
         </widget>
        </item>
        <item row="1" column="1">
-        <widget class="QLabel" name="sensorTypeLabel">
+        <widget class="QLabel" name="sensorNameLabel">
          <property name="text">
           <string>-</string>
          </property>
         </widget>
        </item>
        <item row="2" column="0">
-        <widget class="QLabel" name="pixelSizeTextLabel">
+        <widget class="QLabel" name="sensorTypeTextLabel">
          <property name="text">
-          <string>Pixel size (µm)</string>
+          <string>Sensor type</string>
          </property>
         </widget>
        </item>
        <item row="2" column="1">
-        <widget class="QLabel" name="pixelSizeLabel">
+        <widget class="QLabel" name="sensorTypeLabel">
          <property name="text">
           <string>-</string>
          </property>
         </widget>
        </item>
        <item row="3" column="0">
-        <widget class="QLabel" name="cameraSizeTextLabel">
+        <widget class="QLabel" name="pixelSizeTextLabel">
          <property name="text">
-          <string>Sensor size (px)</string>
+          <string>Pixel size (µm)</string>
          </property>
         </widget>
        </item>
        <item row="3" column="1">
-        <widget class="QLabel" name="cameraSizeLabel">
+        <widget class="QLabel" name="pixelSizeLabel">
          <property name="text">
           <string>-</string>
          </property>
         </widget>
        </item>
        <item row="4" column="0">
+        <widget class="QLabel" name="cameraSizeTextLabel">
+         <property name="text">
+          <string>Sensor size (px)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QLabel" name="cameraSizeLabel">
+         <property name="text">
+          <string>-</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0">
         <widget class="QLabel" name="ccdTempTextLabel">
          <property name="text">
           <string>CCD temp (°C)</string>
          </property>
         </widget>
        </item>
-       <item row="4" column="1">
+       <item row="5" column="1">
         <widget class="QLabel" name="ccdTempLabel">
          <property name="text">
           <string>-</string>

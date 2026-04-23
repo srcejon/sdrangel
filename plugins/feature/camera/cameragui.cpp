@@ -134,6 +134,22 @@ bool CameraGUI::handleMessage(const Message& message)
         updateAlpacaCapabilities(info);
         return true;
     }
+    else if (CameraWorker::MsgReportAlpacaStatus::match(message))
+    {
+        const CameraWorker::MsgReportAlpacaStatus& status = (CameraWorker::MsgReportAlpacaStatus&) message;
+
+        static const QStringList cameraStateNames = {
+            "Idle", "Waiting", "Exposing", "Reading", "Download", "Error"
+        };
+        const int cs = status.getCameraState();
+        ui->cameraStateLabel->setText((cs >= 0 && cs < cameraStateNames.size()) ? cameraStateNames[cs] : (cs >= 0 ? QString::number(cs) : "-"));
+
+        if (status.isCcdTemperatureValid()) {
+            ui->ccdTempLabel->setText(QString::number(status.getCcdTemperature(), 'f', 1));
+        }
+
+        return true;
+    }
 
     return false;
 }

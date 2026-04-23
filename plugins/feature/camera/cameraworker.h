@@ -237,6 +237,33 @@ public:
         { }
     };
 
+    // Sent periodically to update live status fields (camerastate, ccdtemperature)
+    class MsgReportAlpacaStatus : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        int getCameraState() const { return m_cameraState; }
+        double getCcdTemperature() const { return m_ccdTemperature; }
+        bool isCcdTemperatureValid() const { return m_ccdTemperatureValid; }
+
+        static MsgReportAlpacaStatus* create(int cameraState, double ccdTemperature, bool ccdTemperatureValid)
+        {
+            return new MsgReportAlpacaStatus(cameraState, ccdTemperature, ccdTemperatureValid);
+        }
+
+    private:
+        int m_cameraState;
+        double m_ccdTemperature;
+        bool m_ccdTemperatureValid;
+
+        MsgReportAlpacaStatus(int cameraState, double ccdTemperature, bool ccdTemperatureValid) :
+            Message(),
+            m_cameraState(cameraState),
+            m_ccdTemperature(ccdTemperature),
+            m_ccdTemperatureValid(ccdTemperatureValid)
+        { }
+    };
+
     CameraWorker();
     ~CameraWorker();
 
@@ -258,6 +285,7 @@ private:
     quint32 m_alpacaClientId;
     quint32 m_alpacaClientTransactionId;
     int m_alpacaSensorType; // 0=Mono, 1=Colour, 2=RGGB, 3=CMYG, 4=CMYG2, 5=LRGB
+    QTimer m_statusTimer;   // polls camerastate + ccdtemperature every 2 s
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
@@ -285,6 +313,7 @@ private:
     void alpacaFetchImageArray();
     void alpacaQueryCameraCapabilities();
     void alpacaSetCameraParams();
+    void alpacaPollStatus();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void setupQtCapture();
@@ -295,6 +324,7 @@ private:
 private slots:
     void handleInputMessages();
     void captureTick();
+    void statusTick();
 };
 
 #endif // INCLUDE_FEATURE_CAMERAWORKER_H_

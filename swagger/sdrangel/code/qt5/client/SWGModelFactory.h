@@ -159,6 +159,8 @@
 #include "SWGFreeDVDemodSettings.h"
 #include "SWGFreeDVModReport.h"
 #include "SWGFreeDVModSettings.h"
+#include "SWGFreqDisplayReport.h"
+#include "SWGFreqDisplaySettings.h"
 #include "SWGFreqScannerActions.h"
 #include "SWGFreqScannerChannelState.h"
 #include "SWGFreqScannerFrequency.h"
@@ -1122,6 +1124,16 @@ namespace SWGSDRangel {
     }
     if(QString("SWGFreeDVModSettings").compare(type) == 0) {
       SWGFreeDVModSettings *obj = new SWGFreeDVModSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGFreqDisplayReport").compare(type) == 0) {
+      SWGFreqDisplayReport *obj = new SWGFreqDisplayReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGFreqDisplaySettings").compare(type) == 0) {
+      SWGFreqDisplaySettings *obj = new SWGFreqDisplaySettings();
       obj->init();
       return obj;
     }

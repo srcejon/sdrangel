@@ -38,6 +38,7 @@ public:
     int arrangeRollups();
     bool hasExpandableWidgets();
     virtual QSize minimumSizeHint() const override { return m_minimumSizeHint; }
+    void setTransparentBackground(bool transparent);
 
 signals:
     void widgetRolled(QWidget* widget, bool rollDown);
@@ -64,6 +65,7 @@ private:
     // bool m_channelWidget;
     int m_newHeight;
     QSize m_minimumSizeHint;
+    bool m_transparentBackground;
 };
 
 #endif // INCLUDE_ROLLUPCONTENTS_H

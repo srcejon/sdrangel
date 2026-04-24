@@ -1,0 +1,59 @@
+FreqDisplaySettings:
+  description: "Frequency Display settings"
+  properties:
+    selectedChannel:
+      description: Channel to display frequency/power for
+      type: string
+    fontName:
+      type: string
+    transparentBackground:
+      type: integer
+    displayMode:
+      description: (0 Frequency, 1 Power, 2 Frequency and Power)
+      type: integer
+    speechEnabled:
+      type: integer
+    frequencyUnits:
+      description: (0 Hz, 1 kHz, 2 MHz, 3 GHz)
+      type: integer
+    showUnits:
+      type: integer
+    freqDecimalPlaces:
+      type: integer
+    powerDecimalPlaces:
+      type: integer
+    textcolor:
+      type: integer
+    dropShadowEnabled:
+      type: integer    
+    dropShadowColor:
+      type: integer    
+    title:
+      type: string
+    rgbColor:
+      type: integer
+    useReverseAPI:
+      description: Synchronize with reverse API (1 for yes, 0 for no)
+      type: integer
+    reverseAPIAddress:
+      type: string
+    reverseAPIPort:
+      type: integer
+    reverseAPIFeatureSetIndex:
+      type: integer
+    reverseAPIFeatureIndex:
+      type: integer
+    rollupState:
+      $ref: "/doc/swagger/include/RollupState.yaml#/RollupState"
+
+FreqDisplayReport:
+  description: "Frequency Display report"
+  properties:
+    frequency:
+      description: "Channel center frequency in Hz"
+      type: integer
+      format: int64
+    power:
+      description: "Channel power in dB"
+      type: number
+      format: float

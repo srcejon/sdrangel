@@ -11,6 +11,8 @@ FeatureReport:
       $ref: "/doc/swagger/include/AFC.yaml#/AFCReport"
     AMBEReport:
       $ref: "/doc/swagger/include/AMBE.yaml#/AMBEReport"
+    FreqDisplayReport:
+      $ref: "/doc/swagger/include/FreqDisplay.yaml#/FreqDisplayReport"
     GS232ControllerReport:
       $ref: "/doc/swagger/include/GS232Controller.yaml#/GS232ControllerReport"
     LimeRFEReport:

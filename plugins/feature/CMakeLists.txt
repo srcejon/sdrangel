@@ -139,6 +139,12 @@ else()
     message(STATUS "Not building denoiser (ENABLE_FEATURE_DENOISER=${ENABLE_FEATURE_DENOISER} RNNOISE_FOUND=${RNNOISE_FOUND})")
 endif()
 
+if (ENABLE_FEATURE_FREQDISPLAY)
+    add_subdirectory(freqdisplay)
+else()
+    message(STATUS "Not building freqdisplay (ENABLE_FEATURE_FREQDISPLAY=${ENABLE_FEATURE_FREQDISPLAY})")
+endif()
+
 if (ENABLE_FEATURE_CAMERA)
     add_subdirectory(camera)
 else()

@@ -29,6 +29,7 @@
 #include "SWGAntennaToolsSettings.h"
 #include "SWGDemodAnalyzerSettings.h"
 #include "SWGDenoiserSettings.h"
+#include "SWGFreqDisplaySettings.h"
 #include "SWGGS232ControllerSettings.h"
 #include "SWGJogdialControllerSettings.h"
 #include "SWGLimeRFESettings.h"
@@ -95,6 +96,9 @@ public:
 
     SWGJogdialControllerSettings* getJogdialControllerSettings();
     void setJogdialControllerSettings(SWGJogdialControllerSettings* jogdial_controller_settings);
+
+    SWGFreqDisplaySettings* getFreqDisplaySettings();
+    void setFreqDisplaySettings(SWGFreqDisplaySettings* freq_display_settings);
 
     SWGGS232ControllerSettings* getGs232ControllerSettings();
     void setGs232ControllerSettings(SWGGS232ControllerSettings* gs232_controller_settings);
@@ -171,6 +175,9 @@ private:
 
     SWGJogdialControllerSettings* jogdial_controller_settings;
     bool m_jogdial_controller_settings_isSet;
+
+    SWGFreqDisplaySettings* freq_display_settings;
+    bool m_freq_display_settings_isSet;
 
     SWGGS232ControllerSettings* gs232_controller_settings;
     bool m_gs232_controller_settings_isSet;

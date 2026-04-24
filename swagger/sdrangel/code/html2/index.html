@@ -6777,6 +6777,9 @@ margin-bottom: 20px;
     "AMBEReport" : {
       "$ref" : "#/definitions/AMBEReport"
     },
+    "FreqDisplayReport" : {
+      "$ref" : "#/definitions/FreqDisplayReport"
+    },
     "GS232ControllerReport" : {
       "$ref" : "#/definitions/GS232ControllerReport"
     },
@@ -6883,6 +6886,9 @@ margin-bottom: 20px;
     },
     "JogdialControllerSettings" : {
       "$ref" : "#/definitions/JogdialControllerSettings"
+    },
+    "FreqDisplaySettings" : {
+      "$ref" : "#/definitions/FreqDisplaySettings"
     },
     "GS232ControllerSettings" : {
       "$ref" : "#/definitions/GS232ControllerSettings"
@@ -7436,6 +7442,90 @@ margin-bottom: 20px;
     }
   },
   "description" : "FreeDVMod"
+};
+            defs.FreqDisplayReport = {
+  "properties" : {
+    "frequency" : {
+      "type" : "integer",
+      "format" : "int64",
+      "description" : "Channel center frequency in Hz"
+    },
+    "power" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Channel power in dB"
+    }
+  },
+  "description" : "Frequency Display report"
+};
+            defs.FreqDisplaySettings = {
+  "properties" : {
+    "selectedChannel" : {
+      "type" : "string",
+      "description" : "Channel to display frequency/power for"
+    },
+    "fontName" : {
+      "type" : "string"
+    },
+    "transparentBackground" : {
+      "type" : "integer"
+    },
+    "displayMode" : {
+      "type" : "integer",
+      "description" : "(0 Frequency, 1 Power, 2 Frequency and Power)"
+    },
+    "speechEnabled" : {
+      "type" : "integer"
+    },
+    "frequencyUnits" : {
+      "type" : "integer",
+      "description" : "(0 Hz, 1 kHz, 2 MHz, 3 GHz)"
+    },
+    "showUnits" : {
+      "type" : "integer"
+    },
+    "freqDecimalPlaces" : {
+      "type" : "integer"
+    },
+    "powerDecimalPlaces" : {
+      "type" : "integer"
+    },
+    "textcolor" : {
+      "type" : "integer"
+    },
+    "dropShadowEnabled" : {
+      "type" : "integer"
+    },
+    "dropShadowColor" : {
+      "type" : "integer"
+    },
+    "title" : {
+      "type" : "string"
+    },
+    "rgbColor" : {
+      "type" : "integer"
+    },
+    "useReverseAPI" : {
+      "type" : "integer",
+      "description" : "Synchronize with reverse API (1 for yes, 0 for no)"
+    },
+    "reverseAPIAddress" : {
+      "type" : "string"
+    },
+    "reverseAPIPort" : {
+      "type" : "integer"
+    },
+    "reverseAPIFeatureSetIndex" : {
+      "type" : "integer"
+    },
+    "reverseAPIFeatureIndex" : {
+      "type" : "integer"
+    },
+    "rollupState" : {
+      "$ref" : "#/definitions/RollupState"
+    }
+  },
+  "description" : "Frequency Display settings"
 };
             defs.FreqScannerActions = {
   "properties" : {
@@ -60312,7 +60402,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-03-22T19:58:59.376+01:00
+              Generated 2026-04-22T21:13:47.209+02:00
             </div>
           </div>
       </div>

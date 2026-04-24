@@ -33,7 +33,8 @@ RollupContents::RollupContents(QWidget* parent) :
     QWidget(parent),
     m_streamIndicator("S"),
     // m_channelWidget(true),
-    m_newHeight(0)
+    m_newHeight(0),
+    m_transparentBackground(false)
 {
     setMinimumSize(250, 150);
     setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
@@ -41,6 +42,12 @@ RollupContents::RollupContents(QWidget* parent) :
 
     setAutoFillBackground(false);
     setAttribute(Qt::WA_OpaquePaintEvent, true);
+}
+
+void RollupContents::setTransparentBackground(bool transparent)
+{
+    m_transparentBackground = transparent;
+    update();
 }
 
 void RollupContents::saveState(RollupState &state) const
@@ -222,12 +229,25 @@ void RollupContents::paintEvent(QPaintEvent*)
 
     // Rahmen (frame)
     // p.setPen(m_highlighted ? Qt::white : frameColor);
-    p.setBrush(palette().window());
     QRectF r(rect());
-    // r.adjust(0.5, 0.5, -0.5, -0.5);
-    // p.drawRoundedRect(r, 3.0, 3.0, Qt::AbsoluteSize);
-    // p.drawRect(r);
-    p.fillRect(r, palette().window());
+    if (m_transparentBackground)
+    {
+        // Zero every pixel in this widget's area to fully transparent so that the
+        // compositor (WA_TranslucentBackground on the top-level window) shows through.
+        // Child widgets that have autoFillBackground set (e.g. the settings bar) will
+        // still paint their own opaque background on top of this cleared region.
+        p.setCompositionMode(QPainter::CompositionMode_Clear);
+        p.fillRect(r, Qt::transparent);
+        p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    }
+    else
+    {
+        p.setBrush(palette().window());
+        // r.adjust(0.5, 0.5, -0.5, -0.5);
+        // p.drawRoundedRect(r, 3.0, 3.0, Qt::AbsoluteSize);
+        // p.drawRect(r);
+        p.fillRect(r, palette().window());
+    }
 
     // Rollups
     int pos = 2; // fm.height() + 4;

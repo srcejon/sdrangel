@@ -71,7 +71,7 @@ private:
     Interpolators<qint16, SDR_TX_SAMP_SZ, 12> m_interpolators;
 
     void run();
-    void callback(qint16* buf, qint32 len);
+    qint32 callback(qint16* buf, qint32 len);
     void callbackPart(qint16* buf, SampleVector& data, unsigned int iBegin, unsigned int iEnd);
 };
 

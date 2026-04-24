@@ -24,6 +24,7 @@
 
 #include "SWGAFCReport.h"
 #include "SWGAMBEReport.h"
+#include "SWGFreqDisplayReport.h"
 #include "SWGGS232ControllerReport.h"
 #include "SWGLimeRFEReport.h"
 #include "SWGMapReport.h"
@@ -62,6 +63,9 @@ public:
 
     SWGAMBEReport* getAmbeReport();
     void setAmbeReport(SWGAMBEReport* ambe_report);
+
+    SWGFreqDisplayReport* getFreqDisplayReport();
+    void setFreqDisplayReport(SWGFreqDisplayReport* freq_display_report);
 
     SWGGS232ControllerReport* getGs232ControllerReport();
     void setGs232ControllerReport(SWGGS232ControllerReport* gs232_controller_report);
@@ -105,6 +109,9 @@ private:
 
     SWGAMBEReport* ambe_report;
     bool m_ambe_report_isSet;
+
+    SWGFreqDisplayReport* freq_display_report;
+    bool m_freq_display_report_isSet;
 
     SWGGS232ControllerReport* gs232_controller_report;
     bool m_gs232_controller_report_isSet;

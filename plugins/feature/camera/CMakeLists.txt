@@ -30,7 +30,7 @@ if(NOT SERVER_MODE)
     )
 
     set(TARGET_NAME ${PLUGINS_PREFIX}featurecamera)
-    set(TARGET_LIB "Qt::Widgets")
+    set(TARGET_LIB "Qt::Widgets" Qt::Charts)
     set(TARGET_LIB_GUI "sdrgui")
     set(INSTALL_FOLDER ${INSTALL_PLUGINS_DIR})
 else()
@@ -58,7 +58,6 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     Qt::Gui
     Qt::Multimedia
     ${TARGET_LIB}
-    $<$<NOT:$<BOOL:${SERVER_MODE}>>:Qt::Charts>
     "${OpenCV_LIBS}"
     sdrbase
     ${TARGET_LIB_GUI}

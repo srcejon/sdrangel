@@ -544,11 +544,11 @@ if (NOT FFMPEG_FOUND AND NOT USE_PRECOMPILED_LIBS)
 
 endif (NOT FFMPEG_FOUND AND NOT USE_PRECOMPILED_LIBS)
 
-# OpenCV only used by Mod ATV curently
-if (NOT OpenCV_FOUND AND NOT USE_PRECOMPILED_LIBS AND ENABLE_CHANNELTX_MODATV)
+# OpenCV used by Mod ATV and Camera curently (The prebuilt windows version includes CUDA support - we should add that here)
+if (NOT OpenCV_FOUND AND NOT USE_PRECOMPILED_LIBS AND (ENABLE_CHANNELTX_MODATV OR ENABLE_FEATURE_CAMERA))
     ExternalProject_Add(opencv
             GIT_REPOSITORY https://github.com/opencv/opencv.git
-            GIT_TAG 4.10.0
+            GIT_TAG 4.13.0
             DEPENDS "${FFMPEG_DEPENDS}"
             PREFIX "${EXTERNAL_BUILD_LIBRARIES}/opencv"
             CMAKE_ARGS ${COMMON_CMAKE_ARGS} -DWITH_FFMPEG=ON -DCMAKE_PREFIX_PATH=${FFMPEG_INSTALL_DIR}
@@ -592,7 +592,7 @@ if (NOT OpenCV_FOUND AND NOT USE_PRECOMPILED_LIBS AND ENABLE_CHANNELTX_MODATV)
         set(OpenCV_LIBS "${binary_dir}/lib/libopencv_core${CMAKE_SHARED_LIBRARY_SUFFIX};${binary_dir}/lib/libopencv_core${CMAKE_SHARED_LIBRARY_SUFFIX};${binary_dir}/lib/libopencv_highgui${CMAKE_SHARED_LIBRARY_SUFFIX};${binary_dir}/lib/libopencv_video${CMAKE_SHARED_LIBRARY_SUFFIX};${binary_dir}/lib/libopencv_videoio${CMAKE_SHARED_LIBRARY_SUFFIX};${binary_dir}/lib/libopencv_imgproc${CMAKE_SHARED_LIBRARY_SUFFIX};${binary_dir}/lib/libopencv_imgcodecs${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
         set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${binary_dir}/lib")
     endif ()
-endif (NOT OpenCV_FOUND AND NOT USE_PRECOMPILED_LIBS AND ENABLE_CHANNELTX_MODATV)
+endif (NOT OpenCV_FOUND AND NOT USE_PRECOMPILED_LIBS AND (ENABLE_CHANNELTX_MODATV OR ENABLE_FEATURE_CAMERA))
 
 if ((NOT CODEC2_FOUND OR CODEC2_EXTERNAL) AND NOT USE_PRECOMPILED_LIBS)
     # needs speexdsp

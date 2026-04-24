@@ -111,9 +111,12 @@ CameraWorker::CameraWorker() :
         &CameraWorker::onAvailableDevicesChanged);
     m_availableDeviceHandler.scanAvailableDevices();
 
-    m_captureAudioFifo.setSize(4800 * 4);
-    m_outputAudioFifo.setSize(4800 * 4);
-    m_audioTransferBuffer.resize(4800 * 4);
+    // Audio FIFO: stereo 16-bit PCM at 48 kHz; 4800 sample frames × 4 bytes each
+    static constexpr int kAudioFifoFrames = 4800;
+    static constexpr int kBytesPerSampleFrame = 4; // 2 channels × 2 bytes (int16)
+    m_captureAudioFifo.setSize(kAudioFifoFrames);
+    m_outputAudioFifo.setSize(kAudioFifoFrames);
+    m_audioTransferBuffer.resize(kAudioFifoFrames * kBytesPerSampleFrame);
 
     QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraWorker::onCaptureAudioDataReady);
 
@@ -2249,9 +2252,11 @@ void CameraWorker::onCaptureAudioDataReady()
         return;
     }
 
+    // Each audio sample frame is 4 bytes: stereo 16-bit PCM (2 channels × 2 bytes)
+    static constexpr int kBytesPerSampleFrame = 4;
     unsigned int nbRead;
 
-    while ((nbRead = m_captureAudioFifo.read(m_audioTransferBuffer.data(), m_audioTransferBuffer.size() / 4)) != 0)
+    while ((nbRead = m_captureAudioFifo.read(m_audioTransferBuffer.data(), m_audioTransferBuffer.size() / kBytesPerSampleFrame)) != 0)
     {
         m_outputAudioFifo.write(m_audioTransferBuffer.data(), nbRead);
     }

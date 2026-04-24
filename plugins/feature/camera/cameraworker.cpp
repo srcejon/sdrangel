@@ -50,6 +50,15 @@
 #include <QSet>
 #include <QVideoFrame>
 #include <QVideoSink>
+#else
+#include <QAbstractVideoBuffer>
+#include <QAbstractVideoSurface>
+#include <QCamera>
+#include <QCameraExposure>
+#include <QCameraInfo>
+#include <QCameraViewfinderSettings>
+#include <QSet>
+#include <QVideoFrame>
 #endif
 
 #include "maincore.h"
@@ -83,6 +92,9 @@ CameraWorker::CameraWorker() :
     , m_qtCamera(nullptr)
     , m_videoSink(nullptr)
     , m_captureSession(nullptr)
+#else
+    , m_qtCamera(nullptr)
+    , m_videoSurface(nullptr)
 #endif
 {
     QObject::connect(
@@ -449,7 +461,13 @@ void CameraWorker::reportCameraList()
         cameraIds.append(id.isEmpty() ? camera.description() : id);
     }
 #else
-    cameraIds.append("Qt camera API unavailable (Qt6 required)");
+    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+
+    for (const QCameraInfo& info : cameras)
+    {
+        const QString id = info.deviceName();
+        cameraIds.append(id.isEmpty() ? info.description() : id);
+    }
 #endif
 
     if (m_msgQueueToGUI) {
@@ -490,6 +508,43 @@ void CameraWorker::reportResolutions()
             m_msgQueueToGUI->push(MsgReportResolutions::create(resolutions));
         }
     }
+#else
+    // Qt5: enumerate supported viewfinder resolutions from the selected camera.
+    // QCamera::supportedViewfinderResolutions() is available once the camera is loaded;
+    // try it optimistically — it will return an empty list on platforms that don't support
+    // it before loading, in which case the GUI shows no pre-defined resolutions and the
+    // camera uses its default.
+    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIQtCamera)
+    {
+        QList<QSize> resolutions;
+        const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+
+        for (const QCameraInfo& info : cameras)
+        {
+            const QString id = info.deviceName();
+            if ((id == m_settings.m_cameraId) || (info.description() == m_settings.m_cameraId))
+            {
+                QCamera tempCam(info);
+                QSet<QString> seen;
+
+                for (const QSize& res : tempCam.supportedViewfinderResolutions())
+                {
+                    const QString key = QString("%1x%2").arg(res.width()).arg(res.height());
+                    if (!seen.contains(key))
+                    {
+                        seen.insert(key);
+                        resolutions.append(res);
+                    }
+                }
+
+                break;
+            }
+        }
+
+        if (m_msgQueueToGUI) {
+            m_msgQueueToGUI->push(MsgReportResolutions::create(resolutions));
+        }
+    }
 #endif
 }
 
@@ -512,11 +567,7 @@ void CameraWorker::startCapture()
     }
     else
     {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         setupQtCapture();
-#else
-        reportFrameToGUI(createPlaceholderFrame());
-#endif
     }
 }
 
@@ -529,9 +580,7 @@ void CameraWorker::stopCapture()
         m_videoWriter.release();
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     cleanupQtCapture();
-#endif
 }
 
 void CameraWorker::captureTick()
@@ -2018,6 +2067,153 @@ void CameraWorker::processQtVideoFrame(const QVideoFrame& frame)
     }
 
     const QImage image = frame.toImage();
+
+    if (!image.isNull()) {
+        processNewFrame(image);
+    }
+}
+#endif
+
+#else // Qt 5 implementations
+
+CameraVideoSurface::CameraVideoSurface(CameraWorker *worker, QObject *parent)
+    : QAbstractVideoSurface(parent)
+    , m_worker(worker)
+{
+}
+
+QList<QVideoFrame::PixelFormat> CameraVideoSurface::supportedPixelFormats(
+    QAbstractVideoBuffer::HandleType handleType) const
+{
+    Q_UNUSED(handleType);
+    return {
+        QVideoFrame::Format_ARGB32,
+        QVideoFrame::Format_ARGB32_Premultiplied,
+        QVideoFrame::Format_RGB32,
+        QVideoFrame::Format_RGB24,
+        QVideoFrame::Format_RGB565,
+        QVideoFrame::Format_RGB555,
+        QVideoFrame::Format_BGRA32,
+        QVideoFrame::Format_BGR32,
+        QVideoFrame::Format_BGR24,
+        QVideoFrame::Format_YUV444,
+        QVideoFrame::Format_YUV420P,
+        QVideoFrame::Format_YV12,
+        QVideoFrame::Format_UYVY,
+        QVideoFrame::Format_YUYV,
+        QVideoFrame::Format_NV12,
+        QVideoFrame::Format_NV21,
+    };
+}
+
+bool CameraVideoSurface::present(const QVideoFrame& frame)
+{
+    if (!frame.isValid()) {
+        return false;
+    }
+
+    QVideoFrame mutableFrame(frame);
+    mutableFrame.map(QAbstractVideoBuffer::ReadOnly);
+
+    const QImage::Format imageFormat = QVideoFrame::imageFormatFromPixelFormat(mutableFrame.pixelFormat());
+    QImage image;
+
+    if (imageFormat != QImage::Format_Invalid)
+    {
+        // Direct mapping: wrap the frame's data, then deep-copy before unmapping
+        image = QImage(
+            mutableFrame.bits(),
+            mutableFrame.width(),
+            mutableFrame.height(),
+            mutableFrame.bytesPerLine(),
+            imageFormat
+        ).copy();
+    }
+
+    mutableFrame.unmap();
+
+    if (!image.isNull()) {
+        emit frameAvailable(image);
+    }
+
+    return true;
+}
+
+void CameraWorker::setupQtCapture()
+{
+    cleanupQtCapture();
+
+    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+
+    if (cameras.isEmpty())
+    {
+        reportFrameToGUI(createPlaceholderFrame());
+        return;
+    }
+
+    QCameraInfo selectedInfo = cameras.front();
+
+    for (const QCameraInfo& info : cameras)
+    {
+        const QString id = info.deviceName();
+        if ((id == m_settings.m_cameraId) || (info.description() == m_settings.m_cameraId))
+        {
+            selectedInfo = info;
+            break;
+        }
+    }
+
+    m_qtCamera = new QCamera(selectedInfo, this);
+    m_videoSurface = new CameraVideoSurface(this, this);
+
+    m_qtCamera->setViewfinder(m_videoSurface);
+
+    if (m_settings.m_resolutionWidth > 0 && m_settings.m_resolutionHeight > 0)
+    {
+        QCameraViewfinderSettings vfSettings;
+        vfSettings.setResolution(m_settings.m_resolutionWidth, m_settings.m_resolutionHeight);
+        vfSettings.setMaximumFrameRate(m_settings.m_framesPerSecond);
+        m_qtCamera->setViewfinderSettings(vfSettings);
+    }
+
+    QCameraExposure *exposure = m_qtCamera->exposure();
+
+    if (exposure)
+    {
+        exposure->setExposureMode(QCameraExposure::ExposureManual);
+        exposure->setManualShutterSpeed(static_cast<qreal>(m_settings.m_exposureTimeMs) / 1000.0);
+        exposure->setManualIsoSensitivity(m_settings.m_isoSensitivity);
+    }
+
+    // Use a queued connection so that present() (called from the camera thread) safely
+    // marshals the QImage across to the CameraWorker thread for processing.
+    connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
+            this, &CameraWorker::processQt5VideoFrame, Qt::QueuedConnection);
+
+    m_qtCamera->start();
+}
+
+void CameraWorker::cleanupQtCapture()
+{
+    if (m_qtCamera)
+    {
+        m_qtCamera->stop();
+        m_qtCamera->deleteLater();
+        m_qtCamera = nullptr;
+    }
+
+    if (m_videoSurface)
+    {
+        m_videoSurface->deleteLater();
+        m_videoSurface = nullptr;
+    }
+}
+
+void CameraWorker::processQt5VideoFrame(const QImage& image)
+{
+    if (!m_capturing) {
+        return;
+    }
 
     if (!image.isNull()) {
         processNewFrame(image);

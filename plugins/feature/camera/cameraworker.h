@@ -43,6 +43,31 @@ class QCamera;
 class QVideoSink;
 class QMediaCaptureSession;
 class QVideoFrame;
+#else
+#include <QAbstractVideoSurface>
+#include <QAbstractVideoBuffer>
+#include <QVideoFrame>
+class QCamera;
+class CameraWorker;
+
+/// Helper video surface used in Qt5 to receive frames from QCamera via QAbstractVideoSurface.
+class CameraVideoSurface : public QAbstractVideoSurface
+{
+    Q_OBJECT
+public:
+    explicit CameraVideoSurface(CameraWorker *worker, QObject *parent = nullptr);
+
+    QList<QVideoFrame::PixelFormat> supportedPixelFormats(
+        QAbstractVideoBuffer::HandleType handleType = QAbstractVideoBuffer::NoHandle) const override;
+
+    bool present(const QVideoFrame& frame) override;
+
+signals:
+    void frameAvailable(const QImage& image);
+
+private:
+    CameraWorker *m_worker;
+};
 #endif
 
 class CameraWorker : public QObject
@@ -351,6 +376,9 @@ private:
     QCamera *m_qtCamera;
     QVideoSink *m_videoSink;
     QMediaCaptureSession *m_captureSession;
+#else
+    QCamera *m_qtCamera;
+    CameraVideoSurface *m_videoSurface;
 #endif
 
     bool handleMessage(const Message& cmd);
@@ -384,6 +412,10 @@ private:
     void setupQtCapture();
     void cleanupQtCapture();
     void processQtVideoFrame(const QVideoFrame& frame);
+#else
+    void setupQtCapture();
+    void cleanupQtCapture();
+    void processQt5VideoFrame(const QImage& image);
 #endif
 
 private slots:

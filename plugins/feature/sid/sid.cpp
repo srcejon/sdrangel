@@ -70,6 +70,9 @@ SIDMain::~SIDMain()
 void SIDMain::start()
 {
     qDebug("SIDMain::start");
+    if (m_thread) {
+        return;
+    }
     m_thread = new QThread();
     m_worker = new SIDWorker(this, m_webAPIAdapterInterface);
     m_worker->moveToThread(m_thread);

@@ -118,7 +118,9 @@ GS232Controller::~GS232Controller()
 void GS232Controller::start()
 {
     qDebug("GS232Controller::start");
-
+    if (m_thread) {
+        return;
+    }
     m_thread = new QThread();
     m_worker = new GS232ControllerWorker(this);
     m_worker->moveToThread(m_thread);

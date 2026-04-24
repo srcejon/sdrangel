@@ -52,7 +52,9 @@ RemoteControl::~RemoteControl()
 void RemoteControl::start()
 {
     qDebug() << "RemoteControl::start";
-
+    if (m_thread) {
+        return;
+    }
     m_thread = new QThread();
     m_worker = new RemoteControlWorker();
     m_worker->moveToThread(m_thread);

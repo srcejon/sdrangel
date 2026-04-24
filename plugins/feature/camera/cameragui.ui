@@ -1109,6 +1109,20 @@
        </widget>
       </item>
       <item>
+       <widget class="QToolButton" name="yoloObjectControlButton">
+        <property name="toolTip">
+         <string>Configure actions for specific YOLO object classes</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/gear.png</normaloff>:/gear.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QLabel" name="yoloConfLabel">
         <property name="text">
          <string>Conf</string>

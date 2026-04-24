@@ -31,6 +31,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPainter>
+#include <QProcess>
 #include <QRandomGenerator>
 #include <QFile>
 #include <QTextStream>
@@ -40,6 +41,7 @@
 #include <QUrlQuery>
 #include <QColor>
 #include <QDateTime>
+#include <QMutableHashIterator>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
@@ -64,7 +66,11 @@
 #endif
 
 #include "maincore.h"
+#include "channel/channelwebapiutils.h"
+#include "device/deviceset.h"
 #include "dsp/dspengine.h"
+#include "settings/mainsettings.h"
+#include "settings/preset.h"
 #include "audio/audiodevicemanager.h"
 #include "cameraworker.h"
 
@@ -343,6 +349,15 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath)) {
         m_yoloLabels.clear();
         m_yoloLoadedLabelsPath.clear();
+    }
+
+    if ((force && !m_settings.m_yoloEnabled)
+        || settingsKeys.contains("yoloEnabled")
+        || settingsKeys.contains("yoloLabelsPath")
+        || settingsKeys.contains("objectDeviceSettings"))
+    {
+        m_detectedObjectClasses.clear();
+        m_pendingDisappearDeadlines.clear();
     }
 
     if (settingsKeys.contains("captureActive") || force)
@@ -1131,6 +1146,8 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
 
 void CameraWorker::runYoloDetections(cv::Mat& bgrMat)
 {
+    const QDateTime detectionTime = m_captureDateTime.isValid() ? m_captureDateTime : QDateTime::currentDateTime();
+
     // Lazily load class labels
     if (m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath)
     {
@@ -1215,6 +1232,7 @@ void CameraWorker::runYoloDetections(cv::Mat& bgrMat)
     }
 
     if (outputs.empty()) {
+        processObjectDetections(QSet<QString>(), detectionTime);
         return;
     }
 
@@ -1241,6 +1259,7 @@ void CameraWorker::runYoloDetections(cv::Mat& bgrMat)
     std::vector<cv::Rect> boxes;
     std::vector<float>    scores;
     std::vector<int>      classIds;
+    QSet<QString> currentDetectedClasses;
 
     // Determine which layout we have
     // YOLOv8 style: rows <= ~200 (4 + nClasses), cols >> rows
@@ -1351,6 +1370,7 @@ void CameraWorker::runYoloDetections(cv::Mat& bgrMat)
         } else {
             label = QStringLiteral("cls%1").arg(classIds[idx]);
         }
+        currentDetectedClasses.insert(label);
         label += QStringLiteral(" %1%").arg(static_cast<int>(scores[idx] * 100.0f + 0.5f));
 
         const std::string labelStd = label.toStdString();
@@ -1365,6 +1385,192 @@ void CameraWorker::runYoloDetections(cv::Mat& bgrMat)
         cv::putText(bgrMat, labelStd,
                     cv::Point(box.x, labelY),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, boxColor, 1, cv::LINE_AA);
+    }
+
+    processObjectDetections(currentDetectedClasses, detectionTime);
+}
+
+void CameraWorker::processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now)
+{
+    for (const QString& className : currentDetectedClasses)
+    {
+        m_pendingDisappearDeadlines.remove(className);
+
+        if (!m_detectedObjectClasses.contains(className))
+        {
+            m_detectedObjectClasses.insert(className);
+            applyObjectDetectedSettings(className);
+        }
+    }
+
+    for (const QString& className : m_detectedObjectClasses)
+    {
+        if (!currentDetectedClasses.contains(className) && !m_pendingDisappearDeadlines.contains(className)) {
+            m_pendingDisappearDeadlines.insert(className, now.addMSecs(static_cast<qint64>(m_settings.m_yoloDisappearDebounce * 1000.0)));
+        }
+    }
+
+    QMutableHashIterator<QString, QDateTime> it(m_pendingDisappearDeadlines);
+    while (it.hasNext())
+    {
+        it.next();
+
+        if (currentDetectedClasses.contains(it.key())) {
+            it.remove();
+            continue;
+        }
+
+        if (it.value() <= now)
+        {
+            m_detectedObjectClasses.remove(it.key());
+            applyObjectDisappearedSettings(it.key());
+            it.remove();
+        }
+    }
+}
+
+void CameraWorker::executeCommand(const QString& command, const QString& className)
+{
+    if (command.isEmpty()) {
+        return;
+    }
+
+#if QT_CONFIG(process)
+    QString cmd = command;
+    cmd.replace(QStringLiteral("${class}"), className);
+    QStringList allArgs = QProcess::splitCommand(cmd);
+
+    if (allArgs.isEmpty()) {
+        return;
+    }
+
+    qDebug() << "CameraWorker::executeCommand: Executing:" << allArgs;
+    const QString program = allArgs.takeFirst();
+    QProcess::startDetached(program, allArgs);
+#else
+    qWarning() << "CameraWorker::executeCommand: QProcess not supported. Can't run:" << command;
+    (void) className;
+#endif
+}
+
+void CameraWorker::applyObjectDetectedSettings(const QString& className)
+{
+    if (!m_settings.m_objectDeviceSettings.contains(className)) {
+        return;
+    }
+
+    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
+    if (deviceSettingsList == nullptr) {
+        return;
+    }
+
+    MainCore *mainCore = MainCore::instance();
+    const MainSettings& mainSettings = mainCore->getSettings();
+    const std::vector<DeviceSet*>& deviceSets = mainCore->getDeviceSets();
+
+    for (int i = 0; i < deviceSettingsList->size(); ++i)
+    {
+        CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
+        if (devSettings == nullptr) {
+            continue;
+        }
+
+        if (devSettings->m_deviceSetIndex < 0 || devSettings->m_deviceSetIndex >= static_cast<int>(deviceSets.size()))
+        {
+            qWarning() << "CameraWorker::applyObjectDetectedSettings: device set at"
+                       << devSettings->m_deviceSetIndex << "does not exist";
+            continue;
+        }
+
+        if (!devSettings->m_presetGroup.isEmpty())
+        {
+            const DeviceSet *deviceSet = deviceSets[devSettings->m_deviceSetIndex];
+            QString presetType;
+            if (deviceSet->m_deviceSourceEngine != nullptr) {
+                presetType = "R";
+            } else if (deviceSet->m_deviceSinkEngine != nullptr) {
+                presetType = "T";
+            } else if (deviceSet->m_deviceMIMOEngine != nullptr) {
+                presetType = "M";
+            }
+
+            const Preset *preset = mainSettings.getPreset(
+                devSettings->m_presetGroup,
+                devSettings->m_presetFrequency,
+                devSettings->m_presetDescription,
+                presetType);
+
+            if (preset != nullptr)
+            {
+                qDebug() << "CameraWorker::applyObjectDetectedSettings: loading preset"
+                         << preset->getDescription() << "for class" << className
+                         << "to device set" << devSettings->m_deviceSetIndex;
+                mainCore->getMainMessageQueue()->push(
+                    MainCore::MsgLoadPreset::create(preset, devSettings->m_deviceSetIndex));
+            }
+            else
+            {
+                qWarning() << "CameraWorker::applyObjectDetectedSettings: unable to get preset"
+                           << devSettings->m_presetGroup
+                           << devSettings->m_presetFrequency
+                           << devSettings->m_presetDescription;
+            }
+        }
+    }
+
+    QTimer::singleShot(1000, this, [deviceSettingsList]()
+    {
+        for (int i = 0; i < deviceSettingsList->size(); ++i)
+        {
+            CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
+            if (devSettings == nullptr) {
+                continue;
+            }
+
+            if (devSettings->m_startOnDetect) {
+                ChannelWebAPIUtils::run(devSettings->m_deviceSetIndex);
+            }
+
+            if (devSettings->m_startStopFileSink) {
+                ChannelWebAPIUtils::startStopFileSinks(devSettings->m_deviceSetIndex, true);
+            }
+
+            if (!devSettings->m_detectCommand.isEmpty()) {
+                executeCommand(devSettings->m_detectCommand, className);
+            }
+        }
+    });
+}
+
+void CameraWorker::applyObjectDisappearedSettings(const QString& className)
+{
+    if (!m_settings.m_objectDeviceSettings.contains(className)) {
+        return;
+    }
+
+    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
+    if (deviceSettingsList == nullptr) {
+        return;
+    }
+
+    for (int i = 0; i < deviceSettingsList->size(); ++i)
+    {
+        CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
+        if (devSettings == nullptr) {
+            continue;
+        }
+
+        if (devSettings->m_startStopFileSink) {
+            ChannelWebAPIUtils::startStopFileSinks(devSettings->m_deviceSetIndex, false);
+        }
+
+        if (devSettings->m_stopOnDisappear) {
+            ChannelWebAPIUtils::stop(devSettings->m_deviceSetIndex);
+        }
+
+        if (!devSettings->m_disappearCommand.isEmpty()) {
+            executeCommand(devSettings->m_disappearCommand, className);
+        }
     }
 }
 

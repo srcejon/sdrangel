@@ -20,13 +20,32 @@
 
 #include <QByteArray>
 #include <QColor>
+#include <QHash>
+#include <QList>
 #include <QString>
 #include <QStringList>
+#include <sstream>
 
 class Serializable;
 
 struct CameraSettings
 {
+    struct ObjectDeviceSettings
+    {
+        int m_deviceSetIndex;           //!< Device set index in SDRangel
+        QString m_presetGroup;          //!< Preset group to load on object detection
+        quint64 m_presetFrequency;      //!< Preset center frequency
+        QString m_presetDescription;    //!< Preset description to identify the preset
+        bool m_startOnDetect;           //!< Start acquisition when the object class is detected
+        bool m_stopOnDisappear;         //!< Stop acquisition when the object class disappears
+        bool m_startStopFileSink;       //!< Start/stop file sinks with detection/disappearance
+        QString m_detectCommand;        //!< Command/script to execute when the object class is detected
+        QString m_disappearCommand;     //!< Command/script to execute when the object class disappears
+
+        ObjectDeviceSettings();
+        void getDebugString(std::ostringstream& ostr) const;
+    };
+
     QString m_title;
     quint32 m_rgbColor;
     QString m_cameraId;
@@ -83,6 +102,8 @@ struct CameraSettings
     double m_yoloConfThreshold;  ///< Minimum confidence to keep a detection: 0.0..1.0
     double m_yoloNmsThreshold;   ///< IoU threshold for non-maximum suppression: 0.0..1.0
     QColor m_yoloBoxColor;       ///< Bounding-box colour when no per-class colour is available
+    double m_yoloDisappearDebounce; ///< Seconds a class must remain absent before it is treated as disappeared
+    QHash<QString, QList<ObjectDeviceSettings *> *> m_objectDeviceSettings; //!< Device control settings per YOLO class name
 
     // Audio settings (Qt camera only)
     bool   m_audioMute;          ///< When true, captured camera audio is silenced
@@ -101,6 +122,8 @@ struct CameraSettings
     QByteArray serialize() const;
     bool deserialize(const QByteArray& data);
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
+    QByteArray serializeObjectDeviceSettings(QHash<QString, QList<ObjectDeviceSettings *> *> objectDeviceSettings) const;
+    void deserializeObjectDeviceSettings(const QByteArray& data, QHash<QString, QList<ObjectDeviceSettings *> *>& objectDeviceSettings);
     void applySettings(const QStringList& settingsKeys, const CameraSettings& settings);
     QString getDebugString(const QStringList& settingsKeys, bool force=false) const;
     bool isAlpacaCamera() const;

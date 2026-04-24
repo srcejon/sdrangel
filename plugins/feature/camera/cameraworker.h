@@ -19,7 +19,9 @@
 #define INCLUDE_FEATURE_CAMERAWORKER_H_
 
 #include <QObject>
+#include <QHash>
 #include <QSize>
+#include <QSet>
 #include <QTimer>
 #include <QImage>
 #include <QDateTime>
@@ -432,6 +434,8 @@ private:
     QString m_yoloLoadedModelPath;       ///< Path that m_yoloNet was loaded from
     QStringList m_yoloLabels;            ///< Class names loaded from m_yoloLabelsPath
     QString m_yoloLoadedLabelsPath;      ///< Path that m_yoloLabels was loaded from
+    QSet<QString> m_detectedObjectClasses; ///< Classes currently considered present after debounce handling
+    QHash<QString, QDateTime> m_pendingDisappearDeadlines; ///< Pending disappearance deadline per class
 
     // Video output
     cv::VideoWriter m_videoWriter; // OpenCV video writer (works for both Alpaca and Qt cameras)
@@ -464,6 +468,10 @@ private:
     // Post-processing
     [[nodiscard]] QImage applyPostProcessing(const QImage& input);
     void runYoloDetections(cv::Mat& bgrMat);
+    void applyObjectDetectedSettings(const QString& className);
+    void applyObjectDisappearedSettings(const QString& className);
+    void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
+    void executeCommand(const QString& command, const QString& className);
 
     void reportFrameToGUI(const QImage& image);
     QString buildAlpacaBaseUrl() const;

@@ -41,6 +41,7 @@
 #include "ui_cameragui.h"
 #include "camera.h"
 #include "camerahistogramdialog.h"
+#include "cameraobjectcontroldialog.h"
 #include "cameraworker.h"
 #include "cameragui.h"
 
@@ -530,6 +531,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
     QObject::connect(ui->yoloLabelsPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloLabelsPathEdit_editingFinished);
     QObject::connect(ui->yoloLabelsPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloLabelsPathButton_clicked);
+    QObject::connect(ui->yoloObjectControlButton, &QToolButton::clicked, this, &CameraGUI::on_yoloObjectControlButton_clicked);
     QObject::connect(ui->yoloConfSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloConfSpin_valueChanged);
     QObject::connect(ui->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
     QObject::connect(ui->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
@@ -1018,6 +1020,7 @@ void CameraGUI::updateEnabledControls()
     ui->yoloLabelsLabel->setEnabled(yoloActive);
     ui->yoloLabelsPathEdit->setEnabled(yoloActive);
     ui->yoloLabelsPathButton->setEnabled(yoloActive);
+    ui->yoloObjectControlButton->setEnabled(yoloActive);
     ui->yoloConfLabel->setEnabled(yoloActive);
     ui->yoloConfSpin->setEnabled(yoloActive);
     ui->yoloNmsLabel->setEnabled(yoloActive);
@@ -1182,6 +1185,19 @@ void CameraGUI::on_yoloLabelsPathButton_clicked()
         m_settings.m_yoloLabelsPath = fileName;
         ui->yoloLabelsPathEdit->setText(fileName);
         m_settingsKeys.append("yoloLabelsPath");
+        applySettings();
+    }
+}
+
+void CameraGUI::on_yoloObjectControlButton_clicked()
+{
+    CameraObjectControlDialog dialog(&m_settings, this);
+    new DialogPositioner(&dialog, true);
+
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        m_settingsKeys.append("yoloDisappearDebounce");
+        m_settingsKeys.append("objectDeviceSettings");
         applySettings();
     }
 }

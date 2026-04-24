@@ -22,11 +22,15 @@ if(NOT SERVER_MODE)
         cameragui.cpp
         cameragui.ui
         camerahistogramdialog.cpp
+        cameraobjectcontroldialog.cpp
+        cameraobjectdevicesettingsgui.cpp
     )
     set(camera_HEADERS
         ${camera_HEADERS}
         cameragui.h
         camerahistogramdialog.h
+        cameraobjectcontroldialog.h
+        cameraobjectdevicesettingsgui.h
     )
 
     set(TARGET_NAME ${PLUGINS_PREFIX}featurecamera)

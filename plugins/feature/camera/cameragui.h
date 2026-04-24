@@ -143,6 +143,7 @@ private slots:
     void on_yoloModelPathButton_clicked();
     void on_yoloLabelsPathEdit_editingFinished();
     void on_yoloLabelsPathButton_clicked();
+    void on_yoloObjectControlButton_clicked();
     void on_yoloConfSpin_valueChanged(double value);
     void on_yoloNmsSpin_valueChanged(double value);
     void on_yoloBoxColorButton_clicked();

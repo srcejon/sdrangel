@@ -1217,7 +1217,7 @@
      <verstretch>0</verstretch>
     </sizepolicy>
    </property>
-   <layout class="QHBoxLayout" name="horizontalLayout">
+   <layout class="QVBoxLayout" name="imageContainerLayout">
     <property name="leftMargin">
      <number>0</number>
     </property>
@@ -1231,7 +1231,7 @@
      <number>0</number>
     </property>
     <item>
-     <widget class="ScaledImage" name="imageLabel">
+     <widget class="QGraphicsView" name="imageView">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
         <horstretch>0</horstretch>
@@ -1241,22 +1241,66 @@
       <property name="minimumSize">
        <size>
         <width>400</width>
-        <height>240</height>
+        <height>220</height>
        </size>
       </property>
       <property name="frameShape">
        <enum>QFrame::Shape::NoFrame</enum>
       </property>
-      <property name="frameShadow">
-       <enum>QFrame::Shadow::Sunken</enum>
-      </property>
-      <property name="text">
-       <string>Camera preview</string>
-      </property>
       <property name="alignment">
        <set>Qt::AlignmentFlag::AlignCenter</set>
       </property>
      </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="imageZoomLayout">
+      <property name="spacing">
+       <number>2</number>
+      </property>
+      <item>
+       <widget class="QToolButton" name="zoomInButton">
+        <property name="toolTip">
+         <string>Zoom in</string>
+        </property>
+        <property name="text">
+         <string>+</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="zoomOutButton">
+        <property name="toolTip">
+         <string>Zoom out</string>
+        </property>
+        <property name="text">
+         <string>-</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="fitInViewButton">
+        <property name="toolTip">
+         <string>Fit image in view</string>
+        </property>
+        <property name="text">
+         <string>Fit</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="imageZoomSpacer">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
     </item>
    </layout>
   </widget>
@@ -1267,11 +1311,6 @@
    <extends>QWidget</extends>
    <header>gui/rollupcontents.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>ScaledImage</class>
-   <extends>QLabel</extends>
-   <header>gui/scaledimage.h</header>
   </customwidget>
   <customwidget>
    <class>ButtonSwitch</class>

@@ -18,6 +18,8 @@
 #include <QColorDialog>
 #include <QFileDialog>
 #include <QFontDatabase>
+#include <QGraphicsView>
+#include <QPainter>
 #include <QPixmap>
 
 #include "feature/featureuiset.h"
@@ -192,7 +194,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_featureUISet(featureUISet),
     m_doApplySettings(true),
     m_alpacaHasNamedGains(false),
-    m_alpacaHasNamedOffsets(false)
+    m_alpacaHasNamedOffsets(false),
+    m_imageScene(nullptr),
+    m_imagePixmapItem(nullptr)
 {
     m_feature = feature;
     setAttribute(Qt::WA_DeleteOnClose, true);
@@ -201,6 +205,15 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     RollupContents *rollupContents = getRollupContents();
     ui->setupUi(rollupContents);
     rollupContents->arrangeRollups();
+
+    // Set up the QGraphicsView for camera preview
+    m_imageScene = new QGraphicsScene(this);
+    m_imagePixmapItem = m_imageScene->addPixmap(QPixmap());
+    ui->imageView->setScene(m_imageScene);
+    ui->imageView->setDragMode(QGraphicsView::ScrollHandDrag);
+    ui->imageView->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+    ui->imageView->setRenderHint(QPainter::SmoothPixmapTransform, true);
+    ui->imageView->setBackgroundBrush(QBrush(Qt::black));
 
     m_camera = reinterpret_cast<Camera*>(feature);
     m_camera->setMessageQueueToGUI(&m_inputMessageQueue);
@@ -337,11 +350,18 @@ void CameraGUI::applySettings(bool force)
 
 void CameraGUI::updateImageWidget()
 {
-    if (m_lastImage.isNull()) {
+    if (m_lastImage.isNull() || !m_imagePixmapItem) {
         return;
     }
 
-    ui->imageLabel->setPixmap(QPixmap::fromImage(m_lastImage));
+    const QPixmap pixmap = QPixmap::fromImage(m_lastImage);
+    m_imagePixmapItem->setPixmap(pixmap);
+    m_imageScene->setSceneRect(pixmap.rect());
+
+    // Fit the image in the view (preserving aspect ratio) only when no zoom has been applied
+    if (ui->imageView->transform().isIdentity()) {
+        ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
+    }
 }
 
 void CameraGUI::makeUIConnections()
@@ -400,6 +420,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->yoloConfSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloConfSpin_valueChanged);
     QObject::connect(ui->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
     QObject::connect(ui->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
+    QObject::connect(ui->zoomInButton, &QToolButton::clicked, this, &CameraGUI::on_zoomInButton_clicked);
+    QObject::connect(ui->zoomOutButton, &QToolButton::clicked, this, &CameraGUI::on_zoomOutButton_clicked);
+    QObject::connect(ui->fitInViewButton, &QToolButton::clicked, this, &CameraGUI::on_fitInViewButton_clicked);
 }
 
 void CameraGUI::updateAlpacaVisibility()
@@ -1034,5 +1057,23 @@ void CameraGUI::on_yoloBoxColorButton_clicked()
         updateColorButton(ui->yoloBoxColorButton, color);
         m_settingsKeys.append("yoloBoxColor");
         applySettings();
+    }
+}
+
+void CameraGUI::on_zoomInButton_clicked()
+{
+    ui->imageView->scale(1.25, 1.25);
+}
+
+void CameraGUI::on_zoomOutButton_clicked()
+{
+    ui->imageView->scale(1.0 / 1.25, 1.0 / 1.25);
+}
+
+void CameraGUI::on_fitInViewButton_clicked()
+{
+    ui->imageView->resetTransform();
+    if (m_imagePixmapItem && !m_imagePixmapItem->pixmap().isNull()) {
+        ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
     }
 }

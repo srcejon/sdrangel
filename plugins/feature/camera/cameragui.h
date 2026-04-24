@@ -20,6 +20,8 @@
 
 #include <QColor>
 #include <QImage>
+#include <QGraphicsScene>
+#include <QGraphicsPixmapItem>
 
 #include "feature/featuregui.h"
 #include "util/messagequeue.h"
@@ -65,6 +67,9 @@ private:
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
+
+    QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
+    QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
 
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     virtual ~CameraGUI();
@@ -136,6 +141,9 @@ private slots:
     void on_yoloConfSpin_valueChanged(double value);
     void on_yoloNmsSpin_valueChanged(double value);
     void on_yoloBoxColorButton_clicked();
+    void on_zoomInButton_clicked();
+    void on_zoomOutButton_clicked();
+    void on_fitInViewButton_clicked();
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

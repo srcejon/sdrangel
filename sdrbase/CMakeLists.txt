@@ -641,16 +641,15 @@ if(Vulkan_FOUND AND (${VKFFT_BACKEND} EQUAL 0))
 endif()
 
 if(CUDA_FOUND AND (${VKFFT_BACKEND} EQUAL 1))
-    set_property(TARGET sdrbase PROPERTY CUDA_ARCHITECTURES 60 70 75 80 86)
+    # 75 is RTX 20x0 series, 86 is RTX 30x0, 89 is RTX 40x0, 120 would be RTX 50x0
+    set_property(TARGET sdrbase PROPERTY CUDA_ARCHITECTURES 75 86 89)
     add_compile_definitions(sdrbase VKFFT_BACKEND=1)
     target_compile_options(sdrbase PUBLIC
         "$<$<COMPILE_LANGUAGE:CUDA>:SHELL:
         -DVKFFT_BACKEND=1
-        -gencode arch=compute_60,code=compute_60
-        -gencode arch=compute_70,code=compute_70
         -gencode arch=compute_75,code=compute_75
-        -gencode arch=compute_80,code=compute_80
-        -gencode arch=compute_86,code=compute_86>")
+        -gencode arch=compute_86,code=compute_86
+        -gencode arch=compute_89,code=compute_89>")
     set_target_properties(sdrbase PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     set_target_properties(sdrbase PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
     find_library(CUDA_NVRTC_LIB libnvrtc nvrtc HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib64" "${LIBNVRTC_LIBRARY_DIR}" "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64" /usr/lib64 /usr/local/cuda/lib64 REQUIRED)

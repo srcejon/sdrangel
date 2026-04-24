@@ -259,7 +259,6 @@ void CameraGUI::displaySettings()
     setTitle(m_settings.m_title);
 
     ui->startStop->setChecked(m_settings.m_captureActive);
-    ui->apiCombo->setCurrentIndex(static_cast<int>(m_settings.m_cameraAPI));
     ui->cameraCombo->setCurrentText(m_settings.m_cameraId);
 
     const QString resText = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
@@ -369,7 +368,6 @@ void CameraGUI::makeUIConnections()
 {
     QObject::connect(ui->startStop, &QPushButton::clicked, this, &CameraGUI::on_startStop_clicked);
     QObject::connect(ui->refreshCamerasButton, &QPushButton::clicked, this, &CameraGUI::on_refreshCamerasButton_clicked);
-    QObject::connect(ui->apiCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_apiCombo_currentIndexChanged);
     QObject::connect(ui->cameraCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_cameraCombo_currentTextChanged);
     QObject::connect(ui->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
     QObject::connect(ui->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
@@ -428,16 +426,16 @@ void CameraGUI::makeUIConnections()
 
 void CameraGUI::updateAlpacaVisibility()
 {
-    const bool alpaca = (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca);
+    const bool alpaca = m_settings.isAlpacaCamera();
 
     ui->resolutionLabel->setVisible(!alpaca);
     ui->resolutionCombo->setVisible(!alpaca);
     ui->isoLabel->setVisible(!alpaca);
     ui->isoSpin->setVisible(!alpaca);
-    ui->alpacaHostLabel->setVisible(alpaca);
+    /*ui->alpacaHostLabel->setVisible(alpaca);
     ui->alpacaHostEdit->setVisible(alpaca);
     ui->alpacaPortLabel->setVisible(alpaca);
-    ui->alpacaPortSpin->setVisible(alpaca);
+    ui->alpacaPortSpin->setVisible(alpaca);*/
     ui->alpacaBinXLabel->setVisible(alpaca);
     ui->alpacaBinXSpin->setVisible(alpaca);
     ui->alpacaBinYLabel->setVisible(alpaca);
@@ -560,14 +558,6 @@ void CameraGUI::on_startStop_clicked(bool checked)
 void CameraGUI::on_refreshCamerasButton_clicked()
 {
     m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
-}
-
-void CameraGUI::on_apiCombo_currentIndexChanged(int index)
-{
-    m_settings.m_cameraAPI = static_cast<CameraSettings::CameraAPI>(index);
-    m_settingsKeys.append("cameraAPI");
-    updateAlpacaVisibility();
-    applySettings();
 }
 
 void CameraGUI::on_cameraCombo_currentTextChanged(const QString& text)

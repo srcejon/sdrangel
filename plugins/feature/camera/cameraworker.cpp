@@ -165,9 +165,10 @@ void CameraWorker::startWork()
         m_msgQueueToGUI->push(MsgReportAvailableDevices::create(longIds));
     }
 
-    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca) {
+    if (m_settings.isAlpacaCamera())
+    {
         alpacaQueryCameraCapabilities();
-        m_statusTimer.start(2000);
+        m_statusTimer.start(500);
     }
     if (m_settings.m_captureActive) {
         startCapture();
@@ -286,7 +287,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     qDebug() << "CameraWorker::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
     const bool recapture = force
-        || settingsKeys.contains("cameraAPI")
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("resolutionWidth")
         || settingsKeys.contains("resolutionHeight")
@@ -295,7 +295,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("isoSensitivity")
         || settingsKeys.contains("alpacaHost")
         || settingsKeys.contains("alpacaPort")
-        || settingsKeys.contains("alpacaCameraId")
         || settingsKeys.contains("alpacaBinX")
         || settingsKeys.contains("alpacaBinY")
         || settingsKeys.contains("alpacaGain")
@@ -365,34 +364,32 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         // VideoWriter will be (re-)opened on the next frame if saveVideo is enabled
     }
 
-    if (force || settingsKeys.contains("cameraAPI") || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort")) {
+    if (force || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort")) {
         reportCameraList();
     }
 
     if (force
-        || settingsKeys.contains("cameraAPI")
         || settingsKeys.contains("cameraId"))
     {
         reportResolutions();
     }
 
-    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca
+    if (m_settings.isAlpacaCamera()
         && m_networkManager
         && (force
-            || settingsKeys.contains("cameraAPI")
+            || settingsKeys.contains("cameraId")
             || settingsKeys.contains("alpacaHost")
             || settingsKeys.contains("alpacaPort")
-            || settingsKeys.contains("alpacaCameraId")
             || settingsKeys.contains("cameraId")))
     {
         alpacaQueryCameraCapabilities();
     }
 
-    if (force || settingsKeys.contains("cameraAPI"))
+    if (force || settingsKeys.contains("cameraId"))
     {
-        if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca) {
+        if (m_settings.isAlpacaCamera()) {
             if (!m_statusTimer.isActive()) {
-                m_statusTimer.start(2000);
+                m_statusTimer.start(500);
             }
         } else {
             m_statusTimer.stop();
@@ -437,26 +434,38 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
 
 void CameraWorker::reportCameraList()
 {
-    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca)
+    QStringList qtCameraIds;
+
+    // List Qt cameras
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
+
+    for (const QCameraDevice& camera : cameras)
     {
-        if (!m_networkManager)
-        {
-            QStringList cameraIds;
-            if (m_msgQueueToGUI) {
-                m_msgQueueToGUI->push(MsgReportCameraList::create(cameraIds));
-            }
+        const QString id = QString("qt:%1:%2").arg(QString::fromUtf8(camera.id())).arg(camera.description());
+        qtCameraIds.append(id);
+    }
+#else
+    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
 
-            return;
-        }
+    for (const QCameraInfo& info : cameras)
+    {
+        const QString id = QString("qt:%1:%2").arg(info.deviceName()).arg(info.description());
+        qtCameraIds.append(id);
+    }
+#endif
 
+    // List Alpaca cameras
+    if (m_networkManager)
+    {
         QNetworkRequest request(QUrl(buildAlpacaBaseUrl() + "/management/v1/configureddevices"));
         QNetworkReply *reply = m_networkManager->get(request);
 
-        QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            QStringList cameraIds;
+        QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, qtCameraIds]() {
+            QStringList cameraIds = qtCameraIds;
 
             if (reply->error() == QNetworkReply::NoError) {
-                cameraIds = parseAlpacaCameraList(reply->readAll());
+                cameraIds.append(parseAlpacaCameraList(reply->readAll()));
             }
 
             if (m_msgQueueToGUI) {
@@ -465,47 +474,29 @@ void CameraWorker::reportCameraList()
 
             reply->deleteLater();
         });
-
-        return;
     }
-
-    QStringList cameraIds;
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
-
-    for (const QCameraDevice& camera : cameras)
+    else
     {
-        const QString id = QString::fromUtf8(camera.id());
-        cameraIds.append(id.isEmpty() ? camera.description() : id);
-    }
-#else
-    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
-
-    for (const QCameraInfo& info : cameras)
-    {
-        const QString id = info.deviceName();
-        cameraIds.append(id.isEmpty() ? info.description() : id);
-    }
-#endif
-
-    if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportCameraList::create(cameraIds));
+        if (m_msgQueueToGUI) {
+            m_msgQueueToGUI->push(MsgReportCameraList::create(qtCameraIds));
+        }
     }
 }
 
 void CameraWorker::reportResolutions()
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIQtCamera)
+    if (m_settings.isQtCamera())
     {
         const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
         QList<QSize> resolutions;
+        const QString targetId = m_settings.cameraIdString();
+        const QString targetDescription = m_settings.cameraDescription();
 
         for (const QCameraDevice& device : cameras)
         {
             const QString id = QString::fromUtf8(device.id());
-            if ((id == m_settings.m_cameraId) || (device.description() == m_settings.m_cameraId))
+            if ((id == targetId) || (device.description() == targetDescription))
             {
                 QSet<QString> seen;
                 for (const QCameraFormat& format : device.videoFormats())
@@ -533,15 +524,17 @@ void CameraWorker::reportResolutions()
     // try it optimistically — it will return an empty list on platforms that don't support
     // it before loading, in which case the GUI shows no pre-defined resolutions and the
     // camera uses its default.
-    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIQtCamera)
+    if (m_settings.isQtCamera())
     {
         QList<QSize> resolutions;
         const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+        const QString targetId = m_settings.cameraIdString();
+        const QString targetDescription = m_settings.cameraDescription();
 
         for (const QCameraInfo& info : cameras)
         {
             const QString id = info.deviceName();
-            if ((id == m_settings.m_cameraId) || (info.description() == m_settings.m_cameraId))
+            if ((id == targetId) || (info.description() == targetDescription))
             {
                 QCamera tempCam(info);
                 QSet<QString> seen;
@@ -567,7 +560,6 @@ void CameraWorker::reportResolutions()
 #endif
 }
 
-
 void CameraWorker::startCapture()
 {
     if (m_capturing) {
@@ -577,14 +569,14 @@ void CameraWorker::startCapture()
     m_imageSaved = false;
     m_capturing = true;
 
-    if (m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca)
+    if (m_settings.isAlpacaCamera())
     {
         m_alpacaFrameRequestPending = false;
         const int intervalMs = std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond))));
         m_captureTimer.start(intervalMs);
         captureTick();
     }
-    else
+    else if (m_settings.isQtCamera())
     {
         setupQtCapture();
     }
@@ -653,7 +645,7 @@ void CameraWorker::alpacaSetCameraParams()
 {
     // Chain: binX -> binY -> gain -> offset -> readoutMode -> startExposure
     const QString baseUrl = buildAlpacaBaseUrl();
-    const int camId = m_settings.alpacaCameraId();
+    const int camId = m_settings.cameraIdInt();
 
     auto doStartExposure = [this]() {
         if (m_capturing) {
@@ -701,7 +693,7 @@ void CameraWorker::alpacaSetCameraParams()
 
 void CameraWorker::alpacaStartExposure()
 {
-    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/startexposure").arg(m_settings.alpacaCameraId()));
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/startexposure").arg(m_settings.cameraIdInt()));
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
@@ -741,7 +733,7 @@ void CameraWorker::alpacaStartExposure()
 
 void CameraWorker::alpacaCheckImageReady()
 {
-    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imageready").arg(m_settings.alpacaCameraId()));
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imageready").arg(m_settings.cameraIdInt()));
     QUrlQuery query;
     query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
     query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
@@ -782,7 +774,7 @@ void CameraWorker::alpacaCheckImageReady()
 
 void CameraWorker::alpacaFetchImageArray()
 {
-    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imagearray").arg(m_settings.alpacaCameraId()));
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imagearray").arg(m_settings.cameraIdInt()));
     QUrlQuery query;
     query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
     query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
@@ -1340,7 +1332,7 @@ void CameraWorker::alpacaQueryCameraCapabilities()
     m_alpacaImageBytesSupported = true;
 
     const QString baseUrl = buildAlpacaBaseUrl();
-    const int camId = m_settings.alpacaCameraId();
+    const int camId = m_settings.cameraIdInt();
 
     // Struct to accumulate results from parallel requests
     struct CapInfo {
@@ -1476,7 +1468,7 @@ void CameraWorker::alpacaQueryCameraCapabilities()
 
 void CameraWorker::statusTick()
 {
-    if (m_networkManager && m_settings.m_cameraAPI == CameraSettings::CameraAPIAlpaca) {
+    if (m_networkManager && m_settings.isAlpacaCamera()) {
         alpacaPollStatus();
     }
 }
@@ -1484,7 +1476,7 @@ void CameraWorker::statusTick()
 void CameraWorker::alpacaPollStatus()
 {
     const QString baseUrl = buildAlpacaBaseUrl();
-    const int camId = m_settings.alpacaCameraId();
+    const int camId = m_settings.cameraIdInt();
 
     // Accumulate results from two parallel GETs
     struct StatusInfo {

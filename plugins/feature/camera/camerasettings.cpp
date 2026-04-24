@@ -33,7 +33,6 @@ void CameraSettings::resetToDefaults()
 {
     m_title = "Camera";
     m_rgbColor = QColor(64, 128, 255).rgb();
-    m_cameraAPI = CameraAPIAlpaca;
     m_cameraId.clear();
     m_resolutionWidth = 1280;
     m_resolutionHeight = 720;
@@ -91,7 +90,6 @@ QByteArray CameraSettings::serialize() const
 
     s.writeString(1, m_title);
     s.writeU32(2, m_rgbColor);
-    s.writeS32(3, static_cast<int>(m_cameraAPI));
     s.writeString(4, m_cameraId);
     s.writeS32(5, m_resolutionWidth);
     s.writeS32(6, m_resolutionHeight);
@@ -169,7 +167,6 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(1, &m_title, "Camera");
         d.readU32(2, &m_rgbColor, QColor(64, 128, 255).rgb());
         d.readS32(3, &itmp, 0);
-        m_cameraAPI = static_cast<CameraAPI>(itmp);
         d.readString(4, &m_cameraId, "");
         d.readS32(5, &m_resolutionWidth, 1280);
         d.readS32(6, &m_resolutionHeight, 720);
@@ -270,9 +267,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("rgbColor")) {
         m_rgbColor = settings.m_rgbColor;
-    }
-    if (settingsKeys.contains("cameraAPI")) {
-        m_cameraAPI = settings.m_cameraAPI;
     }
     if (settingsKeys.contains("cameraId")) {
         m_cameraId = settings.m_cameraId;
@@ -424,9 +418,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
 {
     std::ostringstream ostr;
 
-    if (settingsKeys.contains("cameraAPI") || force) {
-        ostr << " m_cameraAPI: " << static_cast<int>(m_cameraAPI);
-    }
     if (settingsKeys.contains("cameraId") || force) {
         ostr << " m_cameraId: " << m_cameraId.toStdString();
     }
@@ -566,9 +557,19 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     return QString(ostr.str().c_str());
 }
 
-int CameraSettings::alpacaCameraId() const
+bool CameraSettings::isAlpacaCamera() const
 {
-    if (m_cameraId.startsWith("alpaca:"))
+    return m_cameraId.startsWith("alpaca:");
+}
+
+bool CameraSettings::isQtCamera() const
+{
+    return m_cameraId.startsWith("qt:");
+}
+
+int CameraSettings::cameraIdInt() const
+{
+    if (isAlpacaCamera())
     {
         QString idStr = m_cameraId.split(':')[1];
         bool ok;
@@ -578,4 +579,20 @@ int CameraSettings::alpacaCameraId() const
         }
     }
     return -1;
+}
+
+QString CameraSettings::cameraIdString() const
+{
+    if (isQtCamera()) {
+        return m_cameraId.split(':')[1];
+    }
+    return "";
+}
+
+QString CameraSettings::cameraDescription() const
+{
+    if (isAlpacaCamera() || isQtCamera()) {
+        return m_cameraId.split(':')[2];
+    }
+    return "";
 }

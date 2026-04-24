@@ -92,7 +92,6 @@ private slots:
     void handleInputMessages();
     void on_startStop_clicked(bool checked);
     void on_refreshCamerasButton_clicked();
-    void on_apiCombo_currentIndexChanged(int index);
     void on_cameraCombo_currentTextChanged(const QString& text);
     void on_resolutionCombo_currentIndexChanged(int index);
     void on_fpsSpin_valueChanged(int value);

@@ -27,15 +27,8 @@ class Serializable;
 
 struct CameraSettings
 {
-    enum CameraAPI
-    {
-        CameraAPIAlpaca = 0,
-        CameraAPIQtCamera = 1
-    };
-
     QString m_title;
     quint32 m_rgbColor;
-    CameraAPI m_cameraAPI;
     QString m_cameraId;
     int m_resolutionWidth;
     int m_resolutionHeight;
@@ -103,7 +96,11 @@ struct CameraSettings
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
     void applySettings(const QStringList& settingsKeys, const CameraSettings& settings);
     QString getDebugString(const QStringList& settingsKeys, bool force=false) const;
-    int alpacaCameraId() const;
+    bool isAlpacaCamera() const;
+    bool isQtCamera() const;
+    int cameraIdInt() const;
+    QString cameraIdString() const;
+    QString cameraDescription() const;
 };
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGS_H_

@@ -191,8 +191,10 @@ bool CameraGUI::handleMessage(const Message& message)
             (CameraWorker::MsgReportQtCameraCapabilities&) message;
         const double minZoom = caps.getMinZoomFactor();
         const double maxZoom = caps.getMaxZoomFactor();
-        m_qtZoomSupported = (maxZoom > minZoom + 0.01);
-        m_qtManualExposureSupported = caps.isManualExposureSupported();
+        m_qtZoomSupported             = (maxZoom > minZoom + 0.01);
+        m_qtManualExposureSupported   = caps.isManualExposureSupported();
+        m_qtIsoSensitivitySupported   = caps.isIsoSensitivitySupported();
+        m_qtWhiteBalanceModeSupported = caps.isWhiteBalanceModeSupported();
 
         blockApplySettings(true);
         ui->zoomSpin->setMinimum(minZoom);
@@ -201,6 +203,10 @@ bool CameraGUI::handleMessage(const Message& message)
         ui->zoomLabel->setEnabled(m_qtZoomSupported);
         ui->exposureLabel->setEnabled(m_qtManualExposureSupported);
         ui->exposureSpin->setEnabled(m_qtManualExposureSupported);
+        ui->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
+        ui->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
+        ui->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
+        ui->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
         blockApplySettings(false);
 
         return true;
@@ -264,6 +270,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_alpacaHasNamedOffsets(false),
     m_qtZoomSupported(false),
     m_qtManualExposureSupported(true),
+    m_qtIsoSensitivitySupported(true),
+    m_qtWhiteBalanceModeSupported(true),
     m_imageScene(nullptr),
     m_imagePixmapItem(nullptr)
 {
@@ -1033,6 +1041,16 @@ void CameraGUI::updateEnabledControls()
     {
         ui->exposureLabel->setEnabled(false);
         ui->exposureSpin->setEnabled(false);
+    }
+    if (!m_qtIsoSensitivitySupported)
+    {
+        ui->isoLabel->setEnabled(false);
+        ui->isoSpin->setEnabled(false);
+    }
+    if (!m_qtWhiteBalanceModeSupported)
+    {
+        ui->whiteBalanceLabel->setEnabled(false);
+        ui->whiteBalanceCombo->setEnabled(false);
     }
 }
 

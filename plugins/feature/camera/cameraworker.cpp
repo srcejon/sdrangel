@@ -2099,16 +2099,27 @@ void CameraWorker::setupQtCapture()
 
     m_qtCamera->start();
 
-    // Test whether this camera supports manual exposure time: call setManualExposureTime
-    // and then check whether manualExposureTime() reflects the value (returns -1 if unsupported).
+    // Test whether this camera supports manual exposure time: set the value and check whether
+    // manualExposureTime() reflects it (returns -1 when unsupported).
     m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
     const bool manualExposureSupported = (m_qtCamera->manualExposureTime() >= 0.0f);
 
-    // Report zoom and exposure capabilities so the GUI can configure its controls
+    // Same pattern for ISO sensitivity: manualIsoSensitivity() returns -1 when unsupported.
+    m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
+    const bool isoSensitivitySupported = (m_qtCamera->manualIsoSensitivity() >= 0);
+
+    // White balance: Qt6 provides an explicit support query per mode.
+    const bool whiteBalanceModeSupported = m_qtCamera->isWhiteBalanceModeSupported(QCamera::WhiteBalanceAuto);
+
+    // Report zoom and per-control capabilities so the GUI can enable/disable its widgets
     const float minZoom = m_qtCamera->minimumZoomFactor();
     const float maxZoom = m_qtCamera->maximumZoomFactor();
     if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(minZoom, maxZoom, manualExposureSupported));
+        m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(
+            minZoom, maxZoom,
+            manualExposureSupported,
+            isoSensitivitySupported,
+            whiteBalanceModeSupported));
     }
 
     // Apply zoom (clamped to what the hardware supports)
@@ -2296,15 +2307,28 @@ void CameraWorker::setupQtCapture()
 
     m_qtCamera->start();
 
-    // Report zoom and exposure capabilities so the GUI can configure its controls.
-    // Qt5 manual exposure is via QCameraExposure; consider it supported when that object exists.
+    // Report zoom, exposure, ISO and white-balance capabilities so the GUI can configure its controls.
     {
         QCameraFocus *cameraFocus = m_qtCamera->focus();
         const qreal minZoom = cameraFocus ? cameraFocus->minimumOpticalZoom() : 1.0;
         const qreal maxZoom = cameraFocus ? cameraFocus->maximumOpticalZoom() : 1.0;
-        const bool manualExposureSupported = (m_qtCamera->exposure() != nullptr);
+
+        // Qt5: manual exposure and ISO are provided by QCameraExposure
+        QCameraExposure *exp = m_qtCamera->exposure();
+        const bool manualExposureSupported = (exp != nullptr);
+        const bool isoSensitivitySupported = exp && !exp->supportedIsoSensitivities().isEmpty();
+
+        // Qt5: white balance support queried per mode via QCameraImageProcessing
+        QCameraImageProcessing *ip = m_qtCamera->imageProcessing();
+        const bool whiteBalanceModeSupported =
+            ip && ip->isWhiteBalanceModeSupported(QCameraImageProcessing::WhiteBalanceAuto);
+
         if (m_msgQueueToGUI) {
-            m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(minZoom, maxZoom, manualExposureSupported));
+            m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(
+                minZoom, maxZoom,
+                manualExposureSupported,
+                isoSensitivitySupported,
+                whiteBalanceModeSupported));
         }
         if (cameraFocus && maxZoom > minZoom) {
             const qreal clampedZoom = qBound(minZoom, static_cast<qreal>(m_settings.m_zoomFactor), maxZoom);

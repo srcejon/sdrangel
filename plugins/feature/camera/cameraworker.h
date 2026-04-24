@@ -329,7 +329,7 @@ public:
         { }
     };
 
-    // Sent when a Qt camera starts, reporting runtime zoom and exposure capabilities
+    // Sent when a Qt camera starts, reporting runtime zoom, exposure, ISO and white-balance capabilities
     class MsgReportQtCameraCapabilities : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -337,22 +337,40 @@ public:
         double getMinZoomFactor() const { return m_minZoomFactor; }
         double getMaxZoomFactor() const { return m_maxZoomFactor; }
         bool isManualExposureSupported() const { return m_manualExposureSupported; }
+        bool isIsoSensitivitySupported() const { return m_isoSensitivitySupported; }
+        bool isWhiteBalanceModeSupported() const { return m_whiteBalanceModeSupported; }
 
-        static MsgReportQtCameraCapabilities* create(double minZoom, double maxZoom, bool manualExposureSupported)
+        static MsgReportQtCameraCapabilities* create(
+            double minZoom, double maxZoom,
+            bool manualExposureSupported,
+            bool isoSensitivitySupported,
+            bool whiteBalanceModeSupported)
         {
-            return new MsgReportQtCameraCapabilities(minZoom, maxZoom, manualExposureSupported);
+            return new MsgReportQtCameraCapabilities(
+                minZoom, maxZoom,
+                manualExposureSupported,
+                isoSensitivitySupported,
+                whiteBalanceModeSupported);
         }
 
     private:
         double m_minZoomFactor;
         double m_maxZoomFactor;
         bool m_manualExposureSupported;
+        bool m_isoSensitivitySupported;
+        bool m_whiteBalanceModeSupported;
 
-        MsgReportQtCameraCapabilities(double minZoom, double maxZoom, bool manualExposureSupported) :
+        MsgReportQtCameraCapabilities(
+            double minZoom, double maxZoom,
+            bool manualExposureSupported,
+            bool isoSensitivitySupported,
+            bool whiteBalanceModeSupported) :
             Message(),
             m_minZoomFactor(minZoom),
             m_maxZoomFactor(maxZoom),
-            m_manualExposureSupported(manualExposureSupported)
+            m_manualExposureSupported(manualExposureSupported),
+            m_isoSensitivitySupported(isoSensitivitySupported),
+            m_whiteBalanceModeSupported(whiteBalanceModeSupported)
         { }
     };
 

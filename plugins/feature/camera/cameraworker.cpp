@@ -55,6 +55,8 @@
 #include <QAbstractVideoSurface>
 #include <QCamera>
 #include <QCameraExposure>
+#include <QCameraFocus>
+#include <QCameraImageProcessing>
 #include <QCameraInfo>
 #include <QCameraViewfinderSettings>
 #include <QSet>
@@ -75,6 +77,8 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportQtCameraCapabilities, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportQtFocusModes, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
@@ -429,6 +433,49 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(m_settings.m_audioDeviceName);
         audioDeviceManager->removeAudioSink(&m_outputAudioFifo);
         audioDeviceManager->addAudioSink(&m_outputAudioFifo, getInputMessageQueue(), outputDeviceIndex);
+    }
+
+    // Apply Qt-camera image-control settings inline (no recapture needed)
+    if (m_settings.isQtCamera() && m_capturing && m_qtCamera)
+    {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        if (force || settingsKeys.contains("whiteBalanceMode")) {
+            m_qtCamera->setWhiteBalanceMode(static_cast<QCamera::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
+        }
+        if (force || settingsKeys.contains("exposureCompensation")) {
+            m_qtCamera->setExposureCompensation(static_cast<float>(m_settings.m_exposureCompensation));
+        }
+        if (force || settingsKeys.contains("focusMode")) {
+            m_qtCamera->setFocusMode(static_cast<QCamera::FocusMode>(m_settings.m_focusMode));
+        }
+        if (force || settingsKeys.contains("focusDistance")) {
+            m_qtCamera->setFocusDistance(static_cast<float>(m_settings.m_focusDistance));
+        }
+        if (force || settingsKeys.contains("zoomFactor")) {
+            const float clampedZoom = static_cast<float>(
+                qBound(m_qtCamera->minimumZoomFactor(), static_cast<float>(m_settings.m_zoomFactor), m_qtCamera->maximumZoomFactor()));
+            m_qtCamera->setZoomFactor(clampedZoom);
+        }
+#else
+        if (force || settingsKeys.contains("whiteBalanceMode"))
+        {
+            QCameraImageProcessing *imageProcessing = m_qtCamera->imageProcessing();
+            if (imageProcessing) {
+                imageProcessing->setWhiteBalanceMode(
+                    static_cast<QCameraImageProcessing::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
+            }
+        }
+        if (force || settingsKeys.contains("zoomFactor"))
+        {
+            QCameraFocus *cameraFocus = m_qtCamera->focus();
+            if (cameraFocus) {
+                const qreal minZoom = cameraFocus->minimumOpticalZoom();
+                const qreal maxZoom = cameraFocus->maximumOpticalZoom();
+                const qreal clampedZoom = qBound(minZoom, static_cast<qreal>(m_settings.m_zoomFactor), maxZoom);
+                cameraFocus->setOpticalZoom(clampedZoom);
+            }
+        }
+#endif
     }
 }
 
@@ -2040,6 +2087,10 @@ void CameraWorker::setupQtCapture()
     m_qtCamera->setExposureMode(QCamera::ExposureManual);
     m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
     m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
+    m_qtCamera->setWhiteBalanceMode(static_cast<QCamera::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
+    m_qtCamera->setExposureCompensation(static_cast<float>(m_settings.m_exposureCompensation));
+    m_qtCamera->setFocusMode(static_cast<QCamera::FocusMode>(m_settings.m_focusMode));
+    m_qtCamera->setFocusDistance(static_cast<float>(m_settings.m_focusDistance));
 
     m_captureSession->setCamera(m_qtCamera);
     m_captureSession->setVideoOutput(m_videoSink);
@@ -2047,6 +2098,38 @@ void CameraWorker::setupQtCapture()
     connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraWorker::processQtVideoFrame);
 
     m_qtCamera->start();
+
+    // Report zoom capabilities after starting so the GUI can configure the zoom control
+    const float minZoom = m_qtCamera->minimumZoomFactor();
+    const float maxZoom = m_qtCamera->maximumZoomFactor();
+    if (m_msgQueueToGUI) {
+        m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(minZoom, maxZoom));
+    }
+
+    // Apply zoom (clamped to what the hardware supports)
+    const float clampedZoom = qBound(minZoom, static_cast<float>(m_settings.m_zoomFactor), maxZoom);
+    m_qtCamera->setZoomFactor(clampedZoom);
+
+    // Report available focus modes (Qt 6 only)
+    {
+        static const QList<int> kFocusModes = {
+            static_cast<int>(QCamera::FocusModeAuto),
+            static_cast<int>(QCamera::FocusModeAutoNear),
+            static_cast<int>(QCamera::FocusModeAutoFar),
+            static_cast<int>(QCamera::FocusModeHyperfocal),
+            static_cast<int>(QCamera::FocusModeInfinity),
+            static_cast<int>(QCamera::FocusModeManual),
+        };
+        QList<int> supportedModes;
+        for (int mode : kFocusModes) {
+            if (m_qtCamera->isFocusModeSupported(static_cast<QCamera::FocusMode>(mode))) {
+                supportedModes.append(mode);
+            }
+        }
+        if (m_msgQueueToGUI) {
+            m_msgQueueToGUI->push(MsgReportQtFocusModes::create(supportedModes));
+        }
+    }
 }
 
 void CameraWorker::cleanupQtCapture()
@@ -2195,12 +2278,32 @@ void CameraWorker::setupQtCapture()
         exposure->setManualIsoSensitivity(m_settings.m_isoSensitivity);
     }
 
+    QCameraImageProcessing *imageProcessing = m_qtCamera->imageProcessing();
+    if (imageProcessing) {
+        imageProcessing->setWhiteBalanceMode(
+            static_cast<QCameraImageProcessing::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
+    }
+
     // Use a queued connection so that present() (called from the camera thread) safely
     // marshals the QImage across to the CameraWorker thread for processing.
     connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
             this, &CameraWorker::processQt5VideoFrame, Qt::QueuedConnection);
 
     m_qtCamera->start();
+
+    // Report zoom capabilities so the GUI can configure the zoom control
+    {
+        QCameraFocus *cameraFocus = m_qtCamera->focus();
+        const qreal minZoom = cameraFocus ? cameraFocus->minimumOpticalZoom() : 1.0;
+        const qreal maxZoom = cameraFocus ? cameraFocus->maximumOpticalZoom() : 1.0;
+        if (m_msgQueueToGUI) {
+            m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(minZoom, maxZoom));
+        }
+        if (cameraFocus && maxZoom > minZoom) {
+            const qreal clampedZoom = qBound(minZoom, static_cast<qreal>(m_settings.m_zoomFactor), maxZoom);
+            cameraFocus->setOpticalZoom(clampedZoom);
+        }
+    }
 }
 
 void CameraWorker::cleanupQtCapture()

@@ -68,6 +68,7 @@ private:
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
+    bool m_qtZoomSupported;       // true when the active Qt camera reports zoom range > 1.0
 
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
@@ -147,6 +148,11 @@ private slots:
     void on_fitInViewButton_clicked();
     void on_audioMute_toggled(bool checked);
     void audioSelect(const QPoint& p);
+    void on_whiteBalanceCombo_currentIndexChanged(int index);
+    void on_exposureCompSpin_valueChanged(double value);
+    void on_focusModeCombo_currentIndexChanged(int index);
+    void on_focusDistSpin_valueChanged(double value);
+    void on_zoomSpin_valueChanged(double value);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

@@ -329,6 +329,51 @@ public:
         { }
     };
 
+    // Sent when a Qt camera starts, reporting runtime zoom capabilities
+    class MsgReportQtCameraCapabilities : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        double getMinZoomFactor() const { return m_minZoomFactor; }
+        double getMaxZoomFactor() const { return m_maxZoomFactor; }
+
+        static MsgReportQtCameraCapabilities* create(double minZoom, double maxZoom)
+        {
+            return new MsgReportQtCameraCapabilities(minZoom, maxZoom);
+        }
+
+    private:
+        double m_minZoomFactor;
+        double m_maxZoomFactor;
+
+        MsgReportQtCameraCapabilities(double minZoom, double maxZoom) :
+            Message(),
+            m_minZoomFactor(minZoom),
+            m_maxZoomFactor(maxZoom)
+        { }
+    };
+
+    // Sent when a Qt camera starts, reporting available focus modes
+    class MsgReportQtFocusModes : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QList<int>& getFocusModes() const { return m_focusModes; }
+
+        static MsgReportQtFocusModes* create(const QList<int>& focusModes)
+        {
+            return new MsgReportQtFocusModes(focusModes);
+        }
+
+    private:
+        QList<int> m_focusModes;
+
+        MsgReportQtFocusModes(const QList<int>& focusModes) :
+            Message(),
+            m_focusModes(focusModes)
+        { }
+    };
+
     CameraWorker();
     ~CameraWorker();
 

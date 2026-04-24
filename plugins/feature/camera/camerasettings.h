@@ -88,6 +88,13 @@ struct CameraSettings
     bool   m_audioMute;          ///< When true, captured camera audio is silenced
     QString m_audioDeviceName;   ///< Name of the audio output device (empty = system default)
 
+    // Qt camera image-control settings
+    int    m_whiteBalanceMode;      ///< White balance mode index (QCamera::WhiteBalanceMode / QCameraImageProcessing::WhiteBalanceMode); 0 = Auto
+    double m_exposureCompensation;  ///< Exposure compensation in EV steps: -2.0..2.0 (Qt 6 only)
+    int    m_focusMode;             ///< Focus mode index (QCamera::FocusMode); 0 stored as FocusModeAuto (Qt 6 only)
+    double m_focusDistance;         ///< Normalised focus distance: 0.0 (near) .. 1.0 (far/infinity) (Qt 6 manual focus only)
+    double m_zoomFactor;            ///< Hardware optical zoom factor; 1.0 = no zoom
+
     CameraSettings();
     ~CameraSettings() = default;
     void resetToDefaults();

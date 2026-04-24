@@ -21,6 +21,7 @@
 #include <QGraphicsView>
 #include <QPainter>
 #include <QPixmap>
+#include <QStandardItemModel>
 #include <QWheelEvent>
 
 #include "feature/featureuiset.h"
@@ -28,6 +29,14 @@
 #include "gui/audioselectdialog.h"
 #include "gui/dialogpositioner.h"
 #include "dsp/dspengine.h"
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QCamera>
+#else
+#include <QCamera>
+#include <QCameraFocus>
+#include <QCameraImageProcessing>
+#endif
 
 #include "ui_cameragui.h"
 #include "camera.h"
@@ -176,6 +185,56 @@ bool CameraGUI::handleMessage(const Message& message)
 
         return true;
     }
+    else if (CameraWorker::MsgReportQtCameraCapabilities::match(message))
+    {
+        const CameraWorker::MsgReportQtCameraCapabilities& caps =
+            (CameraWorker::MsgReportQtCameraCapabilities&) message;
+        const double minZoom = caps.getMinZoomFactor();
+        const double maxZoom = caps.getMaxZoomFactor();
+        m_qtZoomSupported = (maxZoom > minZoom + 0.01);
+
+        blockApplySettings(true);
+        ui->zoomSpin->setMinimum(minZoom);
+        ui->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
+        ui->zoomSpin->setEnabled(m_qtZoomSupported);
+        ui->zoomLabel->setEnabled(m_qtZoomSupported);
+        blockApplySettings(false);
+
+        return true;
+    }
+    else if (CameraWorker::MsgReportQtFocusModes::match(message))
+    {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        const CameraWorker::MsgReportQtFocusModes& modesMsg =
+            (CameraWorker::MsgReportQtFocusModes&) message;
+        const QList<int>& supported = modesMsg.getFocusModes();
+
+        blockApplySettings(true);
+        for (int i = 0; i < ui->focusModeCombo->count(); ++i)
+        {
+            const int modeVal = ui->focusModeCombo->itemData(i).toInt();
+            // Mark unsupported modes as disabled via the user role flag
+            const QStandardItemModel *model = qobject_cast<QStandardItemModel*>(ui->focusModeCombo->model());
+            if (model) {
+                QStandardItem *item = model->item(i);
+                if (item) {
+                    item->setEnabled(supported.contains(modeVal));
+                }
+            }
+        }
+        // If the currently-saved focus mode is not supported, fall back to first supported mode
+        if (!supported.isEmpty() && !supported.contains(m_settings.m_focusMode))
+        {
+            m_settings.m_focusMode = supported.first();
+            const int idx = ui->focusModeCombo->findData(m_settings.m_focusMode);
+            if (idx >= 0) {
+                ui->focusModeCombo->setCurrentIndex(idx);
+            }
+        }
+        blockApplySettings(false);
+#endif
+        return true;
+    }
 
     return false;
 }
@@ -200,6 +259,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_doApplySettings(true),
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
+    m_qtZoomSupported(false),
     m_imageScene(nullptr),
     m_imagePixmapItem(nullptr)
 {
@@ -230,6 +290,28 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     CRightClickEnabler *audioMuteRightClickEnabler = new CRightClickEnabler(ui->audioMute);
     connect(audioMuteRightClickEnabler, SIGNAL(rightClick(const QPoint &)), this, SLOT(audioSelect(const QPoint &)));
+
+    // Populate white-balance combo (indices match QCamera::WhiteBalanceMode / QCameraImageProcessing::WhiteBalanceMode)
+    ui->whiteBalanceCombo->addItem(tr("Auto"),        0);
+    ui->whiteBalanceCombo->addItem(tr("Manual"),      1);
+    ui->whiteBalanceCombo->addItem(tr("Sunlight"),    2);
+    ui->whiteBalanceCombo->addItem(tr("Cloudy"),      3);
+    ui->whiteBalanceCombo->addItem(tr("Shade"),       4);
+    ui->whiteBalanceCombo->addItem(tr("Tungsten"),    5);
+    ui->whiteBalanceCombo->addItem(tr("Fluorescent"), 6);
+    ui->whiteBalanceCombo->addItem(tr("Flash"),       7);
+    ui->whiteBalanceCombo->addItem(tr("Sunset"),      8);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    // Populate focus-mode combo with all Qt 6 modes; enabled items are updated once
+    // MsgReportQtFocusModes arrives (after the camera starts).
+    ui->focusModeCombo->addItem(tr("Auto"),       static_cast<int>(QCamera::FocusModeAuto));
+    ui->focusModeCombo->addItem(tr("Auto near"),  static_cast<int>(QCamera::FocusModeAutoNear));
+    ui->focusModeCombo->addItem(tr("Auto far"),   static_cast<int>(QCamera::FocusModeAutoFar));
+    ui->focusModeCombo->addItem(tr("Hyperfocal"), static_cast<int>(QCamera::FocusModeHyperfocal));
+    ui->focusModeCombo->addItem(tr("Infinity"),   static_cast<int>(QCamera::FocusModeInfinity));
+    ui->focusModeCombo->addItem(tr("Manual"),     static_cast<int>(QCamera::FocusModeManual));
+#endif
 
     displaySettings();
     applySettings(true);
@@ -332,6 +414,27 @@ void CameraGUI::displaySettings()
     ui->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
     updateColorButton(ui->yoloBoxColorButton, m_settings.m_yoloBoxColor);
     ui->audioMute->setChecked(m_settings.m_audioMute);
+
+    // White balance (select by stored mode integer)
+    {
+        const int idx = ui->whiteBalanceCombo->findData(m_settings.m_whiteBalanceMode);
+        ui->whiteBalanceCombo->blockSignals(true);
+        ui->whiteBalanceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+        ui->whiteBalanceCombo->blockSignals(false);
+    }
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    ui->exposureCompSpin->setValue(m_settings.m_exposureCompensation);
+    {
+        const int idx = ui->focusModeCombo->findData(m_settings.m_focusMode);
+        ui->focusModeCombo->blockSignals(true);
+        ui->focusModeCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+        ui->focusModeCombo->blockSignals(false);
+    }
+    ui->focusDistSpin->setValue(m_settings.m_focusDistance);
+#endif
+
+    ui->zoomSpin->setValue(m_settings.m_zoomFactor);
     updateAlpacaVisibility();
     updateEnabledControls();
 }
@@ -422,6 +525,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->zoomOutButton, &QToolButton::clicked, this, &CameraGUI::on_zoomOutButton_clicked);
     QObject::connect(ui->fitInViewButton, &QToolButton::clicked, this, &CameraGUI::on_fitInViewButton_clicked);
     QObject::connect(ui->audioMute, &QToolButton::toggled, this, &CameraGUI::on_audioMute_toggled);
+    QObject::connect(ui->whiteBalanceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_whiteBalanceCombo_currentIndexChanged);
+    QObject::connect(ui->exposureCompSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureCompSpin_valueChanged);
+    QObject::connect(ui->focusModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_focusModeCombo_currentIndexChanged);
+    QObject::connect(ui->focusDistSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_focusDistSpin_valueChanged);
+    QObject::connect(ui->zoomSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_zoomSpin_valueChanged);
 }
 
 void CameraGUI::updateAlpacaVisibility()
@@ -450,6 +558,28 @@ void CameraGUI::updateAlpacaVisibility()
     ui->alpacaReadoutModeCombo->setVisible(alpaca);
     ui->alpacaStatusGroup->setVisible(alpaca);
     ui->audioMute->setVisible(!alpaca);
+
+    // Qt-camera-only controls
+    ui->whiteBalanceLabel->setVisible(!alpaca);
+    ui->whiteBalanceCombo->setVisible(!alpaca);
+    ui->zoomLabel->setVisible(!alpaca);
+    ui->zoomSpin->setVisible(!alpaca);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    ui->exposureCompLabel->setVisible(!alpaca);
+    ui->exposureCompSpin->setVisible(!alpaca);
+    ui->focusModeLabel->setVisible(!alpaca);
+    ui->focusModeCombo->setVisible(!alpaca);
+    ui->focusDistLabel->setVisible(!alpaca);
+    ui->focusDistSpin->setVisible(!alpaca);
+#else
+    ui->exposureCompLabel->setVisible(false);
+    ui->exposureCompSpin->setVisible(false);
+    ui->focusModeLabel->setVisible(false);
+    ui->focusModeCombo->setVisible(false);
+    ui->focusDistLabel->setVisible(false);
+    ui->focusDistSpin->setVisible(false);
+#endif
 }
 
 
@@ -881,6 +1011,19 @@ void CameraGUI::updateEnabledControls()
     ui->yoloNmsLabel->setEnabled(yoloActive);
     ui->yoloNmsSpin->setEnabled(yoloActive);
     ui->yoloBoxColorButton->setEnabled(yoloActive);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const bool manualFocus = (m_settings.m_focusMode == static_cast<int>(QCamera::FocusModeManual));
+    ui->focusDistLabel->setEnabled(manualFocus);
+    ui->focusDistSpin->setEnabled(manualFocus);
+#endif
+
+    // Zoom control enabled state is set when MsgReportQtCameraCapabilities arrives
+    if (!m_qtZoomSupported)
+    {
+        ui->zoomLabel->setEnabled(false);
+        ui->zoomSpin->setEnabled(false);
+    }
 }
 
 void CameraGUI::on_overlayFontCombo_currentFontChanged(const QFont& font)
@@ -1094,4 +1237,40 @@ void CameraGUI::audioSelect(const QPoint& p)
         m_settingsKeys.append("audioDeviceName");
         applySettings();
     }
+}
+
+void CameraGUI::on_whiteBalanceCombo_currentIndexChanged(int index)
+{
+    m_settings.m_whiteBalanceMode = ui->whiteBalanceCombo->itemData(index).toInt();
+    m_settingsKeys.append("whiteBalanceMode");
+    applySettings();
+}
+
+void CameraGUI::on_exposureCompSpin_valueChanged(double value)
+{
+    m_settings.m_exposureCompensation = value;
+    m_settingsKeys.append("exposureCompensation");
+    applySettings();
+}
+
+void CameraGUI::on_focusModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_focusMode = ui->focusModeCombo->itemData(index).toInt();
+    m_settingsKeys.append("focusMode");
+    updateEnabledControls();
+    applySettings();
+}
+
+void CameraGUI::on_focusDistSpin_valueChanged(double value)
+{
+    m_settings.m_focusDistance = value;
+    m_settingsKeys.append("focusDistance");
+    applySettings();
+}
+
+void CameraGUI::on_zoomSpin_valueChanged(double value)
+{
+    m_settings.m_zoomFactor = value;
+    m_settingsKeys.append("zoomFactor");
+    applySettings();
 }

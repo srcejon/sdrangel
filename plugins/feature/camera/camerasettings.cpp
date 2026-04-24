@@ -82,6 +82,11 @@ void CameraSettings::resetToDefaults()
     m_yoloBoxColor = Qt::green;
     m_audioMute = true;
     m_audioDeviceName.clear();
+    m_whiteBalanceMode = 0;
+    m_exposureCompensation = 0.0;
+    m_focusMode = 0;
+    m_focusDistance = 1.0;
+    m_zoomFactor = 1.0;
 }
 
 QByteArray CameraSettings::serialize() const
@@ -144,6 +149,11 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(52, m_yoloBoxColor.rgba());
     s.writeBool(53, m_audioMute);
     s.writeString(54, m_audioDeviceName);
+    s.writeS32(55, m_whiteBalanceMode);
+    s.writeDouble(56, m_exposureCompensation);
+    s.writeS32(57, m_focusMode);
+    s.writeDouble(58, m_focusDistance);
+    s.writeDouble(59, m_zoomFactor);
 
     return s.final();
 }
@@ -252,6 +262,17 @@ bool CameraSettings::deserialize(const QByteArray& data)
 
         d.readBool(53, &m_audioMute, true);
         d.readString(54, &m_audioDeviceName, "");
+
+        d.readS32(55, &m_whiteBalanceMode, 0);
+        m_whiteBalanceMode = std::max(0, m_whiteBalanceMode);
+        d.readDouble(56, &m_exposureCompensation, 0.0);
+        m_exposureCompensation = qBound(-2.0, m_exposureCompensation, 2.0);
+        d.readS32(57, &m_focusMode, 0);
+        m_focusMode = std::max(0, m_focusMode);
+        d.readDouble(58, &m_focusDistance, 1.0);
+        m_focusDistance = qBound(0.0, m_focusDistance, 1.0);
+        d.readDouble(59, &m_zoomFactor, 1.0);
+        m_zoomFactor = std::max(1.0, m_zoomFactor);
 
         return true;
     }
@@ -412,6 +433,21 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("audioDeviceName")) {
         m_audioDeviceName = settings.m_audioDeviceName;
     }
+    if (settingsKeys.contains("whiteBalanceMode")) {
+        m_whiteBalanceMode = std::max(0, settings.m_whiteBalanceMode);
+    }
+    if (settingsKeys.contains("exposureCompensation")) {
+        m_exposureCompensation = qBound(-2.0, settings.m_exposureCompensation, 2.0);
+    }
+    if (settingsKeys.contains("focusMode")) {
+        m_focusMode = std::max(0, settings.m_focusMode);
+    }
+    if (settingsKeys.contains("focusDistance")) {
+        m_focusDistance = qBound(0.0, settings.m_focusDistance, 1.0);
+    }
+    if (settingsKeys.contains("zoomFactor")) {
+        m_zoomFactor = std::max(1.0, settings.m_zoomFactor);
+    }
 }
 
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
@@ -552,6 +588,21 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("audioDeviceName") || force) {
         ostr << " m_audioDeviceName: " << m_audioDeviceName.toStdString();
+    }
+    if (settingsKeys.contains("whiteBalanceMode") || force) {
+        ostr << " m_whiteBalanceMode: " << m_whiteBalanceMode;
+    }
+    if (settingsKeys.contains("exposureCompensation") || force) {
+        ostr << " m_exposureCompensation: " << m_exposureCompensation;
+    }
+    if (settingsKeys.contains("focusMode") || force) {
+        ostr << " m_focusMode: " << m_focusMode;
+    }
+    if (settingsKeys.contains("focusDistance") || force) {
+        ostr << " m_focusDistance: " << m_focusDistance;
+    }
+    if (settingsKeys.contains("zoomFactor") || force) {
+        ostr << " m_zoomFactor: " << m_zoomFactor;
     }
 
     return QString(ostr.str().c_str());

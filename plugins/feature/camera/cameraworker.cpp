@@ -136,9 +136,11 @@ CameraWorker::CameraWorker() :
 
 CameraWorker::~CameraWorker()
 {
+    delete m_networkManager;
     DSPEngine::instance()->getAudioDeviceManager()->removeAudioSource(&m_captureAudioFifo);
     DSPEngine::instance()->getAudioDeviceManager()->removeAudioSink(&m_outputAudioFifo);
     stopWork();
+    m_inputMessageQueue.clear();
     QObject::disconnect(
         &m_availableDeviceHandler,
         &AvailableDeviceHandler::messageEnqueued,
@@ -183,6 +185,9 @@ void CameraWorker::startWork()
     if (m_settings.m_captureActive) {
         startCapture();
     }
+
+    // Handle any messages already on the queue
+    handleInputMessages();
 }
 
 void CameraWorker::stopWork()
@@ -192,7 +197,6 @@ void CameraWorker::stopWork()
     QObject::disconnect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
     stopCapture();
     m_statusTimer.stop();
-    m_inputMessageQueue.clear();
 }
 
 void CameraWorker::handleInputMessages()
@@ -396,7 +400,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     if (m_settings.isAlpacaCamera()
         && m_networkManager
         && (force
-            || settingsKeys.contains("cameraId")
             || settingsKeys.contains("alpacaHost")
             || settingsKeys.contains("alpacaPort")
             || settingsKeys.contains("cameraId")))
@@ -1518,7 +1521,7 @@ void CameraWorker::applyObjectDetectedSettings(const QString& className)
         }
     }
 
-    QTimer::singleShot(1000, this, [deviceSettingsList]()
+    QTimer::singleShot(1000, this, [this, deviceSettingsList, className]()
     {
         for (int i = 0; i < deviceSettingsList->size(); ++i)
         {

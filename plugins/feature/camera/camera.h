@@ -109,8 +109,8 @@ private:
     CameraWorker *m_worker;
     CameraSettings m_settings;
 
-    void startWorker();
-    void stopWorker();
+    void start();
+    void stop();
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
 };
 

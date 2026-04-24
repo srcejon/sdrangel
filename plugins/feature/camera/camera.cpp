@@ -39,19 +39,15 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
 
 Camera::~Camera()
 {
-    stopWorker();
+    stop();
 }
 
-void Camera::startWorker()
+void Camera::start()
 {
-    if (m_thread)
-    {
-        if (m_worker) {
-            m_worker->setMessageQueueToGUI(getMessageQueueToGUI());
-        }
+    qDebug("Camera::start");
+    if (m_thread) {
         return;
     }
-
     m_thread = new QThread();
     m_worker = new CameraWorker();
     m_worker->moveToThread(m_thread);
@@ -62,17 +58,18 @@ void Camera::startWorker()
 
     m_worker->setMessageQueueToGUI(getMessageQueueToGUI());
     m_thread->start();
+    m_state = StRunning;
 
     m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(m_settings, QList<QString>(), true));
 
     if (m_settings.m_captureActive) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
-        m_state = StRunning;
     }
 }
 
-void Camera::stopWorker()
+void Camera::stop()
 {
+    qDebug("Camera::stop");
     m_state = StIdle;
 
     if (m_thread)
@@ -96,19 +93,19 @@ bool Camera::handleMessage(const Message& cmd)
     else if (MsgStartStop::match(cmd))
     {
         MsgStartStop& msg = (MsgStartStop&) cmd;
-        m_settings.m_captureActive = msg.getStartStop();
-        startWorker();
 
-        if (m_worker) {
-            m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(msg.getStartStop()));
+        if (msg.getStartStop()) {
+            start();
+        } else {
+            stop();
         }
 
-        m_state = msg.getStartStop() ? StRunning : StIdle;
         return true;
     }
     else if (MsgRefreshCameraList::match(cmd))
     {
-        startWorker();
+        // FIXME: Move camera detection to this thread, so we don't have to start the worker?
+        start();
 
         if (m_worker) {
             m_worker->getInputMessageQueue()->push(CameraWorker::MsgRefreshCameraList::create());
@@ -127,26 +124,24 @@ QByteArray Camera::serialize() const
 
 bool Camera::deserialize(const QByteArray& data)
 {
-    const bool success = m_settings.deserialize(data);
-
-    if (!success) {
+    if (m_settings.deserialize(data))
+    {
+        MsgConfigureCamera *msg = MsgConfigureCamera::create(m_settings, QList<QString>(), true);
+        m_inputMessageQueue.push(msg);
+        return true;
+    }
+    else
+    {
         m_settings.resetToDefaults();
+        MsgConfigureCamera *msg = MsgConfigureCamera::create(m_settings, QList<QString>(), true);
+        m_inputMessageQueue.push(msg);
+        return false;
     }
-
-    m_inputMessageQueue.push(MsgConfigureCamera::create(m_settings, QList<QString>(), true));
-
-    if (m_settings.m_captureActive) {
-        m_inputMessageQueue.push(MsgStartStop::create(true));
-    }
-
-    return success;
 }
 
 void Camera::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
     qDebug() << "Camera::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
-
-    startWorker();
 
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(settings, settingsKeys, force));
@@ -158,14 +153,7 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    if (m_settings.m_captureActive) {
-        m_state = StRunning;
-    } else {
-        m_state = StIdle;
-    }
-
-    if (m_guiMessageQueue)
-    {
-        m_guiMessageQueue->push(MsgConfigureCamera::create(m_settings, settingsKeys, force));
+    if (m_guiMessageQueue) {
+        m_guiMessageQueue->push(MsgConfigureCamera::create(m_settings, settingsKeys, force)); // FIXME: Loop?
     }
 }

@@ -138,7 +138,7 @@ void AvailableChannelOrFeatureHandler::deregisterPipes(QObject* from, const QStr
 
 void AvailableChannelOrFeatureHandler::registerPipe(const QString& pipeName, QObject *channelOrFeature)
 {
-    qDebug("MessagePipeHandler::registerPipe: register %s (%p)", qPrintable(channelOrFeature->objectName()), channelOrFeature);
+    qDebug("AvailableChannelOrFeatureHandler::registerPipe: register %s (%p)", qPrintable(channelOrFeature->objectName()), channelOrFeature);
     MessagePipes& messagePipes = MainCore::instance()->getMessagePipes();
 
     ObjectPipe *pipe = messagePipes.registerProducerToConsumer(channelOrFeature, this, pipeName);

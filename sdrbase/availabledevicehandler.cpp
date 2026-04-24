@@ -29,8 +29,8 @@ void AvailableDeviceHandler::init()
 
 void AvailableDeviceHandler::scanAvailableDevices()
 {
-    // Get current list of devices with specified URIs
-    AvailableDeviceList availableDeviceList = MainCore::instance()->getAvailableDevices(m_uris);
+    // Get current list of devices with specified URIs and kinds
+    AvailableDeviceList availableDeviceList = MainCore::instance()->getAvailableDevices(m_uris, m_kinds);
 
     // Look for new devices
     for (const auto& device : availableDeviceList)

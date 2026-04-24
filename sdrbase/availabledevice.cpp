@@ -24,7 +24,7 @@ bool AvailableDevice::operator==(const AvailableDevice& a) const
 
 QString AvailableDevice::getId() const
 {
-    return QString("%1%2").arg(m_kind).arg(m_index);
+    return QString("%1:%2").arg(m_kind).arg(m_index);
 }
 
 QString AvailableDevice::getLongId() const

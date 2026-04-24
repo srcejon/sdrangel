@@ -31,17 +31,11 @@ class SDRBASE_API AvailableDeviceHandler : public QObject
 
 public:
 
-    // Use this constructor to just keep track of available devices with specified URIs and kinds
-    AvailableDeviceHandler(QStringList uris) :
-        m_uris(uris)
-    {
-        init();
-    }
-
     // Use this constructor to keep track of available devices with specified URIs and kinds and register pipes with the given names to them
-    AvailableDeviceHandler(QStringList uris, QStringList pipeNames) :
+    AvailableDeviceHandler(QStringList uris, QStringList pipeNames, const QString& kinds = "RTM") :
         m_uris(uris),
-        m_pipeNames(pipeNames)
+        m_pipeNames(pipeNames),
+        m_kinds(kinds)
     {
         init();
     }
@@ -61,6 +55,7 @@ private:
 
     QStringList m_uris;             //!< URIs of devices we want to create a list for
     QStringList m_pipeNames;        //!< List of pipe names to register
+    QString m_kinds;
 
     void init();
     void registerPipe(const QString& pipeName, QObject *device);

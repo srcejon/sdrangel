@@ -2072,7 +2072,6 @@ void CameraWorker::processQtVideoFrame(const QVideoFrame& frame)
         processNewFrame(image);
     }
 }
-#endif
 
 #else // Qt 5 implementations
 

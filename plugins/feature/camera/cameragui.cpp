@@ -24,6 +24,10 @@
 #include <QWheelEvent>
 
 #include "feature/featureuiset.h"
+#include "gui/crightclickenabler.h"
+#include "gui/audioselectdialog.h"
+#include "gui/dialogpositioner.h"
+#include "dsp/dspengine.h"
 
 #include "ui_cameragui.h"
 #include "camera.h"
@@ -232,6 +236,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     m_settings.setRollupState(&m_rollupState);
 
+    CRightClickEnabler *audioMuteRightClickEnabler = new CRightClickEnabler(ui->audioMute);
+    connect(audioMuteRightClickEnabler, SIGNAL(rightClick(const QPoint &)), this, SLOT(audioSelect(const QPoint &)));
+
     displaySettings();
     applySettings(true);
     makeUIConnections();
@@ -334,6 +341,7 @@ void CameraGUI::displaySettings()
     ui->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
     ui->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
     updateColorButton(ui->yoloBoxColorButton, m_settings.m_yoloBoxColor);
+    ui->audioMute->setChecked(m_settings.m_audioMute);
     updateAlpacaVisibility();
     updateEnabledControls();
 }
@@ -425,6 +433,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->zoomInButton, &QToolButton::clicked, this, &CameraGUI::on_zoomInButton_clicked);
     QObject::connect(ui->zoomOutButton, &QToolButton::clicked, this, &CameraGUI::on_zoomOutButton_clicked);
     QObject::connect(ui->fitInViewButton, &QToolButton::clicked, this, &CameraGUI::on_fitInViewButton_clicked);
+    QObject::connect(ui->audioMute, &QToolButton::toggled, this, &CameraGUI::on_audioMute_toggled);
 }
 
 void CameraGUI::updateAlpacaVisibility()
@@ -454,6 +463,7 @@ void CameraGUI::updateAlpacaVisibility()
     ui->alpacaReadoutModeLabel->setVisible(alpaca);
     ui->alpacaReadoutModeCombo->setVisible(alpaca);
     ui->alpacaStatusGroup->setVisible(alpaca);
+    ui->audioMute->setVisible(!alpaca);
 }
 
 
@@ -1090,5 +1100,28 @@ void CameraGUI::on_fitInViewButton_clicked()
     ui->imageView->resetTransform();
     if (m_imagePixmapItem && !m_imagePixmapItem->pixmap().isNull()) {
         ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
+    }
+}
+
+void CameraGUI::on_audioMute_toggled(bool checked)
+{
+    m_settings.m_audioMute = checked;
+    m_settingsKeys.append("audioMute");
+    applySettings();
+}
+
+void CameraGUI::audioSelect(const QPoint& p)
+{
+    qDebug("CameraGUI::audioSelect");
+    AudioSelectDialog audioSelect(DSPEngine::instance()->getAudioDeviceManager(), m_settings.m_audioDeviceName);
+    audioSelect.move(p);
+    new DialogPositioner(&audioSelect, false);
+    audioSelect.exec();
+
+    if (audioSelect.m_selected)
+    {
+        m_settings.m_audioDeviceName = audioSelect.m_audioDeviceName;
+        m_settingsKeys.append("audioDeviceName");
+        applySettings();
     }
 }

@@ -33,6 +33,7 @@
 
 #include "util/message.h"
 #include "util/messagequeue.h"
+#include "audio/audiofifo.h"
 #include "availabledevicehandler.h"
 #include "camerasettings.h"
 
@@ -372,6 +373,11 @@ private:
     QImage m_spectrumViewImage;
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
 
+    // Audio pass-through (Qt camera only)
+    AudioFifo m_captureAudioFifo;  ///< Receives captured microphone samples from AudioDeviceManager
+    AudioFifo m_outputAudioFifo;   ///< Feeds samples to AudioDeviceManager for playback
+    QVector<quint8> m_audioTransferBuffer; ///< Scratch buffer for the capture→output copy
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
     QVideoSink *m_videoSink;
@@ -425,6 +431,7 @@ private slots:
     void statusTick();
     void onAvailableDevicesChanged(const QStringList& renameFrom, const QStringList& renameTo,
                                    const QStringList& removed, const QStringList& added);
+    void onCaptureAudioDataReady(); ///< Called when microphone samples are available in m_captureAudioFifo
 };
 
 #endif // INCLUDE_FEATURE_CAMERAWORKER_H_

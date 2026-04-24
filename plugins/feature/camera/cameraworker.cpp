@@ -62,6 +62,8 @@
 #endif
 
 #include "maincore.h"
+#include "dsp/dspengine.h"
+#include "audio/audiodevicemanager.h"
 #include "cameraworker.h"
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
@@ -108,10 +110,21 @@ CameraWorker::CameraWorker() :
         this,
         &CameraWorker::onAvailableDevicesChanged);
     m_availableDeviceHandler.scanAvailableDevices();
+
+    m_captureAudioFifo.setSize(4800 * 4);
+    m_outputAudioFifo.setSize(4800 * 4);
+    m_audioTransferBuffer.resize(4800 * 4);
+
+    QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraWorker::onCaptureAudioDataReady);
+
+    DSPEngine::instance()->getAudioDeviceManager()->addAudioSink(&m_outputAudioFifo, getInputMessageQueue());
+    DSPEngine::instance()->getAudioDeviceManager()->addAudioSource(&m_captureAudioFifo, getInputMessageQueue());
 }
 
 CameraWorker::~CameraWorker()
 {
+    DSPEngine::instance()->getAudioDeviceManager()->removeAudioSource(&m_captureAudioFifo);
+    DSPEngine::instance()->getAudioDeviceManager()->removeAudioSink(&m_outputAudioFifo);
     stopWork();
     QObject::disconnect(
         &m_availableDeviceHandler,
@@ -407,6 +420,15 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     if (postProcessChanged && !m_lastRawFrame.isNull()) {
         const QImage processed = applyPostProcessing(m_lastRawFrame);
         reportFrameToGUI(processed);
+    }
+
+    // Update audio output device when the name changes
+    if (force || settingsKeys.contains("audioDeviceName"))
+    {
+        AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
+        const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(m_settings.m_audioDeviceName);
+        audioDeviceManager->removeAudioSink(&m_outputAudioFifo);
+        audioDeviceManager->addAudioSink(&m_outputAudioFifo, getInputMessageQueue(), outputDeviceIndex);
     }
 }
 
@@ -2219,3 +2241,18 @@ void CameraWorker::processQt5VideoFrame(const QImage& image)
     }
 }
 #endif
+
+void CameraWorker::onCaptureAudioDataReady()
+{
+    if (m_settings.m_audioMute) {
+        m_captureAudioFifo.clear();
+        return;
+    }
+
+    unsigned int nbRead;
+
+    while ((nbRead = m_captureAudioFifo.read(m_audioTransferBuffer.data(), m_audioTransferBuffer.size() / 4)) != 0)
+    {
+        m_outputAudioFifo.write(m_audioTransferBuffer.data(), nbRead);
+    }
+}

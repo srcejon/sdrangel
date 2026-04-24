@@ -146,6 +146,8 @@ private slots:
     void on_zoomInButton_clicked();
     void on_zoomOutButton_clicked();
     void on_fitInViewButton_clicked();
+    void on_audioMute_toggled(bool checked);
+    void audioSelect(const QPoint& p);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

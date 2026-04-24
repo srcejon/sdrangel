@@ -92,6 +92,10 @@ struct CameraSettings
     double m_yoloNmsThreshold;   ///< IoU threshold for non-maximum suppression: 0.0..1.0
     QColor m_yoloBoxColor;       ///< Bounding-box colour when no per-class colour is available
 
+    // Audio settings (Qt camera only)
+    bool   m_audioMute;          ///< When true, captured camera audio is silenced
+    QString m_audioDeviceName;   ///< Name of the audio output device (empty = system default)
+
     CameraSettings();
     ~CameraSettings() = default;
     void resetToDefaults();

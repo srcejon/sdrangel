@@ -82,6 +82,8 @@ void CameraSettings::resetToDefaults()
     m_yoloConfThreshold = 0.5;
     m_yoloNmsThreshold = 0.45;
     m_yoloBoxColor = Qt::green;
+    m_audioMute = true;
+    m_audioDeviceName.clear();
 }
 
 QByteArray CameraSettings::serialize() const
@@ -144,6 +146,8 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(50, m_yoloConfThreshold);
     s.writeDouble(51, m_yoloNmsThreshold);
     s.writeU32(52, m_yoloBoxColor.rgba());
+    s.writeBool(53, m_audioMute);
+    s.writeString(54, m_audioDeviceName);
 
     return s.final();
 }
@@ -251,6 +255,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         uint32_t yoloBoxColorRgba = QColor(Qt::green).rgba();
         d.readU32(52, &yoloBoxColorRgba, QColor(Qt::green).rgba());
         m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
+
+        d.readBool(53, &m_audioMute, true);
+        d.readString(54, &m_audioDeviceName, "");
 
         return true;
     }
@@ -411,6 +418,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("yoloBoxColor")) {
         m_yoloBoxColor = settings.m_yoloBoxColor;
     }
+    if (settingsKeys.contains("audioMute")) {
+        m_audioMute = settings.m_audioMute;
+    }
+    if (settingsKeys.contains("audioDeviceName")) {
+        m_audioDeviceName = settings.m_audioDeviceName;
+    }
 }
 
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
@@ -551,6 +564,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("yoloNmsThreshold") || force) {
         ostr << " m_yoloNmsThreshold: " << m_yoloNmsThreshold;
+    }
+    if (settingsKeys.contains("audioMute") || force) {
+        ostr << " m_audioMute: " << m_audioMute;
+    }
+    if (settingsKeys.contains("audioDeviceName") || force) {
+        ostr << " m_audioDeviceName: " << m_audioDeviceName.toStdString();
     }
 
     return QString(ostr.str().c_str());

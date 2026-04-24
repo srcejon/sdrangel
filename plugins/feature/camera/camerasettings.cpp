@@ -187,7 +187,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_resolutionHeight = std::max(16, m_resolutionHeight);
         m_framesPerSecond = std::max(1, m_framesPerSecond);
         m_exposureTimeMs = std::max(1, m_exposureTimeMs);
-        m_isoSensitivity = std::max(1, m_isoSensitivity);
+        m_isoSensitivity = std::max(-1, m_isoSensitivity);
         d.readString(10, &m_alpacaHost, "127.0.0.1");
         d.readU32(11, &utmp, 11111);
         m_alpacaPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;

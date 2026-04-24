@@ -55,7 +55,12 @@ void Camera::start()
 
     QObject::connect(m_thread, &QThread::started, m_worker, &CameraWorker::startWork);
     QObject::connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
-    QObject::connect(m_thread, &QThread::finished, m_thread, &QThread::deleteLater);
+    // Do NOT connect QThread::finished → QThread::deleteLater here.
+    // Camera::stop() uses a processEvents() loop while waiting, and processEvents()
+    // would dispatch the QDeferredDelete event for m_thread on the main thread,
+    // destroying m_thread (including its QThreadPrivate / WaitCondition) while the
+    // worker thread is still in QThreadPrivate::finish() calling thread_done.wakeAll().
+    // We delete m_thread manually after wait() returns instead.
 
     m_worker->setMessageQueueToGUI(getMessageQueueToGUI());
     m_thread->start();
@@ -84,6 +89,11 @@ void Camera::stop()
         while (!m_thread->wait(100)) {
             QCoreApplication::processEvents();
         }
+        // m_worker was deleted by the worker thread itself during its cleanup
+        // (QThread::finished → deleteLater processed inside QThreadPrivate::finish).
+        // Delete the thread object manually since we did not use the auto-delete
+        // finished → deleteLater connection above.
+        delete m_thread;
         m_thread = nullptr;
         m_worker = nullptr;
     }

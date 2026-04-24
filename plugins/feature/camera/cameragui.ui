@@ -796,6 +796,10 @@
         <property name="text">
          <string>Spec</string>
         </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/carrier.png</normaloff>:/carrier.png</iconset>
+        </property>
        </widget>
       </item>
       <item>
@@ -963,17 +967,21 @@
       </item>
       <item>
        <widget class="QPushButton" name="yoloModelPathButton">
-        <property name="toolTip">
-         <string>Browse for ONNX model file</string>
-        </property>
-        <property name="text">
-         <string>...</string>
-        </property>
         <property name="maximumSize">
          <size>
           <width>30</width>
           <height>16777215</height>
          </size>
+        </property>
+        <property name="toolTip">
+         <string>Browse for ONNX model file</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/load.png</normaloff>:/load.png</iconset>
         </property>
        </widget>
       </item>
@@ -996,17 +1004,21 @@
       </item>
       <item>
        <widget class="QPushButton" name="yoloLabelsPathButton">
-        <property name="toolTip">
-         <string>Browse for class labels file</string>
-        </property>
-        <property name="text">
-         <string>...</string>
-        </property>
         <property name="maximumSize">
          <size>
           <width>30</width>
           <height>16777215</height>
          </size>
+        </property>
+        <property name="toolTip">
+         <string>Browse for class labels file</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/load.png</normaloff>:/load.png</iconset>
         </property>
        </widget>
       </item>

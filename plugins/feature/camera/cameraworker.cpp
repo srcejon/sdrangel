@@ -84,7 +84,7 @@ CameraWorker::CameraWorker() :
     m_captureTimer(this),
     m_networkManager(nullptr),
     m_alpacaFrameRequestPending(false),
-    m_alpacaClientId(QRandomGenerator::global()->bounded(quint64(1), quint64(std::numeric_limits<quint32>::max()) + 1)),
+    m_alpacaClientId(QRandomGenerator::global()->bounded(quint32(1), quint32(std::numeric_limits<quint32>::max()))),
     m_alpacaClientTransactionId(1),
     m_alpacaSensorType(0),
     m_alpacaImageBytesSupported(true),

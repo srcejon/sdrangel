@@ -226,14 +226,6 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     connect(getInputMessageQueue(), SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
 
-    // Populate font family combo from system fonts
-    ui->overlayFontCombo->blockSignals(true);
-    const QStringList families = QFontDatabase::families();
-    for (const QString& family : families) {
-        ui->overlayFontCombo->addItem(family);
-    }
-    ui->overlayFontCombo->blockSignals(false);
-
     m_settings.setRollupState(&m_rollupState);
 
     CRightClickEnabler *audioMuteRightClickEnabler = new CRightClickEnabler(ui->audioMute);
@@ -412,7 +404,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->diffMaskButton, &QToolButton::toggled, this, &CameraGUI::on_diffMaskButton_toggled);
     QObject::connect(ui->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
     QObject::connect(ui->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
-    QObject::connect(ui->overlayFontCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_overlayFontCombo_currentIndexChanged);
+    QObject::connect(ui->overlayFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayFontCombo_currentFontChanged);
     QObject::connect(ui->overlayFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayFontScaleSpin_valueChanged);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
     QObject::connect(ui->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
@@ -912,10 +904,9 @@ void CameraGUI::updateEnabledControls()
     ui->yoloBoxColorButton->setEnabled(yoloActive);
 }
 
-void CameraGUI::on_overlayFontCombo_currentIndexChanged(int index)
+void CameraGUI::on_overlayFontCombo_currentFontChanged(const QFont& font)
 {
-    (void) index;
-    m_settings.m_overlayFontFamily = ui->overlayFontCombo->currentText();
+    m_settings.m_overlayFontFamily = font.family();
     m_settingsKeys.append("overlayFontFamily");
     applySettings();
 }

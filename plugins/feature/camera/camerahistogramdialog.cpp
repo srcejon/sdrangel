@@ -26,6 +26,10 @@
 
 #include "camerahistogramdialog.h"
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+using namespace QtCharts;
+#endif
+
 CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* parent)
     : QDialog(parent)
 {

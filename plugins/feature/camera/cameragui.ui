@@ -556,15 +556,9 @@
        </widget>
       </item>
       <item>
-       <widget class="QComboBox" name="overlayFontCombo">
+       <widget class="QFontComboBox" name="overlayFontCombo">
         <property name="toolTip">
-         <string>Font family for date/time overlay</string>
-        </property>
-        <property name="sizeAdjustPolicy">
-         <enum>QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon</enum>
-        </property>
-        <property name="minimumContentsLength">
-         <number>8</number>
+         <string>Select font to use for date and time text</string>
         </property>
        </widget>
       </item>

@@ -22,6 +22,7 @@
 #include <QImage>
 #include <QGraphicsScene>
 #include <QGraphicsPixmapItem>
+#include <QToolButton>
 
 #include "feature/featuregui.h"
 #include "util/messagequeue.h"
@@ -125,7 +126,7 @@ private slots:
     void on_diffMaskButton_toggled(bool checked);
     void on_dilationSpin_valueChanged(int value);
     void on_histogramButton_clicked();
-    void on_overlayFontCombo_currentIndexChanged(int index);
+    void on_overlayFontCombo_currentFontChanged(const QFont& font);
     void on_overlayFontScaleSpin_valueChanged(double value);
     void on_motionDetectButton_toggled(bool checked);
     void on_minContourAreaSpin_valueChanged(int value);

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>430</width>
-    <height>1297</height>
+    <height>1355</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -1206,7 +1206,7 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>1062</y>
+     <y>1100</y>
      <width>402</width>
      <height>242</height>
     </rect>
@@ -1265,6 +1265,10 @@
         <property name="text">
          <string>+</string>
         </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/zoomin.png</normaloff>:/zoomin.png</iconset>
+        </property>
        </widget>
       </item>
       <item>
@@ -1273,7 +1277,11 @@
          <string>Zoom out</string>
         </property>
         <property name="text">
-         <string>-</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/zoomout.png</normaloff>:/zoomout.png</iconset>
         </property>
        </widget>
       </item>
@@ -1283,7 +1291,11 @@
          <string>Fit image in view</string>
         </property>
         <property name="text">
-         <string>Fit</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/zoomall.png</normaloff>:/zoomall.png</iconset>
         </property>
        </widget>
       </item>

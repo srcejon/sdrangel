@@ -442,8 +442,6 @@ void CameraWorker::reportCameraList()
         if (!m_networkManager)
         {
             QStringList cameraIds;
-            cameraIds.append(QString("alpaca:%1").arg(m_settings.m_alpacaCameraId));
-
             if (m_msgQueueToGUI) {
                 m_msgQueueToGUI->push(MsgReportCameraList::create(cameraIds));
             }
@@ -459,10 +457,6 @@ void CameraWorker::reportCameraList()
 
             if (reply->error() == QNetworkReply::NoError) {
                 cameraIds = parseAlpacaCameraList(reply->readAll());
-            }
-
-            if (cameraIds.isEmpty()) {
-                cameraIds.append(QString("alpaca:%1").arg(m_settings.m_alpacaCameraId));
             }
 
             if (m_msgQueueToGUI) {
@@ -659,7 +653,7 @@ void CameraWorker::alpacaSetCameraParams()
 {
     // Chain: binX -> binY -> gain -> offset -> readoutMode -> startExposure
     const QString baseUrl = buildAlpacaBaseUrl();
-    const int camId = m_settings.m_alpacaCameraId;
+    const int camId = m_settings.alpacaCameraId();
 
     auto doStartExposure = [this]() {
         if (m_capturing) {
@@ -707,7 +701,7 @@ void CameraWorker::alpacaSetCameraParams()
 
 void CameraWorker::alpacaStartExposure()
 {
-    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/startexposure").arg(m_settings.m_alpacaCameraId));
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/startexposure").arg(m_settings.alpacaCameraId()));
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
@@ -747,7 +741,7 @@ void CameraWorker::alpacaStartExposure()
 
 void CameraWorker::alpacaCheckImageReady()
 {
-    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imageready").arg(m_settings.m_alpacaCameraId));
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imageready").arg(m_settings.alpacaCameraId()));
     QUrlQuery query;
     query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
     query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
@@ -788,7 +782,7 @@ void CameraWorker::alpacaCheckImageReady()
 
 void CameraWorker::alpacaFetchImageArray()
 {
-    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imagearray").arg(m_settings.m_alpacaCameraId));
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imagearray").arg(m_settings.alpacaCameraId()));
     QUrlQuery query;
     query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
     query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
@@ -1346,7 +1340,7 @@ void CameraWorker::alpacaQueryCameraCapabilities()
     m_alpacaImageBytesSupported = true;
 
     const QString baseUrl = buildAlpacaBaseUrl();
-    const int camId = m_settings.m_alpacaCameraId;
+    const int camId = m_settings.alpacaCameraId();
 
     // Struct to accumulate results from parallel requests
     struct CapInfo {
@@ -1490,7 +1484,7 @@ void CameraWorker::statusTick()
 void CameraWorker::alpacaPollStatus()
 {
     const QString baseUrl = buildAlpacaBaseUrl();
-    const int camId = m_settings.m_alpacaCameraId;
+    const int camId = m_settings.alpacaCameraId();
 
     // Accumulate results from two parallel GETs
     struct StatusInfo {

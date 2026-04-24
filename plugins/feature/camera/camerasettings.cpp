@@ -42,7 +42,6 @@ void CameraSettings::resetToDefaults()
     m_isoSensitivity = 400;
     m_alpacaHost = "127.0.0.1";
     m_alpacaPort = 11111;
-    m_alpacaCameraId = 0;
     m_alpacaBinX = 1;
     m_alpacaBinY = 1;
     m_alpacaGain = -1;
@@ -101,7 +100,6 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(9, m_isoSensitivity);
     s.writeString(10, m_alpacaHost);
     s.writeU32(11, m_alpacaPort);
-    s.writeS32(12, m_alpacaCameraId);
     s.writeBool(13, m_saveImage);
     s.writeString(14, m_imageFileName);
     s.writeBool(15, m_saveVideo);
@@ -186,7 +184,6 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(10, &m_alpacaHost, "127.0.0.1");
         d.readU32(11, &utmp, 11111);
         m_alpacaPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
-        d.readS32(12, &m_alpacaCameraId, 0);
         d.readBool(13, &m_saveImage, false);
         d.readString(14, &m_imageFileName, "camera.jpg");
         d.readBool(15, &m_saveVideo, false);
@@ -300,9 +297,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("alpacaPort")) {
         m_alpacaPort = settings.m_alpacaPort;
-    }
-    if (settingsKeys.contains("alpacaCameraId")) {
-        m_alpacaCameraId = settings.m_alpacaCameraId;
     }
     if (settingsKeys.contains("alpacaBinX")) {
         m_alpacaBinX = std::max(1, settings.m_alpacaBinX);
@@ -457,9 +451,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("alpacaPort") || force) {
         ostr << " m_alpacaPort: " << m_alpacaPort;
     }
-    if (settingsKeys.contains("alpacaCameraId") || force) {
-        ostr << " m_alpacaCameraId: " << m_alpacaCameraId;
-    }
     if (settingsKeys.contains("alpacaBinX") || force) {
         ostr << " m_alpacaBinX: " << m_alpacaBinX;
     }
@@ -573,4 +564,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
 
     return QString(ostr.str().c_str());
+}
+
+int CameraSettings::alpacaCameraId() const
+{
+    if (m_cameraId.startsWith("alpaca:"))
+    {
+        QString idStr = m_cameraId.split(':')[1];
+        bool ok;
+        int id = idStr.toInt(&ok);
+        if (ok) {
+            return id;
+        }
+    }
+    return -1;
 }

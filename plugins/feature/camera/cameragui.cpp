@@ -273,7 +273,6 @@ void CameraGUI::displaySettings()
     ui->isoSpin->setValue(m_settings.m_isoSensitivity);
     ui->alpacaHostEdit->setText(m_settings.m_alpacaHost);
     ui->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
-    ui->alpacaCameraIdSpin->setValue(m_settings.m_alpacaCameraId);
     ui->alpacaBinXSpin->setValue(m_settings.m_alpacaBinX);
     ui->alpacaBinYSpin->setValue(m_settings.m_alpacaBinY);
 
@@ -378,7 +377,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
     QObject::connect(ui->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
     QObject::connect(ui->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
-    QObject::connect(ui->alpacaCameraIdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaCameraIdSpin_valueChanged);
     QObject::connect(ui->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
     QObject::connect(ui->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
     QObject::connect(ui->alpacaGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaGainCombo_currentIndexChanged);
@@ -440,8 +438,6 @@ void CameraGUI::updateAlpacaVisibility()
     ui->alpacaHostEdit->setVisible(alpaca);
     ui->alpacaPortLabel->setVisible(alpaca);
     ui->alpacaPortSpin->setVisible(alpaca);
-    ui->alpacaCameraIdLabel->setVisible(alpaca);
-    ui->alpacaCameraIdSpin->setVisible(alpaca);
     ui->alpacaBinXLabel->setVisible(alpaca);
     ui->alpacaBinXSpin->setVisible(alpaca);
     ui->alpacaBinYLabel->setVisible(alpaca);
@@ -635,13 +631,6 @@ void CameraGUI::on_alpacaPortSpin_valueChanged(int value)
 {
     m_settings.m_alpacaPort = static_cast<uint16_t>(value);
     m_settingsKeys.append("alpacaPort");
-    applySettings();
-}
-
-void CameraGUI::on_alpacaCameraIdSpin_valueChanged(int value)
-{
-    m_settings.m_alpacaCameraId = value;
-    m_settingsKeys.append("alpacaCameraId");
     applySettings();
 }
 

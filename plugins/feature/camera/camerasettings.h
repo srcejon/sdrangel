@@ -44,7 +44,6 @@ struct CameraSettings
     int m_isoSensitivity;
     QString m_alpacaHost;
     uint16_t m_alpacaPort;
-    int m_alpacaCameraId;
     int m_alpacaBinX;
     int m_alpacaBinY;
     int m_alpacaGain;         // index into named gains list, or numeric value; -1 = do not set
@@ -104,6 +103,7 @@ struct CameraSettings
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
     void applySettings(const QStringList& settingsKeys, const CameraSettings& settings);
     QString getDebugString(const QStringList& settingsKeys, bool force=false) const;
+    int alpacaCameraId() const;
 };
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGS_H_

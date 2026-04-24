@@ -100,7 +100,6 @@ private slots:
     void on_isoSpin_valueChanged(int value);
     void on_alpacaHostEdit_editingFinished();
     void on_alpacaPortSpin_valueChanged(int value);
-    void on_alpacaCameraIdSpin_valueChanged(int value);
     void on_alpacaBinXSpin_valueChanged(int value);
     void on_alpacaBinYSpin_valueChanged(int value);
     void on_alpacaGainCombo_currentIndexChanged(int index);

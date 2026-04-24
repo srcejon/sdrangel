@@ -68,7 +68,8 @@ private:
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
-    bool m_qtZoomSupported;       // true when the active Qt camera reports zoom range > 1.0
+    bool m_qtZoomSupported;             // true when the active Qt camera reports zoom range > 1.0
+    bool m_qtManualExposureSupported;   // true when the active Qt camera supports manual exposure time
 
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame

@@ -192,12 +192,15 @@ bool CameraGUI::handleMessage(const Message& message)
         const double minZoom = caps.getMinZoomFactor();
         const double maxZoom = caps.getMaxZoomFactor();
         m_qtZoomSupported = (maxZoom > minZoom + 0.01);
+        m_qtManualExposureSupported = caps.isManualExposureSupported();
 
         blockApplySettings(true);
         ui->zoomSpin->setMinimum(minZoom);
         ui->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
         ui->zoomSpin->setEnabled(m_qtZoomSupported);
         ui->zoomLabel->setEnabled(m_qtZoomSupported);
+        ui->exposureLabel->setEnabled(m_qtManualExposureSupported);
+        ui->exposureSpin->setEnabled(m_qtManualExposureSupported);
         blockApplySettings(false);
 
         return true;
@@ -260,6 +263,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
     m_qtZoomSupported(false),
+    m_qtManualExposureSupported(true),
     m_imageScene(nullptr),
     m_imagePixmapItem(nullptr)
 {
@@ -1018,11 +1022,17 @@ void CameraGUI::updateEnabledControls()
     ui->focusDistSpin->setEnabled(manualFocus);
 #endif
 
-    // Zoom control enabled state is set when MsgReportQtCameraCapabilities arrives
+    // Zoom and exposure control enabled states are set when MsgReportQtCameraCapabilities arrives;
+    // re-apply them here so other updateEnabledControls callers don't accidentally re-enable them.
     if (!m_qtZoomSupported)
     {
         ui->zoomLabel->setEnabled(false);
         ui->zoomSpin->setEnabled(false);
+    }
+    if (!m_qtManualExposureSupported)
+    {
+        ui->exposureLabel->setEnabled(false);
+        ui->exposureSpin->setEnabled(false);
     }
 }
 

@@ -329,27 +329,30 @@ public:
         { }
     };
 
-    // Sent when a Qt camera starts, reporting runtime zoom capabilities
+    // Sent when a Qt camera starts, reporting runtime zoom and exposure capabilities
     class MsgReportQtCameraCapabilities : public Message {
         MESSAGE_CLASS_DECLARATION
 
     public:
         double getMinZoomFactor() const { return m_minZoomFactor; }
         double getMaxZoomFactor() const { return m_maxZoomFactor; }
+        bool isManualExposureSupported() const { return m_manualExposureSupported; }
 
-        static MsgReportQtCameraCapabilities* create(double minZoom, double maxZoom)
+        static MsgReportQtCameraCapabilities* create(double minZoom, double maxZoom, bool manualExposureSupported)
         {
-            return new MsgReportQtCameraCapabilities(minZoom, maxZoom);
+            return new MsgReportQtCameraCapabilities(minZoom, maxZoom, manualExposureSupported);
         }
 
     private:
         double m_minZoomFactor;
         double m_maxZoomFactor;
+        bool m_manualExposureSupported;
 
-        MsgReportQtCameraCapabilities(double minZoom, double maxZoom) :
+        MsgReportQtCameraCapabilities(double minZoom, double maxZoom, bool manualExposureSupported) :
             Message(),
             m_minZoomFactor(minZoom),
-            m_maxZoomFactor(maxZoom)
+            m_maxZoomFactor(maxZoom),
+            m_manualExposureSupported(manualExposureSupported)
         { }
     };
 

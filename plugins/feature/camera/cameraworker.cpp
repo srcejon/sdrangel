@@ -2099,11 +2099,16 @@ void CameraWorker::setupQtCapture()
 
     m_qtCamera->start();
 
-    // Report zoom capabilities after starting so the GUI can configure the zoom control
+    // Test whether this camera supports manual exposure time: call setManualExposureTime
+    // and then check whether manualExposureTime() reflects the value (returns -1 if unsupported).
+    m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
+    const bool manualExposureSupported = (m_qtCamera->manualExposureTime() >= 0.0f);
+
+    // Report zoom and exposure capabilities so the GUI can configure its controls
     const float minZoom = m_qtCamera->minimumZoomFactor();
     const float maxZoom = m_qtCamera->maximumZoomFactor();
     if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(minZoom, maxZoom));
+        m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(minZoom, maxZoom, manualExposureSupported));
     }
 
     // Apply zoom (clamped to what the hardware supports)
@@ -2291,13 +2296,15 @@ void CameraWorker::setupQtCapture()
 
     m_qtCamera->start();
 
-    // Report zoom capabilities so the GUI can configure the zoom control
+    // Report zoom and exposure capabilities so the GUI can configure its controls.
+    // Qt5 manual exposure is via QCameraExposure; consider it supported when that object exists.
     {
         QCameraFocus *cameraFocus = m_qtCamera->focus();
         const qreal minZoom = cameraFocus ? cameraFocus->minimumOpticalZoom() : 1.0;
         const qreal maxZoom = cameraFocus ? cameraFocus->maximumOpticalZoom() : 1.0;
+        const bool manualExposureSupported = (m_qtCamera->exposure() != nullptr);
         if (m_msgQueueToGUI) {
-            m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(minZoom, maxZoom));
+            m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(minZoom, maxZoom, manualExposureSupported));
         }
         if (cameraFocus && maxZoom > minZoom) {
             const qreal clampedZoom = qBound(minZoom, static_cast<qreal>(m_settings.m_zoomFactor), maxZoom);

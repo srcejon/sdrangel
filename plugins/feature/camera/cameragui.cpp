@@ -21,6 +21,7 @@
 #include <QGraphicsView>
 #include <QPainter>
 #include <QPixmap>
+#include <QWheelEvent>
 
 #include "feature/featureuiset.h"
 
@@ -214,6 +215,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     ui->imageView->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     ui->imageView->setRenderHint(QPainter::SmoothPixmapTransform, true);
     ui->imageView->setBackgroundBrush(QBrush(Qt::black));
+    ui->imageView->viewport()->installEventFilter(this);
 
     m_camera = reinterpret_cast<Camera*>(feature);
     m_camera->setMessageQueueToGUI(&m_inputMessageQueue);
@@ -1058,6 +1060,19 @@ void CameraGUI::on_yoloBoxColorButton_clicked()
         m_settingsKeys.append("yoloBoxColor");
         applySettings();
     }
+}
+
+bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == ui->imageView->viewport() && event->type() == QEvent::Wheel)
+    {
+        const QWheelEvent *wheelEvent = static_cast<QWheelEvent*>(event);
+        const double factor = (wheelEvent->angleDelta().y() > 0) ? 1.25 : 1.0 / 1.25;
+        ui->imageView->scale(factor, factor);
+        return true;
+    }
+
+    return FeatureGUI::eventFilter(watched, event);
 }
 
 void CameraGUI::on_zoomInButton_clicked()

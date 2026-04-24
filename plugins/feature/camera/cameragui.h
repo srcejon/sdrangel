@@ -74,6 +74,8 @@ private:
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     virtual ~CameraGUI();
 
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
     void blockApplySettings(bool block);
     void applySettings(bool force = false);
     void displaySettings();

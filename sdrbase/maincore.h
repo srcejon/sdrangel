@@ -935,7 +935,7 @@ public:
     const QGeoPositionInfo& getPosition() const;
 
     // List of available devices. Plugins should use AvailableDeviceHandler to maintain this list
-    AvailableDeviceList getAvailableDevices(const QStringList &uris);
+    AvailableDeviceList getAvailableDevices(const QStringList &uris, const QString& kinds);
     // Lists of available channels and features. List should be ordered by indexes. Plugins should use AvailableChannelOrFeatureHandler to maintain this list
     AvailableChannelOrFeatureList getAvailableChannels(const QStringList& uris); // Get list of available channels with given URIs or all if empty list.
     AvailableChannelOrFeatureList getAvailableFeatures(const QStringList& uris); // Get list of available features with given URIs or all if empty list.

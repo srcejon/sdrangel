@@ -440,26 +440,26 @@ void MainCore::updateWakeLock()
 }
 #endif
 
-
-AvailableDeviceList MainCore::getAvailableDevices(const QStringList& uris)
+AvailableDeviceList MainCore::getAvailableDevices(const QStringList& uris, const QString& kinds)
 {
     AvailableDeviceList list;
 
     for (const auto deviceSet : m_deviceSets)
     {
-        // FIXME: uris
-
-        qDebug() << "getHardwareId" << deviceSet->m_deviceAPI->getHardwareId();
-        qDebug() << "getSamplingDeviceId" << deviceSet->m_deviceAPI->getSamplingDeviceId();
-
-        QChar type = getDeviceSetTypeId(deviceSet);
-        AvailableDevice item {
-            type,
-            deviceSet->m_deviceAPI->getDeviceSetIndex(),
-            deviceSet->m_deviceAPI->getHardwareId(),
-            deviceSet->m_deviceAPI
-        };
-        list.append(item);
+        if ((uris.size() == 0) || uris.contains(deviceSet->m_deviceAPI->getSamplingDeviceId()))
+        {
+            QChar type = getDeviceSetTypeId(deviceSet);
+            if (kinds.contains(type))
+            {
+                AvailableDevice item {
+                    type,
+                    deviceSet->m_deviceAPI->getDeviceSetIndex(),
+                    deviceSet->m_deviceAPI->getHardwareId(),
+                    deviceSet->m_deviceAPI
+                };
+                list.append(item);
+            }
+        }
     }
 
     return list;

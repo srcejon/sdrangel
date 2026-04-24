@@ -1033,27 +1033,35 @@ void CameraGUI::updateEnabledControls()
     ui->focusDistSpin->setEnabled(manualFocus);
 #endif
 
-    // Zoom and exposure control enabled states are set when MsgReportQtCameraCapabilities arrives;
-    // re-apply them here so other updateEnabledControls callers don't accidentally re-enable them.
-    if (!m_qtZoomSupported)
+    if (m_settings.isAlpacaCamera())
     {
-        ui->zoomLabel->setEnabled(false);
-        ui->zoomSpin->setEnabled(false);
+        ui->exposureLabel->setEnabled(true);
+        ui->exposureSpin->setEnabled(true);
     }
-    if (!m_qtManualExposureSupported)
+    else
     {
-        ui->exposureLabel->setEnabled(false);
-        ui->exposureSpin->setEnabled(false);
-    }
-    if (!m_qtIsoSensitivitySupported)
-    {
-        ui->isoLabel->setEnabled(false);
-        ui->isoSpin->setEnabled(false);
-    }
-    if (!m_qtWhiteBalanceModeSupported)
-    {
-        ui->whiteBalanceLabel->setEnabled(false);
-        ui->whiteBalanceCombo->setEnabled(false);
+        // Zoom and exposure control enabled states are set when MsgReportQtCameraCapabilities arrives;
+        // re-apply them here so other updateEnabledControls callers don't accidentally re-enable them.
+        if (!m_qtZoomSupported)
+        {
+            ui->zoomLabel->setEnabled(false);
+            ui->zoomSpin->setEnabled(false);
+        }
+        if (!m_qtManualExposureSupported)
+        {
+            ui->exposureLabel->setEnabled(false);
+            ui->exposureSpin->setEnabled(false);
+        }
+        if (!m_qtIsoSensitivitySupported)
+        {
+            ui->isoLabel->setEnabled(false);
+            ui->isoSpin->setEnabled(false);
+        }
+        if (!m_qtWhiteBalanceModeSupported)
+        {
+            ui->whiteBalanceLabel->setEnabled(false);
+            ui->whiteBalanceCombo->setEnabled(false);
+        }
     }
 }
 

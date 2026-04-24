@@ -38,7 +38,7 @@ void CameraSettings::resetToDefaults()
     m_resolutionHeight = 720;
     m_framesPerSecond = 10;
     m_exposureTimeMs = 50;
-    m_isoSensitivity = 400;
+    m_isoSensitivity = -1; // -1 is auto
     m_alpacaHost = "127.0.0.1";
     m_alpacaPort = 11111;
     m_alpacaBinX = 1;
@@ -172,7 +172,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(6, &m_resolutionHeight, 720);
         d.readS32(7, &m_framesPerSecond, 10);
         d.readS32(8, &m_exposureTimeMs, 50);
-        d.readS32(9, &m_isoSensitivity, 400);
+        d.readS32(9, &m_isoSensitivity, -1);
         m_resolutionWidth = std::max(16, m_resolutionWidth);
         m_resolutionHeight = std::max(16, m_resolutionHeight);
         m_framesPerSecond = std::max(1, m_framesPerSecond);
@@ -284,7 +284,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_exposureTimeMs = std::max(1, settings.m_exposureTimeMs);
     }
     if (settingsKeys.contains("isoSensitivity")) {
-        m_isoSensitivity = std::max(1, settings.m_isoSensitivity);
+        m_isoSensitivity = std::max(-1, settings.m_isoSensitivity);
     }
     if (settingsKeys.contains("alpacaHost")) {
         m_alpacaHost = settings.m_alpacaHost;

@@ -220,8 +220,11 @@
       </item>
       <item row="5" column="1">
        <widget class="QSpinBox" name="isoSpin">
+        <property name="toolTip">
+         <string>ISO setting. -1 for auto</string>
+        </property>
         <property name="minimum">
-         <number>1</number>
+         <number>-1</number>
         </property>
         <property name="maximum">
          <number>25600</number>

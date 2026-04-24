@@ -15,6 +15,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <QCoreApplication>
 #include <QDebug>
 
 #include "camera.h"
@@ -76,7 +77,13 @@ void Camera::stop()
     {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(false));
         m_thread->quit();
-        m_thread->wait();
+        // Qt Multimedia backends (WMF, AVFoundation) dispatch completion callbacks
+        // on the main thread. Blocking the main thread inside wait() while the
+        // worker's QCamera::stop() waits for those callbacks causes a deadlock.
+        // Pump the main event loop in short bursts so those callbacks can run.
+        while (!m_thread->wait(100)) {
+            QCoreApplication::processEvents();
+        }
         m_thread = nullptr;
         m_worker = nullptr;
     }

@@ -2362,19 +2362,19 @@ void CameraWorker::cleanupQtCapture()
     if (m_qtCamera)
     {
         m_qtCamera->stop();
-        m_qtCamera->deleteLater();
+        delete m_qtCamera;
         m_qtCamera = nullptr;
     }
 
     if (m_videoSink)
     {
-        m_videoSink->deleteLater();
+        delete m_videoSink;
         m_videoSink = nullptr;
     }
 
     if (m_captureSession)
     {
-        m_captureSession->deleteLater();
+        delete m_captureSession;
         m_captureSession = nullptr;
     }
 }
@@ -2551,13 +2551,13 @@ void CameraWorker::cleanupQtCapture()
     if (m_qtCamera)
     {
         m_qtCamera->stop();
-        m_qtCamera->deleteLater();
+        delete m_qtCamera;
         m_qtCamera = nullptr;
     }
 
     if (m_videoSurface)
     {
-        m_videoSurface->deleteLater();
+        delete m_videoSurface;
         m_videoSurface = nullptr;
     }
 }

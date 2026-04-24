@@ -16,6 +16,11 @@ set(camera_HEADERS
     camerawebapiadapter.h
 )
 
+include_directories(
+    ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client
+    ${OpenCV_INCLUDE_DIRS}
+)
+
 if(NOT SERVER_MODE)
     set(camera_SOURCES
         ${camera_SOURCES}
@@ -53,8 +58,6 @@ endif()
 if(NOT BUILD_SHARED_LIBS)
     set_property(GLOBAL APPEND PROPERTY STATIC_PLUGINS_PROPERTY ${TARGET_NAME})
 endif()
-
-target_include_directories(${TARGET_NAME} PRIVATE ${OpenCV_INCLUDE_DIRS})
 
 target_link_libraries(${TARGET_NAME} PRIVATE
     Qt::Core

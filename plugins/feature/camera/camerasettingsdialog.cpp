@@ -32,27 +32,8 @@ using namespace QtCharts;
 
 namespace {
 
-QLineSeries* temperatureSeries(const CameraSettingsDialog* dialog)
+void updateTemperatureAxes(QLineSeries* series, QDateTimeAxis* axisX, QValueAxis* axisY)
 {
-    return dialog->findChild<QLineSeries*>("alpacaTempSeries");
-}
-
-QDateTimeAxis* temperatureAxisX(const CameraSettingsDialog* dialog)
-{
-    return dialog->findChild<QDateTimeAxis*>("alpacaTempAxisX");
-}
-
-QValueAxis* temperatureAxisY(const CameraSettingsDialog* dialog)
-{
-    return dialog->findChild<QValueAxis*>("alpacaTempAxisY");
-}
-
-void updateTemperatureAxes(const CameraSettingsDialog* dialog)
-{
-    QLineSeries* series = temperatureSeries(dialog);
-    QDateTimeAxis* axisX = temperatureAxisX(dialog);
-    QValueAxis* axisY = temperatureAxisY(dialog);
-
     if (!series || !axisX || !axisY) {
         return;
     }
@@ -98,35 +79,35 @@ void updateTemperatureAxes(const CameraSettingsDialog* dialog)
 
 CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::CameraSettingsDialog)
+    ui(new Ui::CameraSettingsDialog),
+    m_tempChart(nullptr),
+    m_tempSeries(nullptr),
+    m_tempAxisX(nullptr),
+    m_tempAxisY(nullptr)
 {
     ui->setupUi(this);
 
-    auto* chart = new QChart();
-    chart->setObjectName("alpacaTempChart");
-    chart->setTitle(tr("CCD temperature vs time"));
-    chart->legend()->hide();
+    m_tempChart = new QChart();
+    m_tempChart->setTitle(tr("CCD temperature vs time"));
+    m_tempChart->legend()->hide();
 
-    auto* series = new QLineSeries(chart);
-    series->setObjectName("alpacaTempSeries");
-    chart->addSeries(series);
+    m_tempSeries = new QLineSeries(m_tempChart);
+    m_tempChart->addSeries(m_tempSeries);
 
-    auto* axisX = new QDateTimeAxis(chart);
-    axisX->setObjectName("alpacaTempAxisX");
-    axisX->setFormat("HH:mm:ss");
-    axisX->setTitleText(tr("Time"));
+    m_tempAxisX = new QDateTimeAxis(m_tempChart);
+    m_tempAxisX->setFormat("HH:mm:ss");
+    m_tempAxisX->setTitleText(tr("Time"));
 
-    auto* axisY = new QValueAxis(chart);
-    axisY->setObjectName("alpacaTempAxisY");
-    axisY->setTitleText(tr("Temperature (C)"));
-    axisY->setLabelFormat("%.1f");
+    m_tempAxisY = new QValueAxis(m_tempChart);
+    m_tempAxisY->setTitleText(tr("Temperature (C)"));
+    m_tempAxisY->setLabelFormat("%.1f");
 
-    chart->addAxis(axisX, Qt::AlignBottom);
-    chart->addAxis(axisY, Qt::AlignLeft);
-    series->attachAxis(axisX);
-    series->attachAxis(axisY);
+    m_tempChart->addAxis(m_tempAxisX, Qt::AlignBottom);
+    m_tempChart->addAxis(m_tempAxisY, Qt::AlignLeft);
+    m_tempSeries->attachAxis(m_tempAxisX);
+    m_tempSeries->attachAxis(m_tempAxisY);
 
-    auto* chartView = new QChartView(chart, ui->alpacaTempChartContainer);
+    auto* chartView = new QChartView(m_tempChart, ui->alpacaTempChartContainer);
     chartView->setRenderHint(QPainter::Antialiasing);
 
     auto* layout = new QVBoxLayout(ui->alpacaTempChartContainer);
@@ -143,14 +124,12 @@ CameraSettingsDialog::~CameraSettingsDialog()
 
 void CameraSettingsDialog::appendTemperatureSample(const QDateTime& timestamp, double temperatureC)
 {
-    QLineSeries* series = temperatureSeries(this);
-
-    if (!series) {
+    if (!m_tempSeries) {
         return;
     }
 
-    series->append(timestamp.toMSecsSinceEpoch(), temperatureC);
-    updateTemperatureAxes(this);
+    m_tempSeries->append(timestamp.toMSecsSinceEpoch(), temperatureC);
+    updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
 }
 
 void CameraSettingsDialog::clearAlpacaStatus()
@@ -162,9 +141,9 @@ void CameraSettingsDialog::clearAlpacaStatus()
     ui->cameraSizeLabel->setText("-");
     ui->ccdTempLabel->setText("-");
 
-    if (QLineSeries* series = temperatureSeries(this)) {
-        series->clear();
+    if (m_tempSeries) {
+        m_tempSeries->clear();
     }
 
-    updateTemperatureAxes(this);
+    updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
 }

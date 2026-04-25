@@ -23,6 +23,11 @@
 
 #include "ui_camerasettingsdialog.h"
 
+QT_FORWARD_DECLARE_CLASS(QChart)
+QT_FORWARD_DECLARE_CLASS(QDateTimeAxis)
+QT_FORWARD_DECLARE_CLASS(QLineSeries)
+QT_FORWARD_DECLARE_CLASS(QValueAxis)
+
 class CameraSettingsDialog : public QDialog
 {
     Q_OBJECT
@@ -37,6 +42,10 @@ public:
 
 private:
     Ui::CameraSettingsDialog *ui;
+    QChart *m_tempChart;
+    QLineSeries *m_tempSeries;
+    QDateTimeAxis *m_tempAxisX;
+    QValueAxis *m_tempAxisY;
 };
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGSDIALOG_H_

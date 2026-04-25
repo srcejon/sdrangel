@@ -88,6 +88,7 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     ui->setupUi(this);
 
     m_tempChart = new QChart();
+    m_tempChart->setTheme(QChart::ChartThemeDark);
     m_tempChart->setTitle(tr("CCD temperature vs time"));
     m_tempChart->legend()->hide();
 

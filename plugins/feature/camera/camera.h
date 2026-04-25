@@ -22,9 +22,9 @@
 #include "feature/feature.h"
 #include "util/message.h"
 #include "camerasettings.h"
+#include "cameraworker.h"
 
 class WebAPIAdapterInterface;
-class CameraWorker;
 
 class Camera : public Feature
 {

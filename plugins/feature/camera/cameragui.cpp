@@ -299,6 +299,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     applySettings(true);
     makeUIConnections();
     m_resizer.enableChildMouseTracking();
+
+    m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
 }
 
 CameraGUI::~CameraGUI()
@@ -1412,6 +1414,9 @@ void CameraGUI::updateEnabledControls()
     settingsUI()->focusDistLabel->setEnabled(manualFocus);
     settingsUI()->focusDistSpin->setEnabled(manualFocus);
 #endif
+
+    // No status for Qt cameras, so hide it
+    ui->statusContainer->setVisible(m_settings.isAlpacaCamera());
 
     if (m_settings.isAlpacaCamera())
     {

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>430</width>
-    <height>980</height>
+    <width>441</width>
+    <height>531</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -24,8 +24,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>428</width>
-     <height>170</height>
+     <width>411</width>
+     <height>71</height>
     </rect>
    </property>
    <property name="windowTitle">
@@ -45,25 +45,81 @@
      <number>2</number>
     </property>
     <item>
-     <layout class="QGridLayout" name="gridLayout">
-      <item row="0" column="0">
-       <widget class="QPushButton" name="startStop">
-        <property name="text">
-         <string>Capture</string>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="ButtonSwitch" name="startStop">
+        <property name="toolTip">
+         <string>Start/stop measurements</string>
         </property>
-        <property name="checkable">
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/play.png</normaloff>
+          <normalon>:/stop.png</normalon>:/play.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="cameraCombo">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="editable">
          <bool>true</bool>
         </property>
        </widget>
       </item>
-      <item row="0" column="1">
-       <widget class="QPushButton" name="refreshCamerasButton">
+      <item>
+       <widget class="QToolButton" name="refreshCamerasButton">
         <property name="text">
          <string>Refresh cameras</string>
         </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/recycle.png</normaloff>:/recycle.png</iconset>
+        </property>
        </widget>
       </item>
-      <item row="0" column="2">
+      <item>
+       <widget class="QToolButton" name="cameraSettingsButton">
+        <property name="toolTip">
+         <string>Open camera and post-processing settings</string>
+        </property>
+        <property name="text">
+         <string>Settings</string>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/gear.png</normaloff>:/gear.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="Line" name="line_2">
+        <property name="orientation">
+         <enum>Qt::Orientation::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_2">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
        <widget class="QToolButton" name="audioMute">
         <property name="toolTip">
          <string>Left: Mute/Unmute audio Right: select audio output device</string>
@@ -81,49 +137,39 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="cameraLabel">
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <widget class="QToolButton" name="saveImageCheck">
         <property name="text">
-         <string>Camera</string>
+         <string>JPG</string>
         </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QComboBox" name="cameraCombo">
-        <property name="editable">
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/picture.png</normaloff>:/picture.png</iconset>
+        </property>
+        <property name="checkable">
          <bool>true</bool>
         </property>
        </widget>
       </item>
-      <item row="1" column="2">
-       <widget class="QToolButton" name="cameraSettingsButton">
-        <property name="toolTip">
-         <string>Open camera and post-processing settings</string>
-        </property>
+      <item>
+       <widget class="QToolButton" name="saveVideoCheck">
         <property name="text">
-         <string>Settings</string>
+         <string>MP4</string>
         </property>
         <property name="icon">
          <iconset resource="../../../sdrgui/resources/res.qrc">
-          <normaloff>:/gear.png</normaloff>:/gear.png</iconset>
+          <normaloff>:/camera.png</normaloff>:/camera.png</iconset>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
-      <item row="2" column="0">
-       <widget class="QCheckBox" name="saveImageCheck">
-        <property name="text">
-         <string>Save JPEG</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QCheckBox" name="saveVideoCheck">
-        <property name="text">
-         <string>Save MP4</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="2">
+      <item>
        <widget class="ButtonSwitch" name="videoPostProcessButton">
         <property name="toolTip">
          <string>Record post-processed video (when off, raw frames are recorded)</string>
@@ -136,17 +182,54 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="0">
+      <item>
+       <widget class="Line" name="line_3">
+        <property name="orientation">
+         <enum>Qt::Orientation::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="diffMaskButton">
+        <property name="toolTip">
+         <string>Show differences from previous image</string>
+        </property>
+        <property name="text">
+         <string>-</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="motionDetectButton">
+        <property name="toolTip">
+         <string>Detect motion using background subtractor</string>
+        </property>
+        <property name="text">
+         <string>Motion</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="yoloButton">
+        <property name="toolTip">
+         <string>Run YOLO object detection on each frame</string>
+        </property>
+        <property name="text">
+         <string>YOLO</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="ButtonSwitch" name="invertColorsButton">
         <property name="toolTip">
          <string>Invert colours</string>
         </property>
         <property name="text">
-         <string>Inv</string>
+         <string>~</string>
         </property>
        </widget>
       </item>
-      <item row="3" column="1">
+      <item>
        <widget class="ButtonSwitch" name="overlayDateTimeButton">
         <property name="toolTip">
          <string>Overlay date and time</string>
@@ -160,27 +243,7 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="2">
-       <widget class="ButtonSwitch" name="diffMaskButton">
-        <property name="toolTip">
-         <string>Show differences from previous image</string>
-        </property>
-        <property name="text">
-         <string>Diff</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="0">
-       <widget class="ButtonSwitch" name="motionDetectButton">
-        <property name="toolTip">
-         <string>Detect motion using background subtractor</string>
-        </property>
-        <property name="text">
-         <string>Motion</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1">
+      <item>
        <widget class="ButtonSwitch" name="spectrumOverlayButton">
         <property name="toolTip">
          <string>Overlay spectrum view on post-processed image</string>
@@ -194,33 +257,33 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="2">
-       <widget class="ButtonSwitch" name="yoloButton">
-        <property name="toolTip">
-         <string>Run YOLO object detection on each frame</string>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
-        <property name="text">
-         <string>YOLO</string>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
         </property>
-       </widget>
+       </spacer>
       </item>
      </layout>
     </item>
    </layout>
   </widget>
-  <widget class="QWidget" name="horizontalLayoutWidget">
+  <widget class="QWidget" name="statusContainer" native="true">
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>190</y>
-     <width>411</width>
-     <height>201</height>
+     <y>90</y>
+     <width>132</width>
+     <height>162</height>
     </rect>
    </property>
-   <layout class="QHBoxLayout" name="statusContainer">
-    <property name="windowTitle" stdset="0">
-     <string>Status</string>
-    </property>
+   <layout class="QHBoxLayout" name="statusContainerLayout">
     <item>
      <widget class="QWidget" name="alpacaStatusGroup" native="true">
       <layout class="QFormLayout" name="alpacaStatusLayout">
@@ -317,7 +380,7 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>410</y>
+     <y>260</y>
      <width>402</width>
      <height>242</height>
     </rect>
@@ -356,10 +419,10 @@
        </size>
       </property>
       <property name="frameShape">
-       <enum>QFrame::NoFrame</enum>
+       <enum>QFrame::Shape::NoFrame</enum>
       </property>
       <property name="alignment">
-       <set>Qt::AlignCenter</set>
+       <set>Qt::AlignmentFlag::AlignCenter</set>
       </property>
      </widget>
     </item>
@@ -413,7 +476,7 @@
       <item>
        <spacer name="imageZoomSpacer">
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>

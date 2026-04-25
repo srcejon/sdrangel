@@ -16,6 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QColorDialog>
+#include <QDateTime>
 #include <QFileDialog>
 #include <QFontDatabase>
 #include <QGraphicsView>
@@ -96,6 +97,9 @@ bool CameraGUI::deserialize(const QByteArray& data)
 
 bool CameraGUI::handleMessage(const Message& message)
 {
+    const bool wasAlpaca = m_settings.isAlpacaCamera();
+    const QString previousCameraId = m_settings.m_cameraId;
+
     if (Camera::MsgConfigureCamera::match(message))
     {
         const Camera::MsgConfigureCamera& cfg = (Camera::MsgConfigureCamera&) message;
@@ -104,6 +108,10 @@ bool CameraGUI::handleMessage(const Message& message)
             m_settings = cfg.getSettings();
         } else {
             m_settings.applySettings(cfg.getSettingsKeys(), cfg.getSettings());
+        }
+
+        if ((previousCameraId != m_settings.m_cameraId) || (wasAlpaca != m_settings.isAlpacaCamera())) {
+            m_settingsDialog->clearAlpacaStatus();
         }
 
         blockApplySettings(true);
@@ -179,10 +187,12 @@ bool CameraGUI::handleMessage(const Message& message)
             "Idle", "Waiting", "Exposing", "Reading", "Download", "Error"
         };
         const int cs = status.getCameraState();
-        ui->cameraStateLabel->setText((cs >= 0 && cs < cameraStateNames.size()) ? cameraStateNames[cs] : (cs >= 0 ? QString::number(cs) : "-"));
+        settingsUI()->cameraStateLabel->setText(
+            (cs >= 0 && cs < cameraStateNames.size()) ? cameraStateNames[cs] : (cs >= 0 ? QString::number(cs) : "-"));
 
         if (status.isCcdTemperatureValid()) {
-            ui->ccdTempLabel->setText(QString::number(status.getCcdTemperature(), 'f', 1));
+            settingsUI()->ccdTempLabel->setText(QString::number(status.getCcdTemperature(), 'f', 1));
+            m_settingsDialog->appendTemperatureSample(QDateTime::currentDateTime(), status.getCcdTemperature());
         }
 
         return true;
@@ -259,6 +269,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     ui->imageView->setRenderHint(QPainter::SmoothPixmapTransform, true);
     ui->imageView->setBackgroundBrush(QBrush(Qt::black));
     ui->imageView->viewport()->installEventFilter(this);
+    ui->statusContainer->hide();
+    ui->imageContainer->setGeometry(10, 90, 402, 412);
 
     m_camera = reinterpret_cast<Camera*>(feature);
     m_camera->setMessageQueueToGUI(&m_inputMessageQueue);
@@ -955,7 +967,7 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaOffsetSpin->setVisible(alpaca && !m_alpacaHasNamedOffsets);
     settingsUI()->alpacaReadoutModeLabel->setVisible(alpaca);
     settingsUI()->alpacaReadoutModeCombo->setVisible(alpaca);
-    ui->alpacaStatusGroup->setVisible(alpaca);
+    settingsUI()->alpacaStatusGroup->setVisible(alpaca);
     ui->audioMute->setVisible(!alpaca);
 
     // Qt-camera-only controls
@@ -1044,32 +1056,34 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     }
 
     // Status labels
-    ui->sensorNameLabel->setText(info.getSensorName().isEmpty() ? "-" : info.getSensorName());
+    settingsUI()->sensorNameLabel->setText(info.getSensorName().isEmpty() ? "-" : info.getSensorName());
 
     static const QStringList sensorTypeNames = {
         "Monochrome", "Colour", "RGGB", "CMYG", "CMYG2", "LRGB"
     };
     const int st = info.getSensorType();
-    ui->sensorTypeLabel->setText((st >= 0 && st < sensorTypeNames.size()) ? sensorTypeNames[st] : QString::number(st));
+    settingsUI()->sensorTypeLabel->setText(
+        (st >= 0 && st < sensorTypeNames.size()) ? sensorTypeNames[st] : QString::number(st));
 
     if (info.getPixelSizeX() > 0 || info.getPixelSizeY() > 0) {
-        ui->pixelSizeLabel->setText(QString("%1 × %2")
+        settingsUI()->pixelSizeLabel->setText(QString("%1 × %2")
             .arg(info.getPixelSizeX(), 0, 'f', 2)
             .arg(info.getPixelSizeY(), 0, 'f', 2));
     } else {
-        ui->pixelSizeLabel->setText("-");
+        settingsUI()->pixelSizeLabel->setText("-");
     }
 
     if (info.getCameraSizeX() > 0 || info.getCameraSizeY() > 0) {
-        ui->cameraSizeLabel->setText(QString("%1 × %2").arg(info.getCameraSizeX()).arg(info.getCameraSizeY()));
+        settingsUI()->cameraSizeLabel->setText(QString("%1 × %2").arg(info.getCameraSizeX()).arg(info.getCameraSizeY()));
     } else {
-        ui->cameraSizeLabel->setText("-");
+        settingsUI()->cameraSizeLabel->setText("-");
     }
 
     if (info.isCcdTemperatureValid()) {
-        ui->ccdTempLabel->setText(QString::number(info.getCcdTemperature(), 'f', 1));
+        settingsUI()->ccdTempLabel->setText(QString::number(info.getCcdTemperature(), 'f', 1));
+        m_settingsDialog->appendTemperatureSample(QDateTime::currentDateTime(), info.getCcdTemperature());
     } else {
-        ui->ccdTempLabel->setText("-");
+        settingsUI()->ccdTempLabel->setText("-");
     }
 
     updateAlpacaVisibility();
@@ -1419,7 +1433,7 @@ void CameraGUI::updateEnabledControls()
 #endif
 
     // No status for Qt cameras, so hide it
-    ui->statusContainer->setVisible(m_settings.isAlpacaCamera());
+    settingsUI()->alpacaStatusGroup->setVisible(m_settings.isAlpacaCamera());
 
     if (m_settings.isAlpacaCamera())
     {

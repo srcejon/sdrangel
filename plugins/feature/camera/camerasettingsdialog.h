@@ -18,6 +18,7 @@
 #ifndef INCLUDE_FEATURE_CAMERASETTINGSDIALOG_H_
 #define INCLUDE_FEATURE_CAMERASETTINGSDIALOG_H_
 
+#include <QDateTime>
 #include <QDialog>
 
 #include "ui_camerasettingsdialog.h"
@@ -31,6 +32,8 @@ public:
     ~CameraSettingsDialog() override;
 
     Ui::CameraSettingsDialog *getUI() const { return ui; }
+    void appendTemperatureSample(const QDateTime& timestamp, double temperatureC);
+    void clearAlpacaStatus();
 
 private:
     Ui::CameraSettingsDialog *ui;

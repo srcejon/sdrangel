@@ -361,9 +361,9 @@
       <attribute name="title">
        <string>Alpaca</string>
       </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_6">
+     <layout class="QVBoxLayout" name="verticalLayout_6">
        <item>
-        <widget class="QGroupBox" name="groupBox_6">
+         <widget class="QGroupBox" name="groupBox_6">
          <property name="title">
           <string>ASCOM Alpaca Remote Server</string>
          </property>
@@ -412,9 +412,129 @@
             </property>
            </spacer>
           </item>
-         </layout>
-        </widget>
-       </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="alpacaStatusGroup">
+          <property name="title">
+           <string>Camera Status</string>
+          </property>
+          <layout class="QVBoxLayout" name="alpacaStatusGroupLayout">
+           <item>
+            <layout class="QFormLayout" name="alpacaStatusLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="cameraStateTextLabel">
+               <property name="text">
+                <string>Camera state</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLabel" name="cameraStateLabel">
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="sensorNameTextLabel">
+               <property name="text">
+                <string>Sensor</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QLabel" name="sensorNameLabel">
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="sensorTypeTextLabel">
+               <property name="text">
+                <string>Sensor type</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QLabel" name="sensorTypeLabel">
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="pixelSizeTextLabel">
+               <property name="text">
+                <string>Pixel size (um)</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QLabel" name="pixelSizeLabel">
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="cameraSizeTextLabel">
+               <property name="text">
+                <string>Sensor size (px)</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <widget class="QLabel" name="cameraSizeLabel">
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="ccdTempTextLabel">
+               <property name="text">
+                <string>CCD temp (C)</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QLabel" name="ccdTempLabel">
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QWidget" name="alpacaTempChartContainer" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>220</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <spacer name="alpacaVerticalSpacer">
+          <property name="orientation">
+           <enum>Qt::Orientation::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
       </layout>
      </widget>
      <widget class="QWidget" name="postProcessingTab">

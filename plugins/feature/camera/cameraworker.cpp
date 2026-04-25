@@ -487,10 +487,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         {
             QCameraFocus *cameraFocus = m_qtCamera->focus();
             if (cameraFocus) {
-                const qreal minZoom = cameraFocus->minimumOpticalZoom();
-                const qreal maxZoom = cameraFocus->maximumOpticalZoom();
-                const qreal clampedZoom = qBound(minZoom, static_cast<qreal>(m_settings.m_zoomFactor), maxZoom);
-                cameraFocus->setOpticalZoom(clampedZoom);
+                cameraFocus->zoomTo(m_settings.m_zoomFactor, 1.0);
             }
         }
 #endif
@@ -2362,19 +2359,19 @@ void CameraWorker::cleanupQtCapture()
     if (m_qtCamera)
     {
         m_qtCamera->stop();
-        delete m_qtCamera;
+        m_qtCamera->deleteLater();
         m_qtCamera = nullptr;
     }
 
     if (m_videoSink)
     {
-        delete m_videoSink;
+        m_videoSink->deleteLater();
         m_videoSink = nullptr;
     }
 
     if (m_captureSession)
     {
-        delete m_captureSession;
+        m_captureSession->deleteLater();
         m_captureSession = nullptr;
     }
 }
@@ -2519,7 +2516,7 @@ void CameraWorker::setupQtCapture()
     // Report zoom, exposure, ISO and white-balance capabilities so the GUI can configure its controls.
     {
         QCameraFocus *cameraFocus = m_qtCamera->focus();
-        const qreal minZoom = cameraFocus ? cameraFocus->minimumOpticalZoom() : 1.0;
+        const qreal minZoom = 1.0;
         const qreal maxZoom = cameraFocus ? cameraFocus->maximumOpticalZoom() : 1.0;
 
         // Qt5: manual exposure and ISO are provided by QCameraExposure
@@ -2541,7 +2538,7 @@ void CameraWorker::setupQtCapture()
         }
         if (cameraFocus && maxZoom > minZoom) {
             const qreal clampedZoom = qBound(minZoom, static_cast<qreal>(m_settings.m_zoomFactor), maxZoom);
-            cameraFocus->setOpticalZoom(clampedZoom);
+            cameraFocus->zoomTo(clampedZoom, 1.0);
         }
     }
 }

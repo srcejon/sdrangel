@@ -648,13 +648,10 @@ void CameraGUI::setupQtCapture()
     m_qtCamera->start();
 
     // Probe capabilities after start
-    m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
-    m_qtManualExposureSupported = (m_qtCamera->manualExposureTime() >= 0.0f);
-
-    m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
-    m_qtIsoSensitivitySupported = (m_qtCamera->manualIsoSensitivity() >= 0);
-
-    m_qtWhiteBalanceModeSupported = m_qtCamera->isWhiteBalanceModeSupported(QCamera::WhiteBalanceAuto);
+    const QCamera::Features cameraFeatures = m_qtCamera->supportedFeatures();
+    m_qtManualExposureSupported = cameraFeatures.testFlag(QCamera::Feature::ManualExposureTime);
+    m_qtIsoSensitivitySupported = cameraFeatures.testFlag(QCamera::Feature::IsoSensitivity);
+    m_qtWhiteBalanceModeSupported = cameraFeatures.testFlag(QCamera::Feature::ColorTemperature);
 
     const float minZoom = m_qtCamera->minimumZoomFactor();
     const float maxZoom = m_qtCamera->maximumZoomFactor();
@@ -689,6 +686,12 @@ void CameraGUI::setupQtCapture()
         };
         QList<int> supportedModes;
         for (int mode : kFocusModes) {
+            if ((mode == static_cast<int>(QCamera::FocusModeManual))
+             && !cameraFeatures.testFlag(QCamera::Feature::FocusDistance))
+            {
+                continue;
+            }
+
             if (m_qtCamera->isFocusModeSupported(static_cast<QCamera::FocusMode>(mode))) {
                 supportedModes.append(mode);
             }

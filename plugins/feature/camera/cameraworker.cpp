@@ -70,6 +70,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportResolutions, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportFrame, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportSaveVideoState, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
@@ -1379,6 +1380,43 @@ void CameraWorker::processObjectDetections(const QSet<QString>& currentDetectedC
     }
 }
 
+bool CameraWorker::shouldRecordVideoForDetectedObjects() const
+{
+    for (const QString& className : m_detectedObjectClasses)
+    {
+        QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
+        if (deviceSettingsList == nullptr) {
+            continue;
+        }
+
+        for (CameraSettings::ObjectDeviceSettings *devSettings : *deviceSettingsList)
+        {
+            if (devSettings && devSettings->m_recordVideo) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+void CameraWorker::setVideoRecordingEnabled(bool enabled)
+{
+    if (m_settings.m_saveVideo == enabled) {
+        return;
+    }
+
+    m_settings.m_saveVideo = enabled;
+
+    if (!enabled && m_videoWriter.isOpened()) {
+        m_videoWriter.release();
+    }
+
+    if (m_msgQueueToGUI) {
+        m_msgQueueToGUI->push(MsgReportSaveVideoState::create(enabled));
+    }
+}
+
 void CameraWorker::executeCommand(const QString& command, const QString& className)
 {
     if (command.isEmpty()) {
@@ -1466,6 +1504,10 @@ void CameraWorker::applyObjectDetectedSettings(const QString& className)
                            << devSettings->m_presetDescription;
             }
         }
+
+        if (devSettings->m_recordVideo) {
+            setVideoRecordingEnabled(true);
+        }
     }
 
     QTimer::singleShot(1000, this, [this, deviceSettingsList, className]()
@@ -1521,6 +1563,10 @@ void CameraWorker::applyObjectDisappearedSettings(const QString& className)
         if (!devSettings->m_disappearCommand.isEmpty()) {
             executeCommand(devSettings->m_disappearCommand, className);
         }
+    }
+
+    if (!shouldRecordVideoForDetectedObjects()) {
+        setVideoRecordingEnabled(false);
     }
 }
 

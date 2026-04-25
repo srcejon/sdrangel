@@ -173,6 +173,17 @@ bool CameraGUI::handleMessage(const Message& message)
         updateImageWidget();
         return true;
     }
+    else if (CameraWorker::MsgReportSaveVideoState::match(message))
+    {
+        const CameraWorker::MsgReportSaveVideoState& report = (CameraWorker::MsgReportSaveVideoState&) message;
+        m_settings.m_saveVideo = report.getSaveVideo();
+        ui->saveVideoCheck->blockSignals(true);
+        ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
+        ui->saveVideoCheck->blockSignals(false);
+        m_settingsKeys.append("saveVideo");
+        applySettings();
+        return true;
+    }
     else if (CameraWorker::MsgReportAlpacaCameraInfo::match(message))
     {
         const CameraWorker::MsgReportAlpacaCameraInfo& info = (CameraWorker::MsgReportAlpacaCameraInfo&) message;

@@ -36,6 +36,7 @@ QDataStream& operator<<(QDataStream& out, const CameraSettings::ObjectDeviceSett
     out << settings->m_startStopFileSink;
     out << settings->m_detectCommand;
     out << settings->m_disappearCommand;
+    out << settings->m_recordVideo;
     return out;
 }
 
@@ -51,6 +52,9 @@ QDataStream& operator>>(QDataStream& in, CameraSettings::ObjectDeviceSettings*& 
     in >> settings->m_startStopFileSink;
     in >> settings->m_detectCommand;
     in >> settings->m_disappearCommand;
+    if (!in.atEnd()) {
+        in >> settings->m_recordVideo;
+    }
     return in;
 }
 
@@ -72,7 +76,8 @@ CameraSettings::ObjectDeviceSettings::ObjectDeviceSettings() :
     m_presetFrequency(0),
     m_startOnDetect(true),
     m_stopOnDisappear(true),
-    m_startStopFileSink(false)
+    m_startStopFileSink(false),
+    m_recordVideo(false)
 {
     m_detectCommand.clear();
     m_disappearCommand.clear();
@@ -88,6 +93,7 @@ void CameraSettings::ObjectDeviceSettings::getDebugString(std::ostringstream& os
          << " startOnDetect: " << m_startOnDetect
          << " stopOnDisappear: " << m_stopOnDisappear
          << " startStopFileSink: " << m_startStopFileSink
+         << " recordVideo: " << m_recordVideo
          << " detectCommand: " << m_detectCommand.toStdString()
          << " disappearCommand: " << m_disappearCommand.toStdString()
          << " }";

@@ -164,6 +164,26 @@ public:
         { }
     };
 
+    class MsgReportSaveVideoState : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool getSaveVideo() const { return m_saveVideo; }
+
+        static MsgReportSaveVideoState* create(bool saveVideo)
+        {
+            return new MsgReportSaveVideoState(saveVideo);
+        }
+
+    private:
+        bool m_saveVideo;
+
+        MsgReportSaveVideoState(bool saveVideo) :
+            Message(),
+            m_saveVideo(saveVideo)
+        { }
+    };
+
     class MsgReportAlpacaCameraInfo : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -386,6 +406,8 @@ private:
     void applyObjectDisappearedSettings(const QString& className);
     void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
     void executeCommand(const QString& command, const QString& className);
+    bool shouldRecordVideoForDetectedObjects() const;
+    void setVideoRecordingEnabled(bool enabled);
 
     void reportFrameToGUI(const QImage& image);
     QString buildAlpacaBaseUrl() const;

@@ -54,6 +54,7 @@ private:
     QCheckBox *m_startOnDetectWidget;
     QCheckBox *m_stopOnDisappearWidget;
     QCheckBox *m_startStopFileSinkWidget;
+    QCheckBox *m_recordVideoWidget;
     QLineEdit *m_detectCommandWidget;
     QLineEdit *m_disappearCommandWidget;
     QChar m_currentPresetType;

@@ -35,6 +35,7 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     m_startOnDetectWidget(new QCheckBox(this)),
     m_stopOnDisappearWidget(new QCheckBox(this)),
     m_startStopFileSinkWidget(new QCheckBox(this)),
+    m_recordVideoWidget(new QCheckBox(this)),
     m_detectCommandWidget(new QLineEdit(this)),
     m_disappearCommandWidget(new QLineEdit(this)),
     m_currentPresetType('R'),
@@ -60,6 +61,10 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     m_startStopFileSinkWidget->setChecked(devSettings->m_startStopFileSink);
     m_startStopFileSinkWidget->setToolTip(tr("Start file sinks on detection and stop them on disappearance"));
     formLayout->addRow(tr("Start/stop file sinks"), m_startStopFileSinkWidget);
+
+    m_recordVideoWidget->setChecked(devSettings->m_recordVideo);
+    m_recordVideoWidget->setToolTip(tr("Start recording video on detection and stop when the object disappears"));
+    formLayout->addRow(tr("Record video on detection"), m_recordVideoWidget);
 
     m_detectCommandWidget->setText(devSettings->m_detectCommand);
     m_detectCommandWidget->setToolTip(tr("Command to execute when the selected object class is detected"));
@@ -211,6 +216,7 @@ void CameraObjectDeviceSettingsGUI::accept()
     m_devSettings->m_startOnDetect = m_startOnDetectWidget->isChecked();
     m_devSettings->m_stopOnDisappear = m_stopOnDisappearWidget->isChecked();
     m_devSettings->m_startStopFileSink = m_startStopFileSinkWidget->isChecked();
+    m_devSettings->m_recordVideo = m_recordVideoWidget->isChecked();
     m_devSettings->m_detectCommand = m_detectCommandWidget->text();
     m_devSettings->m_disappearCommand = m_disappearCommandWidget->text();
 }

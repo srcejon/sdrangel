@@ -16,9 +16,14 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QColorDialog>
+#include <QBoxLayout>
 #include <QFileDialog>
 #include <QFontDatabase>
+#include <QIcon>
 #include <QGraphicsView>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QPainter>
 #include <QPixmap>
 #include <QStandardItemModel>
@@ -54,8 +59,31 @@
 #include "camera.h"
 #include "camerahistogramdialog.h"
 #include "cameraobjectcontroldialog.h"
+#include "camerasettingsdialog.h"
 #include "cameraworker.h"
 #include "cameragui.h"
+
+namespace {
+
+void moveGridWidget(QGridLayout *sourceLayout, QWidget *widget, QGridLayout *targetLayout, int row, int column)
+{
+    sourceLayout->removeWidget(widget);
+    targetLayout->addWidget(widget, row, column);
+}
+
+void moveGridLayout(QGridLayout *sourceLayout, QLayout *layout, QGridLayout *targetLayout, int row, int column)
+{
+    sourceLayout->removeItem(layout);
+    targetLayout->addLayout(layout, row, column);
+}
+
+void moveWidgetToBoxLayout(QLayout *sourceLayout, QWidget *widget, QBoxLayout *targetLayout)
+{
+    sourceLayout->removeWidget(widget);
+    targetLayout->addWidget(widget);
+}
+
+}
 
 CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
@@ -223,6 +251,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_pluginAPI(pluginAPI),
     m_featureUISet(featureUISet),
     m_doApplySettings(true),
+    m_settingsDialog(nullptr),
+    m_cameraSettingsButton(nullptr),
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
     m_qtZoomSupported(false),
@@ -265,6 +295,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     m_settings.setRollupState(&m_rollupState);
 
+    m_settingsDialog = new CameraSettingsDialog(this);
+    new DialogPositioner(m_settingsDialog, false);
+
     CRightClickEnabler *audioMuteRightClickEnabler = new CRightClickEnabler(ui->audioMute);
     connect(audioMuteRightClickEnabler, SIGNAL(rightClick(const QPoint &)), this, SLOT(audioSelect(const QPoint &)));
 
@@ -290,6 +323,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     ui->focusModeCombo->addItem(tr("Manual"),     static_cast<int>(QCamera::FocusModeManual));
 #endif
 
+    moveSettingsWidgetsToDialog();
     displaySettings();
     applySettings(true);
     makeUIConnections();
@@ -447,6 +481,7 @@ void CameraGUI::updateImageWidget()
 
 void CameraGUI::makeUIConnections()
 {
+    QObject::connect(m_cameraSettingsButton, &QToolButton::clicked, this, &CameraGUI::on_cameraSettingsButton_clicked);
     QObject::connect(ui->startStop, &QPushButton::clicked, this, &CameraGUI::on_startStop_clicked);
     QObject::connect(ui->refreshCamerasButton, &QPushButton::clicked, this, &CameraGUI::on_refreshCamerasButton_clicked);
     QObject::connect(ui->cameraCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_cameraCombo_currentTextChanged);
@@ -509,6 +544,126 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->focusModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_focusModeCombo_currentIndexChanged);
     QObject::connect(ui->focusDistSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_focusDistSpin_valueChanged);
     QObject::connect(ui->zoomSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_zoomSpin_valueChanged);
+}
+
+void CameraGUI::moveSettingsWidgetsToDialog()
+{
+    m_cameraSettingsButton = new QToolButton(this);
+    m_cameraSettingsButton->setText(tr("Settings"));
+    m_cameraSettingsButton->setToolTip(tr("Open camera and post-processing settings"));
+    m_cameraSettingsButton->setIcon(QIcon(":/gear.png"));
+    ui->gridLayout->addWidget(m_cameraSettingsButton, 1, 2);
+
+    int row = 0;
+    moveGridWidget(ui->gridLayout, ui->resolutionLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->resolutionCombo, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->fpsLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->fpsSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->exposureLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->exposureSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->isoLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->isoSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->alpacaHostLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->alpacaHostEdit, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->alpacaPortLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->alpacaPortSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->alpacaBinXLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->alpacaBinXSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->alpacaBinYLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->alpacaBinYSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->alpacaGainLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridLayout(ui->gridLayout, ui->gainLayout, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->alpacaOffsetLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridLayout(ui->gridLayout, ui->offsetLayout, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->alpacaReadoutModeLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->alpacaReadoutModeCombo, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+
+    ui->gridLayout->removeItem(ui->imageSaveLayout);
+    m_settingsDialog->getCameraSettingsLayout()->addWidget(new QLabel(tr("JPEG path"), m_settingsDialog), row, 0);
+    m_settingsDialog->getCameraSettingsLayout()->addLayout(ui->imageSaveLayout, row++, 1);
+
+    QHBoxLayout *videoPathLayout = new QHBoxLayout();
+    moveWidgetToBoxLayout(ui->videoSaveLayout, ui->videoPathEdit, videoPathLayout);
+    moveWidgetToBoxLayout(ui->videoSaveLayout, ui->videoPathButton, videoPathLayout);
+    videoPathLayout->addStretch(1);
+    m_settingsDialog->getCameraSettingsLayout()->addWidget(new QLabel(tr("MP4 path"), m_settingsDialog), row, 0);
+    m_settingsDialog->getCameraSettingsLayout()->addLayout(videoPathLayout, row++, 1);
+
+    moveGridWidget(ui->gridLayout, ui->whiteBalanceLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->whiteBalanceCombo, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->exposureCompLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->exposureCompSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->focusModeLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->focusModeCombo, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->focusDistLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->focusDistSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    moveGridWidget(ui->gridLayout, ui->zoomLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
+    moveGridWidget(ui->gridLayout, ui->zoomSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
+    m_settingsDialog->getCameraSettingsLayout()->setRowStretch(row, 1);
+
+    ui->postProcessingLayout->removeItem(ui->brightnessLayout);
+    m_settingsDialog->getPostProcessingLayout()->addLayout(ui->brightnessLayout);
+    ui->postProcessingLayout->removeItem(ui->contrastLayout);
+    m_settingsDialog->getPostProcessingLayout()->addLayout(ui->contrastLayout);
+
+    QHBoxLayout *histogramLayout = new QHBoxLayout();
+    moveWidgetToBoxLayout(ui->effectsLayout, ui->histogramButton, histogramLayout);
+    histogramLayout->addStretch(1);
+    m_settingsDialog->getPostProcessingLayout()->addLayout(histogramLayout);
+
+    QHBoxLayout *dateTimeDetailLayout = new QHBoxLayout();
+    moveWidgetToBoxLayout(ui->fontLayout, ui->dateTimeColorButton, dateTimeDetailLayout);
+    moveWidgetToBoxLayout(ui->fontLayout, ui->overlayFontLabel, dateTimeDetailLayout);
+    moveWidgetToBoxLayout(ui->fontLayout, ui->overlayFontCombo, dateTimeDetailLayout);
+    moveWidgetToBoxLayout(ui->fontLayout, ui->overlayFontSizeLabel, dateTimeDetailLayout);
+    moveWidgetToBoxLayout(ui->fontLayout, ui->overlayFontScaleSpin, dateTimeDetailLayout);
+    moveWidgetToBoxLayout(ui->fontLayout, ui->dateTimeFormatLabel, dateTimeDetailLayout);
+    moveWidgetToBoxLayout(ui->fontLayout, ui->dateTimeFormatEdit, dateTimeDetailLayout);
+    m_settingsDialog->getPostProcessingLayout()->addLayout(dateTimeDetailLayout);
+
+    ui->postProcessingLayout->removeItem(ui->dateTimePosLayout);
+    m_settingsDialog->getPostProcessingLayout()->addLayout(ui->dateTimePosLayout);
+
+    QHBoxLayout *diffDetailLayout = new QHBoxLayout();
+    moveWidgetToBoxLayout(ui->motionLayout, ui->dilationLabel, diffDetailLayout);
+    moveWidgetToBoxLayout(ui->motionLayout, ui->dilationSpin, diffDetailLayout);
+    m_settingsDialog->getPostProcessingLayout()->addLayout(diffDetailLayout);
+    ui->motionLayout->removeWidget(ui->line);
+    ui->line->hide();
+
+    QHBoxLayout *motionDetailLayout = new QHBoxLayout();
+    moveWidgetToBoxLayout(ui->motionLayout, ui->minContourAreaLabel, motionDetailLayout);
+    moveWidgetToBoxLayout(ui->motionLayout, ui->minContourAreaSpin, motionDetailLayout);
+    moveWidgetToBoxLayout(ui->motionLayout, ui->motionBoxColorButton, motionDetailLayout);
+    motionDetailLayout->addStretch(1);
+    m_settingsDialog->getPostProcessingLayout()->addLayout(motionDetailLayout);
+
+    QHBoxLayout *spectrumDetailLayout = new QHBoxLayout();
+    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumDeviceCombo, spectrumDetailLayout);
+    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetXLabel, spectrumDetailLayout);
+    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetXSlider, spectrumDetailLayout);
+    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetXValue, spectrumDetailLayout);
+    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetYLabel, spectrumDetailLayout);
+    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetYSlider, spectrumDetailLayout);
+    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetYValue, spectrumDetailLayout);
+    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumScaleLabel, spectrumDetailLayout);
+    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumScaleSpin, spectrumDetailLayout);
+    m_settingsDialog->getPostProcessingLayout()->addLayout(spectrumDetailLayout);
+
+    QHBoxLayout *yoloDetailLayout = new QHBoxLayout();
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloModelPathEdit, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloModelPathButton, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloLabelsLabel, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloLabelsPathEdit, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloLabelsPathButton, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloObjectControlButton, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloConfLabel, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloConfSpin, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloNmsLabel, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloNmsSpin, yoloDetailLayout);
+    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloBoxColorButton, yoloDetailLayout);
+    m_settingsDialog->getPostProcessingLayout()->addLayout(yoloDetailLayout);
+    m_settingsDialog->getPostProcessingLayout()->addStretch(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -1698,4 +1853,11 @@ void CameraGUI::on_zoomSpin_valueChanged(double value)
     m_settings.m_zoomFactor = value;
     m_settingsKeys.append("zoomFactor");
     applySettings();
+}
+
+void CameraGUI::on_cameraSettingsButton_clicked()
+{
+    m_settingsDialog->show();
+    m_settingsDialog->raise();
+    m_settingsDialog->activateWindow();
 }

@@ -62,6 +62,7 @@ signals:
 class PluginAPI;
 class FeatureUISet;
 class Camera;
+class CameraSettingsDialog;
 class Message;
 
 namespace Ui {
@@ -95,6 +96,8 @@ private:
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
+    CameraSettingsDialog *m_settingsDialog;
+    QToolButton *m_cameraSettingsButton;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
     bool m_qtZoomSupported;             // true when the active Qt camera reports zoom range > 1.0
@@ -124,6 +127,7 @@ private:
     void displaySettings();
     bool handleMessage(const Message& message);
     void makeUIConnections();
+    void moveSettingsWidgetsToDialog();
     void updateAlpacaVisibility();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateImageWidget();
@@ -198,6 +202,7 @@ private slots:
     void on_focusModeCombo_currentIndexChanged(int index);
     void on_focusDistSpin_valueChanged(double value);
     void on_zoomSpin_valueChanged(double value);
+    void on_cameraSettingsButton_clicked();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void onQtVideoFrame(const QVideoFrame& frame);

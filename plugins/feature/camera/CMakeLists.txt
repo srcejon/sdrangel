@@ -26,6 +26,7 @@ if(NOT SERVER_MODE)
         ${camera_SOURCES}
         cameragui.cpp
         cameragui.ui
+        camerasettingsdialog.cpp
         camerahistogramdialog.cpp
         cameraobjectcontroldialog.cpp
         cameraobjectdevicesettingsgui.cpp
@@ -33,6 +34,7 @@ if(NOT SERVER_MODE)
     set(camera_HEADERS
         ${camera_HEADERS}
         cameragui.h
+        camerasettingsdialog.h
         camerahistogramdialog.h
         cameraobjectcontroldialog.h
         cameraobjectdevicesettingsgui.h

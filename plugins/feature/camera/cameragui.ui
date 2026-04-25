@@ -470,6 +470,9 @@
       <property name="frameShape">
        <enum>QFrame::Shape::NoFrame</enum>
       </property>
+      <property name="lineWidth">
+       <number>0</number>
+      </property>
       <property name="alignment">
        <set>Qt::AlignmentFlag::AlignCenter</set>
       </property>

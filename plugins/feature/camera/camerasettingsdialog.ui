@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>900</width>
-    <height>700</height>
+    <width>521</width>
+    <height>540</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>2</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -27,7 +27,7 @@
        <item>
         <widget class="QScrollArea" name="cameraScrollArea">
          <property name="frameShape">
-          <enum>QFrame::NoFrame</enum>
+          <enum>QFrame::Shape::NoFrame</enum>
          </property>
          <property name="widgetResizable">
           <bool>true</bool>
@@ -37,14 +37,11 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>862</width>
-            <height>628</height>
+            <width>462</width>
+            <height>514</height>
            </rect>
           </property>
-          <layout class="QGridLayout" name="cameraGridLayout">
-           <property name="columnStretch">
-            <string>0,1</string>
-           </property>
+          <layout class="QGridLayout" name="cameraGridLayout" columnstretch="0,0">
            <item row="0" column="0">
             <widget class="QLabel" name="resolutionLabel">
              <property name="text">
@@ -301,6 +298,9 @@
              <property name="toolTip">
               <string>Exposure compensation in EV steps: -2.0 to +2.0 (Qt 6 cameras only)</string>
              </property>
+             <property name="decimals">
+              <number>1</number>
+             </property>
              <property name="minimum">
               <double>-2.000000000000000</double>
              </property>
@@ -309,9 +309,6 @@
              </property>
              <property name="singleStep">
               <double>0.100000000000000</double>
-             </property>
-             <property name="decimals">
-              <number>1</number>
              </property>
             </widget>
            </item>
@@ -341,6 +338,9 @@
              <property name="toolTip">
               <string>Normalised focus distance: 0.0 = near, 1.0 = far/infinity (Qt 6 manual focus only)</string>
              </property>
+             <property name="decimals">
+              <number>2</number>
+             </property>
              <property name="minimum">
               <double>0.000000000000000</double>
              </property>
@@ -349,9 +349,6 @@
              </property>
              <property name="singleStep">
               <double>0.010000000000000</double>
-             </property>
-             <property name="decimals">
-              <number>2</number>
              </property>
             </widget>
            </item>
@@ -367,6 +364,9 @@
              <property name="toolTip">
               <string>Hardware optical zoom factor (Qt cameras only; disabled if camera does not support zoom)</string>
              </property>
+             <property name="decimals">
+              <number>2</number>
+             </property>
              <property name="minimum">
               <double>1.000000000000000</double>
              </property>
@@ -376,15 +376,12 @@
              <property name="singleStep">
               <double>0.100000000000000</double>
              </property>
-             <property name="decimals">
-              <number>2</number>
-             </property>
             </widget>
            </item>
            <item row="18" column="0">
             <spacer name="cameraVerticalSpacer">
              <property name="orientation">
-              <enum>Qt::Vertical</enum>
+              <enum>Qt::Orientation::Vertical</enum>
              </property>
              <property name="sizeHint" stdset="0">
               <size>
@@ -408,7 +405,7 @@
        <item>
         <widget class="QScrollArea" name="postProcessingScrollArea">
          <property name="frameShape">
-          <enum>QFrame::NoFrame</enum>
+          <enum>QFrame::Shape::NoFrame</enum>
          </property>
          <property name="widgetResizable">
           <bool>true</bool>
@@ -418,663 +415,432 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>862</width>
-            <height>628</height>
+            <width>462</width>
+            <height>453</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="postProcessingLayout">
            <item>
-            <layout class="QHBoxLayout" name="brightnessLayout">
-             <item>
-              <widget class="QLabel" name="brightnessLabel">
-               <property name="text">
-                <string>Brightness</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSlider" name="brightnessSlider">
-               <property name="minimum">
-                <number>-100</number>
-               </property>
-               <property name="maximum">
-                <number>100</number>
-               </property>
-               <property name="value">
-                <number>0</number>
-               </property>
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="brightnessValue">
-               <property name="minimumSize">
-                <size>
-                 <width>30</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>0</string>
-               </property>
-               <property name="alignment">
-                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <widget class="QGroupBox" name="groupBox">
+             <property name="title">
+              <string>Color</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_2">
+              <item>
+               <layout class="QHBoxLayout" name="brightnessLayout">
+                <item>
+                 <widget class="QLabel" name="brightnessLabel">
+                  <property name="text">
+                   <string>Brightness</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSlider" name="brightnessSlider">
+                  <property name="minimum">
+                   <number>-100</number>
+                  </property>
+                  <property name="maximum">
+                   <number>100</number>
+                  </property>
+                  <property name="value">
+                   <number>0</number>
+                  </property>
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="brightnessValue">
+                  <property name="minimumSize">
+                   <size>
+                    <width>30</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>0</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="contrastLayout">
+                <item>
+                 <widget class="QLabel" name="contrastLabel">
+                  <property name="text">
+                   <string>Contrast</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSlider" name="contrastSlider">
+                  <property name="minimum">
+                   <number>10</number>
+                  </property>
+                  <property name="maximum">
+                   <number>300</number>
+                  </property>
+                  <property name="value">
+                   <number>100</number>
+                  </property>
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="contrastValue">
+                  <property name="minimumSize">
+                   <size>
+                    <width>35</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>1.00</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <widget class="QToolButton" name="histogramButton">
+                <property name="toolTip">
+                 <string>Show histogram</string>
+                </property>
+                <property name="text">
+                 <string>Histogram</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
            </item>
            <item>
-            <layout class="QHBoxLayout" name="contrastLayout">
-             <item>
-              <widget class="QLabel" name="contrastLabel">
-               <property name="text">
-                <string>Contrast</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSlider" name="contrastSlider">
-               <property name="minimum">
-                <number>10</number>
-               </property>
-               <property name="maximum">
-                <number>300</number>
-               </property>
-               <property name="value">
-                <number>100</number>
-               </property>
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="contrastValue">
-               <property name="minimumSize">
-                <size>
-                 <width>35</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>1.00</string>
-               </property>
-               <property name="alignment">
-                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <widget class="QGroupBox" name="groupBox_2">
+             <property name="title">
+              <string>Date &amp; Time Overlay</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayout_2">
+              <item row="4" column="0">
+               <widget class="QLabel" name="dateTimePosXLabel">
+                <property name="text">
+                 <string>X</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="overlayFontLabel">
+                <property name="text">
+                 <string>Font</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="overlayFontSizeLabel">
+                <property name="text">
+                 <string>Size</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QToolButton" name="dateTimeColorButton">
+                <property name="toolTip">
+                 <string>Select date/time text colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="2">
+               <widget class="QSlider" name="dateTimePosXSlider">
+                <property name="toolTip">
+                 <string>Date/time text X position (px from left)</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>4096</number>
+                </property>
+                <property name="value">
+                 <number>4</number>
+                </property>
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="label_4">
+                <property name="text">
+                 <string>Colour</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="dateTimeFormatLabel">
+                <property name="text">
+                 <string>Format</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="0">
+               <widget class="QLabel" name="dateTimePosYLabel">
+                <property name="text">
+                 <string>Y</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="3">
+               <widget class="QLabel" name="dateTimePosXValue">
+                <property name="minimumSize">
+                 <size>
+                  <width>35</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>4</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="2">
+               <widget class="QSlider" name="dateTimePosYSlider">
+                <property name="toolTip">
+                 <string>Date/time text Y position (px from top; 0 = auto bottom)</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>4096</number>
+                </property>
+                <property name="value">
+                 <number>0</number>
+                </property>
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="3">
+               <widget class="QLabel" name="dateTimePosYValue">
+                <property name="minimumSize">
+                 <size>
+                  <width>35</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>0</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="2" colspan="2">
+               <widget class="QDoubleSpinBox" name="overlayFontScaleSpin">
+                <property name="toolTip">
+                 <string>Font point size for date/time overlay</string>
+                </property>
+                <property name="decimals">
+                 <number>0</number>
+                </property>
+                <property name="minimum">
+                 <double>4.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>144.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>12.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2" colspan="2">
+               <widget class="QFontComboBox" name="overlayFontCombo">
+                <property name="toolTip">
+                 <string>Select font to use for date and time text</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2" colspan="2">
+               <widget class="QLineEdit" name="dateTimeFormatEdit">
+                <property name="toolTip">
+                 <string>Date/time format string (e.g. yyyy-MM-dd hh:mm:ss)</string>
+                </property>
+                <property name="text">
+                 <string>yyyy-MM-dd hh:mm:ss</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
            </item>
            <item>
-            <layout class="QHBoxLayout" name="effectsLayout">
-             <item>
-              <widget class="QToolButton" name="histogramButton">
-               <property name="toolTip">
-                <string>Show histogram</string>
-               </property>
-               <property name="text">
-                <string>Hist</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontalSpacer_2">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="fontLayout">
-             <item>
-              <widget class="QToolButton" name="dateTimeColorButton">
-               <property name="toolTip">
-                <string>Select date/time text colour</string>
-               </property>
-               <property name="text">
-                <string/>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="overlayFontLabel">
-               <property name="text">
-                <string>Font</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QFontComboBox" name="overlayFontCombo">
-               <property name="toolTip">
-                <string>Select font to use for date and time text</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="overlayFontSizeLabel">
-               <property name="text">
-                <string>Size</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QDoubleSpinBox" name="overlayFontScaleSpin">
-               <property name="toolTip">
-                <string>Font point size for date/time overlay</string>
-               </property>
-               <property name="decimals">
-                <number>0</number>
-               </property>
-               <property name="minimum">
-                <double>4.000000000000000</double>
-               </property>
-               <property name="maximum">
-                <double>144.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>1.000000000000000</double>
-               </property>
-               <property name="value">
-                <double>12.000000000000000</double>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="dateTimeFormatLabel">
-               <property name="text">
-                <string>Format</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLineEdit" name="dateTimeFormatEdit">
-               <property name="toolTip">
-                <string>Date/time format string (e.g. yyyy-MM-dd hh:mm:ss)</string>
-               </property>
-               <property name="text">
-                <string>yyyy-MM-dd hh:mm:ss</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="dateTimePosLayout">
-             <item>
-              <widget class="QLabel" name="dateTimePosXLabel">
-               <property name="text">
-                <string>X</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSlider" name="dateTimePosXSlider">
-               <property name="toolTip">
-                <string>Date/time text X position (px from left)</string>
-               </property>
-               <property name="minimum">
-                <number>0</number>
-               </property>
-               <property name="maximum">
-                <number>4096</number>
-               </property>
-               <property name="value">
-                <number>4</number>
-               </property>
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="dateTimePosXValue">
-               <property name="minimumSize">
-                <size>
-                 <width>35</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>4</string>
-               </property>
-               <property name="alignment">
-                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="dateTimePosYLabel">
-               <property name="text">
-                <string>Y</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSlider" name="dateTimePosYSlider">
-               <property name="toolTip">
-                <string>Date/time text Y position (px from top; 0 = auto bottom)</string>
-               </property>
-               <property name="minimum">
-                <number>0</number>
-               </property>
-               <property name="maximum">
-                <number>4096</number>
-               </property>
-               <property name="value">
-                <number>0</number>
-               </property>
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="dateTimePosYValue">
-               <property name="minimumSize">
-                <size>
-                 <width>35</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>0</string>
-               </property>
-               <property name="alignment">
-                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="diffDetailsLayout">
-             <item>
-              <widget class="QLabel" name="dilationLabel">
-               <property name="text">
-                <string>Dilation</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSpinBox" name="dilationSpin">
-               <property name="toolTip">
-                <string>Dilation kernel size for diff mask</string>
-               </property>
-               <property name="minimum">
-                <number>0</number>
-               </property>
-               <property name="maximum">
-                <number>20</number>
-               </property>
-               <property name="value">
-                <number>3</number>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontalSpacer_3">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="motionDetailsLayout">
-             <item>
-              <widget class="QLabel" name="minContourAreaLabel">
-               <property name="text">
-                <string>Min area</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSpinBox" name="minContourAreaSpin">
-               <property name="toolTip">
-                <string>Minimum contour area (px²)</string>
-               </property>
-               <property name="minimum">
-                <number>0</number>
-               </property>
-               <property name="maximum">
-                <number>10000</number>
-               </property>
-               <property name="value">
-                <number>100</number>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="motionBoxColorButton">
-               <property name="toolTip">
-                <string>Select bounding box colour</string>
-               </property>
-               <property name="text">
-                <string/>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontalSpacer_4">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="spectrumOverlayLayout">
-             <item>
-              <widget class="QComboBox" name="spectrumDeviceCombo">
-               <property name="toolTip">
-                <string>Device whose spectrum view to overlay</string>
-               </property>
-               <property name="sizeAdjustPolicy">
-                <enum>QComboBox::AdjustToMinimumContentsLengthWithIcon</enum>
-               </property>
-               <property name="minimumContentsLength">
-                <number>8</number>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="spectrumOffsetXLabel">
-               <property name="text">
-                <string>X</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSlider" name="spectrumOffsetXSlider">
-               <property name="toolTip">
-                <string>Spectrum overlay X offset (px)</string>
-               </property>
-               <property name="minimum">
-                <number>-4096</number>
-               </property>
-               <property name="maximum">
-                <number>4096</number>
-               </property>
-               <property name="value">
-                <number>0</number>
-               </property>
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="spectrumOffsetXValue">
-               <property name="minimumSize">
-                <size>
-                 <width>40</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>0</string>
-               </property>
-               <property name="alignment">
-                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="spectrumOffsetYLabel">
-               <property name="text">
-                <string>Y</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSlider" name="spectrumOffsetYSlider">
-               <property name="toolTip">
-                <string>Spectrum overlay Y offset (px)</string>
-               </property>
-               <property name="minimum">
-                <number>-4096</number>
-               </property>
-               <property name="maximum">
-                <number>4096</number>
-               </property>
-               <property name="value">
-                <number>0</number>
-               </property>
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="spectrumOffsetYValue">
-               <property name="minimumSize">
-                <size>
-                 <width>40</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>0</string>
-               </property>
-               <property name="alignment">
-                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="spectrumScaleLabel">
-               <property name="text">
-                <string>Scale</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QDoubleSpinBox" name="spectrumScaleSpin">
-               <property name="toolTip">
-                <string>Spectrum overlay scale factor</string>
-               </property>
-               <property name="decimals">
-                <number>2</number>
-               </property>
-               <property name="minimum">
-                <double>0.100000000000000</double>
-               </property>
-               <property name="maximum">
-                <double>4.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>0.050000000000000</double>
-               </property>
-               <property name="value">
-                <double>1.000000000000000</double>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="yoloLayout">
-             <item>
-              <widget class="QLineEdit" name="yoloModelPathEdit">
-               <property name="toolTip">
-                <string>Path to YOLO ONNX model file</string>
-               </property>
-               <property name="placeholderText">
-                <string>model.onnx</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="yoloModelPathButton">
-               <property name="maximumSize">
-                <size>
-                 <width>30</width>
-                 <height>16777215</height>
-                </size>
-               </property>
-               <property name="toolTip">
-                <string>Browse for ONNX model file</string>
-               </property>
-               <property name="text">
-                <string/>
-               </property>
-               <property name="icon">
-                <iconset resource="../../../sdrgui/resources/res.qrc">
-                 <normaloff>:/load.png</normaloff>:/load.png</iconset>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="yoloLabelsLabel">
-               <property name="text">
-                <string>Labels</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLineEdit" name="yoloLabelsPathEdit">
-               <property name="toolTip">
-                <string>Path to plain-text class labels file (one name per line)</string>
-               </property>
-               <property name="placeholderText">
-                <string>coco.names</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="yoloLabelsPathButton">
-               <property name="maximumSize">
-                <size>
-                 <width>30</width>
-                 <height>16777215</height>
-                </size>
-               </property>
-               <property name="toolTip">
-                <string>Browse for class labels file</string>
-               </property>
-               <property name="text">
-                <string/>
-               </property>
-               <property name="icon">
-                <iconset resource="../../../sdrgui/resources/res.qrc">
-                 <normaloff>:/load.png</normaloff>:/load.png</iconset>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="yoloObjectControlButton">
-               <property name="toolTip">
-                <string>Configure actions for specific YOLO object classes</string>
-               </property>
-               <property name="text">
-                <string/>
-               </property>
-               <property name="icon">
-                <iconset resource="../../../sdrgui/resources/res.qrc">
-                 <normaloff>:/gear.png</normaloff>:/gear.png</iconset>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="yoloConfLabel">
-               <property name="text">
-                <string>Conf</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QDoubleSpinBox" name="yoloConfSpin">
-               <property name="toolTip">
-                <string>Minimum confidence threshold for detections (0-1)</string>
-               </property>
-               <property name="decimals">
-                <number>2</number>
-               </property>
-               <property name="minimum">
-                <double>0.010000000000000</double>
-               </property>
-               <property name="maximum">
-                <double>1.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>0.050000000000000</double>
-               </property>
-               <property name="value">
-                <double>0.500000000000000</double>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="yoloNmsLabel">
-               <property name="text">
-                <string>NMS</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QDoubleSpinBox" name="yoloNmsSpin">
-               <property name="toolTip">
-                <string>Non-maximum suppression IoU threshold (0-1)</string>
-               </property>
-               <property name="decimals">
-                <number>2</number>
-               </property>
-               <property name="minimum">
-                <double>0.010000000000000</double>
-               </property>
-               <property name="maximum">
-                <double>1.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>0.050000000000000</double>
-               </property>
-               <property name="value">
-                <double>0.450000000000000</double>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="yoloBoxColorButton">
-               <property name="toolTip">
-                <string>Select bounding box colour</string>
-               </property>
-               <property name="text">
-                <string/>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <widget class="QGroupBox" name="groupBox_3">
+             <property name="title">
+              <string>Spectrum Overlay</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayout_3">
+              <item row="1" column="2">
+               <widget class="QSlider" name="spectrumOffsetXSlider">
+                <property name="toolTip">
+                 <string>Spectrum overlay X offset (px)</string>
+                </property>
+                <property name="minimum">
+                 <number>-4096</number>
+                </property>
+                <property name="maximum">
+                 <number>4096</number>
+                </property>
+                <property name="value">
+                 <number>0</number>
+                </property>
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="3">
+               <widget class="QLabel" name="spectrumOffsetYValue">
+                <property name="minimumSize">
+                 <size>
+                  <width>40</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>0</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="spectrumScaleLabel">
+                <property name="text">
+                 <string>Scale</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_5">
+                <property name="text">
+                 <string>Device Set</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QSlider" name="spectrumOffsetYSlider">
+                <property name="toolTip">
+                 <string>Spectrum overlay Y offset (px)</string>
+                </property>
+                <property name="minimum">
+                 <number>-4096</number>
+                </property>
+                <property name="maximum">
+                 <number>4096</number>
+                </property>
+                <property name="value">
+                 <number>0</number>
+                </property>
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="spectrumOffsetXLabel">
+                <property name="text">
+                 <string>X</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="3">
+               <widget class="QLabel" name="spectrumOffsetXValue">
+                <property name="minimumSize">
+                 <size>
+                  <width>40</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>0</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="spectrumOffsetYLabel">
+                <property name="text">
+                 <string>Y</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2" colspan="2">
+               <widget class="QComboBox" name="spectrumDeviceCombo">
+                <property name="toolTip">
+                 <string>Device whose spectrum view to overlay</string>
+                </property>
+                <property name="sizeAdjustPolicy">
+                 <enum>QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon</enum>
+                </property>
+                <property name="minimumContentsLength">
+                 <number>8</number>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="2" colspan="2">
+               <widget class="QDoubleSpinBox" name="spectrumScaleSpin">
+                <property name="toolTip">
+                 <string>Spectrum overlay scale factor</string>
+                </property>
+                <property name="decimals">
+                 <number>2</number>
+                </property>
+                <property name="minimum">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>4.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.050000000000000</double>
+                </property>
+                <property name="value">
+                 <double>1.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
            </item>
            <item>
             <spacer name="postVerticalSpacer">
              <property name="orientation">
-              <enum>Qt::Vertical</enum>
+              <enum>Qt::Orientation::Vertical</enum>
              </property>
              <property name="sizeHint" stdset="0">
               <size>
@@ -1090,12 +856,306 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="detectionTab">
+      <attribute name="title">
+       <string>Detection</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_5">
+       <item>
+        <widget class="QGroupBox" name="objectDetectionGroup">
+         <property name="title">
+          <string>Object Detection</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout">
+          <item row="2" column="0">
+           <widget class="QLabel" name="yoloConfLabel">
+            <property name="text">
+             <string>Conf</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label">
+            <property name="text">
+             <string>YOLO model</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="yoloNmsLabel">
+            <property name="text">
+             <string>NMS</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="label_3">
+            <property name="text">
+             <string>Actions</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="4">
+           <widget class="QPushButton" name="yoloLabelsPathButton">
+            <property name="maximumSize">
+             <size>
+              <width>30</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Browse for class labels file</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/load.png</normaloff>:/load.png</iconset>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="yoloLabelsLabel">
+            <property name="text">
+             <string>Labels</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="4">
+           <widget class="QPushButton" name="yoloModelPathButton">
+            <property name="maximumSize">
+             <size>
+              <width>30</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Browse for ONNX model file</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/load.png</normaloff>:/load.png</iconset>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="label_2">
+            <property name="text">
+             <string>BB Colour</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QToolButton" name="yoloObjectControlButton">
+            <property name="toolTip">
+             <string>Configure actions for specific YOLO object classes</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/gear.png</normaloff>:/gear.png</iconset>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QToolButton" name="yoloBoxColorButton">
+            <property name="toolTip">
+             <string>Select bounding box colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QDoubleSpinBox" name="yoloNmsSpin">
+            <property name="toolTip">
+             <string>Non-maximum suppression IoU threshold (0-1)</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.050000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.450000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QDoubleSpinBox" name="yoloConfSpin">
+            <property name="toolTip">
+             <string>Minimum confidence threshold for detections (0-1)</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.050000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.500000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="yoloLabelsPathEdit">
+            <property name="toolTip">
+             <string>Path to plain-text class labels file (one name per line)</string>
+            </property>
+            <property name="placeholderText">
+             <string>coco.names</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="yoloModelPathEdit">
+            <property name="toolTip">
+             <string>Path to YOLO ONNX model file</string>
+            </property>
+            <property name="placeholderText">
+             <string>model.onnx</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_5">
+         <property name="title">
+          <string>Motion Detection</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_3">
+          <item>
+           <layout class="QHBoxLayout" name="motionDetailsLayout">
+            <item>
+             <widget class="QLabel" name="minContourAreaLabel">
+              <property name="text">
+               <string>Min area</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="minContourAreaSpin">
+              <property name="toolTip">
+               <string>Minimum contour area (px²)</string>
+              </property>
+              <property name="minimum">
+               <number>0</number>
+              </property>
+              <property name="maximum">
+               <number>10000</number>
+              </property>
+              <property name="value">
+               <number>100</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="motionBoxColorButton">
+              <property name="toolTip">
+               <string>Select bounding box colour</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_4">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_4">
+         <property name="title">
+          <string>Difference Detection</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_4">
+          <item>
+           <layout class="QHBoxLayout" name="diffDetailsLayout">
+            <item>
+             <widget class="QLabel" name="dilationLabel">
+              <property name="text">
+               <string>Dilation</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="dilationSpin">
+              <property name="toolTip">
+               <string>Dilation kernel size for diff mask</string>
+              </property>
+              <property name="minimum">
+               <number>0</number>
+              </property>
+              <property name="maximum">
+               <number>20</number>
+              </property>
+              <property name="value">
+               <number>3</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_3">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
    <item>
     <widget class="QDialogButtonBox" name="buttonBox">
      <property name="standardButtons">
-      <set>QDialogButtonBox::Close</set>
+      <set>QDialogButtonBox::StandardButton::Close</set>
      </property>
     </widget>
    </item>

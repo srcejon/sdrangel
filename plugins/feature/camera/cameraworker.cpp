@@ -47,22 +47,12 @@
 #include <QCamera>
 #include <QCameraDevice>
 #include <QCameraFormat>
-#include <QMediaCaptureSession>
 #include <QMediaDevices>
 #include <QSet>
-#include <QVideoFrame>
-#include <QVideoSink>
 #else
-#include <QAbstractVideoBuffer>
-#include <QAbstractVideoSurface>
 #include <QCamera>
-#include <QCameraExposure>
-#include <QCameraFocus>
-#include <QCameraImageProcessing>
 #include <QCameraInfo>
-#include <QCameraViewfinderSettings>
 #include <QSet>
-#include <QVideoFrame>
 #endif
 
 #include "maincore.h"
@@ -83,8 +73,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportQtCameraCapabilities, Message)
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportQtFocusModes, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgProcessFrame, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
@@ -100,14 +89,6 @@ CameraWorker::CameraWorker() :
     m_alpacaImageBytesSupported(true),
     m_statusTimer(this),
     m_spectrumPipeSource(nullptr)
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    , m_qtCamera(nullptr)
-    , m_videoSink(nullptr)
-    , m_captureSession(nullptr)
-#else
-    , m_qtCamera(nullptr)
-    , m_videoSurface(nullptr)
-#endif
 {
     QObject::connect(
         &m_availableDeviceHandler,
@@ -292,6 +273,14 @@ bool CameraWorker::handleMessage(const Message& cmd)
         }
         return true;
     }
+    else if (MsgProcessFrame::match(cmd))
+    {
+        MsgProcessFrame& frameMsg = (MsgProcessFrame&) cmd;
+        if (m_capturing) {
+            processNewFrame(frameMsg.getImage());
+        }
+        return true;
+    }
 
     return false;
 }
@@ -453,45 +442,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         audioDeviceManager->addAudioSink(&m_outputAudioFifo, getInputMessageQueue(), outputDeviceIndex);
     }
 
-    // Apply Qt-camera image-control settings inline (no recapture needed)
-    if (m_settings.isQtCamera() && m_capturing && m_qtCamera)
-    {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        if (force || settingsKeys.contains("whiteBalanceMode")) {
-            m_qtCamera->setWhiteBalanceMode(static_cast<QCamera::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
-        }
-        if (force || settingsKeys.contains("exposureCompensation")) {
-            m_qtCamera->setExposureCompensation(static_cast<float>(m_settings.m_exposureCompensation));
-        }
-        if (force || settingsKeys.contains("focusMode")) {
-            m_qtCamera->setFocusMode(static_cast<QCamera::FocusMode>(m_settings.m_focusMode));
-        }
-        if (force || settingsKeys.contains("focusDistance")) {
-            m_qtCamera->setFocusDistance(static_cast<float>(m_settings.m_focusDistance));
-        }
-        if (force || settingsKeys.contains("zoomFactor")) {
-            const float clampedZoom = static_cast<float>(
-                qBound(m_qtCamera->minimumZoomFactor(), static_cast<float>(m_settings.m_zoomFactor), m_qtCamera->maximumZoomFactor()));
-            m_qtCamera->setZoomFactor(clampedZoom);
-        }
-#else
-        if (force || settingsKeys.contains("whiteBalanceMode"))
-        {
-            QCameraImageProcessing *imageProcessing = m_qtCamera->imageProcessing();
-            if (imageProcessing) {
-                imageProcessing->setWhiteBalanceMode(
-                    static_cast<QCameraImageProcessing::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
-            }
-        }
-        if (force || settingsKeys.contains("zoomFactor"))
-        {
-            QCameraFocus *cameraFocus = m_qtCamera->focus();
-            if (cameraFocus) {
-                cameraFocus->zoomTo(m_settings.m_zoomFactor, 1.0);
-            }
-        }
-#endif
-    }
 }
 
 void CameraWorker::reportCameraList()
@@ -640,7 +590,8 @@ void CameraWorker::startCapture()
     }
     else if (m_settings.isQtCamera())
     {
-        setupQtCapture();
+        // Qt camera capture is managed by CameraGUI on the main thread.
+        // The worker just records that it is capturing so MsgProcessFrame messages are accepted.
     }
 }
 
@@ -652,8 +603,7 @@ void CameraWorker::stopCapture()
     if (m_videoWriter.isOpened()) {
         m_videoWriter.release();
     }
-
-    cleanupQtCapture();
+    // Qt camera cleanup is handled by CameraGUI on the main thread.
 }
 
 void CameraWorker::captureTick()
@@ -2246,330 +2196,6 @@ QImage CameraWorker::createPlaceholderFrame() const
     return image;
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-void CameraWorker::setupQtCapture()
-{
-    cleanupQtCapture();
-
-    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
-    if (cameras.isEmpty()) {
-        reportFrameToGUI(createPlaceholderFrame());
-        return;
-    }
-
-    QCameraDevice selectedDevice = cameras.front();
-
-    for (const QCameraDevice& device : cameras)
-    {
-        const QString id = QString::fromUtf8(device.id());
-
-        if ((id == m_settings.m_cameraId) || (device.description() == m_settings.m_cameraId)) {
-            selectedDevice = device;
-            break;
-        }
-    }
-
-    m_captureSession = new QMediaCaptureSession(this);
-    m_qtCamera = new QCamera(selectedDevice, this);
-    m_videoSink = new QVideoSink(this);
-
-    QCameraFormat chosenFormat;
-
-    for (const QCameraFormat& format : selectedDevice.videoFormats())
-    {
-        if ((format.resolution().width() == m_settings.m_resolutionWidth)
-                && (format.resolution().height() == m_settings.m_resolutionHeight)
-                && (format.maxFrameRate() >= m_settings.m_framesPerSecond))
-        {
-            chosenFormat = format;
-            break;
-        }
-    }
-
-    if (!chosenFormat.isNull()) {
-        m_qtCamera->setCameraFormat(chosenFormat);
-    }
-
-    m_qtCamera->setExposureMode(QCamera::ExposureManual);
-    m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
-    m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
-    m_qtCamera->setWhiteBalanceMode(static_cast<QCamera::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
-    m_qtCamera->setExposureCompensation(static_cast<float>(m_settings.m_exposureCompensation));
-    m_qtCamera->setFocusMode(static_cast<QCamera::FocusMode>(m_settings.m_focusMode));
-    m_qtCamera->setFocusDistance(static_cast<float>(m_settings.m_focusDistance));
-
-    m_captureSession->setCamera(m_qtCamera);
-    m_captureSession->setVideoOutput(m_videoSink);
-
-    connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraWorker::processQtVideoFrame);
-
-    m_qtCamera->start();
-
-    // Test whether this camera supports manual exposure time: set the value and check whether
-    // manualExposureTime() reflects it (returns -1 when unsupported).
-    m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
-    const bool manualExposureSupported = (m_qtCamera->manualExposureTime() >= 0.0f);
-
-    // Same pattern for ISO sensitivity: manualIsoSensitivity() returns -1 when unsupported.
-    m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
-    const bool isoSensitivitySupported = (m_qtCamera->manualIsoSensitivity() >= 0);
-
-    // White balance: Qt6 provides an explicit support query per mode.
-    const bool whiteBalanceModeSupported = m_qtCamera->isWhiteBalanceModeSupported(QCamera::WhiteBalanceAuto);
-
-    // Report zoom and per-control capabilities so the GUI can enable/disable its widgets
-    const float minZoom = m_qtCamera->minimumZoomFactor();
-    const float maxZoom = m_qtCamera->maximumZoomFactor();
-    if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(
-            minZoom, maxZoom,
-            manualExposureSupported,
-            isoSensitivitySupported,
-            whiteBalanceModeSupported));
-    }
-
-    // Apply zoom (clamped to what the hardware supports)
-    const float clampedZoom = qBound(minZoom, static_cast<float>(m_settings.m_zoomFactor), maxZoom);
-    m_qtCamera->setZoomFactor(clampedZoom);
-
-    // Report available focus modes (Qt 6 only)
-    {
-        static const QList<int> kFocusModes = {
-            static_cast<int>(QCamera::FocusModeAuto),
-            static_cast<int>(QCamera::FocusModeAutoNear),
-            static_cast<int>(QCamera::FocusModeAutoFar),
-            static_cast<int>(QCamera::FocusModeHyperfocal),
-            static_cast<int>(QCamera::FocusModeInfinity),
-            static_cast<int>(QCamera::FocusModeManual),
-        };
-        QList<int> supportedModes;
-        for (int mode : kFocusModes) {
-            if (m_qtCamera->isFocusModeSupported(static_cast<QCamera::FocusMode>(mode))) {
-                supportedModes.append(mode);
-            }
-        }
-        if (m_msgQueueToGUI) {
-            m_msgQueueToGUI->push(MsgReportQtFocusModes::create(supportedModes));
-        }
-    }
-}
-
-void CameraWorker::cleanupQtCapture()
-{
-    if (m_qtCamera)
-    {
-        m_qtCamera->stop();
-        m_qtCamera->deleteLater();
-        m_qtCamera = nullptr;
-    }
-
-    if (m_videoSink)
-    {
-        m_videoSink->deleteLater();
-        m_videoSink = nullptr;
-    }
-
-    if (m_captureSession)
-    {
-        m_captureSession->deleteLater();
-        m_captureSession = nullptr;
-    }
-}
-
-void CameraWorker::processQtVideoFrame(const QVideoFrame& frame)
-{
-    if (!m_capturing) {
-        return;
-    }
-
-    const QImage image = frame.toImage();
-
-    if (!image.isNull()) {
-        processNewFrame(image);
-    }
-}
-
-#else // Qt 5 implementations
-
-CameraVideoSurface::CameraVideoSurface(CameraWorker *worker, QObject *parent)
-    : QAbstractVideoSurface(parent)
-    , m_worker(worker)
-{
-}
-
-QList<QVideoFrame::PixelFormat> CameraVideoSurface::supportedPixelFormats(
-    QAbstractVideoBuffer::HandleType handleType) const
-{
-    Q_UNUSED(handleType);
-    return {
-        QVideoFrame::Format_ARGB32,
-        QVideoFrame::Format_ARGB32_Premultiplied,
-        QVideoFrame::Format_RGB32,
-        QVideoFrame::Format_RGB24,
-        QVideoFrame::Format_RGB565,
-        QVideoFrame::Format_RGB555,
-        QVideoFrame::Format_BGRA32,
-        QVideoFrame::Format_BGR32,
-        QVideoFrame::Format_BGR24,
-        QVideoFrame::Format_YUV444,
-        QVideoFrame::Format_YUV420P,
-        QVideoFrame::Format_YV12,
-        QVideoFrame::Format_UYVY,
-        QVideoFrame::Format_YUYV,
-        QVideoFrame::Format_NV12,
-        QVideoFrame::Format_NV21,
-    };
-}
-
-bool CameraVideoSurface::present(const QVideoFrame& frame)
-{
-    if (!frame.isValid()) {
-        return false;
-    }
-
-    QVideoFrame mutableFrame(frame);
-    mutableFrame.map(QAbstractVideoBuffer::ReadOnly);
-
-    const QImage::Format imageFormat = QVideoFrame::imageFormatFromPixelFormat(mutableFrame.pixelFormat());
-    QImage image;
-
-    if (imageFormat != QImage::Format_Invalid)
-    {
-        // Direct mapping: wrap the frame's data, then deep-copy before unmapping
-        image = QImage(
-            mutableFrame.bits(),
-            mutableFrame.width(),
-            mutableFrame.height(),
-            mutableFrame.bytesPerLine(),
-            imageFormat
-        ).copy();
-    }
-
-    mutableFrame.unmap();
-
-    if (!image.isNull()) {
-        emit frameAvailable(image);
-    }
-
-    return true;
-}
-
-void CameraWorker::setupQtCapture()
-{
-    cleanupQtCapture();
-
-    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
-
-    if (cameras.isEmpty())
-    {
-        reportFrameToGUI(createPlaceholderFrame());
-        return;
-    }
-
-    QCameraInfo selectedInfo = cameras.front();
-
-    for (const QCameraInfo& info : cameras)
-    {
-        const QString id = info.deviceName();
-        if ((id == m_settings.m_cameraId) || (info.description() == m_settings.m_cameraId))
-        {
-            selectedInfo = info;
-            break;
-        }
-    }
-
-    m_qtCamera = new QCamera(selectedInfo, this);
-    m_videoSurface = new CameraVideoSurface(this, this);
-
-    m_qtCamera->setViewfinder(m_videoSurface);
-
-    if (m_settings.m_resolutionWidth > 0 && m_settings.m_resolutionHeight > 0)
-    {
-        QCameraViewfinderSettings vfSettings;
-        vfSettings.setResolution(m_settings.m_resolutionWidth, m_settings.m_resolutionHeight);
-        vfSettings.setMaximumFrameRate(m_settings.m_framesPerSecond);
-        m_qtCamera->setViewfinderSettings(vfSettings);
-    }
-
-    QCameraExposure *exposure = m_qtCamera->exposure();
-
-    if (exposure)
-    {
-        exposure->setExposureMode(QCameraExposure::ExposureManual);
-        exposure->setManualShutterSpeed(static_cast<qreal>(m_settings.m_exposureTimeMs) / 1000.0);
-        exposure->setManualIsoSensitivity(m_settings.m_isoSensitivity);
-    }
-
-    QCameraImageProcessing *imageProcessing = m_qtCamera->imageProcessing();
-    if (imageProcessing) {
-        imageProcessing->setWhiteBalanceMode(
-            static_cast<QCameraImageProcessing::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
-    }
-
-    // Use a queued connection so that present() (called from the camera thread) safely
-    // marshals the QImage across to the CameraWorker thread for processing.
-    connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
-            this, &CameraWorker::processQt5VideoFrame, Qt::QueuedConnection);
-
-    m_qtCamera->start();
-
-    // Report zoom, exposure, ISO and white-balance capabilities so the GUI can configure its controls.
-    {
-        QCameraFocus *cameraFocus = m_qtCamera->focus();
-        const qreal minZoom = 1.0;
-        const qreal maxZoom = cameraFocus ? cameraFocus->maximumOpticalZoom() : 1.0;
-
-        // Qt5: manual exposure and ISO are provided by QCameraExposure
-        QCameraExposure *exp = m_qtCamera->exposure();
-        const bool manualExposureSupported = (exp != nullptr);
-        const bool isoSensitivitySupported = exp && !exp->supportedIsoSensitivities().isEmpty();
-
-        // Qt5: white balance support queried per mode via QCameraImageProcessing
-        QCameraImageProcessing *ip = m_qtCamera->imageProcessing();
-        const bool whiteBalanceModeSupported =
-            ip && ip->isWhiteBalanceModeSupported(QCameraImageProcessing::WhiteBalanceAuto);
-
-        if (m_msgQueueToGUI) {
-            m_msgQueueToGUI->push(MsgReportQtCameraCapabilities::create(
-                minZoom, maxZoom,
-                manualExposureSupported,
-                isoSensitivitySupported,
-                whiteBalanceModeSupported));
-        }
-        if (cameraFocus && maxZoom > minZoom) {
-            const qreal clampedZoom = qBound(minZoom, static_cast<qreal>(m_settings.m_zoomFactor), maxZoom);
-            cameraFocus->zoomTo(clampedZoom, 1.0);
-        }
-    }
-}
-
-void CameraWorker::cleanupQtCapture()
-{
-    if (m_qtCamera)
-    {
-        m_qtCamera->stop();
-        delete m_qtCamera;
-        m_qtCamera = nullptr;
-    }
-
-    if (m_videoSurface)
-    {
-        delete m_videoSurface;
-        m_videoSurface = nullptr;
-    }
-}
-
-void CameraWorker::processQt5VideoFrame(const QImage& image)
-{
-    if (!m_capturing) {
-        return;
-    }
-
-    if (!image.isNull()) {
-        processNewFrame(image);
-    }
-}
-#endif
 
 void CameraWorker::onCaptureAudioDataReady()
 {

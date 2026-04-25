@@ -32,10 +32,22 @@
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
+#include <QCameraDevice>
+#include <QCameraFormat>
+#include <QMediaCaptureSession>
+#include <QMediaDevices>
+#include <QVideoFrame>
+#include <QVideoSink>
 #else
+#include <QAbstractVideoBuffer>
+#include <QAbstractVideoSurface>
 #include <QCamera>
+#include <QCameraExposure>
 #include <QCameraFocus>
 #include <QCameraImageProcessing>
+#include <QCameraInfo>
+#include <QCameraViewfinderSettings>
+#include <QVideoFrame>
 #endif
 
 #include "ui_cameragui.h"
@@ -96,6 +108,10 @@ bool CameraGUI::handleMessage(const Message& message)
         blockApplySettings(true);
         displaySettings();
         blockApplySettings(false);
+
+        // (Re)start or update the Qt camera in response to settings changes or feature start
+        applyQtCameraSettings(cfg.getSettingsKeys(), cfg.getForce());
+
         return true;
     }
     else if (CameraWorker::MsgReportCameraList::match(message))
@@ -186,66 +202,6 @@ bool CameraGUI::handleMessage(const Message& message)
 
         return true;
     }
-    else if (CameraWorker::MsgReportQtCameraCapabilities::match(message))
-    {
-        const CameraWorker::MsgReportQtCameraCapabilities& caps =
-            (CameraWorker::MsgReportQtCameraCapabilities&) message;
-        const double minZoom = caps.getMinZoomFactor();
-        const double maxZoom = caps.getMaxZoomFactor();
-        m_qtZoomSupported             = (maxZoom > minZoom + 0.01);
-        m_qtManualExposureSupported   = caps.isManualExposureSupported();
-        m_qtIsoSensitivitySupported   = caps.isIsoSensitivitySupported();
-        m_qtWhiteBalanceModeSupported = caps.isWhiteBalanceModeSupported();
-
-        blockApplySettings(true);
-        ui->zoomSpin->setMinimum(minZoom);
-        ui->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
-        ui->zoomSpin->setEnabled(m_qtZoomSupported);
-        ui->zoomLabel->setEnabled(m_qtZoomSupported);
-        ui->exposureLabel->setEnabled(m_qtManualExposureSupported);
-        ui->exposureSpin->setEnabled(m_qtManualExposureSupported);
-        ui->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
-        ui->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
-        ui->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
-        ui->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
-        blockApplySettings(false);
-
-        return true;
-    }
-    else if (CameraWorker::MsgReportQtFocusModes::match(message))
-    {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        const CameraWorker::MsgReportQtFocusModes& modesMsg =
-            (CameraWorker::MsgReportQtFocusModes&) message;
-        const QList<int>& supported = modesMsg.getFocusModes();
-
-        blockApplySettings(true);
-        for (int i = 0; i < ui->focusModeCombo->count(); ++i)
-        {
-            const int modeVal = ui->focusModeCombo->itemData(i).toInt();
-            // Mark unsupported modes as disabled via the user role flag
-            const QStandardItemModel *model = qobject_cast<QStandardItemModel*>(ui->focusModeCombo->model());
-            if (model) {
-                QStandardItem *item = model->item(i);
-                if (item) {
-                    item->setEnabled(supported.contains(modeVal));
-                }
-            }
-        }
-        // If the currently-saved focus mode is not supported, fall back to first supported mode
-        if (!supported.isEmpty() && !supported.contains(m_settings.m_focusMode))
-        {
-            m_settings.m_focusMode = supported.first();
-            const int idx = ui->focusModeCombo->findData(m_settings.m_focusMode);
-            if (idx >= 0) {
-                ui->focusModeCombo->setCurrentIndex(idx);
-            }
-        }
-        blockApplySettings(false);
-#endif
-        return true;
-    }
-
     return false;
 }
 
@@ -274,7 +230,15 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_qtIsoSensitivitySupported(true),
     m_qtWhiteBalanceModeSupported(true),
     m_imageScene(nullptr),
-    m_imagePixmapItem(nullptr)
+    m_imagePixmapItem(nullptr),
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    m_qtCamera(nullptr),
+    m_videoSink(nullptr),
+    m_captureSession(nullptr)
+#else
+    m_qtCamera(nullptr),
+    m_videoSurface(nullptr)
+#endif
 {
     m_feature = feature;
     setAttribute(Qt::WA_DeleteOnClose, true);
@@ -317,7 +281,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     // Populate focus-mode combo with all Qt 6 modes; enabled items are updated once
-    // MsgReportQtFocusModes arrives (after the camera starts).
+    // the camera starts (inside setupQtCapture).
     ui->focusModeCombo->addItem(tr("Auto"),       static_cast<int>(QCamera::FocusModeAuto));
     ui->focusModeCombo->addItem(tr("Auto near"),  static_cast<int>(QCamera::FocusModeAutoNear));
     ui->focusModeCombo->addItem(tr("Auto far"),   static_cast<int>(QCamera::FocusModeAutoFar));
@@ -334,6 +298,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
 CameraGUI::~CameraGUI()
 {
+    cleanupQtCapture();
     delete ui;
 }
 
@@ -545,6 +510,414 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->focusDistSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_focusDistSpin_valueChanged);
     QObject::connect(ui->zoomSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_zoomSpin_valueChanged);
 }
+
+// ---------------------------------------------------------------------------
+// Qt camera capture — runs entirely on the GUI / main thread
+// ---------------------------------------------------------------------------
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+CameraVideoSurface::CameraVideoSurface(QObject *parent)
+    : QAbstractVideoSurface(parent)
+{
+}
+
+QList<QVideoFrame::PixelFormat> CameraVideoSurface::supportedPixelFormats(
+    QAbstractVideoBuffer::HandleType handleType) const
+{
+    Q_UNUSED(handleType);
+    return {
+        QVideoFrame::Format_ARGB32,
+        QVideoFrame::Format_ARGB32_Premultiplied,
+        QVideoFrame::Format_RGB32,
+        QVideoFrame::Format_RGB24,
+        QVideoFrame::Format_RGB565,
+        QVideoFrame::Format_RGB555,
+        QVideoFrame::Format_BGRA32,
+        QVideoFrame::Format_BGR32,
+        QVideoFrame::Format_BGR24,
+        QVideoFrame::Format_YUV444,
+        QVideoFrame::Format_YUV420P,
+        QVideoFrame::Format_YV12,
+        QVideoFrame::Format_UYVY,
+        QVideoFrame::Format_YUYV,
+        QVideoFrame::Format_NV12,
+        QVideoFrame::Format_NV21,
+    };
+}
+
+bool CameraVideoSurface::present(const QVideoFrame& frame)
+{
+    if (!frame.isValid()) {
+        return false;
+    }
+
+    QVideoFrame mutableFrame(frame);
+    mutableFrame.map(QAbstractVideoBuffer::ReadOnly);
+
+    const QImage::Format imageFormat = QVideoFrame::imageFormatFromPixelFormat(mutableFrame.pixelFormat());
+    QImage image;
+
+    if (imageFormat != QImage::Format_Invalid)
+    {
+        image = QImage(
+            mutableFrame.bits(),
+            mutableFrame.width(),
+            mutableFrame.height(),
+            mutableFrame.bytesPerLine(),
+            imageFormat
+        ).copy();
+    }
+
+    mutableFrame.unmap();
+
+    if (!image.isNull()) {
+        emit frameAvailable(image);
+    }
+
+    return true;
+}
+#endif // Qt 5
+
+void CameraGUI::setupQtCapture()
+{
+    cleanupQtCapture();
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+
+    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
+    if (cameras.isEmpty()) {
+        return;
+    }
+
+    QCameraDevice selectedDevice = cameras.front();
+    for (const QCameraDevice& device : cameras)
+    {
+        const QString id = QString::fromUtf8(device.id());
+        if ((id == m_settings.m_cameraId) || (device.description() == m_settings.m_cameraId)) {
+            selectedDevice = device;
+            break;
+        }
+    }
+
+    m_captureSession = new QMediaCaptureSession(this);
+    m_qtCamera       = new QCamera(selectedDevice, this);
+    m_videoSink      = new QVideoSink(this);
+
+    // Select a matching camera format if one exists
+    QCameraFormat chosenFormat;
+    for (const QCameraFormat& fmt : selectedDevice.videoFormats())
+    {
+        if ((fmt.resolution().width()  == m_settings.m_resolutionWidth)
+         && (fmt.resolution().height() == m_settings.m_resolutionHeight)
+         && (fmt.maxFrameRate()        >= m_settings.m_framesPerSecond))
+        {
+            chosenFormat = fmt;
+            break;
+        }
+    }
+    if (!chosenFormat.isNull()) {
+        m_qtCamera->setCameraFormat(chosenFormat);
+    }
+
+    m_qtCamera->setExposureMode(QCamera::ExposureManual);
+    m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
+    m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
+    m_qtCamera->setWhiteBalanceMode(static_cast<QCamera::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
+    m_qtCamera->setExposureCompensation(static_cast<float>(m_settings.m_exposureCompensation));
+    m_qtCamera->setFocusMode(static_cast<QCamera::FocusMode>(m_settings.m_focusMode));
+    m_qtCamera->setFocusDistance(static_cast<float>(m_settings.m_focusDistance));
+
+    m_captureSession->setCamera(m_qtCamera);
+    m_captureSession->setVideoOutput(m_videoSink);
+
+    connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
+
+    m_qtCamera->start();
+
+    // Probe capabilities after start
+    m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
+    m_qtManualExposureSupported = (m_qtCamera->manualExposureTime() >= 0.0f);
+
+    m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
+    m_qtIsoSensitivitySupported = (m_qtCamera->manualIsoSensitivity() >= 0);
+
+    m_qtWhiteBalanceModeSupported = m_qtCamera->isWhiteBalanceModeSupported(QCamera::WhiteBalanceAuto);
+
+    const float minZoom = m_qtCamera->minimumZoomFactor();
+    const float maxZoom = m_qtCamera->maximumZoomFactor();
+    m_qtZoomSupported = (maxZoom > minZoom + 0.01f);
+
+    blockApplySettings(true);
+    ui->zoomSpin->setMinimum(minZoom);
+    ui->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
+    ui->zoomSpin->setEnabled(m_qtZoomSupported);
+    ui->zoomLabel->setEnabled(m_qtZoomSupported);
+    ui->exposureLabel->setEnabled(m_qtManualExposureSupported);
+    ui->exposureSpin->setEnabled(m_qtManualExposureSupported);
+    ui->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
+    ui->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
+    ui->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
+    ui->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
+    blockApplySettings(false);
+
+    // Clamp and apply zoom
+    const float clampedZoom = qBound(minZoom, static_cast<float>(m_settings.m_zoomFactor), maxZoom);
+    m_qtCamera->setZoomFactor(clampedZoom);
+
+    // Populate focus mode combo with supported modes
+    {
+        static const QList<int> kFocusModes = {
+            static_cast<int>(QCamera::FocusModeAuto),
+            static_cast<int>(QCamera::FocusModeAutoNear),
+            static_cast<int>(QCamera::FocusModeAutoFar),
+            static_cast<int>(QCamera::FocusModeHyperfocal),
+            static_cast<int>(QCamera::FocusModeInfinity),
+            static_cast<int>(QCamera::FocusModeManual),
+        };
+        QList<int> supportedModes;
+        for (int mode : kFocusModes) {
+            if (m_qtCamera->isFocusModeSupported(static_cast<QCamera::FocusMode>(mode))) {
+                supportedModes.append(mode);
+            }
+        }
+        blockApplySettings(true);
+        for (int i = 0; i < ui->focusModeCombo->count(); ++i)
+        {
+            const int modeVal = ui->focusModeCombo->itemData(i).toInt();
+            const QStandardItemModel *model = qobject_cast<QStandardItemModel*>(ui->focusModeCombo->model());
+            if (model) {
+                QStandardItem *item = model->item(i);
+                if (item) {
+                    item->setEnabled(supportedModes.contains(modeVal));
+                }
+            }
+        }
+        if (!supportedModes.isEmpty() && !supportedModes.contains(m_settings.m_focusMode))
+        {
+            m_settings.m_focusMode = supportedModes.first();
+            const int idx = ui->focusModeCombo->findData(m_settings.m_focusMode);
+            if (idx >= 0) {
+                ui->focusModeCombo->setCurrentIndex(idx);
+            }
+        }
+        blockApplySettings(false);
+    }
+
+#else // Qt 5
+
+    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+    if (cameras.isEmpty()) {
+        return;
+    }
+
+    QCameraInfo selectedInfo = cameras.front();
+    for (const QCameraInfo& info : cameras)
+    {
+        const QString id = info.deviceName();
+        if ((id == m_settings.m_cameraId) || (info.description() == m_settings.m_cameraId))
+        {
+            selectedInfo = info;
+            break;
+        }
+    }
+
+    m_qtCamera     = new QCamera(selectedInfo, this);
+    m_videoSurface = new CameraVideoSurface(this);
+
+    m_qtCamera->setViewfinder(m_videoSurface);
+
+    if (m_settings.m_resolutionWidth > 0 && m_settings.m_resolutionHeight > 0)
+    {
+        QCameraViewfinderSettings vfSettings;
+        vfSettings.setResolution(m_settings.m_resolutionWidth, m_settings.m_resolutionHeight);
+        vfSettings.setMaximumFrameRate(m_settings.m_framesPerSecond);
+        m_qtCamera->setViewfinderSettings(vfSettings);
+    }
+
+    QCameraExposure *exposure = m_qtCamera->exposure();
+    if (exposure)
+    {
+        exposure->setExposureMode(QCameraExposure::ExposureManual);
+        exposure->setManualShutterSpeed(static_cast<qreal>(m_settings.m_exposureTimeMs) / 1000.0);
+        exposure->setManualIsoSensitivity(m_settings.m_isoSensitivity);
+    }
+
+    QCameraImageProcessing *imageProcessing = m_qtCamera->imageProcessing();
+    if (imageProcessing) {
+        imageProcessing->setWhiteBalanceMode(
+            static_cast<QCameraImageProcessing::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
+    }
+
+    // Queued connection: present() may be called from the camera's internal thread
+    connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
+            this, &CameraGUI::onQt5VideoFrame, Qt::QueuedConnection);
+
+    m_qtCamera->start();
+
+    // Probe capabilities
+    {
+        QCameraFocus *cameraFocus = m_qtCamera->focus();
+        const qreal minZoom = 1.0;
+        const qreal maxZoom = cameraFocus ? cameraFocus->maximumOpticalZoom() : 1.0;
+        m_qtZoomSupported = (maxZoom > minZoom + 0.01);
+
+        QCameraExposure *exp = m_qtCamera->exposure();
+        m_qtManualExposureSupported = (exp != nullptr);
+        m_qtIsoSensitivitySupported = exp && !exp->supportedIsoSensitivities().isEmpty();
+
+        QCameraImageProcessing *ip = m_qtCamera->imageProcessing();
+        m_qtWhiteBalanceModeSupported =
+            ip && ip->isWhiteBalanceModeSupported(QCameraImageProcessing::WhiteBalanceAuto);
+
+        blockApplySettings(true);
+        ui->zoomSpin->setMinimum(minZoom);
+        ui->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
+        ui->zoomSpin->setEnabled(m_qtZoomSupported);
+        ui->zoomLabel->setEnabled(m_qtZoomSupported);
+        ui->exposureLabel->setEnabled(m_qtManualExposureSupported);
+        ui->exposureSpin->setEnabled(m_qtManualExposureSupported);
+        ui->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
+        ui->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
+        ui->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
+        ui->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
+        blockApplySettings(false);
+
+        if (cameraFocus && maxZoom > minZoom) {
+            const qreal clampedZoom = qBound(minZoom, static_cast<qreal>(m_settings.m_zoomFactor), maxZoom);
+            cameraFocus->zoomTo(clampedZoom, 1.0);
+        }
+    }
+
+#endif // Qt version
+}
+
+void CameraGUI::cleanupQtCapture()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_qtCamera) {
+        m_qtCamera->stop();
+        delete m_qtCamera;
+        m_qtCamera = nullptr;
+    }
+    if (m_videoSink) {
+        delete m_videoSink;
+        m_videoSink = nullptr;
+    }
+    if (m_captureSession) {
+        delete m_captureSession;
+        m_captureSession = nullptr;
+    }
+#else
+    if (m_qtCamera) {
+        m_qtCamera->stop();
+        delete m_qtCamera;
+        m_qtCamera = nullptr;
+    }
+    if (m_videoSurface) {
+        delete m_videoSurface;
+        m_videoSurface = nullptr;
+    }
+#endif
+}
+
+void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool force)
+{
+    if (!m_settings.isQtCamera())
+    {
+        // Camera type switched away from Qt — stop any running Qt camera
+        if (m_qtCamera) {
+            cleanupQtCapture();
+        }
+        return;
+    }
+
+    // Decide whether a full restart is needed
+    const bool recapture = force
+        || settingsKeys.contains("cameraId")
+        || settingsKeys.contains("resolutionWidth")
+        || settingsKeys.contains("resolutionHeight")
+        || settingsKeys.contains("framesPerSecond")
+        || settingsKeys.contains("exposureTimeMs")
+        || settingsKeys.contains("isoSensitivity");
+
+    if (settingsKeys.contains("captureActive") || force)
+    {
+        if (m_settings.m_captureActive) {
+            setupQtCapture();
+        } else {
+            cleanupQtCapture();
+        }
+    }
+    else if (recapture && m_qtCamera)
+    {
+        // Restart the camera so the new format / exposure parameters take effect
+        setupQtCapture();
+    }
+    else if (m_qtCamera)
+    {
+        // Apply inline settings that don't require a camera restart
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        if (force || settingsKeys.contains("whiteBalanceMode")) {
+            m_qtCamera->setWhiteBalanceMode(static_cast<QCamera::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
+        }
+        if (force || settingsKeys.contains("exposureCompensation")) {
+            m_qtCamera->setExposureCompensation(static_cast<float>(m_settings.m_exposureCompensation));
+        }
+        if (force || settingsKeys.contains("focusMode")) {
+            m_qtCamera->setFocusMode(static_cast<QCamera::FocusMode>(m_settings.m_focusMode));
+        }
+        if (force || settingsKeys.contains("focusDistance")) {
+            m_qtCamera->setFocusDistance(static_cast<float>(m_settings.m_focusDistance));
+        }
+        if (force || settingsKeys.contains("zoomFactor")) {
+            const float clampedZoom = static_cast<float>(
+                qBound(m_qtCamera->minimumZoomFactor(),
+                       static_cast<float>(m_settings.m_zoomFactor),
+                       m_qtCamera->maximumZoomFactor()));
+            m_qtCamera->setZoomFactor(clampedZoom);
+        }
+#else
+        if (force || settingsKeys.contains("whiteBalanceMode"))
+        {
+            QCameraImageProcessing *ip = m_qtCamera->imageProcessing();
+            if (ip) {
+                ip->setWhiteBalanceMode(
+                    static_cast<QCameraImageProcessing::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
+            }
+        }
+        if (force || settingsKeys.contains("zoomFactor"))
+        {
+            QCameraFocus *cameraFocus = m_qtCamera->focus();
+            if (cameraFocus) {
+                cameraFocus->zoomTo(m_settings.m_zoomFactor, 1.0);
+            }
+        }
+#endif
+    }
+}
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+void CameraGUI::onQtVideoFrame(const QVideoFrame& frame)
+{
+    const QImage image = frame.toImage();
+    if (!image.isNull()) {
+        MessageQueue *workerMQ = m_camera->getWorkerInputMessageQueue();
+        if (workerMQ) {
+            workerMQ->push(CameraWorker::MsgProcessFrame::create(image));
+        }
+    }
+}
+#else
+void CameraGUI::onQt5VideoFrame(const QImage& image)
+{
+    if (!image.isNull()) {
+        MessageQueue *workerMQ = m_camera->getWorkerInputMessageQueue();
+        if (workerMQ) {
+            workerMQ->push(CameraWorker::MsgProcessFrame::create(image));
+        }
+    }
+}
+#endif
 
 void CameraGUI::updateAlpacaVisibility()
 {
@@ -1040,7 +1413,7 @@ void CameraGUI::updateEnabledControls()
     }
     else
     {
-        // Zoom and exposure control enabled states are set when MsgReportQtCameraCapabilities arrives;
+        // Zoom and exposure control enabled states are set inside setupQtCapture;
         // re-apply them here so other updateEnabledControls callers don't accidentally re-enable them.
         if (!m_qtZoomSupported)
         {

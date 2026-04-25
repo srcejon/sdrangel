@@ -104,6 +104,8 @@ public:
     static const char* const m_featureIdURI;
     static const char* const m_featureId;
 
+    MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
+
 private:
     QThread *m_thread;
     CameraWorker *m_worker;

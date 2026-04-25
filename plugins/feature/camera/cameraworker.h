@@ -41,38 +41,6 @@
 
 class QNetworkAccessManager;
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-class QCamera;
-class QVideoSink;
-class QMediaCaptureSession;
-class QVideoFrame;
-#else
-#include <QAbstractVideoSurface>
-#include <QAbstractVideoBuffer>
-#include <QVideoFrame>
-class QCamera;
-class CameraWorker;
-
-/// Helper video surface used in Qt5 to receive frames from QCamera via QAbstractVideoSurface.
-class CameraVideoSurface : public QAbstractVideoSurface
-{
-    Q_OBJECT
-public:
-    explicit CameraVideoSurface(CameraWorker *worker, QObject *parent = nullptr);
-
-    QList<QVideoFrame::PixelFormat> supportedPixelFormats(
-        QAbstractVideoBuffer::HandleType handleType = QAbstractVideoBuffer::NoHandle) const override;
-
-    bool present(const QVideoFrame& frame) override;
-
-signals:
-    void frameAvailable(const QImage& image);
-
-private:
-    CameraWorker *m_worker;
-};
-#endif
-
 class CameraWorker : public QObject
 {
     Q_OBJECT
@@ -331,69 +299,24 @@ public:
         { }
     };
 
-    // Sent when a Qt camera starts, reporting runtime zoom, exposure, ISO and white-balance capabilities
-    class MsgReportQtCameraCapabilities : public Message {
+    // Sent from CameraGUI to CameraWorker when a new video frame arrives from the Qt camera
+    class MsgProcessFrame : public Message {
         MESSAGE_CLASS_DECLARATION
 
     public:
-        double getMinZoomFactor() const { return m_minZoomFactor; }
-        double getMaxZoomFactor() const { return m_maxZoomFactor; }
-        bool isManualExposureSupported() const { return m_manualExposureSupported; }
-        bool isIsoSensitivitySupported() const { return m_isoSensitivitySupported; }
-        bool isWhiteBalanceModeSupported() const { return m_whiteBalanceModeSupported; }
+        const QImage& getImage() const { return m_image; }
 
-        static MsgReportQtCameraCapabilities* create(
-            double minZoom, double maxZoom,
-            bool manualExposureSupported,
-            bool isoSensitivitySupported,
-            bool whiteBalanceModeSupported)
+        static MsgProcessFrame* create(const QImage& image)
         {
-            return new MsgReportQtCameraCapabilities(
-                minZoom, maxZoom,
-                manualExposureSupported,
-                isoSensitivitySupported,
-                whiteBalanceModeSupported);
+            return new MsgProcessFrame(image);
         }
 
     private:
-        double m_minZoomFactor;
-        double m_maxZoomFactor;
-        bool m_manualExposureSupported;
-        bool m_isoSensitivitySupported;
-        bool m_whiteBalanceModeSupported;
+        QImage m_image;
 
-        MsgReportQtCameraCapabilities(
-            double minZoom, double maxZoom,
-            bool manualExposureSupported,
-            bool isoSensitivitySupported,
-            bool whiteBalanceModeSupported) :
+        MsgProcessFrame(const QImage& image) :
             Message(),
-            m_minZoomFactor(minZoom),
-            m_maxZoomFactor(maxZoom),
-            m_manualExposureSupported(manualExposureSupported),
-            m_isoSensitivitySupported(isoSensitivitySupported),
-            m_whiteBalanceModeSupported(whiteBalanceModeSupported)
-        { }
-    };
-
-    // Sent when a Qt camera starts, reporting available focus modes
-    class MsgReportQtFocusModes : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const QList<int>& getFocusModes() const { return m_focusModes; }
-
-        static MsgReportQtFocusModes* create(const QList<int>& focusModes)
-        {
-            return new MsgReportQtFocusModes(focusModes);
-        }
-
-    private:
-        QList<int> m_focusModes;
-
-        MsgReportQtFocusModes(const QList<int>& focusModes) :
-            Message(),
-            m_focusModes(focusModes)
+            m_image(image)
         { }
     };
 
@@ -448,15 +371,6 @@ private:
     AudioFifo m_outputAudioFifo;   ///< Feeds samples to AudioDeviceManager for playback
     QVector<quint8> m_audioTransferBuffer; ///< Scratch buffer for the capture→output copy
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    QCamera *m_qtCamera;
-    QVideoSink *m_videoSink;
-    QMediaCaptureSession *m_captureSession;
-#else
-    QCamera *m_qtCamera;
-    CameraVideoSurface *m_videoSurface;
-#endif
-
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void reportCameraList();
@@ -487,16 +401,6 @@ private:
     void alpacaQueryCameraCapabilities();
     void alpacaSetCameraParams();
     void alpacaPollStatus();
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    void setupQtCapture();
-    void cleanupQtCapture();
-    void processQtVideoFrame(const QVideoFrame& frame);
-#else
-    void setupQtCapture();
-    void cleanupQtCapture();
-    void processQt5VideoFrame(const QImage& image);
-#endif
 
 private slots:
     void handleInputMessages();

@@ -63,6 +63,11 @@ void Camera::start()
 
     m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(m_settings, QList<QString>(), true));
 
+    // Notify GUI that the worker has started so it can (re)start the Qt camera
+    if (m_guiMessageQueue) {
+        m_guiMessageQueue->push(MsgConfigureCamera::create(m_settings, QList<QString>(), true));
+    }
+
     if (m_settings.m_captureActive) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
     }

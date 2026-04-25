@@ -24,6 +24,35 @@
 #include <QGraphicsPixmapItem>
 #include <QToolButton>
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QVideoFrame>
+class QCamera;
+class QVideoSink;
+class QMediaCaptureSession;
+#else
+#include <QAbstractVideoSurface>
+#include <QAbstractVideoBuffer>
+#include <QVideoFrame>
+class QCamera;
+class CameraGUI;
+
+/// Qt5 video surface: receives raw frames from QCamera and emits them as QImage signals.
+class CameraVideoSurface : public QAbstractVideoSurface
+{
+    Q_OBJECT
+public:
+    explicit CameraVideoSurface(QObject *parent = nullptr);
+
+    QList<QVideoFrame::PixelFormat> supportedPixelFormats(
+        QAbstractVideoBuffer::HandleType handleType = QAbstractVideoBuffer::NoHandle) const override;
+
+    bool present(const QVideoFrame& frame) override;
+
+signals:
+    void frameAvailable(const QImage& image);
+};
+#endif
+
 #include "feature/featuregui.h"
 #include "util/messagequeue.h"
 #include "settings/rollupstate.h"
@@ -76,6 +105,15 @@ private:
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    QCamera *m_qtCamera;
+    QVideoSink *m_videoSink;
+    QMediaCaptureSession *m_captureSession;
+#else
+    QCamera *m_qtCamera;
+    CameraVideoSurface *m_videoSurface;
+#endif
+
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     virtual ~CameraGUI();
 
@@ -91,6 +129,9 @@ private:
     void updateImageWidget();
     void updateEnabledControls();
     static void updateColorButton(QToolButton* btn, const QColor& color);
+    void setupQtCapture();
+    void cleanupQtCapture();
+    void applyQtCameraSettings(const QList<QString>& settingsKeys, bool force);
 
 private slots:
     void handleInputMessages();
@@ -157,6 +198,12 @@ private slots:
     void on_focusModeCombo_currentIndexChanged(int index);
     void on_focusDistSpin_valueChanged(double value);
     void on_zoomSpin_valueChanged(double value);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    void onQtVideoFrame(const QVideoFrame& frame);
+#else
+    void onQt5VideoFrame(const QImage& image);
+#endif
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

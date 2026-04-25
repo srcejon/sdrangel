@@ -16,14 +16,9 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QColorDialog>
-#include <QBoxLayout>
 #include <QFileDialog>
 #include <QFontDatabase>
-#include <QIcon>
 #include <QGraphicsView>
-#include <QGridLayout>
-#include <QHBoxLayout>
-#include <QLabel>
 #include <QPainter>
 #include <QPixmap>
 #include <QStandardItemModel>
@@ -62,28 +57,6 @@
 #include "camerasettingsdialog.h"
 #include "cameraworker.h"
 #include "cameragui.h"
-
-namespace {
-
-void moveGridWidget(QGridLayout *sourceLayout, QWidget *widget, QGridLayout *targetLayout, int row, int column)
-{
-    sourceLayout->removeWidget(widget);
-    targetLayout->addWidget(widget, row, column);
-}
-
-void moveGridLayout(QGridLayout *sourceLayout, QLayout *layout, QGridLayout *targetLayout, int row, int column)
-{
-    sourceLayout->removeItem(layout);
-    targetLayout->addLayout(layout, row, column);
-}
-
-void moveWidgetToBoxLayout(QLayout *sourceLayout, QWidget *widget, QBoxLayout *targetLayout)
-{
-    sourceLayout->removeWidget(widget);
-    targetLayout->addWidget(widget);
-}
-
-}
 
 CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
@@ -168,21 +141,21 @@ bool CameraGUI::handleMessage(const Message& message)
         const CameraWorker::MsgReportResolutions& report = (CameraWorker::MsgReportResolutions&) message;
         const QString current = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
 
-        ui->resolutionCombo->blockSignals(true);
-        ui->resolutionCombo->clear();
+        settingsUI()->resolutionCombo->blockSignals(true);
+        settingsUI()->resolutionCombo->clear();
 
         for (const QSize& size : report.getResolutions()) {
-            ui->resolutionCombo->addItem(QString("%1x%2").arg(size.width()).arg(size.height()));
+            settingsUI()->resolutionCombo->addItem(QString("%1x%2").arg(size.width()).arg(size.height()));
         }
 
-        const int idx = ui->resolutionCombo->findText(current);
+        const int idx = settingsUI()->resolutionCombo->findText(current);
         if (idx >= 0) {
-            ui->resolutionCombo->setCurrentIndex(idx);
-        } else if (ui->resolutionCombo->count() > 0) {
-            ui->resolutionCombo->setCurrentIndex(0);
+            settingsUI()->resolutionCombo->setCurrentIndex(idx);
+        } else if (settingsUI()->resolutionCombo->count() > 0) {
+            settingsUI()->resolutionCombo->setCurrentIndex(0);
         }
 
-        ui->resolutionCombo->blockSignals(false);
+        settingsUI()->resolutionCombo->blockSignals(false);
         return true;
     }
     else if (CameraWorker::MsgReportFrame::match(message))
@@ -219,14 +192,14 @@ bool CameraGUI::handleMessage(const Message& message)
         const CameraWorker::MsgReportAvailableDevices& report = (CameraWorker::MsgReportAvailableDevices&) message;
         const QString currentDevice = m_settings.m_spectrumDevice;
 
-        ui->spectrumDeviceCombo->blockSignals(true);
-        ui->spectrumDeviceCombo->clear();
+        settingsUI()->spectrumDeviceCombo->blockSignals(true);
+        settingsUI()->spectrumDeviceCombo->clear();
         for (const QString& id : report.getDeviceLongIds()) {
-            ui->spectrumDeviceCombo->addItem(id);
+            settingsUI()->spectrumDeviceCombo->addItem(id);
         }
-        const int idx = ui->spectrumDeviceCombo->findText(currentDevice);
-        ui->spectrumDeviceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
-        ui->spectrumDeviceCombo->blockSignals(false);
+        const int idx = settingsUI()->spectrumDeviceCombo->findText(currentDevice);
+        settingsUI()->spectrumDeviceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+        settingsUI()->spectrumDeviceCombo->blockSignals(false);
 
         return true;
     }
@@ -252,7 +225,6 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_featureUISet(featureUISet),
     m_doApplySettings(true),
     m_settingsDialog(nullptr),
-    m_cameraSettingsButton(nullptr),
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
     m_qtZoomSupported(false),
@@ -302,28 +274,27 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     connect(audioMuteRightClickEnabler, SIGNAL(rightClick(const QPoint &)), this, SLOT(audioSelect(const QPoint &)));
 
     // Populate white-balance combo (indices match QCamera::WhiteBalanceMode / QCameraImageProcessing::WhiteBalanceMode)
-    ui->whiteBalanceCombo->addItem(tr("Auto"),        0);
-    ui->whiteBalanceCombo->addItem(tr("Manual"),      1);
-    ui->whiteBalanceCombo->addItem(tr("Sunlight"),    2);
-    ui->whiteBalanceCombo->addItem(tr("Cloudy"),      3);
-    ui->whiteBalanceCombo->addItem(tr("Shade"),       4);
-    ui->whiteBalanceCombo->addItem(tr("Tungsten"),    5);
-    ui->whiteBalanceCombo->addItem(tr("Fluorescent"), 6);
-    ui->whiteBalanceCombo->addItem(tr("Flash"),       7);
-    ui->whiteBalanceCombo->addItem(tr("Sunset"),      8);
+    settingsUI()->whiteBalanceCombo->addItem(tr("Auto"),        0);
+    settingsUI()->whiteBalanceCombo->addItem(tr("Manual"),      1);
+    settingsUI()->whiteBalanceCombo->addItem(tr("Sunlight"),    2);
+    settingsUI()->whiteBalanceCombo->addItem(tr("Cloudy"),      3);
+    settingsUI()->whiteBalanceCombo->addItem(tr("Shade"),       4);
+    settingsUI()->whiteBalanceCombo->addItem(tr("Tungsten"),    5);
+    settingsUI()->whiteBalanceCombo->addItem(tr("Fluorescent"), 6);
+    settingsUI()->whiteBalanceCombo->addItem(tr("Flash"),       7);
+    settingsUI()->whiteBalanceCombo->addItem(tr("Sunset"),      8);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     // Populate focus-mode combo with all Qt 6 modes; enabled items are updated once
     // the camera starts (inside setupQtCapture).
-    ui->focusModeCombo->addItem(tr("Auto"),       static_cast<int>(QCamera::FocusModeAuto));
-    ui->focusModeCombo->addItem(tr("Auto near"),  static_cast<int>(QCamera::FocusModeAutoNear));
-    ui->focusModeCombo->addItem(tr("Auto far"),   static_cast<int>(QCamera::FocusModeAutoFar));
-    ui->focusModeCombo->addItem(tr("Hyperfocal"), static_cast<int>(QCamera::FocusModeHyperfocal));
-    ui->focusModeCombo->addItem(tr("Infinity"),   static_cast<int>(QCamera::FocusModeInfinity));
-    ui->focusModeCombo->addItem(tr("Manual"),     static_cast<int>(QCamera::FocusModeManual));
+    settingsUI()->focusModeCombo->addItem(tr("Auto"),       static_cast<int>(QCamera::FocusModeAuto));
+    settingsUI()->focusModeCombo->addItem(tr("Auto near"),  static_cast<int>(QCamera::FocusModeAutoNear));
+    settingsUI()->focusModeCombo->addItem(tr("Auto far"),   static_cast<int>(QCamera::FocusModeAutoFar));
+    settingsUI()->focusModeCombo->addItem(tr("Hyperfocal"), static_cast<int>(QCamera::FocusModeHyperfocal));
+    settingsUI()->focusModeCombo->addItem(tr("Infinity"),   static_cast<int>(QCamera::FocusModeInfinity));
+    settingsUI()->focusModeCombo->addItem(tr("Manual"),     static_cast<int>(QCamera::FocusModeManual));
 #endif
 
-    moveSettingsWidgetsToDialog();
     displaySettings();
     applySettings(true);
     makeUIConnections();
@@ -347,6 +318,11 @@ void CameraGUI::blockApplySettings(bool block)
     m_doApplySettings = !block;
 }
 
+Ui::CameraSettingsDialog *CameraGUI::settingsUI() const
+{
+    return m_settingsDialog->getUI();
+}
+
 void CameraGUI::displaySettings()
 {
     setWindowTitle(m_settings.m_title);
@@ -356,97 +332,97 @@ void CameraGUI::displaySettings()
     ui->cameraCombo->setCurrentText(m_settings.m_cameraId);
 
     const QString resText = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
-    const int resIdx = ui->resolutionCombo->findText(resText);
+    const int resIdx = settingsUI()->resolutionCombo->findText(resText);
     if (resIdx >= 0) {
-        ui->resolutionCombo->setCurrentIndex(resIdx);
+        settingsUI()->resolutionCombo->setCurrentIndex(resIdx);
     }
 
-    ui->fpsSpin->setValue(m_settings.m_framesPerSecond);
-    ui->exposureSpin->setValue(m_settings.m_exposureTimeMs);
-    ui->isoSpin->setValue(m_settings.m_isoSensitivity);
-    ui->alpacaHostEdit->setText(m_settings.m_alpacaHost);
-    ui->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
-    ui->alpacaBinXSpin->setValue(m_settings.m_alpacaBinX);
-    ui->alpacaBinYSpin->setValue(m_settings.m_alpacaBinY);
+    settingsUI()->fpsSpin->setValue(m_settings.m_framesPerSecond);
+    settingsUI()->exposureSpin->setValue(m_settings.m_exposureTimeMs);
+    settingsUI()->isoSpin->setValue(m_settings.m_isoSensitivity);
+    settingsUI()->alpacaHostEdit->setText(m_settings.m_alpacaHost);
+    settingsUI()->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
+    settingsUI()->alpacaBinXSpin->setValue(m_settings.m_alpacaBinX);
+    settingsUI()->alpacaBinYSpin->setValue(m_settings.m_alpacaBinY);
 
     if (m_alpacaHasNamedGains) {
-        ui->alpacaGainCombo->setCurrentIndex(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
+        settingsUI()->alpacaGainCombo->setCurrentIndex(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
     } else {
-        ui->alpacaGainSpin->setValue(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
+        settingsUI()->alpacaGainSpin->setValue(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
     }
 
     if (m_alpacaHasNamedOffsets) {
-        ui->alpacaOffsetCombo->setCurrentIndex(m_settings.m_alpacaOffset >= 0 ? m_settings.m_alpacaOffset : 0);
+        settingsUI()->alpacaOffsetCombo->setCurrentIndex(m_settings.m_alpacaOffset >= 0 ? m_settings.m_alpacaOffset : 0);
     } else {
-        ui->alpacaOffsetSpin->setValue(m_settings.m_alpacaOffset >= 0 ? m_settings.m_alpacaOffset : 0);
+        settingsUI()->alpacaOffsetSpin->setValue(m_settings.m_alpacaOffset >= 0 ? m_settings.m_alpacaOffset : 0);
     }
 
-    ui->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_alpacaReadoutMode);
+    settingsUI()->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_alpacaReadoutMode);
     ui->saveImageCheck->setChecked(m_settings.m_saveImage);
-    ui->imagePathEdit->setText(m_settings.m_imageFileName);
+    settingsUI()->imagePathEdit->setText(m_settings.m_imageFileName);
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
-    ui->videoPathEdit->setText(m_settings.m_videoFileName);
+    settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
     ui->videoPostProcessButton->setChecked(m_settings.m_videoPostProcess);
-    ui->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
-    ui->brightnessValue->setText(QString::number(m_settings.m_brightness, 'f', 0));
-    ui->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
-    ui->contrastValue->setText(QString::number(m_settings.m_contrast, 'f', 2));
+    settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
+    settingsUI()->brightnessValue->setText(QString::number(m_settings.m_brightness, 'f', 0));
+    settingsUI()->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
+    settingsUI()->contrastValue->setText(QString::number(m_settings.m_contrast, 'f', 2));
     ui->invertColorsButton->setChecked(m_settings.m_invertColors);
     ui->overlayDateTimeButton->setChecked(m_settings.m_overlayDateTime);
-    ui->dateTimeFormatEdit->setText(m_settings.m_dateTimeFormat);
-    ui->dateTimePosXSlider->setValue(m_settings.m_dateTimePosX);
-    ui->dateTimePosXValue->setText(QString::number(m_settings.m_dateTimePosX));
-    ui->dateTimePosYSlider->setValue(m_settings.m_dateTimePosY);
-    ui->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
+    settingsUI()->dateTimeFormatEdit->setText(m_settings.m_dateTimeFormat);
+    settingsUI()->dateTimePosXSlider->setValue(m_settings.m_dateTimePosX);
+    settingsUI()->dateTimePosXValue->setText(QString::number(m_settings.m_dateTimePosX));
+    settingsUI()->dateTimePosYSlider->setValue(m_settings.m_dateTimePosY);
+    settingsUI()->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
     ui->diffMaskButton->setChecked(m_settings.m_diffMask);
-    ui->dilationSpin->setValue(m_settings.m_dilationSize);
-    ui->overlayFontCombo->setCurrentText(m_settings.m_overlayFontFamily);
-    ui->overlayFontScaleSpin->setValue(m_settings.m_overlayFontScale);
+    settingsUI()->dilationSpin->setValue(m_settings.m_dilationSize);
+    settingsUI()->overlayFontCombo->setCurrentText(m_settings.m_overlayFontFamily);
+    settingsUI()->overlayFontScaleSpin->setValue(m_settings.m_overlayFontScale);
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
-    ui->minContourAreaSpin->setValue(m_settings.m_minContourArea);
-    updateColorButton(ui->dateTimeColorButton, m_settings.m_dateTimeColor);
-    updateColorButton(ui->motionBoxColorButton, m_settings.m_motionBoxColor);
+    settingsUI()->minContourAreaSpin->setValue(m_settings.m_minContourArea);
+    updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
+    updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
     ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
     {
         // Select the saved device in the spectrum combo
-        const int idx = ui->spectrumDeviceCombo->findText(m_settings.m_spectrumDevice);
-        ui->spectrumDeviceCombo->blockSignals(true);
-        ui->spectrumDeviceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
-        ui->spectrumDeviceCombo->blockSignals(false);
+        const int idx = settingsUI()->spectrumDeviceCombo->findText(m_settings.m_spectrumDevice);
+        settingsUI()->spectrumDeviceCombo->blockSignals(true);
+        settingsUI()->spectrumDeviceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+        settingsUI()->spectrumDeviceCombo->blockSignals(false);
     }
-    ui->spectrumOffsetXSlider->setValue(m_settings.m_spectrumOffsetX);
-    ui->spectrumOffsetXValue->setText(QString::number(m_settings.m_spectrumOffsetX));
-    ui->spectrumOffsetYSlider->setValue(m_settings.m_spectrumOffsetY);
-    ui->spectrumOffsetYValue->setText(QString::number(m_settings.m_spectrumOffsetY));
-    ui->spectrumScaleSpin->setValue(m_settings.m_spectrumScale);
+    settingsUI()->spectrumOffsetXSlider->setValue(m_settings.m_spectrumOffsetX);
+    settingsUI()->spectrumOffsetXValue->setText(QString::number(m_settings.m_spectrumOffsetX));
+    settingsUI()->spectrumOffsetYSlider->setValue(m_settings.m_spectrumOffsetY);
+    settingsUI()->spectrumOffsetYValue->setText(QString::number(m_settings.m_spectrumOffsetY));
+    settingsUI()->spectrumScaleSpin->setValue(m_settings.m_spectrumScale);
     ui->yoloButton->setChecked(m_settings.m_yoloEnabled);
-    ui->yoloModelPathEdit->setText(m_settings.m_yoloModelPath);
-    ui->yoloLabelsPathEdit->setText(m_settings.m_yoloLabelsPath);
-    ui->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
-    ui->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
-    updateColorButton(ui->yoloBoxColorButton, m_settings.m_yoloBoxColor);
+    settingsUI()->yoloModelPathEdit->setText(m_settings.m_yoloModelPath);
+    settingsUI()->yoloLabelsPathEdit->setText(m_settings.m_yoloLabelsPath);
+    settingsUI()->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
+    settingsUI()->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
+    updateColorButton(settingsUI()->yoloBoxColorButton, m_settings.m_yoloBoxColor);
     ui->audioMute->setChecked(m_settings.m_audioMute);
 
     // White balance (select by stored mode integer)
     {
-        const int idx = ui->whiteBalanceCombo->findData(m_settings.m_whiteBalanceMode);
-        ui->whiteBalanceCombo->blockSignals(true);
-        ui->whiteBalanceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
-        ui->whiteBalanceCombo->blockSignals(false);
+        const int idx = settingsUI()->whiteBalanceCombo->findData(m_settings.m_whiteBalanceMode);
+        settingsUI()->whiteBalanceCombo->blockSignals(true);
+        settingsUI()->whiteBalanceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+        settingsUI()->whiteBalanceCombo->blockSignals(false);
     }
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    ui->exposureCompSpin->setValue(m_settings.m_exposureCompensation);
+    settingsUI()->exposureCompSpin->setValue(m_settings.m_exposureCompensation);
     {
-        const int idx = ui->focusModeCombo->findData(m_settings.m_focusMode);
-        ui->focusModeCombo->blockSignals(true);
-        ui->focusModeCombo->setCurrentIndex(idx >= 0 ? idx : 0);
-        ui->focusModeCombo->blockSignals(false);
+        const int idx = settingsUI()->focusModeCombo->findData(m_settings.m_focusMode);
+        settingsUI()->focusModeCombo->blockSignals(true);
+        settingsUI()->focusModeCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+        settingsUI()->focusModeCombo->blockSignals(false);
     }
-    ui->focusDistSpin->setValue(m_settings.m_focusDistance);
+    settingsUI()->focusDistSpin->setValue(m_settings.m_focusDistance);
 #endif
 
-    ui->zoomSpin->setValue(m_settings.m_zoomFactor);
+    settingsUI()->zoomSpin->setValue(m_settings.m_zoomFactor);
     updateAlpacaVisibility();
     updateEnabledControls();
 }
@@ -481,189 +457,69 @@ void CameraGUI::updateImageWidget()
 
 void CameraGUI::makeUIConnections()
 {
-    QObject::connect(m_cameraSettingsButton, &QToolButton::clicked, this, &CameraGUI::on_cameraSettingsButton_clicked);
+    QObject::connect(ui->cameraSettingsButton, &QToolButton::clicked, this, &CameraGUI::on_cameraSettingsButton_clicked);
     QObject::connect(ui->startStop, &QPushButton::clicked, this, &CameraGUI::on_startStop_clicked);
     QObject::connect(ui->refreshCamerasButton, &QPushButton::clicked, this, &CameraGUI::on_refreshCamerasButton_clicked);
     QObject::connect(ui->cameraCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_cameraCombo_currentTextChanged);
-    QObject::connect(ui->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
-    QObject::connect(ui->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
-    QObject::connect(ui->exposureSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
-    QObject::connect(ui->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
-    QObject::connect(ui->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
-    QObject::connect(ui->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
-    QObject::connect(ui->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
-    QObject::connect(ui->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
-    QObject::connect(ui->alpacaGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaGainCombo_currentIndexChanged);
-    QObject::connect(ui->alpacaGainSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaGainSpin_valueChanged);
-    QObject::connect(ui->alpacaOffsetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaOffsetCombo_currentIndexChanged);
-    QObject::connect(ui->alpacaOffsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaOffsetSpin_valueChanged);
-    QObject::connect(ui->alpacaReadoutModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
+    QObject::connect(settingsUI()->exposureSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
+    QObject::connect(settingsUI()->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
+    QObject::connect(settingsUI()->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaGainCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->alpacaGainSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaGainSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaOffsetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaOffsetCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->alpacaOffsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaOffsetSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaReadoutModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged);
     QObject::connect(ui->saveImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveImageCheck_toggled);
-    QObject::connect(ui->imagePathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_imagePathEdit_editingFinished);
-    QObject::connect(ui->imagePathButton, &QPushButton::clicked, this, &CameraGUI::on_imagePathButton_clicked);
+    QObject::connect(settingsUI()->imagePathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_imagePathEdit_editingFinished);
+    QObject::connect(settingsUI()->imagePathButton, &QToolButton::clicked, this, &CameraGUI::on_imagePathButton_clicked);
     QObject::connect(ui->saveVideoCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveVideoCheck_toggled);
-    QObject::connect(ui->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
-    QObject::connect(ui->videoPathButton, &QPushButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
+    QObject::connect(settingsUI()->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
+    QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
     QObject::connect(ui->videoPostProcessButton, &QToolButton::toggled, this, &CameraGUI::on_videoPostProcessButton_toggled);
-    QObject::connect(ui->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
-    QObject::connect(ui->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
+    QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
+    QObject::connect(settingsUI()->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
     QObject::connect(ui->invertColorsButton, &QToolButton::toggled, this, &CameraGUI::on_invertColorsButton_toggled);
     QObject::connect(ui->overlayDateTimeButton, &QToolButton::toggled, this, &CameraGUI::on_overlayDateTimeButton_toggled);
-    QObject::connect(ui->dateTimeColorButton, &QToolButton::clicked, this, &CameraGUI::on_dateTimeColorButton_clicked);
-    QObject::connect(ui->dateTimeFormatEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_dateTimeFormatEdit_editingFinished);
-    QObject::connect(ui->dateTimePosXSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosXSlider_valueChanged);
-    QObject::connect(ui->dateTimePosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosYSlider_valueChanged);
+    QObject::connect(settingsUI()->dateTimeColorButton, &QToolButton::clicked, this, &CameraGUI::on_dateTimeColorButton_clicked);
+    QObject::connect(settingsUI()->dateTimeFormatEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_dateTimeFormatEdit_editingFinished);
+    QObject::connect(settingsUI()->dateTimePosXSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosXSlider_valueChanged);
+    QObject::connect(settingsUI()->dateTimePosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosYSlider_valueChanged);
     QObject::connect(ui->diffMaskButton, &QToolButton::toggled, this, &CameraGUI::on_diffMaskButton_toggled);
-    QObject::connect(ui->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
-    QObject::connect(ui->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
-    QObject::connect(ui->overlayFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayFontCombo_currentFontChanged);
-    QObject::connect(ui->overlayFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayFontScaleSpin_valueChanged);
+    QObject::connect(settingsUI()->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
+    QObject::connect(settingsUI()->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
+    QObject::connect(settingsUI()->overlayFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayFontCombo_currentFontChanged);
+    QObject::connect(settingsUI()->overlayFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayFontScaleSpin_valueChanged);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
-    QObject::connect(ui->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
-    QObject::connect(ui->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
+    QObject::connect(settingsUI()->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
+    QObject::connect(settingsUI()->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
     QObject::connect(ui->spectrumOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_spectrumOverlayButton_toggled);
-    QObject::connect(ui->spectrumDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_spectrumDeviceCombo_currentIndexChanged);
-    QObject::connect(ui->spectrumOffsetXSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetXSlider_valueChanged);
-    QObject::connect(ui->spectrumOffsetYSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetYSlider_valueChanged);
-    QObject::connect(ui->spectrumScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_spectrumScaleSpin_valueChanged);
+    QObject::connect(settingsUI()->spectrumDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_spectrumDeviceCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->spectrumOffsetXSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetXSlider_valueChanged);
+    QObject::connect(settingsUI()->spectrumOffsetYSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetYSlider_valueChanged);
+    QObject::connect(settingsUI()->spectrumScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_spectrumScaleSpin_valueChanged);
     QObject::connect(ui->yoloButton, &QToolButton::toggled, this, &CameraGUI::on_yoloButton_toggled);
-    QObject::connect(ui->yoloModelPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloModelPathEdit_editingFinished);
-    QObject::connect(ui->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
-    QObject::connect(ui->yoloLabelsPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloLabelsPathEdit_editingFinished);
-    QObject::connect(ui->yoloLabelsPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloLabelsPathButton_clicked);
-    QObject::connect(ui->yoloObjectControlButton, &QToolButton::clicked, this, &CameraGUI::on_yoloObjectControlButton_clicked);
-    QObject::connect(ui->yoloConfSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloConfSpin_valueChanged);
-    QObject::connect(ui->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
-    QObject::connect(ui->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
+    QObject::connect(settingsUI()->yoloModelPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloModelPathEdit_editingFinished);
+    QObject::connect(settingsUI()->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
+    QObject::connect(settingsUI()->yoloLabelsPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloLabelsPathEdit_editingFinished);
+    QObject::connect(settingsUI()->yoloLabelsPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloLabelsPathButton_clicked);
+    QObject::connect(settingsUI()->yoloObjectControlButton, &QToolButton::clicked, this, &CameraGUI::on_yoloObjectControlButton_clicked);
+    QObject::connect(settingsUI()->yoloConfSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloConfSpin_valueChanged);
+    QObject::connect(settingsUI()->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
+    QObject::connect(settingsUI()->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
     QObject::connect(ui->zoomInButton, &QToolButton::clicked, this, &CameraGUI::on_zoomInButton_clicked);
     QObject::connect(ui->zoomOutButton, &QToolButton::clicked, this, &CameraGUI::on_zoomOutButton_clicked);
     QObject::connect(ui->fitInViewButton, &QToolButton::clicked, this, &CameraGUI::on_fitInViewButton_clicked);
     QObject::connect(ui->audioMute, &QToolButton::toggled, this, &CameraGUI::on_audioMute_toggled);
-    QObject::connect(ui->whiteBalanceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_whiteBalanceCombo_currentIndexChanged);
-    QObject::connect(ui->exposureCompSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureCompSpin_valueChanged);
-    QObject::connect(ui->focusModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_focusModeCombo_currentIndexChanged);
-    QObject::connect(ui->focusDistSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_focusDistSpin_valueChanged);
-    QObject::connect(ui->zoomSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_zoomSpin_valueChanged);
-}
-
-void CameraGUI::moveSettingsWidgetsToDialog()
-{
-    m_cameraSettingsButton = new QToolButton(this);
-    m_cameraSettingsButton->setText(tr("Settings"));
-    m_cameraSettingsButton->setToolTip(tr("Open camera and post-processing settings"));
-    m_cameraSettingsButton->setIcon(QIcon(":/gear.png"));
-    ui->gridLayout->addWidget(m_cameraSettingsButton, 1, 2);
-
-    int row = 0;
-    moveGridWidget(ui->gridLayout, ui->resolutionLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->resolutionCombo, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->fpsLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->fpsSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->exposureLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->exposureSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->isoLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->isoSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->alpacaHostLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->alpacaHostEdit, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->alpacaPortLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->alpacaPortSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->alpacaBinXLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->alpacaBinXSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->alpacaBinYLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->alpacaBinYSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->alpacaGainLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridLayout(ui->gridLayout, ui->gainLayout, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->alpacaOffsetLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridLayout(ui->gridLayout, ui->offsetLayout, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->alpacaReadoutModeLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->alpacaReadoutModeCombo, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-
-    ui->gridLayout->removeItem(ui->imageSaveLayout);
-    m_settingsDialog->getCameraSettingsLayout()->addWidget(new QLabel(tr("JPEG path"), m_settingsDialog), row, 0);
-    m_settingsDialog->getCameraSettingsLayout()->addLayout(ui->imageSaveLayout, row++, 1);
-
-    QHBoxLayout *videoPathLayout = new QHBoxLayout();
-    moveWidgetToBoxLayout(ui->videoSaveLayout, ui->videoPathEdit, videoPathLayout);
-    moveWidgetToBoxLayout(ui->videoSaveLayout, ui->videoPathButton, videoPathLayout);
-    videoPathLayout->addStretch(1);
-    m_settingsDialog->getCameraSettingsLayout()->addWidget(new QLabel(tr("MP4 path"), m_settingsDialog), row, 0);
-    m_settingsDialog->getCameraSettingsLayout()->addLayout(videoPathLayout, row++, 1);
-
-    moveGridWidget(ui->gridLayout, ui->whiteBalanceLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->whiteBalanceCombo, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->exposureCompLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->exposureCompSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->focusModeLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->focusModeCombo, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->focusDistLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->focusDistSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    moveGridWidget(ui->gridLayout, ui->zoomLabel, m_settingsDialog->getCameraSettingsLayout(), row, 0);
-    moveGridWidget(ui->gridLayout, ui->zoomSpin, m_settingsDialog->getCameraSettingsLayout(), row++, 1);
-    m_settingsDialog->getCameraSettingsLayout()->setRowStretch(row, 1);
-
-    ui->postProcessingLayout->removeItem(ui->brightnessLayout);
-    m_settingsDialog->getPostProcessingLayout()->addLayout(ui->brightnessLayout);
-    ui->postProcessingLayout->removeItem(ui->contrastLayout);
-    m_settingsDialog->getPostProcessingLayout()->addLayout(ui->contrastLayout);
-
-    QHBoxLayout *histogramLayout = new QHBoxLayout();
-    moveWidgetToBoxLayout(ui->effectsLayout, ui->histogramButton, histogramLayout);
-    histogramLayout->addStretch(1);
-    m_settingsDialog->getPostProcessingLayout()->addLayout(histogramLayout);
-
-    QHBoxLayout *dateTimeDetailLayout = new QHBoxLayout();
-    moveWidgetToBoxLayout(ui->fontLayout, ui->dateTimeColorButton, dateTimeDetailLayout);
-    moveWidgetToBoxLayout(ui->fontLayout, ui->overlayFontLabel, dateTimeDetailLayout);
-    moveWidgetToBoxLayout(ui->fontLayout, ui->overlayFontCombo, dateTimeDetailLayout);
-    moveWidgetToBoxLayout(ui->fontLayout, ui->overlayFontSizeLabel, dateTimeDetailLayout);
-    moveWidgetToBoxLayout(ui->fontLayout, ui->overlayFontScaleSpin, dateTimeDetailLayout);
-    moveWidgetToBoxLayout(ui->fontLayout, ui->dateTimeFormatLabel, dateTimeDetailLayout);
-    moveWidgetToBoxLayout(ui->fontLayout, ui->dateTimeFormatEdit, dateTimeDetailLayout);
-    m_settingsDialog->getPostProcessingLayout()->addLayout(dateTimeDetailLayout);
-
-    ui->postProcessingLayout->removeItem(ui->dateTimePosLayout);
-    m_settingsDialog->getPostProcessingLayout()->addLayout(ui->dateTimePosLayout);
-
-    QHBoxLayout *diffDetailLayout = new QHBoxLayout();
-    moveWidgetToBoxLayout(ui->motionLayout, ui->dilationLabel, diffDetailLayout);
-    moveWidgetToBoxLayout(ui->motionLayout, ui->dilationSpin, diffDetailLayout);
-    m_settingsDialog->getPostProcessingLayout()->addLayout(diffDetailLayout);
-    ui->motionLayout->removeWidget(ui->line);
-    ui->line->hide();
-
-    QHBoxLayout *motionDetailLayout = new QHBoxLayout();
-    moveWidgetToBoxLayout(ui->motionLayout, ui->minContourAreaLabel, motionDetailLayout);
-    moveWidgetToBoxLayout(ui->motionLayout, ui->minContourAreaSpin, motionDetailLayout);
-    moveWidgetToBoxLayout(ui->motionLayout, ui->motionBoxColorButton, motionDetailLayout);
-    motionDetailLayout->addStretch(1);
-    m_settingsDialog->getPostProcessingLayout()->addLayout(motionDetailLayout);
-
-    QHBoxLayout *spectrumDetailLayout = new QHBoxLayout();
-    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumDeviceCombo, spectrumDetailLayout);
-    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetXLabel, spectrumDetailLayout);
-    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetXSlider, spectrumDetailLayout);
-    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetXValue, spectrumDetailLayout);
-    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetYLabel, spectrumDetailLayout);
-    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetYSlider, spectrumDetailLayout);
-    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumOffsetYValue, spectrumDetailLayout);
-    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumScaleLabel, spectrumDetailLayout);
-    moveWidgetToBoxLayout(ui->spectrumOverlayLayout, ui->spectrumScaleSpin, spectrumDetailLayout);
-    m_settingsDialog->getPostProcessingLayout()->addLayout(spectrumDetailLayout);
-
-    QHBoxLayout *yoloDetailLayout = new QHBoxLayout();
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloModelPathEdit, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloModelPathButton, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloLabelsLabel, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloLabelsPathEdit, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloLabelsPathButton, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloObjectControlButton, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloConfLabel, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloConfSpin, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloNmsLabel, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloNmsSpin, yoloDetailLayout);
-    moveWidgetToBoxLayout(ui->yoloLayout, ui->yoloBoxColorButton, yoloDetailLayout);
-    m_settingsDialog->getPostProcessingLayout()->addLayout(yoloDetailLayout);
-    m_settingsDialog->getPostProcessingLayout()->addStretch(1);
+    QObject::connect(settingsUI()->whiteBalanceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_whiteBalanceCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->exposureCompSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureCompSpin_valueChanged);
+    QObject::connect(settingsUI()->focusModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_focusModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->focusDistSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_focusDistSpin_valueChanged);
+    QObject::connect(settingsUI()->zoomSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_zoomSpin_valueChanged);
 }
 
 // ---------------------------------------------------------------------------
@@ -803,16 +659,16 @@ void CameraGUI::setupQtCapture()
     m_qtZoomSupported = (maxZoom > minZoom + 0.01f);
 
     blockApplySettings(true);
-    ui->zoomSpin->setMinimum(minZoom);
-    ui->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
-    ui->zoomSpin->setEnabled(m_qtZoomSupported);
-    ui->zoomLabel->setEnabled(m_qtZoomSupported);
-    ui->exposureLabel->setEnabled(m_qtManualExposureSupported);
-    ui->exposureSpin->setEnabled(m_qtManualExposureSupported);
-    ui->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
-    ui->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
-    ui->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
-    ui->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
+    settingsUI()->zoomSpin->setMinimum(minZoom);
+    settingsUI()->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
+    settingsUI()->zoomSpin->setEnabled(m_qtZoomSupported);
+    settingsUI()->zoomLabel->setEnabled(m_qtZoomSupported);
+    settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
+    settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
+    settingsUI()->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
+    settingsUI()->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
     blockApplySettings(false);
 
     // Clamp and apply zoom
@@ -836,10 +692,10 @@ void CameraGUI::setupQtCapture()
             }
         }
         blockApplySettings(true);
-        for (int i = 0; i < ui->focusModeCombo->count(); ++i)
+        for (int i = 0; i < settingsUI()->focusModeCombo->count(); ++i)
         {
-            const int modeVal = ui->focusModeCombo->itemData(i).toInt();
-            const QStandardItemModel *model = qobject_cast<QStandardItemModel*>(ui->focusModeCombo->model());
+            const int modeVal = settingsUI()->focusModeCombo->itemData(i).toInt();
+            const QStandardItemModel *model = qobject_cast<QStandardItemModel*>(settingsUI()->focusModeCombo->model());
             if (model) {
                 QStandardItem *item = model->item(i);
                 if (item) {
@@ -850,9 +706,9 @@ void CameraGUI::setupQtCapture()
         if (!supportedModes.isEmpty() && !supportedModes.contains(m_settings.m_focusMode))
         {
             m_settings.m_focusMode = supportedModes.first();
-            const int idx = ui->focusModeCombo->findData(m_settings.m_focusMode);
+            const int idx = settingsUI()->focusModeCombo->findData(m_settings.m_focusMode);
             if (idx >= 0) {
-                ui->focusModeCombo->setCurrentIndex(idx);
+                settingsUI()->focusModeCombo->setCurrentIndex(idx);
             }
         }
         blockApplySettings(false);
@@ -925,16 +781,16 @@ void CameraGUI::setupQtCapture()
             ip && ip->isWhiteBalanceModeSupported(QCameraImageProcessing::WhiteBalanceAuto);
 
         blockApplySettings(true);
-        ui->zoomSpin->setMinimum(minZoom);
-        ui->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
-        ui->zoomSpin->setEnabled(m_qtZoomSupported);
-        ui->zoomLabel->setEnabled(m_qtZoomSupported);
-        ui->exposureLabel->setEnabled(m_qtManualExposureSupported);
-        ui->exposureSpin->setEnabled(m_qtManualExposureSupported);
-        ui->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
-        ui->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
-        ui->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
-        ui->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
+        settingsUI()->zoomSpin->setMinimum(minZoom);
+        settingsUI()->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
+        settingsUI()->zoomSpin->setEnabled(m_qtZoomSupported);
+        settingsUI()->zoomLabel->setEnabled(m_qtZoomSupported);
+        settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
+        settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
+        settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
+        settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
+        settingsUI()->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
+        settingsUI()->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
         blockApplySettings(false);
 
         if (cameraFocus && maxZoom > minZoom) {
@@ -1078,49 +934,45 @@ void CameraGUI::updateAlpacaVisibility()
 {
     const bool alpaca = m_settings.isAlpacaCamera();
 
-    ui->resolutionLabel->setVisible(!alpaca);
-    ui->resolutionCombo->setVisible(!alpaca);
-    ui->isoLabel->setVisible(!alpaca);
-    ui->isoSpin->setVisible(!alpaca);
-    /*ui->alpacaHostLabel->setVisible(alpaca);
-    ui->alpacaHostEdit->setVisible(alpaca);
-    ui->alpacaPortLabel->setVisible(alpaca);
-    ui->alpacaPortSpin->setVisible(alpaca);*/
-    ui->alpacaBinXLabel->setVisible(alpaca);
-    ui->alpacaBinXSpin->setVisible(alpaca);
-    ui->alpacaBinYLabel->setVisible(alpaca);
-    ui->alpacaBinYSpin->setVisible(alpaca);
-    ui->alpacaGainLabel->setVisible(alpaca);
-    ui->alpacaGainCombo->setVisible(alpaca && m_alpacaHasNamedGains);
-    ui->alpacaGainSpin->setVisible(alpaca && !m_alpacaHasNamedGains);
-    ui->alpacaOffsetLabel->setVisible(alpaca);
-    ui->alpacaOffsetCombo->setVisible(alpaca && m_alpacaHasNamedOffsets);
-    ui->alpacaOffsetSpin->setVisible(alpaca && !m_alpacaHasNamedOffsets);
-    ui->alpacaReadoutModeLabel->setVisible(alpaca);
-    ui->alpacaReadoutModeCombo->setVisible(alpaca);
+    settingsUI()->resolutionLabel->setVisible(!alpaca);
+    settingsUI()->resolutionCombo->setVisible(!alpaca);
+    settingsUI()->isoLabel->setVisible(!alpaca);
+    settingsUI()->isoSpin->setVisible(!alpaca);
+    settingsUI()->alpacaBinXLabel->setVisible(alpaca);
+    settingsUI()->alpacaBinXSpin->setVisible(alpaca);
+    settingsUI()->alpacaBinYLabel->setVisible(alpaca);
+    settingsUI()->alpacaBinYSpin->setVisible(alpaca);
+    settingsUI()->alpacaGainLabel->setVisible(alpaca);
+    settingsUI()->alpacaGainCombo->setVisible(alpaca && m_alpacaHasNamedGains);
+    settingsUI()->alpacaGainSpin->setVisible(alpaca && !m_alpacaHasNamedGains);
+    settingsUI()->alpacaOffsetLabel->setVisible(alpaca);
+    settingsUI()->alpacaOffsetCombo->setVisible(alpaca && m_alpacaHasNamedOffsets);
+    settingsUI()->alpacaOffsetSpin->setVisible(alpaca && !m_alpacaHasNamedOffsets);
+    settingsUI()->alpacaReadoutModeLabel->setVisible(alpaca);
+    settingsUI()->alpacaReadoutModeCombo->setVisible(alpaca);
     ui->alpacaStatusGroup->setVisible(alpaca);
     ui->audioMute->setVisible(!alpaca);
 
     // Qt-camera-only controls
-    ui->whiteBalanceLabel->setVisible(!alpaca);
-    ui->whiteBalanceCombo->setVisible(!alpaca);
-    ui->zoomLabel->setVisible(!alpaca);
-    ui->zoomSpin->setVisible(!alpaca);
+    settingsUI()->whiteBalanceLabel->setVisible(!alpaca);
+    settingsUI()->whiteBalanceCombo->setVisible(!alpaca);
+    settingsUI()->zoomLabel->setVisible(!alpaca);
+    settingsUI()->zoomSpin->setVisible(!alpaca);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    ui->exposureCompLabel->setVisible(!alpaca);
-    ui->exposureCompSpin->setVisible(!alpaca);
-    ui->focusModeLabel->setVisible(!alpaca);
-    ui->focusModeCombo->setVisible(!alpaca);
-    ui->focusDistLabel->setVisible(!alpaca);
-    ui->focusDistSpin->setVisible(!alpaca);
+    settingsUI()->exposureCompLabel->setVisible(!alpaca);
+    settingsUI()->exposureCompSpin->setVisible(!alpaca);
+    settingsUI()->focusModeLabel->setVisible(!alpaca);
+    settingsUI()->focusModeCombo->setVisible(!alpaca);
+    settingsUI()->focusDistLabel->setVisible(!alpaca);
+    settingsUI()->focusDistSpin->setVisible(!alpaca);
 #else
-    ui->exposureCompLabel->setVisible(false);
-    ui->exposureCompSpin->setVisible(false);
-    ui->focusModeLabel->setVisible(false);
-    ui->focusModeCombo->setVisible(false);
-    ui->focusDistLabel->setVisible(false);
-    ui->focusDistSpin->setVisible(false);
+    settingsUI()->exposureCompLabel->setVisible(false);
+    settingsUI()->exposureCompSpin->setVisible(false);
+    settingsUI()->focusModeLabel->setVisible(false);
+    settingsUI()->focusModeCombo->setVisible(false);
+    settingsUI()->focusDistLabel->setVisible(false);
+    settingsUI()->focusDistSpin->setVisible(false);
 #endif
 }
 
@@ -1130,60 +982,60 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     blockApplySettings(true);
 
     // Bin X
-    ui->alpacaBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
-    ui->alpacaBinXSpin->setValue(qBound(1, m_settings.m_alpacaBinX, info.getMaxBinX()));
+    settingsUI()->alpacaBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
+    settingsUI()->alpacaBinXSpin->setValue(qBound(1, m_settings.m_alpacaBinX, info.getMaxBinX()));
 
     // Bin Y
-    ui->alpacaBinYSpin->setMaximum(std::max(1, info.getMaxBinY()));
-    ui->alpacaBinYSpin->setValue(qBound(1, m_settings.m_alpacaBinY, info.getMaxBinY()));
+    settingsUI()->alpacaBinYSpin->setMaximum(std::max(1, info.getMaxBinY()));
+    settingsUI()->alpacaBinYSpin->setValue(qBound(1, m_settings.m_alpacaBinY, info.getMaxBinY()));
 
     // Gain
     m_alpacaHasNamedGains = !info.getGains().isEmpty();
     if (m_alpacaHasNamedGains)
     {
-        ui->alpacaGainCombo->blockSignals(true);
-        ui->alpacaGainCombo->clear();
-        ui->alpacaGainCombo->addItems(info.getGains());
+        settingsUI()->alpacaGainCombo->blockSignals(true);
+        settingsUI()->alpacaGainCombo->clear();
+        settingsUI()->alpacaGainCombo->addItems(info.getGains());
         const int gainIdx = (m_settings.m_alpacaGain >= 0 && m_settings.m_alpacaGain < info.getGains().size())
             ? m_settings.m_alpacaGain : 0;
-        ui->alpacaGainCombo->setCurrentIndex(gainIdx);
-        ui->alpacaGainCombo->blockSignals(false);
+        settingsUI()->alpacaGainCombo->setCurrentIndex(gainIdx);
+        settingsUI()->alpacaGainCombo->blockSignals(false);
     }
     else
     {
-        ui->alpacaGainSpin->setMinimum(info.getGainMin());
-        ui->alpacaGainSpin->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
+        settingsUI()->alpacaGainSpin->setMinimum(info.getGainMin());
+        settingsUI()->alpacaGainSpin->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
         const int gainVal = (m_settings.m_alpacaGain >= 0) ? m_settings.m_alpacaGain : info.getGainMin();
-        ui->alpacaGainSpin->setValue(qBound(info.getGainMin(), gainVal, info.getGainMax()));
+        settingsUI()->alpacaGainSpin->setValue(qBound(info.getGainMin(), gainVal, info.getGainMax()));
     }
 
     // Readout mode
-    ui->alpacaReadoutModeCombo->blockSignals(true);
-    ui->alpacaReadoutModeCombo->clear();
-    ui->alpacaReadoutModeCombo->addItems(info.getReadoutModes());
+    settingsUI()->alpacaReadoutModeCombo->blockSignals(true);
+    settingsUI()->alpacaReadoutModeCombo->clear();
+    settingsUI()->alpacaReadoutModeCombo->addItems(info.getReadoutModes());
     if (m_settings.m_alpacaReadoutMode < info.getReadoutModes().size()) {
-        ui->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_alpacaReadoutMode);
+        settingsUI()->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_alpacaReadoutMode);
     }
-    ui->alpacaReadoutModeCombo->blockSignals(false);
+    settingsUI()->alpacaReadoutModeCombo->blockSignals(false);
 
     // Offset
     m_alpacaHasNamedOffsets = !info.getOffsets().isEmpty();
     if (m_alpacaHasNamedOffsets)
     {
-        ui->alpacaOffsetCombo->blockSignals(true);
-        ui->alpacaOffsetCombo->clear();
-        ui->alpacaOffsetCombo->addItems(info.getOffsets());
+        settingsUI()->alpacaOffsetCombo->blockSignals(true);
+        settingsUI()->alpacaOffsetCombo->clear();
+        settingsUI()->alpacaOffsetCombo->addItems(info.getOffsets());
         const int offsetIdx = (m_settings.m_alpacaOffset >= 0 && m_settings.m_alpacaOffset < info.getOffsets().size())
             ? m_settings.m_alpacaOffset : 0;
-        ui->alpacaOffsetCombo->setCurrentIndex(offsetIdx);
-        ui->alpacaOffsetCombo->blockSignals(false);
+        settingsUI()->alpacaOffsetCombo->setCurrentIndex(offsetIdx);
+        settingsUI()->alpacaOffsetCombo->blockSignals(false);
     }
     else
     {
-        ui->alpacaOffsetSpin->setMinimum(info.getOffsetMin());
-        ui->alpacaOffsetSpin->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
+        settingsUI()->alpacaOffsetSpin->setMinimum(info.getOffsetMin());
+        settingsUI()->alpacaOffsetSpin->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
         const int offsetVal = (m_settings.m_alpacaOffset >= 0) ? m_settings.m_alpacaOffset : info.getOffsetMin();
-        ui->alpacaOffsetSpin->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
+        settingsUI()->alpacaOffsetSpin->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
     }
 
     // Status labels
@@ -1242,7 +1094,7 @@ void CameraGUI::on_cameraCombo_currentTextChanged(const QString& text)
 void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
 {
     (void) index;
-    const QStringList parts = ui->resolutionCombo->currentText().split('x');
+    const QStringList parts = settingsUI()->resolutionCombo->currentText().split('x');
 
     if (parts.size() == 2)
     {
@@ -1284,7 +1136,7 @@ void CameraGUI::on_isoSpin_valueChanged(int value)
 
 void CameraGUI::on_alpacaHostEdit_editingFinished()
 {
-    m_settings.m_alpacaHost = ui->alpacaHostEdit->text();
+    m_settings.m_alpacaHost = settingsUI()->alpacaHostEdit->text();
     m_settingsKeys.append("alpacaHost");
     applySettings();
 }
@@ -1354,7 +1206,7 @@ void CameraGUI::on_saveImageCheck_toggled(bool checked)
 
 void CameraGUI::on_imagePathEdit_editingFinished()
 {
-    m_settings.m_imageFileName = ui->imagePathEdit->text();
+    m_settings.m_imageFileName = settingsUI()->imagePathEdit->text();
     m_settingsKeys.append("imageFileName");
     applySettings();
 }
@@ -1366,7 +1218,7 @@ void CameraGUI::on_imagePathButton_clicked()
     if (!fileName.isEmpty())
     {
         m_settings.m_imageFileName = fileName;
-        ui->imagePathEdit->setText(fileName);
+        settingsUI()->imagePathEdit->setText(fileName);
         m_settingsKeys.append("imageFileName");
         applySettings();
     }
@@ -1381,7 +1233,7 @@ void CameraGUI::on_saveVideoCheck_toggled(bool checked)
 
 void CameraGUI::on_videoPathEdit_editingFinished()
 {
-    m_settings.m_videoFileName = ui->videoPathEdit->text();
+    m_settings.m_videoFileName = settingsUI()->videoPathEdit->text();
     m_settingsKeys.append("videoFileName");
     applySettings();
 }
@@ -1393,7 +1245,7 @@ void CameraGUI::on_videoPathButton_clicked()
     if (!fileName.isEmpty())
     {
         m_settings.m_videoFileName = fileName;
-        ui->videoPathEdit->setText(fileName);
+        settingsUI()->videoPathEdit->setText(fileName);
         m_settingsKeys.append("videoFileName");
         applySettings();
     }
@@ -1409,7 +1261,7 @@ void CameraGUI::on_videoPostProcessButton_toggled(bool checked)
 void CameraGUI::on_brightnessSlider_valueChanged(int value)
 {
     m_settings.m_brightness = static_cast<double>(value);
-    ui->brightnessValue->setText(QString::number(value));
+    settingsUI()->brightnessValue->setText(QString::number(value));
     m_settingsKeys.append("brightness");
     applySettings();
 }
@@ -1417,7 +1269,7 @@ void CameraGUI::on_brightnessSlider_valueChanged(int value)
 void CameraGUI::on_contrastSlider_valueChanged(int value)
 {
     m_settings.m_contrast = value / 100.0;
-    ui->contrastValue->setText(QString::number(m_settings.m_contrast, 'f', 2));
+    settingsUI()->contrastValue->setText(QString::number(m_settings.m_contrast, 'f', 2));
     m_settingsKeys.append("contrast");
     applySettings();
 }
@@ -1444,7 +1296,7 @@ void CameraGUI::on_dateTimeColorButton_clicked()
     if (color.isValid())
     {
         m_settings.m_dateTimeColor = color;
-        updateColorButton(ui->dateTimeColorButton, m_settings.m_dateTimeColor);
+        updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
         m_settingsKeys.append("dateTimeColor");
         applySettings();
     }
@@ -1452,7 +1304,7 @@ void CameraGUI::on_dateTimeColorButton_clicked()
 
 void CameraGUI::on_dateTimeFormatEdit_editingFinished()
 {
-    m_settings.m_dateTimeFormat = ui->dateTimeFormatEdit->text();
+    m_settings.m_dateTimeFormat = settingsUI()->dateTimeFormatEdit->text();
     m_settingsKeys.append("dateTimeFormat");
     applySettings();
 }
@@ -1460,7 +1312,7 @@ void CameraGUI::on_dateTimeFormatEdit_editingFinished()
 void CameraGUI::on_dateTimePosXSlider_valueChanged(int value)
 {
     m_settings.m_dateTimePosX = value;
-    ui->dateTimePosXValue->setText(QString::number(value));
+    settingsUI()->dateTimePosXValue->setText(QString::number(value));
     m_settingsKeys.append("dateTimePosX");
     applySettings();
 }
@@ -1468,7 +1320,7 @@ void CameraGUI::on_dateTimePosXSlider_valueChanged(int value)
 void CameraGUI::on_dateTimePosYSlider_valueChanged(int value)
 {
     m_settings.m_dateTimePosY = value;
-    ui->dateTimePosYValue->setText(QString::number(value));
+    settingsUI()->dateTimePosYValue->setText(QString::number(value));
     m_settingsKeys.append("dateTimePosY");
     applySettings();
 }
@@ -1508,63 +1360,63 @@ void CameraGUI::on_histogramButton_clicked()
 void CameraGUI::updateEnabledControls()
 {
     const bool dtActive = m_settings.m_overlayDateTime;
-    ui->dateTimeColorButton->setEnabled(dtActive);
-    ui->overlayFontLabel->setEnabled(dtActive);
-    ui->overlayFontCombo->setEnabled(dtActive);
-    ui->overlayFontSizeLabel->setEnabled(dtActive);
-    ui->overlayFontScaleSpin->setEnabled(dtActive);
-    ui->dateTimeFormatLabel->setEnabled(dtActive);
-    ui->dateTimeFormatEdit->setEnabled(dtActive);
-    ui->dateTimePosXLabel->setEnabled(dtActive);
-    ui->dateTimePosXSlider->setEnabled(dtActive);
-    ui->dateTimePosXValue->setEnabled(dtActive);
-    ui->dateTimePosYLabel->setEnabled(dtActive);
-    ui->dateTimePosYSlider->setEnabled(dtActive);
-    ui->dateTimePosYValue->setEnabled(dtActive);
+    settingsUI()->dateTimeColorButton->setEnabled(dtActive);
+    settingsUI()->overlayFontLabel->setEnabled(dtActive);
+    settingsUI()->overlayFontCombo->setEnabled(dtActive);
+    settingsUI()->overlayFontSizeLabel->setEnabled(dtActive);
+    settingsUI()->overlayFontScaleSpin->setEnabled(dtActive);
+    settingsUI()->dateTimeFormatLabel->setEnabled(dtActive);
+    settingsUI()->dateTimeFormatEdit->setEnabled(dtActive);
+    settingsUI()->dateTimePosXLabel->setEnabled(dtActive);
+    settingsUI()->dateTimePosXSlider->setEnabled(dtActive);
+    settingsUI()->dateTimePosXValue->setEnabled(dtActive);
+    settingsUI()->dateTimePosYLabel->setEnabled(dtActive);
+    settingsUI()->dateTimePosYSlider->setEnabled(dtActive);
+    settingsUI()->dateTimePosYValue->setEnabled(dtActive);
 
     const bool diffActive = m_settings.m_diffMask;
-    ui->dilationLabel->setEnabled(diffActive);
-    ui->dilationSpin->setEnabled(diffActive);
+    settingsUI()->dilationLabel->setEnabled(diffActive);
+    settingsUI()->dilationSpin->setEnabled(diffActive);
 
     const bool motionActive = m_settings.m_motionDetect;
-    ui->minContourAreaLabel->setEnabled(motionActive);
-    ui->minContourAreaSpin->setEnabled(motionActive);
-    ui->motionBoxColorButton->setEnabled(motionActive);
+    settingsUI()->minContourAreaLabel->setEnabled(motionActive);
+    settingsUI()->minContourAreaSpin->setEnabled(motionActive);
+    settingsUI()->motionBoxColorButton->setEnabled(motionActive);
 
     const bool specActive = m_settings.m_overlaySpectrum;
-    ui->spectrumDeviceCombo->setEnabled(specActive);
-    ui->spectrumOffsetXLabel->setEnabled(specActive);
-    ui->spectrumOffsetXSlider->setEnabled(specActive);
-    ui->spectrumOffsetXValue->setEnabled(specActive);
-    ui->spectrumOffsetYLabel->setEnabled(specActive);
-    ui->spectrumOffsetYSlider->setEnabled(specActive);
-    ui->spectrumOffsetYValue->setEnabled(specActive);
-    ui->spectrumScaleLabel->setEnabled(specActive);
-    ui->spectrumScaleSpin->setEnabled(specActive);
+    settingsUI()->spectrumDeviceCombo->setEnabled(specActive);
+    settingsUI()->spectrumOffsetXLabel->setEnabled(specActive);
+    settingsUI()->spectrumOffsetXSlider->setEnabled(specActive);
+    settingsUI()->spectrumOffsetXValue->setEnabled(specActive);
+    settingsUI()->spectrumOffsetYLabel->setEnabled(specActive);
+    settingsUI()->spectrumOffsetYSlider->setEnabled(specActive);
+    settingsUI()->spectrumOffsetYValue->setEnabled(specActive);
+    settingsUI()->spectrumScaleLabel->setEnabled(specActive);
+    settingsUI()->spectrumScaleSpin->setEnabled(specActive);
 
     const bool yoloActive = m_settings.m_yoloEnabled;
-    ui->yoloModelPathEdit->setEnabled(yoloActive);
-    ui->yoloModelPathButton->setEnabled(yoloActive);
-    ui->yoloLabelsLabel->setEnabled(yoloActive);
-    ui->yoloLabelsPathEdit->setEnabled(yoloActive);
-    ui->yoloLabelsPathButton->setEnabled(yoloActive);
-    ui->yoloObjectControlButton->setEnabled(yoloActive);
-    ui->yoloConfLabel->setEnabled(yoloActive);
-    ui->yoloConfSpin->setEnabled(yoloActive);
-    ui->yoloNmsLabel->setEnabled(yoloActive);
-    ui->yoloNmsSpin->setEnabled(yoloActive);
-    ui->yoloBoxColorButton->setEnabled(yoloActive);
+    settingsUI()->yoloModelPathEdit->setEnabled(yoloActive);
+    settingsUI()->yoloModelPathButton->setEnabled(yoloActive);
+    settingsUI()->yoloLabelsLabel->setEnabled(yoloActive);
+    settingsUI()->yoloLabelsPathEdit->setEnabled(yoloActive);
+    settingsUI()->yoloLabelsPathButton->setEnabled(yoloActive);
+    settingsUI()->yoloObjectControlButton->setEnabled(yoloActive);
+    settingsUI()->yoloConfLabel->setEnabled(yoloActive);
+    settingsUI()->yoloConfSpin->setEnabled(yoloActive);
+    settingsUI()->yoloNmsLabel->setEnabled(yoloActive);
+    settingsUI()->yoloNmsSpin->setEnabled(yoloActive);
+    settingsUI()->yoloBoxColorButton->setEnabled(yoloActive);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const bool manualFocus = (m_settings.m_focusMode == static_cast<int>(QCamera::FocusModeManual));
-    ui->focusDistLabel->setEnabled(manualFocus);
-    ui->focusDistSpin->setEnabled(manualFocus);
+    settingsUI()->focusDistLabel->setEnabled(manualFocus);
+    settingsUI()->focusDistSpin->setEnabled(manualFocus);
 #endif
 
     if (m_settings.isAlpacaCamera())
     {
-        ui->exposureLabel->setEnabled(true);
-        ui->exposureSpin->setEnabled(true);
+        settingsUI()->exposureLabel->setEnabled(true);
+        settingsUI()->exposureSpin->setEnabled(true);
     }
     else
     {
@@ -1572,23 +1424,23 @@ void CameraGUI::updateEnabledControls()
         // re-apply them here so other updateEnabledControls callers don't accidentally re-enable them.
         if (!m_qtZoomSupported)
         {
-            ui->zoomLabel->setEnabled(false);
-            ui->zoomSpin->setEnabled(false);
+            settingsUI()->zoomLabel->setEnabled(false);
+            settingsUI()->zoomSpin->setEnabled(false);
         }
         if (!m_qtManualExposureSupported)
         {
-            ui->exposureLabel->setEnabled(false);
-            ui->exposureSpin->setEnabled(false);
+            settingsUI()->exposureLabel->setEnabled(false);
+            settingsUI()->exposureSpin->setEnabled(false);
         }
         if (!m_qtIsoSensitivitySupported)
         {
-            ui->isoLabel->setEnabled(false);
-            ui->isoSpin->setEnabled(false);
+            settingsUI()->isoLabel->setEnabled(false);
+            settingsUI()->isoSpin->setEnabled(false);
         }
         if (!m_qtWhiteBalanceModeSupported)
         {
-            ui->whiteBalanceLabel->setEnabled(false);
-            ui->whiteBalanceCombo->setEnabled(false);
+            settingsUI()->whiteBalanceLabel->setEnabled(false);
+            settingsUI()->whiteBalanceCombo->setEnabled(false);
         }
     }
 }
@@ -1629,7 +1481,7 @@ void CameraGUI::on_motionBoxColorButton_clicked()
     if (color.isValid())
     {
         m_settings.m_motionBoxColor = color;
-        updateColorButton(ui->motionBoxColorButton, color);
+        updateColorButton(settingsUI()->motionBoxColorButton, color);
         m_settingsKeys.append("motionBoxColor");
         applySettings();
     }
@@ -1645,7 +1497,7 @@ void CameraGUI::on_spectrumOverlayButton_toggled(bool checked)
 
 void CameraGUI::on_spectrumDeviceCombo_currentIndexChanged(int index)
 {
-    m_settings.m_spectrumDevice = ui->spectrumDeviceCombo->itemText(index);
+    m_settings.m_spectrumDevice = settingsUI()->spectrumDeviceCombo->itemText(index);
     m_settingsKeys.append("spectrumDevice");
     applySettings();
 }
@@ -1653,7 +1505,7 @@ void CameraGUI::on_spectrumDeviceCombo_currentIndexChanged(int index)
 void CameraGUI::on_spectrumOffsetXSlider_valueChanged(int value)
 {
     m_settings.m_spectrumOffsetX = value;
-    ui->spectrumOffsetXValue->setText(QString::number(value));
+    settingsUI()->spectrumOffsetXValue->setText(QString::number(value));
     m_settingsKeys.append("spectrumOffsetX");
     applySettings();
 }
@@ -1661,7 +1513,7 @@ void CameraGUI::on_spectrumOffsetXSlider_valueChanged(int value)
 void CameraGUI::on_spectrumOffsetYSlider_valueChanged(int value)
 {
     m_settings.m_spectrumOffsetY = value;
-    ui->spectrumOffsetYValue->setText(QString::number(value));
+    settingsUI()->spectrumOffsetYValue->setText(QString::number(value));
     m_settingsKeys.append("spectrumOffsetY");
     applySettings();
 }
@@ -1683,7 +1535,7 @@ void CameraGUI::on_yoloButton_toggled(bool checked)
 
 void CameraGUI::on_yoloModelPathEdit_editingFinished()
 {
-    m_settings.m_yoloModelPath = ui->yoloModelPathEdit->text();
+    m_settings.m_yoloModelPath = settingsUI()->yoloModelPathEdit->text();
     m_settingsKeys.append("yoloModelPath");
     applySettings();
 }
@@ -1697,7 +1549,7 @@ void CameraGUI::on_yoloModelPathButton_clicked()
     if (!fileName.isEmpty())
     {
         m_settings.m_yoloModelPath = fileName;
-        ui->yoloModelPathEdit->setText(fileName);
+        settingsUI()->yoloModelPathEdit->setText(fileName);
         m_settingsKeys.append("yoloModelPath");
         applySettings();
     }
@@ -1705,7 +1557,7 @@ void CameraGUI::on_yoloModelPathButton_clicked()
 
 void CameraGUI::on_yoloLabelsPathEdit_editingFinished()
 {
-    m_settings.m_yoloLabelsPath = ui->yoloLabelsPathEdit->text();
+    m_settings.m_yoloLabelsPath = settingsUI()->yoloLabelsPathEdit->text();
     m_settingsKeys.append("yoloLabelsPath");
     applySettings();
 }
@@ -1719,7 +1571,7 @@ void CameraGUI::on_yoloLabelsPathButton_clicked()
     if (!fileName.isEmpty())
     {
         m_settings.m_yoloLabelsPath = fileName;
-        ui->yoloLabelsPathEdit->setText(fileName);
+        settingsUI()->yoloLabelsPathEdit->setText(fileName);
         m_settingsKeys.append("yoloLabelsPath");
         applySettings();
     }
@@ -1759,7 +1611,7 @@ void CameraGUI::on_yoloBoxColorButton_clicked()
     if (color.isValid())
     {
         m_settings.m_yoloBoxColor = color;
-        updateColorButton(ui->yoloBoxColorButton, color);
+        updateColorButton(settingsUI()->yoloBoxColorButton, color);
         m_settingsKeys.append("yoloBoxColor");
         applySettings();
     }
@@ -1821,7 +1673,7 @@ void CameraGUI::audioSelect(const QPoint& p)
 
 void CameraGUI::on_whiteBalanceCombo_currentIndexChanged(int index)
 {
-    m_settings.m_whiteBalanceMode = ui->whiteBalanceCombo->itemData(index).toInt();
+    m_settings.m_whiteBalanceMode = settingsUI()->whiteBalanceCombo->itemData(index).toInt();
     m_settingsKeys.append("whiteBalanceMode");
     applySettings();
 }
@@ -1835,7 +1687,7 @@ void CameraGUI::on_exposureCompSpin_valueChanged(double value)
 
 void CameraGUI::on_focusModeCombo_currentIndexChanged(int index)
 {
-    m_settings.m_focusMode = ui->focusModeCombo->itemData(index).toInt();
+    m_settings.m_focusMode = settingsUI()->focusModeCombo->itemData(index).toInt();
     m_settingsKeys.append("focusMode");
     updateEnabledControls();
     applySettings();

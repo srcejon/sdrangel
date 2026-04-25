@@ -67,6 +67,7 @@ class Message;
 
 namespace Ui {
     class CameraGUI;
+    class CameraSettingsDialog;
 }
 
 class CameraGUI : public FeatureGUI {
@@ -97,7 +98,6 @@ private:
     MessageQueue m_inputMessageQueue;
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraSettingsDialog *m_settingsDialog;
-    QToolButton *m_cameraSettingsButton;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
     bool m_qtZoomSupported;             // true when the active Qt camera reports zoom range > 1.0
@@ -125,9 +125,9 @@ private:
     void blockApplySettings(bool block);
     void applySettings(bool force = false);
     void displaySettings();
+    Ui::CameraSettingsDialog *settingsUI() const;
     bool handleMessage(const Message& message);
     void makeUIConnections();
-    void moveSettingsWidgetsToDialog();
     void updateAlpacaVisibility();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateImageWidget();

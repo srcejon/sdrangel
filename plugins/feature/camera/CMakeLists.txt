@@ -27,6 +27,7 @@ if(NOT SERVER_MODE)
         cameragui.cpp
         cameragui.ui
         camerasettingsdialog.cpp
+        camerasettingsdialog.ui
         camerahistogramdialog.cpp
         cameraobjectcontroldialog.cpp
         cameraobjectdevicesettingsgui.cpp

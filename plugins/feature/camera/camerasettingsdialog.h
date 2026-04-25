@@ -20,8 +20,7 @@
 
 #include <QDialog>
 
-class QGridLayout;
-class QVBoxLayout;
+#include "ui_camerasettingsdialog.h"
 
 class CameraSettingsDialog : public QDialog
 {
@@ -29,14 +28,12 @@ class CameraSettingsDialog : public QDialog
 
 public:
     explicit CameraSettingsDialog(QWidget *parent = nullptr);
-    ~CameraSettingsDialog() override = default;
+    ~CameraSettingsDialog() override;
 
-    QGridLayout *getCameraSettingsLayout() const { return m_cameraSettingsLayout; }
-    QVBoxLayout *getPostProcessingLayout() const { return m_postProcessingLayout; }
+    Ui::CameraSettingsDialog *getUI() const { return ui; }
 
 private:
-    QGridLayout *m_cameraSettingsLayout;
-    QVBoxLayout *m_postProcessingLayout;
+    Ui::CameraSettingsDialog *ui;
 };
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGSDIALOG_H_

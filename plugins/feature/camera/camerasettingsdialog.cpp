@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <QPainter>
 #include <QVBoxLayout>
+#include <QGraphicsLayout>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
 #include <QtCharts/QDateTimeAxis>
@@ -91,13 +92,13 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     m_tempChart->setTheme(QChart::ChartThemeDark);
     m_tempChart->setTitle(tr("CCD temperature vs time"));
     m_tempChart->legend()->hide();
+    m_tempChart->layout()->setContentsMargins(0, 0, 0, 0);
 
     m_tempSeries = new QLineSeries(m_tempChart);
     m_tempChart->addSeries(m_tempSeries);
 
     m_tempAxisX = new QDateTimeAxis(m_tempChart);
     m_tempAxisX->setFormat("HH:mm:ss");
-    m_tempAxisX->setTitleText(tr("Time"));
 
     m_tempAxisY = new QValueAxis(m_tempChart);
     m_tempAxisY->setTitleText(tr("Temperature (C)"));
@@ -147,4 +148,9 @@ void CameraSettingsDialog::clearAlpacaStatus()
     }
 
     updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
+}
+
+void CameraSettingsDialog::on_clearChart_clicked()
+{
+    m_tempSeries->clear();
 }

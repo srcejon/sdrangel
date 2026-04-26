@@ -280,7 +280,6 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     ui->imageView->setRenderHint(QPainter::SmoothPixmapTransform, true);
     ui->imageView->setBackgroundBrush(QBrush(Qt::black));
     ui->imageView->viewport()->installEventFilter(this);
-    ui->statusContainer->hide();
     ui->imageContainer->setGeometry(10, 90, 402, 412);
 
     m_camera = reinterpret_cast<Camera*>(feature);

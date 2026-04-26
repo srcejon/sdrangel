@@ -46,6 +46,9 @@ private:
     QLineSeries *m_tempSeries;
     QDateTimeAxis *m_tempAxisX;
     QValueAxis *m_tempAxisY;
+
+private slots:
+    void on_clearChart_clicked();
 };
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGSDIALOG_H_

@@ -66,6 +66,132 @@
 #include "util/profiler.h"
 #include "cameraworker.h"
 
+namespace {
+
+QString normalizeAudioMatchName(QString text)
+{
+    text = text.toLower();
+
+    for (int i = 0; i < text.size(); ++i)
+    {
+        if (!text[i].isLetterOrNumber()) {
+            text[i] = QLatin1Char(' ');
+        }
+    }
+
+    const QStringList skipTokens = {
+        QStringLiteral("audio"),
+        QStringLiteral("camera"),
+        QStringLiteral("device"),
+        QStringLiteral("input"),
+        QStringLiteral("microphone"),
+        QStringLiteral("mic"),
+        QStringLiteral("video"),
+        QStringLiteral("webcam")
+    };
+
+    QStringList tokens = text.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    tokens.erase(
+        std::remove_if(
+            tokens.begin(),
+            tokens.end(),
+            [&skipTokens](const QString& token) { return skipTokens.contains(token); }),
+        tokens.end());
+    return tokens.join(QLatin1Char(' '));
+}
+
+int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName)
+{
+    if (cameraName.isEmpty() || audioName.isEmpty()) {
+        return -1;
+    }
+
+    const QString cameraLower = cameraName.toLower();
+    const QString audioLower = audioName.toLower();
+
+    if (cameraLower == audioLower) {
+        return 1000;
+    }
+
+    int score = 0;
+
+    if (audioLower.contains(cameraLower) || cameraLower.contains(audioLower)) {
+        score += 400;
+    }
+
+    const QString normalizedCamera = normalizeAudioMatchName(cameraName);
+    const QString normalizedAudio = normalizeAudioMatchName(audioName);
+
+    if (!normalizedCamera.isEmpty() && normalizedCamera == normalizedAudio) {
+        score += 300;
+    } else if (!normalizedCamera.isEmpty() && !normalizedAudio.isEmpty()
+            && (normalizedAudio.contains(normalizedCamera) || normalizedCamera.contains(normalizedAudio))) {
+        score += 150;
+    }
+
+    const QStringList cameraTokens = normalizedCamera.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    const QStringList audioTokens = normalizedAudio.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    int tokenMatches = 0;
+
+    for (const QString& token : cameraTokens)
+    {
+        if (audioTokens.contains(token)) {
+            ++tokenMatches;
+        }
+    }
+
+    score += tokenMatches * 25;
+    return score;
+}
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+int findQtCameraAudioInputIndex(const CameraSettings& settings)
+{
+    if (!settings.isQtCamera()) {
+        return -1;
+    }
+
+    const QString targetId = settings.cameraIdString();
+    const QString targetDescription = settings.cameraDescription();
+    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
+
+    QString cameraDescription = targetDescription;
+
+    for (const QCameraDevice& device : cameras)
+    {
+        const QString id = QString::fromUtf8(device.id());
+
+        if ((id == targetId) || (device.description() == targetDescription))
+        {
+            cameraDescription = device.description();
+            break;
+        }
+    }
+
+    const QList<AudioDeviceInfo>& audioInputs = AudioDeviceInfo::availableInputDevices();
+    int bestIndex = -1;
+    int bestScore = -1;
+
+    for (int i = 0; i < audioInputs.size(); ++i)
+    {
+        const QString audioName = audioInputs[i].deviceName();
+        const int descriptionScore = scoreAudioDeviceMatch(cameraDescription, audioName);
+        const int idScore = scoreAudioDeviceMatch(targetId, audioName);
+        const int score = std::max(descriptionScore, idScore);
+
+        if (score > bestScore)
+        {
+            bestScore = score;
+            bestIndex = i;
+        }
+    }
+
+    return bestScore >= 150 ? bestIndex : -1;
+}
+#endif
+
+} // namespace
+
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
@@ -586,9 +712,14 @@ void CameraWorker::startCapture()
         // Qt camera capture is mainly managed by CameraGUI on the main thread. We just do audio
         AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
         const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(m_settings.m_audioDeviceName);
-        qDebug() << "CameraWorker: starting audio capture: deviceIndex" << outputDeviceIndex;
+        int inputDeviceIndex = -1;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        inputDeviceIndex = findQtCameraAudioInputIndex(m_settings);
+#endif
+        qDebug() << "CameraWorker: starting audio capture: outputDeviceIndex" << outputDeviceIndex
+                 << "inputDeviceIndex" << inputDeviceIndex;
         audioDeviceManager->addAudioSink(&m_outputAudioFifo, getInputMessageQueue(), outputDeviceIndex);
-        audioDeviceManager->addAudioSource(&m_captureAudioFifo, getInputMessageQueue());    // FIXME: Match to camera.
+        audioDeviceManager->addAudioSource(&m_captureAudioFifo, getInputMessageQueue(), inputDeviceIndex);
         QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraWorker::onCaptureAudioDataReady);
         m_capturingAudio = true;
     }

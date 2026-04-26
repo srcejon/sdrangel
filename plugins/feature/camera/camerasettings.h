@@ -80,6 +80,13 @@ struct CameraSettings
     QString m_dateTimeFormat; ///< QDateTime::toString format string, e.g. "yyyy-MM-dd hh:mm:ss"
     int m_dateTimePosX;       ///< X pixel offset from left for date/time text: 0..4096
     int m_dateTimePosY;       ///< Y pixel offset from top for date/time text: 0..4096 (0 = auto bottom)
+    bool m_overlayText;       ///< Draw custom HTML text on frame
+    QString m_overlayTextString; ///< HTML text content to render on the frame
+    QColor m_overlayTextColor;   ///< Colour for the text overlay content
+    QString m_overlayTextFontFamily; ///< QPainter font family for the text overlay
+    double  m_overlayTextFontScale;  ///< Font point size for the text overlay: 4.0..144.0
+    int m_overlayTextPosX;     ///< X pixel offset from left for text overlay: 0..4096
+    int m_overlayTextPosY;     ///< Y pixel offset from top for text overlay: 0..4096 (0 = auto bottom)
     bool m_diffMask;          ///< Show pixel differences from previous frame
     int m_dilationSize;       ///< Kernel radius for diff-mask dilation: 0..20
     QString m_overlayFontFamily; ///< QPainter font family name (empty = system default)

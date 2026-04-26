@@ -37,6 +37,7 @@
 #include <QTextStream>
 #include <QSharedPointer>
 #include <QtEndian>
+#include <QTextDocument>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QColor>
@@ -309,6 +310,8 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     static const QStringList kPostProcessingKeys = {
         "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
+        "overlayText", "overlayTextString", "overlayTextColor",
+        "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "diffMask", "dilationSize", "overlayFontFamily", "overlayFontScale",
         "motionDetect", "motionBoxColor", "minContourArea",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
@@ -909,9 +912,13 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
 
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
+    QTextDocument overlayTextDocument;
+    overlayTextDocument.setHtml(m_settings.m_overlayTextString);
+    const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
     const bool needsAny = needsBrightContrast
         || m_settings.m_invertColors
         || m_settings.m_overlayDateTime
+        || needsTextOverlay
         || (m_settings.m_diffMask && !m_previousRawFrame.isNull())
         || m_settings.m_motionDetect
         || (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty())
@@ -996,9 +1003,9 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
         runYoloDetections(bgrMat);
     }
 
-    if (m_settings.m_overlayDateTime)
+    if (m_settings.m_overlayDateTime || needsTextOverlay)
     {
-        // Date/time text is rendered after the cv::Mat pipeline using QPainter,
+        // Text overlays are rendered after the cv::Mat pipeline using QPainter,
         // which gives access to the full system font library.
     }
 
@@ -1090,6 +1097,34 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
                       ? m_settings.m_dateTimePosY
                       : result.height() - fm.descent() - 2;
         painter.drawText(x, y, text);
+    }
+
+    if (needsTextOverlay)
+    {
+        QFont font;
+        if (!m_settings.m_overlayTextFontFamily.isEmpty()) {
+            font.setFamily(m_settings.m_overlayTextFontFamily);
+        }
+        font.setPointSizeF(m_settings.m_overlayTextFontScale);
+        overlayTextDocument.setDefaultFont(font);
+        overlayTextDocument.setDefaultStyleSheet(QStringLiteral("body { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
+        overlayTextDocument.setHtml(m_settings.m_overlayTextString);
+
+        const int x = std::max(0, m_settings.m_overlayTextPosX);
+        const qreal maxTextWidth = std::max(1, result.width() - x);
+        overlayTextDocument.setTextWidth(maxTextWidth);
+
+        const QSizeF documentSize = overlayTextDocument.size();
+        const int y = (m_settings.m_overlayTextPosY > 0)
+            ? m_settings.m_overlayTextPosY
+            : std::max(0, static_cast<int>(std::floor(result.height() - documentSize.height() - 2.0)));
+
+        QPainter painter(&result);
+        painter.setRenderHint(QPainter::TextAntialiasing);
+        painter.save();
+        painter.translate(x, y);
+        overlayTextDocument.drawContents(&painter);
+        painter.restore();
     }
 
     return result;

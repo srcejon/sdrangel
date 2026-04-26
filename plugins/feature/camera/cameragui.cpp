@@ -398,13 +398,24 @@ void CameraGUI::displaySettings()
     settingsUI()->dateTimePosXValue->setText(QString::number(m_settings.m_dateTimePosX));
     settingsUI()->dateTimePosYSlider->setValue(m_settings.m_dateTimePosY);
     settingsUI()->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
+    ui->overlayTextButton->setChecked(m_settings.m_overlayText);
+    settingsUI()->overlayTextEdit->blockSignals(true);
+    settingsUI()->overlayTextEdit->setHtml(m_settings.m_overlayTextString);
+    settingsUI()->overlayTextEdit->blockSignals(false);
+    settingsUI()->overlayTextPosXSlider->setValue(m_settings.m_overlayTextPosX);
+    settingsUI()->overlayTextPosXValue->setText(QString::number(m_settings.m_overlayTextPosX));
+    settingsUI()->overlayTextPosYSlider->setValue(m_settings.m_overlayTextPosY);
+    settingsUI()->overlayTextPosYValue->setText(QString::number(m_settings.m_overlayTextPosY));
     ui->diffMaskButton->setChecked(m_settings.m_diffMask);
     settingsUI()->dilationSpin->setValue(m_settings.m_dilationSize);
     settingsUI()->overlayFontCombo->setCurrentText(m_settings.m_overlayFontFamily);
     settingsUI()->overlayFontScaleSpin->setValue(m_settings.m_overlayFontScale);
+    settingsUI()->overlayTextFontCombo->setCurrentText(m_settings.m_overlayTextFontFamily);
+    settingsUI()->overlayTextFontScaleSpin->setValue(m_settings.m_overlayTextFontScale);
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
     settingsUI()->minContourAreaSpin->setValue(m_settings.m_minContourArea);
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
+    updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
     updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
     ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
     {
@@ -513,11 +524,18 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->dateTimeFormatEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_dateTimeFormatEdit_editingFinished);
     QObject::connect(settingsUI()->dateTimePosXSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosXSlider_valueChanged);
     QObject::connect(settingsUI()->dateTimePosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosYSlider_valueChanged);
+    QObject::connect(ui->overlayTextButton, &QToolButton::toggled, this, &CameraGUI::on_overlayTextButton_toggled);
+    QObject::connect(settingsUI()->overlayTextColorButton, &QToolButton::clicked, this, &CameraGUI::on_overlayTextColorButton_clicked);
+    QObject::connect(settingsUI()->overlayTextEdit, &QTextEdit::textChanged, this, &CameraGUI::on_overlayTextEdit_textChanged);
+    QObject::connect(settingsUI()->overlayTextPosXSlider, &QSlider::valueChanged, this, &CameraGUI::on_overlayTextPosXSlider_valueChanged);
+    QObject::connect(settingsUI()->overlayTextPosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_overlayTextPosYSlider_valueChanged);
     QObject::connect(ui->diffMaskButton, &QToolButton::toggled, this, &CameraGUI::on_diffMaskButton_toggled);
     QObject::connect(settingsUI()->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
     QObject::connect(settingsUI()->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
     QObject::connect(settingsUI()->overlayFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->overlayFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayFontScaleSpin_valueChanged);
+    QObject::connect(settingsUI()->overlayTextFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayTextFontCombo_currentFontChanged);
+    QObject::connect(settingsUI()->overlayTextFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayTextFontScaleSpin_valueChanged);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
     QObject::connect(settingsUI()->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
     QObject::connect(settingsUI()->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
@@ -1354,6 +1372,50 @@ void CameraGUI::on_dateTimePosYSlider_valueChanged(int value)
     applySettings();
 }
 
+void CameraGUI::on_overlayTextButton_toggled(bool checked)
+{
+    m_settings.m_overlayText = checked;
+    m_settingsKeys.append("overlayText");
+    updateEnabledControls();
+    applySettings();
+}
+
+void CameraGUI::on_overlayTextColorButton_clicked()
+{
+    const QColor color = QColorDialog::getColor(m_settings.m_overlayTextColor, this, tr("Select overlay text colour"));
+
+    if (color.isValid())
+    {
+        m_settings.m_overlayTextColor = color;
+        updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
+        m_settingsKeys.append("overlayTextColor");
+        applySettings();
+    }
+}
+
+void CameraGUI::on_overlayTextEdit_textChanged()
+{
+    m_settings.m_overlayTextString = settingsUI()->overlayTextEdit->toHtml();
+    m_settingsKeys.append("overlayTextString");
+    applySettings();
+}
+
+void CameraGUI::on_overlayTextPosXSlider_valueChanged(int value)
+{
+    m_settings.m_overlayTextPosX = value;
+    settingsUI()->overlayTextPosXValue->setText(QString::number(value));
+    m_settingsKeys.append("overlayTextPosX");
+    applySettings();
+}
+
+void CameraGUI::on_overlayTextPosYSlider_valueChanged(int value)
+{
+    m_settings.m_overlayTextPosY = value;
+    settingsUI()->overlayTextPosYValue->setText(QString::number(value));
+    m_settingsKeys.append("overlayTextPosY");
+    applySettings();
+}
+
 void CameraGUI::on_diffMaskButton_toggled(bool checked)
 {
     m_settings.m_diffMask = checked;
@@ -1388,6 +1450,9 @@ void CameraGUI::on_histogramButton_clicked()
 
 void CameraGUI::updateEnabledControls()
 {
+    settingsUI()->dateTimeOverlay->setEnabled(m_settings.m_overlayDateTime);
+    settingsUI()->textOverlay->setEnabled(m_settings.m_overlayText);
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const bool manualFocus = (m_settings.m_focusMode == static_cast<int>(QCamera::FocusModeManual));
     settingsUI()->focusDistLabel->setEnabled(manualFocus);
@@ -1440,6 +1505,20 @@ void CameraGUI::on_overlayFontScaleSpin_valueChanged(double value)
 {
     m_settings.m_overlayFontScale = value;
     m_settingsKeys.append("overlayFontScale");
+    applySettings();
+}
+
+void CameraGUI::on_overlayTextFontCombo_currentFontChanged(const QFont& font)
+{
+    m_settings.m_overlayTextFontFamily = font.family();
+    m_settingsKeys.append("overlayTextFontFamily");
+    applySettings();
+}
+
+void CameraGUI::on_overlayTextFontScaleSpin_valueChanged(double value)
+{
+    m_settings.m_overlayTextFontScale = value;
+    m_settingsKeys.append("overlayTextFontScale");
     applySettings();
 }
 

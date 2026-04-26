@@ -293,6 +293,16 @@
        </widget>
       </item>
       <item>
+       <widget class="ButtonSwitch" name="overlayTextButton">
+        <property name="toolTip">
+         <string>Overlay custom HTML text</string>
+        </property>
+        <property name="text">
+         <string>Text</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="ButtonSwitch" name="spectrumOverlayButton">
         <property name="toolTip">
          <string>Overlay spectrum view on post-processed image</string>

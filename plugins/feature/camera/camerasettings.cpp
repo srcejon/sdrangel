@@ -137,6 +137,13 @@ void CameraSettings::resetToDefaults()
     m_dateTimeFormat = QStringLiteral("yyyy-MM-dd hh:mm:ss");
     m_dateTimePosX = 4;
     m_dateTimePosY = 0;
+    m_overlayText = false;
+    m_overlayTextString = QStringLiteral("<p>SDRangel Camera</p>");
+    m_overlayTextColor = Qt::white;
+    m_overlayTextFontFamily.clear();
+    m_overlayTextFontScale = 12.0;
+    m_overlayTextPosX = 4;
+    m_overlayTextPosY = 0;
     m_diffMask = false;
     m_dilationSize = 3;
     m_overlayFontFamily.clear();
@@ -218,6 +225,13 @@ QByteArray CameraSettings::serialize() const
     s.writeString(44, m_dateTimeFormat);
     s.writeS32(45, m_dateTimePosX);
     s.writeS32(46, m_dateTimePosY);
+    s.writeBool(62, m_overlayText);
+    s.writeString(63, m_overlayTextString);
+    s.writeU32(64, m_overlayTextColor.rgba());
+    s.writeString(65, m_overlayTextFontFamily);
+    s.writeDouble(66, m_overlayTextFontScale);
+    s.writeS32(67, m_overlayTextPosX);
+    s.writeS32(68, m_overlayTextPosY);
     s.writeBool(47, m_yoloEnabled);
     s.writeString(48, m_yoloModelPath);
     s.writeString(49, m_yoloLabelsPath);
@@ -328,6 +342,18 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(46, &m_dateTimePosY, 0);
         m_dateTimePosX = qBound(0, m_dateTimePosX, 4096);
         m_dateTimePosY = qBound(0, m_dateTimePosY, 4096);
+        d.readBool(62, &m_overlayText, false);
+        d.readString(63, &m_overlayTextString, "<p>SDRangel Camera</p>");
+        uint32_t overlayTextColorRgba = QColor(Qt::white).rgba();
+        d.readU32(64, &overlayTextColorRgba, QColor(Qt::white).rgba());
+        m_overlayTextColor = QColor::fromRgba(overlayTextColorRgba);
+        d.readString(65, &m_overlayTextFontFamily, "");
+        d.readDouble(66, &m_overlayTextFontScale, 12.0);
+        m_overlayTextFontScale = qBound(4.0, m_overlayTextFontScale, 144.0);
+        d.readS32(67, &m_overlayTextPosX, 4);
+        d.readS32(68, &m_overlayTextPosY, 0);
+        m_overlayTextPosX = qBound(0, m_overlayTextPosX, 4096);
+        m_overlayTextPosY = qBound(0, m_overlayTextPosY, 4096);
         d.readBool(47, &m_yoloEnabled, false);
         d.readString(48, &m_yoloModelPath, "");
         d.readString(49, &m_yoloLabelsPath, "");
@@ -511,6 +537,27 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("dateTimePosY")) {
         m_dateTimePosY = qBound(0, settings.m_dateTimePosY, 4096);
     }
+    if (settingsKeys.contains("overlayText")) {
+        m_overlayText = settings.m_overlayText;
+    }
+    if (settingsKeys.contains("overlayTextString")) {
+        m_overlayTextString = settings.m_overlayTextString;
+    }
+    if (settingsKeys.contains("overlayTextColor")) {
+        m_overlayTextColor = settings.m_overlayTextColor;
+    }
+    if (settingsKeys.contains("overlayTextFontFamily")) {
+        m_overlayTextFontFamily = settings.m_overlayTextFontFamily;
+    }
+    if (settingsKeys.contains("overlayTextFontScale")) {
+        m_overlayTextFontScale = qBound(4.0, settings.m_overlayTextFontScale, 144.0);
+    }
+    if (settingsKeys.contains("overlayTextPosX")) {
+        m_overlayTextPosX = qBound(0, settings.m_overlayTextPosX, 4096);
+    }
+    if (settingsKeys.contains("overlayTextPosY")) {
+        m_overlayTextPosY = qBound(0, settings.m_overlayTextPosY, 4096);
+    }
     if (settingsKeys.contains("yoloEnabled")) {
         m_yoloEnabled = settings.m_yoloEnabled;
     }
@@ -675,6 +722,27 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("dateTimePosY") || force) {
         ostr << " m_dateTimePosY: " << m_dateTimePosY;
+    }
+    if (settingsKeys.contains("overlayText") || force) {
+        ostr << " m_overlayText: " << m_overlayText;
+    }
+    if (settingsKeys.contains("overlayTextString") || force) {
+        ostr << " m_overlayTextString: " << m_overlayTextString.toStdString();
+    }
+    if (settingsKeys.contains("overlayTextColor") || force) {
+        ostr << " m_overlayTextColor: " << m_overlayTextColor.name().toStdString();
+    }
+    if (settingsKeys.contains("overlayTextFontFamily") || force) {
+        ostr << " m_overlayTextFontFamily: " << m_overlayTextFontFamily.toStdString();
+    }
+    if (settingsKeys.contains("overlayTextFontScale") || force) {
+        ostr << " m_overlayTextFontScale: " << m_overlayTextFontScale;
+    }
+    if (settingsKeys.contains("overlayTextPosX") || force) {
+        ostr << " m_overlayTextPosX: " << m_overlayTextPosX;
+    }
+    if (settingsKeys.contains("overlayTextPosY") || force) {
+        ostr << " m_overlayTextPosY: " << m_overlayTextPosY;
     }
     if (settingsKeys.contains("yoloEnabled") || force) {
         ostr << " m_yoloEnabled: " << m_yoloEnabled;

@@ -671,7 +671,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="dateTimeOverlay">
+       <widget class="QGroupBox" name="dateTimeOverlay">
          <property name="title">
           <string>Date / Time Overlay</string>
          </property>
@@ -837,11 +837,184 @@
             </property>
            </widget>
           </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="spectrumOverlay">
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="textOverlay">
+        <property name="title">
+         <string>Text Overlay</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayout_textOverlay">
+         <item row="0" column="0">
+          <widget class="QLabel" name="overlayTextEditLabel">
+           <property name="text">
+            <string>HTML</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2" colspan="2">
+          <widget class="QTextEdit" name="overlayTextEdit">
+           <property name="toolTip">
+            <string>HTML text to render on the image</string>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>100</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="overlayTextColorLabel">
+           <property name="text">
+            <string>Colour</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QToolButton" name="overlayTextColorButton">
+           <property name="toolTip">
+            <string>Select text overlay colour</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="overlayTextFontLabel">
+           <property name="text">
+            <string>Font</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2" colspan="2">
+          <widget class="QFontComboBox" name="overlayTextFontCombo">
+           <property name="toolTip">
+            <string>Select font to use for the text overlay</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="overlayTextFontSizeLabel">
+           <property name="text">
+            <string>Size</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="2" colspan="2">
+          <widget class="QDoubleSpinBox" name="overlayTextFontScaleSpin">
+           <property name="toolTip">
+            <string>Font point size for text overlay</string>
+           </property>
+           <property name="decimals">
+            <number>0</number>
+           </property>
+           <property name="minimum">
+            <double>4.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>144.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>1.000000000000000</double>
+           </property>
+           <property name="value">
+            <double>12.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="overlayTextPosXLabel">
+           <property name="text">
+            <string>X</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="2">
+          <widget class="QSlider" name="overlayTextPosXSlider">
+           <property name="toolTip">
+            <string>Text overlay X position (px from left)</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>4096</number>
+           </property>
+           <property name="value">
+            <number>4</number>
+           </property>
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="3">
+          <widget class="QLabel" name="overlayTextPosXValue">
+           <property name="minimumSize">
+            <size>
+             <width>35</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>4</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="overlayTextPosYLabel">
+           <property name="text">
+            <string>Y</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="2">
+          <widget class="QSlider" name="overlayTextPosYSlider">
+           <property name="toolTip">
+            <string>Text overlay Y position (px from top; 0 = auto bottom)</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>4096</number>
+           </property>
+           <property name="value">
+            <number>0</number>
+           </property>
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="3">
+          <widget class="QLabel" name="overlayTextPosYValue">
+           <property name="minimumSize">
+            <size>
+             <width>35</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>0</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="spectrumOverlay">
          <property name="title">
           <string>Spectrum Overlay</string>
          </property>

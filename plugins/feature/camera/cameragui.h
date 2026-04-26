@@ -170,11 +170,18 @@ private slots:
     void on_dateTimeFormatEdit_editingFinished();
     void on_dateTimePosXSlider_valueChanged(int value);
     void on_dateTimePosYSlider_valueChanged(int value);
+    void on_overlayTextButton_toggled(bool checked);
+    void on_overlayTextColorButton_clicked();
+    void on_overlayTextEdit_textChanged();
+    void on_overlayTextPosXSlider_valueChanged(int value);
+    void on_overlayTextPosYSlider_valueChanged(int value);
     void on_diffMaskButton_toggled(bool checked);
     void on_dilationSpin_valueChanged(int value);
     void on_histogramButton_clicked();
     void on_overlayFontCombo_currentFontChanged(const QFont& font);
     void on_overlayFontScaleSpin_valueChanged(double value);
+    void on_overlayTextFontCombo_currentFontChanged(const QFont& font);
+    void on_overlayTextFontScaleSpin_valueChanged(double value);
     void on_motionDetectButton_toggled(bool checked);
     void on_minContourAreaSpin_valueChanged(int value);
     void on_motionBoxColorButton_clicked();

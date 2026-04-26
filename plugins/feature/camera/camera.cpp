@@ -158,8 +158,4 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
     } else {
         m_settings.applySettings(settingsKeys, settings);
     }
-
-    if (m_guiMessageQueue) {
-        m_guiMessageQueue->push(MsgConfigureCamera::create(m_settings, settingsKeys, force)); // FIXME: Loop?
-    }
 }

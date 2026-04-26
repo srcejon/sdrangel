@@ -986,7 +986,10 @@ void CameraWorker::processNewFrame(const QImage& image)
     // Save a single JPEG of the raw frame per capture session
     if (m_settings.m_saveImage && !m_imageSaved && !m_settings.m_imageFileName.isEmpty())
     {
-        image.save(m_settings.m_imageFileName, "JPEG");
+        QFileInfo fileInfo(m_settings.m_imageFileName);
+        QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
+        qDebug() << "CameraWorker: Saving image to" << filename;
+        image.save(filename);
         m_imageSaved = true;
     }
 
@@ -996,11 +999,15 @@ void CameraWorker::processNewFrame(const QImage& image)
         // Lazily open the VideoWriter on the first frame so we know the frame size
         if (!m_videoWriter.isOpened())
         {
+            QFileInfo fileInfo(m_settings.m_videoFileName);
+            QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
+            qDebug() << "CameraWorker: Saving video to" << filename;
+
             // 'mp4v' (MPEG-4 Part 2) is widely supported by OpenCV across all platforms.
             // The output file extension (.mp4) determines the container format.
             const int fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
             m_videoWriter.open(
-                m_settings.m_videoFileName.toStdString(),
+                filename.toStdString(),
                 fourcc,
                 std::max(1, m_settings.m_framesPerSecond),
                 cv::Size(image.width(), image.height()),

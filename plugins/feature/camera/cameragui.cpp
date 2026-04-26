@@ -1388,54 +1388,6 @@ void CameraGUI::on_histogramButton_clicked()
 
 void CameraGUI::updateEnabledControls()
 {
-    const bool dtActive = m_settings.m_overlayDateTime;
-    settingsUI()->dateTimeColorButton->setEnabled(dtActive);
-    settingsUI()->overlayFontLabel->setEnabled(dtActive);
-    settingsUI()->overlayFontCombo->setEnabled(dtActive);
-    settingsUI()->overlayFontSizeLabel->setEnabled(dtActive);
-    settingsUI()->overlayFontScaleSpin->setEnabled(dtActive);
-    settingsUI()->dateTimeFormatLabel->setEnabled(dtActive);
-    settingsUI()->dateTimeFormatEdit->setEnabled(dtActive);
-    settingsUI()->dateTimePosXLabel->setEnabled(dtActive);
-    settingsUI()->dateTimePosXSlider->setEnabled(dtActive);
-    settingsUI()->dateTimePosXValue->setEnabled(dtActive);
-    settingsUI()->dateTimePosYLabel->setEnabled(dtActive);
-    settingsUI()->dateTimePosYSlider->setEnabled(dtActive);
-    settingsUI()->dateTimePosYValue->setEnabled(dtActive);
-
-    const bool diffActive = m_settings.m_diffMask;
-    settingsUI()->dilationLabel->setEnabled(diffActive);
-    settingsUI()->dilationSpin->setEnabled(diffActive);
-
-    const bool motionActive = m_settings.m_motionDetect;
-    settingsUI()->minContourAreaLabel->setEnabled(motionActive);
-    settingsUI()->minContourAreaSpin->setEnabled(motionActive);
-    settingsUI()->motionBoxColorButton->setEnabled(motionActive);
-
-    const bool specActive = m_settings.m_overlaySpectrum;
-    settingsUI()->spectrumDeviceCombo->setEnabled(specActive);
-    settingsUI()->spectrumOffsetXLabel->setEnabled(specActive);
-    settingsUI()->spectrumOffsetXSlider->setEnabled(specActive);
-    settingsUI()->spectrumOffsetXValue->setEnabled(specActive);
-    settingsUI()->spectrumOffsetYLabel->setEnabled(specActive);
-    settingsUI()->spectrumOffsetYSlider->setEnabled(specActive);
-    settingsUI()->spectrumOffsetYValue->setEnabled(specActive);
-    settingsUI()->spectrumScaleLabel->setEnabled(specActive);
-    settingsUI()->spectrumScaleSpin->setEnabled(specActive);
-
-    const bool yoloActive = m_settings.m_yoloEnabled;
-    settingsUI()->yoloModelPathEdit->setEnabled(yoloActive);
-    settingsUI()->yoloModelPathButton->setEnabled(yoloActive);
-    settingsUI()->yoloLabelsLabel->setEnabled(yoloActive);
-    settingsUI()->yoloLabelsPathEdit->setEnabled(yoloActive);
-    settingsUI()->yoloLabelsPathButton->setEnabled(yoloActive);
-    settingsUI()->yoloObjectControlButton->setEnabled(yoloActive);
-    settingsUI()->yoloConfLabel->setEnabled(yoloActive);
-    settingsUI()->yoloConfSpin->setEnabled(yoloActive);
-    settingsUI()->yoloNmsLabel->setEnabled(yoloActive);
-    settingsUI()->yoloNmsSpin->setEnabled(yoloActive);
-    settingsUI()->yoloBoxColorButton->setEnabled(yoloActive);
-
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const bool manualFocus = (m_settings.m_focusMode == static_cast<int>(QCamera::FocusModeManual));
     settingsUI()->focusDistLabel->setEnabled(manualFocus);

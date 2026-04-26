@@ -15,6 +15,9 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <algorithm>
+#include <cmath>
+
 #include <QColorDialog>
 #include <QDateTime>
 #include <QFileDialog>
@@ -22,6 +25,8 @@
 #include <QGraphicsView>
 #include <QPainter>
 #include <QPixmap>
+#include <QSet>
+#include <QSignalBlocker>
 #include <QStandardItemModel>
 #include <QWheelEvent>
 
@@ -58,6 +63,56 @@
 #include "camerasettingsdialog.h"
 #include "cameraworker.h"
 #include "cameragui.h"
+
+namespace {
+
+QString resolutionKey(const QSize& size)
+{
+    return QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
+}
+
+QString resolutionKey(int width, int height)
+{
+    return QStringLiteral("%1x%2").arg(width).arg(height);
+}
+
+void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
+{
+    const int minRounded = qMax(1, static_cast<int>(std::ceil(minFps)));
+    const int maxRounded = qMax(minRounded, static_cast<int>(std::floor(maxFps)));
+
+    for (int fps = minRounded; fps <= maxRounded; ++fps) {
+        fpsValues.insert(fps);
+    }
+}
+
+CameraGUI::FrameRateOptions makeFrameRateOptions(const QSet<int>& fpsValues)
+{
+    CameraGUI::FrameRateOptions options{true, 1, 1, {}};
+    options.values = fpsValues.values();
+    std::sort(options.values.begin(), options.values.end());
+
+    if (options.values.isEmpty()) {
+        options.values.append(1);
+    }
+
+    options.minFps = options.values.first();
+    options.maxFps = options.values.last();
+    options.contiguous = true;
+
+    for (int i = 1; i < options.values.size(); ++i)
+    {
+        if (options.values.at(i) != options.values.at(i - 1) + 1)
+        {
+            options.contiguous = false;
+            break;
+        }
+    }
+
+    return options;
+}
+
+}
 
 CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
@@ -158,28 +213,6 @@ bool CameraGUI::handleMessage(const Message& message)
 
         ui->cameraCombo->blockSignals(false);
 
-        return true;
-    }
-    else if (CameraWorker::MsgReportResolutions::match(message))
-    {
-        const CameraWorker::MsgReportResolutions& report = (CameraWorker::MsgReportResolutions&) message;
-        const QString current = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
-
-        settingsUI()->resolutionCombo->blockSignals(true);
-        settingsUI()->resolutionCombo->clear();
-
-        for (const QSize& size : report.getResolutions()) {
-            settingsUI()->resolutionCombo->addItem(QString("%1x%2").arg(size.width()).arg(size.height()));
-        }
-
-        const int idx = settingsUI()->resolutionCombo->findText(current);
-        if (idx >= 0) {
-            settingsUI()->resolutionCombo->setCurrentIndex(idx);
-        } else if (settingsUI()->resolutionCombo->count() > 0) {
-            settingsUI()->resolutionCombo->setCurrentIndex(0);
-        }
-
-        settingsUI()->resolutionCombo->blockSignals(false);
         return true;
     }
     else if (CameraWorker::MsgReportFrame::match(message))
@@ -376,7 +409,7 @@ void CameraGUI::displaySettings()
         settingsUI()->resolutionCombo->setCurrentIndex(resIdx);
     }
 
-    settingsUI()->fpsSpin->setValue(m_settings.m_framesPerSecond);
+    updateFrameRateControlForResolution(resText);
     settingsUI()->exposureSpin->setValue(m_settings.m_exposureTimeMs);
     settingsUI()->isoSpin->setValue(m_settings.m_isoSensitivity);
     settingsUI()->alpacaHostEdit->setText(m_settings.m_alpacaHost);
@@ -517,6 +550,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->cameraCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_cameraCombo_currentTextChanged);
     QObject::connect(settingsUI()->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
+    QObject::connect(settingsUI()->fpsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsCombo_currentIndexChanged);
     QObject::connect(settingsUI()->exposureSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
     QObject::connect(settingsUI()->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
@@ -581,6 +615,170 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->focusModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_focusModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->focusDistSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_focusDistSpin_valueChanged);
     QObject::connect(settingsUI()->zoomSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_zoomSpin_valueChanged);
+}
+
+void CameraGUI::reportResolutions()
+{
+    QList<QSize> resolutions;
+    QHash<QString, FrameRateOptions> frameRateOptionsByResolution;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_settings.isQtCamera())
+    {
+        const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
+        const QString targetId = m_settings.cameraIdString();
+        const QString targetDescription = m_settings.cameraDescription();
+
+        for (const QCameraDevice& device : cameras)
+        {
+            const QString id = QString::fromUtf8(device.id());
+            if ((id == targetId) || (device.description() == targetDescription))
+            {
+                QHash<QString, QSet<int>> fpsByResolution;
+                QSet<QString> seen;
+
+                for (const QCameraFormat& format : device.videoFormats())
+                {
+                    const QSize size = format.resolution();
+                    const QString key = resolutionKey(size);
+                    if (!seen.contains(key))
+                    {
+                        seen.insert(key);
+                        resolutions.append(size);
+                    }
+
+                    appendFpsRange(fpsByResolution[key], format.minFrameRate(), format.maxFrameRate());
+                }
+
+                for (auto it = fpsByResolution.cbegin(); it != fpsByResolution.cend(); ++it) {
+                    frameRateOptionsByResolution.insert(it.key(), makeFrameRateOptions(it.value()));
+                }
+
+                break;
+            }
+        }
+    }
+#else
+    if (m_settings.isQtCamera())
+    {
+        const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+        const QString targetId = m_settings.cameraIdString();
+        const QString targetDescription = m_settings.cameraDescription();
+
+        for (const QCameraInfo& info : cameras)
+        {
+            const QString id = info.deviceName();
+            if ((id == targetId) || (info.description() == targetDescription))
+            {
+                QCamera tempCam(info);
+                QHash<QString, QSet<int>> fpsByResolution;
+                QSet<QString> seen;
+
+                const QList<QCameraViewfinderSettings> viewfinderSettings = tempCam.supportedViewfinderSettings();
+
+                for (const QCameraViewfinderSettings& vfSettings : viewfinderSettings)
+                {
+                    const QSize size = vfSettings.resolution();
+                    if (!size.isValid()) {
+                        continue;
+                    }
+
+                    const QString key = resolutionKey(size);
+                    if (!seen.contains(key))
+                    {
+                        seen.insert(key);
+                        resolutions.append(size);
+                    }
+
+                    appendFpsRange(fpsByResolution[key], vfSettings.minimumFrameRate(), vfSettings.maximumFrameRate());
+                }
+
+                if (resolutions.isEmpty())
+                {
+                    for (const QSize& res : tempCam.supportedViewfinderResolutions())
+                    {
+                        const QString key = resolutionKey(res);
+                        if (!seen.contains(key))
+                        {
+                            seen.insert(key);
+                            resolutions.append(res);
+                        }
+                        fpsByResolution[key].insert(qMax(1, m_settings.m_framesPerSecond));
+                    }
+                }
+
+                for (auto it = fpsByResolution.cbegin(); it != fpsByResolution.cend(); ++it) {
+                    frameRateOptionsByResolution.insert(it.key(), makeFrameRateOptions(it.value()));
+                }
+
+                break;
+            }
+        }
+    }
+#endif
+
+    populateQtFormatControls(resolutions, frameRateOptionsByResolution);
+}
+
+void CameraGUI::populateQtFormatControls(const QList<QSize>& resolutions, const QHash<QString, FrameRateOptions>& frameRateOptionsByResolution)
+{
+    m_qtFrameRateOptionsByResolution = frameRateOptionsByResolution;
+
+    const QString current = resolutionKey(m_settings.m_resolutionWidth, m_settings.m_resolutionHeight);
+    QSignalBlocker blocker(settingsUI()->resolutionCombo);
+    settingsUI()->resolutionCombo->clear();
+
+    for (const QSize& size : resolutions) {
+        settingsUI()->resolutionCombo->addItem(resolutionKey(size));
+    }
+
+    const int idx = settingsUI()->resolutionCombo->findText(current);
+    if (idx >= 0) {
+        settingsUI()->resolutionCombo->setCurrentIndex(idx);
+    } else if (settingsUI()->resolutionCombo->count() > 0) {
+        settingsUI()->resolutionCombo->setCurrentIndex(0);
+    }
+
+    updateFrameRateControlForResolution(settingsUI()->resolutionCombo->currentText());
+}
+
+void CameraGUI::updateFrameRateControlForResolution(const QString& resolutionText)
+{
+    const FrameRateOptions options = m_qtFrameRateOptionsByResolution.value(
+        resolutionText,
+        FrameRateOptions{true, 1, 240, QList<int>{m_settings.m_framesPerSecond}});
+
+    const int desiredFps = m_settings.m_framesPerSecond;
+
+    if (options.contiguous)
+    {
+        const int clampedFps = qBound(options.minFps, desiredFps, options.maxFps);
+        m_settings.m_framesPerSecond = clampedFps;
+
+        QSignalBlocker blockSpin(settingsUI()->fpsSpin);
+        settingsUI()->fpsSpin->setMinimum(options.minFps);
+        settingsUI()->fpsSpin->setMaximum(options.maxFps);
+        settingsUI()->fpsSpin->setValue(clampedFps);
+        settingsUI()->fpsStack->setCurrentWidget(settingsUI()->fpsSpinPage);
+    }
+    else
+    {
+        QSignalBlocker blockCombo(settingsUI()->fpsCombo);
+        settingsUI()->fpsCombo->clear();
+        for (int fps : options.values) {
+            settingsUI()->fpsCombo->addItem(QString::number(fps), fps);
+        }
+
+        int selectedIndex = settingsUI()->fpsCombo->findData(desiredFps);
+        if (selectedIndex < 0 && settingsUI()->fpsCombo->count() > 0) {
+            selectedIndex = 0;
+        }
+        if (selectedIndex >= 0) {
+            settingsUI()->fpsCombo->setCurrentIndex(selectedIndex);
+            m_settings.m_framesPerSecond = settingsUI()->fpsCombo->currentData().toInt();
+        }
+        settingsUI()->fpsStack->setCurrentWidget(settingsUI()->fpsComboPage);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -670,6 +868,8 @@ void CameraGUI::setupQtCapture()
             break;
         }
     }
+
+    reportResolutions();
 
     m_captureSession = new QMediaCaptureSession(this);
     m_qtCamera       = new QCamera(selectedDevice, this);
@@ -909,7 +1109,20 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         if (m_qtCamera) {
             cleanupQtCapture();
         }
+        m_qtFrameRateOptionsByResolution.clear();
+        settingsUI()->fpsStack->setCurrentWidget(settingsUI()->fpsSpinPage);
+        settingsUI()->fpsSpin->setMinimum(1);
+        settingsUI()->fpsSpin->setMaximum(240);
+        settingsUI()->fpsSpin->setValue(m_settings.m_framesPerSecond);
         return;
+    }
+
+    if (force || settingsKeys.contains("cameraId")) {
+        reportResolutions();
+    }
+
+    if (force || settingsKeys.contains("resolutionWidth") || settingsKeys.contains("resolutionHeight")) {
+        updateFrameRateControlForResolution(resolutionKey(m_settings.m_resolutionWidth, m_settings.m_resolutionHeight));
     }
 
     // Decide whether a full restart is needed
@@ -1167,8 +1380,10 @@ void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
         {
             m_settings.m_resolutionWidth = width;
             m_settings.m_resolutionHeight = height;
+            updateFrameRateControlForResolution(settingsUI()->resolutionCombo->currentText());
             m_settingsKeys.append("resolutionWidth");
             m_settingsKeys.append("resolutionHeight");
+            m_settingsKeys.append("framesPerSecond");
             applySettings();
         }
     }
@@ -1177,6 +1392,17 @@ void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
 void CameraGUI::on_fpsSpin_valueChanged(int value)
 {
     m_settings.m_framesPerSecond = value;
+    m_settingsKeys.append("framesPerSecond");
+    applySettings();
+}
+
+void CameraGUI::on_fpsCombo_currentIndexChanged(int index)
+{
+    if (index < 0) {
+        return;
+    }
+
+    m_settings.m_framesPerSecond = settingsUI()->fpsCombo->itemData(index).toInt();
     m_settingsKeys.append("framesPerSecond");
     applySettings();
 }

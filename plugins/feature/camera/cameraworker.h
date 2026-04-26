@@ -124,26 +124,6 @@ public:
         { }
     };
 
-    class MsgReportResolutions : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const QList<QSize>& getResolutions() const { return m_resolutions; }
-
-        static MsgReportResolutions* create(const QList<QSize>& resolutions)
-        {
-            return new MsgReportResolutions(resolutions);
-        }
-
-    private:
-        QList<QSize> m_resolutions;
-
-        MsgReportResolutions(const QList<QSize>& resolutions) :
-            Message(),
-            m_resolutions(resolutions)
-        { }
-    };
-
     class MsgReportFrame : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -411,7 +391,6 @@ private:
 
     void reportFrameToGUI(const QImage& image);
     QString buildAlpacaBaseUrl() const;
-    void reportResolutions();
     QImage parseAlpacaImageArray(const QByteArray& payload) const;
     QImage parseAlpacaImageBytes(const QByteArray& payload) const;
     QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const;

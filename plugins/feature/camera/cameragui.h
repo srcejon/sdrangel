@@ -19,9 +19,11 @@
 #define INCLUDE_FEATURE_CAMERAGUI_H_
 
 #include <QColor>
+#include <QHash>
 #include <QImage>
 #include <QGraphicsScene>
 #include <QGraphicsPixmapItem>
+#include <QSize>
 #include <QToolButton>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -73,6 +75,13 @@ namespace Ui {
 class CameraGUI : public FeatureGUI {
     Q_OBJECT
 public:
+    struct FrameRateOptions {
+        bool contiguous;
+        int minFps;
+        int maxFps;
+        QList<int> values;
+    };
+
     static CameraGUI* create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature);
     virtual void destroy();
 
@@ -104,6 +113,7 @@ private:
     bool m_qtManualExposureSupported;   // true when the active Qt camera supports manual exposure time
     bool m_qtIsoSensitivitySupported;   // true when the active Qt camera supports manual ISO sensitivity
     bool m_qtWhiteBalanceModeSupported; // true when the active Qt camera supports white balance control
+    QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
 
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
@@ -132,6 +142,9 @@ private:
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateImageWidget();
     void updateEnabledControls();
+    void reportResolutions();
+    void populateQtFormatControls(const QList<QSize>& resolutions, const QHash<QString, FrameRateOptions>& frameRateOptionsByResolution);
+    void updateFrameRateControlForResolution(const QString& resolutionText);
     static void updateColorButton(QToolButton* btn, const QColor& color);
     void setupQtCapture();
     void cleanupQtCapture();
@@ -146,6 +159,7 @@ private slots:
     void on_cameraCombo_currentTextChanged(const QString& text);
     void on_resolutionCombo_currentIndexChanged(int index);
     void on_fpsSpin_valueChanged(int value);
+    void on_fpsCombo_currentIndexChanged(int index);
     void on_exposureSpin_valueChanged(int value);
     void on_isoSpin_valueChanged(int value);
     void on_alpacaHostEdit_editingFinished();

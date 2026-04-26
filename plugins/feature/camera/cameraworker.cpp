@@ -196,7 +196,6 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportResolutions, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportSaveVideoState, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
@@ -488,12 +487,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         // VideoWriter will be (re-)opened on the next frame if saveVideo is enabled
     }
 
-    if (force
-        || settingsKeys.contains("cameraId"))
-    {
-        reportResolutions();
-    }
-
     if (m_settings.isAlpacaCamera()
         && m_networkManager
         && (force
@@ -540,83 +533,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         const QImage processed = applyPostProcessing(m_lastRawFrame);
         reportFrameToGUI(processed);
     }
-}
-
-void CameraWorker::reportResolutions()
-{
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (m_settings.isQtCamera())
-    {
-        const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
-        QList<QSize> resolutions;
-        const QString targetId = m_settings.cameraIdString();
-        const QString targetDescription = m_settings.cameraDescription();
-
-        for (const QCameraDevice& device : cameras)
-        {
-            const QString id = QString::fromUtf8(device.id());
-            if ((id == targetId) || (device.description() == targetDescription))
-            {
-                QSet<QString> seen;
-                for (const QCameraFormat& format : device.videoFormats())
-                {
-                    const QString key = QString("%1x%2")
-                        .arg(format.resolution().width())
-                        .arg(format.resolution().height());
-                    if (!seen.contains(key))
-                    {
-                        seen.insert(key);
-                        resolutions.append(format.resolution());
-                    }
-                }
-                break;
-            }
-        }
-
-        if (m_msgQueueToGUI) {
-            m_msgQueueToGUI->push(MsgReportResolutions::create(resolutions));
-        }
-    }
-#else
-    // Qt5: enumerate supported viewfinder resolutions from the selected camera.
-    // QCamera::supportedViewfinderResolutions() is available once the camera is loaded;
-    // try it optimistically — it will return an empty list on platforms that don't support
-    // it before loading, in which case the GUI shows no pre-defined resolutions and the
-    // camera uses its default.
-    if (m_settings.isQtCamera())
-    {
-        QList<QSize> resolutions;
-        const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
-        const QString targetId = m_settings.cameraIdString();
-        const QString targetDescription = m_settings.cameraDescription();
-
-        for (const QCameraInfo& info : cameras)
-        {
-            const QString id = info.deviceName();
-            if ((id == targetId) || (info.description() == targetDescription))
-            {
-                QCamera tempCam(info);
-                QSet<QString> seen;
-
-                for (const QSize& res : tempCam.supportedViewfinderResolutions())
-                {
-                    const QString key = QString("%1x%2").arg(res.width()).arg(res.height());
-                    if (!seen.contains(key))
-                    {
-                        seen.insert(key);
-                        resolutions.append(res);
-                    }
-                }
-
-                break;
-            }
-        }
-
-        if (m_msgQueueToGUI) {
-            m_msgQueueToGUI->push(MsgReportResolutions::create(resolutions));
-        }
-    }
-#endif
 }
 
 void CameraWorker::startCapture()

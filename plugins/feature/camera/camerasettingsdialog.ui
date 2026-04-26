@@ -48,16 +48,62 @@
           </widget>
          </item>
          <item row="1" column="1">
-          <widget class="QSpinBox" name="fpsSpin">
-           <property name="toolTip">
-            <string>Camera frame rate in frames per second</string>
+          <widget class="QStackedWidget" name="fpsStack">
+           <property name="currentIndex">
+            <number>0</number>
            </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>240</number>
-           </property>
+           <widget class="QWidget" name="fpsSpinPage">
+            <layout class="QVBoxLayout" name="verticalLayoutFpsSpin">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QSpinBox" name="fpsSpin">
+               <property name="toolTip">
+                <string>Camera frame rate in frames per second</string>
+               </property>
+               <property name="minimum">
+                <number>1</number>
+               </property>
+               <property name="maximum">
+                <number>240</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="fpsComboPage">
+            <layout class="QVBoxLayout" name="verticalLayoutFpsCombo">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QComboBox" name="fpsCombo">
+               <property name="toolTip">
+                <string>Camera frame rate in frames per second</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
           </widget>
          </item>
          <item row="2" column="0">

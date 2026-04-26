@@ -400,7 +400,7 @@ void CameraGUI::displaySettings()
     settingsUI()->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
     ui->overlayTextButton->setChecked(m_settings.m_overlayText);
     settingsUI()->overlayTextEdit->blockSignals(true);
-    settingsUI()->overlayTextEdit->setHtml(m_settings.m_overlayTextString);
+    settingsUI()->overlayTextEdit->setPlainText(m_settings.m_overlayTextString);
     settingsUI()->overlayTextEdit->blockSignals(false);
     settingsUI()->overlayTextPosXSlider->setValue(m_settings.m_overlayTextPosX);
     settingsUI()->overlayTextPosXValue->setText(QString::number(m_settings.m_overlayTextPosX));
@@ -1395,7 +1395,7 @@ void CameraGUI::on_overlayTextColorButton_clicked()
 
 void CameraGUI::on_overlayTextEdit_textChanged()
 {
-    m_settings.m_overlayTextString = settingsUI()->overlayTextEdit->toHtml();
+    m_settings.m_overlayTextString = settingsUI()->overlayTextEdit->toPlainText();
     m_settingsKeys.append("overlayTextString");
     applySettings();
 }

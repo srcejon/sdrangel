@@ -40,6 +40,7 @@
 #include "camerasettings.h"
 
 class QNetworkAccessManager;
+class CameraFinder;
 
 class CameraWorker : public QObject
 {
@@ -360,6 +361,7 @@ private:
     bool m_imageSaved;
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
+    CameraFinder* m_cameraFinder;
     bool m_alpacaFrameRequestPending;
     quint32 m_alpacaClientId;
     quint32 m_alpacaClientTransactionId;
@@ -394,7 +396,6 @@ private:
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
-    void reportCameraList();
     void startCapture();
     void stopCapture();
     void processNewFrame(const QImage& image);
@@ -413,7 +414,6 @@ private:
     void reportFrameToGUI(const QImage& image);
     QString buildAlpacaBaseUrl() const;
     void reportResolutions();
-    QStringList parseAlpacaCameraList(const QByteArray& payload) const;
     QImage parseAlpacaImageArray(const QByteArray& payload) const;
     QImage parseAlpacaImageBytes(const QByteArray& payload) const;
     QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const;

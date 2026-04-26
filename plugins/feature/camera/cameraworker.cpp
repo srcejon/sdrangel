@@ -64,6 +64,7 @@
 #include "settings/preset.h"
 #include "audio/audiodevicemanager.h"
 #include "util/profiler.h"
+#include "camerafinder.h"
 #include "cameraworker.h"
 
 namespace {
@@ -212,6 +213,7 @@ CameraWorker::CameraWorker() :
     m_imageSaved(false),
     m_captureTimer(this),
     m_networkManager(nullptr),
+    m_cameraFinder(new CameraFinder(this)),
     m_alpacaFrameRequestPending(false),
     m_alpacaClientId(QRandomGenerator::global()->bounded(quint32(1), quint32(std::numeric_limits<quint32>::max()))),
     m_alpacaClientTransactionId(1),
@@ -265,11 +267,17 @@ void CameraWorker::startWork()
     QObject::connect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
     QObject::connect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
 
+    if (m_cameraFinder) {
+        m_cameraFinder->setMessageQueueToGUI(m_msgQueueToGUI);
+    }
+
     if (!m_networkManager) {
         m_networkManager = new QNetworkAccessManager(this);
     }
 
-    reportCameraList();
+    if (m_cameraFinder) {
+        m_cameraFinder->reportCameraList(m_settings);
+    }
 
     // Notify GUI of already-known spectrum-view devices
     if (m_msgQueueToGUI)
@@ -387,7 +395,9 @@ bool CameraWorker::handleMessage(const Message& cmd)
     }
     else if (MsgRefreshCameraList::match(cmd))
     {
-        reportCameraList();
+        if (m_cameraFinder) {
+            m_cameraFinder->reportCameraList(m_settings);
+        }
         return true;
     }
     else if (MainCore::MsgImage::match(cmd))
@@ -506,7 +516,10 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     }
 
     if (force || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort")) {
-        reportCameraList();
+        if (m_cameraFinder) {
+            m_cameraFinder->setMessageQueueToGUI(m_msgQueueToGUI);
+            m_cameraFinder->reportCameraList(m_settings);
+        }
     }
 
     if (force
@@ -560,57 +573,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     if (postProcessChanged && !m_lastRawFrame.isNull()) {
         const QImage processed = applyPostProcessing(m_lastRawFrame);
         reportFrameToGUI(processed);
-    }
-}
-
-void CameraWorker::reportCameraList()
-{
-    QStringList qtCameraIds;
-
-    // List Qt cameras
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
-
-    for (const QCameraDevice& camera : cameras)
-    {
-        const QString id = QString("qt:%1:%2").arg(QString::fromUtf8(camera.id())).arg(camera.description());
-        qtCameraIds.append(id);
-    }
-#else
-    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
-
-    for (const QCameraInfo& info : cameras)
-    {
-        const QString id = QString("qt:%1:%2").arg(info.deviceName()).arg(info.description());
-        qtCameraIds.append(id);
-    }
-#endif
-
-    // List Alpaca cameras
-    if (m_networkManager)
-    {
-        QNetworkRequest request(QUrl(buildAlpacaBaseUrl() + "/management/v1/configureddevices"));
-        QNetworkReply *reply = m_networkManager->get(request);
-
-        QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, qtCameraIds]() {
-            QStringList cameraIds = qtCameraIds;
-
-            if (reply->error() == QNetworkReply::NoError) {
-                cameraIds.append(parseAlpacaCameraList(reply->readAll()));
-            }
-
-            if (m_msgQueueToGUI) {
-                m_msgQueueToGUI->push(MsgReportCameraList::create(cameraIds));
-            }
-
-            reply->deleteLater();
-        });
-    }
-    else
-    {
-        if (m_msgQueueToGUI) {
-            m_msgQueueToGUI->push(MsgReportCameraList::create(qtCameraIds));
-        }
     }
 }
 
@@ -1986,48 +1948,6 @@ QString CameraWorker::buildAlpacaBaseUrl() const
     return QString("http://%1:%2")
         .arg(m_settings.m_alpacaHost)
         .arg(m_settings.m_alpacaPort);
-}
-
-QStringList CameraWorker::parseAlpacaCameraList(const QByteArray& payload) const
-{
-    QStringList result;
-    const QJsonDocument doc = QJsonDocument::fromJson(payload);
-
-    if (!doc.isObject()) {
-        return result;
-    }
-
-    QJsonArray devices;
-    const QJsonObject root = doc.object();
-
-    if (root.contains("Value") && root.value("Value").isArray()) {
-        devices = root.value("Value").toArray();
-    } else if (root.contains("value") && root.value("value").isArray()) {
-        devices = root.value("value").toArray();
-    }
-
-    for (const QJsonValue& value : devices)
-    {
-        if (!value.isObject()) {
-            continue;
-        }
-
-        const QJsonObject obj = value.toObject();
-        const QString type = obj.value("DeviceType").toString().toLower();
-
-        if (type != "camera") {
-            continue;
-        }
-
-        const int number = obj.value("DeviceNumber").toInt(-1);
-        const QString name = obj.value("DeviceName").toString();
-
-        if (number >= 0) {
-            result.append(QString("alpaca:%1:%2").arg(number).arg(name));
-        }
-    }
-
-    return result;
 }
 
 QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const

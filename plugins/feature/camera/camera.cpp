@@ -19,6 +19,7 @@
 #include <QDebug>
 
 #include "camera.h"
+#include "camerafinder.h"
 #include "cameraworker.h"
 
 MESSAGE_CLASS_DEFINITION(Camera::MsgConfigureCamera, Message)
@@ -31,11 +32,13 @@ const char* const Camera::m_featureId = "Camera";
 Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),
     m_thread(nullptr),
-    m_worker(nullptr)
+    m_worker(nullptr),
+    m_cameraFinder(new CameraFinder(this))
 {
     setObjectName(m_featureId);
     m_state = StIdle;
     m_errorMessage = "Camera error";
+    m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
 }
 
 Camera::~Camera()
@@ -110,11 +113,10 @@ bool Camera::handleMessage(const Message& cmd)
     }
     else if (MsgRefreshCameraList::match(cmd))
     {
-        // FIXME: Move camera detection to this thread, so we don't have to start the worker?
-        start();
-
-        if (m_worker) {
-            m_worker->getInputMessageQueue()->push(CameraWorker::MsgRefreshCameraList::create());
+        if (m_cameraFinder)
+        {
+            m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
+            m_cameraFinder->reportCameraList(m_settings);
         }
 
         return true;

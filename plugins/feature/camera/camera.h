@@ -25,6 +25,7 @@
 #include "cameraworker.h"
 
 class WebAPIAdapterInterface;
+class CameraFinder;
 
 class Camera : public Feature
 {
@@ -109,6 +110,7 @@ public:
 private:
     QThread *m_thread;
     CameraWorker *m_worker;
+    CameraFinder* m_cameraFinder;
     CameraSettings m_settings;
 
     void start();

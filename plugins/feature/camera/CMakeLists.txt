@@ -2,6 +2,7 @@ project(camera)
 
 set(camera_SOURCES
     camera.cpp
+    camerafinder.cpp
     camerasettings.cpp
     cameraplugin.cpp
     cameraworker.cpp
@@ -10,6 +11,7 @@ set(camera_SOURCES
 
 set(camera_HEADERS
     camera.h
+    camerafinder.h
     camerasettings.h
     cameraplugin.h
     cameraworker.h

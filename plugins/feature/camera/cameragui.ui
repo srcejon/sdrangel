@@ -190,7 +190,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QToolButton" name="saveImageCheck">
+       <widget class="ButtonSwitch" name="saveImageCheck">
         <property name="toolTip">
          <string>Save images</string>
         </property>
@@ -201,13 +201,10 @@
          <iconset resource="../../../sdrgui/resources/res.qrc">
           <normaloff>:/picture.png</normaloff>:/picture.png</iconset>
         </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
        </widget>
       </item>
       <item>
-       <widget class="QToolButton" name="saveVideoCheck">
+       <widget class="ButtonSwitch" name="saveVideoCheck">
         <property name="toolTip">
          <string>Record video</string>
         </property>
@@ -217,9 +214,6 @@
         <property name="icon">
          <iconset resource="../../../sdrgui/resources/res.qrc">
           <normaloff>:/camera.png</normaloff>:/camera.png</iconset>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
         </property>
        </widget>
       </item>

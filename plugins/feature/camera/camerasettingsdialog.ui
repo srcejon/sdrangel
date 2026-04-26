@@ -1230,17 +1230,24 @@ li.checked::marker { content: &quot;\2612&quot;; }
           <item row="0" column="0">
            <widget class="QLabel" name="imagePathLabel">
             <property name="text">
-             <string>Image save path</string>
+             <string>Image basename</string>
             </property>
            </widget>
           </item>
           <item row="0" column="1">
            <layout class="QHBoxLayout" name="imageSaveLayout">
             <item>
-             <widget class="QLineEdit" name="imagePathEdit"/>
+             <widget class="QLineEdit" name="imagePathEdit">
+              <property name="toolTip">
+               <string>File basename to use for saved images</string>
+              </property>
+             </widget>
             </item>
             <item>
              <widget class="QToolButton" name="imagePathButton">
+              <property name="toolTip">
+               <string>Specify image file basename using file browser</string>
+              </property>
               <property name="text">
                <string/>
               </property>
@@ -1255,17 +1262,24 @@ li.checked::marker { content: &quot;\2612&quot;; }
           <item row="1" column="0">
            <widget class="QLabel" name="videoPathLabel">
             <property name="text">
-             <string>Video save path</string>
+             <string>Video basename</string>
             </property>
            </widget>
           </item>
           <item row="1" column="1">
            <layout class="QHBoxLayout" name="videoSaveLayout">
             <item>
-             <widget class="QLineEdit" name="videoPathEdit"/>
+             <widget class="QLineEdit" name="videoPathEdit">
+              <property name="toolTip">
+               <string>File basename to use for recorded videos</string>
+              </property>
+             </widget>
             </item>
             <item>
              <widget class="QToolButton" name="videoPathButton">
+              <property name="toolTip">
+               <string>Specify video file basename using file browser</string>
+              </property>
               <property name="text">
                <string/>
               </property>
@@ -1276,6 +1290,30 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </widget>
             </item>
            </layout>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="videoPostProcessLabel">
+            <property name="text">
+             <string>Record</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="videoPostProcessCombo">
+            <property name="toolTip">
+             <string>Select whether pre (raw) or post processed images should be recorded</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Raw images</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Post-process images</string>
+             </property>
+            </item>
+           </widget>
           </item>
          </layout>
         </widget>

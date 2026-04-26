@@ -49,7 +49,7 @@
       <item>
        <widget class="ButtonSwitch" name="startStop">
         <property name="toolTip">
-         <string>Start/stop measurements</string>
+         <string>Start/stop image capture</string>
         </property>
         <property name="text">
          <string/>
@@ -69,6 +69,9 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="toolTip">
+         <string>Select camera to capture from</string>
+        </property>
         <property name="editable">
          <bool>true</bool>
         </property>
@@ -76,6 +79,9 @@
       </item>
       <item>
        <widget class="QToolButton" name="refreshCamerasButton">
+        <property name="toolTip">
+         <string>Refresh camera list</string>
+        </property>
         <property name="text">
          <string>Refresh cameras</string>
         </property>
@@ -185,6 +191,9 @@
       </item>
       <item>
        <widget class="QToolButton" name="saveImageCheck">
+        <property name="toolTip">
+         <string>Save images</string>
+        </property>
         <property name="text">
          <string>JPG</string>
         </property>
@@ -199,25 +208,15 @@
       </item>
       <item>
        <widget class="QToolButton" name="saveVideoCheck">
+        <property name="toolTip">
+         <string>Record video</string>
+        </property>
         <property name="text">
          <string>MP4</string>
         </property>
         <property name="icon">
          <iconset resource="../../../sdrgui/resources/res.qrc">
           <normaloff>:/camera.png</normaloff>:/camera.png</iconset>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="ButtonSwitch" name="videoPostProcessButton">
-        <property name="toolTip">
-         <string>Record post-processed video (when off, raw frames are recorded)</string>
-        </property>
-        <property name="text">
-         <string>Post</string>
         </property>
         <property name="checkable">
          <bool>true</bool>
@@ -254,7 +253,7 @@
       <item>
        <widget class="ButtonSwitch" name="yoloButton">
         <property name="toolTip">
-         <string>Run YOLO object detection on each frame</string>
+         <string>Run YOLO object detection</string>
         </property>
         <property name="text">
          <string>YOLO</string>
@@ -288,17 +287,17 @@
       <item>
        <widget class="ButtonSwitch" name="overlayTextButton">
         <property name="toolTip">
-         <string>Overlay custom HTML text</string>
+         <string>Overlay HTML</string>
         </property>
         <property name="text">
-         <string>Text</string>
+         <string>HTML</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="ButtonSwitch" name="spectrumOverlayButton">
         <property name="toolTip">
-         <string>Overlay spectrum view on post-processed image</string>
+         <string>Overlay spectrum</string>
         </property>
         <property name="text">
          <string>Spec</string>

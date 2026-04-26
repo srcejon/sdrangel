@@ -386,7 +386,7 @@ void CameraGUI::displaySettings()
     settingsUI()->imagePathEdit->setText(m_settings.m_imageFileName);
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
     settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
-    ui->videoPostProcessButton->setChecked(m_settings.m_videoPostProcess);
+    settingsUI()->videoPostProcessCombo->setCurrentIndex(static_cast<int>(m_settings.m_videoPostProcess));
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
     settingsUI()->brightnessValue->setText(QString::number(m_settings.m_brightness, 'f', 0));
     settingsUI()->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
@@ -460,6 +460,8 @@ void CameraGUI::displaySettings()
     settingsUI()->zoomSpin->setValue(m_settings.m_zoomFactor);
     updateAlpacaVisibility();
     updateEnabledControls();
+    applyVideoPath();
+    applyImagePath();
 }
 
 void CameraGUI::applySettings(bool force)
@@ -515,7 +517,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->saveVideoCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveVideoCheck_toggled);
     QObject::connect(settingsUI()->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
-    QObject::connect(ui->videoPostProcessButton, &QToolButton::toggled, this, &CameraGUI::on_videoPostProcessButton_toggled);
+    QObject::connect(settingsUI()->videoPostProcessCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_videoPostProcessCombo_currentIndexChanged);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
     QObject::connect(settingsUI()->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
     QObject::connect(ui->invertColorsButton, &QToolButton::toggled, this, &CameraGUI::on_invertColorsButton_toggled);
@@ -1256,6 +1258,7 @@ void CameraGUI::on_imagePathEdit_editingFinished()
     m_settings.m_imageFileName = settingsUI()->imagePathEdit->text();
     m_settingsKeys.append("imageFileName");
     applySettings();
+    applyImagePath();
 }
 
 void CameraGUI::on_imagePathButton_clicked()
@@ -1268,6 +1271,7 @@ void CameraGUI::on_imagePathButton_clicked()
         settingsUI()->imagePathEdit->setText(fileName);
         m_settingsKeys.append("imageFileName");
         applySettings();
+        applyImagePath();
     }
 }
 
@@ -1283,6 +1287,7 @@ void CameraGUI::on_videoPathEdit_editingFinished()
     m_settings.m_videoFileName = settingsUI()->videoPathEdit->text();
     m_settingsKeys.append("videoFileName");
     applySettings();
+    applyVideoPath();
 }
 
 void CameraGUI::on_videoPathButton_clicked()
@@ -1295,12 +1300,13 @@ void CameraGUI::on_videoPathButton_clicked()
         settingsUI()->videoPathEdit->setText(fileName);
         m_settingsKeys.append("videoFileName");
         applySettings();
+        applyVideoPath();
     }
 }
 
-void CameraGUI::on_videoPostProcessButton_toggled(bool checked)
+void CameraGUI::on_videoPostProcessCombo_currentIndexChanged(int index)
 {
-    m_settings.m_videoPostProcess = checked;
+    m_settings.m_videoPostProcess = static_cast<bool>(index);
     m_settingsKeys.append("videoPostProcess");
     applySettings();
 }
@@ -1766,4 +1772,14 @@ void CameraGUI::on_cameraSettingsButton_clicked()
     m_settingsDialog->show();
     m_settingsDialog->raise();
     m_settingsDialog->activateWindow();
+}
+
+void CameraGUI::applyImagePath()
+{
+    ui->saveVideoCheck->setToolTip(QString("Save images to %1").arg(m_settings.m_imageFileName));
+}
+
+void CameraGUI::applyVideoPath()
+{
+    ui->saveVideoCheck->setToolTip(QString("Record video to %1").arg(m_settings.m_videoFileName));
 }

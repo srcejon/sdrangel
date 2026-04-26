@@ -136,6 +136,8 @@ private:
     void setupQtCapture();
     void cleanupQtCapture();
     void applyQtCameraSettings(const QList<QString>& settingsKeys, bool force);
+    void applyImagePath();
+    void applyVideoPath();
 
 private slots:
     void handleInputMessages();
@@ -161,7 +163,7 @@ private slots:
     void on_saveVideoCheck_toggled(bool checked);
     void on_videoPathEdit_editingFinished();
     void on_videoPathButton_clicked();
-    void on_videoPostProcessButton_toggled(bool checked);
+    void on_videoPostProcessCombo_currentIndexChanged(int index);
     void on_brightnessSlider_valueChanged(int value);
     void on_contrastSlider_valueChanged(int value);
     void on_invertColorsButton_toggled(bool checked);

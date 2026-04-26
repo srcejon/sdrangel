@@ -63,6 +63,7 @@
 #include "settings/mainsettings.h"
 #include "settings/preset.h"
 #include "audio/audiodevicemanager.h"
+#include "util/profiler.h"
 #include "cameraworker.h"
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
@@ -81,6 +82,7 @@ CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
     m_availableDeviceHandler({}, QStringList{"spectrumview"}),
     m_capturing(false),
+    m_capturingAudio(false),
     m_imageSaved(false),
     m_captureTimer(this),
     m_networkManager(nullptr),
@@ -105,23 +107,18 @@ CameraWorker::CameraWorker() :
     m_availableDeviceHandler.scanAvailableDevices();
 
     // Audio FIFO: stereo 16-bit PCM at 48 kHz; 4800 sample frames × 4 bytes each
-    static constexpr int kAudioFifoFrames = 4800;
-    static constexpr int kBytesPerSampleFrame = 4; // 2 channels × 2 bytes (int16)
-    m_captureAudioFifo.setSize(kAudioFifoFrames);
-    m_outputAudioFifo.setSize(kAudioFifoFrames);
-    m_audioTransferBuffer.resize(kAudioFifoFrames * kBytesPerSampleFrame);
+    static constexpr int audioFifoFrames = 4800*4;
+    static constexpr int bytesPerSampleFrame = 4; // 2 channels × 2 bytes (int16)
+    m_captureAudioFifo.setSize(audioFifoFrames);
+    m_outputAudioFifo.setSize(audioFifoFrames);
+    m_audioTransferBuffer.resize(audioFifoFrames * bytesPerSampleFrame);
 
-    QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraWorker::onCaptureAudioDataReady);
 
-    DSPEngine::instance()->getAudioDeviceManager()->addAudioSink(&m_outputAudioFifo, getInputMessageQueue());
-    DSPEngine::instance()->getAudioDeviceManager()->addAudioSource(&m_captureAudioFifo, getInputMessageQueue());
 }
 
 CameraWorker::~CameraWorker()
 {
     delete m_networkManager;
-    DSPEngine::instance()->getAudioDeviceManager()->removeAudioSource(&m_captureAudioFifo);
-    DSPEngine::instance()->getAudioDeviceManager()->removeAudioSink(&m_outputAudioFifo);
     stopWork();
     m_inputMessageQueue.clear();
     QObject::disconnect(
@@ -168,6 +165,7 @@ void CameraWorker::startWork()
     if (m_settings.m_captureActive) {
         startCapture();
     }
+
 
     // Handle any messages already on the queue
     handleInputMessages();
@@ -293,6 +291,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
 
     const bool recapture = force
         || settingsKeys.contains("cameraId")
+        || settingsKeys.contains("audioDeviceName")
         || settingsKeys.contains("resolutionWidth")
         || settingsKeys.contains("resolutionHeight")
         || settingsKeys.contains("framesPerSecond")
@@ -436,16 +435,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         const QImage processed = applyPostProcessing(m_lastRawFrame);
         reportFrameToGUI(processed);
     }
-
-    // Update audio output device when the name changes
-    if (force || settingsKeys.contains("audioDeviceName"))
-    {
-        AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
-        const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(m_settings.m_audioDeviceName);
-        audioDeviceManager->removeAudioSink(&m_outputAudioFifo);
-        audioDeviceManager->addAudioSink(&m_outputAudioFifo, getInputMessageQueue(), outputDeviceIndex);
-    }
-
 }
 
 void CameraWorker::reportCameraList()
@@ -594,8 +583,14 @@ void CameraWorker::startCapture()
     }
     else if (m_settings.isQtCamera())
     {
-        // Qt camera capture is managed by CameraGUI on the main thread.
-        // The worker just records that it is capturing so MsgProcessFrame messages are accepted.
+        // Qt camera capture is mainly managed by CameraGUI on the main thread. We just do audio
+        AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
+        const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(m_settings.m_audioDeviceName);
+        qDebug() << "CameraWorker: starting audio capture: deviceIndex" << outputDeviceIndex;
+        audioDeviceManager->addAudioSink(&m_outputAudioFifo, getInputMessageQueue(), outputDeviceIndex);
+        audioDeviceManager->addAudioSource(&m_captureAudioFifo, getInputMessageQueue());    // FIXME: Match to camera.
+        QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraWorker::onCaptureAudioDataReady);
+        m_capturingAudio = true;
     }
 }
 
@@ -607,7 +602,16 @@ void CameraWorker::stopCapture()
     if (m_videoWriter.isOpened()) {
         m_videoWriter.release();
     }
-    // Qt camera cleanup is handled by CameraGUI on the main thread.
+
+    if (m_capturingAudio)
+    {
+        qDebug() << "CameraWorker: stopping audio capture";
+        QObject::disconnect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraWorker::onCaptureAudioDataReady);
+        AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
+        audioDeviceManager->removeAudioSource(&m_captureAudioFifo);
+        audioDeviceManager->removeAudioSink(&m_outputAudioFifo);
+        m_capturingAudio = false;
+    }
 }
 
 void CameraWorker::captureTick()
@@ -907,6 +911,8 @@ void CameraWorker::reportFrameToGUI(const QImage& image)
  */
 QImage CameraWorker::applyPostProcessing(const QImage& input)
 {
+    PROFILER_START();
+
     // Pixel grayscale difference (0–255) below which a pixel is considered unchanged between frames.
     static constexpr int kDiffThreshold = 30;
 
@@ -1131,11 +1137,15 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
         painter.restore();
     }
 
+    PROFILER_STOP("CameraWorker::applyPostProcessing");
+
     return result;
 }
 
 void CameraWorker::runYoloDetections(cv::Mat& bgrMat)
 {
+    PROFILER_START();
+
     const QDateTime detectionTime = m_captureDateTime.isValid() ? m_captureDateTime : QDateTime::currentDateTime();
 
     // Lazily load class labels
@@ -1376,6 +1386,8 @@ void CameraWorker::runYoloDetections(cv::Mat& bgrMat)
                     cv::Point(box.x, labelY),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, boxColor, 1, cv::LINE_AA);
     }
+
+    PROFILER_STOP("YOLO");
 
     processObjectDetections(currentDetectedClasses, detectionTime);
 }
@@ -2284,17 +2296,17 @@ QImage CameraWorker::createPlaceholderFrame() const
 
 void CameraWorker::onCaptureAudioDataReady()
 {
-    if (m_settings.m_audioMute) {
+    if (m_settings.m_audioMute)
+    {
         m_captureAudioFifo.clear();
         return;
     }
 
     // Each audio sample frame is 4 bytes: stereo 16-bit PCM (2 channels × 2 bytes)
-    static constexpr int kBytesPerSampleFrame = 4;
+    static constexpr int bytesPerSampleFrame = 4;
     unsigned int nbRead;
 
-    while ((nbRead = m_captureAudioFifo.read(m_audioTransferBuffer.data(), m_audioTransferBuffer.size() / kBytesPerSampleFrame)) != 0)
-    {
+    while ((nbRead = m_captureAudioFifo.read(m_audioTransferBuffer.data(), m_audioTransferBuffer.size() / bytesPerSampleFrame)) != 0) {
         m_outputAudioFifo.write(m_audioTransferBuffer.data(), nbRead);
     }
 }

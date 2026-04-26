@@ -356,6 +356,7 @@ private:
     AvailableDeviceHandler m_availableDeviceHandler;
     AvailableDeviceList m_availableDevices;
     bool m_capturing;
+    bool m_capturingAudio;
     bool m_imageSaved;
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;

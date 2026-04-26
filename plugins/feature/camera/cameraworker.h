@@ -40,7 +40,6 @@
 #include "camerasettings.h"
 
 class QNetworkAccessManager;
-class CameraFinder;
 
 class CameraWorker : public QObject
 {
@@ -361,7 +360,6 @@ private:
     bool m_imageSaved;
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
-    CameraFinder* m_cameraFinder;
     bool m_alpacaFrameRequestPending;
     quint32 m_alpacaClientId;
     quint32 m_alpacaClientTransactionId;

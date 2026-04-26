@@ -64,7 +64,6 @@
 #include "settings/preset.h"
 #include "audio/audiodevicemanager.h"
 #include "util/profiler.h"
-#include "camerafinder.h"
 #include "cameraworker.h"
 
 namespace {
@@ -213,7 +212,6 @@ CameraWorker::CameraWorker() :
     m_imageSaved(false),
     m_captureTimer(this),
     m_networkManager(nullptr),
-    m_cameraFinder(new CameraFinder(this)),
     m_alpacaFrameRequestPending(false),
     m_alpacaClientId(QRandomGenerator::global()->bounded(quint32(1), quint32(std::numeric_limits<quint32>::max()))),
     m_alpacaClientTransactionId(1),
@@ -267,16 +265,8 @@ void CameraWorker::startWork()
     QObject::connect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
     QObject::connect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
 
-    if (m_cameraFinder) {
-        m_cameraFinder->setMessageQueueToGUI(m_msgQueueToGUI);
-    }
-
     if (!m_networkManager) {
         m_networkManager = new QNetworkAccessManager(this);
-    }
-
-    if (m_cameraFinder) {
-        m_cameraFinder->reportCameraList(m_settings);
     }
 
     // Notify GUI of already-known spectrum-view devices
@@ -296,10 +286,8 @@ void CameraWorker::startWork()
         alpacaQueryCameraCapabilities();
         m_statusTimer.start(500);
     }
-    if (m_settings.m_captureActive) {
-        startCapture();
-    }
 
+    startCapture();
 
     // Handle any messages already on the queue
     handleInputMessages();
@@ -390,13 +378,6 @@ bool CameraWorker::handleMessage(const Message& cmd)
             startCapture();
         } else {
             stopCapture();
-        }
-        return true;
-    }
-    else if (MsgRefreshCameraList::match(cmd))
-    {
-        if (m_cameraFinder) {
-            m_cameraFinder->reportCameraList(m_settings);
         }
         return true;
     }
@@ -492,15 +473,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         m_pendingDisappearDeadlines.clear();
     }
 
-    if (settingsKeys.contains("captureActive") || force)
-    {
-        if (m_settings.m_captureActive) {
-            startCapture();
-        } else {
-            stopCapture();
-        }
-    }
-    else if (recapture && m_capturing)
+    if (recapture && m_capturing)
     {
         stopCapture();
         startCapture();
@@ -513,13 +486,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
             m_videoWriter.release();
         }
         // VideoWriter will be (re-)opened on the next frame if saveVideo is enabled
-    }
-
-    if (force || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort")) {
-        if (m_cameraFinder) {
-            m_cameraFinder->setMessageQueueToGUI(m_msgQueueToGUI);
-            m_cameraFinder->reportCameraList(m_settings);
-        }
     }
 
     if (force

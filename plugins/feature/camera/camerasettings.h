@@ -66,7 +66,6 @@ struct CameraSettings
     QString m_imageFileName;
     bool m_saveVideo;
     QString m_videoFileName;
-    bool m_captureActive;
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

@@ -128,7 +128,6 @@ void CameraSettings::resetToDefaults()
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
     m_videoFileName = "camera.mp4";
-    m_captureActive = false;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_brightness = 0.0;
@@ -193,7 +192,6 @@ QByteArray CameraSettings::serialize() const
     s.writeString(14, m_imageFileName);
     s.writeBool(15, m_saveVideo);
     s.writeString(16, m_videoFileName);
-    s.writeBool(17, m_captureActive);
 
     if (m_rollupState) {
         s.writeBlob(18, m_rollupState->serialize());
@@ -290,7 +288,6 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(14, &m_imageFileName, "camera.jpg");
         d.readBool(15, &m_saveVideo, false);
         d.readString(16, &m_videoFileName, "camera.mp4");
-        d.readBool(17, &m_captureActive, false);
 
         if (m_rollupState)
         {
@@ -469,9 +466,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoFileName")) {
         m_videoFileName = settings.m_videoFileName;
-    }
-    if (settingsKeys.contains("captureActive")) {
-        m_captureActive = settings.m_captureActive;
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -661,9 +655,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoFileName") || force) {
         ostr << " m_videoFileName: " << m_videoFileName.toStdString();
-    }
-    if (settingsKeys.contains("captureActive") || force) {
-        ostr << " m_captureActive: " << m_captureActive;
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

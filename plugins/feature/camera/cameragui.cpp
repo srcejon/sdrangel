@@ -123,6 +123,22 @@ bool CameraGUI::handleMessage(const Message& message)
 
         return true;
     }
+    else if (Camera::MsgStartStop::match(message))
+    {
+        const Camera::MsgStartStop& cfg = (Camera::MsgStartStop&) message;
+
+        if ((previousCameraId != m_settings.m_cameraId) || (wasAlpaca != m_settings.isAlpacaCamera())) {
+            m_settingsDialog->clearAlpacaStatus();
+        }
+
+        if (cfg.getStartStop()) {
+            setupQtCapture();
+        } else {
+            cleanupQtCapture();
+        }
+
+        return true;
+    }
     else if (CameraWorker::MsgReportCameraList::match(message))
     {
         const CameraWorker::MsgReportCameraList& report = (CameraWorker::MsgReportCameraList&) message;
@@ -352,7 +368,6 @@ void CameraGUI::displaySettings()
     setWindowTitle(m_settings.m_title);
     setTitle(m_settings.m_title);
 
-    ui->startStop->setChecked(m_settings.m_captureActive);
     ui->cameraCombo->setCurrentText(m_settings.m_cameraId);
 
     const QString resText = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
@@ -472,6 +487,8 @@ void CameraGUI::applySettings(bool force)
 
     Camera::MsgConfigureCamera *msg = Camera::MsgConfigureCamera::create(m_settings, m_settingsKeys, force);
     m_camera->getInputMessageQueue()->push(msg);
+
+    applyQtCameraSettings(m_settingsKeys, force);
 
     m_settingsKeys.clear();
 }
@@ -662,9 +679,13 @@ void CameraGUI::setupQtCapture()
     QCameraFormat chosenFormat;
     for (const QCameraFormat& fmt : selectedDevice.videoFormats())
     {
+        qDebug() << "Camera format:" << fmt.resolution() << "FPS:" << fmt.minFrameRate() << "-" << fmt.maxFrameRate() << "target" << m_settings.m_framesPerSecond;
+
         if ((fmt.resolution().width()  == m_settings.m_resolutionWidth)
          && (fmt.resolution().height() == m_settings.m_resolutionHeight)
-         && (fmt.maxFrameRate()        >= m_settings.m_framesPerSecond))
+            && (fmt.maxFrameRate()     >= m_settings.m_framesPerSecond)
+            && (fmt.minFrameRate()     <= m_settings.m_framesPerSecond)
+            )
         {
             chosenFormat = fmt;
             break;
@@ -672,6 +693,8 @@ void CameraGUI::setupQtCapture()
     }
     if (!chosenFormat.isNull()) {
         m_qtCamera->setCameraFormat(chosenFormat);
+    } else {
+        qWarning() << "No matching camera format";
     }
 
     m_qtCamera->setExposureMode(QCamera::ExposureManual);
@@ -898,15 +921,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("isoSensitivity");
 
-    if (settingsKeys.contains("captureActive") || force)
-    {
-        if (m_settings.m_captureActive) {
-            setupQtCapture();
-        } else {
-            cleanupQtCapture();
-        }
-    }
-    else if (recapture && m_qtCamera)
+    if (recapture && m_qtCamera)
     {
         // Restart the camera so the new format / exposure parameters take effect
         setupQtCapture();
@@ -1122,9 +1137,6 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
 
 void CameraGUI::on_startStop_clicked(bool checked)
 {
-    m_settings.m_captureActive = checked;
-    m_settingsKeys.append("captureActive");
-    applySettings();
     m_camera->getInputMessageQueue()->push(Camera::MsgStartStop::create(checked));
 }
 

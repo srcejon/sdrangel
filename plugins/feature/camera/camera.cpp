@@ -65,14 +65,10 @@ void Camera::start()
     m_state = StRunning;
 
     m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(m_settings, QList<QString>(), true));
+    m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
 
-    // Notify GUI that the worker has started so it can (re)start the Qt camera
     if (m_guiMessageQueue) {
-        m_guiMessageQueue->push(MsgConfigureCamera::create(m_settings, QList<QString>(), true));
-    }
-
-    if (m_settings.m_captureActive) {
-        m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
+        m_guiMessageQueue->push(Camera::MsgStartStop::create(true));
     }
 }
 
@@ -83,7 +79,9 @@ void Camera::stop()
 
     if (m_thread)
     {
-        m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(false));
+        if (m_guiMessageQueue) {
+            m_guiMessageQueue->push(Camera::MsgStartStop::create(false));
+        }
         m_thread->quit();
         m_thread->wait();
         m_thread = nullptr;
@@ -159,5 +157,11 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
+    }
+
+    if ((settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort") || force) && m_cameraFinder)
+    {
+        m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
+        m_cameraFinder->reportCameraList(m_settings);
     }
 }

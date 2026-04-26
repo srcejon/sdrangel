@@ -1332,7 +1332,6 @@ void CameraGUI::on_overlayDateTimeButton_toggled(bool checked)
 {
     m_settings.m_overlayDateTime = checked;
     m_settingsKeys.append("overlayDateTime");
-    updateEnabledControls();
     applySettings();
 }
 
@@ -1376,7 +1375,6 @@ void CameraGUI::on_overlayTextButton_toggled(bool checked)
 {
     m_settings.m_overlayText = checked;
     m_settingsKeys.append("overlayText");
-    updateEnabledControls();
     applySettings();
 }
 
@@ -1420,7 +1418,6 @@ void CameraGUI::on_diffMaskButton_toggled(bool checked)
 {
     m_settings.m_diffMask = checked;
     m_settingsKeys.append("diffMask");
-    updateEnabledControls();
     applySettings();
 }
 
@@ -1450,9 +1447,6 @@ void CameraGUI::on_histogramButton_clicked()
 
 void CameraGUI::updateEnabledControls()
 {
-    settingsUI()->dateTimeOverlay->setEnabled(m_settings.m_overlayDateTime);
-    settingsUI()->textOverlay->setEnabled(m_settings.m_overlayText);
-
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const bool manualFocus = (m_settings.m_focusMode == static_cast<int>(QCamera::FocusModeManual));
     settingsUI()->focusDistLabel->setEnabled(manualFocus);
@@ -1526,7 +1520,6 @@ void CameraGUI::on_motionDetectButton_toggled(bool checked)
 {
     m_settings.m_motionDetect = checked;
     m_settingsKeys.append("motionDetect");
-    updateEnabledControls();
     applySettings();
 }
 
@@ -1554,7 +1547,6 @@ void CameraGUI::on_spectrumOverlayButton_toggled(bool checked)
 {
     m_settings.m_overlaySpectrum = checked;
     m_settingsKeys.append("overlaySpectrum");
-    updateEnabledControls();
     applySettings();
 }
 
@@ -1592,7 +1584,6 @@ void CameraGUI::on_yoloButton_toggled(bool checked)
 {
     m_settings.m_yoloEnabled = checked;
     m_settingsKeys.append("yoloEnabled");
-    updateEnabledControls();
     applySettings();
 }
 

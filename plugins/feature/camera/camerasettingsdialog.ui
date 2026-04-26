@@ -843,7 +843,7 @@
        <item>
         <widget class="QGroupBox" name="textOverlay">
          <property name="title">
-          <string>Text Overlay</string>
+          <string>HTML Overlay</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_textOverlay">
           <item row="0" column="0">
@@ -862,7 +862,9 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>HTML text to render on the image</string>
+             <string>HTML text to render on the image
+
+Use src=file:///path/to/images/logo.png for img tags. http is not supported.</string>
             </property>
             <property name="layoutDirection">
              <enum>Qt::LayoutDirection::LeftToRight</enum>

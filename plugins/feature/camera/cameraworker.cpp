@@ -1107,8 +1107,12 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
         }
         font.setPointSizeF(m_settings.m_overlayTextFontScale);
         overlayTextDocument.setDefaultFont(font);
-        overlayTextDocument.setDefaultStyleSheet(QStringLiteral("body { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
-        overlayTextDocument.setHtml(m_settings.m_overlayTextString);
+        overlayTextDocument.setDefaultStyleSheet(QStringLiteral("* { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
+        QString html = m_settings.m_overlayTextString;
+        // Stick a div around everything, so the default colour is applied to text outside of any tags
+        html = html.prepend("<div>");
+        html = html.append("</div>");
+        overlayTextDocument.setHtml(html);
 
         const int x = std::max(0, m_settings.m_overlayTextPosX);
         const qreal maxTextWidth = std::max(1, result.width() - x);

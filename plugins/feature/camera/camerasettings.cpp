@@ -25,6 +25,8 @@
 #include "settings/serializable.h"
 #include "camerasettings.h"
 
+#define DEFAULT_OVERLAY_TEXT_STRING "<img src=\":/sdrangel_icon.png\"><h1 style=\"color:blue\">SDRangel</h1>\n<p>\nText overlay "
+
 QDataStream& operator<<(QDataStream& out, const CameraSettings::ObjectDeviceSettings* settings)
 {
     out << settings->m_deviceSetIndex;
@@ -138,7 +140,7 @@ void CameraSettings::resetToDefaults()
     m_dateTimePosX = 4;
     m_dateTimePosY = 0;
     m_overlayText = false;
-    m_overlayTextString = QStringLiteral("<p>SDRangel Camera</p>");
+    m_overlayTextString = QStringLiteral(DEFAULT_OVERLAY_TEXT_STRING);
     m_overlayTextColor = Qt::white;
     m_overlayTextFontFamily.clear();
     m_overlayTextFontScale = 12.0;
@@ -343,7 +345,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_dateTimePosX = qBound(0, m_dateTimePosX, 4096);
         m_dateTimePosY = qBound(0, m_dateTimePosY, 4096);
         d.readBool(62, &m_overlayText, false);
-        d.readString(63, &m_overlayTextString, "<p>SDRangel Camera</p>");
+        d.readString(63, &m_overlayTextString, DEFAULT_OVERLAY_TEXT_STRING);
         uint32_t overlayTextColorRgba = QColor(Qt::white).rgba();
         d.readU32(64, &overlayTextColorRgba, QColor(Qt::white).rgba());
         m_overlayTextColor = QColor::fromRgba(overlayTextColorRgba);

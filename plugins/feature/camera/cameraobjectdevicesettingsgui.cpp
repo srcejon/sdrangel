@@ -112,6 +112,7 @@ void CameraObjectDeviceSettingsGUI::addDeviceSets()
 void CameraObjectDeviceSettingsGUI::addPresets(QChar deviceSetType)
 {
     m_presetWidget->clear();
+    m_presetWidget->addItem(QString());
     m_currentPresetType = deviceSetType;
 
     const MainSettings& mainSettings = MainCore::instance()->getSettings();
@@ -131,7 +132,7 @@ void CameraObjectDeviceSettingsGUI::addPresets(QChar deviceSetType)
         }
     }
 
-    int presetIdx = 0;
+    int presetIdx = 1;
     for (int i = 0; i < count; ++i)
     {
         const Preset *preset = mainSettings.getPreset(i);
@@ -155,13 +156,13 @@ void CameraObjectDeviceSettingsGUI::addPresets(QChar deviceSetType)
 const Preset *CameraObjectDeviceSettingsGUI::getSelectedPreset() const
 {
     const int listIdx = m_presetWidget->currentIndex();
-    if (listIdx < 0) {
+    if (listIdx <= 0) {
         return nullptr;
     }
 
     const MainSettings& mainSettings = MainCore::instance()->getSettings();
     const int count = mainSettings.getPresetCount();
-    int presetIdx = 0;
+    int presetIdx = 1;
 
     for (int i = 0; i < count; ++i)
     {

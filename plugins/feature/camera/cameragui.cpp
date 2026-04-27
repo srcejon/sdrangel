@@ -645,6 +645,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->diffMaskButton, &QToolButton::toggled, this, &CameraGUI::on_diffMaskButton_toggled);
     QObject::connect(settingsUI()->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
     QObject::connect(settingsUI()->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
+    QObject::connect(settingsUI()->defaultColorSettingsButton, &QToolButton::clicked, this, &CameraGUI::on_defaultColorSettingsButton_clicked);
     QObject::connect(settingsUI()->overlayFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->overlayFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayFontScaleSpin_valueChanged);
     QObject::connect(settingsUI()->overlayTextFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayTextFontCombo_currentFontChanged);
@@ -1824,6 +1825,17 @@ void CameraGUI::on_histogramButton_clicked()
         m_histogramDialog->raise();
         m_histogramDialog->activateWindow();
     }
+}
+
+void CameraGUI::on_defaultColorSettingsButton_clicked()
+{
+    settingsUI()->postProcessWhiteBalanceModeCombo->setCurrentIndex(0);
+    settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(1);
+    settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(1);
+    settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(1);
+    settingsUI()->brightnessSlider->setValue(0);
+    settingsUI()->contrastSlider->setValue(100);
+    settingsUI()->gammaSlider->setValue(100);
 }
 
 /*static*/ void CameraGUI::updateColorButton(QToolButton* btn, const QColor& color)

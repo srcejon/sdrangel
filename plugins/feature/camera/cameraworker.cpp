@@ -200,6 +200,7 @@ CameraWorker::CameraWorker() :
     m_alpacaSensorType(0),
     m_alpacaImageBytesSupported(true),
     m_statusTimer(this),
+    m_lastAlpacaCaptureTimeMs(-1),
     m_spectrumPipeSource(nullptr)
 {
     QObject::connect(
@@ -459,9 +460,12 @@ void CameraWorker::startCapture()
     }
 
     m_capturing = true;
+    m_lastAlpacaCaptureTimeMs = -1;
+    m_alpacaCaptureTimer.invalidate();
 
     if (m_settings.isAlpacaCamera())
     {
+        m_alpacaCaptureTimer.start();
         m_alpacaFrameRequestPending = false;
         const int intervalMs = std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond))));
         m_captureTimer.start(intervalMs);
@@ -489,6 +493,7 @@ void CameraWorker::stopCapture()
 {
     m_capturing = false;
     m_captureTimer.stop();
+    m_alpacaCaptureTimer.invalidate();
 
     if (m_capturingAudio)
     {
@@ -511,6 +516,9 @@ void CameraWorker::captureTick()
         return;
     }
 
+    if (!m_alpacaCaptureTimer.isValid()) {
+        m_alpacaCaptureTimer.start();
+    }
     m_alpacaFrameRequestPending = true;
     alpacaSetCameraParams();
 }
@@ -721,6 +729,12 @@ void CameraWorker::alpacaFetchImageArray()
             }
         }
 
+        if (m_alpacaCaptureTimer.isValid())
+        {
+            m_lastAlpacaCaptureTimeMs = m_alpacaCaptureTimer.elapsed();
+            m_alpacaCaptureTimer.invalidate();
+        }
+
         if (m_postProcessorInputMessageQueue) {
             m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(image));
         }
@@ -905,7 +919,8 @@ void CameraWorker::alpacaPollStatus()
             m_msgQueueToGUI->push(MsgReportAlpacaStatus::create(
                 status->cameraState,
                 status->ccdTemperature,
-                status->ccdTemperatureValid));
+                status->ccdTemperatureValid,
+                m_lastAlpacaCaptureTimeMs));
         }
     };
 

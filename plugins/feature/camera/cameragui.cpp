@@ -255,6 +255,8 @@ bool CameraGUI::handleMessage(const Message& message)
         const int cs = status.getCameraState();
         settingsUI()->cameraStateLabel->setText(
             (cs >= 0 && cs < cameraStateNames.size()) ? cameraStateNames[cs] : (cs >= 0 ? QString::number(cs) : "-"));
+        settingsUI()->captureTimeLabel->setText(
+            status.getCaptureTimeMs() >= 0 ? QString::number(status.getCaptureTimeMs()) : "-");
 
         if (status.isCcdTemperatureValid()) {
             settingsUI()->ccdTempLabel->setText(QString::number(status.getCcdTemperature(), 'f', 1));

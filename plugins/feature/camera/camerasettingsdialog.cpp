@@ -137,6 +137,7 @@ void CameraSettingsDialog::appendTemperatureSample(const QDateTime& timestamp, d
 void CameraSettingsDialog::clearAlpacaStatus()
 {
     ui->cameraStateLabel->setText("-");
+    ui->captureTimeLabel->setText("-");
     ui->sensorNameLabel->setText("-");
     ui->sensorTypeLabel->setText("-");
     ui->pixelSizeLabel->setText("-");

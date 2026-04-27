@@ -25,6 +25,7 @@
 #include <QTimer>
 #include <QImage>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QRecursiveMutex>
 
 #include <opencv2/core/core.hpp>
@@ -241,22 +242,25 @@ public:
         int getCameraState() const { return m_cameraState; }
         double getCcdTemperature() const { return m_ccdTemperature; }
         bool isCcdTemperatureValid() const { return m_ccdTemperatureValid; }
+        qint64 getCaptureTimeMs() const { return m_captureTimeMs; }
 
-        static MsgReportAlpacaStatus* create(int cameraState, double ccdTemperature, bool ccdTemperatureValid)
+        static MsgReportAlpacaStatus* create(int cameraState, double ccdTemperature, bool ccdTemperatureValid, qint64 captureTimeMs)
         {
-            return new MsgReportAlpacaStatus(cameraState, ccdTemperature, ccdTemperatureValid);
+            return new MsgReportAlpacaStatus(cameraState, ccdTemperature, ccdTemperatureValid, captureTimeMs);
         }
 
     private:
         int m_cameraState;
         double m_ccdTemperature;
         bool m_ccdTemperatureValid;
+        qint64 m_captureTimeMs;
 
-        MsgReportAlpacaStatus(int cameraState, double ccdTemperature, bool ccdTemperatureValid) :
+        MsgReportAlpacaStatus(int cameraState, double ccdTemperature, bool ccdTemperatureValid, qint64 captureTimeMs) :
             Message(),
             m_cameraState(cameraState),
             m_ccdTemperature(ccdTemperature),
-            m_ccdTemperatureValid(ccdTemperatureValid)
+            m_ccdTemperatureValid(ccdTemperatureValid),
+            m_captureTimeMs(captureTimeMs)
         { }
     };
 
@@ -287,6 +291,8 @@ private:
     int m_alpacaSensorType;          // 0=Mono, 1=Colour, 2=RGGB, 3=CMYG, 4=CMYG2, 5=LRGB
     bool m_alpacaImageBytesSupported; // true = try ImageBytes binary protocol; false = use JSON
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature every 2 s
+    QElapsedTimer m_alpacaCaptureTimer;
+    qint64 m_lastAlpacaCaptureTimeMs;
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
 
     // Audio pass-through (Qt camera only)

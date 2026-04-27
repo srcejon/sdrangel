@@ -190,7 +190,12 @@ private slots:
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);
     void on_postProcessWhiteBalanceGreenGainSpin_valueChanged(double value);
     void on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value);
+    void on_saturationSlider_valueChanged(int value);
     void on_gammaSlider_valueChanged(int value);
+    void on_gaussianBlurSpin_valueChanged(int value);
+    void on_medianBlurSpin_valueChanged(int value);
+    void on_sharpenSlider_valueChanged(int value);
+    void on_sobelEdgeSlider_valueChanged(int value);
     void on_flipXButton_toggled(bool checked);
     void on_flipYButton_toggled(bool checked);
     void on_brightnessSlider_valueChanged(int value);

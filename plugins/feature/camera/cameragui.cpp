@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QDateTime>
 #include <QDoubleSpinBox>
@@ -473,8 +474,16 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(m_settings.m_postProcessWhiteBalanceRedGain);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(m_settings.m_postProcessWhiteBalanceBlueGain);
+    settingsUI()->saturationSlider->setValue(static_cast<int>(m_settings.m_saturation * 100.0));
+    settingsUI()->saturationValue->setText(QString::number(m_settings.m_saturation, 'f', 2));
     settingsUI()->gammaSlider->setValue(static_cast<int>(m_settings.m_gamma * 100.0));
     settingsUI()->gammaValue->setText(QString::number(m_settings.m_gamma, 'f', 2));
+    settingsUI()->gaussianBlurSpin->setValue(m_settings.m_gaussianBlur);
+    settingsUI()->medianBlurSpin->setValue(m_settings.m_medianBlur);
+    settingsUI()->sharpenSlider->setValue(static_cast<int>(m_settings.m_sharpen * 100.0));
+    settingsUI()->sharpenValue->setText(QString::number(m_settings.m_sharpen, 'f', 2));
+    settingsUI()->sobelEdgeSlider->setValue(static_cast<int>(m_settings.m_sobelEdge * 100.0));
+    settingsUI()->sobelEdgeValue->setText(QString::number(m_settings.m_sobelEdge, 'f', 2));
     settingsUI()->flipXButton->setChecked(m_settings.m_flipX);
     settingsUI()->flipYButton->setChecked(m_settings.m_flipY);
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
@@ -626,9 +635,14 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceGreenGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
+    QObject::connect(settingsUI()->saturationSlider, &QSlider::valueChanged, this, &CameraGUI::on_saturationSlider_valueChanged);
     QObject::connect(settingsUI()->gammaSlider, &QSlider::valueChanged, this, &CameraGUI::on_gammaSlider_valueChanged);
-    QObject::connect(settingsUI()->flipXButton, &QToolButton::toggled, this, &CameraGUI::on_flipXButton_toggled);
-    QObject::connect(settingsUI()->flipYButton, &QToolButton::toggled, this, &CameraGUI::on_flipYButton_toggled);
+    QObject::connect(settingsUI()->gaussianBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_gaussianBlurSpin_valueChanged);
+    QObject::connect(settingsUI()->medianBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_medianBlurSpin_valueChanged);
+    QObject::connect(settingsUI()->sharpenSlider, &QSlider::valueChanged, this, &CameraGUI::on_sharpenSlider_valueChanged);
+    QObject::connect(settingsUI()->sobelEdgeSlider, &QSlider::valueChanged, this, &CameraGUI::on_sobelEdgeSlider_valueChanged);
+    QObject::connect(settingsUI()->flipXButton, &QCheckBox::toggled, this, &CameraGUI::on_flipXButton_toggled);
+    QObject::connect(settingsUI()->flipYButton, &QCheckBox::toggled, this, &CameraGUI::on_flipYButton_toggled);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
     QObject::connect(settingsUI()->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
     QObject::connect(ui->invertColorsButton, &QToolButton::toggled, this, &CameraGUI::on_invertColorsButton_toggled);
@@ -1662,11 +1676,49 @@ void CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value
     applySettings();
 }
 
+void CameraGUI::on_saturationSlider_valueChanged(int value)
+{
+    m_settings.m_saturation = value / 100.0;
+    settingsUI()->saturationValue->setText(QString::number(m_settings.m_saturation, 'f', 2));
+    m_settingsKeys.append("saturation");
+    applySettings();
+}
+
 void CameraGUI::on_gammaSlider_valueChanged(int value)
 {
     m_settings.m_gamma = value / 100.0;
     settingsUI()->gammaValue->setText(QString::number(m_settings.m_gamma, 'f', 2));
     m_settingsKeys.append("gamma");
+    applySettings();
+}
+
+void CameraGUI::on_gaussianBlurSpin_valueChanged(int value)
+{
+    m_settings.m_gaussianBlur = value;
+    m_settingsKeys.append("gaussianBlur");
+    applySettings();
+}
+
+void CameraGUI::on_medianBlurSpin_valueChanged(int value)
+{
+    m_settings.m_medianBlur = value;
+    m_settingsKeys.append("medianBlur");
+    applySettings();
+}
+
+void CameraGUI::on_sharpenSlider_valueChanged(int value)
+{
+    m_settings.m_sharpen = value / 100.0;
+    settingsUI()->sharpenValue->setText(QString::number(m_settings.m_sharpen, 'f', 2));
+    m_settingsKeys.append("sharpen");
+    applySettings();
+}
+
+void CameraGUI::on_sobelEdgeSlider_valueChanged(int value)
+{
+    m_settings.m_sobelEdge = value / 100.0;
+    settingsUI()->sobelEdgeValue->setText(QString::number(m_settings.m_sobelEdge, 'f', 2));
+    m_settingsKeys.append("sobelEdge");
     applySettings();
 }
 
@@ -1835,7 +1887,12 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(1);
     settingsUI()->brightnessSlider->setValue(0);
     settingsUI()->contrastSlider->setValue(100);
+    settingsUI()->saturationSlider->setValue(100);
     settingsUI()->gammaSlider->setValue(100);
+    settingsUI()->gaussianBlurSpin->setValue(0);
+    settingsUI()->medianBlurSpin->setValue(0);
+    settingsUI()->sharpenSlider->setValue(0);
+    settingsUI()->sobelEdgeSlider->setValue(0);
 }
 
 /*static*/ void CameraGUI::updateColorButton(QToolButton* btn, const QColor& color)

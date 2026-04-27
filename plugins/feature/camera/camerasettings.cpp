@@ -135,7 +135,12 @@ void CameraSettings::resetToDefaults()
     m_postProcessWhiteBalanceRedGain = 1.0;
     m_postProcessWhiteBalanceGreenGain = 1.0;
     m_postProcessWhiteBalanceBlueGain = 1.0;
+    m_saturation = 1.0;
     m_gamma = 1.0;
+    m_gaussianBlur = 0;
+    m_medianBlur = 0;
+    m_sharpen = 0.0;
+    m_sobelEdge = 0.0;
     m_flipX = false;
     m_flipY = false;
     m_brightness = 0.0;
@@ -216,7 +221,12 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(70, m_postProcessWhiteBalanceRedGain);
     s.writeDouble(71, m_postProcessWhiteBalanceGreenGain);
     s.writeDouble(72, m_postProcessWhiteBalanceBlueGain);
+    s.writeDouble(76, m_saturation);
     s.writeDouble(73, m_gamma);
+    s.writeS32(77, m_gaussianBlur);
+    s.writeS32(78, m_medianBlur);
+    s.writeDouble(79, m_sharpen);
+    s.writeDouble(80, m_sobelEdge);
     s.writeBool(74, m_flipX);
     s.writeBool(75, m_flipY);
     s.writeDouble(26, m_brightness);
@@ -326,14 +336,24 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(70, &m_postProcessWhiteBalanceRedGain, 1.0);
         d.readDouble(71, &m_postProcessWhiteBalanceGreenGain, 1.0);
         d.readDouble(72, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        d.readDouble(76, &m_saturation, 1.0);
         d.readDouble(73, &m_gamma, 1.0);
+        d.readS32(77, &m_gaussianBlur, 0);
+        d.readS32(78, &m_medianBlur, 0);
+        d.readDouble(79, &m_sharpen, 0.0);
+        d.readDouble(80, &m_sobelEdge, 0.0);
         d.readBool(74, &m_flipX, false);
         d.readBool(75, &m_flipY, false);
         m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
         m_postProcessWhiteBalanceRedGain = qBound(0.1, m_postProcessWhiteBalanceRedGain, 8.0);
         m_postProcessWhiteBalanceGreenGain = qBound(0.1, m_postProcessWhiteBalanceGreenGain, 8.0);
         m_postProcessWhiteBalanceBlueGain = qBound(0.1, m_postProcessWhiteBalanceBlueGain, 8.0);
+        m_saturation = qBound(0.0, m_saturation, 3.0);
         m_gamma = qBound(0.1, m_gamma, 3.0);
+        m_gaussianBlur = qBound(0, m_gaussianBlur, 15);
+        m_medianBlur = qBound(0, m_medianBlur, 15);
+        m_sharpen = qBound(0.0, m_sharpen, 3.0);
+        m_sobelEdge = qBound(0.0, m_sobelEdge, 3.0);
 
         d.readDouble(26, &m_brightness, 0.0);
         d.readDouble(27, &m_contrast, 1.0);
@@ -462,14 +482,24 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(70, &m_postProcessWhiteBalanceRedGain, 1.0);
         d.readDouble(71, &m_postProcessWhiteBalanceGreenGain, 1.0);
         d.readDouble(72, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        d.readDouble(76, &m_saturation, 1.0);
         d.readDouble(73, &m_gamma, 1.0);
+        d.readS32(77, &m_gaussianBlur, 0);
+        d.readS32(78, &m_medianBlur, 0);
+        d.readDouble(79, &m_sharpen, 0.0);
+        d.readDouble(80, &m_sobelEdge, 0.0);
         d.readBool(74, &m_flipX, false);
         d.readBool(75, &m_flipY, false);
         m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
         m_postProcessWhiteBalanceRedGain = qBound(0.1, m_postProcessWhiteBalanceRedGain, 8.0);
         m_postProcessWhiteBalanceGreenGain = qBound(0.1, m_postProcessWhiteBalanceGreenGain, 8.0);
         m_postProcessWhiteBalanceBlueGain = qBound(0.1, m_postProcessWhiteBalanceBlueGain, 8.0);
+        m_saturation = qBound(0.0, m_saturation, 3.0);
         m_gamma = qBound(0.1, m_gamma, 3.0);
+        m_gaussianBlur = qBound(0, m_gaussianBlur, 15);
+        m_medianBlur = qBound(0, m_medianBlur, 15);
+        m_sharpen = qBound(0.0, m_sharpen, 3.0);
+        m_sobelEdge = qBound(0.0, m_sobelEdge, 3.0);
 
         d.readDouble(26, &m_brightness, 0.0);
         d.readDouble(27, &m_contrast, 1.0);
@@ -650,8 +680,23 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain")) {
         m_postProcessWhiteBalanceBlueGain = qBound(0.1, settings.m_postProcessWhiteBalanceBlueGain, 8.0);
     }
+    if (settingsKeys.contains("saturation")) {
+        m_saturation = qBound(0.0, settings.m_saturation, 3.0);
+    }
     if (settingsKeys.contains("gamma")) {
         m_gamma = qBound(0.1, settings.m_gamma, 3.0);
+    }
+    if (settingsKeys.contains("gaussianBlur")) {
+        m_gaussianBlur = qBound(0, settings.m_gaussianBlur, 15);
+    }
+    if (settingsKeys.contains("medianBlur")) {
+        m_medianBlur = qBound(0, settings.m_medianBlur, 15);
+    }
+    if (settingsKeys.contains("sharpen")) {
+        m_sharpen = qBound(0.0, settings.m_sharpen, 3.0);
+    }
+    if (settingsKeys.contains("sobelEdge")) {
+        m_sobelEdge = qBound(0.0, settings.m_sobelEdge, 3.0);
     }
     if (settingsKeys.contains("flipX")) {
         m_flipX = settings.m_flipX;
@@ -857,8 +902,23 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain") || force) {
         ostr << " m_postProcessWhiteBalanceBlueGain: " << m_postProcessWhiteBalanceBlueGain;
     }
+    if (settingsKeys.contains("saturation") || force) {
+        ostr << " m_saturation: " << m_saturation;
+    }
     if (settingsKeys.contains("gamma") || force) {
         ostr << " m_gamma: " << m_gamma;
+    }
+    if (settingsKeys.contains("gaussianBlur") || force) {
+        ostr << " m_gaussianBlur: " << m_gaussianBlur;
+    }
+    if (settingsKeys.contains("medianBlur") || force) {
+        ostr << " m_medianBlur: " << m_medianBlur;
+    }
+    if (settingsKeys.contains("sharpen") || force) {
+        ostr << " m_sharpen: " << m_sharpen;
+    }
+    if (settingsKeys.contains("sobelEdge") || force) {
+        ostr << " m_sobelEdge: " << m_sobelEdge;
     }
     if (settingsKeys.contains("flipX") || force) {
         ostr << " m_flipX: " << m_flipX;

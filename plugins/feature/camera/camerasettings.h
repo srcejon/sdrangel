@@ -76,7 +76,12 @@ struct CameraSettings
     double m_postProcessWhiteBalanceRedGain;   ///< Manual red gain: 0.1..8.0
     double m_postProcessWhiteBalanceGreenGain; ///< Manual green gain: 0.1..8.0
     double m_postProcessWhiteBalanceBlueGain;  ///< Manual blue gain: 0.1..8.0
+    double m_saturation;      ///< Saturation multiplier: 0.0..3.0
     double m_gamma;           ///< Gamma correction exponent: 0.1..3.0
+    int m_gaussianBlur;       ///< Gaussian blur strength: 0..15 (0 = off)
+    int m_medianBlur;         ///< Median blur strength: 0..15 (0 = off)
+    double m_sharpen;         ///< Sharpen amount: 0.0..3.0
+    double m_sobelEdge;       ///< Sobel edge blend amount: 0.0..3.0
     bool m_flipX;             ///< Flip image horizontally
     bool m_flipY;             ///< Flip image vertically
     double m_brightness;      ///< Brightness adjustment: -100.0..100.0

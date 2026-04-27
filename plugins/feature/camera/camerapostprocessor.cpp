@@ -140,7 +140,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "postProcessWhiteBalanceRedGain",
         "postProcessWhiteBalanceGreenGain",
         "postProcessWhiteBalanceBlueGain",
-        "gamma", "flipX", "flipY",
+        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "sobelEdge", "flipX", "flipY",
         "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "overlayText", "overlayTextString", "overlayTextColor",
@@ -296,14 +296,24 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
 
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
+    const bool needsSaturation = std::abs(m_settings.m_saturation - 1.0) > 1e-4;
     const bool needsGamma = std::abs(m_settings.m_gamma - 1.0) > 1e-4;
+    const bool needsGaussianBlur = m_settings.m_gaussianBlur > 0;
+    const bool needsMedianBlur = m_settings.m_medianBlur > 0;
+    const bool needsSharpen = m_settings.m_sharpen > 1e-4;
+    const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     QTextDocument overlayTextDocument;
     overlayTextDocument.setHtml(m_settings.m_overlayTextString);
     const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
     const bool needsAny = needsWhiteBalance
+        || needsSaturation
         || needsGamma
+        || needsGaussianBlur
+        || needsMedianBlur
+        || needsSharpen
+        || needsSobelEdge
         || needsFlip
         || needsBrightContrast
         || m_settings.m_invertColors
@@ -369,6 +379,17 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
         cv::merge(channels, bgrMat);
     }
 
+    if (needsSaturation)
+    {
+        cv::Mat hsvMat;
+        cv::cvtColor(bgrMat, hsvMat, cv::COLOR_BGR2HSV);
+        std::vector<cv::Mat> hsvChannels;
+        cv::split(hsvMat, hsvChannels);
+        hsvChannels[1].convertTo(hsvChannels[1], -1, m_settings.m_saturation, 0.0);
+        cv::merge(hsvChannels, hsvMat);
+        cv::cvtColor(hsvMat, bgrMat, cv::COLOR_HSV2BGR);
+    }
+
     if (needsGamma)
     {
         cv::Mat lut(1, 256, CV_8U);
@@ -377,6 +398,48 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
             lutData[i] = static_cast<uchar>(qBound(0, static_cast<int>(std::pow(i / 255.0, m_settings.m_gamma) * 255.0 + 0.5), 255));
         }
         cv::LUT(bgrMat, lut, bgrMat);
+    }
+
+    if (needsGaussianBlur)
+    {
+        const int kernelSize = 2 * m_settings.m_gaussianBlur + 1;
+        cv::GaussianBlur(bgrMat, bgrMat, cv::Size(kernelSize, kernelSize), 0.0);
+    }
+
+    if (needsMedianBlur)
+    {
+        const int kernelSize = 2 * m_settings.m_medianBlur + 1;
+        cv::medianBlur(bgrMat, bgrMat, kernelSize);
+    }
+
+    if (needsSharpen)
+    {
+        cv::Mat blurred;
+        cv::GaussianBlur(bgrMat, blurred, cv::Size(0, 0), 1.0);
+        cv::addWeighted(bgrMat, 1.0 + m_settings.m_sharpen, blurred, -m_settings.m_sharpen, 0.0, bgrMat);
+    }
+
+    if (needsSobelEdge)
+    {
+        cv::Mat grayMat;
+        cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
+
+        cv::Mat gradX;
+        cv::Mat gradY;
+        cv::Sobel(grayMat, gradX, CV_16S, 1, 0, 3);
+        cv::Sobel(grayMat, gradY, CV_16S, 0, 1, 3);
+
+        cv::Mat absGradX;
+        cv::Mat absGradY;
+        cv::convertScaleAbs(gradX, absGradX);
+        cv::convertScaleAbs(gradY, absGradY);
+
+        cv::Mat edgesGray;
+        cv::addWeighted(absGradX, 0.5, absGradY, 0.5, 0.0, edgesGray);
+
+        cv::Mat edgesBgr;
+        cv::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
+        cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrMat);
     }
 
     if (needsFlip)

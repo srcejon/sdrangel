@@ -30,6 +30,7 @@
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QVideoFrame>
 class QCamera;
+class QImageCapture;
 class QVideoSink;
 class QMediaCaptureSession;
 #else
@@ -37,6 +38,7 @@ class QMediaCaptureSession;
 #include <QAbstractVideoBuffer>
 #include <QVideoFrame>
 class QCamera;
+class QCameraImageCapture;
 class CameraGUI;
 
 /// Qt5 video surface: receives raw frames from QCamera and emits them as QImage signals.
@@ -127,12 +129,15 @@ private:
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
+    QImageCapture *m_imageCapture;
     QVideoSink *m_videoSink;
     QMediaCaptureSession *m_captureSession;
 #else
     QCamera *m_qtCamera;
+    QCameraImageCapture *m_imageCapture;
     CameraVideoSurface *m_videoSurface;
 #endif
+    QTimer m_qtStillCaptureTimer;
 
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     virtual ~CameraGUI();
@@ -149,6 +154,7 @@ private:
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateImageWidget();
     void updateEnabledControls();
+    void updateCaptureModeControls();
     void reportResolutions();
     void populateQtFormatControls(const QList<QSize>& resolutions, const QHash<QString, FrameRateOptions>& frameRateOptionsByResolution);
     void updateFrameRateControlForResolution(const QString& resolutionText);
@@ -166,8 +172,11 @@ private slots:
     void on_refreshCamerasButton_clicked();
     void on_cameraCombo_currentTextChanged(const QString& text);
     void on_resolutionCombo_currentIndexChanged(int index);
+    void on_fpsLabel_currentIndexChanged(int index);
     void on_fpsSpin_valueChanged(int value);
     void on_fpsCombo_currentIndexChanged(int index);
+    void on_intervalSpin_valueChanged(double value);
+    void on_intervalUnitsCombo_currentIndexChanged(int index);
     void on_exposureSpin_valueChanged(double value);
     void on_isoSpin_valueChanged(int value);
     void on_alpacaHostEdit_editingFinished();
@@ -254,6 +263,8 @@ private slots:
 #else
     void onQt5VideoFrame(const QImage& image);
 #endif
+    void onQtImageCaptured(int id, const QImage& image);
+    void triggerQtStillCapture();
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

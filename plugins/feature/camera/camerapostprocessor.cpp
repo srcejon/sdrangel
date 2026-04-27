@@ -262,7 +262,7 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
             m_videoWriter.open(
                 filename.toStdString(),
                 fourcc,
-                std::max(1, m_settings.m_framesPerSecond),
+                m_settings.getCaptureFrameRate(),
                 cv::Size(frameForSize.width(), frameForSize.height()),
                 true);
         }

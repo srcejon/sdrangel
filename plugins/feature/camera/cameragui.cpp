@@ -44,6 +44,7 @@
 #include <QCamera>
 #include <QCameraDevice>
 #include <QCameraFormat>
+#include <QImageCapture>
 #include <QMediaCaptureSession>
 #include <QMediaDevices>
 #include <QVideoFrame>
@@ -54,6 +55,7 @@
 #include <QCamera>
 #include <QCameraExposure>
 #include <QCameraFocus>
+#include <QCameraImageCapture>
 #include <QCameraImageProcessing>
 #include <QCameraInfo>
 #include <QCameraViewfinderSettings>
@@ -336,10 +338,12 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_imagePixmapItem(nullptr),
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     m_qtCamera(nullptr),
+    m_imageCapture(nullptr),
     m_videoSink(nullptr),
     m_captureSession(nullptr)
 #else
     m_qtCamera(nullptr),
+    m_imageCapture(nullptr),
     m_videoSurface(nullptr)
 #endif
 {
@@ -398,6 +402,13 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 #endif
 
     connect(&m_statusTimer, &QTimer::timeout, this, &CameraGUI::updateStatus);
+    connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
+    m_qtStillCaptureTimer.setSingleShot(false);
+
+    settingsUI()->fpsLabel->addItem(tr("Frame Rate"), CameraSettings::CaptureModeFrameRate);
+    settingsUI()->fpsLabel->addItem(tr("Interval"), CameraSettings::CaptureModeInterval);
+    settingsUI()->intervalUnitsCombo->addItem(tr("Seconds"), CameraSettings::CaptureIntervalSeconds);
+    settingsUI()->intervalUnitsCombo->addItem(tr("Minutes"), CameraSettings::CaptureIntervalMinutes);
     m_statusTimer.start(250);
 
     displaySettings();
@@ -444,7 +455,18 @@ void CameraGUI::displaySettings()
         settingsUI()->resolutionCombo->setCurrentIndex(resIdx);
     }
 
+    {
+        const int captureModeIndex = settingsUI()->fpsLabel->findData(m_settings.m_captureMode);
+        settingsUI()->fpsLabel->setCurrentIndex(captureModeIndex >= 0 ? captureModeIndex : 0);
+    }
+
     updateFrameRateControlForResolution(resText);
+    settingsUI()->intervalSpin->setValue(m_settings.m_captureInterval);
+    {
+        const int intervalUnitsIndex = settingsUI()->intervalUnitsCombo->findData(m_settings.m_captureIntervalUnits);
+        settingsUI()->intervalUnitsCombo->setCurrentIndex(intervalUnitsIndex >= 0 ? intervalUnitsIndex : 0);
+    }
+    updateCaptureModeControls();
     settingsUI()->exposureSpin->setValue(m_settings.m_exposureTimeMs);
     settingsUI()->isoSpin->setValue(m_settings.m_isoSensitivity);
     settingsUI()->alpacaHostEdit->setText(m_settings.m_alpacaHost);
@@ -611,8 +633,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->refreshCamerasButton, &QPushButton::clicked, this, &CameraGUI::on_refreshCamerasButton_clicked);
     QObject::connect(ui->cameraCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_cameraCombo_currentTextChanged);
     QObject::connect(settingsUI()->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->fpsLabel, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsLabel_currentIndexChanged);
     QObject::connect(settingsUI()->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
     QObject::connect(settingsUI()->fpsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->intervalSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_intervalSpin_valueChanged);
+    QObject::connect(settingsUI()->intervalUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_intervalUnitsCombo_currentIndexChanged);
     QObject::connect(settingsUI()->exposureSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
     QObject::connect(settingsUI()->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
@@ -856,6 +881,12 @@ void CameraGUI::updateFrameRateControlForResolution(const QString& resolutionTex
     }
 }
 
+void CameraGUI::updateCaptureModeControls()
+{
+    const bool intervalMode = m_settings.isIntervalCaptureMode();
+    settingsUI()->captureValueStack->setCurrentWidget(intervalMode ? settingsUI()->intervalPage : settingsUI()->frameRatePage);
+}
+
 // ---------------------------------------------------------------------------
 // Qt camera capture — runs entirely on the GUI / main thread
 // ---------------------------------------------------------------------------
@@ -926,6 +957,7 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 void CameraGUI::setupQtCapture()
 {
     cleanupQtCapture();
+    m_qtStillCaptureTimer.stop();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 
@@ -948,7 +980,8 @@ void CameraGUI::setupQtCapture()
 
     m_captureSession = new QMediaCaptureSession(this);
     m_qtCamera       = new QCamera(selectedDevice, this);
-    m_videoSink      = new QVideoSink(this);
+    m_imageCapture   = nullptr;
+    m_videoSink      = nullptr;
 
     // Select a matching camera format if one exists
     QCameraFormat chosenFormat;
@@ -982,11 +1015,31 @@ void CameraGUI::setupQtCapture()
     m_qtCamera->setFocusDistance(static_cast<float>(m_settings.m_focusDistance));
 
     m_captureSession->setCamera(m_qtCamera);
-    m_captureSession->setVideoOutput(m_videoSink);
 
-    connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
+    if (m_settings.isIntervalCaptureMode())
+    {
+        m_imageCapture = new QImageCapture(this);
+        m_captureSession->setImageCapture(m_imageCapture);
+        connect(m_imageCapture, &QImageCapture::imageCaptured, this, &CameraGUI::onQtImageCaptured);
+        connect(m_imageCapture, &QImageCapture::errorOccurred, this,
+                [this](int id, QImageCapture::Error error, const QString& errorString)
+                {
+                    Q_UNUSED(id)
+                    Q_UNUSED(error)
+                    qWarning() << "CameraGUI::setupQtCapture: image capture error:" << errorString;
+                });
+    }
+    else
+    {
+        m_videoSink = new QVideoSink(this);
+        m_captureSession->setVideoOutput(m_videoSink);
+        connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
+    }
 
     m_qtCamera->start();
+    if (m_settings.isIntervalCaptureMode()) {
+        m_qtStillCaptureTimer.start(m_settings.getCaptureIntervalMs());
+    }
 
     // Probe capabilities after start
     const QCamera::Features cameraFeatures = m_qtCamera->supportedFeatures();
@@ -1079,9 +1132,30 @@ void CameraGUI::setupQtCapture()
     }
 
     m_qtCamera     = new QCamera(selectedInfo, this);
-    m_videoSurface = new CameraVideoSurface(this);
+    m_imageCapture = nullptr;
+    m_videoSurface = nullptr;
 
-    m_qtCamera->setViewfinder(m_videoSurface);
+    if (m_settings.isIntervalCaptureMode())
+    {
+        m_imageCapture = new QCameraImageCapture(m_qtCamera, this);
+        m_imageCapture->setCaptureDestination(QCameraImageCapture::CaptureToBuffer);
+        connect(m_imageCapture, QOverload<int, const QImage&>::of(&QCameraImageCapture::imageCaptured),
+                this, &CameraGUI::onQtImageCaptured);
+        connect(m_imageCapture,
+                QOverload<int, QCameraImageCapture::Error, const QString&>::of(&QCameraImageCapture::error),
+                this,
+                [this](int id, QCameraImageCapture::Error error, const QString& errorString)
+                {
+                    Q_UNUSED(id)
+                    Q_UNUSED(error)
+                    qWarning() << "CameraGUI::setupQtCapture: image capture error:" << errorString;
+                });
+    }
+    else
+    {
+        m_videoSurface = new CameraVideoSurface(this);
+        m_qtCamera->setViewfinder(m_videoSurface);
+    }
 
     if (m_settings.m_resolutionWidth > 0 && m_settings.m_resolutionHeight > 0)
     {
@@ -1105,11 +1179,17 @@ void CameraGUI::setupQtCapture()
             static_cast<QCameraImageProcessing::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
     }
 
-    // Queued connection: present() may be called from the camera's internal thread
-    connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
-            this, &CameraGUI::onQt5VideoFrame, Qt::QueuedConnection);
+    if (m_videoSurface)
+    {
+        // Queued connection: present() may be called from the camera's internal thread
+        connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
+                this, &CameraGUI::onQt5VideoFrame, Qt::QueuedConnection);
+    }
 
     m_qtCamera->start();
+    if (m_settings.isIntervalCaptureMode()) {
+        m_qtStillCaptureTimer.start(m_settings.getCaptureIntervalMs());
+    }
 
     // Probe capabilities
     {
@@ -1150,11 +1230,11 @@ void CameraGUI::setupQtCapture()
 
 void CameraGUI::cleanupQtCapture()
 {
+    m_qtStillCaptureTimer.stop();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (m_qtCamera) {
-        m_qtCamera->stop();
-        delete m_qtCamera;
-        m_qtCamera = nullptr;
+    if (m_imageCapture) {
+        delete m_imageCapture;
+        m_imageCapture = nullptr;
     }
     if (m_videoSink) {
         delete m_videoSink;
@@ -1164,15 +1244,24 @@ void CameraGUI::cleanupQtCapture()
         delete m_captureSession;
         m_captureSession = nullptr;
     }
-#else
     if (m_qtCamera) {
         m_qtCamera->stop();
         delete m_qtCamera;
         m_qtCamera = nullptr;
     }
+#else
+    if (m_imageCapture) {
+        delete m_imageCapture;
+        m_imageCapture = nullptr;
+    }
     if (m_videoSurface) {
         delete m_videoSurface;
         m_videoSurface = nullptr;
+    }
+    if (m_qtCamera) {
+        m_qtCamera->stop();
+        delete m_qtCamera;
+        m_qtCamera = nullptr;
     }
 #endif
 }
@@ -1187,6 +1276,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         }
         m_qtFrameRateOptionsByResolution.clear();
         settingsUI()->fpsStack->setCurrentWidget(settingsUI()->fpsSpinPage);
+        settingsUI()->captureValueStack->setCurrentWidget(settingsUI()->frameRatePage);
         settingsUI()->fpsSpin->setMinimum(1);
         settingsUI()->fpsSpin->setMaximum(240);
         settingsUI()->fpsSpin->setValue(m_settings.m_framesPerSecond);
@@ -1202,10 +1292,15 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
     }
 
     // Decide whether a full restart is needed
+    updateCaptureModeControls();
+
     const bool recapture = force
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("resolutionWidth")
         || settingsKeys.contains("resolutionHeight")
+        || settingsKeys.contains("captureMode")
+        || settingsKeys.contains("captureInterval")
+        || settingsKeys.contains("captureIntervalUnits")
         || settingsKeys.contains("framesPerSecond")
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("isoSensitivity");
@@ -1267,24 +1362,45 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
 void CameraGUI::onQtVideoFrame(const QVideoFrame& frame)
 {
     const QImage image = frame.toImage();
-    if (!image.isNull()) {
-        MessageQueue *postProcessorMQ = m_camera->getPostProcessorInputMessageQueue();
-        if (postProcessorMQ) {
-            postProcessorMQ->push(CameraPostProcessor::MsgProcessFrame::create(image));
-        }
-    }
+    onQtImageCaptured(-1, image);
 }
 #else
 void CameraGUI::onQt5VideoFrame(const QImage& image)
 {
-    if (!image.isNull()) {
-        MessageQueue *postProcessorMQ = m_camera->getPostProcessorInputMessageQueue();
-        if (postProcessorMQ) {
-            postProcessorMQ->push(CameraPostProcessor::MsgProcessFrame::create(image));
-        }
-    }
+    onQtImageCaptured(-1, image);
 }
 #endif
+
+void CameraGUI::onQtImageCaptured(int id, const QImage& image)
+{
+    Q_UNUSED(id)
+
+    if (image.isNull()) {
+        return;
+    }
+
+    MessageQueue *postProcessorMQ = m_camera->getPostProcessorInputMessageQueue();
+    if (postProcessorMQ) {
+        postProcessorMQ->push(CameraPostProcessor::MsgProcessFrame::create(image));
+    }
+}
+
+void CameraGUI::triggerQtStillCapture()
+{
+    if (!m_settings.isQtCamera() || !m_settings.isIntervalCaptureMode() || !m_qtCamera || !m_imageCapture) {
+        return;
+    }
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_imageCapture->isReadyForCapture()) {
+        m_imageCapture->capture();
+    }
+#else
+    if (m_imageCapture->isReadyForCapture()) {
+        m_imageCapture->capture();
+    }
+#endif
+}
 
 void CameraGUI::updateAlpacaVisibility()
 {
@@ -1292,7 +1408,8 @@ void CameraGUI::updateAlpacaVisibility()
 
     settingsUI()->resolutionLabel->setVisible(!alpaca);
     settingsUI()->resolutionCombo->setVisible(!alpaca);
-    if (alpaca) {
+    settingsUI()->captureValueStack->setCurrentWidget(m_settings.isIntervalCaptureMode() ? settingsUI()->intervalPage : settingsUI()->frameRatePage);
+    if (alpaca || !m_settings.isIntervalCaptureMode()) {
         settingsUI()->fpsStack->setCurrentWidget(settingsUI()->fpsSpinPage);
     }
     settingsUI()->isoLabel->setVisible(!alpaca);
@@ -1484,6 +1601,18 @@ void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
     }
 }
 
+void CameraGUI::on_fpsLabel_currentIndexChanged(int index)
+{
+    if (index < 0) {
+        return;
+    }
+
+    m_settings.m_captureMode = settingsUI()->fpsLabel->itemData(index).toInt();
+    updateCaptureModeControls();
+    m_settingsKeys.append("captureMode");
+    applySettings();
+}
+
 void CameraGUI::on_fpsSpin_valueChanged(int value)
 {
     m_settings.m_framesPerSecond = value;
@@ -1499,6 +1628,24 @@ void CameraGUI::on_fpsCombo_currentIndexChanged(int index)
 
     m_settings.m_framesPerSecond = settingsUI()->fpsCombo->itemData(index).toInt();
     m_settingsKeys.append("framesPerSecond");
+    applySettings();
+}
+
+void CameraGUI::on_intervalSpin_valueChanged(double value)
+{
+    m_settings.m_captureInterval = value;
+    m_settingsKeys.append("captureInterval");
+    applySettings();
+}
+
+void CameraGUI::on_intervalUnitsCombo_currentIndexChanged(int index)
+{
+    if (index < 0) {
+        return;
+    }
+
+    m_settings.m_captureIntervalUnits = settingsUI()->intervalUnitsCombo->itemData(index).toInt();
+    m_settingsKeys.append("captureIntervalUnits");
     applySettings();
 }
 

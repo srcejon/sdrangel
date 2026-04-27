@@ -31,6 +31,18 @@ class Serializable;
 
 struct CameraSettings
 {
+    enum CaptureMode
+    {
+        CaptureModeFrameRate = 0,
+        CaptureModeInterval = 1
+    };
+
+    enum CaptureIntervalUnits
+    {
+        CaptureIntervalSeconds = 0,
+        CaptureIntervalMinutes = 1
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -54,6 +66,9 @@ struct CameraSettings
     int m_resolutionWidth;
     int m_resolutionHeight;
     int m_framesPerSecond;
+    int m_captureMode;
+    double m_captureInterval;
+    int m_captureIntervalUnits;
     double m_exposureTimeMs;
     int m_isoSensitivity;
     QString m_alpacaHost;
@@ -151,6 +166,10 @@ struct CameraSettings
     int cameraIdInt() const;
     QString cameraIdString() const;
     QString cameraDescription() const;
+    bool isIntervalCaptureMode() const;
+    double getCaptureIntervalSeconds() const;
+    int getCaptureIntervalMs() const;
+    double getCaptureFrameRate() const;
 };
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGS_H_

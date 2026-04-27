@@ -421,6 +421,9 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("audioDeviceName")
         || settingsKeys.contains("resolutionWidth")
         || settingsKeys.contains("resolutionHeight")
+        || settingsKeys.contains("captureMode")
+        || settingsKeys.contains("captureInterval")
+        || settingsKeys.contains("captureIntervalUnits")
         || settingsKeys.contains("framesPerSecond")
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("isoSensitivity")
@@ -503,8 +506,9 @@ void CameraWorker::startCapture()
     {
         m_alpacaCaptureTimer.start();
         m_alpacaFrameRequestPending = false;
-        const int intervalMs = std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond))));
-        m_captureTimer.start(intervalMs);
+        m_captureTimer.start(m_settings.isIntervalCaptureMode()
+            ? m_settings.getCaptureIntervalMs()
+            : std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond)))));
         captureTick();
     }
     else if (m_settings.isQtCamera())

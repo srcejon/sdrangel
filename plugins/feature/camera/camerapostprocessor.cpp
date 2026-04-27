@@ -139,6 +139,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "postProcessWhiteBalanceRedGain",
         "postProcessWhiteBalanceGreenGain",
         "postProcessWhiteBalanceBlueGain",
+        "gamma", "flipX", "flipY",
         "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "overlayText", "overlayTextString", "overlayTextColor",
@@ -294,11 +295,15 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
 
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
+    const bool needsGamma = std::abs(m_settings.m_gamma - 1.0) > 1e-4;
+    const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     QTextDocument overlayTextDocument;
     overlayTextDocument.setHtml(m_settings.m_overlayTextString);
     const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
     const bool needsAny = needsWhiteBalance
+        || needsGamma
+        || needsFlip
         || needsBrightContrast
         || m_settings.m_invertColors
         || m_settings.m_overlayDateTime
@@ -361,6 +366,22 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
         channels[1].convertTo(channels[1], -1, gains[1], 0.0);
         channels[2].convertTo(channels[2], -1, gains[2], 0.0);
         cv::merge(channels, bgrMat);
+    }
+
+    if (needsGamma)
+    {
+        cv::Mat lut(1, 256, CV_8U);
+        uchar* lutData = lut.ptr<uchar>();
+        for (int i = 0; i < 256; ++i) {
+            lutData[i] = static_cast<uchar>(qBound(0, static_cast<int>(std::pow(i / 255.0, m_settings.m_gamma) * 255.0 + 0.5), 255));
+        }
+        cv::LUT(bgrMat, lut, bgrMat);
+    }
+
+    if (needsFlip)
+    {
+        const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
+        cv::flip(bgrMat, bgrMat, flipCode);
     }
 
     if (needsBrightContrast)

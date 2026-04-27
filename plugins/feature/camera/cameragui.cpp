@@ -472,6 +472,10 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(m_settings.m_postProcessWhiteBalanceRedGain);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(m_settings.m_postProcessWhiteBalanceBlueGain);
+    settingsUI()->gammaSlider->setValue(static_cast<int>(m_settings.m_gamma * 100.0));
+    settingsUI()->gammaValue->setText(QString::number(m_settings.m_gamma, 'f', 2));
+    settingsUI()->flipXButton->setChecked(m_settings.m_flipX);
+    settingsUI()->flipYButton->setChecked(m_settings.m_flipY);
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
     settingsUI()->brightnessValue->setText(QString::number(m_settings.m_brightness, 'f', 0));
     settingsUI()->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
@@ -621,6 +625,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceGreenGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
+    QObject::connect(settingsUI()->gammaSlider, &QSlider::valueChanged, this, &CameraGUI::on_gammaSlider_valueChanged);
+    QObject::connect(settingsUI()->flipXButton, &QToolButton::toggled, this, &CameraGUI::on_flipXButton_toggled);
+    QObject::connect(settingsUI()->flipYButton, &QToolButton::toggled, this, &CameraGUI::on_flipYButton_toggled);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
     QObject::connect(settingsUI()->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
     QObject::connect(ui->invertColorsButton, &QToolButton::toggled, this, &CameraGUI::on_invertColorsButton_toggled);
@@ -1650,6 +1657,28 @@ void CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value
 {
     m_settings.m_postProcessWhiteBalanceBlueGain = value;
     m_settingsKeys.append("postProcessWhiteBalanceBlueGain");
+    applySettings();
+}
+
+void CameraGUI::on_gammaSlider_valueChanged(int value)
+{
+    m_settings.m_gamma = value / 100.0;
+    settingsUI()->gammaValue->setText(QString::number(m_settings.m_gamma, 'f', 2));
+    m_settingsKeys.append("gamma");
+    applySettings();
+}
+
+void CameraGUI::on_flipXButton_toggled(bool checked)
+{
+    m_settings.m_flipX = checked;
+    m_settingsKeys.append("flipX");
+    applySettings();
+}
+
+void CameraGUI::on_flipYButton_toggled(bool checked)
+{
+    m_settings.m_flipY = checked;
+    m_settingsKeys.append("flipY");
     applySettings();
 }
 

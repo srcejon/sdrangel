@@ -134,6 +134,9 @@ void CameraSettings::resetToDefaults()
     m_postProcessWhiteBalanceRedGain = 1.0;
     m_postProcessWhiteBalanceGreenGain = 1.0;
     m_postProcessWhiteBalanceBlueGain = 1.0;
+    m_gamma = 1.0;
+    m_flipX = false;
+    m_flipY = false;
     m_brightness = 0.0;
     m_contrast = 1.0;
     m_invertColors = false;
@@ -212,6 +215,9 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(70, m_postProcessWhiteBalanceRedGain);
     s.writeDouble(71, m_postProcessWhiteBalanceGreenGain);
     s.writeDouble(72, m_postProcessWhiteBalanceBlueGain);
+    s.writeDouble(73, m_gamma);
+    s.writeBool(74, m_flipX);
+    s.writeBool(75, m_flipY);
     s.writeDouble(26, m_brightness);
     s.writeDouble(27, m_contrast);
     s.writeBool(28, m_invertColors);
@@ -319,10 +325,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(70, &m_postProcessWhiteBalanceRedGain, 1.0);
         d.readDouble(71, &m_postProcessWhiteBalanceGreenGain, 1.0);
         d.readDouble(72, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        d.readDouble(73, &m_gamma, 1.0);
+        d.readBool(74, &m_flipX, false);
+        d.readBool(75, &m_flipY, false);
         m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
         m_postProcessWhiteBalanceRedGain = qBound(0.1, m_postProcessWhiteBalanceRedGain, 8.0);
         m_postProcessWhiteBalanceGreenGain = qBound(0.1, m_postProcessWhiteBalanceGreenGain, 8.0);
         m_postProcessWhiteBalanceBlueGain = qBound(0.1, m_postProcessWhiteBalanceBlueGain, 8.0);
+        m_gamma = qBound(0.1, m_gamma, 3.0);
 
         d.readDouble(26, &m_brightness, 0.0);
         d.readDouble(27, &m_contrast, 1.0);
@@ -451,10 +461,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(70, &m_postProcessWhiteBalanceRedGain, 1.0);
         d.readDouble(71, &m_postProcessWhiteBalanceGreenGain, 1.0);
         d.readDouble(72, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        d.readDouble(73, &m_gamma, 1.0);
+        d.readBool(74, &m_flipX, false);
+        d.readBool(75, &m_flipY, false);
         m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
         m_postProcessWhiteBalanceRedGain = qBound(0.1, m_postProcessWhiteBalanceRedGain, 8.0);
         m_postProcessWhiteBalanceGreenGain = qBound(0.1, m_postProcessWhiteBalanceGreenGain, 8.0);
         m_postProcessWhiteBalanceBlueGain = qBound(0.1, m_postProcessWhiteBalanceBlueGain, 8.0);
+        m_gamma = qBound(0.1, m_gamma, 3.0);
 
         d.readDouble(26, &m_brightness, 0.0);
         d.readDouble(27, &m_contrast, 1.0);
@@ -634,6 +648,15 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain")) {
         m_postProcessWhiteBalanceBlueGain = qBound(0.1, settings.m_postProcessWhiteBalanceBlueGain, 8.0);
+    }
+    if (settingsKeys.contains("gamma")) {
+        m_gamma = qBound(0.1, settings.m_gamma, 3.0);
+    }
+    if (settingsKeys.contains("flipX")) {
+        m_flipX = settings.m_flipX;
+    }
+    if (settingsKeys.contains("flipY")) {
+        m_flipY = settings.m_flipY;
     }
     if (settingsKeys.contains("contrast")) {
         m_contrast = qBound(0.1, settings.m_contrast, 3.0);
@@ -832,6 +855,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain") || force) {
         ostr << " m_postProcessWhiteBalanceBlueGain: " << m_postProcessWhiteBalanceBlueGain;
+    }
+    if (settingsKeys.contains("gamma") || force) {
+        ostr << " m_gamma: " << m_gamma;
+    }
+    if (settingsKeys.contains("flipX") || force) {
+        ostr << " m_flipX: " << m_flipX;
+    }
+    if (settingsKeys.contains("flipY") || force) {
+        ostr << " m_flipY: " << m_flipY;
     }
     if (settingsKeys.contains("contrast") || force) {
         ostr << " m_contrast: " << m_contrast;

@@ -273,7 +273,7 @@ void CameraWorker::startWork()
     if (m_settings.isAlpacaCamera())
     {
         alpacaQueryCameraCapabilities();
-        m_statusTimer.start(500);
+        m_statusTimer.start(m_alpacaStatusPollIntervalMs);
     }
 
     startCapture();
@@ -424,7 +424,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     {
         if (m_settings.isAlpacaCamera()) {
             if (!m_statusTimer.isActive()) {
-                m_statusTimer.start(500);
+                m_statusTimer.start(m_alpacaStatusPollIntervalMs);
             }
         } else {
             m_statusTimer.stop();
@@ -712,7 +712,7 @@ void CameraWorker::alpacaCheckImageReady()
             alpacaFetchImageArray();
         } else {
             // Image not yet ready — poll again after a short delay
-            QTimer::singleShot(100, this, [this]() {
+            QTimer::singleShot(m_alpacaImageReadyPollIntervalMs, this, [this]() {
                 if (m_capturing) {
                     alpacaCheckImageReady();
                 } else {

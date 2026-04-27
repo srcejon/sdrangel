@@ -316,6 +316,9 @@ private:
     QImage parseAlpacaImageBytes(const QByteArray& payload) const;
     QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const;
 
+    static const int m_alpacaStatusPollIntervalMs = 2000;
+    static const int m_alpacaImageReadyPollIntervalMs = 50;
+
     void alpacaStartExposure();
     void alpacaCheckImageReady();
     void alpacaFetchImageArray();

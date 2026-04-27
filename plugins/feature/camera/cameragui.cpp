@@ -20,6 +20,7 @@
 
 #include <QColorDialog>
 #include <QDateTime>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFontDatabase>
 #include <QGraphicsView>
@@ -75,6 +76,21 @@ QString resolutionKey(const QSize& size)
 QString resolutionKey(int width, int height)
 {
     return QStringLiteral("%1x%2").arg(width).arg(height);
+}
+
+int decimalsForStepSize(double step)
+{
+    const double normalizedStep = std::max(0.001, step);
+
+    for (int decimals = 0; decimals <= 6; ++decimals)
+    {
+        const double scaled = normalizedStep * std::pow(10.0, decimals);
+        if (std::abs(scaled - std::round(scaled)) < 1e-6) {
+            return decimals;
+        }
+    }
+
+    return 6;
 }
 
 void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
@@ -573,7 +589,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
     QObject::connect(settingsUI()->fpsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->exposureSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
+    QObject::connect(settingsUI()->exposureSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
     QObject::connect(settingsUI()->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
     QObject::connect(settingsUI()->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
@@ -1282,6 +1298,10 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
 {
     blockApplySettings(true);
 
+    const double exposureMinMs = std::max(0.001, info.getExposureMinMs());
+    const double exposureMaxMs = std::max(exposureMinMs, info.getExposureMaxMs());
+    const double exposureResolutionMs = std::max(0.001, info.getExposureResolutionMs());
+
     // Bin X
     settingsUI()->alpacaBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
     settingsUI()->alpacaBinXSpin->setValue(qBound(1, m_settings.m_alpacaBinX, info.getMaxBinX()));
@@ -1338,6 +1358,12 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
         const int offsetVal = (m_settings.m_alpacaOffset >= 0) ? m_settings.m_alpacaOffset : info.getOffsetMin();
         settingsUI()->alpacaOffsetSpin->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
     }
+
+    settingsUI()->exposureSpin->setDecimals(decimalsForStepSize(exposureResolutionMs));
+    settingsUI()->exposureSpin->setSingleStep(exposureResolutionMs);
+    settingsUI()->exposureSpin->setMinimum(exposureMinMs);
+    settingsUI()->exposureSpin->setMaximum(exposureMaxMs);
+    settingsUI()->exposureSpin->setValue(qBound(exposureMinMs, m_settings.m_exposureTimeMs, exposureMaxMs));
 
     // Status labels
     settingsUI()->sensorNameLabel->setText(info.getSensorName().isEmpty() ? "-" : info.getSensorName());
@@ -1434,7 +1460,7 @@ void CameraGUI::on_fpsCombo_currentIndexChanged(int index)
     applySettings();
 }
 
-void CameraGUI::on_exposureSpin_valueChanged(int value)
+void CameraGUI::on_exposureSpin_valueChanged(double value)
 {
     m_settings.m_exposureTimeMs = value;
     m_settingsKeys.append("exposureTimeMs");

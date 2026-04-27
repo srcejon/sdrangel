@@ -164,7 +164,7 @@ private slots:
     void on_resolutionCombo_currentIndexChanged(int index);
     void on_fpsSpin_valueChanged(int value);
     void on_fpsCombo_currentIndexChanged(int index);
-    void on_exposureSpin_valueChanged(int value);
+    void on_exposureSpin_valueChanged(double value);
     void on_isoSpin_valueChanged(int value);
     void on_alpacaHostEdit_editingFinished();
     void on_alpacaPortSpin_valueChanged(int value);

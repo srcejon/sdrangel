@@ -53,7 +53,7 @@ struct CameraSettings
     int m_resolutionWidth;
     int m_resolutionHeight;
     int m_framesPerSecond;
-    int m_exposureTimeMs;
+    double m_exposureTimeMs;
     int m_isoSensitivity;
     QString m_alpacaHost;
     uint16_t m_alpacaPort;

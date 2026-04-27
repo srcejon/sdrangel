@@ -672,7 +672,7 @@ void CameraWorker::alpacaStartExposure()
         }
 
         // Wait for the exposure duration before polling imageready
-        QTimer::singleShot(m_settings.m_exposureTimeMs, this, [this]() {
+        QTimer::singleShot(static_cast<int>(std::ceil(m_settings.m_exposureTimeMs)), this, [this]() {
             if (m_capturing) {
                 alpacaCheckImageReady();
             } else {
@@ -810,6 +810,9 @@ void CameraWorker::alpacaQueryCameraCapabilities()
         int cameraSizeY = 0;
         double ccdTemperature = 0.0;
         bool ccdTemperatureValid = false;
+        double exposureMinMs = 1.0;
+        double exposureMaxMs = 60000.0;
+        double exposureResolutionMs = 1.0;
         int pending = 0;
     };
 
@@ -821,7 +824,7 @@ void CameraWorker::alpacaQueryCameraCapabilities()
         "offsets", "offsetmin", "offsetmax",
         "readoutmodes", "sensorname", "sensortype",
         "pixelsizex", "pixelsizey", "cameraxsize", "cameraysize",
-        "ccdtemperature"
+        "ccdtemperature", "exposuremin", "exposuremax", "exposureresolution"
     };
 
     info->pending = properties.size();
@@ -833,6 +836,9 @@ void CameraWorker::alpacaQueryCameraCapabilities()
         }
 
         m_alpacaSensorType = info->sensorType;
+        info->exposureMinMs = std::max(0.001, info->exposureMinMs);
+        info->exposureResolutionMs = std::max(0.001, info->exposureResolutionMs);
+        info->exposureMaxMs = std::max(info->exposureMinMs, info->exposureMaxMs);
 
         if (m_msgQueueToGUI) {
             m_msgQueueToGUI->push(MsgReportAlpacaCameraInfo::create(
@@ -843,7 +849,8 @@ void CameraWorker::alpacaQueryCameraCapabilities()
                 info->sensorName, info->sensorType,
                 info->pixelSizeX, info->pixelSizeY,
                 info->cameraSizeX, info->cameraSizeY,
-                info->ccdTemperature, info->ccdTemperatureValid));
+                info->ccdTemperature, info->ccdTemperatureValid,
+                info->exposureMinMs, info->exposureMaxMs, info->exposureResolutionMs));
         }
     };
 
@@ -909,6 +916,12 @@ void CameraWorker::alpacaQueryCameraCapabilities()
                         } else if (prop == "ccdtemperature") {
                             info->ccdTemperature = val.toDouble(0.0);
                             info->ccdTemperatureValid = true;
+                        } else if (prop == "exposuremin") {
+                            info->exposureMinMs = std::max(0.001, val.toDouble(0.0) * 1000.0);
+                        } else if (prop == "exposuremax") {
+                            info->exposureMaxMs = std::max(info->exposureMinMs, val.toDouble(0.0) * 1000.0);
+                        } else if (prop == "exposureresolution") {
+                            info->exposureResolutionMs = std::max(0.001, val.toDouble(0.0) * 1000.0);
                         }
                     }
                 }

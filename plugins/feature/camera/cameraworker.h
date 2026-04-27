@@ -147,6 +147,9 @@ public:
         int getCameraSizeY() const { return m_cameraSizeY; }
         double getCcdTemperature() const { return m_ccdTemperature; }
         bool isCcdTemperatureValid() const { return m_ccdTemperatureValid; }
+        double getExposureMinMs() const { return m_exposureMinMs; }
+        double getExposureMaxMs() const { return m_exposureMaxMs; }
+        double getExposureResolutionMs() const { return m_exposureResolutionMs; }
 
         static MsgReportAlpacaCameraInfo* create(
             int maxBinX, int maxBinY,
@@ -156,12 +159,14 @@ public:
             const QString& sensorName, int sensorType,
             double pixelSizeX, double pixelSizeY,
             int cameraSizeX, int cameraSizeY,
-            double ccdTemperature, bool ccdTemperatureValid)
+            double ccdTemperature, bool ccdTemperatureValid,
+            double exposureMinMs, double exposureMaxMs, double exposureResolutionMs)
         {
             return new MsgReportAlpacaCameraInfo(
                 maxBinX, maxBinY, gains, gainMin, gainMax, offsets, offsetMin, offsetMax,
                 readoutModes, sensorName, sensorType, pixelSizeX, pixelSizeY,
-                cameraSizeX, cameraSizeY, ccdTemperature, ccdTemperatureValid);
+                cameraSizeX, cameraSizeY, ccdTemperature, ccdTemperatureValid,
+                exposureMinMs, exposureMaxMs, exposureResolutionMs);
         }
 
     private:
@@ -182,6 +187,9 @@ public:
         int m_cameraSizeY;
         double m_ccdTemperature;
         bool m_ccdTemperatureValid;
+        double m_exposureMinMs;
+        double m_exposureMaxMs;
+        double m_exposureResolutionMs;
 
         MsgReportAlpacaCameraInfo(
             int maxBinX, int maxBinY,
@@ -191,7 +199,8 @@ public:
             const QString& sensorName, int sensorType,
             double pixelSizeX, double pixelSizeY,
             int cameraSizeX, int cameraSizeY,
-            double ccdTemperature, bool ccdTemperatureValid) :
+            double ccdTemperature, bool ccdTemperatureValid,
+            double exposureMinMs, double exposureMaxMs, double exposureResolutionMs) :
             Message(),
             m_maxBinX(maxBinX),
             m_maxBinY(maxBinY),
@@ -209,7 +218,10 @@ public:
             m_cameraSizeX(cameraSizeX),
             m_cameraSizeY(cameraSizeY),
             m_ccdTemperature(ccdTemperature),
-            m_ccdTemperatureValid(ccdTemperatureValid)
+            m_ccdTemperatureValid(ccdTemperatureValid),
+            m_exposureMinMs(exposureMinMs),
+            m_exposureMaxMs(exposureMaxMs),
+            m_exposureResolutionMs(exposureResolutionMs)
         { }
     };
 

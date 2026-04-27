@@ -176,7 +176,7 @@ void CameraSettings::resetToDefaults()
 
 QByteArray CameraSettings::serialize() const
 {
-    SimpleSerializer s(1);
+    SimpleSerializer s(2);
 
     s.writeString(1, m_title);
     s.writeU32(2, m_rgbColor);
@@ -184,7 +184,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(5, m_resolutionWidth);
     s.writeS32(6, m_resolutionHeight);
     s.writeS32(7, m_framesPerSecond);
-    s.writeS32(8, m_exposureTimeMs);
+    s.writeDouble(8, m_exposureTimeMs);
     s.writeS32(9, m_isoSensitivity);
     s.writeString(10, m_alpacaHost);
     s.writeU32(11, m_alpacaPort);
@@ -274,12 +274,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(5, &m_resolutionWidth, 1280);
         d.readS32(6, &m_resolutionHeight, 720);
         d.readS32(7, &m_framesPerSecond, 10);
-        d.readS32(8, &m_exposureTimeMs, 50);
+        int exposureTimeMs = 50;
+        d.readS32(8, &exposureTimeMs, 50);
+        m_exposureTimeMs = exposureTimeMs;
         d.readS32(9, &m_isoSensitivity, -1);
         m_resolutionWidth = std::max(16, m_resolutionWidth);
         m_resolutionHeight = std::max(16, m_resolutionHeight);
         m_framesPerSecond = std::max(1, m_framesPerSecond);
-        m_exposureTimeMs = std::max(1, m_exposureTimeMs);
+        m_exposureTimeMs = std::max(1.0, m_exposureTimeMs);
         m_isoSensitivity = std::max(-1, m_isoSensitivity);
         d.readString(10, &m_alpacaHost, "127.0.0.1");
         d.readU32(11, &utmp, 11111);
@@ -304,6 +306,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(25, &m_alpacaOffset, -1);
         m_alpacaBinX = std::max(1, m_alpacaBinX);
         m_alpacaBinY = std::max(1, m_alpacaBinY);
+        m_alpacaReadoutMode = std::max(0, m_alpacaReadoutMode);
 
         d.readDouble(26, &m_brightness, 0.0);
         d.readDouble(27, &m_contrast, 1.0);
@@ -384,6 +387,129 @@ bool CameraSettings::deserialize(const QByteArray& data)
 
         return true;
     }
+    else if (d.getVersion() == 2)
+    {
+        int32_t itmp;
+        uint32_t utmp;
+        QByteArray bytetmp;
+
+        d.readString(1, &m_title, "Camera");
+        d.readU32(2, &m_rgbColor, QColor(64, 128, 255).rgb());
+        d.readS32(3, &itmp, 0);
+        d.readString(4, &m_cameraId, "");
+        d.readS32(5, &m_resolutionWidth, 1280);
+        d.readS32(6, &m_resolutionHeight, 720);
+        d.readS32(7, &m_framesPerSecond, 10);
+        d.readDouble(8, &m_exposureTimeMs, 50.0);
+        d.readS32(9, &m_isoSensitivity, -1);
+        m_resolutionWidth = std::max(16, m_resolutionWidth);
+        m_resolutionHeight = std::max(16, m_resolutionHeight);
+        m_framesPerSecond = std::max(1, m_framesPerSecond);
+        m_exposureTimeMs = std::max(1.0, m_exposureTimeMs);
+        m_isoSensitivity = std::max(-1, m_isoSensitivity);
+        d.readString(10, &m_alpacaHost, "127.0.0.1");
+        d.readU32(11, &utmp, 11111);
+        m_alpacaPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
+        d.readBool(13, &m_saveImage, false);
+        d.readString(14, &m_imageFileName, "camera.jpg");
+        d.readBool(15, &m_saveVideo, false);
+        d.readString(16, &m_videoFileName, "camera.mp4");
+
+        if (m_rollupState)
+        {
+            d.readBlob(18, &bytetmp);
+            m_rollupState->deserialize(bytetmp);
+        }
+
+        d.readS32(19, &m_workspaceIndex, 0);
+        d.readBlob(20, &m_geometryBytes);
+        d.readS32(21, &m_alpacaBinX, 1);
+        d.readS32(22, &m_alpacaBinY, 1);
+        d.readS32(23, &m_alpacaGain, -1);
+        d.readS32(24, &m_alpacaReadoutMode, 0);
+        d.readS32(25, &m_alpacaOffset, -1);
+        m_alpacaBinX = std::max(1, m_alpacaBinX);
+        m_alpacaBinY = std::max(1, m_alpacaBinY);
+        m_alpacaReadoutMode = std::max(0, m_alpacaReadoutMode);
+
+        d.readDouble(26, &m_brightness, 0.0);
+        d.readDouble(27, &m_contrast, 1.0);
+        d.readBool(28, &m_invertColors, false);
+        d.readBool(29, &m_overlayDateTime, false);
+        uint32_t colorRgba = QColor(Qt::white).rgba();
+        d.readU32(30, &colorRgba, QColor(Qt::white).rgba());
+        m_dateTimeColor = QColor::fromRgba(colorRgba);
+        d.readBool(31, &m_diffMask, false);
+        d.readS32(32, &m_dilationSize, 3);
+        m_brightness = qBound(-100.0, m_brightness, 100.0);
+        m_contrast = qBound(0.1, m_contrast, 3.0);
+        m_dilationSize = qBound(0, m_dilationSize, 20);
+
+        d.readString(33, &m_overlayFontFamily, "");
+        d.readDouble(34, &m_overlayFontScale, 12.0);
+        d.readBool(35, &m_motionDetect, false);
+        uint32_t motionBoxColorRgba = QColor(Qt::red).rgba();
+        d.readU32(36, &motionBoxColorRgba, QColor(Qt::red).rgba());
+        m_motionBoxColor = QColor::fromRgba(motionBoxColorRgba);
+        d.readS32(37, &m_minContourArea, 100);
+        m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
+        m_minContourArea = qBound(0, m_minContourArea, 10000);
+        d.readBool(38, &m_videoPostProcess, false);
+        d.readBool(39, &m_overlaySpectrum, false);
+        d.readString(40, &m_spectrumDevice, "");
+        d.readS32(41, &m_spectrumOffsetX, 0);
+        d.readS32(42, &m_spectrumOffsetY, 0);
+        m_spectrumOffsetX = qBound(-4096, m_spectrumOffsetX, 4096);
+        m_spectrumOffsetY = qBound(-4096, m_spectrumOffsetY, 4096);
+        d.readDouble(43, &m_spectrumScale, 1.0);
+        m_spectrumScale = qBound(0.1, m_spectrumScale, 4.0);
+        d.readString(44, &m_dateTimeFormat, "yyyy-MM-dd hh:mm:ss");
+        d.readS32(45, &m_dateTimePosX, 4);
+        d.readS32(46, &m_dateTimePosY, 0);
+        m_dateTimePosX = qBound(0, m_dateTimePosX, 4096);
+        m_dateTimePosY = qBound(0, m_dateTimePosY, 4096);
+        d.readBool(62, &m_overlayText, false);
+        d.readString(63, &m_overlayTextString, DEFAULT_OVERLAY_TEXT_STRING);
+        uint32_t overlayTextColorRgba = QColor(Qt::white).rgba();
+        d.readU32(64, &overlayTextColorRgba, QColor(Qt::white).rgba());
+        m_overlayTextColor = QColor::fromRgba(overlayTextColorRgba);
+        d.readString(65, &m_overlayTextFontFamily, "");
+        d.readDouble(66, &m_overlayTextFontScale, 12.0);
+        m_overlayTextFontScale = qBound(4.0, m_overlayTextFontScale, 144.0);
+        d.readS32(67, &m_overlayTextPosX, 4);
+        d.readS32(68, &m_overlayTextPosY, 0);
+        m_overlayTextPosX = qBound(0, m_overlayTextPosX, 4096);
+        m_overlayTextPosY = qBound(0, m_overlayTextPosY, 4096);
+        d.readBool(47, &m_yoloEnabled, false);
+        d.readString(48, &m_yoloModelPath, "");
+        d.readString(49, &m_yoloLabelsPath, "");
+        d.readDouble(50, &m_yoloConfThreshold, 0.5);
+        d.readDouble(51, &m_yoloNmsThreshold, 0.45);
+        m_yoloConfThreshold = qBound(0.0, m_yoloConfThreshold, 1.0);
+        m_yoloNmsThreshold = qBound(0.0, m_yoloNmsThreshold, 1.0);
+        uint32_t yoloBoxColorRgba = QColor(Qt::green).rgba();
+        d.readU32(52, &yoloBoxColorRgba, QColor(Qt::green).rgba());
+        m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
+        d.readDouble(60, &m_yoloDisappearDebounce, 0.0);
+        m_yoloDisappearDebounce = qBound(0.0, m_yoloDisappearDebounce, 60.0);
+        d.readBlob(61, &bytetmp);
+        deserializeObjectDeviceSettings(bytetmp, m_objectDeviceSettings);
+
+        d.readBool(53, &m_audioMute, true);
+        d.readString(54, &m_audioDeviceName, "");
+        d.readS32(55, &m_whiteBalanceMode, 0);
+        m_whiteBalanceMode = std::max(0, m_whiteBalanceMode);
+        d.readDouble(56, &m_exposureCompensation, 0.0);
+        m_exposureCompensation = qBound(-2.0, m_exposureCompensation, 2.0);
+        d.readS32(57, &m_focusMode, 0);
+        m_focusMode = std::max(0, m_focusMode);
+        d.readDouble(58, &m_focusDistance, 1.0);
+        m_focusDistance = qBound(0.0, m_focusDistance, 1.0);
+        d.readDouble(59, &m_zoomFactor, 1.0);
+        m_zoomFactor = std::max(1.0, m_zoomFactor);
+
+        return true;
+    }
 
     resetToDefaults();
     return false;
@@ -429,7 +555,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_framesPerSecond = std::max(1, settings.m_framesPerSecond);
     }
     if (settingsKeys.contains("exposureTimeMs")) {
-        m_exposureTimeMs = std::max(1, settings.m_exposureTimeMs);
+        m_exposureTimeMs = std::max(1.0, settings.m_exposureTimeMs);
     }
     if (settingsKeys.contains("isoSensitivity")) {
         m_isoSensitivity = std::max(-1, settings.m_isoSensitivity);

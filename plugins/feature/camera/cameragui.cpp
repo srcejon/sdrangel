@@ -242,6 +242,9 @@ bool CameraGUI::handleMessage(const Message& message)
         const CameraPostProcessor::MsgReportFrame& report = (CameraPostProcessor::MsgReportFrame&) message;
         m_lastImage = report.getImage();
         updateImageWidget();
+        if (m_histogramDialog) {
+            m_histogramDialog->updateImage(m_lastImage);
+        }
         return true;
     }
     else if (CameraPostProcessor::MsgReportSaveVideoState::match(message))
@@ -320,6 +323,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_doApplySettings(true),
     m_lastFeatureState(0),
     m_settingsDialog(nullptr),
+    m_histogramDialog(nullptr),
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
     m_qtZoomSupported(false),
@@ -405,6 +409,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 CameraGUI::~CameraGUI()
 {
     cleanupQtCapture();
+    delete m_histogramDialog;
     delete ui;
 }
 
@@ -463,10 +468,15 @@ void CameraGUI::displaySettings()
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
     settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
     settingsUI()->videoPostProcessCombo->setCurrentIndex(static_cast<int>(m_settings.m_videoPostProcess));
+    settingsUI()->postProcessWhiteBalanceModeCombo->setCurrentIndex(m_settings.m_postProcessWhiteBalanceMode);
+    settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(m_settings.m_postProcessWhiteBalanceRedGain);
+    settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
+    settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(m_settings.m_postProcessWhiteBalanceBlueGain);
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
     settingsUI()->brightnessValue->setText(QString::number(m_settings.m_brightness, 'f', 0));
     settingsUI()->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
     settingsUI()->contrastValue->setText(QString::number(m_settings.m_contrast, 'f', 2));
+    updatePostProcessWhiteBalanceControls();
     ui->invertColorsButton->setChecked(m_settings.m_invertColors);
     ui->overlayDateTimeButton->setChecked(m_settings.m_overlayDateTime);
     settingsUI()->dateTimeFormatEdit->setText(m_settings.m_dateTimeFormat);
@@ -607,6 +617,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
     QObject::connect(settingsUI()->videoPostProcessCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_videoPostProcessCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
+    QObject::connect(settingsUI()->postProcessWhiteBalanceGreenGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged);
+    QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
     QObject::connect(settingsUI()->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
     QObject::connect(ui->invertColorsButton, &QToolButton::toggled, this, &CameraGUI::on_invertColorsButton_toggled);
@@ -1602,6 +1616,43 @@ void CameraGUI::on_videoPostProcessCombo_currentIndexChanged(int index)
     applySettings();
 }
 
+void CameraGUI::updatePostProcessWhiteBalanceControls()
+{
+    const bool manual = m_settings.m_postProcessWhiteBalanceMode == 2;
+    settingsUI()->postProcessWhiteBalanceRedGainSpin->setEnabled(manual);
+    settingsUI()->postProcessWhiteBalanceGreenGainSpin->setEnabled(manual);
+    settingsUI()->postProcessWhiteBalanceBlueGainSpin->setEnabled(manual);
+}
+
+void CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_postProcessWhiteBalanceMode = index;
+    updatePostProcessWhiteBalanceControls();
+    m_settingsKeys.append("postProcessWhiteBalanceMode");
+    applySettings();
+}
+
+void CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value)
+{
+    m_settings.m_postProcessWhiteBalanceRedGain = value;
+    m_settingsKeys.append("postProcessWhiteBalanceRedGain");
+    applySettings();
+}
+
+void CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged(double value)
+{
+    m_settings.m_postProcessWhiteBalanceGreenGain = value;
+    m_settingsKeys.append("postProcessWhiteBalanceGreenGain");
+    applySettings();
+}
+
+void CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value)
+{
+    m_settings.m_postProcessWhiteBalanceBlueGain = value;
+    m_settingsKeys.append("postProcessWhiteBalanceBlueGain");
+    applySettings();
+}
+
 void CameraGUI::on_brightnessSlider_valueChanged(int value)
 {
     m_settings.m_brightness = static_cast<double>(value);
@@ -1729,8 +1780,19 @@ void CameraGUI::on_histogramButton_clicked()
 {
     if (!m_lastImage.isNull())
     {
-        CameraHistogramDialog dialog(m_lastImage, this);
-        dialog.exec();
+        if (!m_histogramDialog)
+        {
+            m_histogramDialog = new CameraHistogramDialog(m_lastImage, this);
+            connect(m_histogramDialog, &QObject::destroyed, this, [this]() { m_histogramDialog = nullptr; });
+        }
+        else
+        {
+            m_histogramDialog->updateImage(m_lastImage);
+        }
+
+        m_histogramDialog->show();
+        m_histogramDialog->raise();
+        m_histogramDialog->activateWindow();
     }
 }
 

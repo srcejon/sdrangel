@@ -21,6 +21,17 @@
 #include <QDialog>
 #include <QImage>
 
+QT_BEGIN_NAMESPACE
+class QVBoxLayout;
+class QPushButton;
+QT_END_NAMESPACE
+
+namespace QtCharts {
+class QChart;
+class QChartView;
+class QValueAxis;
+}
+
 /**
  * @brief Dialog that displays per-channel histogram of a camera frame.
  *
@@ -31,6 +42,13 @@ class CameraHistogramDialog : public QDialog
     Q_OBJECT
 public:
     explicit CameraHistogramDialog(const QImage& image, QWidget* parent = nullptr);
+    void updateImage(const QImage& image);
+
+private:
+    QtCharts::QChart* m_chart;
+    QtCharts::QChartView* m_chartView;
+    QtCharts::QValueAxis* m_axisX;
+    QtCharts::QValueAxis* m_axisY;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAHISTOGRAMDIALOG_H_

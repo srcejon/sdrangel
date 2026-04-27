@@ -31,12 +31,52 @@ using namespace QtCharts;
 #endif
 
 CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* parent)
-    : QDialog(parent)
+    : QDialog(parent),
+      m_chart(new QChart()),
+      m_chartView(new QChartView(m_chart, this)),
+      m_axisX(new QValueAxis()),
+      m_axisY(new QValueAxis())
 {
     setWindowTitle(tr("Histogram"));
     resize(600, 400);
+    setModal(false);
 
-    // Convert QImage to BGR cv::Mat
+    m_chart->setTheme(QChart::ChartThemeDark);
+    m_chart->setTitle(tr("RGB histogram"));
+    m_chart->legend()->setVisible(true);
+
+    m_axisX->setRange(0, 255);
+    m_axisX->setTitleText(tr("Pixel value"));
+    m_axisX->setLabelFormat("%d");
+
+    m_axisY->setRange(0, 1.0);
+    m_axisY->setTitleText(tr("Count"));
+
+    m_chart->addAxis(m_axisX, Qt::AlignBottom);
+    m_chart->addAxis(m_axisY, Qt::AlignLeft);
+
+    m_chartView->setRenderHint(QPainter::Antialiasing);
+
+    auto* closeButton = new QPushButton(tr("Close"), this);
+    connect(closeButton, &QPushButton::clicked, this, &QDialog::close);
+
+    auto* layout = new QVBoxLayout(this);
+    layout->addWidget(m_chartView);
+    layout->addWidget(closeButton);
+    setLayout(layout);
+
+    updateImage(image);
+}
+
+void CameraHistogramDialog::updateImage(const QImage& image)
+{
+    m_chart->removeAllSeries();
+
+    if (image.isNull()) {
+        m_axisY->setRange(0, 1.0);
+        return;
+    }
+
     const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
     cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
                 const_cast<uchar*>(rgb.bits()),
@@ -44,7 +84,6 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 
-    // Split into B, G, R channels
     std::vector<cv::Mat> channels;
     cv::split(bgrMat, channels);
 
@@ -52,12 +91,6 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
     const float range[] = {0.0f, 256.0f};
     const float* histRange = range;
 
-    auto* chart = new QChart();
-    chart->setTheme(QChart::ChartThemeDark);
-    chart->setTitle(tr("RGB histogram"));
-    chart->legend()->setVisible(true);
-
-    // Channel order from cv::split on BGR: 0=B, 1=G, 2=R
     const struct { int idx; const char* name; QColor color; } channelDefs[] = {
         {2, "Red",   Qt::red},
         {1, "Green", Qt::green},
@@ -85,35 +118,10 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
             }
         }
 
-        chart->addSeries(series);
+        m_chart->addSeries(series);
+        series->attachAxis(m_axisX);
+        series->attachAxis(m_axisY);
     }
 
-    auto* axisX = new QValueAxis();
-    axisX->setRange(0, 255);
-    axisX->setTitleText(tr("Pixel value"));
-    axisX->setLabelFormat("%d");
-
-    auto* axisY = new QValueAxis();
-    axisY->setRange(0, maxCount > 0 ? maxCount : 1.0);
-    axisY->setTitleText(tr("Count"));
-
-    chart->addAxis(axisX, Qt::AlignBottom);
-    chart->addAxis(axisY, Qt::AlignLeft);
-
-    for (auto* s : chart->series())
-    {
-        s->attachAxis(axisX);
-        s->attachAxis(axisY);
-    }
-
-    auto* chartView = new QChartView(chart, this);
-    chartView->setRenderHint(QPainter::Antialiasing);
-
-    auto* closeButton = new QPushButton(tr("Close"), this);
-    connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
-
-    auto* layout = new QVBoxLayout(this);
-    layout->addWidget(chartView);
-    layout->addWidget(closeButton);
-    setLayout(layout);
+    m_axisY->setRange(0, maxCount > 0 ? maxCount : 1.0);
 }

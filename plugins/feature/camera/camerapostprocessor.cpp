@@ -48,7 +48,9 @@ MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_captureActive(false),
-    m_imageSaved(false)
+    m_imageSaved(false),
+    m_autoWhiteBalanceGains(1.0, 1.0, 1.0),
+    m_autoWhiteBalanceInitialized(false)
 {
 }
 
@@ -114,6 +116,8 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         {
             m_imageSaved = false;
             m_previousRawFrame = QImage();
+            m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
+            m_autoWhiteBalanceInitialized = false;
         }
         else if (m_videoWriter.isOpened())
         {
@@ -131,6 +135,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     qDebug() << "CameraPostProcessor::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
     static const QStringList kPostProcessingKeys = {
+        "postProcessWhiteBalanceMode",
+        "postProcessWhiteBalanceRedGain",
+        "postProcessWhiteBalanceGreenGain",
+        "postProcessWhiteBalanceBlueGain",
         "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "overlayText", "overlayTextString", "overlayTextColor",
@@ -157,6 +165,18 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     {
         m_lastRawFrame = QImage();
         m_previousRawFrame = QImage();
+        m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
+        m_autoWhiteBalanceInitialized = false;
+    }
+
+    if (force
+        || settingsKeys.contains("postProcessWhiteBalanceMode")
+        || settingsKeys.contains("postProcessWhiteBalanceRedGain")
+        || settingsKeys.contains("postProcessWhiteBalanceGreenGain")
+        || settingsKeys.contains("postProcessWhiteBalanceBlueGain"))
+    {
+        m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
+        m_autoWhiteBalanceInitialized = false;
     }
 
     if ((force && !m_settings.m_diffMask) || (settingsKeys.contains("diffMask") && !m_settings.m_diffMask)) {
@@ -273,11 +293,13 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
     static constexpr int kDiffThreshold = 30;
 
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
+    const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     QTextDocument overlayTextDocument;
     overlayTextDocument.setHtml(m_settings.m_overlayTextString);
     const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
-    const bool needsAny = needsBrightContrast
+    const bool needsAny = needsWhiteBalance
+        || needsBrightContrast
         || m_settings.m_invertColors
         || m_settings.m_overlayDateTime
         || needsTextOverlay
@@ -296,6 +318,50 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
                 static_cast<size_t>(rgb.bytesPerLine()));
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+
+    if (needsWhiteBalance)
+    {
+        cv::Vec3d gains(
+            m_settings.m_postProcessWhiteBalanceBlueGain,
+            m_settings.m_postProcessWhiteBalanceGreenGain,
+            m_settings.m_postProcessWhiteBalanceRedGain);
+
+        if (m_settings.m_postProcessWhiteBalanceMode == 1)
+        {
+            const cv::Scalar means = cv::mean(bgrMat);
+            const double blueMean = std::max(1.0, means[0]);
+            const double greenMean = std::max(1.0, means[1]);
+            const double redMean = std::max(1.0, means[2]);
+            const double targetMean = (blueMean + greenMean + redMean) / 3.0;
+
+            cv::Vec3d targetGains(
+                qBound(0.25, targetMean / blueMean, 4.0),
+                qBound(0.25, targetMean / greenMean, 4.0),
+                qBound(0.25, targetMean / redMean, 4.0));
+
+            if (!m_autoWhiteBalanceInitialized)
+            {
+                m_autoWhiteBalanceGains = targetGains;
+                m_autoWhiteBalanceInitialized = true;
+            }
+            else
+            {
+                static constexpr double kAutoWhiteBalanceSmoothing = 0.2;
+                m_autoWhiteBalanceGains =
+                    (1.0 - kAutoWhiteBalanceSmoothing) * m_autoWhiteBalanceGains
+                    + kAutoWhiteBalanceSmoothing * targetGains;
+            }
+
+            gains = m_autoWhiteBalanceGains;
+        }
+
+        std::vector<cv::Mat> channels;
+        cv::split(bgrMat, channels);
+        channels[0].convertTo(channels[0], -1, gains[0], 0.0);
+        channels[1].convertTo(channels[1], -1, gains[1], 0.0);
+        channels[2].convertTo(channels[2], -1, gains[2], 0.0);
+        cv::merge(channels, bgrMat);
+    }
 
     if (needsBrightContrast)
     {

@@ -71,6 +71,10 @@ struct CameraSettings
     QByteArray m_geometryBytes;
 
     // Post-processing settings
+    int m_postProcessWhiteBalanceMode; ///< 0=Off, 1=Auto, 2=Manual
+    double m_postProcessWhiteBalanceRedGain;   ///< Manual red gain: 0.1..8.0
+    double m_postProcessWhiteBalanceGreenGain; ///< Manual green gain: 0.1..8.0
+    double m_postProcessWhiteBalanceBlueGain;  ///< Manual blue gain: 0.1..8.0
     double m_brightness;      ///< Brightness adjustment: -100.0..100.0
     double m_contrast;        ///< Contrast multiplier: 0.1..3.0
     bool m_invertColors;      ///< Invert all colour channels

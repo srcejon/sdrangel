@@ -190,6 +190,8 @@ private:
     QHash<QString, QDateTime> m_pendingDisappearDeadlines;
     cv::VideoWriter m_videoWriter;
     QImage m_spectrumViewImage;
+    cv::Vec3d m_autoWhiteBalanceGains;
+    bool m_autoWhiteBalanceInitialized;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);

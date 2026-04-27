@@ -66,6 +66,7 @@ class PluginAPI;
 class FeatureUISet;
 class Camera;
 class CameraSettingsDialog;
+class CameraHistogramDialog;
 class Message;
 
 namespace Ui {
@@ -111,6 +112,7 @@ private:
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraSettingsDialog *m_settingsDialog;
+    CameraHistogramDialog *m_histogramDialog;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
     bool m_qtZoomSupported;             // true when the active Qt camera reports zoom range > 1.0
@@ -155,6 +157,7 @@ private:
     void applyQtCameraSettings(const QList<QString>& settingsKeys, bool force);
     void applyImagePath();
     void applyVideoPath();
+    void updatePostProcessWhiteBalanceControls();
 
 private slots:
     void handleInputMessages();
@@ -182,6 +185,10 @@ private slots:
     void on_videoPathEdit_editingFinished();
     void on_videoPathButton_clicked();
     void on_videoPostProcessCombo_currentIndexChanged(int index);
+    void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
+    void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);
+    void on_postProcessWhiteBalanceGreenGainSpin_valueChanged(double value);
+    void on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value);
     void on_brightnessSlider_valueChanged(int value);
     void on_contrastSlider_valueChanged(int value);
     void on_invertColorsButton_toggled(bool checked);

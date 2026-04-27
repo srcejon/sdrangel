@@ -54,6 +54,34 @@
 
 namespace {
 
+QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height)
+{
+    int minValue = std::numeric_limits<int>::max();
+    int maxValue = std::numeric_limits<int>::min();
+
+    for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+            minValue = std::min(minValue, raw[x][y]);
+            maxValue = std::max(maxValue, raw[x][y]);
+        }
+    }
+
+    const int range = maxValue - minValue;
+    const int uniformGray = (range == 0) ? (minValue > 0 ? 128 : 0) : 0;
+
+    QImage image(width, height, QImage::Format_Grayscale8);
+    for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+            const int value = (range > 0)
+                ? qBound(0, static_cast<int>(((raw[x][y] - minValue) * 255.0) / range), 255)
+                : uniformGray;
+            image.scanLine(y)[x] = static_cast<uchar>(value);
+        }
+    }
+
+    return image;
+}
+
 QString normalizeAudioMatchName(QString text)
 {
     text = text.toLower();
@@ -1070,11 +1098,9 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             }
         }
         const int range = maxVal - minVal;
-        // Uniform image: map to mid-gray to avoid division by zero
         const double scale = (range > 0) ? (255.0 / range) : 0.0;
         const int uniformGray = (range == 0) ? (minVal > 0 ? 128 : 0) : 0;
 
-        // Build scaled raw array (column-major), with black-level subtracted
         QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
             const QJsonArray col = value[x].toArray();
@@ -1107,7 +1133,6 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             return createPlaceholderFrame();
         }
 
-        // First pass: find minimum and maximum pixel values across all planes for black-level correction and linear scaling
         int minVal = std::numeric_limits<int>::max();
         int maxVal = std::numeric_limits<int>::min();
         for (const QJsonArray* plane : {&planeR, &planeG, &planeB}) {
@@ -1120,7 +1145,6 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             }
         }
         const int range3 = maxVal - minVal;
-        // Uniform image: map to mid-gray to avoid division by zero
         const double scale = (range3 > 0) ? (255.0 / range3) : 0.0;
         const int uniformGray3 = (range3 == 0) ? (minVal > 0 ? 128 : 0) : 0;
 
@@ -1191,13 +1215,7 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
     }
 
     // Monochrome (sensorType 0 or 1 returning rank 2, or unsupported Bayer types 3-5)
-    QImage image(width, height, QImage::Format_Grayscale8);
-    for (int x = 0; x < width; ++x) {
-        for (int y = 0; y < height; ++y) {
-            image.scanLine(y)[x] = static_cast<uchar>(raw[x][y]);
-        }
-    }
-    return image;
+    return renderGrayscaleRaw(raw, width, height);
 }
 
 // Alpaca ImageBytes binary format (ASCOM Alpaca spec):
@@ -1373,7 +1391,6 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
             return readPixelAsDouble(static_cast<qsizetype>(plane * width * height + x * height + y) * elementSize);
         };
 
-        // First pass: min/max across all planes for black-level correction
         double minVal = std::numeric_limits<double>::max();
         double maxVal = std::numeric_limits<double>::lowest();
         for (int p = 0; p < 3; ++p) {

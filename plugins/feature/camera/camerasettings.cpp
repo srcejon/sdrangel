@@ -130,6 +130,10 @@ void CameraSettings::resetToDefaults()
     m_videoFileName = "camera.mp4";
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
+    m_postProcessWhiteBalanceMode = 0;
+    m_postProcessWhiteBalanceRedGain = 1.0;
+    m_postProcessWhiteBalanceGreenGain = 1.0;
+    m_postProcessWhiteBalanceBlueGain = 1.0;
     m_brightness = 0.0;
     m_contrast = 1.0;
     m_invertColors = false;
@@ -204,6 +208,10 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(23, m_alpacaGain);
     s.writeS32(24, m_alpacaReadoutMode);
     s.writeS32(25, m_alpacaOffset);
+    s.writeS32(69, m_postProcessWhiteBalanceMode);
+    s.writeDouble(70, m_postProcessWhiteBalanceRedGain);
+    s.writeDouble(71, m_postProcessWhiteBalanceGreenGain);
+    s.writeDouble(72, m_postProcessWhiteBalanceBlueGain);
     s.writeDouble(26, m_brightness);
     s.writeDouble(27, m_contrast);
     s.writeBool(28, m_invertColors);
@@ -307,6 +315,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_alpacaBinX = std::max(1, m_alpacaBinX);
         m_alpacaBinY = std::max(1, m_alpacaBinY);
         m_alpacaReadoutMode = std::max(0, m_alpacaReadoutMode);
+        d.readS32(69, &m_postProcessWhiteBalanceMode, 0);
+        d.readDouble(70, &m_postProcessWhiteBalanceRedGain, 1.0);
+        d.readDouble(71, &m_postProcessWhiteBalanceGreenGain, 1.0);
+        d.readDouble(72, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
+        m_postProcessWhiteBalanceRedGain = qBound(0.1, m_postProcessWhiteBalanceRedGain, 8.0);
+        m_postProcessWhiteBalanceGreenGain = qBound(0.1, m_postProcessWhiteBalanceGreenGain, 8.0);
+        m_postProcessWhiteBalanceBlueGain = qBound(0.1, m_postProcessWhiteBalanceBlueGain, 8.0);
 
         d.readDouble(26, &m_brightness, 0.0);
         d.readDouble(27, &m_contrast, 1.0);
@@ -431,6 +447,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_alpacaBinX = std::max(1, m_alpacaBinX);
         m_alpacaBinY = std::max(1, m_alpacaBinY);
         m_alpacaReadoutMode = std::max(0, m_alpacaReadoutMode);
+        d.readS32(69, &m_postProcessWhiteBalanceMode, 0);
+        d.readDouble(70, &m_postProcessWhiteBalanceRedGain, 1.0);
+        d.readDouble(71, &m_postProcessWhiteBalanceGreenGain, 1.0);
+        d.readDouble(72, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
+        m_postProcessWhiteBalanceRedGain = qBound(0.1, m_postProcessWhiteBalanceRedGain, 8.0);
+        m_postProcessWhiteBalanceGreenGain = qBound(0.1, m_postProcessWhiteBalanceGreenGain, 8.0);
+        m_postProcessWhiteBalanceBlueGain = qBound(0.1, m_postProcessWhiteBalanceBlueGain, 8.0);
 
         d.readDouble(26, &m_brightness, 0.0);
         d.readDouble(27, &m_contrast, 1.0);
@@ -598,6 +622,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("brightness")) {
         m_brightness = qBound(-100.0, settings.m_brightness, 100.0);
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceMode")) {
+        m_postProcessWhiteBalanceMode = qBound(0, settings.m_postProcessWhiteBalanceMode, 2);
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceRedGain")) {
+        m_postProcessWhiteBalanceRedGain = qBound(0.1, settings.m_postProcessWhiteBalanceRedGain, 8.0);
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceGreenGain")) {
+        m_postProcessWhiteBalanceGreenGain = qBound(0.1, settings.m_postProcessWhiteBalanceGreenGain, 8.0);
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceBlueGain")) {
+        m_postProcessWhiteBalanceBlueGain = qBound(0.1, settings.m_postProcessWhiteBalanceBlueGain, 8.0);
     }
     if (settingsKeys.contains("contrast")) {
         m_contrast = qBound(0.1, settings.m_contrast, 3.0);
@@ -784,6 +820,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceMode") || force) {
+        ostr << " m_postProcessWhiteBalanceMode: " << m_postProcessWhiteBalanceMode;
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceRedGain") || force) {
+        ostr << " m_postProcessWhiteBalanceRedGain: " << m_postProcessWhiteBalanceRedGain;
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceGreenGain") || force) {
+        ostr << " m_postProcessWhiteBalanceGreenGain: " << m_postProcessWhiteBalanceGreenGain;
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceBlueGain") || force) {
+        ostr << " m_postProcessWhiteBalanceBlueGain: " << m_postProcessWhiteBalanceBlueGain;
     }
     if (settingsKeys.contains("contrast") || force) {
         ostr << " m_contrast: " << m_contrast;

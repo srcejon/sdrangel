@@ -122,6 +122,7 @@ private:
     bool m_qtManualExposureSupported;   // true when the active Qt camera supports manual exposure time
     bool m_qtIsoSensitivitySupported;   // true when the active Qt camera supports manual ISO sensitivity
     bool m_qtWhiteBalanceModeSupported; // true when the active Qt camera supports white balance control
+    bool m_qtExposureCompensationSupported; // true when the active Qt camera supports exposure compensation
     QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
 
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display

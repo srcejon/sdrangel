@@ -334,6 +334,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_qtManualExposureSupported(true),
     m_qtIsoSensitivitySupported(true),
     m_qtWhiteBalanceModeSupported(true),
+    m_qtExposureCompensationSupported(true),
     m_imageScene(nullptr),
     m_imagePixmapItem(nullptr),
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -1046,6 +1047,7 @@ void CameraGUI::setupQtCapture()
     m_qtManualExposureSupported = cameraFeatures.testFlag(QCamera::Feature::ManualExposureTime);
     m_qtIsoSensitivitySupported = cameraFeatures.testFlag(QCamera::Feature::IsoSensitivity);
     m_qtWhiteBalanceModeSupported = cameraFeatures.testFlag(QCamera::Feature::ColorTemperature);
+    m_qtExposureCompensationSupported = cameraFeatures.testFlag(QCamera::Feature::ExposureCompensation);
 
     const float minZoom = m_qtCamera->minimumZoomFactor();
     const float maxZoom = m_qtCamera->maximumZoomFactor();
@@ -1062,6 +1064,8 @@ void CameraGUI::setupQtCapture()
     settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
     settingsUI()->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
     settingsUI()->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
+    settingsUI()->exposureCompLabel->setEnabled(m_qtExposureCompensationSupported);
+    settingsUI()->exposureCompSpin->setEnabled(m_qtExposureCompensationSupported);
     blockApplySettings(false);
 
     // Clamp and apply zoom
@@ -1607,7 +1611,7 @@ void CameraGUI::on_fpsLabel_currentIndexChanged(int index)
         return;
     }
 
-    m_settings.m_captureMode = settingsUI()->fpsLabel->itemData(index).toInt();
+    m_settings.m_captureMode = static_cast<CameraSettings::CaptureMode>(settingsUI()->fpsLabel->itemData(index).toInt());
     updateCaptureModeControls();
     m_settingsKeys.append("captureMode");
     applySettings();
@@ -1644,7 +1648,7 @@ void CameraGUI::on_intervalUnitsCombo_currentIndexChanged(int index)
         return;
     }
 
-    m_settings.m_captureIntervalUnits = settingsUI()->intervalUnitsCombo->itemData(index).toInt();
+    m_settings.m_captureIntervalUnits = static_cast<CameraSettings::CaptureIntervalUnits>(settingsUI()->intervalUnitsCombo->itemData(index).toInt());
     m_settingsKeys.append("captureIntervalUnits");
     applySettings();
 }
@@ -2090,6 +2094,11 @@ void CameraGUI::updateEnabledControls()
         {
             settingsUI()->isoLabel->setEnabled(false);
             settingsUI()->isoSpin->setEnabled(false);
+        }
+        if (!m_qtExposureCompensationSupported)
+        {
+            settingsUI()->exposureCompLabel->setEnabled(false);
+            settingsUI()->exposureCompSpin->setEnabled(false);
         }
         if (!m_qtWhiteBalanceModeSupported)
         {

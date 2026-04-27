@@ -186,9 +186,14 @@ bool CameraGUI::handleMessage(const Message& message)
             m_settingsDialog->clearAlpacaStatus();
         }
 
-        if (cfg.getStartStop()) {
-            setupQtCapture();
-        } else {
+        if (cfg.getStartStop())
+        {
+            if (m_settings.isQtCamera()) {
+                setupQtCapture();
+            }
+        }
+        else
+        {
             cleanupQtCapture();
         }
 
@@ -540,6 +545,16 @@ void CameraGUI::updateImageWidget()
     if (ui->imageView->transform().isIdentity()) {
         ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
     }
+
+    // Update max overlay positions according to size of image
+    const int maxX = m_lastImage.width();
+    const int maxY = m_lastImage.height();
+    settingsUI()->overlayTextPosXSlider->setMaximum(maxX);
+    settingsUI()->overlayTextPosYSlider->setMaximum(maxY);
+    settingsUI()->dateTimePosXSlider->setMaximum(maxX);
+    settingsUI()->dateTimePosYSlider->setMaximum(maxY);
+    settingsUI()->spectrumOffsetXSlider->setMaximum(maxX);
+    settingsUI()->spectrumOffsetYSlider->setMaximum(maxY);
 }
 
 void CameraGUI::makeUIConnections()
@@ -879,8 +894,6 @@ void CameraGUI::setupQtCapture()
     QCameraFormat chosenFormat;
     for (const QCameraFormat& fmt : selectedDevice.videoFormats())
     {
-        qDebug() << "Camera format:" << fmt.resolution() << "FPS:" << fmt.minFrameRate() << "-" << fmt.maxFrameRate() << "target" << m_settings.m_framesPerSecond;
-
         if ((fmt.resolution().width()  == m_settings.m_resolutionWidth)
          && (fmt.resolution().height() == m_settings.m_resolutionHeight)
             && (fmt.maxFrameRate()     >= m_settings.m_framesPerSecond)
@@ -1211,6 +1224,9 @@ void CameraGUI::updateAlpacaVisibility()
 
     settingsUI()->resolutionLabel->setVisible(!alpaca);
     settingsUI()->resolutionCombo->setVisible(!alpaca);
+    if (alpaca) {
+        settingsUI()->fpsStack->setCurrentWidget(settingsUI()->fpsSpinPage);
+    }
     settingsUI()->isoLabel->setVisible(!alpaca);
     settingsUI()->isoSpin->setVisible(!alpaca);
     settingsUI()->alpacaBinXLabel->setVisible(alpaca);
@@ -1362,6 +1378,7 @@ void CameraGUI::on_cameraCombo_currentTextChanged(const QString& text)
 {
     m_settings.m_cameraId = text;
     m_settingsKeys.append("cameraId");
+    updateEnabledControls();
     applySettings();
 }
 
@@ -1697,7 +1714,6 @@ void CameraGUI::updateEnabledControls()
     settingsUI()->focusDistSpin->setEnabled(manualFocus);
 #endif
 
-    // No status for Qt cameras, so hide it
     settingsUI()->alpacaStatusGroup->setVisible(m_settings.isAlpacaCamera());
 
     if (m_settings.isAlpacaCamera())
@@ -2014,7 +2030,7 @@ void CameraGUI::on_cameraSettingsButton_clicked()
 
 void CameraGUI::applyImagePath()
 {
-    ui->saveVideoCheck->setToolTip(QString("Save images to %1").arg(m_settings.m_imageFileName));
+    ui->saveImageCheck->setToolTip(QString("Save images to %1").arg(m_settings.m_imageFileName));
 }
 
 void CameraGUI::applyVideoPath()

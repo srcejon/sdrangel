@@ -47,65 +47,6 @@
            </property>
           </widget>
          </item>
-         <item row="1" column="1">
-          <widget class="QStackedWidget" name="fpsStack">
-           <property name="currentIndex">
-            <number>0</number>
-           </property>
-           <widget class="QWidget" name="fpsSpinPage">
-            <layout class="QVBoxLayout" name="verticalLayoutFpsSpin">
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
-             <item>
-              <widget class="QSpinBox" name="fpsSpin">
-               <property name="toolTip">
-                <string>Camera frame rate in frames per second</string>
-               </property>
-               <property name="minimum">
-                <number>1</number>
-               </property>
-               <property name="maximum">
-                <number>240</number>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-           <widget class="QWidget" name="fpsComboPage">
-            <layout class="QVBoxLayout" name="verticalLayoutFpsCombo">
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
-             <item>
-              <widget class="QComboBox" name="fpsCombo">
-               <property name="toolTip">
-                <string>Camera frame rate in frames per second</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </widget>
-         </item>
          <item row="2" column="0">
           <widget class="QLabel" name="exposureLabel">
            <property name="text">
@@ -366,6 +307,71 @@
            <property name="singleStep">
             <double>0.100000000000000</double>
            </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QStackedWidget" name="fpsStack">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="currentIndex">
+            <number>1</number>
+           </property>
+           <widget class="QWidget" name="fpsComboPage">
+            <layout class="QHBoxLayout" name="horizontalLayout_5">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QComboBox" name="fpsCombo">
+               <property name="toolTip">
+                <string>Camera frame rate in frames per second</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="fpsSpinPage">
+            <layout class="QHBoxLayout" name="horizontalLayout_6">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QSpinBox" name="fpsSpin">
+               <property name="toolTip">
+                <string>Camera frame rate in frames per second</string>
+               </property>
+               <property name="minimum">
+                <number>1</number>
+               </property>
+               <property name="maximum">
+                <number>240</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
           </widget>
          </item>
         </layout>
@@ -805,7 +811,7 @@
                <string>Date/time text X position (px from left)</string>
               </property>
               <property name="minimum">
-               <number>0</number>
+               <number>-100</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -854,7 +860,7 @@
                <string>Date/time text Y position (px from top; 0 = auto bottom)</string>
               </property>
               <property name="minimum">
-               <number>0</number>
+               <number>-100</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -962,7 +968,7 @@
                <string>Text overlay X position (px from left)</string>
               </property>
               <property name="minimum">
-               <number>0</number>
+               <number>-100</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -1011,7 +1017,7 @@
                <string>Text overlay Y position (px from top; 0 = auto bottom)</string>
               </property>
               <property name="minimum">
-               <number>0</number>
+               <number>-100</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -1157,7 +1163,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                <string>Spectrum overlay X offset (px)</string>
               </property>
               <property name="minimum">
-               <number>-4096</number>
+               <number>-100</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -1206,7 +1212,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                <string>Spectrum overlay Y offset (px)</string>
               </property>
               <property name="minimum">
-               <number>-4096</number>
+               <number>-100</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -1356,7 +1362,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </item>
             <item>
              <property name="text">
-              <string>Post-process images</string>
+              <string>Post-processed images</string>
              </property>
             </item>
            </widget>

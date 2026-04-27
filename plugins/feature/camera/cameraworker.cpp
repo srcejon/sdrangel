@@ -991,12 +991,6 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
         runYoloDetections(bgrMat);
     }
 
-    if (m_settings.m_overlayDateTime || needsTextOverlay)
-    {
-        // Text overlays are rendered after the cv::Mat pipeline using QPainter,
-        // which gives access to the full system font library.
-    }
-
     if (needsSpectrumOverlay)
     {
         // Scale the spectrum image if a non-unity scale is requested
@@ -1081,9 +1075,7 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
         painter.setFont(font);
         painter.setPen(m_settings.m_dateTimeColor);
         const int x = m_settings.m_dateTimePosX;
-        const int y = (m_settings.m_dateTimePosY > 0)
-                      ? m_settings.m_dateTimePosY
-                      : result.height() - fm.descent() - 2;
+        const int y = m_settings.m_dateTimePosY + fm.ascent();
         painter.drawText(x, y, text);
     }
 
@@ -1096,10 +1088,8 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
         font.setPointSizeF(m_settings.m_overlayTextFontScale);
         overlayTextDocument.setDefaultFont(font);
         overlayTextDocument.setDefaultStyleSheet(QStringLiteral("* { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
-        QString html = m_settings.m_overlayTextString;
         // Stick a div around everything, so the default colour is applied to text outside of any tags
-        html = html.prepend("<div>");
-        html = html.append("</div>");
+        QString html = QString("<div>%1</div>").arg(m_settings.m_overlayTextString);
         overlayTextDocument.setHtml(html);
 
         const int x = std::max(0, m_settings.m_overlayTextPosX);
@@ -1107,9 +1097,7 @@ QImage CameraWorker::applyPostProcessing(const QImage& input)
         overlayTextDocument.setTextWidth(maxTextWidth);
 
         const QSizeF documentSize = overlayTextDocument.size();
-        const int y = (m_settings.m_overlayTextPosY > 0)
-            ? m_settings.m_overlayTextPosY
-            : std::max(0, static_cast<int>(std::floor(result.height() - documentSize.height() - 2.0)));
+        const int y = m_settings.m_overlayTextPosY;
 
         QPainter painter(&result);
         painter.setRenderHint(QPainter::TextAntialiasing);

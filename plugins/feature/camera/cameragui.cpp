@@ -1893,6 +1893,8 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->medianBlurSpin->setValue(0);
     settingsUI()->sharpenSlider->setValue(0);
     settingsUI()->sobelEdgeSlider->setValue(0);
+    settingsUI()->flipXButton->setChecked(false);
+    settingsUI()->flipYButton->setChecked(false);
 }
 
 /*static*/ void CameraGUI::updateColorButton(QToolButton* btn, const QColor& color)

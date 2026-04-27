@@ -4,6 +4,7 @@
       <file>icons/difference.png</file>
       <file>icons/html.png</file>
       <file>icons/invert.png</file>
+      <file>icons/histogram.png</file>
       <file>icons/object_detect.png</file>
       <file>icons/motion_detect.png</file>
     </qresource>

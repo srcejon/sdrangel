@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>521</width>
-    <height>622</height>
+    <height>697</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>2</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -811,7 +811,7 @@
                <string>Date/time text X position (px from left)</string>
               </property>
               <property name="minimum">
-               <number>-100</number>
+               <number>0</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -860,7 +860,7 @@
                <string>Date/time text Y position (px from top; 0 = auto bottom)</string>
               </property>
               <property name="minimum">
-               <number>-100</number>
+               <number>0</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -968,7 +968,7 @@
                <string>Text overlay X position (px from left)</string>
               </property>
               <property name="minimum">
-               <number>-100</number>
+               <number>0</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -1017,7 +1017,7 @@
                <string>Text overlay Y position (px from top; 0 = auto bottom)</string>
               </property>
               <property name="minimum">
-               <number>-100</number>
+               <number>0</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -1163,7 +1163,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                <string>Spectrum overlay X offset (px)</string>
               </property>
               <property name="minimum">
-               <number>-100</number>
+               <number>0</number>
               </property>
               <property name="maximum">
                <number>4096</number>
@@ -1212,7 +1212,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                <string>Spectrum overlay Y offset (px)</string>
               </property>
               <property name="minimum">
-               <number>-100</number>
+               <number>0</number>
               </property>
               <property name="maximum">
                <number>4096</number>

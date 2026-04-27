@@ -29,6 +29,7 @@
 #include <QSignalBlocker>
 #include <QStandardItemModel>
 #include <QWheelEvent>
+#include <QMessageBox>
 
 #include "feature/featureuiset.h"
 #include "gui/crightclickenabler.h"
@@ -299,6 +300,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_pluginAPI(pluginAPI),
     m_featureUISet(featureUISet),
     m_doApplySettings(true),
+    m_lastFeatureState(0),
     m_settingsDialog(nullptr),
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
@@ -370,6 +372,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     settingsUI()->focusModeCombo->addItem(tr("Infinity"),   static_cast<int>(QCamera::FocusModeInfinity));
     settingsUI()->focusModeCombo->addItem(tr("Manual"),     static_cast<int>(QCamera::FocusModeManual));
 #endif
+
+    connect(&m_statusTimer, &QTimer::timeout, this, &CameraGUI::updateStatus);
+    m_statusTimer.start(250);
 
     displaySettings();
     applySettings(true);
@@ -907,7 +912,10 @@ void CameraGUI::setupQtCapture()
     if (!chosenFormat.isNull()) {
         m_qtCamera->setCameraFormat(chosenFormat);
     } else {
-        qWarning() << "No matching camera format";
+        qWarning() << "CameraGUI::setupQtCapture: No matching camera format"
+            << m_settings.m_resolutionWidth
+            << m_settings.m_resolutionHeight
+            << m_settings.m_framesPerSecond;
     }
 
     m_qtCamera->setExposureMode(QCamera::ExposureManual);
@@ -2036,4 +2044,41 @@ void CameraGUI::applyImagePath()
 void CameraGUI::applyVideoPath()
 {
     ui->saveVideoCheck->setToolTip(QString("Record video to %1").arg(m_settings.m_videoFileName));
+}
+
+void CameraGUI::updateStatus()
+{
+    int state = m_camera->getState();
+
+    if (m_lastFeatureState != state)
+    {
+        // We set checked state of start/stop button, in case it was changed via API
+        bool oldState;
+        switch (state)
+        {
+        case Feature::StNotStarted:
+            ui->startStop->setStyleSheet("QToolButton { background:rgb(79,79,79); }");
+            break;
+        case Feature::StIdle:
+            oldState = ui->startStop->blockSignals(true);
+            ui->startStop->setChecked(false);
+            ui->startStop->blockSignals(oldState);
+            ui->startStop->setStyleSheet("QToolButton { background-color : blue; }");
+            break;
+        case Feature::StRunning:
+            oldState = ui->startStop->blockSignals(true);
+            ui->startStop->setChecked(true);
+            ui->startStop->blockSignals(oldState);
+            ui->startStop->setStyleSheet("QToolButton { background-color : green; }");
+            break;
+        case Feature::StError:
+            ui->startStop->setStyleSheet("QToolButton { background-color : red; }");
+            QMessageBox::critical(this, m_settings.m_title, m_camera->getErrorMessage());
+            break;
+        default:
+            break;
+        }
+
+        m_lastFeatureState = state;
+    }
 }

@@ -35,6 +35,7 @@ if(NOT SERVER_MODE)
         camerahistogramdialog.cpp
         cameraobjectcontroldialog.cpp
         cameraobjectdevicesettingsgui.cpp
+        cameraicons.qrc
     )
     set(camera_HEADERS
         ${camera_HEADERS}

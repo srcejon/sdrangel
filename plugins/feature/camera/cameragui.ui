@@ -230,27 +230,39 @@
          <string>Show differences from previous image</string>
         </property>
         <property name="text">
-         <string>-</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/difference.png</normaloff>:/camera/icons/difference.png</iconset>
         </property>
        </widget>
       </item>
       <item>
        <widget class="ButtonSwitch" name="motionDetectButton">
         <property name="toolTip">
-         <string>Detect motion using background subtractor</string>
+         <string>Motion detection</string>
         </property>
         <property name="text">
-         <string>Motion</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/motion_detect.png</normaloff>:/camera/icons/motion_detect.png</iconset>
         </property>
        </widget>
       </item>
       <item>
        <widget class="ButtonSwitch" name="yoloButton">
         <property name="toolTip">
-         <string>Run YOLO object detection</string>
+         <string>Object detection</string>
         </property>
         <property name="text">
-         <string>YOLO</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/object_detect.png</normaloff>:/camera/icons/object_detect.png</iconset>
         </property>
        </widget>
       </item>
@@ -260,7 +272,11 @@
          <string>Invert colours</string>
         </property>
         <property name="text">
-         <string>~</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/invert.png</normaloff>:/camera/icons/invert.png</iconset>
         </property>
        </widget>
       </item>
@@ -273,8 +289,8 @@
          <string/>
         </property>
         <property name="icon">
-         <iconset resource="../../../sdrgui/resources/res.qrc">
-          <normaloff>:/info.png</normaloff>:/info.png</iconset>
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/clock.png</normaloff>:/camera/icons/clock.png</iconset>
         </property>
        </widget>
       </item>
@@ -284,7 +300,11 @@
          <string>Overlay HTML</string>
         </property>
         <property name="text">
-         <string>HTML</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/html.png</normaloff>:/camera/icons/html.png</iconset>
         </property>
        </widget>
       </item>
@@ -389,6 +409,7 @@
   </customwidget>
  </customwidgets>
  <resources>
+  <include location="cameraicons.qrc"/>
   <include location="../../../sdrgui/resources/res.qrc"/>
  </resources>
  <connections/>

@@ -106,6 +106,9 @@ private:
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
+    QTimer m_statusTimer;
+    int m_lastFeatureState;
+
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraSettingsDialog *m_settingsDialog;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
@@ -227,6 +230,7 @@ private slots:
     void on_focusDistSpin_valueChanged(double value);
     void on_zoomSpin_valueChanged(double value);
     void on_cameraSettingsButton_clicked();
+    void updateStatus();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void onQtVideoFrame(const QVideoFrame& frame);

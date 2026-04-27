@@ -199,6 +199,12 @@ CameraWorker::CameraWorker() :
     m_alpacaClientTransactionId(1),
     m_alpacaSensorType(0),
     m_alpacaImageBytesSupported(true),
+    m_alpacaParamsInitialized(false),
+    m_lastAlpacaBinX(0),
+    m_lastAlpacaBinY(0),
+    m_lastAlpacaGain(-1),
+    m_lastAlpacaOffset(-1),
+    m_lastAlpacaReadoutMode(0),
     m_statusTimer(this),
     m_lastAlpacaCaptureTimeMs(-1),
     m_spectrumPipeSource(nullptr)
@@ -390,12 +396,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("isoSensitivity")
         || settingsKeys.contains("alpacaHost")
-        || settingsKeys.contains("alpacaPort")
-        || settingsKeys.contains("alpacaBinX")
-        || settingsKeys.contains("alpacaBinY")
-        || settingsKeys.contains("alpacaGain")
-        || settingsKeys.contains("alpacaOffset")
-        || settingsKeys.contains("alpacaReadoutMode");
+        || settingsKeys.contains("alpacaPort");
 
     if (force) {
         m_settings = settings;
@@ -462,6 +463,12 @@ void CameraWorker::startCapture()
     m_capturing = true;
     m_lastAlpacaCaptureTimeMs = -1;
     m_alpacaCaptureTimer.invalidate();
+    m_alpacaParamsInitialized = false;
+    m_lastAlpacaBinX = m_settings.m_alpacaBinX;
+    m_lastAlpacaBinY = m_settings.m_alpacaBinY;
+    m_lastAlpacaGain = m_settings.m_alpacaGain;
+    m_lastAlpacaOffset = m_settings.m_alpacaOffset;
+    m_lastAlpacaReadoutMode = m_settings.m_alpacaReadoutMode;
 
     if (m_settings.isAlpacaCamera())
     {
@@ -534,7 +541,8 @@ static void alpacaPutIntProperty(
     int value,
     quint32 clientId,
     quint32& transactionId,
-    std::function<void()> continuation)
+    std::function<void()> continuation,
+    std::function<void()> onSuccess = {})
 {
     QUrl url(baseUrl + QString("/api/v1/camera/%1/%2").arg(cameraId).arg(property));
     QNetworkRequest request(url);
@@ -547,9 +555,11 @@ static void alpacaPutIntProperty(
 
     QNetworkReply *reply = nam->put(request, body.toString(QUrl::FullyEncoded).toUtf8());
 
-    QObject::connect(reply, &QNetworkReply::finished, reply, [reply, property, continuation]() {
+    QObject::connect(reply, &QNetworkReply::finished, reply, [reply, property, continuation, onSuccess]() {
         if (reply->error() != QNetworkReply::NoError) {
             qDebug() << "CameraWorker: PUT" << property << "error:" << reply->errorString();
+        } else if (onSuccess) {
+            onSuccess();
         }
         reply->deleteLater();
         continuation();
@@ -561,49 +571,75 @@ void CameraWorker::alpacaSetCameraParams()
     // Chain: binX -> binY -> gain -> offset -> readoutMode -> startExposure
     const QString baseUrl = buildAlpacaBaseUrl();
     const int camId = m_settings.cameraIdInt();
+    const bool forceAllParams = !m_alpacaParamsInitialized;
+    const bool setBinX = forceAllParams || (m_lastAlpacaBinX != m_settings.m_alpacaBinX);
+    const bool setBinY = forceAllParams || (m_lastAlpacaBinY != m_settings.m_alpacaBinY);
+    const bool setGain = (m_settings.m_alpacaGain >= 0)
+        && (forceAllParams || (m_lastAlpacaGain != m_settings.m_alpacaGain));
+    const bool setOffset = (m_settings.m_alpacaOffset >= 0)
+        && (forceAllParams || (m_lastAlpacaOffset != m_settings.m_alpacaOffset));
+    const bool setReadoutMode = forceAllParams || (m_lastAlpacaReadoutMode != m_settings.m_alpacaReadoutMode);
 
     auto doStartExposure = [this]() {
         if (m_capturing) {
+            m_alpacaParamsInitialized = true;
             alpacaStartExposure();
         } else {
             m_alpacaFrameRequestPending = false;
         }
     };
 
-    auto doReadoutMode = [this, baseUrl, camId, doStartExposure]() {
+    auto doReadoutMode = [this, baseUrl, camId, doStartExposure, setReadoutMode]() {
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
-        alpacaPutIntProperty(m_networkManager, baseUrl, camId, "readoutmode", "ReadoutMode",
-            m_settings.m_alpacaReadoutMode, m_alpacaClientId, m_alpacaClientTransactionId, doStartExposure);
+        if (setReadoutMode) {
+            alpacaPutIntProperty(m_networkManager, baseUrl, camId, "readoutmode", "ReadoutMode",
+                m_settings.m_alpacaReadoutMode, m_alpacaClientId, m_alpacaClientTransactionId, doStartExposure,
+                [this]() { m_lastAlpacaReadoutMode = m_settings.m_alpacaReadoutMode; });
+        } else {
+            doStartExposure();
+        }
     };
 
-    auto doOffset = [this, baseUrl, camId, doReadoutMode]() {
+    auto doOffset = [this, baseUrl, camId, doReadoutMode, setOffset]() {
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
-        if (m_settings.m_alpacaOffset >= 0) {
+        if (setOffset) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "offset", "Offset",
-                m_settings.m_alpacaOffset, m_alpacaClientId, m_alpacaClientTransactionId, doReadoutMode);
+                m_settings.m_alpacaOffset, m_alpacaClientId, m_alpacaClientTransactionId, doReadoutMode,
+                [this]() { m_lastAlpacaOffset = m_settings.m_alpacaOffset; });
         } else {
             doReadoutMode();
         }
     };
 
-    auto doGain = [this, baseUrl, camId, doOffset]() {
+    auto doGain = [this, baseUrl, camId, doOffset, setGain]() {
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
-        if (m_settings.m_alpacaGain >= 0) {
+        if (setGain) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "gain", "Gain",
-                m_settings.m_alpacaGain, m_alpacaClientId, m_alpacaClientTransactionId, doOffset);
+                m_settings.m_alpacaGain, m_alpacaClientId, m_alpacaClientTransactionId, doOffset,
+                [this]() { m_lastAlpacaGain = m_settings.m_alpacaGain; });
         } else {
             doOffset();
         }
     };
 
-    auto doBinY = [this, baseUrl, camId, doGain]() {
+    auto doBinY = [this, baseUrl, camId, doGain, setBinY]() {
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
-        alpacaPutIntProperty(m_networkManager, baseUrl, camId, "biny", "BinY",
-            m_settings.m_alpacaBinY, m_alpacaClientId, m_alpacaClientTransactionId, doGain);
+        if (setBinY) {
+            alpacaPutIntProperty(m_networkManager, baseUrl, camId, "biny", "BinY",
+                m_settings.m_alpacaBinY, m_alpacaClientId, m_alpacaClientTransactionId, doGain,
+                [this]() { m_lastAlpacaBinY = m_settings.m_alpacaBinY; });
+        } else {
+            doGain();
+        }
     };
 
-    alpacaPutIntProperty(m_networkManager, baseUrl, camId, "binx", "BinX",
-        m_settings.m_alpacaBinX, m_alpacaClientId, m_alpacaClientTransactionId, doBinY);
+    if (setBinX) {
+        alpacaPutIntProperty(m_networkManager, baseUrl, camId, "binx", "BinX",
+            m_settings.m_alpacaBinX, m_alpacaClientId, m_alpacaClientTransactionId, doBinY,
+            [this]() { m_lastAlpacaBinX = m_settings.m_alpacaBinX; });
+    } else {
+        doBinY();
+    }
 }
 
 void CameraWorker::alpacaStartExposure()

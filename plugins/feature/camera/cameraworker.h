@@ -290,6 +290,12 @@ private:
     quint32 m_alpacaClientTransactionId;
     int m_alpacaSensorType;          // 0=Mono, 1=Colour, 2=RGGB, 3=CMYG, 4=CMYG2, 5=LRGB
     bool m_alpacaImageBytesSupported; // true = try ImageBytes binary protocol; false = use JSON
+    bool m_alpacaParamsInitialized;
+    int m_lastAlpacaBinX;
+    int m_lastAlpacaBinY;
+    int m_lastAlpacaGain;
+    int m_lastAlpacaOffset;
+    int m_lastAlpacaReadoutMode;
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature every 2 s
     QElapsedTimer m_alpacaCaptureTimer;
     qint64 m_lastAlpacaCaptureTimeMs;

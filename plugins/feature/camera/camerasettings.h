@@ -66,9 +66,9 @@ struct CameraSettings
     int m_resolutionWidth;
     int m_resolutionHeight;
     int m_framesPerSecond;
-    int m_captureMode;
+    CaptureMode m_captureMode;
     double m_captureInterval;
-    int m_captureIntervalUnits;
+    CaptureIntervalUnits m_captureIntervalUnits;
     double m_exposureTimeMs;
     int m_isoSensitivity;
     QString m_alpacaHost;

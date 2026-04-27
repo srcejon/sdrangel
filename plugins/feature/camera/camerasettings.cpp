@@ -306,7 +306,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(5, &m_resolutionWidth, 1280);
         d.readS32(6, &m_resolutionHeight, 720);
         d.readS32(7, &m_framesPerSecond, 10);
-        d.readS32(12, &m_captureMode, CaptureModeFrameRate);
+        d.readS32(12, (qint32 *) &m_captureMode, (qint32) CaptureModeFrameRate);
         int exposureTimeMs = 50;
         d.readS32(8, &exposureTimeMs, 50);
         m_exposureTimeMs = exposureTimeMs;
@@ -315,7 +315,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_resolutionHeight = std::max(16, m_resolutionHeight);
         m_framesPerSecond = std::max(1, m_framesPerSecond);
         d.readDouble(81, &m_captureInterval, 1.0);
-        d.readS32(82, &m_captureIntervalUnits, CaptureIntervalSeconds);
+        d.readS32(82, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
         m_captureMode = qBound(CaptureModeFrameRate, m_captureMode, CaptureModeInterval);
         m_captureInterval = std::max(0.1, m_captureInterval);
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, m_captureIntervalUnits, CaptureIntervalMinutes);
@@ -460,14 +460,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(5, &m_resolutionWidth, 1280);
         d.readS32(6, &m_resolutionHeight, 720);
         d.readS32(7, &m_framesPerSecond, 10);
-        d.readS32(12, &m_captureMode, CaptureModeFrameRate);
+        d.readS32(12, (qint32 *) &m_captureMode, (qint32) CaptureModeFrameRate);
         d.readDouble(8, &m_exposureTimeMs, 50.0);
         d.readS32(9, &m_isoSensitivity, -1);
         m_resolutionWidth = std::max(16, m_resolutionWidth);
         m_resolutionHeight = std::max(16, m_resolutionHeight);
         m_framesPerSecond = std::max(1, m_framesPerSecond);
         d.readDouble(81, &m_captureInterval, 1.0);
-        d.readS32(82, &m_captureIntervalUnits, CaptureIntervalSeconds);
+        d.readS32(82, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
         m_captureMode = qBound(CaptureModeFrameRate, m_captureMode, CaptureModeInterval);
         m_captureInterval = std::max(0.1, m_captureInterval);
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, m_captureIntervalUnits, CaptureIntervalMinutes);

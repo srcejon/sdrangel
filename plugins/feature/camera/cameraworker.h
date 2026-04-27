@@ -40,6 +40,7 @@
 #include "camerasettings.h"
 
 class QNetworkAccessManager;
+class CameraPostProcessor;
 
 class CameraWorker : public QObject
 {
@@ -121,46 +122,6 @@ public:
         MsgReportCameraList(const QStringList& cameraIds) :
             Message(),
             m_cameraIds(cameraIds)
-        { }
-    };
-
-    class MsgReportFrame : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const QImage& getImage() const { return m_image; }
-
-        static MsgReportFrame* create(const QImage& image)
-        {
-            return new MsgReportFrame(image);
-        }
-
-    private:
-        QImage m_image;
-
-        MsgReportFrame(const QImage& image) :
-            Message(),
-            m_image(image)
-        { }
-    };
-
-    class MsgReportSaveVideoState : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        bool getSaveVideo() const { return m_saveVideo; }
-
-        static MsgReportSaveVideoState* create(bool saveVideo)
-        {
-            return new MsgReportSaveVideoState(saveVideo);
-        }
-
-    private:
-        bool m_saveVideo;
-
-        MsgReportSaveVideoState(bool saveVideo) :
-            Message(),
-            m_saveVideo(saveVideo)
         { }
     };
 
@@ -299,27 +260,6 @@ public:
         { }
     };
 
-    // Sent from CameraGUI to CameraWorker when a new video frame arrives from the Qt camera
-    class MsgProcessFrame : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const QImage& getImage() const { return m_image; }
-
-        static MsgProcessFrame* create(const QImage& image)
-        {
-            return new MsgProcessFrame(image);
-        }
-
-    private:
-        QImage m_image;
-
-        MsgProcessFrame(const QImage& image) :
-            Message(),
-            m_image(image)
-        { }
-    };
-
     CameraWorker();
     ~CameraWorker();
 
@@ -327,17 +267,18 @@ public:
     void stopWork();
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
 
 private:
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_postProcessorInputMessageQueue;
     QRecursiveMutex m_mutex;
     CameraSettings m_settings;
     AvailableDeviceHandler m_availableDeviceHandler;
     AvailableDeviceList m_availableDevices;
     bool m_capturing;
     bool m_capturingAudio;
-    bool m_imageSaved;
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
     bool m_alpacaFrameRequestPending;
@@ -346,25 +287,6 @@ private:
     int m_alpacaSensorType;          // 0=Mono, 1=Colour, 2=RGGB, 3=CMYG, 4=CMYG2, 5=LRGB
     bool m_alpacaImageBytesSupported; // true = try ImageBytes binary protocol; false = use JSON
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature every 2 s
-
-    // Post-processing state (moved here from GUI)
-    QImage m_lastRawFrame;       // last raw frame captured, kept for reprocessing on settings change
-    QImage m_previousRawFrame;   // raw frame before m_lastRawFrame, used by diff mask
-    QDateTime m_captureDateTime; // timestamp of the last raw frame
-    cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor; // MOG2 state
-
-    // YOLO DNN state
-    cv::dnn::Net m_yoloNet;              ///< Loaded ONNX model (empty until first use)
-    QString m_yoloLoadedModelPath;       ///< Path that m_yoloNet was loaded from
-    QStringList m_yoloLabels;            ///< Class names loaded from m_yoloLabelsPath
-    QString m_yoloLoadedLabelsPath;      ///< Path that m_yoloLabels was loaded from
-    QSet<QString> m_detectedObjectClasses; ///< Classes currently considered present after debounce handling
-    QHash<QString, QDateTime> m_pendingDisappearDeadlines; ///< Pending disappearance deadline per class
-
-    // Video output
-    cv::VideoWriter m_videoWriter; // OpenCV video writer (works for both Alpaca and Qt cameras)
-
-    QImage m_spectrumViewImage;
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
 
     // Audio pass-through (Qt camera only)
@@ -376,20 +298,7 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void startCapture();
     void stopCapture();
-    void processNewFrame(const QImage& image);
     QImage createPlaceholderFrame() const;
-
-    // Post-processing
-    [[nodiscard]] QImage applyPostProcessing(const QImage& input);
-    void runYoloDetections(cv::Mat& bgrMat);
-    void applyObjectDetectedSettings(const QString& className);
-    void applyObjectDisappearedSettings(const QString& className);
-    void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
-    void executeCommand(const QString& command, const QString& className);
-    bool shouldRecordVideoForDetectedObjects() const;
-    void setVideoRecordingEnabled(bool enabled);
-
-    void reportFrameToGUI(const QImage& image);
     QString buildAlpacaBaseUrl() const;
     QImage parseAlpacaImageArray(const QByteArray& payload) const;
     QImage parseAlpacaImageBytes(const QByteArray& payload) const;

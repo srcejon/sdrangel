@@ -33,17 +33,35 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),
     m_thread(nullptr),
     m_worker(nullptr),
+    m_postProcessorThread(new QThread()),
+    m_postProcessor(new CameraPostProcessor()),
     m_cameraFinder(new CameraFinder(this))
 {
     setObjectName(m_featureId);
     m_state = StIdle;
     m_errorMessage = "Camera error";
     m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
+
+    m_postProcessor->moveToThread(m_postProcessorThread);
+    QObject::connect(m_postProcessorThread, &QThread::started, m_postProcessor, &CameraPostProcessor::startWork);
+    QObject::connect(m_postProcessorThread, &QThread::finished, m_postProcessor, &QObject::deleteLater);
+    QObject::connect(m_postProcessorThread, &QThread::finished, m_postProcessorThread, &QThread::deleteLater);
+    m_postProcessor->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_postProcessorThread->start();
+    m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgConfigureCameraPostProcessor::create(m_settings, QList<QString>(), true));
 }
 
 Camera::~Camera()
 {
     stop();
+
+    if (m_postProcessorThread)
+    {
+        m_postProcessorThread->quit();
+        m_postProcessorThread->wait();
+        m_postProcessorThread = nullptr;
+        m_postProcessor = nullptr;
+    }
 }
 
 void Camera::start()
@@ -61,11 +79,18 @@ void Camera::start()
     QObject::connect(m_thread, &QThread::finished, m_thread, &QThread::deleteLater);
 
     m_worker->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_worker->setPostProcessorInputMessageQueue(getPostProcessorInputMessageQueue());
+    if (m_postProcessor) {
+        m_postProcessor->setMessageQueueToGUI(getMessageQueueToGUI());
+    }
     m_thread->start();
     m_state = StRunning;
 
     m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(m_settings, QList<QString>(), true));
     m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
+    if (m_postProcessor) {
+        m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(true));
+    }
 
     if (m_guiMessageQueue) {
         m_guiMessageQueue->push(Camera::MsgStartStop::create(true));
@@ -81,6 +106,9 @@ void Camera::stop()
     {
         if (m_guiMessageQueue) {
             m_guiMessageQueue->push(Camera::MsgStartStop::create(false));
+        }
+        if (m_postProcessor) {
+            m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(false));
         }
         m_thread->quit();
         m_thread->wait();
@@ -151,6 +179,10 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
 
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(settings, settingsKeys, force));
+    }
+    if (m_postProcessor) {
+        m_postProcessor->setMessageQueueToGUI(getMessageQueueToGUI());
+        m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgConfigureCameraPostProcessor::create(settings, settingsKeys, force));
     }
 
     if (force) {

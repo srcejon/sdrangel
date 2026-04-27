@@ -220,16 +220,16 @@ bool CameraGUI::handleMessage(const Message& message)
 
         return true;
     }
-    else if (CameraWorker::MsgReportFrame::match(message))
+    else if (CameraPostProcessor::MsgReportFrame::match(message))
     {
-        const CameraWorker::MsgReportFrame& report = (CameraWorker::MsgReportFrame&) message;
+        const CameraPostProcessor::MsgReportFrame& report = (CameraPostProcessor::MsgReportFrame&) message;
         m_lastImage = report.getImage();
         updateImageWidget();
         return true;
     }
-    else if (CameraWorker::MsgReportSaveVideoState::match(message))
+    else if (CameraPostProcessor::MsgReportSaveVideoState::match(message))
     {
-        const CameraWorker::MsgReportSaveVideoState& report = (CameraWorker::MsgReportSaveVideoState&) message;
+        const CameraPostProcessor::MsgReportSaveVideoState& report = (CameraPostProcessor::MsgReportSaveVideoState&) message;
         m_settings.m_saveVideo = report.getSaveVideo();
         ui->saveVideoCheck->blockSignals(true);
         ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
@@ -1200,9 +1200,9 @@ void CameraGUI::onQtVideoFrame(const QVideoFrame& frame)
 {
     const QImage image = frame.toImage();
     if (!image.isNull()) {
-        MessageQueue *workerMQ = m_camera->getWorkerInputMessageQueue();
-        if (workerMQ) {
-            workerMQ->push(CameraWorker::MsgProcessFrame::create(image));
+        MessageQueue *postProcessorMQ = m_camera->getPostProcessorInputMessageQueue();
+        if (postProcessorMQ) {
+            postProcessorMQ->push(CameraPostProcessor::MsgProcessFrame::create(image));
         }
     }
 }
@@ -1210,9 +1210,9 @@ void CameraGUI::onQtVideoFrame(const QVideoFrame& frame)
 void CameraGUI::onQt5VideoFrame(const QImage& image)
 {
     if (!image.isNull()) {
-        MessageQueue *workerMQ = m_camera->getWorkerInputMessageQueue();
-        if (workerMQ) {
-            workerMQ->push(CameraWorker::MsgProcessFrame::create(image));
+        MessageQueue *postProcessorMQ = m_camera->getPostProcessorInputMessageQueue();
+        if (postProcessorMQ) {
+            postProcessorMQ->push(CameraPostProcessor::MsgProcessFrame::create(image));
         }
     }
 }

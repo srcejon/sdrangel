@@ -59,6 +59,7 @@ signals:
 #include "util/messagequeue.h"
 #include "settings/rollupstate.h"
 #include "camerasettings.h"
+#include "camerapostprocessor.h"
 #include "cameraworker.h"
 
 class PluginAPI;

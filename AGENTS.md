@@ -14,11 +14,15 @@ Build:
 ## Windows
 Default preset: `default-qt6-windows`
 
+Before configuring, make sure the `external/windows` submodule is checked out so bundled tools such as `pkg-config.exe` are present.
+
 Configure:
 `cmake --preset default-qt6-windows`
 
 Build:
 `cmake --build --preset default-qt6-windows`
+
+Allow a longer timeout for Windows builds when running through Codex tools, as dependency and generated-code targets can take several minutes before the first actionable compiler error appears.
 
 ## Validation
 - There is no single top-level unit test runner

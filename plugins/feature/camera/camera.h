@@ -22,6 +22,7 @@
 #include "feature/feature.h"
 #include "util/message.h"
 #include "camerasettings.h"
+#include "camerapostprocessor.h"
 #include "cameraworker.h"
 
 class WebAPIAdapterInterface;
@@ -106,10 +107,13 @@ public:
     static const char* const m_featureId;
 
     MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
+    MessageQueue* getPostProcessorInputMessageQueue() { return m_postProcessor ? m_postProcessor->getInputMessageQueue() : nullptr; }
 
 private:
     QThread *m_thread;
     CameraWorker *m_worker;
+    QThread *m_postProcessorThread;
+    CameraPostProcessor *m_postProcessor;
     CameraFinder* m_cameraFinder;
     CameraSettings m_settings;
 

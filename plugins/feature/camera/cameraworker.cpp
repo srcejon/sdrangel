@@ -22,27 +22,17 @@
 #include <limits>
 
 #include <QDebug>
-#include <QFont>
-#include <QFontMetrics>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QPainter>
-#include <QProcess>
 #include <QRandomGenerator>
-#include <QFile>
-#include <QTextStream>
 #include <QSharedPointer>
 #include <QtEndian>
-#include <QTextDocument>
 #include <QUrl>
 #include <QUrlQuery>
-#include <QColor>
-#include <QDateTime>
-#include <QMutableHashIterator>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
@@ -57,13 +47,9 @@
 #endif
 
 #include "maincore.h"
-#include "channel/channelwebapiutils.h"
-#include "device/deviceset.h"
 #include "dsp/dspengine.h"
-#include "settings/mainsettings.h"
-#include "settings/preset.h"
 #include "audio/audiodevicemanager.h"
-#include "util/profiler.h"
+#include "camerapostprocessor.h"
 #include "cameraworker.h"
 
 namespace {
@@ -196,19 +182,16 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportSaveVideoState, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgProcessFrame, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
+    m_postProcessorInputMessageQueue(nullptr),
     m_availableDeviceHandler({}, QStringList{"spectrumview"}),
     m_capturing(false),
     m_capturingAudio(false),
-    m_imageSaved(false),
     m_captureTimer(this),
     m_networkManager(nullptr),
     m_alpacaFrameRequestPending(false),
@@ -384,16 +367,8 @@ bool CameraWorker::handleMessage(const Message& cmd)
     {
         MainCore::MsgImage& imgMsg = (MainCore::MsgImage&) cmd;
         // Only accept images from the selected device; if none is selected, accept all
-        if (!m_spectrumPipeSource || imgMsg.getPipeSource() == m_spectrumPipeSource) {
-            m_spectrumViewImage = imgMsg.getImage();
-        }
-        return true;
-    }
-    else if (MsgProcessFrame::match(cmd))
-    {
-        MsgProcessFrame& frameMsg = (MsgProcessFrame&) cmd;
-        if (m_capturing) {
-            processNewFrame(frameMsg.getImage());
+        if ((!m_spectrumPipeSource || imgMsg.getPipeSource() == m_spectrumPipeSource) && m_postProcessorInputMessageQueue) {
+            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSpectrumFrame::create(imgMsg.getImage()));
         }
         return true;
     }
@@ -421,70 +396,16 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("alpacaOffset")
         || settingsKeys.contains("alpacaReadoutMode");
 
-    // Detect whether any post-processing parameter changed
-    static const QStringList kPostProcessingKeys = {
-        "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
-        "dateTimeFormat", "dateTimePosX", "dateTimePosY",
-        "overlayText", "overlayTextString", "overlayTextColor",
-        "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
-        "diffMask", "dilationSize", "overlayFontFamily", "overlayFontScale",
-        "motionDetect", "motionBoxColor", "minContourArea",
-        "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
-        "yoloEnabled", "yoloModelPath", "yoloLabelsPath", "yoloConfThreshold", "yoloNmsThreshold", "yoloBoxColor"
-    };
-    const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
-        [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
-
     if (force) {
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    // Reset diff-mask history when the feature is toggled off
-    if ((force && !m_settings.m_diffMask) || (settingsKeys.contains("diffMask") && !m_settings.m_diffMask)) {
-        m_previousRawFrame = QImage();
-    }
-
-    // Reset MOG2 state when motion detection is toggled off
-    if ((force && !m_settings.m_motionDetect) || (settingsKeys.contains("motionDetect") && !m_settings.m_motionDetect)) {
-        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
-    }
-
-    // Drop cached YOLO net if the model path changed so it will be reloaded lazily
-    if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath)) {
-        m_yoloNet = cv::dnn::Net();
-        m_yoloLoadedModelPath.clear();
-    }
-
-    // Drop cached YOLO labels if the labels path changed
-    if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath)) {
-        m_yoloLabels.clear();
-        m_yoloLoadedLabelsPath.clear();
-    }
-
-    if ((force && !m_settings.m_yoloEnabled)
-        || settingsKeys.contains("yoloEnabled")
-        || settingsKeys.contains("yoloLabelsPath")
-        || settingsKeys.contains("objectDeviceSettings"))
-    {
-        m_detectedObjectClasses.clear();
-        m_pendingDisappearDeadlines.clear();
-    }
-
     if (recapture && m_capturing)
     {
         stopCapture();
         startCapture();
-    }
-
-    // Manage VideoWriter independently of camera restart
-    if (settingsKeys.contains("saveVideo") || settingsKeys.contains("videoFileName"))
-    {
-        if (m_videoWriter.isOpened()) {
-            m_videoWriter.release();
-        }
-        // VideoWriter will be (re-)opened on the next frame if saveVideo is enabled
     }
 
     if (m_settings.isAlpacaCamera()
@@ -525,13 +446,9 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
             }
         }
         // When the device changes, clear the cached image to avoid showing a stale overlay
-        m_spectrumViewImage = QImage();
-    }
-
-    // If a post-processing parameter changed and we have a stored raw frame, reprocess and push to GUI
-    if (postProcessChanged && !m_lastRawFrame.isNull()) {
-        const QImage processed = applyPostProcessing(m_lastRawFrame);
-        reportFrameToGUI(processed);
+        if (m_postProcessorInputMessageQueue) {
+            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSpectrumFrame::create(QImage()));
+        }
     }
 }
 
@@ -541,7 +458,6 @@ void CameraWorker::startCapture()
         return;
     }
 
-    m_imageSaved = false;
     m_capturing = true;
 
     if (m_settings.isAlpacaCamera())
@@ -573,10 +489,6 @@ void CameraWorker::stopCapture()
 {
     m_capturing = false;
     m_captureTimer.stop();
-
-    if (m_videoWriter.isOpened()) {
-        m_videoWriter.release();
-    }
 
     if (m_capturingAudio)
     {
@@ -809,786 +721,11 @@ void CameraWorker::alpacaFetchImageArray()
             }
         }
 
-        processNewFrame(image);
+        if (m_postProcessorInputMessageQueue) {
+            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(image));
+        }
         reply->deleteLater();
     });
-}
-
-void CameraWorker::processNewFrame(const QImage& image)
-{
-    m_captureDateTime = QDateTime::currentDateTime();
-
-    // Apply all post-processing effects; result is what the GUI will display
-    const QImage processed = applyPostProcessing(image);
-
-    // Advance the raw-frame history (used by diff mask on the next frame)
-    m_previousRawFrame = m_lastRawFrame;
-    m_lastRawFrame = image;
-
-    reportFrameToGUI(processed);
-
-    // Save a single JPEG of the raw frame per capture session
-    if (m_settings.m_saveImage && !m_imageSaved && !m_settings.m_imageFileName.isEmpty())
-    {
-        QFileInfo fileInfo(m_settings.m_imageFileName);
-        QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
-        qDebug() << "CameraWorker: Saving image to" << filename;
-        image.save(filename);
-        m_imageSaved = true;
-    }
-
-    // Write video frame (raw or post-processed, depending on setting)
-    if (m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
-    {
-        // Lazily open the VideoWriter on the first frame so we know the frame size
-        if (!m_videoWriter.isOpened())
-        {
-            QFileInfo fileInfo(m_settings.m_videoFileName);
-            QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
-            qDebug() << "CameraWorker: Saving video to" << filename;
-
-            // 'mp4v' (MPEG-4 Part 2) is widely supported by OpenCV across all platforms.
-            // The output file extension (.mp4) determines the container format.
-            const int fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
-            m_videoWriter.open(
-                filename.toStdString(),
-                fourcc,
-                std::max(1, m_settings.m_framesPerSecond),
-                cv::Size(image.width(), image.height()),
-                true);
-        }
-
-        if (m_videoWriter.isOpened())
-        {
-            const QImage& frameToWrite = m_settings.m_videoPostProcess ? processed : image;
-            const QImage rgb = frameToWrite.convertToFormat(QImage::Format_RGB888);
-            cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                        const_cast<uchar*>(rgb.bits()),
-                        static_cast<size_t>(rgb.bytesPerLine()));
-            cv::Mat bgrMat;
-            cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-            m_videoWriter.write(bgrMat);
-        }
-    }
-}
-
-void CameraWorker::reportFrameToGUI(const QImage& image)
-{
-    if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportFrame::create(image));
-    }
-}
-
-/**
- * Applies all enabled post-processing effects to @p input in order:
- *   1. Brightness/contrast adjustment
- *   2. Colour inversion
- *   3. Diff mask against the previous raw frame
- *   4. MOG2 motion detection with bounding boxes
- *   5. Spectrum view image overlay
- *   6. Date/time text overlay (rendered with QPainter onto the final QImage)
- *
- * Returns the processed image, or a copy of @p input when no effects are active.
- * Must be called from the worker thread only (modifies m_bgSubtractor).
- */
-QImage CameraWorker::applyPostProcessing(const QImage& input)
-{
-    PROFILER_START();
-
-    // Pixel grayscale difference (0–255) below which a pixel is considered unchanged between frames.
-    static constexpr int kDiffThreshold = 30;
-
-    const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
-    const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
-    QTextDocument overlayTextDocument;
-    overlayTextDocument.setHtml(m_settings.m_overlayTextString);
-    const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
-    const bool needsAny = needsBrightContrast
-        || m_settings.m_invertColors
-        || m_settings.m_overlayDateTime
-        || needsTextOverlay
-        || (m_settings.m_diffMask && !m_previousRawFrame.isNull())
-        || m_settings.m_motionDetect
-        || (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty())
-        || needsSpectrumOverlay;
-
-    if (!needsAny) {
-        return input;
-    }
-
-    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
-    cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                const_cast<uchar*>(rgb.bits()),
-                static_cast<size_t>(rgb.bytesPerLine()));
-    cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-
-    if (needsBrightContrast)
-    {
-        cv::Mat adjusted;
-        cv::convertScaleAbs(bgrMat, adjusted, m_settings.m_contrast, m_settings.m_brightness);
-        bgrMat = adjusted;
-    }
-
-    if (m_settings.m_invertColors) {
-        cv::bitwise_not(bgrMat, bgrMat);
-    }
-
-    if (m_settings.m_diffMask && !m_previousRawFrame.isNull()
-        && m_previousRawFrame.width() == input.width()
-        && m_previousRawFrame.height() == input.height())
-    {
-        const QImage prevRgb = m_previousRawFrame.convertToFormat(QImage::Format_RGB888);
-        cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
-                        const_cast<uchar*>(prevRgb.bits()),
-                        static_cast<size_t>(prevRgb.bytesPerLine()));
-        cv::Mat prevBgr;
-        cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
-
-        cv::Mat gray, prevGray, diff, mask;
-        cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
-        cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
-        cv::absdiff(gray, prevGray, diff);
-        cv::threshold(diff, mask, kDiffThreshold, 255, cv::THRESH_BINARY);
-
-        if (m_settings.m_dilationSize > 0)
-        {
-            const int ksize = 2 * m_settings.m_dilationSize + 1;
-            const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
-            cv::dilate(mask, mask, kernel);
-        }
-
-        cv::Mat result = cv::Mat::zeros(bgrMat.size(), bgrMat.type());
-        cv::bitwise_and(bgrMat, bgrMat, result, mask);
-        bgrMat = result;
-    }
-
-    if (m_settings.m_motionDetect)
-    {
-        if (!m_bgSubtractor) {
-            m_bgSubtractor = cv::createBackgroundSubtractorMOG2();
-        }
-
-        cv::Mat fgMask;
-        m_bgSubtractor->apply(bgrMat, fgMask);
-        cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
-
-        std::vector<std::vector<cv::Point>> contours;
-        cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-
-        const QColor& bc = m_settings.m_motionBoxColor;
-        const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
-        for (const auto& contour : contours)
-        {
-            if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea)) {
-                cv::rectangle(bgrMat, cv::boundingRect(contour), boxColor, 2);
-            }
-        }
-    }
-
-    if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty())
-    {
-        runYoloDetections(bgrMat);
-    }
-
-    if (needsSpectrumOverlay)
-    {
-        // Scale the spectrum image if a non-unity scale is requested
-        QImage specSrc = m_spectrumViewImage;
-        if (qAbs(m_settings.m_spectrumScale - 1.0) > 1e-4)
-        {
-            const int sw = static_cast<int>(specSrc.width()  * m_settings.m_spectrumScale);
-            const int sh = static_cast<int>(specSrc.height() * m_settings.m_spectrumScale);
-            if (sw > 0 && sh > 0) {
-                specSrc = specSrc.scaled(sw, sh, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            }
-        }
-
-        const QImage specRgb = specSrc.convertToFormat(QImage::Format_RGBA8888);
-        const int dstW = bgrMat.cols;
-        const int dstH = bgrMat.rows;
-        const int ox = m_settings.m_spectrumOffsetX;
-        const int oy = m_settings.m_spectrumOffsetY;
-        const int sw = specRgb.width();
-        const int sh = specRgb.height();
-
-        // Determine the intersection of the spectrum image with the camera frame
-        const int srcX0 = std::max(0, -ox);
-        const int srcY0 = std::max(0, -oy);
-        const int srcX1 = std::min(sw, dstW - ox);
-        const int srcY1 = std::min(sh, dstH - oy);
-
-        for (int sy = srcY0; sy < srcY1; ++sy)
-        {
-            const uchar* srcRow = specRgb.constScanLine(sy);
-            const int dy = oy + sy;
-            uchar* dstRow = bgrMat.ptr<uchar>(dy);
-
-            for (int sx = srcX0; sx < srcX1; ++sx)
-            {
-                const int srcPx = sx * 4;
-                const uchar alpha = srcRow[srcPx + 3];
-                if (alpha == 0) {
-                    continue;
-                }
-                const int dx = (ox + sx) * 3;
-                if (alpha == 255)
-                {
-                    // Fully opaque: direct copy (note: bgrMat is BGR, specRgb is RGBA)
-                    dstRow[dx]     = srcRow[srcPx + 2]; // B
-                    dstRow[dx + 1] = srcRow[srcPx + 1]; // G
-                    dstRow[dx + 2] = srcRow[srcPx];     // R
-                }
-                else
-                {
-                    // Alpha-blend
-                    const int a = alpha;
-                    const int invA = 255 - a;
-                    dstRow[dx]     = static_cast<uchar>((srcRow[srcPx + 2] * a + dstRow[dx]     * invA) / 255);
-                    dstRow[dx + 1] = static_cast<uchar>((srcRow[srcPx + 1] * a + dstRow[dx + 1] * invA) / 255);
-                    dstRow[dx + 2] = static_cast<uchar>((srcRow[srcPx]     * a + dstRow[dx + 2] * invA) / 255);
-                }
-            }
-        }
-    }
-
-    cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);
-    const QImage rawResult(bgrMat.data, bgrMat.cols, bgrMat.rows,
-                           static_cast<qsizetype>(bgrMat.step[0]),
-                           QImage::Format_RGB888);
-    QImage result = rawResult.copy(); // detach from cv::Mat memory
-
-    if (m_settings.m_overlayDateTime)
-    {
-        const QString fmt = m_settings.m_dateTimeFormat.isEmpty()
-                            ? QStringLiteral("yyyy-MM-dd hh:mm:ss")
-                            : m_settings.m_dateTimeFormat;
-        const QString text = m_captureDateTime.toString(fmt);
-        QFont font;
-        if (!m_settings.m_overlayFontFamily.isEmpty()) {
-            font.setFamily(m_settings.m_overlayFontFamily);
-        }
-        font.setPointSizeF(m_settings.m_overlayFontScale);
-        const QFontMetrics fm(font);
-        QPainter painter(&result);
-        painter.setRenderHint(QPainter::TextAntialiasing);
-        painter.setFont(font);
-        painter.setPen(m_settings.m_dateTimeColor);
-        const int x = m_settings.m_dateTimePosX;
-        const int y = m_settings.m_dateTimePosY + fm.ascent();
-        painter.drawText(x, y, text);
-    }
-
-    if (needsTextOverlay)
-    {
-        QFont font;
-        if (!m_settings.m_overlayTextFontFamily.isEmpty()) {
-            font.setFamily(m_settings.m_overlayTextFontFamily);
-        }
-        font.setPointSizeF(m_settings.m_overlayTextFontScale);
-        overlayTextDocument.setDefaultFont(font);
-        overlayTextDocument.setDefaultStyleSheet(QStringLiteral("* { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
-        // Stick a div around everything, so the default colour is applied to text outside of any tags
-        QString html = QString("<div>%1</div>").arg(m_settings.m_overlayTextString);
-        overlayTextDocument.setHtml(html);
-
-        const int x = std::max(0, m_settings.m_overlayTextPosX);
-        const qreal maxTextWidth = std::max(1, result.width() - x);
-        overlayTextDocument.setTextWidth(maxTextWidth);
-
-        const QSizeF documentSize = overlayTextDocument.size();
-        const int y = m_settings.m_overlayTextPosY;
-
-        QPainter painter(&result);
-        painter.setRenderHint(QPainter::TextAntialiasing);
-        painter.save();
-        painter.translate(x, y);
-        overlayTextDocument.drawContents(&painter);
-        painter.restore();
-    }
-
-    PROFILER_STOP("CameraWorker::applyPostProcessing");
-
-    return result;
-}
-
-void CameraWorker::runYoloDetections(cv::Mat& bgrMat)
-{
-    PROFILER_START();
-
-    const QDateTime detectionTime = m_captureDateTime.isValid() ? m_captureDateTime : QDateTime::currentDateTime();
-
-    // Lazily load class labels
-    if (m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath)
-    {
-        m_yoloLabels.clear();
-        m_yoloLoadedLabelsPath.clear();
-
-        if (!m_settings.m_yoloLabelsPath.isEmpty())
-        {
-            QFile f(m_settings.m_yoloLabelsPath);
-            if (f.open(QIODevice::ReadOnly | QIODevice::Text))
-            {
-                QTextStream ts(&f);
-                while (!ts.atEnd())
-                {
-                    const QString line = ts.readLine().trimmed();
-                    if (!line.isEmpty()) {
-                        m_yoloLabels.append(line);
-                    }
-                }
-                m_yoloLoadedLabelsPath = m_settings.m_yoloLabelsPath;
-            }
-            else
-            {
-                qWarning() << "CameraWorker::runYoloDetections: cannot open labels file:" << m_settings.m_yoloLabelsPath;
-            }
-        }
-    }
-
-    // Lazily load the ONNX model
-    if (m_yoloLoadedModelPath != m_settings.m_yoloModelPath)
-    {
-        m_yoloNet = cv::dnn::Net();
-        m_yoloLoadedModelPath.clear();
-
-        if (!m_settings.m_yoloModelPath.isEmpty())
-        {
-            try
-            {
-                m_yoloNet = cv::dnn::readNetFromONNX(m_settings.m_yoloModelPath.toStdString());
-                m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
-                m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-                m_yoloLoadedModelPath = m_settings.m_yoloModelPath;
-                qDebug() << "CameraWorker::runYoloDetections: loaded model" << m_settings.m_yoloModelPath;
-            }
-            catch (const cv::Exception& e)
-            {
-                qWarning() << "CameraWorker::runYoloDetections: failed to load model:" << e.what();
-                return;
-            }
-        }
-        else
-        {
-            return;
-        }
-    }
-
-    if (m_yoloNet.empty()) {
-        return;
-    }
-
-    // Build a 640×640 blob from the frame (letterboxing handled by the model)
-    const int inputSize = 640;
-    const float scaleX = static_cast<float>(bgrMat.cols) / inputSize;
-    const float scaleY = static_cast<float>(bgrMat.rows) / inputSize;
-
-    cv::Mat blob;
-    cv::dnn::blobFromImage(bgrMat, blob, 1.0 / 255.0,
-                           cv::Size(inputSize, inputSize),
-                           cv::Scalar(), /*swapRB=*/true, /*crop=*/false);
-
-    m_yoloNet.setInput(blob);
-
-    std::vector<cv::Mat> outputs;
-    try
-    {
-        m_yoloNet.forward(outputs, m_yoloNet.getUnconnectedOutLayersNames());
-    }
-    catch (const cv::Exception& e)
-    {
-        qWarning() << "CameraWorker::runYoloDetections: inference failed:" << e.what();
-        return;
-    }
-
-    if (outputs.empty()) {
-        processObjectDetections(QSet<QString>(), detectionTime);
-        return;
-    }
-
-    // Parse detections. Supports two common YOLO ONNX output layouts:
-    //
-    // YOLOv8 / YOLOv9 / YOLOv10:  [1, (4 + numClasses), numAnchors]
-    //   rows = 4 + numClasses, cols = numAnchors, no explicit objectness score.
-    //
-    // YOLOv5 / YOLOv7:             [1, numAnchors, (5 + numClasses)]
-    //   rows = numAnchors, cols = 5 + numClasses, col[4] is objectness.
-    //
-    // We detect which layout is in use by checking which dimension is larger.
-
-    cv::Mat det = outputs[0];
-    if (det.dims == 3) {
-        // Squeeze the batch dimension: [1, rows, cols] → [rows, cols]
-        det = det.reshape(1, det.size[1]);
-    }
-    // det is now a 2D matrix [rows × cols]
-
-    const float confThresh = static_cast<float>(m_settings.m_yoloConfThreshold);
-    const float nmsThresh  = static_cast<float>(m_settings.m_yoloNmsThreshold);
-
-    std::vector<cv::Rect> boxes;
-    std::vector<float>    scores;
-    std::vector<int>      classIds;
-    QSet<QString> currentDetectedClasses;
-
-    // Determine which layout we have
-    // YOLOv8 style: rows <= ~200 (4 + nClasses), cols >> rows
-    const bool isV8Style = (det.rows < det.cols);
-
-    if (isV8Style)
-    {
-        // det: [4 + numClasses, numAnchors]
-        // Each column is one anchor: [cx, cy, w, h, cls0, cls1, ...]
-        const int numAnchors = det.cols;
-        const int numClasses = det.rows - 4;
-        if (numClasses <= 0) {
-            return;
-        }
-
-        for (int a = 0; a < numAnchors; ++a)
-        {
-            // Find the class with the highest score
-            float bestScore = 0.0f;
-            int   bestClass = 0;
-            for (int c = 0; c < numClasses; ++c)
-            {
-                const float s = det.at<float>(4 + c, a);
-                if (s > bestScore) {
-                    bestScore = s;
-                    bestClass = c;
-                }
-            }
-            if (bestScore < confThresh) {
-                continue;
-            }
-
-            const float cx = det.at<float>(0, a) * scaleX;
-            const float cy = det.at<float>(1, a) * scaleY;
-            const float  w = det.at<float>(2, a) * scaleX;
-            const float  h = det.at<float>(3, a) * scaleY;
-
-            const int x1 = static_cast<int>(cx - w / 2.0f);
-            const int y1 = static_cast<int>(cy - h / 2.0f);
-
-            boxes.push_back(cv::Rect(x1, y1, static_cast<int>(w), static_cast<int>(h)));
-            scores.push_back(bestScore);
-            classIds.push_back(bestClass);
-        }
-    }
-    else
-    {
-        // YOLOv5 style: [numAnchors, 5 + numClasses]
-        const int numAnchors = det.rows;
-        const int numClasses = det.cols - 5;
-        if (numClasses < 0) {
-            return;
-        }
-
-        for (int a = 0; a < numAnchors; ++a)
-        {
-            const float objectness = det.at<float>(a, 4);
-            if (objectness < confThresh) {
-                continue;
-            }
-
-            float bestScore = 0.0f;
-            int   bestClass = 0;
-            for (int c = 0; c < numClasses; ++c)
-            {
-                const float s = objectness * det.at<float>(a, 5 + c);
-                if (s > bestScore) {
-                    bestScore = s;
-                    bestClass = c;
-                }
-            }
-            if (bestScore < confThresh) {
-                continue;
-            }
-
-            const float cx = det.at<float>(a, 0) * scaleX;
-            const float cy = det.at<float>(a, 1) * scaleY;
-            const float  w = det.at<float>(a, 2) * scaleX;
-            const float  h = det.at<float>(a, 3) * scaleY;
-
-            const int x1 = static_cast<int>(cx - w / 2.0f);
-            const int y1 = static_cast<int>(cy - h / 2.0f);
-
-            boxes.push_back(cv::Rect(x1, y1, static_cast<int>(w), static_cast<int>(h)));
-            scores.push_back(bestScore);
-            classIds.push_back(bestClass);
-        }
-    }
-
-    // Apply NMS
-    std::vector<int> indices;
-    cv::dnn::NMSBoxes(boxes, scores, confThresh, nmsThresh, indices);
-
-    // Draw bounding boxes and labels
-    const QColor& bc = m_settings.m_yoloBoxColor;
-    const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
-    const cv::Scalar textBg(0, 0, 0);
-
-    for (int idx : indices)
-    {
-        const cv::Rect& box = boxes[idx];
-        cv::rectangle(bgrMat, box, boxColor, 2);
-
-        // Build label text
-        QString label;
-        if (!m_yoloLabels.isEmpty() && classIds[idx] < m_yoloLabels.size()) {
-            label = m_yoloLabels[classIds[idx]];
-        } else {
-            label = QStringLiteral("cls%1").arg(classIds[idx]);
-        }
-        currentDetectedClasses.insert(label);
-        label += QStringLiteral(" %1%").arg(static_cast<int>(scores[idx] * 100.0f + 0.5f));
-
-        const std::string labelStd = label.toStdString();
-        int baseLine = 0;
-        const cv::Size textSize = cv::getTextSize(labelStd, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-
-        const int labelY = std::max(box.y, textSize.height + 2);
-        cv::rectangle(bgrMat,
-                      cv::Point(box.x, labelY - textSize.height - 2),
-                      cv::Point(box.x + textSize.width, labelY + baseLine),
-                      textBg, cv::FILLED);
-        cv::putText(bgrMat, labelStd,
-                    cv::Point(box.x, labelY),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, boxColor, 1, cv::LINE_AA);
-    }
-
-    PROFILER_STOP("YOLO");
-
-    processObjectDetections(currentDetectedClasses, detectionTime);
-}
-
-void CameraWorker::processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now)
-{
-    for (const QString& className : currentDetectedClasses)
-    {
-        m_pendingDisappearDeadlines.remove(className);
-
-        if (!m_detectedObjectClasses.contains(className))
-        {
-            m_detectedObjectClasses.insert(className);
-            applyObjectDetectedSettings(className);
-        }
-    }
-
-    for (const QString& className : m_detectedObjectClasses)
-    {
-        if (!currentDetectedClasses.contains(className) && !m_pendingDisappearDeadlines.contains(className)) {
-            m_pendingDisappearDeadlines.insert(className, now.addMSecs(static_cast<qint64>(m_settings.m_yoloDisappearDebounce * 1000.0)));
-        }
-    }
-
-    QMutableHashIterator<QString, QDateTime> it(m_pendingDisappearDeadlines);
-    while (it.hasNext())
-    {
-        it.next();
-
-        if (currentDetectedClasses.contains(it.key())) {
-            it.remove();
-            continue;
-        }
-
-        if (it.value() <= now)
-        {
-            m_detectedObjectClasses.remove(it.key());
-            applyObjectDisappearedSettings(it.key());
-            it.remove();
-        }
-    }
-}
-
-bool CameraWorker::shouldRecordVideoForDetectedObjects() const
-{
-    for (const QString& className : m_detectedObjectClasses)
-    {
-        QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
-        if (deviceSettingsList == nullptr) {
-            continue;
-        }
-
-        for (CameraSettings::ObjectDeviceSettings *devSettings : *deviceSettingsList)
-        {
-            if (devSettings && devSettings->m_recordVideo) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-void CameraWorker::setVideoRecordingEnabled(bool enabled)
-{
-    if (m_settings.m_saveVideo == enabled) {
-        return;
-    }
-
-    m_settings.m_saveVideo = enabled;
-
-    if (!enabled && m_videoWriter.isOpened()) {
-        m_videoWriter.release();
-    }
-
-    if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportSaveVideoState::create(enabled));
-    }
-}
-
-void CameraWorker::executeCommand(const QString& command, const QString& className)
-{
-    if (command.isEmpty()) {
-        return;
-    }
-
-#if QT_CONFIG(process)
-    QString cmd = command;
-    cmd.replace(QStringLiteral("${class}"), className);
-    QStringList allArgs = QProcess::splitCommand(cmd);
-
-    if (allArgs.isEmpty()) {
-        return;
-    }
-
-    qDebug() << "CameraWorker::executeCommand: Executing:" << allArgs;
-    const QString program = allArgs.takeFirst();
-    QProcess::startDetached(program, allArgs);
-#else
-    qWarning() << "CameraWorker::executeCommand: QProcess not supported. Can't run:" << command;
-    (void) className;
-#endif
-}
-
-void CameraWorker::applyObjectDetectedSettings(const QString& className)
-{
-    if (!m_settings.m_objectDeviceSettings.contains(className)) {
-        return;
-    }
-
-    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
-    if (deviceSettingsList == nullptr) {
-        return;
-    }
-
-    MainCore *mainCore = MainCore::instance();
-    const MainSettings& mainSettings = mainCore->getSettings();
-    const std::vector<DeviceSet*>& deviceSets = mainCore->getDeviceSets();
-
-    for (int i = 0; i < deviceSettingsList->size(); ++i)
-    {
-        CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
-        if (devSettings == nullptr) {
-            continue;
-        }
-
-        if (devSettings->m_deviceSetIndex < 0 || devSettings->m_deviceSetIndex >= static_cast<int>(deviceSets.size()))
-        {
-            qWarning() << "CameraWorker::applyObjectDetectedSettings: device set at"
-                       << devSettings->m_deviceSetIndex << "does not exist";
-            continue;
-        }
-
-        if (!devSettings->m_presetGroup.isEmpty())
-        {
-            const DeviceSet *deviceSet = deviceSets[devSettings->m_deviceSetIndex];
-            QString presetType;
-            if (deviceSet->m_deviceSourceEngine != nullptr) {
-                presetType = "R";
-            } else if (deviceSet->m_deviceSinkEngine != nullptr) {
-                presetType = "T";
-            } else if (deviceSet->m_deviceMIMOEngine != nullptr) {
-                presetType = "M";
-            }
-
-            const Preset *preset = mainSettings.getPreset(
-                devSettings->m_presetGroup,
-                devSettings->m_presetFrequency,
-                devSettings->m_presetDescription,
-                presetType);
-
-            if (preset != nullptr)
-            {
-                qDebug() << "CameraWorker::applyObjectDetectedSettings: loading preset"
-                         << preset->getDescription() << "for class" << className
-                         << "to device set" << devSettings->m_deviceSetIndex;
-                mainCore->getMainMessageQueue()->push(
-                    MainCore::MsgLoadPreset::create(preset, devSettings->m_deviceSetIndex));
-            }
-            else
-            {
-                qWarning() << "CameraWorker::applyObjectDetectedSettings: unable to get preset"
-                           << devSettings->m_presetGroup
-                           << devSettings->m_presetFrequency
-                           << devSettings->m_presetDescription;
-            }
-        }
-
-        if (devSettings->m_recordVideo) {
-            setVideoRecordingEnabled(true);
-        }
-    }
-
-    QTimer::singleShot(1000, this, [this, deviceSettingsList, className]()
-    {
-        for (int i = 0; i < deviceSettingsList->size(); ++i)
-        {
-            CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
-            if (devSettings == nullptr) {
-                continue;
-            }
-
-            if (devSettings->m_startOnDetect) {
-                ChannelWebAPIUtils::run(devSettings->m_deviceSetIndex);
-            }
-
-            if (devSettings->m_startStopFileSink) {
-                ChannelWebAPIUtils::startStopFileSinks(devSettings->m_deviceSetIndex, true);
-            }
-
-            if (!devSettings->m_detectCommand.isEmpty()) {
-                executeCommand(devSettings->m_detectCommand, className);
-            }
-        }
-    });
-}
-
-void CameraWorker::applyObjectDisappearedSettings(const QString& className)
-{
-    if (!m_settings.m_objectDeviceSettings.contains(className)) {
-        return;
-    }
-
-    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
-    if (deviceSettingsList == nullptr) {
-        return;
-    }
-
-    for (int i = 0; i < deviceSettingsList->size(); ++i)
-    {
-        CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
-        if (devSettings == nullptr) {
-            continue;
-        }
-
-        if (devSettings->m_startStopFileSink) {
-            ChannelWebAPIUtils::startStopFileSinks(devSettings->m_deviceSetIndex, false);
-        }
-
-        if (devSettings->m_stopOnDisappear) {
-            ChannelWebAPIUtils::stop(devSettings->m_deviceSetIndex);
-        }
-
-        if (!devSettings->m_disappearCommand.isEmpty()) {
-            executeCommand(devSettings->m_disappearCommand, className);
-        }
-    }
-
-    if (!shouldRecordVideoForDetectedObjects()) {
-        setVideoRecordingEnabled(false);
-    }
 }
 
 void CameraWorker::alpacaQueryCameraCapabilities()
@@ -2238,3 +1375,4 @@ void CameraWorker::onCaptureAudioDataReady()
         m_outputAudioFifo.write(m_audioTransferBuffer.data(), nbRead);
     }
 }
+

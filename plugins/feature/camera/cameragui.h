@@ -61,6 +61,7 @@ signals:
 #include "feature/featuregui.h"
 #include "util/messagequeue.h"
 #include "settings/rollupstate.h"
+#include "cameraobjectdevicesettingsgui.h"
 #include "camerasettings.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
@@ -124,6 +125,7 @@ private:
     bool m_qtWhiteBalanceModeSupported; // true when the active Qt camera supports white balance control
     bool m_qtExposureCompensationSupported; // true when the active Qt camera supports exposure compensation
     QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
+    QList<CameraObjectDeviceSettingsGUI *> m_actionDeviceSettingsGUIs;
 
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
@@ -165,6 +167,12 @@ private:
     void applyQtCameraSettings(const QList<QString>& settingsKeys, bool force);
     void applyImagePath();
     void applyVideoPath();
+    QStringList loadActionObjectClasses() const;
+    void saveCurrentActionClassSettings();
+    void populateActionClasses();
+    void rebuildActionTabsForCurrentClass();
+    void updateActionControls();
+    void applyActionSettings();
     void updatePostProcessWhiteBalanceControls();
 
 private slots:
@@ -242,7 +250,10 @@ private slots:
     void on_yoloModelPathButton_clicked();
     void on_yoloLabelsPathEdit_editingFinished();
     void on_yoloLabelsPathButton_clicked();
-    void on_yoloObjectControlButton_clicked();
+    void on_actionsClassCombo_currentIndexChanged(int index);
+    void on_actionsDisappearDebounceSpin_valueChanged(double value);
+    void on_actionsAddButton_clicked();
+    void on_actionsTabWidget_tabCloseRequested(int index);
     void on_yoloConfSpin_valueChanged(double value);
     void on_yoloNmsSpin_valueChanged(double value);
     void on_yoloBoxColorButton_clicked();
@@ -266,6 +277,7 @@ private slots:
 #endif
     void onQtImageCaptured(int id, const QImage& image);
     void triggerQtStillCapture();
+    void onSettingsDialogFinished(int result);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAGUI_H_

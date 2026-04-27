@@ -40,6 +40,11 @@ The Ninja path should be run from `VsDevCmd.bat` so `cl.exe`, the Windows SDK to
 Current known caveat:
 - The bundled Windows OpenCV package may be detected but still marked unusable; if that happens, targets including camera post-processing code can fail with missing `opencv2/...` headers until `OpenCV_DIR` points to a compatible build.
 
+Working OpenCV override for this machine:
+`-DOpenCV_DIR="C:/Users/jon/source/repos/sdrangel-windows-libraries/opencv/x64/vc15/lib"`
+
+If Qt autogen fails with `libuv process spawn failed: operation not permitted` while running through Codex tools, rerun the Windows build or `cmake -E cmake_autogen` step outside the sandbox from the same VS developer environment.
+
 ## Validation
 - There is no single top-level unit test runner
 - Validate by building the relevant target or plugin for the area you changed

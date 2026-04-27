@@ -23,6 +23,7 @@
 #include <QColorDialog>
 #include <QDateTime>
 #include <QDoubleSpinBox>
+#include <QFile>
 #include <QFileDialog>
 #include <QFontDatabase>
 #include <QGraphicsView>
@@ -31,6 +32,7 @@
 #include <QSet>
 #include <QSignalBlocker>
 #include <QStandardItemModel>
+#include <QTextStream>
 #include <QWheelEvent>
 #include <QMessageBox>
 
@@ -65,7 +67,6 @@
 #include "ui_cameragui.h"
 #include "camera.h"
 #include "camerahistogramdialog.h"
-#include "cameraobjectcontroldialog.h"
 #include "camerasettingsdialog.h"
 #include "cameraworker.h"
 #include "cameragui.h"
@@ -403,6 +404,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 #endif
 
     connect(&m_statusTimer, &QTimer::timeout, this, &CameraGUI::updateStatus);
+    connect(m_settingsDialog, &QDialog::finished, this, &CameraGUI::onSettingsDialogFinished);
     connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
     m_qtStillCaptureTimer.setSingleShot(false);
 
@@ -468,6 +470,12 @@ void CameraGUI::displaySettings()
         settingsUI()->intervalUnitsCombo->setCurrentIndex(intervalUnitsIndex >= 0 ? intervalUnitsIndex : 0);
     }
     updateCaptureModeControls();
+    populateActionClasses();
+    {
+        QSignalBlocker blocker(settingsUI()->actionsDisappearDebounceSpin);
+        settingsUI()->actionsDisappearDebounceSpin->setValue(m_settings.m_yoloDisappearDebounce);
+    }
+    rebuildActionTabsForCurrentClass();
     settingsUI()->exposureSpin->setValue(m_settings.m_exposureTimeMs);
     settingsUI()->isoSpin->setValue(m_settings.m_isoSensitivity);
     settingsUI()->alpacaHostEdit->setText(m_settings.m_alpacaHost);
@@ -703,7 +711,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
     QObject::connect(settingsUI()->yoloLabelsPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloLabelsPathEdit_editingFinished);
     QObject::connect(settingsUI()->yoloLabelsPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloLabelsPathButton_clicked);
-    QObject::connect(settingsUI()->yoloObjectControlButton, &QToolButton::clicked, this, &CameraGUI::on_yoloObjectControlButton_clicked);
+    QObject::connect(settingsUI()->actionsClassCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_actionsClassCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->actionsDisappearDebounceSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_actionsDisappearDebounceSpin_valueChanged);
+    QObject::connect(settingsUI()->actionsAddButton, &QPushButton::clicked, this, &CameraGUI::on_actionsAddButton_clicked);
+    QObject::connect(settingsUI()->actionsTabWidget, &QTabWidget::tabCloseRequested, this, &CameraGUI::on_actionsTabWidget_tabCloseRequested);
     QObject::connect(settingsUI()->yoloConfSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloConfSpin_valueChanged);
     QObject::connect(settingsUI()->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
     QObject::connect(settingsUI()->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
@@ -886,6 +897,121 @@ void CameraGUI::updateCaptureModeControls()
 {
     const bool intervalMode = m_settings.isIntervalCaptureMode();
     settingsUI()->captureValueStack->setCurrentWidget(intervalMode ? settingsUI()->intervalPage : settingsUI()->frameRatePage);
+}
+
+QStringList CameraGUI::loadActionObjectClasses() const
+{
+    QStringList classes;
+
+    if (!m_settings.m_yoloLabelsPath.isEmpty())
+    {
+        QFile labelsFile(m_settings.m_yoloLabelsPath);
+        if (labelsFile.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            QTextStream textStream(&labelsFile);
+            while (!textStream.atEnd())
+            {
+                const QString line = textStream.readLine().trimmed();
+                if (!line.isEmpty() && !classes.contains(line)) {
+                    classes.append(line);
+                }
+            }
+        }
+    }
+
+    for (auto it = m_settings.m_objectDeviceSettings.cbegin(); it != m_settings.m_objectDeviceSettings.cend(); ++it) {
+        if (!classes.contains(it.key())) {
+            classes.append(it.key());
+        }
+    }
+
+    return classes;
+}
+
+void CameraGUI::saveCurrentActionClassSettings()
+{
+    for (CameraObjectDeviceSettingsGUI *gui : m_actionDeviceSettingsGUIs) {
+        gui->accept();
+    }
+}
+
+void CameraGUI::populateActionClasses()
+{
+    const QString currentClass = settingsUI()->actionsClassCombo->currentText();
+    const QStringList classes = loadActionObjectClasses();
+
+    QSignalBlocker blocker(settingsUI()->actionsClassCombo);
+    settingsUI()->actionsClassCombo->clear();
+    settingsUI()->actionsClassCombo->addItems(classes);
+
+    const int index = settingsUI()->actionsClassCombo->findText(currentClass);
+    if (index >= 0) {
+        settingsUI()->actionsClassCombo->setCurrentIndex(index);
+    } else if (settingsUI()->actionsClassCombo->count() > 0) {
+        settingsUI()->actionsClassCombo->setCurrentIndex(0);
+    }
+}
+
+void CameraGUI::rebuildActionTabsForCurrentClass()
+{
+    settingsUI()->actionsTabWidget->clear();
+    qDeleteAll(m_actionDeviceSettingsGUIs);
+    m_actionDeviceSettingsGUIs.clear();
+
+    const QString className = settingsUI()->actionsClassCombo->currentText();
+    if (className.isEmpty())
+    {
+        updateActionControls();
+        return;
+    }
+
+    if (!m_settings.m_objectDeviceSettings.contains(className)) {
+        m_settings.m_objectDeviceSettings.insert(className, new QList<CameraSettings::ObjectDeviceSettings *>());
+    }
+
+    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
+    for (CameraSettings::ObjectDeviceSettings *deviceSettings : *deviceSettingsList)
+    {
+        CameraObjectDeviceSettingsGUI *deviceSettingsGUI =
+            new CameraObjectDeviceSettingsGUI(deviceSettings, settingsUI()->actionsTabWidget, settingsUI()->actionsTabWidget);
+        const int index = settingsUI()->actionsTabWidget->addTab(deviceSettingsGUI, QString("R%1").arg(deviceSettings->m_deviceSetIndex));
+        settingsUI()->actionsTabWidget->setCurrentIndex(index);
+        m_actionDeviceSettingsGUIs.append(deviceSettingsGUI);
+    }
+
+    updateActionControls();
+}
+
+void CameraGUI::updateActionControls()
+{
+    const bool hasClasses = settingsUI()->actionsClassCombo->count() > 0;
+    const bool hasClassSelection = !settingsUI()->actionsClassCombo->currentText().isEmpty();
+
+    settingsUI()->actionsClassCombo->setEnabled(hasClasses);
+    settingsUI()->actionsAddButton->setEnabled(hasClassSelection);
+    settingsUI()->actionsTabWidget->setEnabled(hasClassSelection);
+
+    if (!hasClasses)
+    {
+        if (m_settings.m_yoloLabelsPath.isEmpty()) {
+            settingsUI()->actionsStatusLabel->setText(tr("Select a YOLO labels file first to configure per-class actions."));
+        } else {
+            settingsUI()->actionsStatusLabel->setText(tr("No class names could be loaded from the labels file."));
+        }
+    }
+    else
+    {
+        settingsUI()->actionsStatusLabel->setText(
+            tr("Configure what each device set should do when the selected YOLO class is detected or disappears."));
+    }
+}
+
+void CameraGUI::applyActionSettings()
+{
+    saveCurrentActionClassSettings();
+    m_settingsKeys.append("yoloDisappearDebounce");
+    m_settingsKeys.append("objectDeviceSettings");
+    applySettings();
 }
 
 // ---------------------------------------------------------------------------
@@ -2232,6 +2358,8 @@ void CameraGUI::on_yoloModelPathButton_clicked()
 void CameraGUI::on_yoloLabelsPathEdit_editingFinished()
 {
     m_settings.m_yoloLabelsPath = settingsUI()->yoloLabelsPathEdit->text();
+    populateActionClasses();
+    rebuildActionTabsForCurrentClass();
     m_settingsKeys.append("yoloLabelsPath");
     applySettings();
 }
@@ -2246,22 +2374,66 @@ void CameraGUI::on_yoloLabelsPathButton_clicked()
     {
         m_settings.m_yoloLabelsPath = fileName;
         settingsUI()->yoloLabelsPathEdit->setText(fileName);
+        populateActionClasses();
+        rebuildActionTabsForCurrentClass();
         m_settingsKeys.append("yoloLabelsPath");
         applySettings();
     }
 }
 
-void CameraGUI::on_yoloObjectControlButton_clicked()
+void CameraGUI::on_actionsClassCombo_currentIndexChanged(int index)
 {
-    CameraObjectControlDialog dialog(&m_settings, this);
-    new DialogPositioner(&dialog, true);
-
-    if (dialog.exec() == QDialog::Accepted)
-    {
-        m_settingsKeys.append("yoloDisappearDebounce");
-        m_settingsKeys.append("objectDeviceSettings");
-        applySettings();
+    if (index < 0) {
+        return;
     }
+
+    saveCurrentActionClassSettings();
+    rebuildActionTabsForCurrentClass();
+    m_settingsKeys.append("objectDeviceSettings");
+    applySettings();
+}
+
+void CameraGUI::on_actionsDisappearDebounceSpin_valueChanged(double value)
+{
+    m_settings.m_yoloDisappearDebounce = value;
+    applyActionSettings();
+}
+
+void CameraGUI::on_actionsAddButton_clicked()
+{
+    const QString className = settingsUI()->actionsClassCombo->currentText();
+    if (className.isEmpty()) {
+        return;
+    }
+
+    if (!m_settings.m_objectDeviceSettings.contains(className)) {
+        m_settings.m_objectDeviceSettings.insert(className, new QList<CameraSettings::ObjectDeviceSettings *>());
+    }
+
+    CameraSettings::ObjectDeviceSettings *deviceSettings = new CameraSettings::ObjectDeviceSettings();
+    CameraObjectDeviceSettingsGUI *deviceSettingsGUI =
+        new CameraObjectDeviceSettingsGUI(deviceSettings, settingsUI()->actionsTabWidget, settingsUI()->actionsTabWidget);
+
+    const int index = settingsUI()->actionsTabWidget->addTab(deviceSettingsGUI, QStringLiteral("R0"));
+    settingsUI()->actionsTabWidget->setCurrentIndex(index);
+    m_actionDeviceSettingsGUIs.append(deviceSettingsGUI);
+    m_settings.m_objectDeviceSettings.value(className)->append(deviceSettings);
+    applyActionSettings();
+}
+
+void CameraGUI::on_actionsTabWidget_tabCloseRequested(int index)
+{
+    const QString className = settingsUI()->actionsClassCombo->currentText();
+    if (className.isEmpty() || !m_settings.m_objectDeviceSettings.contains(className)) {
+        return;
+    }
+
+    settingsUI()->actionsTabWidget->removeTab(index);
+    delete m_actionDeviceSettingsGUIs.takeAt(index);
+
+    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
+    delete deviceSettingsList->takeAt(index);
+    applyActionSettings();
 }
 
 void CameraGUI::on_yoloConfSpin_valueChanged(double value)
@@ -2396,6 +2568,12 @@ void CameraGUI::applyImagePath()
 void CameraGUI::applyVideoPath()
 {
     ui->saveVideoCheck->setToolTip(QString("Record video to %1").arg(m_settings.m_videoFileName));
+}
+
+void CameraGUI::onSettingsDialogFinished(int result)
+{
+    Q_UNUSED(result)
+    applyActionSettings();
 }
 
 void CameraGUI::updateStatus()

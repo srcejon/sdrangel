@@ -1809,7 +1809,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
       <attribute name="title">
        <string>Recording</string>
       </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_7">
+      <layout class="QVBoxLayout" name="actionsTabLayout">
        <item>
         <widget class="QGroupBox" name="recordingGroup">
          <property name="title">
@@ -1947,13 +1947,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="label_3">
-            <property name="text">
-             <string>Actions</string>
-            </property>
-           </widget>
-          </item>
           <item row="1" column="4">
            <widget class="QPushButton" name="yoloLabelsPathButton">
             <property name="maximumSize">
@@ -2005,20 +1998,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
            <widget class="QLabel" name="label_2">
             <property name="text">
              <string>BB Colour</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QToolButton" name="yoloObjectControlButton">
-            <property name="toolTip">
-             <string>Configure actions for specific YOLO object classes</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-            <property name="icon">
-             <iconset resource="../../../sdrgui/resources/res.qrc">
-              <normaloff>:/gear.png</normaloff>:/gear.png</iconset>
             </property>
            </widget>
           </item>
@@ -2204,6 +2183,84 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </size>
          </property>
         </spacer>
+       </item>
+     </layout>
+     </widget>
+     <widget class="QWidget" name="actionsTab">
+      <attribute name="title">
+       <string>Actions</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_7">
+       <item>
+        <layout class="QHBoxLayout" name="actionsHeaderLayout">
+         <item>
+          <widget class="QLabel" name="actionsClassLabel">
+           <property name="text">
+            <string>Object class</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="actionsClassCombo">
+           <property name="toolTip">
+            <string>YOLO object class whose actions are being configured</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="actionsDisappearDebounceLabel">
+           <property name="text">
+            <string>Disappear debounce (s)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QDoubleSpinBox" name="actionsDisappearDebounceSpin">
+           <property name="toolTip">
+            <string>How long a class must stay absent before disappearance actions run</string>
+           </property>
+           <property name="decimals">
+            <number>1</number>
+           </property>
+           <property name="minimum">
+            <double>0.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>60.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.500000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="actionsAddButton">
+           <property name="toolTip">
+            <string>Add device set control settings for the selected object class</string>
+           </property>
+           <property name="text">
+            <string>Add device set</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QLabel" name="actionsStatusLabel">
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTabWidget" name="actionsTabWidget">
+         <property name="tabsClosable">
+          <bool>true</bool>
+         </property>
+        </widget>
        </item>
       </layout>
      </widget>

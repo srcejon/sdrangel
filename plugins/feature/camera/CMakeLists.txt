@@ -33,7 +33,6 @@ if(NOT SERVER_MODE)
         camerasettingsdialog.cpp
         camerasettingsdialog.ui
         camerahistogramdialog.cpp
-        cameraobjectcontroldialog.cpp
         cameraobjectdevicesettingsgui.cpp
         cameraicons.qrc
     )
@@ -42,7 +41,6 @@ if(NOT SERVER_MODE)
         cameragui.h
         camerasettingsdialog.h
         camerahistogramdialog.h
-        cameraobjectcontroldialog.h
         cameraobjectdevicesettingsgui.h
     )
 

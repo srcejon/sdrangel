@@ -1210,7 +1210,12 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("isoSensitivity");
 
-    if (recapture && m_qtCamera)
+    if (!m_qtCamera && (m_camera->getState() == Feature::StRunning))
+    {
+        // Start the camera (we've probably just switched to Qt camera type)
+        setupQtCapture();
+    }
+    else if (recapture && m_qtCamera)
     {
         // Restart the camera so the new format / exposure parameters take effect
         setupQtCapture();

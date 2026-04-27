@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>521</width>
-    <height>697</height>
+    <width>529</width>
+    <height>796</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>2</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -626,9 +626,9 @@
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="postProcessingTab">
+     <widget class="QWidget" name="colourTab">
       <attribute name="title">
-       <string>Post Processing</string>
+       <string>Colour</string>
       </attribute>
       <layout class="QVBoxLayout" name="postProcessingTabLayout">
        <item>
@@ -637,33 +637,51 @@
           <string>Color</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_6">
+          <item row="5" column="0">
+           <widget class="QLabel" name="contrastLabel">
+            <property name="text">
+             <string>Contrast</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QSlider" name="contrastSlider">
+            <property name="toolTip">
+             <string>Contrast adjustment</string>
+            </property>
+            <property name="minimum">
+             <number>10</number>
+            </property>
+            <property name="maximum">
+             <number>300</number>
+            </property>
+            <property name="value">
+             <number>100</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="postProcessWhiteBalanceBlueGainLabel">
+            <property name="text">
+             <string>Blue Gain</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="brightnessLabel">
+            <property name="text">
+             <string>Brightness</string>
+            </property>
+           </widget>
+          </item>
           <item row="0" column="0">
            <widget class="QLabel" name="postProcessWhiteBalanceModeLabel">
             <property name="text">
              <string>White Balance</string>
             </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QComboBox" name="postProcessWhiteBalanceModeCombo">
-            <property name="toolTip">
-             <string>Post-processing white balance mode</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>Off</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Auto</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Manual</string>
-             </property>
-            </item>
            </widget>
           </item>
           <item row="1" column="0">
@@ -695,14 +713,55 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="2">
-           <widget class="QLabel" name="postProcessWhiteBalanceGreenGainLabel">
-            <property name="text">
-             <string>Green Gain</string>
+          <item row="4" column="1">
+           <widget class="QSlider" name="brightnessSlider">
+            <property name="toolTip">
+             <string>Brightness adjustment</string>
+            </property>
+            <property name="minimum">
+             <number>-100</number>
+            </property>
+            <property name="maximum">
+             <number>100</number>
+            </property>
+            <property name="value">
+             <number>0</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
             </property>
            </widget>
           </item>
-          <item row="1" column="3">
+          <item row="4" column="3">
+           <widget class="QLabel" name="label_5">
+            <property name="minimumSize">
+             <size>
+              <width>20</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QLabel" name="contrastValue">
+            <property name="minimumSize">
+             <size>
+              <width>35</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>1.00</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="postProcessWhiteBalanceGreenGainSpin">
             <property name="toolTip">
              <string>Manual white-balance green gain</string>
@@ -724,14 +783,52 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="postProcessWhiteBalanceBlueGainLabel">
+          <item row="0" column="1">
+           <widget class="QComboBox" name="postProcessWhiteBalanceModeCombo">
+            <property name="toolTip">
+             <string>Post-processing white balance mode</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Off</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Auto</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Manual</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QLabel" name="brightnessValue">
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
             <property name="text">
-             <string>Blue Gain</string>
+             <string>0</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="2" column="0">
+           <widget class="QLabel" name="postProcessWhiteBalanceGreenGainLabel">
+            <property name="text">
+             <string>Green Gain</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
            <widget class="QDoubleSpinBox" name="postProcessWhiteBalanceBlueGainSpin">
             <property name="toolTip">
              <string>Manual white-balance blue gain</string>
@@ -753,23 +850,7 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="2">
-           <widget class="QLabel" name="brightnessValue">
-            <property name="minimumSize">
-             <size>
-              <width>30</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>0</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="4">
+          <item row="6" column="0">
            <widget class="QToolButton" name="histogramButton">
             <property name="toolTip">
              <string>Show histogram</string>
@@ -779,90 +860,29 @@
             </property>
            </widget>
           </item>
-          <item row="4" column="1">
-           <widget class="QSlider" name="contrastSlider">
-            <property name="toolTip">
-             <string>Contrast adjustment</string>
-            </property>
-            <property name="minimum">
-             <number>10</number>
-            </property>
-            <property name="maximum">
-             <number>300</number>
-            </property>
-            <property name="value">
-             <number>100</number>
-            </property>
-            <property name="orientation">
-             <enum>Qt::Orientation::Horizontal</enum>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QSlider" name="brightnessSlider">
-            <property name="toolTip">
-             <string>Brightness adjustment</string>
-            </property>
-            <property name="minimum">
-             <number>-100</number>
-            </property>
-            <property name="maximum">
-             <number>100</number>
-            </property>
-            <property name="value">
-             <number>0</number>
-            </property>
-            <property name="orientation">
-             <enum>Qt::Orientation::Horizontal</enum>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="2">
-           <widget class="QLabel" name="contrastValue">
-            <property name="minimumSize">
-             <size>
-              <width>35</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>1.00</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="brightnessLabel">
-            <property name="text">
-             <string>Brightness</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="contrastLabel">
-            <property name="text">
-             <string>Contrast</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="3">
-           <widget class="QLabel" name="label_5">
-            <property name="minimumSize">
-             <size>
-              <width>20</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
          </layout>
         </widget>
        </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="overlayTab">
+      <attribute name="title">
+       <string>Overlay</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
         <widget class="QGroupBox" name="dateTimeOverlay">
          <property name="title">
@@ -1388,19 +1408,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </item>
          </layout>
         </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacer">
-         <property name="orientation">
-          <enum>Qt::Orientation::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
        </item>
       </layout>
      </widget>

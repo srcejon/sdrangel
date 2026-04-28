@@ -1759,8 +1759,13 @@ void CameraGUI::on_refreshCamerasButton_clicked()
 
 void CameraGUI::on_cameraCombo_currentTextChanged(const QString& text)
 {
+    const bool wasAlpaca = m_settings.isAlpacaCamera();
     m_settings.m_cameraId = text;
+    if (wasAlpaca != m_settings.isAlpacaCamera()) {
+        m_settingsDialog->clearAlpacaStatus();
+    }
     m_settingsKeys.append("cameraId");
+    updateAlpacaVisibility();
     updateEnabledControls();
     applySettings();
 }

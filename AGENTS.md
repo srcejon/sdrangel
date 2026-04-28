@@ -14,34 +14,26 @@ Build:
 ## Windows
 Default preset: `default-qt6-windows`
 
-Before configuring, make sure the `external/windows` submodule is checked out so bundled tools such as `pkg-config.exe` are present.
+Before configuring, make sure the `external/windows` submodule is checked out so bundled tools such as `pkg-config.exe` and libraries such as `OpenCV` are present.
+
+Run configure and build from a VS developer shell, `vcvars64.bat"` so `cl.exe`, the Windows SDK tools, and standard libraries such as `kernel32.lib` are available in the environment.
 
 Submodule checkout:
 `git -c safe.directory=<repo-path> submodule update --init --recursive external/windows`
 
 Configure:
-`cmake --preset default-qt6-windows`
+`cmake --preset default-qt6-windows -G Ninja`
 
 Build:
-`cmake --build --preset default-qt6-windows`
+`cmake --build --preset default-qt6-windows --parallel`
 
 Allow a longer timeout for Windows builds when running through Codex tools, as dependency and generated-code targets can take several minutes before the first actionable compiler error appears.
-
-If the Visual Studio generator produces broken project files or MSBuild fails before reaching the changed target, use Ninja from a Visual Studio developer command prompt instead of the preset-generated Visual Studio solution.
-
-Example configure from a VS developer shell:
-`cmake -S . -B build-qt6-ninja-vsdev -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDEBUG_OUTPUT=ON -DRX_SAMPLE_24BIT=ON -DARCH_OPT=SSE4_2 -DHIDE_CONSOLE=OFF -DENABLE_AIRSPY=ON -DENABLE_AIRSPYHF=ON -DENABLE_BLADERF=ON -DENABLE_HACKRF=ON -DENABLE_IIO=ON -DENABLE_MIRISDR=OFF -DENABLE_PERSEUS=ON -DENABLE_RTLSDR=ON -DENABLE_SDRPLAY=ON -DENABLE_SOAPYSDR=ON -DENABLE_XTRX=ON -DENABLE_USRP=ON -DBUILD_SERVER=OFF -DENABLE_QT6=ON -DCMAKE_PREFIX_PATH="C:/Qt/6.11.0/msvc2022_64;C:/Applications/boost_1_81_0"`
-
-Example build from a VS developer shell:
-`cmake --build build-qt6-ninja-vsdev --target <target> -j1`
-
-The Ninja path should be run from `VsDevCmd.bat` so `cl.exe`, the Windows SDK tools, and standard libraries such as `kernel32.lib` are available in the environment.
 
 Current known caveat:
 - The bundled Windows OpenCV package may be detected but still marked unusable; if that happens, targets including camera post-processing code can fail with missing `opencv2/...` headers until `OpenCV_DIR` points to a compatible build.
 
 Working OpenCV override for this machine:
-`-DOpenCV_DIR="C:/Users/jon/source/repos/sdrangel-windows-libraries/opencv/x64/vc15/lib"`
+`-DOpenCV_DIR="C:/Users/jon/source/repos/sdrangel-windows-libraries/opencv4/x64/vc17"`
 
 If Qt autogen fails with `libuv process spawn failed: operation not permitted` while running through Codex tools, rerun the Windows build or `cmake -E cmake_autogen` step outside the sandbox from the same VS developer environment.
 
@@ -57,7 +49,7 @@ If Qt autogen fails with `libuv process spawn failed: operation not permitted` w
 - Device integrations are implemented as sample source, sample sink, or sample MIMO plugins
 - Channel processing is implemented under `plugins/channelrx/`, `plugins/channeltx/`, and `plugins/channelmimo/`
 - Additional non-I/Q features live under `plugins/feature/`
-- DSP-heavy code often lives in `wdsp/`
+- DSP-heavy code often lives in `sdrbase/dsp/`
 
 ## Repo Conventions
 - Follow the presets defined in `CMakePresets.json`

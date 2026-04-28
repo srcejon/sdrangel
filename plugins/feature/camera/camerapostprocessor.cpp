@@ -30,6 +30,7 @@
 #include <QTextDocument>
 #include <QTextStream>
 #include <QTimer>
+#include <QVector>
 
 #include "maincore.h"
 #include "channel/channelwebapiutils.h"
@@ -47,6 +48,306 @@ QString substituteObjectClass(QString text, const QString& className)
     return text;
 }
 
+class ProtoReader
+{
+public:
+    ProtoReader(const uchar *data, int size) :
+        m_data(data),
+        m_size(size),
+        m_pos(0)
+    {}
+
+    bool atEnd() const { return m_pos >= m_size; }
+
+    bool readVarint(quint64& value)
+    {
+        value = 0;
+        int shift = 0;
+
+        while (m_pos < m_size && shift < 64)
+        {
+            const quint8 byte = m_data[m_pos++];
+            value |= static_cast<quint64>(byte & 0x7f) << shift;
+
+            if ((byte & 0x80) == 0) {
+                return true;
+            }
+
+            shift += 7;
+        }
+
+        return false;
+    }
+
+    bool readSubMessage(ProtoReader& subMessage)
+    {
+        quint64 length = 0;
+
+        if (!readVarint(length) || (length > static_cast<quint64>(m_size - m_pos))) {
+            return false;
+        }
+
+        subMessage = ProtoReader(m_data + m_pos, static_cast<int>(length));
+        m_pos += static_cast<int>(length);
+        return true;
+    }
+
+    bool skipField(int wireType)
+    {
+        switch (wireType)
+        {
+        case 0:
+        {
+            quint64 value = 0;
+            return readVarint(value);
+        }
+        case 1:
+            return skipBytes(8);
+        case 2:
+        {
+            quint64 length = 0;
+            return readVarint(length) && skipBytes(static_cast<int>(length));
+        }
+        case 5:
+            return skipBytes(4);
+        default:
+            return false;
+        }
+    }
+
+private:
+    bool skipBytes(int count)
+    {
+        if ((count < 0) || (count > (m_size - m_pos))) {
+            return false;
+        }
+
+        m_pos += count;
+        return true;
+    }
+
+    const uchar *m_data;
+    int m_size;
+    int m_pos;
+};
+
+bool parseOnnxTensorShape(ProtoReader& reader, QVector<int>& dims)
+{
+    while (!reader.atEnd())
+    {
+        quint64 tag = 0;
+
+        if (!reader.readVarint(tag)) {
+            return false;
+        }
+
+        const int fieldNumber = static_cast<int>(tag >> 3);
+        const int wireType = static_cast<int>(tag & 0x7);
+
+        if ((fieldNumber == 1) && (wireType == 2))
+        {
+            ProtoReader dimReader(nullptr, 0);
+
+            if (!reader.readSubMessage(dimReader)) {
+                return false;
+            }
+
+            int dimValue = 0;
+            bool hasDimValue = false;
+
+            while (!dimReader.atEnd())
+            {
+                quint64 dimTag = 0;
+
+                if (!dimReader.readVarint(dimTag)) {
+                    return false;
+                }
+
+                const int dimFieldNumber = static_cast<int>(dimTag >> 3);
+                const int dimWireType = static_cast<int>(dimTag & 0x7);
+
+                if ((dimFieldNumber == 1) && (dimWireType == 0))
+                {
+                    quint64 value = 0;
+
+                    if (!dimReader.readVarint(value)) {
+                        return false;
+                    }
+
+                    dimValue = static_cast<int>(value);
+                    hasDimValue = true;
+                }
+                else if (!dimReader.skipField(dimWireType))
+                {
+                    return false;
+                }
+            }
+
+            dims.append(hasDimValue ? dimValue : 0);
+        }
+        else if (!reader.skipField(wireType))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool parseOnnxTensorType(ProtoReader& reader, QVector<int>& dims)
+{
+    while (!reader.atEnd())
+    {
+        quint64 tag = 0;
+
+        if (!reader.readVarint(tag)) {
+            return false;
+        }
+
+        const int fieldNumber = static_cast<int>(tag >> 3);
+        const int wireType = static_cast<int>(tag & 0x7);
+
+        if ((fieldNumber == 2) && (wireType == 2))
+        {
+            ProtoReader shapeReader(nullptr, 0);
+            return reader.readSubMessage(shapeReader) && parseOnnxTensorShape(shapeReader, dims);
+        }
+
+        if (!reader.skipField(wireType)) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
+bool parseOnnxValueInfo(ProtoReader& reader, QVector<int>& dims)
+{
+    while (!reader.atEnd())
+    {
+        quint64 tag = 0;
+
+        if (!reader.readVarint(tag)) {
+            return false;
+        }
+
+        const int fieldNumber = static_cast<int>(tag >> 3);
+        const int wireType = static_cast<int>(tag & 0x7);
+
+        if ((fieldNumber == 2) && (wireType == 2))
+        {
+            ProtoReader typeReader(nullptr, 0);
+
+            if (!reader.readSubMessage(typeReader)) {
+                return false;
+            }
+
+            while (!typeReader.atEnd())
+            {
+                quint64 typeTag = 0;
+
+                if (!typeReader.readVarint(typeTag)) {
+                    return false;
+                }
+
+                const int typeFieldNumber = static_cast<int>(typeTag >> 3);
+                const int typeWireType = static_cast<int>(typeTag & 0x7);
+
+                if ((typeFieldNumber == 1) && (typeWireType == 2))
+                {
+                    ProtoReader tensorTypeReader(nullptr, 0);
+                    return typeReader.readSubMessage(tensorTypeReader) && parseOnnxTensorType(tensorTypeReader, dims);
+                }
+
+                if (!typeReader.skipField(typeWireType)) {
+                    return false;
+                }
+            }
+        }
+        else if (!reader.skipField(wireType))
+        {
+            return false;
+        }
+    }
+
+    return false;
+}
+
+cv::Size readOnnxInputSize(const QString& modelPath)
+{
+    QFile modelFile(modelPath);
+
+    if (!modelFile.open(QIODevice::ReadOnly)) {
+        return cv::Size();
+    }
+
+    const QByteArray modelData = modelFile.readAll();
+    ProtoReader modelReader(reinterpret_cast<const uchar *>(modelData.constData()), modelData.size());
+
+    while (!modelReader.atEnd())
+    {
+        quint64 tag = 0;
+
+        if (!modelReader.readVarint(tag)) {
+            break;
+        }
+
+        const int fieldNumber = static_cast<int>(tag >> 3);
+        const int wireType = static_cast<int>(tag & 0x7);
+
+        if ((fieldNumber == 7) && (wireType == 2))
+        {
+            ProtoReader graphReader(nullptr, 0);
+
+            if (!modelReader.readSubMessage(graphReader)) {
+                break;
+            }
+
+            while (!graphReader.atEnd())
+            {
+                quint64 graphTag = 0;
+
+                if (!graphReader.readVarint(graphTag)) {
+                    return cv::Size();
+                }
+
+                const int graphFieldNumber = static_cast<int>(graphTag >> 3);
+                const int graphWireType = static_cast<int>(graphTag & 0x7);
+
+                if ((graphFieldNumber == 11) && (graphWireType == 2))
+                {
+                    ProtoReader inputReader(nullptr, 0);
+                    QVector<int> dims;
+
+                    if (!graphReader.readSubMessage(inputReader) || !parseOnnxValueInfo(inputReader, dims)) {
+                        continue;
+                    }
+
+                    if (dims.size() >= 4)
+                    {
+                        const int width = dims.at(dims.size() - 1);
+                        const int height = dims.at(dims.size() - 2);
+
+                        if ((width > 0) && (height > 0)) {
+                            return cv::Size(width, height);
+                        }
+                    }
+                }
+                else if (!graphReader.skipField(graphWireType))
+                {
+                    return cv::Size();
+                }
+            }
+        }
+        else if (!modelReader.skipField(wireType))
+        {
+            break;
+        }
+    }
+
+    return cv::Size();
+}
+
 }
 
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgConfigureCameraPostProcessor, Message)
@@ -60,6 +361,7 @@ CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_captureActive(false),
     m_imageSaved(false),
+    m_yoloInputSize(640, 640),
     m_autoWhiteBalanceGains(1.0, 1.0, 1.0),
     m_autoWhiteBalanceInitialized(false)
 #ifdef QT_TEXTTOSPEECH_FOUND
@@ -693,6 +995,7 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
     if (m_yoloLoadedModelPath != m_settings.m_yoloModelPath)
     {
         m_yoloNet = cv::dnn::Net();
+        m_yoloInputSize = cv::Size(640, 640);
         m_yoloLoadedModelPath.clear();
 
         if (!m_settings.m_yoloModelPath.isEmpty())
@@ -702,8 +1005,21 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
                 m_yoloNet = cv::dnn::readNetFromONNX(m_settings.m_yoloModelPath.toStdString());
                 m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
                 m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+                const cv::Size modelInputSize = readOnnxInputSize(m_settings.m_yoloModelPath);
+
+                if ((modelInputSize.width > 0) && (modelInputSize.height > 0))
+                {
+                    m_yoloInputSize = modelInputSize;
+                }
+                else
+                {
+                    qWarning() << "CameraPostProcessor::runYoloDetections: unable to read model input size, using fallback 640x640 for"
+                               << m_settings.m_yoloModelPath;
+                }
+
                 m_yoloLoadedModelPath = m_settings.m_yoloModelPath;
-                qDebug() << "CameraPostProcessor::runYoloDetections: loaded model" << m_settings.m_yoloModelPath;
+                qDebug() << "CameraPostProcessor::runYoloDetections: loaded model" << m_settings.m_yoloModelPath
+                         << "with input size" << m_yoloInputSize.width << "x" << m_yoloInputSize.height;
             }
             catch (const cv::Exception& e)
             {
@@ -721,12 +1037,11 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
         return;
     }
 
-    const int inputSize = 640;
-    const float scaleX = static_cast<float>(bgrMat.cols) / inputSize;
-    const float scaleY = static_cast<float>(bgrMat.rows) / inputSize;
+    const float scaleX = static_cast<float>(bgrMat.cols) / m_yoloInputSize.width;
+    const float scaleY = static_cast<float>(bgrMat.rows) / m_yoloInputSize.height;
 
     cv::Mat blob;
-    cv::dnn::blobFromImage(bgrMat, blob, 1.0 / 255.0, cv::Size(inputSize, inputSize), cv::Scalar(), true, false);
+    cv::dnn::blobFromImage(bgrMat, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
     m_yoloNet.setInput(blob);
 
     std::vector<cv::Mat> outputs;

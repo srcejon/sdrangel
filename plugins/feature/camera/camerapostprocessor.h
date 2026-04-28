@@ -188,6 +188,7 @@ private:
     QDateTime m_captureDateTime;
     cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
     cv::dnn::Net m_yoloNet;
+    cv::Size m_yoloInputSize;
     QString m_yoloLoadedModelPath;
     QStringList m_yoloLabels;
     QString m_yoloLoadedLabelsPath;

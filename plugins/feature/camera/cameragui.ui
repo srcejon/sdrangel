@@ -239,6 +239,20 @@
        </widget>
       </item>
       <item>
+       <widget class="ButtonSwitch" name="invertColorsButton">
+        <property name="toolTip">
+         <string>Invert colours</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/invert.png</normaloff>:/camera/icons/invert.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="Line" name="line_2">
         <property name="orientation">
          <enum>Qt::Orientation::Vertical</enum>
@@ -284,20 +298,6 @@
         <property name="icon">
          <iconset resource="cameraicons.qrc">
           <normaloff>:/camera/icons/object_detect.png</normaloff>:/camera/icons/object_detect.png</iconset>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="ButtonSwitch" name="invertColorsButton">
-        <property name="toolTip">
-         <string>Invert colours</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="cameraicons.qrc">
-          <normaloff>:/camera/icons/invert.png</normaloff>:/camera/icons/invert.png</iconset>
         </property>
        </widget>
       </item>

@@ -208,7 +208,6 @@ int findQtCameraAudioInputIndex(const CameraSettings& settings)
 } // namespace
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
@@ -387,16 +386,6 @@ bool CameraWorker::handleMessage(const Message& cmd)
         QMutexLocker locker(&m_mutex);
         MsgConfigureCameraWorker& cfg = (MsgConfigureCameraWorker&) cmd;
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
-        return true;
-    }
-    else if (MsgStartStop::match(cmd))
-    {
-        MsgStartStop& startStop = (MsgStartStop&) cmd;
-        if (startStop.getStartStop()) {
-            startCapture();
-        } else {
-            stopCapture();
-        }
         return true;
     }
     else if (MainCore::MsgImage::match(cmd))

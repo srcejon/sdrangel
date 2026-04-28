@@ -88,7 +88,6 @@ void Camera::start()
     m_state = StRunning;
 
     m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(m_settings, QList<QString>(), true));
-    m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
     if (m_postProcessor) {
         m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(true));
     }

@@ -29,6 +29,8 @@ Build:
 
 Allow a longer timeout for Windows builds when running through Codex tools, as dependency and generated-code targets can take several minutes before the first actionable compiler error appears.
 
+Use '--parallel' when building, rather than 'j1', to make builds faster.
+
 Current known caveat:
 - The bundled Windows OpenCV package may be detected but still marked unusable; if that happens, targets including camera post-processing code can fail with missing `opencv2/...` headers until `OpenCV_DIR` points to a compatible build.
 

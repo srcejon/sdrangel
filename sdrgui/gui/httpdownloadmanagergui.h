@@ -32,7 +32,7 @@ class QProgressDialog;
 class SDRGUI_API HttpDownloadManagerGUI : public HttpDownloadManager
 {
 public:
-    HttpDownloadManagerGUI();
+    HttpDownloadManagerGUI(QObject *parent = nullptr);
     QNetworkReply *download(const QUrl &url, const QString &filename, QWidget *parent = nullptr);
 
     static bool confirmDownload(const QString& filename, QWidget *parent = nullptr, int maxAge = 100);

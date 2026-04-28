@@ -22,16 +22,17 @@
 #include <QDateTime>
 #include <QRegularExpression>
 
-HttpDownloadManager::HttpDownloadManager()
+HttpDownloadManager::HttpDownloadManager(QObject *parent) :
+    m_manager(parent)
 {
-    connect(&manager, &QNetworkAccessManager::finished, this, &HttpDownloadManager::downloadFinished);
+    connect(&m_manager, &QNetworkAccessManager::finished, this, &HttpDownloadManager::downloadFinished);
 }
 
 QNetworkReply *HttpDownloadManager::download(const QUrl &url, const QString &filename)
 {
     QNetworkRequest request(url);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    QNetworkReply *reply = manager.get(request);
+    QNetworkReply *reply = m_manager.get(request);
 
     connect(reply, &QNetworkReply::sslErrors, this, &HttpDownloadManager::sslErrors);
 
@@ -227,7 +228,9 @@ void HttpDownloadManager::downloadFinished(QNetworkReply *reply)
     {
         m_downloads.removeAll(reply);
         m_filenames.remove(idx);
-        emit downloadComplete(filename, success, url, reply->errorString());
+        // reply->url() is the final URL after redirects, but we want the original requested URL
+        QString requestedURL = reply->request().url().toEncoded().constData();
+        emit downloadComplete(filename, success, requestedURL, reply->errorString());
     }
     reply->deleteLater();
 }

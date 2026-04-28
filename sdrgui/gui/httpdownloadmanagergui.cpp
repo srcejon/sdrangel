@@ -22,7 +22,8 @@
 #include <QProgressDialog>
 #include <QMessageBox>
 
-HttpDownloadManagerGUI::HttpDownloadManagerGUI()
+HttpDownloadManagerGUI::HttpDownloadManagerGUI(QObject *parent) :
+    HttpDownloadManager(parent)
 {
     connect(this, &HttpDownloadManager::downloadComplete, this, &HttpDownloadManagerGUI::downloadCompleteGUI);
     connect(this, &HttpDownloadManager::retryDownload, this, &HttpDownloadManagerGUI::retryDownload);

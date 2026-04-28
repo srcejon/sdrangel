@@ -33,7 +33,7 @@ class SDRBASE_API HttpDownloadManager : public QObject
 {
     Q_OBJECT
 public:
-    HttpDownloadManager();
+    HttpDownloadManager(QObject *parent = nullptr);
     QNetworkReply *download(const QUrl &url, const QString &filename);
     bool downloading() const;
 
@@ -43,7 +43,7 @@ protected:
     static qint64 fileAgeInDays(const QString& filename);
 
 private:
-    QNetworkAccessManager manager;
+    QNetworkAccessManager m_manager;
     QVector<QNetworkReply *> m_downloads;
     QVector<QString> m_filenames;
 

@@ -319,7 +319,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_captureMode = qBound(CaptureModeFrameRate, m_captureMode, CaptureModeInterval);
         m_captureInterval = std::max(0.1, m_captureInterval);
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, m_captureIntervalUnits, CaptureIntervalMinutes);
-        m_exposureTimeMs = std::max(1.0, m_exposureTimeMs);
+        m_exposureTimeMs = std::max(0.001, m_exposureTimeMs);
         m_isoSensitivity = std::max(-1, m_isoSensitivity);
         d.readString(10, &m_alpacaHost, "127.0.0.1");
         d.readU32(11, &utmp, 11111);
@@ -471,7 +471,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_captureMode = qBound(CaptureModeFrameRate, m_captureMode, CaptureModeInterval);
         m_captureInterval = std::max(0.1, m_captureInterval);
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, m_captureIntervalUnits, CaptureIntervalMinutes);
-        m_exposureTimeMs = std::max(1.0, m_exposureTimeMs);
+        m_exposureTimeMs = std::max(0.001, m_exposureTimeMs);
         m_isoSensitivity = std::max(-1, m_isoSensitivity);
         d.readString(10, &m_alpacaHost, "127.0.0.1");
         d.readU32(11, &utmp, 11111);
@@ -652,7 +652,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, settings.m_captureIntervalUnits, CaptureIntervalMinutes);
     }
     if (settingsKeys.contains("exposureTimeMs")) {
-        m_exposureTimeMs = std::max(1.0, settings.m_exposureTimeMs);
+        m_exposureTimeMs = std::max(0.001, settings.m_exposureTimeMs);
     }
     if (settingsKeys.contains("isoSensitivity")) {
         m_isoSensitivity = std::max(-1, settings.m_isoSensitivity);

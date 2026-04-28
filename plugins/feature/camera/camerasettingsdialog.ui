@@ -48,18 +48,18 @@
           </widget>
          </item>
          <item row="2" column="0">
-          <widget class="QLabel" name="exposureLabel">
+         <widget class="QLabel" name="exposureLabel">
            <property name="text">
-            <string>Exposure (ms)</string>
+            <string>Exposure</string>
            </property>
           </widget>
          </item>
          <item row="2" column="1">
           <layout class="QHBoxLayout" name="exposureLayout">
            <item>
-            <widget class="QSlider" name="exposureSlider">
+           <widget class="QSlider" name="exposureSlider">
              <property name="toolTip">
-              <string>Exposure time in milliseconds</string>
+              <string>Exposure time</string>
              </property>
              <property name="minimum">
               <number>0</number>
@@ -78,7 +78,7 @@
            <item>
             <widget class="QDoubleSpinBox" name="exposureSpin">
              <property name="toolTip">
-              <string>Exposure time in milliseconds</string>
+              <string>Exposure time</string>
              </property>
              <property name="decimals">
               <number>0</number>
@@ -91,6 +91,13 @@
              </property>
              <property name="singleStep">
               <double>1.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="exposureUnitsCombo">
+             <property name="toolTip">
+              <string>Exposure time units</string>
              </property>
             </widget>
            </item>

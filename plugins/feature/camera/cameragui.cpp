@@ -117,6 +117,12 @@ double sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int sliderValue
     return qBound(spinBox->minimum(), spinBox->minimum() + (sliderValue * step), spinBox->maximum());
 }
 
+double currentExposureUnitScaleMs(const Ui::CameraSettingsDialog *ui)
+{
+    const QVariant data = ui->exposureUnitsCombo->currentData();
+    return data.isValid() ? data.toDouble() : 1.0;
+}
+
 void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
 {
     const int minRounded = qMax(1, static_cast<int>(std::ceil(minFps)));
@@ -360,6 +366,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_qtIsoSensitivitySupported(true),
     m_qtWhiteBalanceModeSupported(true),
     m_qtExposureCompensationSupported(true),
+    m_exposureMinimumMs(1.0),
+    m_exposureMaximumMs(60000.0),
+    m_exposureStepMs(1.0),
     m_imageScene(nullptr),
     m_imagePixmapItem(nullptr),
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -436,6 +445,11 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     settingsUI()->fpsLabel->addItem(tr("Interval"), CameraSettings::CaptureModeInterval);
     settingsUI()->intervalUnitsCombo->addItem(tr("Seconds"), CameraSettings::CaptureIntervalSeconds);
     settingsUI()->intervalUnitsCombo->addItem(tr("Minutes"), CameraSettings::CaptureIntervalMinutes);
+    settingsUI()->exposureUnitsCombo->addItem(tr("us"), 0.001);
+    settingsUI()->exposureUnitsCombo->addItem(tr("ms"), 1.0);
+    settingsUI()->exposureUnitsCombo->addItem(tr("s"), 1000.0);
+    settingsUI()->exposureUnitsCombo->addItem(tr("min"), 60000.0);
+    settingsUI()->exposureUnitsCombo->setCurrentIndex(1);
     m_statusTimer.start(250);
 
     displaySettings();
@@ -500,9 +514,7 @@ void CameraGUI::displaySettings()
         settingsUI()->actionsDisappearDebounceSpin->setValue(m_settings.m_yoloDisappearDebounce);
     }
     rebuildActionTabsForCurrentClass();
-    settingsUI()->exposureSpin->setValue(m_settings.m_exposureTimeMs);
-    settingsUI()->exposureSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->exposureSpin));
-    settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, m_settings.m_exposureTimeMs));
+    updateExposureControls();
     settingsUI()->isoSpin->setValue(m_settings.m_isoSensitivity);
     settingsUI()->alpacaHostEdit->setText(m_settings.m_alpacaHost);
     settingsUI()->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
@@ -685,6 +697,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->intervalUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_intervalUnitsCombo_currentIndexChanged);
     QObject::connect(settingsUI()->exposureSlider, &QSlider::valueChanged, this, &CameraGUI::on_exposureSlider_valueChanged);
     QObject::connect(settingsUI()->exposureSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
+    QObject::connect(settingsUI()->exposureUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_exposureUnitsCombo_currentIndexChanged);
     QObject::connect(settingsUI()->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
     QObject::connect(settingsUI()->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
@@ -947,6 +960,31 @@ void CameraGUI::updateCaptureModeControls()
 {
     const bool intervalMode = m_settings.isAlpacaCamera() || m_settings.isIntervalCaptureMode();
     settingsUI()->captureValueStack->setCurrentWidget(intervalMode ? settingsUI()->intervalPage : settingsUI()->frameRatePage);
+}
+
+void CameraGUI::updateExposureControls()
+{
+    const double unitScaleMs = currentExposureUnitScaleMs(settingsUI());
+    const double minimum = m_exposureMinimumMs / unitScaleMs;
+    const double maximum = m_exposureMaximumMs / unitScaleMs;
+    const double singleStep = std::max(0.000001, m_exposureStepMs / unitScaleMs);
+    const double value = qBound(minimum, m_settings.m_exposureTimeMs / unitScaleMs, maximum);
+
+    {
+        QSignalBlocker blocker(settingsUI()->exposureSpin);
+        settingsUI()->exposureSpin->setDecimals(decimalsForStepSize(singleStep));
+        settingsUI()->exposureSpin->setSingleStep(singleStep);
+        settingsUI()->exposureSpin->setMinimum(minimum);
+        settingsUI()->exposureSpin->setMaximum(maximum);
+        settingsUI()->exposureSpin->setValue(value);
+    }
+
+    {
+        QSignalBlocker blocker(settingsUI()->exposureSlider);
+        settingsUI()->exposureSlider->setMinimum(0);
+        settingsUI()->exposureSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->exposureSpin));
+        settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, value));
+    }
 }
 
 QStringList CameraGUI::loadActionObjectClasses() const
@@ -1237,6 +1275,7 @@ void CameraGUI::setupQtCapture()
     settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
     settingsUI()->exposureSlider->setEnabled(m_qtManualExposureSupported);
     settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->exposureUnitsCombo->setEnabled(m_qtManualExposureSupported);
     settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
     settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
     settingsUI()->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
@@ -1395,6 +1434,7 @@ void CameraGUI::setupQtCapture()
         settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
         settingsUI()->exposureSlider->setEnabled(m_qtManualExposureSupported);
         settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
+        settingsUI()->exposureUnitsCombo->setEnabled(m_qtManualExposureSupported);
         settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
         settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
         settingsUI()->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
@@ -1644,7 +1684,7 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
 
     const double exposureMinMs = std::max(0.001, info.getExposureMinMs());
     const double exposureMaxMs = std::max(exposureMinMs, info.getExposureMaxMs());
-    const double exposureResolutionMs = std::max(0.001, info.getExposureResolutionMs());
+    const double exposureResolutionMs = std::max(0.000001, info.getExposureResolutionMs());
 
     // Bin X
     settingsUI()->alpacaBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
@@ -1709,14 +1749,11 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
         settingsUI()->alpacaOffsetSlider->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
     }
 
-    settingsUI()->exposureSpin->setDecimals(decimalsForStepSize(exposureResolutionMs));
-    settingsUI()->exposureSpin->setSingleStep(exposureResolutionMs);
-    settingsUI()->exposureSpin->setMinimum(exposureMinMs);
-    settingsUI()->exposureSpin->setMaximum(exposureMaxMs);
-    settingsUI()->exposureSpin->setValue(qBound(exposureMinMs, m_settings.m_exposureTimeMs, exposureMaxMs));
-    settingsUI()->exposureSlider->setMinimum(0);
-    settingsUI()->exposureSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->exposureSpin));
-    settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, settingsUI()->exposureSpin->value()));
+    m_exposureMinimumMs = exposureMinMs;
+    m_exposureMaximumMs = exposureMaxMs;
+    m_exposureStepMs = exposureResolutionMs;
+    m_settings.m_exposureTimeMs = qBound(exposureMinMs, m_settings.m_exposureTimeMs, exposureMaxMs);
+    updateExposureControls();
 
     // Status labels
     settingsUI()->sensorNameLabel->setText(info.getSensorName().isEmpty() ? "-" : info.getSensorName());
@@ -1864,9 +1901,10 @@ void CameraGUI::on_intervalUnitsCombo_currentIndexChanged(int index)
 
 void CameraGUI::on_exposureSlider_valueChanged(int value)
 {
-    const double exposureMs = sliderValueToDoubleSpinBox(settingsUI()->exposureSpin, value);
+    const double exposureValue = sliderValueToDoubleSpinBox(settingsUI()->exposureSpin, value);
+    const double exposureMs = exposureValue * currentExposureUnitScaleMs(settingsUI());
     settingsUI()->exposureSpin->blockSignals(true);
-    settingsUI()->exposureSpin->setValue(exposureMs);
+    settingsUI()->exposureSpin->setValue(exposureValue);
     settingsUI()->exposureSpin->blockSignals(false);
     m_settings.m_exposureTimeMs = exposureMs;
     m_settingsKeys.append("exposureTimeMs");
@@ -1878,9 +1916,18 @@ void CameraGUI::on_exposureSpin_valueChanged(double value)
     settingsUI()->exposureSlider->blockSignals(true);
     settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, value));
     settingsUI()->exposureSlider->blockSignals(false);
-    m_settings.m_exposureTimeMs = value;
+    m_settings.m_exposureTimeMs = value * currentExposureUnitScaleMs(settingsUI());
     m_settingsKeys.append("exposureTimeMs");
     applySettings();
+}
+
+void CameraGUI::on_exposureUnitsCombo_currentIndexChanged(int index)
+{
+    if (index < 0) {
+        return;
+    }
+
+    updateExposureControls();
 }
 
 void CameraGUI::on_isoSpin_valueChanged(int value)
@@ -2469,6 +2516,7 @@ void CameraGUI::updateEnabledControls()
         settingsUI()->exposureLabel->setEnabled(true);
         settingsUI()->exposureSlider->setEnabled(true);
         settingsUI()->exposureSpin->setEnabled(true);
+        settingsUI()->exposureUnitsCombo->setEnabled(true);
     }
     else
     {
@@ -2484,6 +2532,7 @@ void CameraGUI::updateEnabledControls()
             settingsUI()->exposureLabel->setEnabled(false);
             settingsUI()->exposureSlider->setEnabled(false);
             settingsUI()->exposureSpin->setEnabled(false);
+            settingsUI()->exposureUnitsCombo->setEnabled(false);
         }
         if (!m_qtIsoSensitivitySupported)
         {

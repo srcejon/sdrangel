@@ -124,6 +124,9 @@ private:
     bool m_qtIsoSensitivitySupported;   // true when the active Qt camera supports manual ISO sensitivity
     bool m_qtWhiteBalanceModeSupported; // true when the active Qt camera supports white balance control
     bool m_qtExposureCompensationSupported; // true when the active Qt camera supports exposure compensation
+    double m_exposureMinimumMs;
+    double m_exposureMaximumMs;
+    double m_exposureStepMs;
     QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
     QList<CameraObjectDeviceSettingsGUI *> m_actionDeviceSettingsGUIs;
 
@@ -158,6 +161,7 @@ private:
     void updateImageWidget();
     void updateEnabledControls();
     void updateCaptureModeControls();
+    void updateExposureControls();
     void reportResolutions();
     void populateQtFormatControls(const QList<QSize>& resolutions, const QHash<QString, FrameRateOptions>& frameRateOptionsByResolution);
     void updateFrameRateControlForResolution(const QString& resolutionText);
@@ -188,6 +192,7 @@ private slots:
     void on_intervalUnitsCombo_currentIndexChanged(int index);
     void on_exposureSlider_valueChanged(int value);
     void on_exposureSpin_valueChanged(double value);
+    void on_exposureUnitsCombo_currentIndexChanged(int index);
     void on_isoSpin_valueChanged(int value);
     void on_alpacaHostEdit_editingFinished();
     void on_alpacaPortSpin_valueChanged(int value);

@@ -563,7 +563,7 @@
          </property>
          <layout class="QVBoxLayout" name="alpacaStatusGroupLayout">
           <property name="spacing">
-           <number>15</number>
+           <number>7</number>
           </property>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayout">
@@ -701,6 +701,19 @@
              </layout>
             </item>
            </layout>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_2">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
           </item>
           <item>
            <widget class="QWidget" name="alpacaTempChartContainer" native="true">
@@ -2292,29 +2305,39 @@ li.checked::marker { content: &quot;\2612&quot;; }
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_7">
        <item>
-        <layout class="QHBoxLayout" name="actionsHeaderLayout">
-         <item>
+        <widget class="QLabel" name="actionsStatusLabel">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QFormLayout" name="formLayout_7">
+         <item row="0" column="0">
           <widget class="QLabel" name="actionsClassLabel">
            <property name="text">
             <string>Object class</string>
            </property>
           </widget>
          </item>
-         <item>
+         <item row="0" column="1">
           <widget class="QComboBox" name="actionsClassCombo">
            <property name="toolTip">
             <string>YOLO object class whose actions are being configured</string>
            </property>
           </widget>
          </item>
-         <item>
+         <item row="1" column="0">
           <widget class="QLabel" name="actionsDisappearDebounceLabel">
            <property name="text">
             <string>Disappear debounce (s)</string>
            </property>
           </widget>
          </item>
-         <item>
+         <item row="1" column="1">
           <widget class="QDoubleSpinBox" name="actionsDisappearDebounceSpin">
            <property name="toolTip">
             <string>How long a class must stay absent before disappearance actions run</string>
@@ -2333,30 +2356,26 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QPushButton" name="actionsAddButton">
-           <property name="toolTip">
-            <string>Add device set control settings for the selected object class</string>
-           </property>
-           <property name="text">
-            <string>Add device set</string>
-           </property>
-          </widget>
-         </item>
         </layout>
        </item>
        <item>
-        <widget class="QLabel" name="actionsStatusLabel">
-         <property name="text">
-          <string/>
+        <widget class="QToolButton" name="actionsAddButton">
+         <property name="toolTip">
+          <string>Add device set control settings for the selected object class</string>
          </property>
-         <property name="wordWrap">
-          <bool>true</bool>
+         <property name="text">
+          <string>Add device set</string>
          </property>
         </widget>
        </item>
        <item>
         <widget class="QTabWidget" name="actionsTabWidget">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>1</verstretch>
+          </sizepolicy>
+         </property>
          <property name="tabsClosable">
           <bool>true</bool>
          </property>

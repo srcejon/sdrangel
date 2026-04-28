@@ -264,10 +264,15 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (CameraPostProcessor::MsgReportFrame::match(message))
     {
         const CameraPostProcessor::MsgReportFrame& report = (CameraPostProcessor::MsgReportFrame&) message;
+        QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
         updateImageWidget();
         if (m_histogramDialog) {
             m_histogramDialog->updateImage(m_lastImage);
+        }
+        // When the image size changes, refit to view
+        if (oldSize != m_lastImage.size()) {
+            ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
         }
         return true;
     }
@@ -1047,7 +1052,7 @@ void CameraGUI::updateActionControls()
     else
     {
         settingsUI()->actionsStatusLabel->setText(
-            tr("Configure what each device set should do when the selected YOLO class is detected or disappears."));
+            tr("Configure what each device set should do when the selected class is detected or disappears."));
     }
 }
 

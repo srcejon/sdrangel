@@ -31,6 +31,10 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/dnn/dnn.hpp>
 
+#ifdef QT_TEXTTOSPEECH_FOUND
+#include <QTextToSpeech>
+#endif
+
 #include "util/message.h"
 #include "util/messagequeue.h"
 #include "camerasettings.h"
@@ -193,6 +197,9 @@ private:
     QImage m_spectrumViewImage;
     cv::Vec3d m_autoWhiteBalanceGains;
     bool m_autoWhiteBalanceInitialized;
+#ifdef QT_TEXTTOSPEECH_FOUND
+    QTextToSpeech *m_speech;
+#endif
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
@@ -203,6 +210,7 @@ private:
     void applyObjectDetectedSettings(const QString& className);
     void applyObjectDisappearedSettings(const QString& className);
     void executeCommand(const QString& command, const QString& className);
+    void saySpeech(const QString& speech, const QString& className);
     bool shouldRecordVideoForDetectedObjects() const;
     void setVideoRecordingEnabled(bool enabled);
     void reportFrameToGUI(const QImage& image);

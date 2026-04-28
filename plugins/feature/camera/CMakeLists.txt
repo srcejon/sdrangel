@@ -55,6 +55,10 @@ else()
     set(INSTALL_FOLDER ${INSTALL_PLUGINSSRV_DIR})
 endif()
 
+if(Qt${QT_DEFAULT_MAJOR_VERSION}TextToSpeech_FOUND)
+    list(APPEND TARGET_LIB Qt::TextToSpeech)
+endif()
+
 if(NOT Qt6_FOUND)
     add_library(${TARGET_NAME} ${camera_SOURCES})
 else()

@@ -41,6 +41,8 @@ QDataStream& operator<<(QDataStream& out, const CameraSettings::ObjectDeviceSett
     out << settings->m_detectCommand;
     out << settings->m_disappearCommand;
     out << settings->m_recordVideo;
+    out << settings->m_detectSpeech;
+    out << settings->m_disappearSpeech;
     return out;
 }
 
@@ -58,6 +60,12 @@ QDataStream& operator>>(QDataStream& in, CameraSettings::ObjectDeviceSettings*& 
     in >> settings->m_disappearCommand;
     if (!in.atEnd()) {
         in >> settings->m_recordVideo;
+    }
+    if (!in.atEnd()) {
+        in >> settings->m_detectSpeech;
+    }
+    if (!in.atEnd()) {
+        in >> settings->m_disappearSpeech;
     }
     return in;
 }
@@ -85,6 +93,8 @@ CameraSettings::ObjectDeviceSettings::ObjectDeviceSettings() :
 {
     m_detectCommand.clear();
     m_disappearCommand.clear();
+    m_detectSpeech.clear();
+    m_disappearSpeech.clear();
 }
 
 void CameraSettings::ObjectDeviceSettings::getDebugString(std::ostringstream& ostr) const
@@ -100,6 +110,8 @@ void CameraSettings::ObjectDeviceSettings::getDebugString(std::ostringstream& os
          << " recordVideo: " << m_recordVideo
          << " detectCommand: " << m_detectCommand.toStdString()
          << " disappearCommand: " << m_disappearCommand.toStdString()
+         << " detectSpeech: " << m_detectSpeech.toStdString()
+         << " disappearSpeech: " << m_disappearSpeech.toStdString()
          << " }";
 }
 

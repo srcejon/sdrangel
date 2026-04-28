@@ -55,6 +55,8 @@ struct CameraSettings
         bool m_recordVideo;             //!< Start video recording on detection and stop when the object disappears
         QString m_detectCommand;        //!< Command/script to execute when the object class is detected
         QString m_disappearCommand;     //!< Command/script to execute when the object class disappears
+        QString m_detectSpeech;         //!< Speech to say when the object class is detected
+        QString m_disappearSpeech;      //!< Speech to say when the object class disappears
 
         ObjectDeviceSettings();
         void getDebugString(std::ostringstream& ostr) const;

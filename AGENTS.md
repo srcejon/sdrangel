@@ -16,16 +16,19 @@ Default preset: `default-qt6-windows`
 
 Before configuring, make sure the `external/windows` submodule is checked out so bundled tools such as `pkg-config.exe` and libraries such as `OpenCV` are present.
 
-Run configure and build from a VS developer shell, `vcvars64.bat"` so `cl.exe`, the Windows SDK tools, and standard libraries such as `kernel32.lib` are available in the environment.
+Always run Windows configure and build commands from `vcvars64.bat` (or an already-open VS developer shell that has run it) so `cl.exe`, the Windows SDK tools, and standard libraries such as `kernel32.lib` are available in the environment.
+
+Example:
+`cmd /c "\"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cmake --preset default-qt6-windows -G Ninja"`
 
 Submodule checkout:
 `git -c safe.directory=<repo-path> submodule update --init --recursive external/windows`
 
 Configure:
-`cmake --preset default-qt6-windows -G Ninja`
+`cmd /c "\"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cmake --preset default-qt6-windows -G Ninja"`
 
 Build:
-`cmake --build --preset default-qt6-windows --parallel`
+`cmd /c "\"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cmake --build --preset default-qt6-windows --parallel"`
 
 Allow a longer timeout for Windows builds when running through Codex tools, as dependency and generated-code targets can take several minutes before the first actionable compiler error appears.
 

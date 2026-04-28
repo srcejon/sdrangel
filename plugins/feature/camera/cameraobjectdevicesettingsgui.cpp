@@ -39,6 +39,8 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     m_recordVideoWidget(new QCheckBox(this)),
     m_detectCommandWidget(new QLineEdit(this)),
     m_disappearCommandWidget(new QLineEdit(this)),
+    m_detectSpeechWidget(new QLineEdit(this)),
+    m_disappearSpeechWidget(new QLineEdit(this)),
     m_currentPresetType('R'),
     m_devSettings(devSettings)
 {
@@ -74,6 +76,14 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     m_disappearCommandWidget->setText(devSettings->m_disappearCommand);
     m_disappearCommandWidget->setToolTip(tr("Command to execute when the selected object class disappears"));
     formLayout->addRow(tr("Disappear command"), m_disappearCommandWidget);
+
+    m_detectSpeechWidget->setText(devSettings->m_detectSpeech);
+    m_detectSpeechWidget->setToolTip(tr("Speech to say when the selected object class is detected. Supports ${class}."));
+    formLayout->addRow(tr("Detect speech"), m_detectSpeechWidget);
+
+    m_disappearSpeechWidget->setText(devSettings->m_disappearSpeech);
+    m_disappearSpeechWidget->setToolTip(tr("Speech to say when the selected object class disappears. Supports ${class}."));
+    formLayout->addRow(tr("Disappear speech"), m_disappearSpeechWidget);
 
     addDeviceSets();
 
@@ -221,4 +231,6 @@ void CameraObjectDeviceSettingsGUI::accept()
     m_devSettings->m_recordVideo = m_recordVideoWidget->isChecked();
     m_devSettings->m_detectCommand = m_detectCommandWidget->text();
     m_devSettings->m_disappearCommand = m_disappearCommandWidget->text();
+    m_devSettings->m_detectSpeech = m_detectSpeechWidget->text();
+    m_devSettings->m_disappearSpeech = m_disappearSpeechWidget->text();
 }

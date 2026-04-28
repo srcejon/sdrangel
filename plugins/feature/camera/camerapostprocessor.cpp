@@ -39,6 +39,16 @@
 #include "util/profiler.h"
 #include "camerapostprocessor.h"
 
+namespace {
+
+QString substituteObjectClass(QString text, const QString& className)
+{
+    text.replace(QStringLiteral("${class}"), className);
+    return text;
+}
+
+}
+
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgConfigureCameraPostProcessor, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
@@ -52,6 +62,9 @@ CameraPostProcessor::CameraPostProcessor() :
     m_imageSaved(false),
     m_autoWhiteBalanceGains(1.0, 1.0, 1.0),
     m_autoWhiteBalanceInitialized(false)
+#ifdef QT_TEXTTOSPEECH_FOUND
+    , m_speech(new QTextToSpeech(this))
+#endif
 {
 }
 
@@ -920,8 +933,7 @@ void CameraPostProcessor::executeCommand(const QString& command, const QString& 
     }
 
 #if QT_CONFIG(process)
-    QString cmd = command;
-    cmd.replace(QStringLiteral("${class}"), className);
+    const QString cmd = substituteObjectClass(command, className);
     QStringList allArgs = QProcess::splitCommand(cmd);
 
     if (allArgs.isEmpty()) {
@@ -934,6 +946,21 @@ void CameraPostProcessor::executeCommand(const QString& command, const QString& 
 #else
     qWarning() << "CameraPostProcessor::executeCommand: QProcess not supported. Can't run:" << command;
     (void) className;
+#endif
+}
+
+void CameraPostProcessor::saySpeech(const QString& speech, const QString& className)
+{
+    if (speech.isEmpty()) {
+        return;
+    }
+
+    const QString expandedSpeech = substituteObjectClass(speech, className);
+
+#ifdef QT_TEXTTOSPEECH_FOUND
+    m_speech->say(expandedSpeech);
+#else
+    qWarning() << "CameraPostProcessor::saySpeech: TextToSpeech not supported. Unable to say" << expandedSpeech;
 #endif
 }
 
@@ -1026,6 +1053,10 @@ void CameraPostProcessor::applyObjectDetectedSettings(const QString& className)
             if (!devSettings->m_detectCommand.isEmpty()) {
                 executeCommand(devSettings->m_detectCommand, className);
             }
+
+            if (!devSettings->m_detectSpeech.isEmpty()) {
+                saySpeech(devSettings->m_detectSpeech, className);
+            }
         }
     });
 }
@@ -1058,6 +1089,10 @@ void CameraPostProcessor::applyObjectDisappearedSettings(const QString& classNam
 
         if (!devSettings->m_disappearCommand.isEmpty()) {
             executeCommand(devSettings->m_disappearCommand, className);
+        }
+
+        if (!devSettings->m_disappearSpeech.isEmpty()) {
+            saySpeech(devSettings->m_disappearSpeech, className);
         }
     }
 

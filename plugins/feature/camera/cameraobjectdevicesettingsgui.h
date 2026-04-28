@@ -58,6 +58,8 @@ private:
     QCheckBox *m_recordVideoWidget;
     QLineEdit *m_detectCommandWidget;
     QLineEdit *m_disappearCommandWidget;
+    QLineEdit *m_detectSpeechWidget;
+    QLineEdit *m_disappearSpeechWidget;
     QChar m_currentPresetType;
     CameraSettings::ObjectDeviceSettings *m_devSettings;
 };

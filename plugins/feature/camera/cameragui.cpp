@@ -2389,6 +2389,7 @@ void CameraGUI::on_histogramButton_clicked()
         if (!m_histogramDialog)
         {
             m_histogramDialog = new CameraHistogramDialog(m_lastImage, this);
+            m_histogramDialog->setAttribute(Qt::WA_DeleteOnClose); // Delete when closed, so we don't waste CPU calculating the histogram when not visible
             connect(m_histogramDialog, &QObject::destroyed, this, [this]() { m_histogramDialog = nullptr; });
         }
         else

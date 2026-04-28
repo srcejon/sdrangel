@@ -35,7 +35,6 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
     setModal(false);
 
     m_chart->setTheme(QChart::ChartThemeDark);
-    m_chart->setTitle(tr("RGB histogram"));
     m_chart->legend()->setVisible(true);
 
     m_axisX->setRange(0, 255);
@@ -50,12 +49,20 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
 
     m_chartView->setRenderHint(QPainter::Antialiasing);
 
+    m_chartView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
     auto* closeButton = new QPushButton(tr("Close"), this);
     connect(closeButton, &QPushButton::clicked, this, &QDialog::close);
 
-    auto* layout = new QVBoxLayout(this);
+    auto buttonSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding);
+
+    auto* buttonLayout = new QHBoxLayout();
+    buttonLayout->addItem(buttonSpacer);
+    buttonLayout->addWidget(closeButton);
+
+    auto* layout = new QVBoxLayout();
     layout->addWidget(m_chartView);
-    layout->addWidget(closeButton);
+    layout->addLayout(buttonLayout);
     setLayout(layout);
 
     updateImage(image);

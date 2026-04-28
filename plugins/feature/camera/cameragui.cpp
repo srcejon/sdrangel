@@ -969,6 +969,7 @@ void CameraGUI::updateExposureControls()
     const double maximum = m_exposureMaximumMs / unitScaleMs;
     const double singleStep = std::max(0.000001, m_exposureStepMs / unitScaleMs);
     const double value = qBound(minimum, m_settings.m_exposureTimeMs / unitScaleMs, maximum);
+    const double sliderMaximumValue = std::min(maximum, 10000.0);
 
     {
         QSignalBlocker blocker(settingsUI()->exposureSpin);
@@ -982,8 +983,12 @@ void CameraGUI::updateExposureControls()
     {
         QSignalBlocker blocker(settingsUI()->exposureSlider);
         settingsUI()->exposureSlider->setMinimum(0);
-        settingsUI()->exposureSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->exposureSpin));
-        settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, value));
+        settingsUI()->exposureSlider->setMaximum(std::max(
+            0,
+            static_cast<int>(std::llround((sliderMaximumValue - minimum) / singleStep))));
+        settingsUI()->exposureSlider->setValue(std::min(
+            settingsUI()->exposureSlider->maximum(),
+            doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, value)));
     }
 }
 

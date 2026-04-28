@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>441</width>
+    <width>431</width>
     <height>364</height>
    </rect>
   </property>
@@ -24,7 +24,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>411</width>
+     <width>421</width>
      <height>71</height>
     </rect>
    </property>
@@ -219,6 +219,27 @@
       </item>
       <item>
        <widget class="Line" name="line_3">
+        <property name="orientation">
+         <enum>Qt::Orientation::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="histogramButton">
+        <property name="toolTip">
+         <string>Show histogram</string>
+        </property>
+        <property name="text">
+         <string>Histogram</string>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/histogram.png</normaloff>:/camera/icons/histogram.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="Line" name="line_2">
         <property name="orientation">
          <enum>Qt::Orientation::Vertical</enum>
         </property>

@@ -181,6 +181,11 @@ static int runQtApplication(int argc, char* argv[], qtwebapp::LoggerWithFile *lo
         qputenv("QT_SCALE_FACTOR", scaleFactor.toLatin1());
     }
 
+    qputenv("QT_FFMPEG_DEBUG", "1");
+    qputenv("QT_LOGGING_RULES", "*.ffmpeg.*=true");
+    qputenv("OPENCV_LOG_LEVEL", "DEBUG");
+    qputenv("OPENCV_VIDEOIO_DEBUG", "1");
+
     SDRangelApplication a(argc, argv);
 
 #if 1

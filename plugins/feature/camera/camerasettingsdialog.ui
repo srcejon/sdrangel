@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>529</width>
-    <height>714</height>
+    <width>549</width>
+    <height>719</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -697,51 +697,6 @@
       </attribute>
       <layout class="QVBoxLayout" name="postProcessingTabLayout">
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_7">
-         <item>
-          <widget class="QToolButton" name="histogramButton">
-           <property name="toolTip">
-            <string>Show histogram</string>
-           </property>
-           <property name="text">
-            <string>Histogram</string>
-           </property>
-           <property name="icon">
-            <iconset resource="cameraicons.qrc">
-             <normaloff>:/camera/icons/histogram.png</normaloff>:/camera/icons/histogram.png</iconset>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QToolButton" name="defaultColorSettingsButton">
-           <property name="toolTip">
-            <string>Reset color settings to their default values</string>
-           </property>
-           <property name="text">
-            <string/>
-           </property>
-           <property name="icon">
-            <iconset resource="../../../sdrgui/resources/res.qrc">
-             <normaloff>:/recycle.png</normaloff>:/recycle.png</iconset>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <spacer name="horizontalSpacer">
-           <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-        </layout>
-       </item>
-       <item>
         <widget class="QGroupBox" name="colorGroup">
          <property name="title">
           <string>Color</string>
@@ -1256,6 +1211,37 @@
           </item>
          </layout>
         </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_7">
+         <item>
+          <widget class="QToolButton" name="defaultColorSettingsButton">
+           <property name="toolTip">
+            <string>Reset color settings to their default values</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="../../../sdrgui/resources/res.qrc">
+             <normaloff>:/recycle.png</normaloff>:/recycle.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
        </item>
        <item>
         <spacer name="verticalSpacer">
@@ -2184,7 +2170,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
          </property>
         </spacer>
        </item>
-     </layout>
+      </layout>
      </widget>
      <widget class="QWidget" name="actionsTab">
       <attribute name="title">
@@ -2247,11 +2233,11 @@ li.checked::marker { content: &quot;\2612&quot;; }
        </item>
        <item>
         <widget class="QLabel" name="actionsStatusLabel">
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
          <property name="text">
           <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
          </property>
         </widget>
        </item>

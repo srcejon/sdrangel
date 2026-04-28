@@ -945,7 +945,7 @@ void CameraGUI::updateFrameRateControlForResolution(const QString& resolutionTex
 
 void CameraGUI::updateCaptureModeControls()
 {
-    const bool intervalMode = m_settings.isIntervalCaptureMode();
+    const bool intervalMode = m_settings.isAlpacaCamera() || m_settings.isIntervalCaptureMode();
     settingsUI()->captureValueStack->setCurrentWidget(intervalMode ? settingsUI()->intervalPage : settingsUI()->frameRatePage);
 }
 
@@ -1458,7 +1458,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         }
         m_qtFrameRateOptionsByResolution.clear();
         settingsUI()->fpsStack->setCurrentWidget(settingsUI()->fpsSpinPage);
-        settingsUI()->captureValueStack->setCurrentWidget(settingsUI()->frameRatePage);
+        updateCaptureModeControls();
         settingsUI()->fpsSpin->setMinimum(1);
         settingsUI()->fpsSpin->setMaximum(240);
         settingsUI()->fpsSpin->setValue(m_settings.m_framesPerSecond);
@@ -1590,7 +1590,8 @@ void CameraGUI::updateAlpacaVisibility()
 
     settingsUI()->resolutionLabel->setVisible(!alpaca);
     settingsUI()->resolutionCombo->setVisible(!alpaca);
-    settingsUI()->captureValueStack->setCurrentWidget(m_settings.isIntervalCaptureMode() ? settingsUI()->intervalPage : settingsUI()->frameRatePage);
+    settingsUI()->fpsLabel->setEnabled(!alpaca);
+    updateCaptureModeControls();
     if (alpaca || !m_settings.isIntervalCaptureMode()) {
         settingsUI()->fpsStack->setCurrentWidget(settingsUI()->fpsSpinPage);
     }
@@ -1769,6 +1770,16 @@ void CameraGUI::on_cameraCombo_currentTextChanged(const QString& text)
     if (wasAlpaca != m_settings.isAlpacaCamera()) {
         m_settingsDialog->clearAlpacaStatus();
     }
+    if (m_settings.isAlpacaCamera() && (m_settings.m_captureMode != CameraSettings::CaptureModeInterval))
+    {
+        m_settings.m_captureMode = CameraSettings::CaptureModeInterval;
+        m_settingsKeys.append("captureMode");
+        const int intervalIndex = settingsUI()->fpsLabel->findData(CameraSettings::CaptureModeInterval);
+        if (intervalIndex >= 0) {
+            QSignalBlocker blocker(settingsUI()->fpsLabel);
+            settingsUI()->fpsLabel->setCurrentIndex(intervalIndex);
+        }
+    }
     m_settingsKeys.append("cameraId");
     updateAlpacaVisibility();
     updateEnabledControls();
@@ -1802,6 +1813,10 @@ void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
 void CameraGUI::on_fpsLabel_currentIndexChanged(int index)
 {
     if (index < 0) {
+        return;
+    }
+
+    if (m_settings.isAlpacaCamera()) {
         return;
     }
 

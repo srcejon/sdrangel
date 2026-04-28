@@ -24,6 +24,7 @@
 #include <sstream>
 
 #include "util/simpleserializer.h"
+#include "util/httpdownloadmanager.h"
 #include "settings/serializable.h"
 #include "camerasettings.h"
 
@@ -1183,4 +1184,19 @@ double CameraSettings::getCaptureFrameRate() const
     }
 
     return std::max(0.001, 1.0 / getCaptureIntervalSeconds());
+}
+
+// Map URL to filename where it will be downloaded
+QString CameraSettings::urlToFilename(const QString &url, const QString& destSubDir)
+{
+    if (url.startsWith("http://") || url.startsWith("https://"))
+    {
+        QString dirPath = HttpDownloadManager::downloadDir() + "/" + destSubDir;
+
+        return dirPath + "/" + QUrl(url).fileName();
+    }
+    else
+    {
+        return url;
+    }
 }

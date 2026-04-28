@@ -26,6 +26,7 @@
 #include <QGraphicsPixmapItem>
 #include <QSize>
 #include <QToolButton>
+#include <QProgressDialog>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QVideoFrame>
@@ -113,6 +114,8 @@ private:
     MessageQueue m_inputMessageQueue;
     QTimer m_statusTimer;
     int m_lastFeatureState;
+
+    QProgressDialog *m_progressDialog;
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraSettingsDialog *m_settingsDialog;
@@ -265,9 +268,9 @@ private slots:
     void on_spectrumOffsetYSlider_valueChanged(int value);
     void on_spectrumScaleSpin_valueChanged(double value);
     void on_yoloButton_toggled(bool checked);
-    void on_yoloModelPathEdit_editingFinished();
+    void on_yoloModelPathCombo_currentTextChanged(const QString &text);
     void on_yoloModelPathButton_clicked();
-    void on_yoloLabelsPathEdit_editingFinished();
+    void on_yoloLabelsPathCombo_currentTextChanged(const QString &text);
     void on_yoloLabelsPathButton_clicked();
     void on_actionsClassCombo_currentIndexChanged(int index);
     void on_actionsDisappearDebounceSpin_valueChanged(double value);

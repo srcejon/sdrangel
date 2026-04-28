@@ -37,6 +37,7 @@
 
 #include "util/message.h"
 #include "util/messagequeue.h"
+#include "util/httpdownloadmanager.h"
 #include "camerasettings.h"
 
 class CameraPostProcessor : public QObject
@@ -169,6 +170,64 @@ public:
         { }
     };
 
+    class MsgDownloadProgress : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        QString getURL() const { return m_url; }
+        QString getFilename() const { return m_filename; }
+        qint64 getBytesRead() const { return m_bytesRead; }
+        qint64 getTotalBytes() const { return m_totalBytes; }
+
+        static MsgDownloadProgress* create(const QString& url, const QString& filename, qint64 bytesRead, qint64 totalBytes)
+        {
+            return new MsgDownloadProgress(url, filename, bytesRead, totalBytes);
+        }
+
+    private:
+        QString m_url;
+        QString m_filename;
+        qint64 m_bytesRead;
+        qint64 m_totalBytes;
+
+        MsgDownloadProgress(const QString& url, const QString& filename, qint64 bytesRead, qint64 totalBytes) :
+            Message(),
+            m_url(url),
+            m_filename(filename),
+            m_bytesRead(bytesRead),
+            m_totalBytes(totalBytes)
+        { }
+    };
+
+    class MsgDownloadComplete : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        QString getURL() const { return m_url; }
+        QString getFilename() const { return m_filename; }
+        bool getSuccess() const { return m_success; }
+        QString getError() const { return m_error; }
+
+        static MsgDownloadComplete* create(const QString& url, const QString& filename, bool success, const QString& error)
+        {
+            return new MsgDownloadComplete(url, filename, success, error);
+        }
+
+    private:
+        QString m_url;
+        QString m_filename;
+        bool m_success;
+        QString m_error;
+
+        MsgDownloadComplete(const QString& url, const QString& filename, bool success, const QString& error) :
+            Message(),
+            m_url(url),
+            m_filename(filename),
+            m_success(success),
+            m_error(error)
+        { }
+    };
+
     CameraPostProcessor();
     ~CameraPostProcessor();
 
@@ -201,6 +260,9 @@ private:
 #ifdef QT_TEXTTOSPEECH_FOUND
     QTextToSpeech *m_speech;
 #endif
+    HttpDownloadManager m_dlm;
+    QStringList m_pendingDownloads;
+    QStringList m_completedDownloads;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
@@ -215,9 +277,12 @@ private:
     bool shouldRecordVideoForDetectedObjects() const;
     void setVideoRecordingEnabled(bool enabled);
     void reportFrameToGUI(const QImage& image);
+    void download(const QString& filename, const QString& destSubDir);
+    void downloadComplete(const QString &filename, bool success, const QString &url, const QString &errorMessage);
 
 private slots:
     void handleInputMessages();
+
 };
 
 #endif // INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_

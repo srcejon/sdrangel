@@ -282,6 +282,62 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         return true;
     }
+    else if (CameraPostProcessor::MsgDownloadProgress::match(message))
+    {
+        const CameraPostProcessor::MsgDownloadProgress& report = (CameraPostProcessor::MsgDownloadProgress&) message;
+
+        if (m_progressDialog)
+        {
+            m_progressDialog->setValue(100 * report.getBytesRead() / report.getTotalBytes());
+        }
+        else
+        {
+            QString text = QString("Downloading: %1\nTo: %2.")
+                .arg(report.getURL())
+                .arg(report.getFilename());
+
+            m_progressDialog = new QProgressDialog(this);
+            m_progressDialog->setCancelButton(nullptr);
+            m_progressDialog->setMinimumDuration(500);
+            m_progressDialog->setLabelText(text);
+        }
+
+        return true;
+    }
+    else if (CameraPostProcessor::MsgDownloadComplete::match(message))
+    {
+        const CameraPostProcessor::MsgDownloadComplete& report = (CameraPostProcessor::MsgDownloadComplete&) message;
+
+        // Close progress dialog
+        if (m_progressDialog)
+        {
+            m_progressDialog->close();
+            m_progressDialog->deleteLater();
+            m_progressDialog = nullptr;
+        }
+
+        // Report any errors
+        if (!report.getSuccess())
+        {
+            QString error = report.getError();
+            if (!error.isEmpty())
+            {
+                error = QString("An unknown error occurred during download from %1 to %2.")
+                    .arg(report.getURL())
+                    .arg(report.getFilename());
+            }
+            QMessageBox::warning(this, "Download failed", error);
+        }
+
+        // Update settings to use downloaded file rather than URL
+        if (report.getURL() == m_settings.m_yoloModelPath) {
+            settingsUI()->yoloModelPathCombo->setCurrentText(report.getFilename());
+        }
+        if (report.getURL() == m_settings.m_yoloLabelsPath) {
+            settingsUI()->yoloLabelsPathCombo->setCurrentText(report.getFilename());
+        }
+        return true;
+    }
     else if (CameraPostProcessor::MsgReportSaveVideoState::match(message))
     {
         const CameraPostProcessor::MsgReportSaveVideoState& report = (CameraPostProcessor::MsgReportSaveVideoState&) message;
@@ -357,6 +413,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_featureUISet(featureUISet),
     m_doApplySettings(true),
     m_lastFeatureState(0),
+    m_progressDialog(nullptr),
     m_settingsDialog(nullptr),
     m_histogramDialog(nullptr),
     m_alpacaHasNamedGains(false),
@@ -610,8 +667,8 @@ void CameraGUI::displaySettings()
     settingsUI()->spectrumOffsetYValue->setText(QString::number(m_settings.m_spectrumOffsetY));
     settingsUI()->spectrumScaleSpin->setValue(m_settings.m_spectrumScale);
     ui->yoloButton->setChecked(m_settings.m_yoloEnabled);
-    settingsUI()->yoloModelPathEdit->setText(m_settings.m_yoloModelPath);
-    settingsUI()->yoloLabelsPathEdit->setText(m_settings.m_yoloLabelsPath);
+    settingsUI()->yoloModelPathCombo->setCurrentText(m_settings.m_yoloModelPath);
+    settingsUI()->yoloLabelsPathCombo->setCurrentText(m_settings.m_yoloLabelsPath);
     settingsUI()->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
     settingsUI()->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
     updateColorButton(settingsUI()->yoloBoxColorButton, m_settings.m_yoloBoxColor);
@@ -770,9 +827,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->spectrumOffsetYSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetYSlider_valueChanged);
     QObject::connect(settingsUI()->spectrumScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_spectrumScaleSpin_valueChanged);
     QObject::connect(ui->yoloButton, &QToolButton::toggled, this, &CameraGUI::on_yoloButton_toggled);
-    QObject::connect(settingsUI()->yoloModelPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloModelPathEdit_editingFinished);
+    QObject::connect(settingsUI()->yoloModelPathCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_yoloModelPathCombo_currentTextChanged);
     QObject::connect(settingsUI()->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
-    QObject::connect(settingsUI()->yoloLabelsPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_yoloLabelsPathEdit_editingFinished);
+    QObject::connect(settingsUI()->yoloLabelsPathCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_yoloLabelsPathCombo_currentTextChanged);
     QObject::connect(settingsUI()->yoloLabelsPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloLabelsPathButton_clicked);
     QObject::connect(settingsUI()->actionsClassCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_actionsClassCombo_currentIndexChanged);
     QObject::connect(settingsUI()->actionsDisappearDebounceSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_actionsDisappearDebounceSpin_valueChanged);
@@ -996,7 +1053,7 @@ QStringList CameraGUI::loadActionObjectClasses() const
 {
     QStringList classes;
 
-    if (!m_settings.m_yoloLabelsPath.isEmpty())
+    if (!m_settings.m_yoloLabelsPath.isEmpty() && !(m_settings.m_yoloLabelsPath.startsWith("http://") || m_settings.m_yoloLabelsPath.startsWith("https://")))
     {
         QFile labelsFile(m_settings.m_yoloLabelsPath);
         if (labelsFile.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -2656,9 +2713,9 @@ void CameraGUI::on_yoloButton_toggled(bool checked)
     applySettings();
 }
 
-void CameraGUI::on_yoloModelPathEdit_editingFinished()
+void CameraGUI::on_yoloModelPathCombo_currentTextChanged(const QString &text)
 {
-    m_settings.m_yoloModelPath = settingsUI()->yoloModelPathEdit->text();
+    m_settings.m_yoloModelPath = text;
     m_settingsKeys.append("yoloModelPath");
     applySettings();
 }
@@ -2672,15 +2729,15 @@ void CameraGUI::on_yoloModelPathButton_clicked()
     if (!fileName.isEmpty())
     {
         m_settings.m_yoloModelPath = fileName;
-        settingsUI()->yoloModelPathEdit->setText(fileName);
+        settingsUI()->yoloModelPathCombo->setCurrentText(fileName);
         m_settingsKeys.append("yoloModelPath");
         applySettings();
     }
 }
 
-void CameraGUI::on_yoloLabelsPathEdit_editingFinished()
+void CameraGUI::on_yoloLabelsPathCombo_currentTextChanged(const QString& text)
 {
-    m_settings.m_yoloLabelsPath = settingsUI()->yoloLabelsPathEdit->text();
+    m_settings.m_yoloLabelsPath = text;
     populateActionClasses();
     rebuildActionTabsForCurrentClass();
     m_settingsKeys.append("yoloLabelsPath");
@@ -2696,7 +2753,7 @@ void CameraGUI::on_yoloLabelsPathButton_clicked()
     if (!fileName.isEmpty())
     {
         m_settings.m_yoloLabelsPath = fileName;
-        settingsUI()->yoloLabelsPathEdit->setText(fileName);
+        settingsUI()->yoloLabelsPathCombo->setCurrentText(fileName);
         populateActionClasses();
         rebuildActionTabsForCurrentClass();
         m_settingsKeys.append("yoloLabelsPath");

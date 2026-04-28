@@ -40,6 +40,15 @@
 #include "util/profiler.h"
 #include "camerapostprocessor.h"
 
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgConfigureCameraPostProcessor, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgProcessFrame, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveVideoState, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgDownloadProgress, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgDownloadComplete, Message)
+
 namespace {
 
 QString substituteObjectClass(QString text, const QString& className)
@@ -350,28 +359,24 @@ cv::Size readOnnxInputSize(const QString& modelPath)
 
 }
 
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgConfigureCameraPostProcessor, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgProcessFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveVideoState, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
-
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_captureActive(false),
     m_imageSaved(false),
     m_yoloInputSize(640, 640),
     m_autoWhiteBalanceGains(1.0, 1.0, 1.0),
-    m_autoWhiteBalanceInitialized(false)
+    m_autoWhiteBalanceInitialized(false),
 #ifdef QT_TEXTTOSPEECH_FOUND
-    , m_speech(new QTextToSpeech(this))
+    m_speech(new QTextToSpeech(this)),
 #endif
+    m_dlm(this)
 {
+    connect(&m_dlm, &HttpDownloadManager::downloadComplete, this, &CameraPostProcessor::downloadComplete);
 }
 
 CameraPostProcessor::~CameraPostProcessor()
 {
+    disconnect(&m_dlm, &HttpDownloadManager::downloadComplete, this, &CameraPostProcessor::downloadComplete);
     stopWork();
     m_inputMessageQueue.clear();
 }
@@ -522,14 +527,20 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
     }
 
-    if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath)) {
+    if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
+    {
         m_yoloNet = cv::dnn::Net();
         m_yoloLoadedModelPath.clear();
     }
 
-    if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath)) {
+    if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath))
+    {
         m_yoloLabels.clear();
         m_yoloLoadedLabelsPath.clear();
+        // Download even if YOLO not enabled, for use in the GUI
+        if (m_settings.m_yoloLabelsPath.startsWith("http://") || m_settings.m_yoloLabelsPath.startsWith("https://")) {
+            download(m_settings.m_yoloLabelsPath, "onnx");
+        }
     }
 
     if ((force && !m_settings.m_yoloEnabled)
@@ -550,6 +561,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         if (m_videoWriter.isOpened()) {
             m_videoWriter.release();
         }
+    }
+
+    if (m_settings.m_yoloEnabled && (m_settings.m_yoloModelPath.startsWith("http://") || m_settings.m_yoloModelPath.startsWith("https://"))) {
+        download(m_settings.m_yoloModelPath, "onnx");
     }
 
     if (postProcessChanged && !m_lastRawFrame.isNull()) {
@@ -970,7 +985,7 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
         m_yoloLabels.clear();
         m_yoloLoadedLabelsPath.clear();
 
-        if (!m_settings.m_yoloLabelsPath.isEmpty())
+        if (!m_settings.m_yoloLabelsPath.isEmpty() && !(m_settings.m_yoloLabelsPath.startsWith("http://") || m_settings.m_yoloLabelsPath.startsWith("https://")))
         {
             QFile f(m_settings.m_yoloLabelsPath);
             if (f.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -998,14 +1013,17 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
         m_yoloInputSize = cv::Size(640, 640);
         m_yoloLoadedModelPath.clear();
 
-        if (!m_settings.m_yoloModelPath.isEmpty())
+        if (!m_settings.m_yoloModelPath.isEmpty() && !(m_settings.m_yoloModelPath.startsWith("http://") || m_settings.m_yoloModelPath.startsWith("https://")))
         {
             try
             {
-                m_yoloNet = cv::dnn::readNetFromONNX(m_settings.m_yoloModelPath.toStdString());
+                QString localFile = CameraSettings::urlToFilename(m_settings.m_yoloModelPath, "onnx");
+
+                m_yoloNet = cv::dnn::readNetFromONNX(localFile.toStdString());
                 m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
-                m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-                const cv::Size modelInputSize = readOnnxInputSize(m_settings.m_yoloModelPath);
+                //m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_OPENCL_FP16); // 860ms
+                m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU); // 350ms
+                const cv::Size modelInputSize = readOnnxInputSize(localFile);
 
                 if ((modelInputSize.width > 0) && (modelInputSize.height > 0))
                 {
@@ -1014,12 +1032,12 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
                 else
                 {
                     qWarning() << "CameraPostProcessor::runYoloDetections: unable to read model input size, using fallback 640x640 for"
-                               << m_settings.m_yoloModelPath;
+                                << localFile;
                 }
 
                 m_yoloLoadedModelPath = m_settings.m_yoloModelPath;
-                qDebug() << "CameraPostProcessor::runYoloDetections: loaded model" << m_settings.m_yoloModelPath
-                         << "with input size" << m_yoloInputSize.width << "x" << m_yoloInputSize.height;
+                qDebug() << "CameraPostProcessor::runYoloDetections: loaded model" << localFile
+                            << "with input size" << m_yoloInputSize.width << "x" << m_yoloInputSize.height;
             }
             catch (const cv::Exception& e)
             {
@@ -1431,5 +1449,64 @@ void CameraPostProcessor::applyObjectDisappearedSettings(const QString& classNam
 
     if (!shouldRecordVideoForDetectedObjects()) {
         setVideoRecordingEnabled(false);
+    }
+}
+
+void CameraPostProcessor::download(const QString& filename, const QString& destSubDir)
+{
+    QDir downloadDir = QDir(HttpDownloadManager::downloadDir());
+    QString destDirPath = downloadDir.path() + "/" + destSubDir ;
+    QDir destDir(destDirPath);
+
+    if (!destDir.exists())
+    {
+        if (!downloadDir.mkdir(destSubDir)) {
+            qWarning() << "Failed to make directory" << (downloadDir.path() + "/" + destSubDir);
+        }
+    }
+    if (destDir.exists())
+    {
+        QUrl url(filename);
+        QString localFilename = CameraSettings::urlToFilename(filename, destSubDir);
+
+        if (!QFileInfo::exists(localFilename))
+        {
+            if (!m_pendingDownloads.contains(localFilename))
+            {
+                qDebug() << "Downloading from" << url << "to" << localFilename;
+                m_pendingDownloads.append(localFilename);
+                QNetworkReply *reply = m_dlm.download(url, localFilename);
+                connect(reply, &QNetworkReply::downloadProgress, this, [this, filename, localFilename](qint64 bytesRead, qint64 totalBytes) {
+                    if (m_msgQueueToGUI) {
+                        m_msgQueueToGUI->push(MsgDownloadProgress::create(filename, localFilename, bytesRead, totalBytes));
+                    }
+                });
+            }
+        }
+        else
+        {
+            // File already downloaded
+            if (m_msgQueueToGUI) {
+                m_msgQueueToGUI->push(MsgDownloadComplete::create(filename, localFilename, true, ""));
+            }
+        }
+    }
+}
+
+void CameraPostProcessor::downloadComplete(const QString &filename, bool success, const QString &url, const QString &errorMessage)
+{
+    (void) success;
+    (void) url;
+    (void) errorMessage;
+
+    if (m_msgQueueToGUI) {
+        m_msgQueueToGUI->push(MsgDownloadComplete::create(url, filename, success, errorMessage));
+    }
+
+    m_completedDownloads.append(filename);
+    if (m_completedDownloads == m_pendingDownloads)
+    {
+        m_pendingDownloads.clear();
+        m_completedDownloads.clear();
     }
 }

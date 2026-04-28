@@ -172,6 +172,7 @@ struct CameraSettings
     double getCaptureIntervalSeconds() const;
     int getCaptureIntervalMs() const;
     double getCaptureFrameRate() const;
+    static QString urlToFilename(const QString &url, const QString& destSubDir);
 };
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGS_H_

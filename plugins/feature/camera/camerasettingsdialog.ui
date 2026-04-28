@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>615</width>
+    <width>810</width>
     <height>738</height>
    </rect>
   </property>
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>5</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -25,7 +25,7 @@
       </attribute>
       <layout class="QVBoxLayout" name="cameraTabLayout">
        <item>
-        <layout class="QFormLayout" name="formLayout_3">
+        <layout class="QFormLayout" name="cameraLayout">
          <item row="0" column="0">
           <widget class="QLabel" name="resolutionLabel">
            <property name="text">
@@ -48,7 +48,7 @@
           </widget>
          </item>
          <item row="2" column="0">
-         <widget class="QLabel" name="exposureLabel">
+          <widget class="QLabel" name="exposureLabel">
            <property name="text">
             <string>Exposure</string>
            </property>
@@ -57,7 +57,7 @@
          <item row="2" column="1">
           <layout class="QHBoxLayout" name="exposureLayout">
            <item>
-           <widget class="QSlider" name="exposureSlider">
+            <widget class="QSlider" name="exposureSlider">
              <property name="toolTip">
               <string>Exposure time</string>
              </property>
@@ -524,7 +524,7 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_6">
        <item>
-        <widget class="QGroupBox" name="groupBox_6">
+        <widget class="QGroupBox" name="alpacaServerSettingsGroup">
          <property name="title">
           <string>ASCOM Alpaca Remote Server</string>
          </property>
@@ -573,7 +573,7 @@
            <number>7</number>
           </property>
           <item>
-           <layout class="QHBoxLayout" name="horizontalLayout">
+           <layout class="QHBoxLayout" name="alpacaLayout">
             <item>
              <layout class="QFormLayout" name="alpacaStatusLayout">
               <item row="0" column="0">
@@ -677,9 +677,9 @@
              </layout>
             </item>
             <item>
-             <layout class="QVBoxLayout" name="verticalLayout_3">
+             <layout class="QVBoxLayout" name="alpacaLayout_3">
               <item>
-               <spacer name="verticalSpacer_4">
+               <spacer name="alpacaSpacer">
                 <property name="orientation">
                  <enum>Qt::Orientation::Vertical</enum>
                 </property>
@@ -710,7 +710,7 @@
            </layout>
           </item>
           <item>
-           <spacer name="horizontalSpacer_2">
+           <spacer name="alpacaSpacer_2">
             <property name="orientation">
              <enum>Qt::Orientation::Horizontal</enum>
             </property>
@@ -1127,7 +1127,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="groupBox">
+        <widget class="QGroupBox" name="filterGroup">
          <property name="title">
           <string>Filter</string>
          </property>
@@ -1453,7 +1453,7 @@
            </widget>
           </item>
           <item row="2" column="2">
-           <layout class="QHBoxLayout" name="horizontalLayout_4">
+           <layout class="QHBoxLayout" name="spectrumOffsetLayout">
             <item>
              <widget class="QLabel" name="spectrumOffsetXLabel">
               <property name="text">
@@ -1497,7 +1497,7 @@
              </widget>
             </item>
             <item>
-             <widget class="Line" name="line_3">
+             <widget class="Line" name="spectrumOffsetLine">
               <property name="orientation">
                <enum>Qt::Orientation::Vertical</enum>
               </property>
@@ -1548,7 +1548,7 @@
            </layout>
           </item>
           <item row="2" column="0">
-           <widget class="QLabel" name="label_7">
+           <widget class="QLabel" name="spectrumOffsetLabel">
             <property name="text">
              <string>Position</string>
             </property>
@@ -1627,7 +1627,7 @@
            </widget>
           </item>
           <item row="3" column="1" colspan="4">
-           <layout class="QHBoxLayout" name="horizontalLayout_2">
+           <layout class="QHBoxLayout" name="dateTimePosLayout">
             <item>
              <widget class="QLabel" name="dateTimePosXLabel">
               <property name="text">
@@ -1671,7 +1671,7 @@
              </widget>
             </item>
             <item>
-             <widget class="Line" name="line">
+             <widget class="Line" name="dateTimeLine">
               <property name="orientation">
                <enum>Qt::Orientation::Vertical</enum>
               </property>
@@ -1722,7 +1722,7 @@
            </layout>
           </item>
           <item row="3" column="0">
-           <widget class="QLabel" name="label_6">
+           <widget class="QLabel" name="dateTimePosLabel">
             <property name="text">
              <string>Position</string>
             </property>
@@ -1784,7 +1784,7 @@
            </widget>
           </item>
           <item row="2" column="1" colspan="5">
-           <layout class="QHBoxLayout" name="horizontalLayout_3">
+           <layout class="QHBoxLayout" name="overlayTextPosLayout">
             <item>
              <widget class="QLabel" name="overlayTextPosXLabel">
               <property name="text">
@@ -1828,7 +1828,7 @@
              </widget>
             </item>
             <item>
-             <widget class="Line" name="line_2">
+             <widget class="Line" name="overlayTextLine">
               <property name="orientation">
                <enum>Qt::Orientation::Vertical</enum>
               </property>
@@ -1879,7 +1879,7 @@
            </layout>
           </item>
           <item row="2" column="0">
-           <widget class="QLabel" name="label_4">
+           <widget class="QLabel" name="overlayTextPosLabel">
             <property name="text">
              <string>Position</string>
             </property>
@@ -2048,10 +2048,10 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </widget>
           </item>
           <item row="0" column="0">
-           <widget class="QLabel" name="label">
+           <widget class="QLabel" name="yoloModelPathLabel">
             <property name="minimumSize">
              <size>
-              <width>110</width>
+              <width>130</width>
               <height>0</height>
              </size>
             </property>
@@ -2115,7 +2115,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </widget>
           </item>
           <item row="4" column="0">
-           <widget class="QLabel" name="label_2">
+           <widget class="QLabel" name="yoloBoxColorLabel">
             <property name="text">
              <string>BB Colour</string>
             </property>
@@ -2175,31 +2175,161 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
-           <widget class="QLineEdit" name="yoloLabelsPathEdit">
-            <property name="toolTip">
-             <string>Path to plain-text class labels file (one name per line)</string>
-            </property>
-            <property name="placeholderText">
-             <string>coco.names</string>
-            </property>
-           </widget>
-          </item>
           <item row="0" column="1">
-           <widget class="QLineEdit" name="yoloModelPathEdit">
+           <widget class="QComboBox" name="yoloModelPathCombo">
             <property name="toolTip">
              <string>Path to YOLO ONNX model file</string>
             </property>
-            <property name="placeholderText">
-             <string>model.onnx</string>
+            <property name="editable">
+             <bool>true</bool>
             </property>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo26n.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo26m.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo26s.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo26l.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo26x.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo11n.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo11m.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo11s.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo11l.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolo11x.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov8n.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov8m.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov8s.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov9l.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov8x.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5nu.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5mu.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5su.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5lu.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5xu.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5n6u.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5m6u.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5s6u.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5l6u.onnx</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov5x6u.onnx</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="yoloLabelsPathCombo">
+            <property name="toolTip">
+             <string>Path to plain-text class labels file (one name per line)</string>
+            </property>
+            <property name="editable">
+             <bool>true</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/coco_classes.txt</string>
+             </property>
+            </item>
            </widget>
           </item>
          </layout>
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="groupBox_5">
+        <widget class="QGroupBox" name="motionDetectionGroup">
          <property name="title">
           <string>Motion Detection</string>
          </property>
@@ -2208,7 +2338,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
            <widget class="QLabel" name="minContourAreaLabel">
             <property name="minimumSize">
              <size>
-              <width>110</width>
+              <width>130</width>
               <height>0</height>
              </size>
             </property>
@@ -2254,7 +2384,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="groupBox_4">
+        <widget class="QGroupBox" name="differenceDetectionGroup">
          <property name="title">
           <string>Difference Detection</string>
          </property>
@@ -2263,7 +2393,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
            <widget class="QLabel" name="dilationLabel">
             <property name="minimumSize">
              <size>
-              <width>110</width>
+              <width>130</width>
               <height>0</height>
              </size>
             </property>
@@ -2322,7 +2452,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
         </widget>
        </item>
        <item>
-        <layout class="QFormLayout" name="formLayout_7">
+        <layout class="QFormLayout" name="actionsLayout">
          <item row="0" column="0">
           <widget class="QLabel" name="actionsClassLabel">
            <property name="text">

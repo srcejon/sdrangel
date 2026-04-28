@@ -796,18 +796,18 @@
            </widget>
           </item>
           <item row="4" column="2">
-           <widget class="QLabel" name="brightnessValue">
-            <property name="minimumSize">
-             <size>
-              <width>30</width>
-              <height>0</height>
-             </size>
+           <widget class="QSpinBox" name="brightnessSpin">
+            <property name="toolTip">
+             <string>Brightness adjustment</string>
             </property>
-            <property name="text">
-             <string>0</string>
+            <property name="minimum">
+             <number>-100</number>
             </property>
-            <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            <property name="maximum">
+             <number>100</number>
+            </property>
+            <property name="value">
+             <number>0</number>
             </property>
            </widget>
           </item>
@@ -858,18 +858,24 @@
            </widget>
           </item>
           <item row="6" column="2">
-           <widget class="QLabel" name="gammaValue">
-            <property name="minimumSize">
-             <size>
-              <width>35</width>
-              <height>0</height>
-             </size>
+           <widget class="QDoubleSpinBox" name="gammaSpin">
+            <property name="toolTip">
+             <string>Gamma correction exponent</string>
             </property>
-            <property name="text">
-             <string>1.00</string>
+            <property name="decimals">
+             <number>2</number>
             </property>
-            <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>3.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="value">
+             <double>1.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -919,18 +925,21 @@
            </widget>
           </item>
           <item row="7" column="2">
-           <widget class="QLabel" name="saturationValue">
-            <property name="minimumSize">
-             <size>
-              <width>35</width>
-              <height>0</height>
-             </size>
+           <widget class="QDoubleSpinBox" name="saturationSpin">
+            <property name="toolTip">
+             <string>Colour saturation adjustment</string>
             </property>
-            <property name="text">
-             <string>1.00</string>
+            <property name="decimals">
+             <number>2</number>
             </property>
-            <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            <property name="maximum">
+             <double>3.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="value">
+             <double>1.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -964,18 +973,24 @@
            </widget>
           </item>
           <item row="5" column="2">
-           <widget class="QLabel" name="contrastValue">
-            <property name="minimumSize">
-             <size>
-              <width>35</width>
-              <height>0</height>
-             </size>
+           <widget class="QDoubleSpinBox" name="contrastSpin">
+            <property name="toolTip">
+             <string>Contrast adjustment</string>
             </property>
-            <property name="text">
-             <string>1.00</string>
+            <property name="decimals">
+             <number>2</number>
             </property>
-            <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>3.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="value">
+             <double>1.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -1103,38 +1118,38 @@
            </widget>
           </item>
           <item row="2" column="2">
-           <widget class="QLabel" name="sharpenValue">
-            <property name="minimumSize">
-             <size>
-              <width>35</width>
-              <height>0</height>
-             </size>
+           <widget class="QDoubleSpinBox" name="sharpenSpin">
+            <property name="toolTip">
+             <string>Image sharpening amount</string>
             </property>
-            <property name="text">
-             <string>0.00</string>
+            <property name="decimals">
+             <number>2</number>
             </property>
-            <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            <property name="maximum">
+             <double>3.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
             </property>
            </widget>
           </item>
           <item row="3" column="2">
-           <widget class="QLabel" name="sobelEdgeValue">
-            <property name="minimumSize">
-             <size>
-              <width>35</width>
-              <height>0</height>
-             </size>
+           <widget class="QDoubleSpinBox" name="sobelEdgeSpin">
+            <property name="toolTip">
+             <string>Sobel edge detection blend amount</string>
             </property>
-            <property name="text">
-             <string>0.00</string>
+            <property name="decimals">
+             <number>2</number>
             </property>
-            <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            <property name="maximum">
+             <double>3.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
             </property>
            </widget>
           </item>
-          <item row="1" column="1" colspan="2">
+          <item row="1" column="2">
            <widget class="QSpinBox" name="medianBlurSpin">
             <property name="toolTip">
              <string>Median blur strength (0 = off)</string>
@@ -1147,7 +1162,23 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="1" colspan="2">
+          <item row="1" column="1">
+           <widget class="QSlider" name="medianBlurSlider">
+            <property name="toolTip">
+             <string>Median blur strength (0 = off)</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>15</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
            <widget class="QSpinBox" name="gaussianBlurSpin">
             <property name="toolTip">
              <string>Gaussian blur strength (0 = off)</string>
@@ -1157,6 +1188,22 @@
             </property>
             <property name="maximum">
              <number>15</number>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QSlider" name="gaussianBlurSlider">
+            <property name="toolTip">
+             <string>Gaussian blur strength (0 = off)</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>15</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
             </property>
            </widget>
           </item>

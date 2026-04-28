@@ -506,21 +506,23 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(m_settings.m_postProcessWhiteBalanceBlueGain);
     settingsUI()->saturationSlider->setValue(static_cast<int>(m_settings.m_saturation * 100.0));
-    settingsUI()->saturationValue->setText(QString::number(m_settings.m_saturation, 'f', 2));
+    settingsUI()->saturationSpin->setValue(m_settings.m_saturation);
     settingsUI()->gammaSlider->setValue(static_cast<int>(m_settings.m_gamma * 100.0));
-    settingsUI()->gammaValue->setText(QString::number(m_settings.m_gamma, 'f', 2));
+    settingsUI()->gammaSpin->setValue(m_settings.m_gamma);
+    settingsUI()->gaussianBlurSlider->setValue(m_settings.m_gaussianBlur);
     settingsUI()->gaussianBlurSpin->setValue(m_settings.m_gaussianBlur);
+    settingsUI()->medianBlurSlider->setValue(m_settings.m_medianBlur);
     settingsUI()->medianBlurSpin->setValue(m_settings.m_medianBlur);
     settingsUI()->sharpenSlider->setValue(static_cast<int>(m_settings.m_sharpen * 100.0));
-    settingsUI()->sharpenValue->setText(QString::number(m_settings.m_sharpen, 'f', 2));
+    settingsUI()->sharpenSpin->setValue(m_settings.m_sharpen);
     settingsUI()->sobelEdgeSlider->setValue(static_cast<int>(m_settings.m_sobelEdge * 100.0));
-    settingsUI()->sobelEdgeValue->setText(QString::number(m_settings.m_sobelEdge, 'f', 2));
+    settingsUI()->sobelEdgeSpin->setValue(m_settings.m_sobelEdge);
     settingsUI()->flipXButton->setChecked(m_settings.m_flipX);
     settingsUI()->flipYButton->setChecked(m_settings.m_flipY);
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
-    settingsUI()->brightnessValue->setText(QString::number(m_settings.m_brightness, 'f', 0));
+    settingsUI()->brightnessSpin->setValue(static_cast<int>(m_settings.m_brightness));
     settingsUI()->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
-    settingsUI()->contrastValue->setText(QString::number(m_settings.m_contrast, 'f', 2));
+    settingsUI()->contrastSpin->setValue(m_settings.m_contrast);
     updatePostProcessWhiteBalanceControls();
     ui->invertColorsButton->setChecked(m_settings.m_invertColors);
     ui->overlayDateTimeButton->setChecked(m_settings.m_overlayDateTime);
@@ -670,15 +672,23 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->postProcessWhiteBalanceGreenGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
     QObject::connect(settingsUI()->saturationSlider, &QSlider::valueChanged, this, &CameraGUI::on_saturationSlider_valueChanged);
+    QObject::connect(settingsUI()->saturationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_saturationSpin_valueChanged);
     QObject::connect(settingsUI()->gammaSlider, &QSlider::valueChanged, this, &CameraGUI::on_gammaSlider_valueChanged);
+    QObject::connect(settingsUI()->gammaSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_gammaSpin_valueChanged);
+    QObject::connect(settingsUI()->gaussianBlurSlider, &QSlider::valueChanged, this, &CameraGUI::on_gaussianBlurSlider_valueChanged);
     QObject::connect(settingsUI()->gaussianBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_gaussianBlurSpin_valueChanged);
+    QObject::connect(settingsUI()->medianBlurSlider, &QSlider::valueChanged, this, &CameraGUI::on_medianBlurSlider_valueChanged);
     QObject::connect(settingsUI()->medianBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_medianBlurSpin_valueChanged);
     QObject::connect(settingsUI()->sharpenSlider, &QSlider::valueChanged, this, &CameraGUI::on_sharpenSlider_valueChanged);
+    QObject::connect(settingsUI()->sharpenSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_sharpenSpin_valueChanged);
     QObject::connect(settingsUI()->sobelEdgeSlider, &QSlider::valueChanged, this, &CameraGUI::on_sobelEdgeSlider_valueChanged);
+    QObject::connect(settingsUI()->sobelEdgeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_sobelEdgeSpin_valueChanged);
     QObject::connect(settingsUI()->flipXButton, &QCheckBox::toggled, this, &CameraGUI::on_flipXButton_toggled);
     QObject::connect(settingsUI()->flipYButton, &QCheckBox::toggled, this, &CameraGUI::on_flipYButton_toggled);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
+    QObject::connect(settingsUI()->brightnessSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_brightnessSpin_valueChanged);
     QObject::connect(settingsUI()->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
+    QObject::connect(settingsUI()->contrastSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_contrastSpin_valueChanged);
     QObject::connect(ui->invertColorsButton, &QToolButton::toggled, this, &CameraGUI::on_invertColorsButton_toggled);
     QObject::connect(ui->overlayDateTimeButton, &QToolButton::toggled, this, &CameraGUI::on_overlayDateTimeButton_toggled);
     QObject::connect(settingsUI()->dateTimeColorButton, &QToolButton::clicked, this, &CameraGUI::on_dateTimeColorButton_clicked);
@@ -1961,7 +1971,19 @@ void CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value
 void CameraGUI::on_saturationSlider_valueChanged(int value)
 {
     m_settings.m_saturation = value / 100.0;
-    settingsUI()->saturationValue->setText(QString::number(m_settings.m_saturation, 'f', 2));
+    settingsUI()->saturationSpin->blockSignals(true);
+    settingsUI()->saturationSpin->setValue(m_settings.m_saturation);
+    settingsUI()->saturationSpin->blockSignals(false);
+    m_settingsKeys.append("saturation");
+    applySettings();
+}
+
+void CameraGUI::on_saturationSpin_valueChanged(double value)
+{
+    settingsUI()->saturationSlider->blockSignals(true);
+    settingsUI()->saturationSlider->setValue(static_cast<int>(value * 100.0));
+    settingsUI()->saturationSlider->blockSignals(false);
+    m_settings.m_saturation = value;
     m_settingsKeys.append("saturation");
     applySettings();
 }
@@ -1969,20 +1991,58 @@ void CameraGUI::on_saturationSlider_valueChanged(int value)
 void CameraGUI::on_gammaSlider_valueChanged(int value)
 {
     m_settings.m_gamma = value / 100.0;
-    settingsUI()->gammaValue->setText(QString::number(m_settings.m_gamma, 'f', 2));
+    settingsUI()->gammaSpin->blockSignals(true);
+    settingsUI()->gammaSpin->setValue(m_settings.m_gamma);
+    settingsUI()->gammaSpin->blockSignals(false);
     m_settingsKeys.append("gamma");
     applySettings();
 }
 
-void CameraGUI::on_gaussianBlurSpin_valueChanged(int value)
+void CameraGUI::on_gammaSpin_valueChanged(double value)
 {
+    settingsUI()->gammaSlider->blockSignals(true);
+    settingsUI()->gammaSlider->setValue(static_cast<int>(value * 100.0));
+    settingsUI()->gammaSlider->blockSignals(false);
+    m_settings.m_gamma = value;
+    m_settingsKeys.append("gamma");
+    applySettings();
+}
+
+void CameraGUI::on_gaussianBlurSlider_valueChanged(int value)
+{
+    settingsUI()->gaussianBlurSpin->blockSignals(true);
+    settingsUI()->gaussianBlurSpin->setValue(value);
+    settingsUI()->gaussianBlurSpin->blockSignals(false);
     m_settings.m_gaussianBlur = value;
     m_settingsKeys.append("gaussianBlur");
     applySettings();
 }
 
+void CameraGUI::on_gaussianBlurSpin_valueChanged(int value)
+{
+    settingsUI()->gaussianBlurSlider->blockSignals(true);
+    settingsUI()->gaussianBlurSlider->setValue(value);
+    settingsUI()->gaussianBlurSlider->blockSignals(false);
+    m_settings.m_gaussianBlur = value;
+    m_settingsKeys.append("gaussianBlur");
+    applySettings();
+}
+
+void CameraGUI::on_medianBlurSlider_valueChanged(int value)
+{
+    settingsUI()->medianBlurSpin->blockSignals(true);
+    settingsUI()->medianBlurSpin->setValue(value);
+    settingsUI()->medianBlurSpin->blockSignals(false);
+    m_settings.m_medianBlur = value;
+    m_settingsKeys.append("medianBlur");
+    applySettings();
+}
+
 void CameraGUI::on_medianBlurSpin_valueChanged(int value)
 {
+    settingsUI()->medianBlurSlider->blockSignals(true);
+    settingsUI()->medianBlurSlider->setValue(value);
+    settingsUI()->medianBlurSlider->blockSignals(false);
     m_settings.m_medianBlur = value;
     m_settingsKeys.append("medianBlur");
     applySettings();
@@ -1991,7 +2051,19 @@ void CameraGUI::on_medianBlurSpin_valueChanged(int value)
 void CameraGUI::on_sharpenSlider_valueChanged(int value)
 {
     m_settings.m_sharpen = value / 100.0;
-    settingsUI()->sharpenValue->setText(QString::number(m_settings.m_sharpen, 'f', 2));
+    settingsUI()->sharpenSpin->blockSignals(true);
+    settingsUI()->sharpenSpin->setValue(m_settings.m_sharpen);
+    settingsUI()->sharpenSpin->blockSignals(false);
+    m_settingsKeys.append("sharpen");
+    applySettings();
+}
+
+void CameraGUI::on_sharpenSpin_valueChanged(double value)
+{
+    settingsUI()->sharpenSlider->blockSignals(true);
+    settingsUI()->sharpenSlider->setValue(static_cast<int>(value * 100.0));
+    settingsUI()->sharpenSlider->blockSignals(false);
+    m_settings.m_sharpen = value;
     m_settingsKeys.append("sharpen");
     applySettings();
 }
@@ -1999,7 +2071,19 @@ void CameraGUI::on_sharpenSlider_valueChanged(int value)
 void CameraGUI::on_sobelEdgeSlider_valueChanged(int value)
 {
     m_settings.m_sobelEdge = value / 100.0;
-    settingsUI()->sobelEdgeValue->setText(QString::number(m_settings.m_sobelEdge, 'f', 2));
+    settingsUI()->sobelEdgeSpin->blockSignals(true);
+    settingsUI()->sobelEdgeSpin->setValue(m_settings.m_sobelEdge);
+    settingsUI()->sobelEdgeSpin->blockSignals(false);
+    m_settingsKeys.append("sobelEdge");
+    applySettings();
+}
+
+void CameraGUI::on_sobelEdgeSpin_valueChanged(double value)
+{
+    settingsUI()->sobelEdgeSlider->blockSignals(true);
+    settingsUI()->sobelEdgeSlider->setValue(static_cast<int>(value * 100.0));
+    settingsUI()->sobelEdgeSlider->blockSignals(false);
+    m_settings.m_sobelEdge = value;
     m_settingsKeys.append("sobelEdge");
     applySettings();
 }
@@ -2021,7 +2105,19 @@ void CameraGUI::on_flipYButton_toggled(bool checked)
 void CameraGUI::on_brightnessSlider_valueChanged(int value)
 {
     m_settings.m_brightness = static_cast<double>(value);
-    settingsUI()->brightnessValue->setText(QString::number(value));
+    settingsUI()->brightnessSpin->blockSignals(true);
+    settingsUI()->brightnessSpin->setValue(value);
+    settingsUI()->brightnessSpin->blockSignals(false);
+    m_settingsKeys.append("brightness");
+    applySettings();
+}
+
+void CameraGUI::on_brightnessSpin_valueChanged(int value)
+{
+    settingsUI()->brightnessSlider->blockSignals(true);
+    settingsUI()->brightnessSlider->setValue(value);
+    settingsUI()->brightnessSlider->blockSignals(false);
+    m_settings.m_brightness = static_cast<double>(value);
     m_settingsKeys.append("brightness");
     applySettings();
 }
@@ -2029,7 +2125,19 @@ void CameraGUI::on_brightnessSlider_valueChanged(int value)
 void CameraGUI::on_contrastSlider_valueChanged(int value)
 {
     m_settings.m_contrast = value / 100.0;
-    settingsUI()->contrastValue->setText(QString::number(m_settings.m_contrast, 'f', 2));
+    settingsUI()->contrastSpin->blockSignals(true);
+    settingsUI()->contrastSpin->setValue(m_settings.m_contrast);
+    settingsUI()->contrastSpin->blockSignals(false);
+    m_settingsKeys.append("contrast");
+    applySettings();
+}
+
+void CameraGUI::on_contrastSpin_valueChanged(double value)
+{
+    settingsUI()->contrastSlider->blockSignals(true);
+    settingsUI()->contrastSlider->setValue(static_cast<int>(value * 100.0));
+    settingsUI()->contrastSlider->blockSignals(false);
+    m_settings.m_contrast = value;
     m_settingsKeys.append("contrast");
     applySettings();
 }
@@ -2167,14 +2275,14 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(1);
-    settingsUI()->brightnessSlider->setValue(0);
-    settingsUI()->contrastSlider->setValue(100);
-    settingsUI()->saturationSlider->setValue(100);
-    settingsUI()->gammaSlider->setValue(100);
+    settingsUI()->brightnessSpin->setValue(0);
+    settingsUI()->contrastSpin->setValue(1.0);
+    settingsUI()->saturationSpin->setValue(1.0);
+    settingsUI()->gammaSpin->setValue(1.0);
     settingsUI()->gaussianBlurSpin->setValue(0);
     settingsUI()->medianBlurSpin->setValue(0);
-    settingsUI()->sharpenSlider->setValue(0);
-    settingsUI()->sobelEdgeSlider->setValue(0);
+    settingsUI()->sharpenSpin->setValue(0.0);
+    settingsUI()->sobelEdgeSpin->setValue(0.0);
     settingsUI()->flipXButton->setChecked(false);
     settingsUI()->flipYButton->setChecked(false);
 }

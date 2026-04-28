@@ -186,6 +186,7 @@ private slots:
     void on_fpsCombo_currentIndexChanged(int index);
     void on_intervalSpin_valueChanged(double value);
     void on_intervalUnitsCombo_currentIndexChanged(int index);
+    void on_exposureSlider_valueChanged(int value);
     void on_exposureSpin_valueChanged(double value);
     void on_isoSpin_valueChanged(int value);
     void on_alpacaHostEdit_editingFinished();
@@ -193,8 +194,10 @@ private slots:
     void on_alpacaBinXSpin_valueChanged(int value);
     void on_alpacaBinYSpin_valueChanged(int value);
     void on_alpacaGainCombo_currentIndexChanged(int index);
+    void on_alpacaGainSlider_valueChanged(int value);
     void on_alpacaGainSpin_valueChanged(int value);
     void on_alpacaOffsetCombo_currentIndexChanged(int index);
+    void on_alpacaOffsetSlider_valueChanged(int value);
     void on_alpacaOffsetSpin_valueChanged(int value);
     void on_alpacaReadoutModeCombo_currentIndexChanged(int index);
     void on_saveImageCheck_toggled(bool checked);
@@ -205,8 +208,11 @@ private slots:
     void on_videoPathButton_clicked();
     void on_videoPostProcessCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
+    void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);
+    void on_postProcessWhiteBalanceGreenGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceGreenGainSpin_valueChanged(double value);
+    void on_postProcessWhiteBalanceBlueGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value);
     void on_saturationSlider_valueChanged(int value);
     void on_saturationSpin_valueChanged(double value);

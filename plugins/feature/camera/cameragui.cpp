@@ -98,6 +98,25 @@ int decimalsForStepSize(double step)
     return 6;
 }
 
+int doubleSpinBoxSliderMaximum(const QDoubleSpinBox *spinBox)
+{
+    const double step = std::max(0.000001, spinBox->singleStep());
+    return std::max(0, static_cast<int>(std::llround((spinBox->maximum() - spinBox->minimum()) / step)));
+}
+
+int doubleSpinBoxValueToSlider(const QDoubleSpinBox *spinBox, double value)
+{
+    const double step = std::max(0.000001, spinBox->singleStep());
+    const int sliderValue = static_cast<int>(std::llround((value - spinBox->minimum()) / step));
+    return qBound(0, sliderValue, doubleSpinBoxSliderMaximum(spinBox));
+}
+
+double sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int sliderValue)
+{
+    const double step = std::max(0.000001, spinBox->singleStep());
+    return qBound(spinBox->minimum(), spinBox->minimum() + (sliderValue * step), spinBox->maximum());
+}
+
 void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
 {
     const int minRounded = qMax(1, static_cast<int>(std::ceil(minFps)));
@@ -477,6 +496,8 @@ void CameraGUI::displaySettings()
     }
     rebuildActionTabsForCurrentClass();
     settingsUI()->exposureSpin->setValue(m_settings.m_exposureTimeMs);
+    settingsUI()->exposureSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->exposureSpin));
+    settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, m_settings.m_exposureTimeMs));
     settingsUI()->isoSpin->setValue(m_settings.m_isoSensitivity);
     settingsUI()->alpacaHostEdit->setText(m_settings.m_alpacaHost);
     settingsUI()->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
@@ -487,12 +508,14 @@ void CameraGUI::displaySettings()
         settingsUI()->alpacaGainCombo->setCurrentIndex(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
     } else {
         settingsUI()->alpacaGainSpin->setValue(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
+        settingsUI()->alpacaGainSlider->setValue(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
     }
 
     if (m_alpacaHasNamedOffsets) {
         settingsUI()->alpacaOffsetCombo->setCurrentIndex(m_settings.m_alpacaOffset >= 0 ? m_settings.m_alpacaOffset : 0);
     } else {
         settingsUI()->alpacaOffsetSpin->setValue(m_settings.m_alpacaOffset >= 0 ? m_settings.m_alpacaOffset : 0);
+        settingsUI()->alpacaOffsetSlider->setValue(m_settings.m_alpacaOffset >= 0 ? m_settings.m_alpacaOffset : 0);
     }
 
     settingsUI()->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_alpacaReadoutMode);
@@ -505,6 +528,12 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(m_settings.m_postProcessWhiteBalanceRedGain);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(m_settings.m_postProcessWhiteBalanceBlueGain);
+    settingsUI()->postProcessWhiteBalanceRedGainSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->postProcessWhiteBalanceRedGainSpin));
+    settingsUI()->postProcessWhiteBalanceGreenGainSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->postProcessWhiteBalanceGreenGainSpin));
+    settingsUI()->postProcessWhiteBalanceBlueGainSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->postProcessWhiteBalanceBlueGainSpin));
+    settingsUI()->postProcessWhiteBalanceRedGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceRedGainSpin, m_settings.m_postProcessWhiteBalanceRedGain));
+    settingsUI()->postProcessWhiteBalanceGreenGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceGreenGainSpin, m_settings.m_postProcessWhiteBalanceGreenGain));
+    settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, m_settings.m_postProcessWhiteBalanceBlueGain));
     settingsUI()->saturationSlider->setValue(static_cast<int>(m_settings.m_saturation * 100.0));
     settingsUI()->saturationSpin->setValue(m_settings.m_saturation);
     settingsUI()->gammaSlider->setValue(static_cast<int>(m_settings.m_gamma * 100.0));
@@ -649,6 +678,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->fpsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsCombo_currentIndexChanged);
     QObject::connect(settingsUI()->intervalSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_intervalSpin_valueChanged);
     QObject::connect(settingsUI()->intervalUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_intervalUnitsCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->exposureSlider, &QSlider::valueChanged, this, &CameraGUI::on_exposureSlider_valueChanged);
     QObject::connect(settingsUI()->exposureSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
     QObject::connect(settingsUI()->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
@@ -656,8 +686,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaGainCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->alpacaGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_alpacaGainSlider_valueChanged);
     QObject::connect(settingsUI()->alpacaGainSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaGainSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaOffsetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaOffsetCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->alpacaOffsetSlider, &QSlider::valueChanged, this, &CameraGUI::on_alpacaOffsetSlider_valueChanged);
     QObject::connect(settingsUI()->alpacaOffsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaReadoutModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged);
     QObject::connect(ui->saveImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveImageCheck_toggled);
@@ -668,8 +700,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
     QObject::connect(settingsUI()->videoPostProcessCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_videoPostProcessCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
+    QObject::connect(settingsUI()->postProcessWhiteBalanceGreenGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceGreenGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceGreenGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged);
+    QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
     QObject::connect(settingsUI()->saturationSlider, &QSlider::valueChanged, this, &CameraGUI::on_saturationSlider_valueChanged);
     QObject::connect(settingsUI()->saturationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_saturationSpin_valueChanged);
@@ -1195,6 +1230,7 @@ void CameraGUI::setupQtCapture()
     settingsUI()->zoomSpin->setEnabled(m_qtZoomSupported);
     settingsUI()->zoomLabel->setEnabled(m_qtZoomSupported);
     settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->exposureSlider->setEnabled(m_qtManualExposureSupported);
     settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
     settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
     settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
@@ -1352,6 +1388,7 @@ void CameraGUI::setupQtCapture()
         settingsUI()->zoomSpin->setEnabled(m_qtZoomSupported);
         settingsUI()->zoomLabel->setEnabled(m_qtZoomSupported);
         settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
+        settingsUI()->exposureSlider->setEnabled(m_qtManualExposureSupported);
         settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
         settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
         settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
@@ -1560,9 +1597,11 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaBinYSpin->setVisible(alpaca);
     settingsUI()->alpacaGainLabel->setVisible(alpaca);
     settingsUI()->alpacaGainCombo->setVisible(alpaca && m_alpacaHasNamedGains);
+    settingsUI()->alpacaGainSlider->setVisible(alpaca && !m_alpacaHasNamedGains);
     settingsUI()->alpacaGainSpin->setVisible(alpaca && !m_alpacaHasNamedGains);
     settingsUI()->alpacaOffsetLabel->setVisible(alpaca);
     settingsUI()->alpacaOffsetCombo->setVisible(alpaca && m_alpacaHasNamedOffsets);
+    settingsUI()->alpacaOffsetSlider->setVisible(alpaca && !m_alpacaHasNamedOffsets);
     settingsUI()->alpacaOffsetSpin->setVisible(alpaca && !m_alpacaHasNamedOffsets);
     settingsUI()->alpacaReadoutModeLabel->setVisible(alpaca);
     settingsUI()->alpacaReadoutModeCombo->setVisible(alpaca);
@@ -1624,9 +1663,12 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     else
     {
         settingsUI()->alpacaGainSpin->setMinimum(info.getGainMin());
+        settingsUI()->alpacaGainSlider->setMinimum(info.getGainMin());
         settingsUI()->alpacaGainSpin->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
+        settingsUI()->alpacaGainSlider->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
         const int gainVal = (m_settings.m_alpacaGain >= 0) ? m_settings.m_alpacaGain : info.getGainMin();
         settingsUI()->alpacaGainSpin->setValue(qBound(info.getGainMin(), gainVal, info.getGainMax()));
+        settingsUI()->alpacaGainSlider->setValue(qBound(info.getGainMin(), gainVal, info.getGainMax()));
     }
 
     // Readout mode
@@ -1653,9 +1695,12 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     else
     {
         settingsUI()->alpacaOffsetSpin->setMinimum(info.getOffsetMin());
+        settingsUI()->alpacaOffsetSlider->setMinimum(info.getOffsetMin());
         settingsUI()->alpacaOffsetSpin->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
+        settingsUI()->alpacaOffsetSlider->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
         const int offsetVal = (m_settings.m_alpacaOffset >= 0) ? m_settings.m_alpacaOffset : info.getOffsetMin();
         settingsUI()->alpacaOffsetSpin->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
+        settingsUI()->alpacaOffsetSlider->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
     }
 
     settingsUI()->exposureSpin->setDecimals(decimalsForStepSize(exposureResolutionMs));
@@ -1663,6 +1708,9 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     settingsUI()->exposureSpin->setMinimum(exposureMinMs);
     settingsUI()->exposureSpin->setMaximum(exposureMaxMs);
     settingsUI()->exposureSpin->setValue(qBound(exposureMinMs, m_settings.m_exposureTimeMs, exposureMaxMs));
+    settingsUI()->exposureSlider->setMinimum(0);
+    settingsUI()->exposureSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->exposureSpin));
+    settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, settingsUI()->exposureSpin->value()));
 
     // Status labels
     settingsUI()->sensorNameLabel->setText(info.getSensorName().isEmpty() ? "-" : info.getSensorName());
@@ -1789,8 +1837,22 @@ void CameraGUI::on_intervalUnitsCombo_currentIndexChanged(int index)
     applySettings();
 }
 
+void CameraGUI::on_exposureSlider_valueChanged(int value)
+{
+    const double exposureMs = sliderValueToDoubleSpinBox(settingsUI()->exposureSpin, value);
+    settingsUI()->exposureSpin->blockSignals(true);
+    settingsUI()->exposureSpin->setValue(exposureMs);
+    settingsUI()->exposureSpin->blockSignals(false);
+    m_settings.m_exposureTimeMs = exposureMs;
+    m_settingsKeys.append("exposureTimeMs");
+    applySettings();
+}
+
 void CameraGUI::on_exposureSpin_valueChanged(double value)
 {
+    settingsUI()->exposureSlider->blockSignals(true);
+    settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, value));
+    settingsUI()->exposureSlider->blockSignals(false);
     m_settings.m_exposureTimeMs = value;
     m_settingsKeys.append("exposureTimeMs");
     applySettings();
@@ -1838,8 +1900,21 @@ void CameraGUI::on_alpacaGainCombo_currentIndexChanged(int index)
     applySettings();
 }
 
+void CameraGUI::on_alpacaGainSlider_valueChanged(int value)
+{
+    settingsUI()->alpacaGainSpin->blockSignals(true);
+    settingsUI()->alpacaGainSpin->setValue(value);
+    settingsUI()->alpacaGainSpin->blockSignals(false);
+    m_settings.m_alpacaGain = value;
+    m_settingsKeys.append("alpacaGain");
+    applySettings();
+}
+
 void CameraGUI::on_alpacaGainSpin_valueChanged(int value)
 {
+    settingsUI()->alpacaGainSlider->blockSignals(true);
+    settingsUI()->alpacaGainSlider->setValue(value);
+    settingsUI()->alpacaGainSlider->blockSignals(false);
     m_settings.m_alpacaGain = value;
     m_settingsKeys.append("alpacaGain");
     applySettings();
@@ -1852,8 +1927,21 @@ void CameraGUI::on_alpacaOffsetCombo_currentIndexChanged(int index)
     applySettings();
 }
 
+void CameraGUI::on_alpacaOffsetSlider_valueChanged(int value)
+{
+    settingsUI()->alpacaOffsetSpin->blockSignals(true);
+    settingsUI()->alpacaOffsetSpin->setValue(value);
+    settingsUI()->alpacaOffsetSpin->blockSignals(false);
+    m_settings.m_alpacaOffset = value;
+    m_settingsKeys.append("alpacaOffset");
+    applySettings();
+}
+
 void CameraGUI::on_alpacaOffsetSpin_valueChanged(int value)
 {
+    settingsUI()->alpacaOffsetSlider->blockSignals(true);
+    settingsUI()->alpacaOffsetSlider->setValue(value);
+    settingsUI()->alpacaOffsetSlider->blockSignals(false);
     m_settings.m_alpacaOffset = value;
     m_settingsKeys.append("alpacaOffset");
     applySettings();
@@ -1934,8 +2022,11 @@ void CameraGUI::on_videoPostProcessCombo_currentIndexChanged(int index)
 void CameraGUI::updatePostProcessWhiteBalanceControls()
 {
     const bool manual = m_settings.m_postProcessWhiteBalanceMode == 2;
+    settingsUI()->postProcessWhiteBalanceRedGainSlider->setEnabled(manual);
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setEnabled(manual);
+    settingsUI()->postProcessWhiteBalanceGreenGainSlider->setEnabled(manual);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setEnabled(manual);
+    settingsUI()->postProcessWhiteBalanceBlueGainSlider->setEnabled(manual);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setEnabled(manual);
 }
 
@@ -1947,22 +2038,64 @@ void CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int inde
     applySettings();
 }
 
+void CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value)
+{
+    const double gain = sliderValueToDoubleSpinBox(settingsUI()->postProcessWhiteBalanceRedGainSpin, value);
+    settingsUI()->postProcessWhiteBalanceRedGainSpin->blockSignals(true);
+    settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(gain);
+    settingsUI()->postProcessWhiteBalanceRedGainSpin->blockSignals(false);
+    m_settings.m_postProcessWhiteBalanceRedGain = gain;
+    m_settingsKeys.append("postProcessWhiteBalanceRedGain");
+    applySettings();
+}
+
 void CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value)
 {
+    settingsUI()->postProcessWhiteBalanceRedGainSlider->blockSignals(true);
+    settingsUI()->postProcessWhiteBalanceRedGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceRedGainSpin, value));
+    settingsUI()->postProcessWhiteBalanceRedGainSlider->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceRedGain = value;
     m_settingsKeys.append("postProcessWhiteBalanceRedGain");
     applySettings();
 }
 
+void CameraGUI::on_postProcessWhiteBalanceGreenGainSlider_valueChanged(int value)
+{
+    const double gain = sliderValueToDoubleSpinBox(settingsUI()->postProcessWhiteBalanceGreenGainSpin, value);
+    settingsUI()->postProcessWhiteBalanceGreenGainSpin->blockSignals(true);
+    settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(gain);
+    settingsUI()->postProcessWhiteBalanceGreenGainSpin->blockSignals(false);
+    m_settings.m_postProcessWhiteBalanceGreenGain = gain;
+    m_settingsKeys.append("postProcessWhiteBalanceGreenGain");
+    applySettings();
+}
+
 void CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged(double value)
 {
+    settingsUI()->postProcessWhiteBalanceGreenGainSlider->blockSignals(true);
+    settingsUI()->postProcessWhiteBalanceGreenGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceGreenGainSpin, value));
+    settingsUI()->postProcessWhiteBalanceGreenGainSlider->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceGreenGain = value;
     m_settingsKeys.append("postProcessWhiteBalanceGreenGain");
     applySettings();
 }
 
+void CameraGUI::on_postProcessWhiteBalanceBlueGainSlider_valueChanged(int value)
+{
+    const double gain = sliderValueToDoubleSpinBox(settingsUI()->postProcessWhiteBalanceBlueGainSpin, value);
+    settingsUI()->postProcessWhiteBalanceBlueGainSpin->blockSignals(true);
+    settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(gain);
+    settingsUI()->postProcessWhiteBalanceBlueGainSpin->blockSignals(false);
+    m_settings.m_postProcessWhiteBalanceBlueGain = gain;
+    m_settingsKeys.append("postProcessWhiteBalanceBlueGain");
+    applySettings();
+}
+
 void CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value)
 {
+    settingsUI()->postProcessWhiteBalanceBlueGainSlider->blockSignals(true);
+    settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, value));
+    settingsUI()->postProcessWhiteBalanceBlueGainSlider->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceBlueGain = value;
     m_settingsKeys.append("postProcessWhiteBalanceBlueGain");
     applySettings();
@@ -2308,6 +2441,7 @@ void CameraGUI::updateEnabledControls()
     if (m_settings.isAlpacaCamera())
     {
         settingsUI()->exposureLabel->setEnabled(true);
+        settingsUI()->exposureSlider->setEnabled(true);
         settingsUI()->exposureSpin->setEnabled(true);
     }
     else
@@ -2322,6 +2456,7 @@ void CameraGUI::updateEnabledControls()
         if (!m_qtManualExposureSupported)
         {
             settingsUI()->exposureLabel->setEnabled(false);
+            settingsUI()->exposureSlider->setEnabled(false);
             settingsUI()->exposureSpin->setEnabled(false);
         }
         if (!m_qtIsoSensitivitySupported)

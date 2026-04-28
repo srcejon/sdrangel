@@ -55,23 +55,46 @@
           </widget>
          </item>
          <item row="2" column="1">
-          <widget class="QDoubleSpinBox" name="exposureSpin">
-           <property name="toolTip">
-            <string>Exposure time in milliseconds</string>
-           </property>
-           <property name="decimals">
-            <number>0</number>
-           </property>
-           <property name="minimum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>60000.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>1.000000000000000</double>
-           </property>
-          </widget>
+          <layout class="QHBoxLayout" name="exposureLayout">
+           <item>
+            <widget class="QSlider" name="exposureSlider">
+             <property name="toolTip">
+              <string>Exposure time in milliseconds</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>59999</number>
+             </property>
+             <property name="value">
+              <number>0</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QDoubleSpinBox" name="exposureSpin">
+             <property name="toolTip">
+              <string>Exposure time in milliseconds</string>
+             </property>
+             <property name="decimals">
+              <number>0</number>
+             </property>
+             <property name="minimum">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="maximum">
+              <double>60000.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>1.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
          <item row="3" column="0">
           <widget class="QLabel" name="isoLabel">
@@ -149,6 +172,19 @@
              </property>
             </widget>
            </item>
+          <item>
+            <widget class="QSlider" name="alpacaGainSlider">
+             <property name="toolTip">
+              <string>Camera gain</string>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
            <item>
             <widget class="QSpinBox" name="alpacaGainSpin">
              <property name="toolTip">
@@ -177,6 +213,19 @@
             <widget class="QComboBox" name="alpacaOffsetCombo">
              <property name="toolTip">
               <string>Camera offset</string>
+             </property>
+            </widget>
+           </item>
+          <item>
+            <widget class="QSlider" name="alpacaOffsetSlider">
+             <property name="toolTip">
+              <string>Camera offset</string>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
              </property>
             </widget>
            </item>
@@ -745,6 +794,25 @@
            </widget>
           </item>
           <item row="2" column="1">
+           <widget class="QSlider" name="postProcessWhiteBalanceGreenGainSlider">
+            <property name="toolTip">
+             <string>Manual white-balance green gain</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>158</number>
+            </property>
+            <property name="value">
+             <number>18</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
            <widget class="QDoubleSpinBox" name="postProcessWhiteBalanceGreenGainSpin">
             <property name="toolTip">
              <string>Manual white-balance green gain</string>
@@ -774,6 +842,25 @@
            </widget>
           </item>
           <item row="3" column="1">
+           <widget class="QSlider" name="postProcessWhiteBalanceBlueGainSlider">
+            <property name="toolTip">
+             <string>Manual white-balance blue gain</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>158</number>
+            </property>
+            <property name="value">
+             <number>18</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
            <widget class="QDoubleSpinBox" name="postProcessWhiteBalanceBlueGainSpin">
             <property name="toolTip">
              <string>Manual white-balance blue gain</string>
@@ -944,6 +1031,25 @@
            </widget>
           </item>
           <item row="1" column="1">
+           <widget class="QSlider" name="postProcessWhiteBalanceRedGainSlider">
+            <property name="toolTip">
+             <string>Manual white-balance red gain</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>158</number>
+            </property>
+            <property name="value">
+             <number>18</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
            <widget class="QDoubleSpinBox" name="postProcessWhiteBalanceRedGainSpin">
             <property name="toolTip">
              <string>Manual white-balance red gain</string>

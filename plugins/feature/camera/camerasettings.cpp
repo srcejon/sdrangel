@@ -146,7 +146,7 @@ void CameraSettings::resetToDefaults()
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
     m_videoFileName = "camera.mp4";
-    m_videoHwAcceleration = false;
+    m_videoHwAcceleration = true;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -351,7 +351,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(14, &m_imageFileName, "camera.jpg");
         d.readBool(15, &m_saveVideo, false);
         d.readString(16, &m_videoFileName, "camera.mp4");
-        d.readBool(86, &m_videoHwAcceleration, false);
+        d.readBool(86, &m_videoHwAcceleration, true);
 
         if (m_rollupState)
         {
@@ -511,7 +511,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(14, &m_imageFileName, "camera.jpg");
         d.readBool(15, &m_saveVideo, false);
         d.readString(16, &m_videoFileName, "camera.mp4");
-        d.readBool(86, &m_videoHwAcceleration, false);
+        d.readBool(86, &m_videoHwAcceleration, true);
 
         if (m_rollupState)
         {

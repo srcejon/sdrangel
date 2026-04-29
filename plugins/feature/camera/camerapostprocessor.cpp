@@ -614,10 +614,9 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
         {
             QFileInfo fileInfo(m_settings.m_videoFileName);
             QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
-            qDebug() << "CameraPostProcessor: Saving video to" << filename;
 
             const QImage& frameForSize = m_settings.m_videoPostProcess ? processed : image;
-            const int fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
+            const int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1'); // avc1 gets NVENC h/w accelerated with FFmpeg, whereas mp4v doesn't.
             const std::vector<int> params = {
                 cv::VIDEOWRITER_PROP_HW_ACCELERATION,
                 m_settings.m_videoHwAcceleration ? cv::VIDEO_ACCELERATION_ANY : cv::VIDEO_ACCELERATION_NONE
@@ -628,6 +627,11 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
                 m_settings.getCaptureFrameRate(),
                 cv::Size(frameForSize.width(), frameForSize.height()),
                 params);
+            if (m_videoWriter.isOpened()) {
+                qDebug() << "CameraPostProcessor opened:" << filename << "backend:" << m_videoWriter.getBackendName();
+            } else {
+                qWarning() << "CameraPostProcessor failed to open:" << filename;
+            }
         }
 
         if (m_videoWriter.isOpened())

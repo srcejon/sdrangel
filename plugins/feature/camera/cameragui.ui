@@ -146,7 +146,7 @@
          <string>Zoom in</string>
         </property>
         <property name="text">
-         <string>+</string>
+         <string/>
         </property>
         <property name="icon">
          <iconset resource="../../../sdrgui/resources/res.qrc">
@@ -195,7 +195,7 @@
          <string>Save images</string>
         </property>
         <property name="text">
-         <string>JPG</string>
+         <string/>
         </property>
         <property name="icon">
          <iconset resource="../../../sdrgui/resources/res.qrc">
@@ -209,7 +209,7 @@
          <string>Record video</string>
         </property>
         <property name="text">
-         <string>MP4</string>
+         <string/>
         </property>
         <property name="icon">
          <iconset resource="../../../sdrgui/resources/res.qrc">
@@ -230,7 +230,7 @@
          <string>Show histogram</string>
         </property>
         <property name="text">
-         <string>Histogram</string>
+         <string/>
         </property>
         <property name="icon">
          <iconset resource="cameraicons.qrc">

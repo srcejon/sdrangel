@@ -2159,7 +2159,7 @@ void CameraGUI::on_videoPathEdit_editingFinished()
 
 void CameraGUI::on_videoPathButton_clicked()
 {
-    const QString fileName = QFileDialog::getSaveFileName(this, tr("Save MP4"), m_settings.m_videoFileName, tr("MP4 video (*.mp4)"));
+    const QString fileName = QFileDialog::getSaveFileName(this, tr("Save video"), m_settings.m_videoFileName, tr("MPEG video (*.mp4 *.mov)"));
 
     if (!fileName.isEmpty())
     {

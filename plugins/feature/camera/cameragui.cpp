@@ -250,6 +250,7 @@ bool CameraGUI::handleMessage(const Message& message)
     {
         const CameraWorker::MsgReportCameraList& report = (CameraWorker::MsgReportCameraList&) message;
         const QString current = ui->cameraCombo->currentText();
+        QString selectedCameraId;
 
         ui->cameraCombo->blockSignals(true);
         ui->cameraCombo->clear();
@@ -259,11 +260,25 @@ bool CameraGUI::handleMessage(const Message& message)
 
         if (index >= 0) {
             ui->cameraCombo->setCurrentIndex(index);
+            selectedCameraId = ui->cameraCombo->itemText(index);
         } else if (!m_settings.m_cameraId.isEmpty()) {
             ui->cameraCombo->setCurrentText(m_settings.m_cameraId);
+            selectedCameraId = ui->cameraCombo->currentText();
+        } else if (ui->cameraCombo->count() > 0) {
+            ui->cameraCombo->setCurrentIndex(0);
+            selectedCameraId = ui->cameraCombo->itemText(0);
         }
 
         ui->cameraCombo->blockSignals(false);
+
+        if (m_settings.m_cameraId.isEmpty() && !selectedCameraId.isEmpty())
+        {
+            m_settings.m_cameraId = selectedCameraId;
+            m_settingsKeys.append("cameraId");
+            updateAlpacaVisibility();
+            updateEnabledControls();
+            applySettings();
+        }
 
         return true;
     }

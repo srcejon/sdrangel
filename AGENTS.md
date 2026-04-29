@@ -19,29 +19,29 @@ Before configuring, make sure the `external/windows` submodule is checked out so
 Always run Windows configure and build commands from `vcvars64.bat` (or an already-open VS developer shell that has run it) so `cl.exe`, the Windows SDK tools, and standard libraries such as `kernel32.lib` are available in the environment.
 
 Example:
-`cmd /c "\"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cmake --preset default-qt6-windows -G Ninja"`
+`cmd /c ""C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake --preset default-qt6-windows -G Ninja"`
 
 Submodule checkout:
 `git -c safe.directory=<repo-path> submodule update --init --recursive external/windows`
 
 Configure:
-`cmd /c "\"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cmake --preset default-qt6-windows -G Ninja"`
+`cmd /c ""C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake --preset default-qt6-windows -G Ninja"`
 
 Build:
-`cmd /c "\"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cmake --build --preset default-qt6-windows --parallel"`
+`cmd /c ""C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake --build --preset default-qt6-windows --parallel"`
 
 Allow a longer timeout for Windows builds when running through Codex tools, as dependency and generated-code targets can take several minutes before the first actionable compiler error appears.
 
 Always use `--parallel` for CMake builds, including subtarget builds with `--target`. Do not use `-j1` unless the user explicitly asks for a single-job build or parallelism is being debugged.
 
 Subtarget build example:
-`cmd /c "\"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cmake --build --preset default-qt6-windows --target featurecamera --parallel"`
+`cmd /c ""C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake --build --preset default-qt6-windows --target featurecamera --parallel"`
 
 Current known caveat:
 - The bundled Windows OpenCV package may be detected but still marked unusable; if that happens, targets including camera post-processing code can fail with missing `opencv2/...` headers until `OpenCV_DIR` points to a compatible build.
 
 Working OpenCV override for this machine:
-`-DOpenCV_DIR="C:/Users/jon/source/repos/sdrangel-windows-libraries/opencv4/x64/vc17"`
+`-DOpenCV_DIR="C:/Users/jon/source/repos/sdrangel-windows-libraries/opencv4/x64/vc17/lib"`
 
 If Qt autogen fails with `libuv process spawn failed: operation not permitted` while running through Codex tools, rerun the Windows build or `cmake -E cmake_autogen` step outside the sandbox from the same VS developer environment.
 

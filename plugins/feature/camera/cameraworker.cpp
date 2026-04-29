@@ -159,6 +159,49 @@ int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName)
     return score;
 }
 
+void alignQtCameraAudioInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex)
+{
+    if ((audioDeviceManager == nullptr) || (inputDeviceIndex < 0)) {
+        return;
+    }
+
+    const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
+
+    if (outputSampleRate <= 0) {
+        return;
+    }
+
+    const QList<AudioDeviceInfo>& inputDevices = AudioDeviceInfo::availableInputDevices();
+
+    if (inputDeviceIndex >= inputDevices.size()) {
+        return;
+    }
+
+    const AudioDeviceInfo& inputDeviceInfo = inputDevices.at(inputDeviceIndex);
+    const QList<int> supportedSampleRates = inputDeviceInfo.supportedSampleRates();
+
+    if (!supportedSampleRates.contains(outputSampleRate))
+    {
+        qWarning() << "CameraWorker: input audio device" << inputDeviceInfo.deviceName()
+                   << "does not support output sample rate" << outputSampleRate
+                   << "supported sample rates:" << supportedSampleRates;
+        return;
+    }
+
+    AudioDeviceManager::InputDeviceInfo configuredInputInfo;
+    audioDeviceManager->getInputDeviceInfo(inputDeviceInfo.deviceName(), configuredInputInfo);
+
+    if (configuredInputInfo.sampleRate == outputSampleRate) {
+        return;
+    }
+
+    configuredInputInfo.sampleRate = outputSampleRate;
+    audioDeviceManager->setInputDeviceInfo(inputDeviceIndex, configuredInputInfo);
+
+    qDebug() << "CameraWorker: aligned input audio device" << inputDeviceInfo.deviceName()
+             << "sample rate to output rate" << outputSampleRate;
+}
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 int findQtCameraAudioInputIndex(const CameraSettings& settings)
 {
@@ -508,6 +551,7 @@ void CameraWorker::startCapture()
         int inputDeviceIndex = -1;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         inputDeviceIndex = findQtCameraAudioInputIndex(m_settings);
+        alignQtCameraAudioInputRate(audioDeviceManager, inputDeviceIndex, outputDeviceIndex);
 #endif
         qDebug() << "CameraWorker: starting audio capture: outputDeviceIndex" << outputDeviceIndex
                  << "inputDeviceIndex" << inputDeviceIndex;

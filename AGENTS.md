@@ -14,14 +14,18 @@ Build:
 ## Windows
 Default preset: `default-qt6-windows`
 
-Before configuring, make sure the `external/windows` submodule is checked out so bundled tools such as `pkg-config.exe` and libraries such as `OpenCV` are present.
+Before configuring or building on Windows, check that `external/windows/pkg-config-lite/bin/pkg-config.exe` exists.
+If it does not, initialize the bundled dependency submodule first:
+`git -c safe.directory=<repo-path> submodule update --init --recursive external/windows`
+
+Do not rely on the sandbox for Windows configure/build steps. Run Windows CMake configure and build commands outside the sandbox by default so compiler detection, Qt autogen, and other spawned tools can run normally.
 
 Always run Windows configure and build commands from `vcvars64.bat` (or an already-open VS developer shell that has run it) so `cl.exe`, the Windows SDK tools, and standard libraries such as `kernel32.lib` are available in the environment.
 
 Example:
 `cmd /c "C:\PROGRA~1\MICROS~3\2022\COMMUN~1\VC\AUXILI~1\Build\vcvars64.bat && cmake --preset default-qt6-windows -G Ninja"`
 
-Submodule checkout:
+Submodule checkout, if `pkg-config.exe` is missing:
 `git -c safe.directory=<repo-path> submodule update --init --recursive external/windows`
 
 Configure:
@@ -30,7 +34,7 @@ Configure:
 Build:
 `cmd /c "C:\PROGRA~1\MICROS~3\2022\COMMUN~1\VC\AUXILI~1\Build\vcvars64.bat && cmake --build --preset default-qt6-windows --parallel"`
 
-Allow a longer timeout for Windows builds when running through Codex tools, as dependency and generated-code targets can take several minutes before the first actionable compiler error appears.
+Allow a longer timeout for Windows configure/build commands when running through Codex tools, as dependency and generated-code targets can take several minutes before the first actionable compiler error appears.
 
 Always use `--parallel` for CMake builds, including subtarget builds with `--target`. Do not use `-j1` unless the user explicitly asks for a single-job build or parallelism is being debugged.
 
@@ -43,7 +47,9 @@ Current known caveat:
 Working OpenCV override for this machine:
 `-DOpenCV_DIR="C:/Users/jon/source/repos/sdrangel-windows-libraries/opencv4/x64/vc17/lib"`
 
-If Qt autogen fails with `libuv process spawn failed: operation not permitted` while running through Codex tools, rerun the Windows build or `cmake -E cmake_autogen` step outside the sandbox from the same VS developer environment.
+If Windows configure/build is being run from Codex tools, prefer requesting escalated execution immediately rather than retrying in the sandbox first.
+
+If Qt autogen fails with `libuv process spawn failed: operation not permitted`, rerun the Windows build or `cmake -E cmake_autogen` step outside the sandbox from the same VS developer environment.
 
 ## Validation
 - There is no single top-level unit test runner

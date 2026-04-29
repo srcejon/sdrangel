@@ -647,6 +647,314 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image)
     }
 }
 
+void CameraPostProcessor::applyWhiteBalance(cv::Mat& bgrMat)
+{
+    cv::Vec3d gains(
+        m_settings.m_postProcessWhiteBalanceBlueGain,
+        m_settings.m_postProcessWhiteBalanceGreenGain,
+        m_settings.m_postProcessWhiteBalanceRedGain);
+
+    if (m_settings.m_postProcessWhiteBalanceMode == 1)
+    {
+        const cv::Scalar means = cv::mean(bgrMat);
+        const double blueMean = std::max(1.0, means[0]);
+        const double greenMean = std::max(1.0, means[1]);
+        const double redMean = std::max(1.0, means[2]);
+        const double targetMean = (blueMean + greenMean + redMean) / 3.0;
+
+        cv::Vec3d targetGains(
+            qBound(0.25, targetMean / blueMean, 4.0),
+            qBound(0.25, targetMean / greenMean, 4.0),
+            qBound(0.25, targetMean / redMean, 4.0));
+
+        if (!m_autoWhiteBalanceInitialized)
+        {
+            m_autoWhiteBalanceGains = targetGains;
+            m_autoWhiteBalanceInitialized = true;
+        }
+        else
+        {
+            static constexpr double kAutoWhiteBalanceSmoothing = 0.2;
+            m_autoWhiteBalanceGains =
+                (1.0 - kAutoWhiteBalanceSmoothing) * m_autoWhiteBalanceGains
+                + kAutoWhiteBalanceSmoothing * targetGains;
+        }
+
+        gains = m_autoWhiteBalanceGains;
+    }
+
+    std::vector<cv::Mat> channels;
+    cv::split(bgrMat, channels);
+    channels[0].convertTo(channels[0], -1, gains[0], 0.0);
+    channels[1].convertTo(channels[1], -1, gains[1], 0.0);
+    channels[2].convertTo(channels[2], -1, gains[2], 0.0);
+    cv::merge(channels, bgrMat);
+}
+
+void CameraPostProcessor::applySaturation(cv::Mat& bgrMat)
+{
+    cv::Mat hsvMat;
+    cv::cvtColor(bgrMat, hsvMat, cv::COLOR_BGR2HSV);
+    std::vector<cv::Mat> hsvChannels;
+    cv::split(hsvMat, hsvChannels);
+    hsvChannels[1].convertTo(hsvChannels[1], -1, m_settings.m_saturation, 0.0);
+    cv::merge(hsvChannels, hsvMat);
+    cv::cvtColor(hsvMat, bgrMat, cv::COLOR_HSV2BGR);
+}
+
+void CameraPostProcessor::applyGamma(cv::Mat& bgrMat) const
+{
+    cv::Mat lut(1, 256, CV_8U);
+    uchar* lutData = lut.ptr<uchar>();
+    for (int i = 0; i < 256; ++i) {
+        lutData[i] = static_cast<uchar>(qBound(0, static_cast<int>(std::pow(i / 255.0, m_settings.m_gamma) * 255.0 + 0.5), 255));
+    }
+    cv::LUT(bgrMat, lut, bgrMat);
+}
+
+void CameraPostProcessor::applyGaussianBlur(cv::Mat& bgrMat) const
+{
+    const int kernelSize = 2 * m_settings.m_gaussianBlur + 1;
+    cv::GaussianBlur(bgrMat, bgrMat, cv::Size(kernelSize, kernelSize), 0.0);
+}
+
+void CameraPostProcessor::applyMedianBlur(cv::Mat& bgrMat) const
+{
+    const int kernelSize = 2 * m_settings.m_medianBlur + 1;
+    cv::medianBlur(bgrMat, bgrMat, kernelSize);
+}
+
+void CameraPostProcessor::applySharpen(cv::Mat& bgrMat) const
+{
+    cv::Mat blurred;
+    cv::GaussianBlur(bgrMat, blurred, cv::Size(0, 0), 1.0);
+    cv::addWeighted(bgrMat, 1.0 + m_settings.m_sharpen, blurred, -m_settings.m_sharpen, 0.0, bgrMat);
+}
+
+void CameraPostProcessor::applySobelEdge(cv::Mat& bgrMat) const
+{
+    cv::Mat grayMat;
+    cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
+
+    cv::Mat gradX;
+    cv::Mat gradY;
+    cv::Sobel(grayMat, gradX, CV_16S, 1, 0, 3);
+    cv::Sobel(grayMat, gradY, CV_16S, 0, 1, 3);
+
+    cv::Mat absGradX;
+    cv::Mat absGradY;
+    cv::convertScaleAbs(gradX, absGradX);
+    cv::convertScaleAbs(gradY, absGradY);
+
+    cv::Mat edgesGray;
+    cv::addWeighted(absGradX, 0.5, absGradY, 0.5, 0.0, edgesGray);
+
+    cv::Mat edgesBgr;
+    cv::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
+    cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrMat);
+}
+
+void CameraPostProcessor::applyFlip(cv::Mat& bgrMat) const
+{
+    const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
+    cv::flip(bgrMat, bgrMat, flipCode);
+}
+
+void CameraPostProcessor::applyBrightnessContrast(cv::Mat& bgrMat) const
+{
+    cv::Mat adjusted;
+    cv::convertScaleAbs(bgrMat, adjusted, m_settings.m_contrast, m_settings.m_brightness);
+    bgrMat = adjusted;
+}
+
+void CameraPostProcessor::applyInvertColors(cv::Mat& bgrMat) const
+{
+    cv::bitwise_not(bgrMat, bgrMat);
+}
+
+void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat)
+{
+    const QImage prevRgb = m_previousRawFrame.convertToFormat(QImage::Format_RGB888);
+    cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
+                    const_cast<uchar*>(prevRgb.bits()),
+                    static_cast<size_t>(prevRgb.bytesPerLine()));
+    cv::Mat prevBgr;
+    cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
+
+    cv::Mat gray, prevGray, diff, mask;
+    cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
+    cv::absdiff(gray, prevGray, diff);
+    cv::threshold(diff, mask, m_settings.m_diffThreshold, 255, cv::THRESH_BINARY);
+
+    if (m_settings.m_dilationSize > 0)
+    {
+        const int ksize = 2 * m_settings.m_dilationSize + 1;
+        const cv::Mat dilationKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+        cv::dilate(mask, mask, dilationKernel);
+    }
+
+    if (!m_diffMaskHistory.empty() &&
+        (m_diffMaskHistory.front().size() != mask.size() || m_diffMaskHistory.front().type() != mask.type()))
+    {
+        m_diffMaskHistory.clear();
+    }
+
+    m_diffMaskHistory.push_back(mask.clone());
+
+    const size_t historyFrames = static_cast<size_t>(std::max(1, m_settings.m_diffMaskHistoryFrames));
+    while (m_diffMaskHistory.size() > historyFrames) {
+        m_diffMaskHistory.pop_front();
+    }
+
+    cv::Mat combinedMask = m_diffMaskHistory.front().clone();
+    for (size_t i = 1; i < m_diffMaskHistory.size(); ++i) {
+        cv::bitwise_or(combinedMask, m_diffMaskHistory[i], combinedMask);
+    }
+    if (m_settings.m_diffMaskCloseSize > 0) {
+        const int closeKsize = 2 * m_settings.m_diffMaskCloseSize + 1;
+        const cv::Mat closeKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(closeKsize, closeKsize));
+        cv::morphologyEx(combinedMask, combinedMask, cv::MORPH_CLOSE, closeKernel);
+    }
+
+    cv::Mat result = cv::Mat::zeros(bgrMat.size(), bgrMat.type());
+    cv::bitwise_and(bgrMat, bgrMat, result, combinedMask);
+    bgrMat = result;
+}
+
+void CameraPostProcessor::applyMotionDetection(cv::Mat& bgrMat)
+{
+    if (!m_bgSubtractor) {
+        m_bgSubtractor = cv::createBackgroundSubtractorMOG2();
+    }
+
+    cv::Mat fgMask;
+    m_bgSubtractor->apply(bgrMat, fgMask);
+    cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
+
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+    const QColor& bc = m_settings.m_motionBoxColor;
+    const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
+    for (const auto& contour : contours)
+    {
+        if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea)) {
+            cv::rectangle(bgrMat, cv::boundingRect(contour), boxColor, 2);
+        }
+    }
+}
+
+void CameraPostProcessor::applySpectrumOverlay(cv::Mat& bgrMat) const
+{
+    QImage specSrc = m_spectrumViewImage;
+    if (qAbs(m_settings.m_spectrumScale - 1.0) > 1e-4)
+    {
+        const int sw = static_cast<int>(specSrc.width() * m_settings.m_spectrumScale);
+        const int sh = static_cast<int>(specSrc.height() * m_settings.m_spectrumScale);
+        if (sw > 0 && sh > 0) {
+            specSrc = specSrc.scaled(sw, sh, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+    }
+
+    const QImage specRgb = specSrc.convertToFormat(QImage::Format_RGBA8888);
+    const int dstW = bgrMat.cols;
+    const int dstH = bgrMat.rows;
+    const int ox = m_settings.m_spectrumOffsetX;
+    const int oy = m_settings.m_spectrumOffsetY;
+    const int sw = specRgb.width();
+    const int sh = specRgb.height();
+
+    const int srcX0 = std::max(0, -ox);
+    const int srcY0 = std::max(0, -oy);
+    const int srcX1 = std::min(sw, dstW - ox);
+    const int srcY1 = std::min(sh, dstH - oy);
+
+    for (int sy = srcY0; sy < srcY1; ++sy)
+    {
+        const uchar* srcRow = specRgb.constScanLine(sy);
+        const int dy = oy + sy;
+        uchar* dstRow = bgrMat.ptr<uchar>(dy);
+
+        for (int sx = srcX0; sx < srcX1; ++sx)
+        {
+            const int srcPx = sx * 4;
+            const uchar alpha = srcRow[srcPx + 3];
+            if (alpha == 0) {
+                continue;
+            }
+            const int dx = (ox + sx) * 3;
+            if (alpha == 255)
+            {
+                dstRow[dx] = srcRow[srcPx + 2];
+                dstRow[dx + 1] = srcRow[srcPx + 1];
+                dstRow[dx + 2] = srcRow[srcPx];
+            }
+            else
+            {
+                const int a = alpha;
+                const int invA = 255 - a;
+                dstRow[dx] = static_cast<uchar>((srcRow[srcPx + 2] * a + dstRow[dx] * invA) / 255);
+                dstRow[dx + 1] = static_cast<uchar>((srcRow[srcPx + 1] * a + dstRow[dx + 1] * invA) / 255);
+                dstRow[dx + 2] = static_cast<uchar>((srcRow[srcPx] * a + dstRow[dx + 2] * invA) / 255);
+            }
+        }
+    }
+}
+
+QImage CameraPostProcessor::convertBgrToRgbImage(cv::Mat& bgrMat) const
+{
+    cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);
+    const QImage rawResult(bgrMat.data, bgrMat.cols, bgrMat.rows,
+                           static_cast<qsizetype>(bgrMat.step[0]),
+                           QImage::Format_RGB888);
+    return rawResult.copy();
+}
+
+void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const
+{
+    const QString fmt = m_settings.m_dateTimeFormat.isEmpty()
+                        ? QStringLiteral("yyyy-MM-dd hh:mm:ss")
+                        : m_settings.m_dateTimeFormat;
+    const QString text = m_captureDateTime.toString(fmt);
+    QFont font;
+    if (!m_settings.m_overlayFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_overlayFontFamily);
+    }
+    font.setPointSizeF(m_settings.m_overlayFontScale);
+    const QFontMetrics fm(font);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    painter.setFont(font);
+    painter.setPen(m_settings.m_dateTimeColor);
+    const int x = m_settings.m_dateTimePosX;
+    const int y = m_settings.m_dateTimePosY + fm.ascent();
+    painter.drawText(x, y, text);
+}
+
+void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const
+{
+    QFont font;
+    if (!m_settings.m_overlayTextFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_overlayTextFontFamily);
+    }
+    font.setPointSizeF(m_settings.m_overlayTextFontScale);
+    overlayTextDocument.setDefaultFont(font);
+    overlayTextDocument.setDefaultStyleSheet(QStringLiteral("* { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
+    overlayTextDocument.setHtml(QString("<div>%1</div>").arg(m_settings.m_overlayTextString));
+
+    const int x = std::max(0, m_settings.m_overlayTextPosX);
+    const qreal maxTextWidth = std::max(1, image.width() - x);
+    overlayTextDocument.setTextWidth(maxTextWidth);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    painter.save();
+    painter.translate(x, m_settings.m_overlayTextPosY);
+    overlayTextDocument.drawContents(&painter);
+    painter.restore();
+}
+
 QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
 {
     PROFILER_START();
@@ -692,316 +1000,33 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 
-    if (needsWhiteBalance)
-    {
-        cv::Vec3d gains(
-            m_settings.m_postProcessWhiteBalanceBlueGain,
-            m_settings.m_postProcessWhiteBalanceGreenGain,
-            m_settings.m_postProcessWhiteBalanceRedGain);
-
-        if (m_settings.m_postProcessWhiteBalanceMode == 1)
-        {
-            const cv::Scalar means = cv::mean(bgrMat);
-            const double blueMean = std::max(1.0, means[0]);
-            const double greenMean = std::max(1.0, means[1]);
-            const double redMean = std::max(1.0, means[2]);
-            const double targetMean = (blueMean + greenMean + redMean) / 3.0;
-
-            cv::Vec3d targetGains(
-                qBound(0.25, targetMean / blueMean, 4.0),
-                qBound(0.25, targetMean / greenMean, 4.0),
-                qBound(0.25, targetMean / redMean, 4.0));
-
-            if (!m_autoWhiteBalanceInitialized)
-            {
-                m_autoWhiteBalanceGains = targetGains;
-                m_autoWhiteBalanceInitialized = true;
-            }
-            else
-            {
-                static constexpr double kAutoWhiteBalanceSmoothing = 0.2;
-                m_autoWhiteBalanceGains =
-                    (1.0 - kAutoWhiteBalanceSmoothing) * m_autoWhiteBalanceGains
-                    + kAutoWhiteBalanceSmoothing * targetGains;
-            }
-
-            gains = m_autoWhiteBalanceGains;
-        }
-
-        std::vector<cv::Mat> channels;
-        cv::split(bgrMat, channels);
-        channels[0].convertTo(channels[0], -1, gains[0], 0.0);
-        channels[1].convertTo(channels[1], -1, gains[1], 0.0);
-        channels[2].convertTo(channels[2], -1, gains[2], 0.0);
-        cv::merge(channels, bgrMat);
-    }
-
-    if (needsSaturation)
-    {
-        cv::Mat hsvMat;
-        cv::cvtColor(bgrMat, hsvMat, cv::COLOR_BGR2HSV);
-        std::vector<cv::Mat> hsvChannels;
-        cv::split(hsvMat, hsvChannels);
-        hsvChannels[1].convertTo(hsvChannels[1], -1, m_settings.m_saturation, 0.0);
-        cv::merge(hsvChannels, hsvMat);
-        cv::cvtColor(hsvMat, bgrMat, cv::COLOR_HSV2BGR);
-    }
-
-    if (needsGamma)
-    {
-        cv::Mat lut(1, 256, CV_8U);
-        uchar* lutData = lut.ptr<uchar>();
-        for (int i = 0; i < 256; ++i) {
-            lutData[i] = static_cast<uchar>(qBound(0, static_cast<int>(std::pow(i / 255.0, m_settings.m_gamma) * 255.0 + 0.5), 255));
-        }
-        cv::LUT(bgrMat, lut, bgrMat);
-    }
-
-    if (needsGaussianBlur)
-    {
-        const int kernelSize = 2 * m_settings.m_gaussianBlur + 1;
-        cv::GaussianBlur(bgrMat, bgrMat, cv::Size(kernelSize, kernelSize), 0.0);
-    }
-
-    if (needsMedianBlur)
-    {
-        const int kernelSize = 2 * m_settings.m_medianBlur + 1;
-        cv::medianBlur(bgrMat, bgrMat, kernelSize);
-    }
-
-    if (needsSharpen)
-    {
-        cv::Mat blurred;
-        cv::GaussianBlur(bgrMat, blurred, cv::Size(0, 0), 1.0);
-        cv::addWeighted(bgrMat, 1.0 + m_settings.m_sharpen, blurred, -m_settings.m_sharpen, 0.0, bgrMat);
-    }
-
-    if (needsSobelEdge)
-    {
-        cv::Mat grayMat;
-        cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
-
-        cv::Mat gradX;
-        cv::Mat gradY;
-        cv::Sobel(grayMat, gradX, CV_16S, 1, 0, 3);
-        cv::Sobel(grayMat, gradY, CV_16S, 0, 1, 3);
-
-        cv::Mat absGradX;
-        cv::Mat absGradY;
-        cv::convertScaleAbs(gradX, absGradX);
-        cv::convertScaleAbs(gradY, absGradY);
-
-        cv::Mat edgesGray;
-        cv::addWeighted(absGradX, 0.5, absGradY, 0.5, 0.0, edgesGray);
-
-        cv::Mat edgesBgr;
-        cv::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
-        cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrMat);
-    }
-
-    if (needsFlip)
-    {
-        const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
-        cv::flip(bgrMat, bgrMat, flipCode);
-    }
-
-    if (needsBrightContrast)
-    {
-        cv::Mat adjusted;
-        cv::convertScaleAbs(bgrMat, adjusted, m_settings.m_contrast, m_settings.m_brightness);
-        bgrMat = adjusted;
-    }
-
-    if (m_settings.m_invertColors) {
-        cv::bitwise_not(bgrMat, bgrMat);
-    }
-
+    if (needsWhiteBalance) { applyWhiteBalance(bgrMat); }
+    if (needsSaturation) { applySaturation(bgrMat); }
+    if (needsGamma) { applyGamma(bgrMat); }
+    if (needsGaussianBlur) { applyGaussianBlur(bgrMat); }
+    if (needsMedianBlur) { applyMedianBlur(bgrMat); }
+    if (needsSharpen) { applySharpen(bgrMat); }
+    if (needsSobelEdge) { applySobelEdge(bgrMat); }
+    if (needsFlip) { applyFlip(bgrMat); }
+    if (needsBrightContrast) { applyBrightnessContrast(bgrMat); }
+    if (m_settings.m_invertColors) { applyInvertColors(bgrMat); }
     if (m_settings.m_diffMask && !m_previousRawFrame.isNull()
         && m_previousRawFrame.width() == input.width()
-        && m_previousRawFrame.height() == input.height())
-    {
-        const QImage prevRgb = m_previousRawFrame.convertToFormat(QImage::Format_RGB888);
-        cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
-                        const_cast<uchar*>(prevRgb.bits()),
-                        static_cast<size_t>(prevRgb.bytesPerLine()));
-        cv::Mat prevBgr;
-        cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
-
-        cv::Mat gray, prevGray, diff, mask;
-        cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
-        cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
-        cv::absdiff(gray, prevGray, diff);
-        cv::threshold(diff, mask, m_settings.m_diffThreshold, 255, cv::THRESH_BINARY);
-
-        cv::Mat dilationKernel;
-        if (m_settings.m_dilationSize > 0)
-        {
-            const int ksize = 2 * m_settings.m_dilationSize + 1;
-            dilationKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
-            cv::dilate(mask, mask, dilationKernel);
-        }
-
-        if (!m_diffMaskHistory.empty() &&
-            (m_diffMaskHistory.front().size() != mask.size() || m_diffMaskHistory.front().type() != mask.type()))
-        {
-            m_diffMaskHistory.clear();
-        }
-
-        m_diffMaskHistory.push_back(mask.clone());
-
-        const size_t historyFrames = static_cast<size_t>(std::max(1, m_settings.m_diffMaskHistoryFrames));
-        while (m_diffMaskHistory.size() > historyFrames) {
-            m_diffMaskHistory.pop_front();
-        }
-
-        cv::Mat combinedMask = m_diffMaskHistory.front().clone();
-        for (size_t i = 1; i < m_diffMaskHistory.size(); ++i) {
-            cv::bitwise_or(combinedMask, m_diffMaskHistory[i], combinedMask);
-        }
-        if (m_settings.m_diffMaskCloseSize > 0) {
-            const int closeKsize = 2 * m_settings.m_diffMaskCloseSize + 1;
-            const cv::Mat closeKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(closeKsize, closeKsize));
-            cv::morphologyEx(combinedMask, combinedMask, cv::MORPH_CLOSE, closeKernel);
-        }
-
-        cv::Mat result = cv::Mat::zeros(bgrMat.size(), bgrMat.type());
-        cv::bitwise_and(bgrMat, bgrMat, result, combinedMask);
-        bgrMat = result;
+        && m_previousRawFrame.height() == input.height()) {
+        applyDiffMask(bgrMat);
     }
-
-    if (m_settings.m_motionDetect)
-    {
-        if (!m_bgSubtractor) {
-            m_bgSubtractor = cv::createBackgroundSubtractorMOG2();
-        }
-
-        cv::Mat fgMask;
-        m_bgSubtractor->apply(bgrMat, fgMask);
-        cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
-
-        std::vector<std::vector<cv::Point>> contours;
-        cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-
-        const QColor& bc = m_settings.m_motionBoxColor;
-        const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
-        for (const auto& contour : contours)
-        {
-            if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea)) {
-                cv::rectangle(bgrMat, cv::boundingRect(contour), boxColor, 2);
-            }
-        }
-    }
+    if (m_settings.m_motionDetect) { applyMotionDetection(bgrMat); }
 
     if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
         runYoloDetections(bgrMat);
     }
 
-    if (needsSpectrumOverlay)
-    {
-        QImage specSrc = m_spectrumViewImage;
-        if (qAbs(m_settings.m_spectrumScale - 1.0) > 1e-4)
-        {
-            const int sw = static_cast<int>(specSrc.width() * m_settings.m_spectrumScale);
-            const int sh = static_cast<int>(specSrc.height() * m_settings.m_spectrumScale);
-            if (sw > 0 && sh > 0) {
-                specSrc = specSrc.scaled(sw, sh, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            }
-        }
+    if (needsSpectrumOverlay) { applySpectrumOverlay(bgrMat); }
 
-        const QImage specRgb = specSrc.convertToFormat(QImage::Format_RGBA8888);
-        const int dstW = bgrMat.cols;
-        const int dstH = bgrMat.rows;
-        const int ox = m_settings.m_spectrumOffsetX;
-        const int oy = m_settings.m_spectrumOffsetY;
-        const int sw = specRgb.width();
-        const int sh = specRgb.height();
+    QImage result = convertBgrToRgbImage(bgrMat);
 
-        const int srcX0 = std::max(0, -ox);
-        const int srcY0 = std::max(0, -oy);
-        const int srcX1 = std::min(sw, dstW - ox);
-        const int srcY1 = std::min(sh, dstH - oy);
-
-        for (int sy = srcY0; sy < srcY1; ++sy)
-        {
-            const uchar* srcRow = specRgb.constScanLine(sy);
-            const int dy = oy + sy;
-            uchar* dstRow = bgrMat.ptr<uchar>(dy);
-
-            for (int sx = srcX0; sx < srcX1; ++sx)
-            {
-                const int srcPx = sx * 4;
-                const uchar alpha = srcRow[srcPx + 3];
-                if (alpha == 0) {
-                    continue;
-                }
-                const int dx = (ox + sx) * 3;
-                if (alpha == 255)
-                {
-                    dstRow[dx] = srcRow[srcPx + 2];
-                    dstRow[dx + 1] = srcRow[srcPx + 1];
-                    dstRow[dx + 2] = srcRow[srcPx];
-                }
-                else
-                {
-                    const int a = alpha;
-                    const int invA = 255 - a;
-                    dstRow[dx] = static_cast<uchar>((srcRow[srcPx + 2] * a + dstRow[dx] * invA) / 255);
-                    dstRow[dx + 1] = static_cast<uchar>((srcRow[srcPx + 1] * a + dstRow[dx + 1] * invA) / 255);
-                    dstRow[dx + 2] = static_cast<uchar>((srcRow[srcPx] * a + dstRow[dx + 2] * invA) / 255);
-                }
-            }
-        }
-    }
-
-    cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);
-    const QImage rawResult(bgrMat.data, bgrMat.cols, bgrMat.rows,
-                           static_cast<qsizetype>(bgrMat.step[0]),
-                           QImage::Format_RGB888);
-    QImage result = rawResult.copy();
-
-    if (m_settings.m_overlayDateTime)
-    {
-        const QString fmt = m_settings.m_dateTimeFormat.isEmpty()
-                            ? QStringLiteral("yyyy-MM-dd hh:mm:ss")
-                            : m_settings.m_dateTimeFormat;
-        const QString text = m_captureDateTime.toString(fmt);
-        QFont font;
-        if (!m_settings.m_overlayFontFamily.isEmpty()) {
-            font.setFamily(m_settings.m_overlayFontFamily);
-        }
-        font.setPointSizeF(m_settings.m_overlayFontScale);
-        const QFontMetrics fm(font);
-        QPainter painter(&result);
-        painter.setRenderHint(QPainter::TextAntialiasing);
-        painter.setFont(font);
-        painter.setPen(m_settings.m_dateTimeColor);
-        const int x = m_settings.m_dateTimePosX;
-        const int y = m_settings.m_dateTimePosY + fm.ascent();
-        painter.drawText(x, y, text);
-    }
-
-    if (needsTextOverlay)
-    {
-        QFont font;
-        if (!m_settings.m_overlayTextFontFamily.isEmpty()) {
-            font.setFamily(m_settings.m_overlayTextFontFamily);
-        }
-        font.setPointSizeF(m_settings.m_overlayTextFontScale);
-        overlayTextDocument.setDefaultFont(font);
-        overlayTextDocument.setDefaultStyleSheet(QStringLiteral("* { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
-        overlayTextDocument.setHtml(QString("<div>%1</div>").arg(m_settings.m_overlayTextString));
-
-        const int x = std::max(0, m_settings.m_overlayTextPosX);
-        const qreal maxTextWidth = std::max(1, result.width() - x);
-        overlayTextDocument.setTextWidth(maxTextWidth);
-
-        QPainter painter(&result);
-        painter.setRenderHint(QPainter::TextAntialiasing);
-        painter.save();
-        painter.translate(x, m_settings.m_overlayTextPosY);
-        overlayTextDocument.drawContents(&painter);
-        painter.restore();
-    }
+    if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
+    if (needsTextOverlay) { applyTextOverlay(result, overlayTextDocument); }
 
     PROFILER_STOP("CameraPostProcessor::applyPostProcessing");
     return result;

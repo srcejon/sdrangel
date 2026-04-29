@@ -25,6 +25,7 @@
 #include <QImage>
 #include <QDateTime>
 #include <QSet>
+#include <QTextDocument>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -270,6 +271,22 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const QImage& image);
     [[nodiscard]] QImage applyPostProcessing(const QImage& input);
+    void applyWhiteBalance(cv::Mat& bgrMat);
+    void applySaturation(cv::Mat& bgrMat);
+    void applyGamma(cv::Mat& bgrMat) const;
+    void applyGaussianBlur(cv::Mat& bgrMat) const;
+    void applyMedianBlur(cv::Mat& bgrMat) const;
+    void applySharpen(cv::Mat& bgrMat) const;
+    void applySobelEdge(cv::Mat& bgrMat) const;
+    void applyFlip(cv::Mat& bgrMat) const;
+    void applyBrightnessContrast(cv::Mat& bgrMat) const;
+    void applyInvertColors(cv::Mat& bgrMat) const;
+    void applyDiffMask(cv::Mat& bgrMat);
+    void applyMotionDetection(cv::Mat& bgrMat);
+    void applySpectrumOverlay(cv::Mat& bgrMat) const;
+    [[nodiscard]] QImage convertBgrToRgbImage(cv::Mat& bgrMat) const;
+    void applyDateTimeOverlay(QImage& image) const;
+    void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     void runYoloDetections(cv::Mat& bgrMat);
     void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
     void applyObjectDetectedSettings(const QString& className);

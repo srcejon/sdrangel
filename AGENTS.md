@@ -32,7 +32,10 @@ Build:
 
 Allow a longer timeout for Windows builds when running through Codex tools, as dependency and generated-code targets can take several minutes before the first actionable compiler error appears.
 
-Use '--parallel' when building, rather than 'j1', to make builds faster.
+Always use `--parallel` for CMake builds, including subtarget builds with `--target`. Do not use `-j1` unless the user explicitly asks for a single-job build or parallelism is being debugged.
+
+Subtarget build example:
+`cmd /c "\"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cmake --build --preset default-qt6-windows --target featurecamera --parallel"`
 
 Current known caveat:
 - The bundled Windows OpenCV package may be detected but still marked unusable; if that happens, targets including camera post-processing code can fail with missing `opencv2/...` headers until `OpenCV_DIR` points to a compatible build.

@@ -179,6 +179,7 @@ void CameraSettings::resetToDefaults()
     m_diffThreshold = 30;
     m_dilationSize = 3;
     m_diffMaskHistoryFrames = 1;
+    m_diffMaskCloseSize = 0;
     m_overlayFontFamily.clear();
     m_overlayFontScale = 12.0;
     m_motionDetect = false;
@@ -259,6 +260,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(68, m_diffThreshold);
     s.writeS32(32, m_dilationSize);
     s.writeS32(84, m_diffMaskHistoryFrames);
+    s.writeS32(85, m_diffMaskCloseSize);
     s.writeString(33, m_overlayFontFamily);
     s.writeDouble(34, m_overlayFontScale);
     s.writeBool(35, m_motionDetect);
@@ -398,11 +400,13 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(68, &m_diffThreshold, 30);
         d.readS32(32, &m_dilationSize, 3);
         d.readS32(84, &m_diffMaskHistoryFrames, 1);
+        d.readS32(85, &m_diffMaskCloseSize, 0);
         m_brightness = qBound(-100.0, m_brightness, 100.0);
         m_contrast = qBound(0.1, m_contrast, 3.0);
         m_diffThreshold = qBound(0, m_diffThreshold, 255);
         m_dilationSize = qBound(0, m_dilationSize, 20);
         m_diffMaskHistoryFrames = qBound(1, m_diffMaskHistoryFrames, 120);
+        m_diffMaskCloseSize = qBound(0, m_diffMaskCloseSize, 20);
 
         d.readString(33, &m_overlayFontFamily, "");
         d.readDouble(34, &m_overlayFontScale, 12.0);
@@ -555,11 +559,13 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(68, &m_diffThreshold, 30);
         d.readS32(32, &m_dilationSize, 3);
         d.readS32(84, &m_diffMaskHistoryFrames, 1);
+        d.readS32(85, &m_diffMaskCloseSize, 0);
         m_brightness = qBound(-100.0, m_brightness, 100.0);
         m_contrast = qBound(0.1, m_contrast, 3.0);
         m_diffThreshold = qBound(0, m_diffThreshold, 255);
         m_dilationSize = qBound(0, m_dilationSize, 20);
         m_diffMaskHistoryFrames = qBound(1, m_diffMaskHistoryFrames, 120);
+        m_diffMaskCloseSize = qBound(0, m_diffMaskCloseSize, 20);
 
         d.readString(33, &m_overlayFontFamily, "");
         d.readDouble(34, &m_overlayFontScale, 12.0);
@@ -784,6 +790,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("diffMaskHistoryFrames")) {
         m_diffMaskHistoryFrames = qBound(1, settings.m_diffMaskHistoryFrames, 120);
+    }
+    if (settingsKeys.contains("diffMaskCloseSize")) {
+        m_diffMaskCloseSize = qBound(0, settings.m_diffMaskCloseSize, 20);
     }
     if (settingsKeys.contains("overlayFontFamily")) {
         m_overlayFontFamily = settings.m_overlayFontFamily;
@@ -1024,6 +1033,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("diffMaskHistoryFrames") || force) {
         ostr << " m_diffMaskHistoryFrames: " << m_diffMaskHistoryFrames;
+    }
+    if (settingsKeys.contains("diffMaskCloseSize") || force) {
+        ostr << " m_diffMaskCloseSize: " << m_diffMaskCloseSize;
     }
     if (settingsKeys.contains("overlayFontFamily") || force) {
         ostr << " m_overlayFontFamily: " << m_overlayFontFamily.toStdString();

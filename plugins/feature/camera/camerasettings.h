@@ -120,6 +120,7 @@ struct CameraSettings
     int m_diffThreshold;      ///< Threshold for diff-mask binary classification: 0..255
     int m_dilationSize;       ///< Kernel radius for diff-mask dilation: 0..20
     int m_diffMaskHistoryFrames; ///< Number of diff masks to accumulate with bitwise_or: 1..120
+    int m_diffMaskCloseSize;  ///< Kernel radius for morphological close on accumulated diff mask: 0..20
     QString m_overlayFontFamily; ///< QPainter font family name (empty = system default)
     double  m_overlayFontScale;  ///< Font point size for QPainter text: 4.0..144.0
     bool   m_motionDetect;      ///< Enable MOG2 background subtractor

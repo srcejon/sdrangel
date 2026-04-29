@@ -255,6 +255,7 @@ private slots:
     void on_diffThresholdSpin_valueChanged(int value);
     void on_dilationSpin_valueChanged(int value);
     void on_diffMaskHistoryFramesSpin_valueChanged(int value);
+    void on_diffMaskCloseSizeSpin_valueChanged(int value);
     void on_histogramButton_clicked();
     void on_defaultColorSettingsButton_clicked();
     void on_overlayFontCombo_currentFontChanged(const QFont& font);

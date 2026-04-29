@@ -483,7 +483,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
-        "diffMask", "diffThreshold", "dilationSize", "diffMaskHistoryFrames", "overlayFontFamily", "overlayFontScale",
+        "diffMask", "diffThreshold", "dilationSize", "diffMaskHistoryFrames", "diffMaskCloseSize", "overlayFontFamily", "overlayFontScale",
         "motionDetect", "motionBoxColor", "minContourArea",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
         "yoloEnabled", "yoloModelPath", "yoloLabelsPath", "yoloConfThreshold", "yoloNmsThreshold", "yoloBoxColor"
@@ -524,7 +524,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         || settingsKeys.contains("diffMask")
         || settingsKeys.contains("diffThreshold")
         || settingsKeys.contains("dilationSize")
-        || settingsKeys.contains("diffMaskHistoryFrames"))
+        || settingsKeys.contains("diffMaskHistoryFrames")
+        || settingsKeys.contains("diffMaskCloseSize"))
     {
         m_diffMaskHistory.clear();
     }
@@ -832,11 +833,12 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
         cv::absdiff(gray, prevGray, diff);
         cv::threshold(diff, mask, m_settings.m_diffThreshold, 255, cv::THRESH_BINARY);
 
+        cv::Mat dilationKernel;
         if (m_settings.m_dilationSize > 0)
         {
             const int ksize = 2 * m_settings.m_dilationSize + 1;
-            const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
-            cv::dilate(mask, mask, kernel);
+            dilationKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+            cv::dilate(mask, mask, dilationKernel);
         }
 
         if (!m_diffMaskHistory.empty() &&
@@ -855,6 +857,11 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
         cv::Mat combinedMask = m_diffMaskHistory.front().clone();
         for (size_t i = 1; i < m_diffMaskHistory.size(); ++i) {
             cv::bitwise_or(combinedMask, m_diffMaskHistory[i], combinedMask);
+        }
+        if (m_settings.m_diffMaskCloseSize > 0) {
+            const int closeKsize = 2 * m_settings.m_diffMaskCloseSize + 1;
+            const cv::Mat closeKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(closeKsize, closeKsize));
+            cv::morphologyEx(combinedMask, combinedMask, cv::MORPH_CLOSE, closeKernel);
         }
 
         cv::Mat result = cv::Mat::zeros(bgrMat.size(), bgrMat.type());

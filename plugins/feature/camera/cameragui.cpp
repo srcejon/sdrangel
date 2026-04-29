@@ -671,6 +671,7 @@ void CameraGUI::displaySettings()
     settingsUI()->yoloLabelsPathCombo->setCurrentText(m_settings.m_yoloLabelsPath);
     settingsUI()->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
     settingsUI()->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
+    settingsUI()->yoloTargetCombo->setCurrentIndex((int) m_settings.m_yoloDnnTarget);
     updateColorButton(settingsUI()->yoloBoxColorButton, m_settings.m_yoloBoxColor);
     ui->audioMute->setChecked(m_settings.m_audioMute);
 
@@ -831,6 +832,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
     QObject::connect(settingsUI()->yoloLabelsPathCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_yoloLabelsPathCombo_currentTextChanged);
     QObject::connect(settingsUI()->yoloLabelsPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloLabelsPathButton_clicked);
+    QObject::connect(settingsUI()->yoloTargetCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_yoloTargetCombo_currentIndexChanged);
     QObject::connect(settingsUI()->actionsClassCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_actionsClassCombo_currentIndexChanged);
     QObject::connect(settingsUI()->actionsDisappearDebounceSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_actionsDisappearDebounceSpin_valueChanged);
     QObject::connect(settingsUI()->actionsAddButton, &QPushButton::clicked, this, &CameraGUI::on_actionsAddButton_clicked);
@@ -2759,6 +2761,13 @@ void CameraGUI::on_yoloLabelsPathButton_clicked()
         m_settingsKeys.append("yoloLabelsPath");
         applySettings();
     }
+}
+
+void CameraGUI::on_yoloTargetCombo_currentIndexChanged(int index)
+{
+    m_settings.m_yoloDnnTarget = static_cast<CameraSettings::DNNTarget>(index);
+    m_settingsKeys.append("yoloDnnTarget");
+    applySettings();
 }
 
 void CameraGUI::on_actionsClassCombo_currentIndexChanged(int index)

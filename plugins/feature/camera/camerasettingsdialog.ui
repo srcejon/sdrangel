@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>5</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -2040,61 +2040,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
           <string>Object Detection</string>
          </property>
          <layout class="QGridLayout" name="gridLayout">
-          <item row="2" column="0">
-           <widget class="QLabel" name="yoloConfLabel">
-            <property name="text">
-             <string>Confidence</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="yoloModelPathLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>YOLO ONNX model</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="yoloNmsLabel">
-            <property name="text">
-             <string>NMS</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="4">
-           <widget class="QPushButton" name="yoloLabelsPathButton">
-            <property name="maximumSize">
-             <size>
-              <width>30</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="toolTip">
-             <string>Browse for class labels file</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-            <property name="icon">
-             <iconset resource="../../../sdrgui/resources/res.qrc">
-              <normaloff>:/load.png</normaloff>:/load.png</iconset>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="yoloLabelsLabel">
-            <property name="text">
-             <string>Labels</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="4">
+          <item row="0" column="2">
            <widget class="QPushButton" name="yoloModelPathButton">
             <property name="maximumSize">
              <size>
@@ -2114,10 +2060,39 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="yoloBoxColorLabel">
+          <item row="3" column="0">
+           <widget class="QLabel" name="yoloNmsLabel">
             <property name="text">
-             <string>BB Colour</string>
+             <string>NMS</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="yoloLabelsLabel">
+            <property name="text">
+             <string>Labels</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="yoloLabelsPathCombo">
+            <property name="toolTip">
+             <string>Path to plain-text class labels file (one name per line)</string>
+            </property>
+            <property name="editable">
+             <bool>true</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/coco_classes.txt</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="yoloTargetLabel">
+            <property name="text">
+             <string>Target</string>
             </property>
            </widget>
           </item>
@@ -2131,47 +2106,23 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
-           <widget class="QDoubleSpinBox" name="yoloNmsSpin">
+          <item row="1" column="2">
+           <widget class="QPushButton" name="yoloLabelsPathButton">
+            <property name="maximumSize">
+             <size>
+              <width>30</width>
+              <height>16777215</height>
+             </size>
+            </property>
             <property name="toolTip">
-             <string>Non-maximum suppression IoU threshold (0-1)</string>
+             <string>Browse for class labels file</string>
             </property>
-            <property name="decimals">
-             <number>2</number>
+            <property name="text">
+             <string/>
             </property>
-            <property name="minimum">
-             <double>0.010000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>1.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.050000000000000</double>
-            </property>
-            <property name="value">
-             <double>0.450000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QDoubleSpinBox" name="yoloConfSpin">
-            <property name="toolTip">
-             <string>Minimum confidence threshold for detections (0-1)</string>
-            </property>
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="minimum">
-             <double>0.010000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>1.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.050000000000000</double>
-            </property>
-            <property name="value">
-             <double>0.500000000000000</double>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/load.png</normaloff>:/load.png</iconset>
             </property>
            </widget>
           </item>
@@ -2310,17 +2261,95 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </item>
            </widget>
           </item>
-          <item row="1" column="1">
-           <widget class="QComboBox" name="yoloLabelsPathCombo">
-            <property name="toolTip">
-             <string>Path to plain-text class labels file (one name per line)</string>
+          <item row="4" column="0">
+           <widget class="QLabel" name="yoloBoxColorLabel">
+            <property name="text">
+             <string>BBox Colour</string>
             </property>
-            <property name="editable">
-             <bool>true</bool>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="yoloConfLabel">
+            <property name="text">
+             <string>Confidence</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="yoloModelPathLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>YOLO ONNX model</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1" colspan="2">
+           <widget class="QDoubleSpinBox" name="yoloConfSpin">
+            <property name="toolTip">
+             <string>Minimum confidence threshold for detections (0-1)</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.050000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.500000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1" colspan="2">
+           <widget class="QDoubleSpinBox" name="yoloNmsSpin">
+            <property name="toolTip">
+             <string>Non-maximum suppression IoU threshold (0-1)</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.050000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.450000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1" colspan="2">
+           <widget class="QComboBox" name="yoloTargetCombo">
+            <property name="statusTip">
+             <string>Target h/w for neural network</string>
             </property>
             <item>
              <property name="text">
-              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/coco_classes.txt</string>
+              <string>CPU</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>CUDA</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>CUDA_FP16</string>
              </property>
             </item>
            </widget>
@@ -2366,7 +2395,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
           <item row="1" column="0">
            <widget class="QLabel" name="motionBoxColorLabel">
             <property name="text">
-             <string>BB Colour</string>
+             <string>BBox Colour</string>
             </property>
            </widget>
           </item>

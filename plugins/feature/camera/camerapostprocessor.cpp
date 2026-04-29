@@ -1020,9 +1020,7 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
                 QString localFile = CameraSettings::urlToFilename(m_settings.m_yoloModelPath, "onnx");
 
                 m_yoloNet = cv::dnn::readNetFromONNX(localFile.toStdString());
-                m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
-                //m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_OPENCL_FP16); // 860ms
-                m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU); // 350ms
+
                 const cv::Size modelInputSize = readOnnxInputSize(localFile);
 
                 if ((modelInputSize.width > 0) && (modelInputSize.height > 0))
@@ -1055,6 +1053,30 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
         return;
     }
 
+    // Don't bother with OpenCL
+    // Execution time in ms from Profiler
+    // Model | CPU  | OPENCL_FP16 | CUDA | CUDA_FP16
+    // 26n   | 60   | 270         | 22   |
+    // 26s   | 119  |             | 54   |
+    // 26m   | 267  | 720         | 60   |
+    // 26l   | 370  |             | 70   |
+    // 26x   | 550  | 1482        | 82   |
+    if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
+    {
+        m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+        m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+    }
+    else if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16)
+    {
+        m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+        m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
+    }
+    else
+    {
+        m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
+        m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+    }
+
     const float scaleX = static_cast<float>(bgrMat.cols) / m_yoloInputSize.width;
     const float scaleY = static_cast<float>(bgrMat.rows) / m_yoloInputSize.height;
 
@@ -1072,6 +1094,7 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
         qWarning() << "CameraPostProcessor::runYoloDetections: inference failed:" << e.what();
         return;
     }
+    m_yoloNet.setInput(blob);
 
     if (outputs.empty()) {
         processObjectDetections(QSet<QString>(), detectionTime);

@@ -195,6 +195,7 @@ void CameraSettings::resetToDefaults()
     m_yoloNmsThreshold = 0.45;
     m_yoloBoxColor = Qt::green;
     m_yoloDisappearDebounce = 0.0;
+    m_yoloDnnTarget = CPU;
     m_audioMute = true;
     m_audioDeviceName.clear();
     m_whiteBalanceMode = 0;
@@ -282,6 +283,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(51, m_yoloNmsThreshold);
     s.writeU32(52, m_yoloBoxColor.rgba());
     s.writeDouble(60, m_yoloDisappearDebounce);
+    s.writeS32(83, m_yoloDnnTarget);
     s.writeBlob(61, serializeObjectDeviceSettings(m_objectDeviceSettings));
     s.writeBool(53, m_audioMute);
     s.writeString(54, m_audioDeviceName);
@@ -441,6 +443,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
         d.readDouble(60, &m_yoloDisappearDebounce, 0.0);
         m_yoloDisappearDebounce = qBound(0.0, m_yoloDisappearDebounce, 60.0);
+        d.readS32(83, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
         d.readBlob(61, &bytetmp);
         deserializeObjectDeviceSettings(bytetmp, m_objectDeviceSettings);
 
@@ -593,6 +596,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
         d.readDouble(60, &m_yoloDisappearDebounce, 0.0);
         m_yoloDisappearDebounce = qBound(0.0, m_yoloDisappearDebounce, 60.0);
+        d.readS32(83, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
         d.readBlob(61, &bytetmp);
         deserializeObjectDeviceSettings(bytetmp, m_objectDeviceSettings);
 
@@ -847,6 +851,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("yoloDisappearDebounce")) {
         m_yoloDisappearDebounce = qBound(0.0, settings.m_yoloDisappearDebounce, 60.0);
     }
+    if (settingsKeys.contains("yoloDnnTarget")) {
+        m_yoloDnnTarget = settings.m_yoloDnnTarget;
+    }
     if (settingsKeys.contains("objectDeviceSettings")) {
         m_objectDeviceSettings = settings.m_objectDeviceSettings;
     }
@@ -1071,6 +1078,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("yoloDisappearDebounce") || force) {
         ostr << " m_yoloDisappearDebounce: " << m_yoloDisappearDebounce;
+    }
+    if (settingsKeys.contains("yoloDnnTarget") || force) {
+        ostr << " m_yoloDnnTarget: " << m_yoloDnnTarget;
     }
     if (settingsKeys.contains("objectDeviceSettings") || force)
     {

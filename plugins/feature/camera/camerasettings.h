@@ -141,6 +141,11 @@ struct CameraSettings
     QColor m_yoloBoxColor;       ///< Bounding-box colour when no per-class colour is available
     double m_yoloDisappearDebounce; ///< Seconds a class must remain absent before it is treated as disappeared
     QHash<QString, QList<ObjectDeviceSettings *> *> m_objectDeviceSettings; //!< Device control settings per YOLO class name
+    enum DNNTarget {
+        CPU,
+        CUDA,
+        CUDA_FP16,
+    } m_yoloDnnTarget;          ///< OpenCV DNN target backend for running the YOLO model
 
     // Audio settings (Qt camera only)
     bool   m_audioMute;          ///< When true, captured camera audio is silenced

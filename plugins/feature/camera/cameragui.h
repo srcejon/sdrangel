@@ -272,6 +272,7 @@ private slots:
     void on_yoloModelPathButton_clicked();
     void on_yoloLabelsPathCombo_currentTextChanged(const QString &text);
     void on_yoloLabelsPathButton_clicked();
+    void on_yoloTargetCombo_currentIndexChanged(int index);
     void on_actionsClassCombo_currentIndexChanged(int index);
     void on_actionsDisappearDebounceSpin_valueChanged(double value);
     void on_actionsAddButton_clicked();

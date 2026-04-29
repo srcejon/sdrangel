@@ -643,6 +643,7 @@ void CameraGUI::displaySettings()
     settingsUI()->overlayTextPosYSlider->setValue(m_settings.m_overlayTextPosY);
     settingsUI()->overlayTextPosYValue->setText(QString::number(m_settings.m_overlayTextPosY));
     ui->diffMaskButton->setChecked(m_settings.m_diffMask);
+    settingsUI()->diffThresholdSpin->setValue(m_settings.m_diffThreshold);
     settingsUI()->dilationSpin->setValue(m_settings.m_dilationSize);
     settingsUI()->overlayFontCombo->setCurrentText(m_settings.m_overlayFontFamily);
     settingsUI()->overlayFontScaleSpin->setValue(m_settings.m_overlayFontScale);
@@ -812,6 +813,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->overlayTextPosXSlider, &QSlider::valueChanged, this, &CameraGUI::on_overlayTextPosXSlider_valueChanged);
     QObject::connect(settingsUI()->overlayTextPosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_overlayTextPosYSlider_valueChanged);
     QObject::connect(ui->diffMaskButton, &QToolButton::toggled, this, &CameraGUI::on_diffMaskButton_toggled);
+    QObject::connect(settingsUI()->diffThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
     QObject::connect(ui->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
     QObject::connect(settingsUI()->defaultColorSettingsButton, &QToolButton::clicked, this, &CameraGUI::on_defaultColorSettingsButton_clicked);
@@ -2508,6 +2510,13 @@ void CameraGUI::on_diffMaskButton_toggled(bool checked)
 {
     m_settings.m_diffMask = checked;
     m_settingsKeys.append("diffMask");
+    applySettings();
+}
+
+void CameraGUI::on_diffThresholdSpin_valueChanged(int value)
+{
+    m_settings.m_diffThreshold = value;
+    m_settingsKeys.append("diffThreshold");
     applySettings();
 }
 

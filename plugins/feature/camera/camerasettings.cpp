@@ -176,6 +176,7 @@ void CameraSettings::resetToDefaults()
     m_overlayTextPosX = 4;
     m_overlayTextPosY = 0;
     m_diffMask = false;
+    m_diffThreshold = 30;
     m_dilationSize = 3;
     m_overlayFontFamily.clear();
     m_overlayFontScale = 12.0;
@@ -254,6 +255,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(29, m_overlayDateTime);
     s.writeU32(30, m_dateTimeColor.rgba());
     s.writeBool(31, m_diffMask);
+    s.writeS32(68, m_diffThreshold);
     s.writeS32(32, m_dilationSize);
     s.writeString(33, m_overlayFontFamily);
     s.writeDouble(34, m_overlayFontScale);
@@ -391,9 +393,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readU32(30, &colorRgba, QColor(Qt::white).rgba());
         m_dateTimeColor = QColor::fromRgba(colorRgba);
         d.readBool(31, &m_diffMask, false);
+        d.readS32(68, &m_diffThreshold, 30);
         d.readS32(32, &m_dilationSize, 3);
         m_brightness = qBound(-100.0, m_brightness, 100.0);
         m_contrast = qBound(0.1, m_contrast, 3.0);
+        m_diffThreshold = qBound(0, m_diffThreshold, 255);
         m_dilationSize = qBound(0, m_dilationSize, 20);
 
         d.readString(33, &m_overlayFontFamily, "");
@@ -544,9 +548,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readU32(30, &colorRgba, QColor(Qt::white).rgba());
         m_dateTimeColor = QColor::fromRgba(colorRgba);
         d.readBool(31, &m_diffMask, false);
+        d.readS32(68, &m_diffThreshold, 30);
         d.readS32(32, &m_dilationSize, 3);
         m_brightness = qBound(-100.0, m_brightness, 100.0);
         m_contrast = qBound(0.1, m_contrast, 3.0);
+        m_diffThreshold = qBound(0, m_diffThreshold, 255);
         m_dilationSize = qBound(0, m_dilationSize, 20);
 
         d.readString(33, &m_overlayFontFamily, "");
@@ -763,6 +769,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("diffMask")) {
         m_diffMask = settings.m_diffMask;
+    }
+    if (settingsKeys.contains("diffThreshold")) {
+        m_diffThreshold = qBound(0, settings.m_diffThreshold, 255);
     }
     if (settingsKeys.contains("dilationSize")) {
         m_dilationSize = qBound(0, settings.m_dilationSize, 20);
@@ -997,6 +1006,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("diffMask") || force) {
         ostr << " m_diffMask: " << m_diffMask;
+    }
+    if (settingsKeys.contains("diffThreshold") || force) {
+        ostr << " m_diffThreshold: " << m_diffThreshold;
     }
     if (settingsKeys.contains("dilationSize") || force) {
         ostr << " m_dilationSize: " << m_dilationSize;

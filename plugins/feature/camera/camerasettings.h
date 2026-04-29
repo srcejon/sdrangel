@@ -117,6 +117,7 @@ struct CameraSettings
     int m_overlayTextPosX;     ///< X pixel offset from left for text overlay: 0..4096
     int m_overlayTextPosY;     ///< Y pixel offset from top for text overlay: 0..4096 (0 = auto bottom)
     bool m_diffMask;          ///< Show pixel differences from previous frame
+    int m_diffThreshold;      ///< Threshold for diff-mask binary classification: 0..255
     int m_dilationSize;       ///< Kernel radius for diff-mask dilation: 0..20
     QString m_overlayFontFamily; ///< QPainter font family name (empty = system default)
     double  m_overlayFontScale;  ///< Font point size for QPainter text: 4.0..144.0

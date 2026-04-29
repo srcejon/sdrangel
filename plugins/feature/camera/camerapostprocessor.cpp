@@ -640,8 +640,6 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
 {
     PROFILER_START();
 
-    static constexpr int kDiffThreshold = 30;
-
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsSaturation = std::abs(m_settings.m_saturation - 1.0) > 1e-4;
@@ -822,7 +820,7 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
         cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
         cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
         cv::absdiff(gray, prevGray, diff);
-        cv::threshold(diff, mask, kDiffThreshold, 255, cv::THRESH_BINARY);
+        cv::threshold(diff, mask, m_settings.m_diffThreshold, 255, cv::THRESH_BINARY);
 
         if (m_settings.m_dilationSize > 0)
         {

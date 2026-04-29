@@ -2476,6 +2476,35 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="diffMaskHistoryFramesLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Mask history</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="diffMaskHistoryFramesSpin">
+            <property name="toolTip">
+             <string>Number of diff masks to keep and combine with bitwise OR</string>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>120</number>
+            </property>
+            <property name="value">
+             <number>1</number>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

@@ -645,6 +645,7 @@ void CameraGUI::displaySettings()
     ui->diffMaskButton->setChecked(m_settings.m_diffMask);
     settingsUI()->diffThresholdSpin->setValue(m_settings.m_diffThreshold);
     settingsUI()->dilationSpin->setValue(m_settings.m_dilationSize);
+    settingsUI()->diffMaskHistoryFramesSpin->setValue(m_settings.m_diffMaskHistoryFrames);
     settingsUI()->overlayFontCombo->setCurrentText(m_settings.m_overlayFontFamily);
     settingsUI()->overlayFontScaleSpin->setValue(m_settings.m_overlayFontScale);
     settingsUI()->overlayTextFontCombo->setCurrentText(m_settings.m_overlayTextFontFamily);
@@ -815,6 +816,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->diffMaskButton, &QToolButton::toggled, this, &CameraGUI::on_diffMaskButton_toggled);
     QObject::connect(settingsUI()->diffThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
+    QObject::connect(settingsUI()->diffMaskHistoryFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffMaskHistoryFramesSpin_valueChanged);
     QObject::connect(ui->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
     QObject::connect(settingsUI()->defaultColorSettingsButton, &QToolButton::clicked, this, &CameraGUI::on_defaultColorSettingsButton_clicked);
     QObject::connect(settingsUI()->overlayFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayFontCombo_currentFontChanged);
@@ -2524,6 +2526,13 @@ void CameraGUI::on_dilationSpin_valueChanged(int value)
 {
     m_settings.m_dilationSize = value;
     m_settingsKeys.append("dilationSize");
+    applySettings();
+}
+
+void CameraGUI::on_diffMaskHistoryFramesSpin_valueChanged(int value)
+{
+    m_settings.m_diffMaskHistoryFrames = value;
+    m_settingsKeys.append("diffMaskHistoryFrames");
     applySettings();
 }
 

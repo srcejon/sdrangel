@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
 
 #include <QObject>
+#include <deque>
 #include <QHash>
 #include <QImage>
 #include <QDateTime>
@@ -244,6 +245,7 @@ private:
     bool m_imageSaved;
     QImage m_lastRawFrame;
     QImage m_previousRawFrame;
+    std::deque<cv::Mat> m_diffMaskHistory;
     QDateTime m_captureDateTime;
     cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
     cv::dnn::Net m_yoloNet;

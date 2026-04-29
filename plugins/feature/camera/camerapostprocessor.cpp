@@ -483,7 +483,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
-        "diffMask", "dilationSize", "overlayFontFamily", "overlayFontScale",
+        "diffMask", "diffThreshold", "dilationSize", "diffMaskHistoryFrames", "overlayFontFamily", "overlayFontScale",
         "motionDetect", "motionBoxColor", "minContourArea",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
         "yoloEnabled", "yoloModelPath", "yoloLabelsPath", "yoloConfThreshold", "yoloNmsThreshold", "yoloBoxColor"
@@ -505,6 +505,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     {
         m_lastRawFrame = QImage();
         m_previousRawFrame = QImage();
+        m_diffMaskHistory.clear();
         m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
         m_autoWhiteBalanceInitialized = false;
     }
@@ -517,6 +518,15 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     {
         m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
         m_autoWhiteBalanceInitialized = false;
+    }
+
+    if (force
+        || settingsKeys.contains("diffMask")
+        || settingsKeys.contains("diffThreshold")
+        || settingsKeys.contains("dilationSize")
+        || settingsKeys.contains("diffMaskHistoryFrames"))
+    {
+        m_diffMaskHistory.clear();
     }
 
     if ((force && !m_settings.m_diffMask) || (settingsKeys.contains("diffMask") && !m_settings.m_diffMask)) {
@@ -829,8 +839,26 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
             cv::dilate(mask, mask, kernel);
         }
 
+        if (!m_diffMaskHistory.empty() &&
+            (m_diffMaskHistory.front().size() != mask.size() || m_diffMaskHistory.front().type() != mask.type()))
+        {
+            m_diffMaskHistory.clear();
+        }
+
+        m_diffMaskHistory.push_back(mask.clone());
+
+        const size_t historyFrames = static_cast<size_t>(std::max(1, m_settings.m_diffMaskHistoryFrames));
+        while (m_diffMaskHistory.size() > historyFrames) {
+            m_diffMaskHistory.pop_front();
+        }
+
+        cv::Mat combinedMask = m_diffMaskHistory.front().clone();
+        for (size_t i = 1; i < m_diffMaskHistory.size(); ++i) {
+            cv::bitwise_or(combinedMask, m_diffMaskHistory[i], combinedMask);
+        }
+
         cv::Mat result = cv::Mat::zeros(bgrMat.size(), bgrMat.type());
-        cv::bitwise_and(bgrMat, bgrMat, result, mask);
+        cv::bitwise_and(bgrMat, bgrMat, result, combinedMask);
         bgrMat = result;
     }
 

@@ -2001,13 +2001,30 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </layout>
           </item>
           <item row="2" column="0">
+           <widget class="QLabel" name="videoHwAccelerationLabel">
+            <property name="text">
+             <string>Encoding</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QCheckBox" name="videoHwAccelerationCheck">
+            <property name="toolTip">
+             <string>Prefer hardware-accelerated video encoding when supported by the backend</string>
+            </property>
+            <property name="text">
+             <string>Use hardware acceleration</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
            <widget class="QLabel" name="videoPostProcessLabel">
             <property name="text">
              <string>Record</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="3" column="1">
            <widget class="QComboBox" name="videoPostProcessCombo">
             <property name="toolTip">
              <string>Select whether pre (raw) or post processed images should be recorded</string>

@@ -84,6 +84,7 @@ struct CameraSettings
     QString m_imageFileName;
     bool m_saveVideo;
     QString m_videoFileName;
+    bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

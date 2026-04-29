@@ -146,6 +146,7 @@ void CameraSettings::resetToDefaults()
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
     m_videoFileName = "camera.mp4";
+    m_videoHwAcceleration = false;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -227,6 +228,7 @@ QByteArray CameraSettings::serialize() const
     s.writeString(14, m_imageFileName);
     s.writeBool(15, m_saveVideo);
     s.writeString(16, m_videoFileName);
+    s.writeBool(86, m_videoHwAcceleration);
 
     if (m_rollupState) {
         s.writeBlob(18, m_rollupState->serialize());
@@ -349,6 +351,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(14, &m_imageFileName, "camera.jpg");
         d.readBool(15, &m_saveVideo, false);
         d.readString(16, &m_videoFileName, "camera.mp4");
+        d.readBool(86, &m_videoHwAcceleration, false);
 
         if (m_rollupState)
         {
@@ -508,6 +511,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(14, &m_imageFileName, "camera.jpg");
         d.readBool(15, &m_saveVideo, false);
         d.readString(16, &m_videoFileName, "camera.mp4");
+        d.readBool(86, &m_videoHwAcceleration, false);
 
         if (m_rollupState)
         {
@@ -724,6 +728,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoFileName")) {
         m_videoFileName = settings.m_videoFileName;
+    }
+    if (settingsKeys.contains("videoHwAcceleration")) {
+        m_videoHwAcceleration = settings.m_videoHwAcceleration;
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -970,6 +977,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoFileName") || force) {
         ostr << " m_videoFileName: " << m_videoFileName.toStdString();
+    }
+    if (settingsKeys.contains("videoHwAcceleration") || force) {
+        ostr << " m_videoHwAcceleration: " << m_videoHwAcceleration;
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

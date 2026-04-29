@@ -567,7 +567,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_spectrumViewImage = QImage();
     }
 
-    if (settingsKeys.contains("saveVideo") || settingsKeys.contains("videoFileName"))
+    if (settingsKeys.contains("saveVideo") || settingsKeys.contains("videoFileName") || settingsKeys.contains("videoHwAcceleration"))
     {
         if (m_videoWriter.isOpened()) {
             m_videoWriter.release();
@@ -618,12 +618,16 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
 
             const QImage& frameForSize = m_settings.m_videoPostProcess ? processed : image;
             const int fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
+            const std::vector<int> params = {
+                cv::VIDEOWRITER_PROP_HW_ACCELERATION,
+                m_settings.m_videoHwAcceleration ? cv::VIDEO_ACCELERATION_ANY : cv::VIDEO_ACCELERATION_NONE
+            };
             m_videoWriter.open(
                 filename.toStdString(),
                 fourcc,
                 m_settings.getCaptureFrameRate(),
                 cv::Size(frameForSize.width(), frameForSize.height()),
-                true);
+                params);
         }
 
         if (m_videoWriter.isOpened())

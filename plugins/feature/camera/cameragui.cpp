@@ -1110,7 +1110,7 @@ void CameraGUI::updateExposureControls()
     const double maximum = m_exposureMaximumMs / unitScaleMs;
     const double singleStep = std::max(0.000001, m_exposureStepMs / unitScaleMs);
     const double value = qBound(minimum, m_settings.m_exposureTimeMs / unitScaleMs, maximum);
-    const double sliderMaximumValue = std::min(maximum, 10000.0);
+    const double sliderMaximumValue = std::min(maximum, 1000.0);
 
     {
         QSignalBlocker blocker(settingsUI()->exposureSpin);

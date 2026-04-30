@@ -648,10 +648,8 @@ void CameraWorker::alpacaSetCameraParams()
     const bool forceAllParams = !m_alpacaParamsInitialized;
     const bool setBinX = forceAllParams || (m_lastAlpacaBinX != m_settings.m_alpacaBinX);
     const bool setBinY = forceAllParams || (m_lastAlpacaBinY != m_settings.m_alpacaBinY);
-    const bool setNumX = (m_settings.m_alpacaNumX > 0)
-        && (forceAllParams || (m_lastAlpacaNumX != m_settings.m_alpacaNumX));
-    const bool setNumY = (m_settings.m_alpacaNumY > 0)
-        && (forceAllParams || (m_lastAlpacaNumY != m_settings.m_alpacaNumY));
+    const bool setNumX = forceAllParams || (m_lastAlpacaNumX != m_settings.m_alpacaNumX);
+    const bool setNumY = forceAllParams || (m_lastAlpacaNumY != m_settings.m_alpacaNumY);
     const bool setStartX = forceAllParams || (m_lastAlpacaStartX != m_settings.m_alpacaStartX);
     const bool setStartY = forceAllParams || (m_lastAlpacaStartY != m_settings.m_alpacaStartY);
     const bool setGain = (m_settings.m_alpacaGain >= 0)

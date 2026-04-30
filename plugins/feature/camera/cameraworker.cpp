@@ -269,6 +269,8 @@ CameraWorker::CameraWorker() :
     m_alpacaClientId(QRandomGenerator::global()->bounded(quint32(1), quint32(std::numeric_limits<quint32>::max()))),
     m_alpacaClientTransactionId(1),
     m_alpacaSensorType(0),
+    m_alpacaCameraSizeX(0),
+    m_alpacaCameraSizeY(0),
     m_alpacaImageBytesSupported(true),
     m_alpacaParamsInitialized(false),
     m_lastAlpacaBinX(0),
@@ -646,10 +648,22 @@ void CameraWorker::alpacaSetCameraParams()
     const QString baseUrl = buildAlpacaBaseUrl();
     const int camId = m_settings.cameraIdInt();
     const bool forceAllParams = !m_alpacaParamsInitialized;
+    const int maxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_settings.m_alpacaBinX));
+    const int maxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_settings.m_alpacaBinY));
+    const int effectiveNumX = (m_settings.m_alpacaNumX > 0) ? m_settings.m_alpacaNumX
+        : std::max(1, maxSubframeX - std::max(0, m_settings.m_alpacaStartX));
+    const int effectiveNumY = (m_settings.m_alpacaNumY > 0) ? m_settings.m_alpacaNumY
+        : std::max(1, maxSubframeY - std::max(0, m_settings.m_alpacaStartY));
+    const int lastMaxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_lastAlpacaBinX));
+    const int lastMaxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_lastAlpacaBinY));
+    const int lastEffectiveNumX = (m_lastAlpacaNumX > 0) ? m_lastAlpacaNumX
+        : std::max(1, lastMaxSubframeX - std::max(0, m_lastAlpacaStartX));
+    const int lastEffectiveNumY = (m_lastAlpacaNumY > 0) ? m_lastAlpacaNumY
+        : std::max(1, lastMaxSubframeY - std::max(0, m_lastAlpacaStartY));
     const bool setBinX = forceAllParams || (m_lastAlpacaBinX != m_settings.m_alpacaBinX);
     const bool setBinY = forceAllParams || (m_lastAlpacaBinY != m_settings.m_alpacaBinY);
-    const bool setNumX = forceAllParams || (m_lastAlpacaNumX != m_settings.m_alpacaNumX);
-    const bool setNumY = forceAllParams || (m_lastAlpacaNumY != m_settings.m_alpacaNumY);
+    const bool setNumX = forceAllParams || (lastEffectiveNumX != effectiveNumX);
+    const bool setNumY = forceAllParams || (lastEffectiveNumY != effectiveNumY);
     const bool setStartX = forceAllParams || (m_lastAlpacaStartX != m_settings.m_alpacaStartX);
     const bool setStartY = forceAllParams || (m_lastAlpacaStartY != m_settings.m_alpacaStartY);
     const bool setGain = (m_settings.m_alpacaGain >= 0)
@@ -700,7 +714,7 @@ void CameraWorker::alpacaSetCameraParams()
         }
     };
 
-    auto doAxisY = [this, baseUrl, camId, doGain, setNumY, setStartY]() {
+    auto doAxisY = [this, baseUrl, camId, doGain, setNumY, setStartY, effectiveNumY]() {
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
 
         std::function<void()> maybeSetStartYAfterNum = [this, baseUrl, camId, doGain, setStartY]() {
@@ -714,11 +728,11 @@ void CameraWorker::alpacaSetCameraParams()
             }
         };
 
-        std::function<void()> maybeSetNumYAfterStart = [this, baseUrl, camId, doGain, setNumY]() {
+        std::function<void()> maybeSetNumYAfterStart = [this, baseUrl, camId, doGain, setNumY, effectiveNumY]() {
             if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
             if (setNumY) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
-                    m_settings.m_alpacaNumY, m_alpacaClientId, m_alpacaClientTransactionId, doGain,
+                    effectiveNumY, m_alpacaClientId, m_alpacaClientTransactionId, doGain,
                     [this]() { m_lastAlpacaNumY = m_settings.m_alpacaNumY; });
             } else {
                 doGain();
@@ -734,7 +748,7 @@ void CameraWorker::alpacaSetCameraParams()
         else if (setNumY)
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
-                m_settings.m_alpacaNumY, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetStartYAfterNum,
+                effectiveNumY, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetStartYAfterNum,
                 [this]() { m_lastAlpacaNumY = m_settings.m_alpacaNumY; });
         }
         else
@@ -743,7 +757,7 @@ void CameraWorker::alpacaSetCameraParams()
         }
     };
 
-    auto doAxisX = [this, baseUrl, camId, doAxisY, setNumX, setStartX]() {
+    auto doAxisX = [this, baseUrl, camId, doAxisY, setNumX, setStartX, effectiveNumX]() {
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
 
         std::function<void()> maybeSetStartXAfterNum = [this, baseUrl, camId, doAxisY, setStartX]() {
@@ -757,11 +771,11 @@ void CameraWorker::alpacaSetCameraParams()
             }
         };
 
-        std::function<void()> maybeSetNumXAfterStart = [this, baseUrl, camId, doAxisY, setNumX]() {
+        std::function<void()> maybeSetNumXAfterStart = [this, baseUrl, camId, doAxisY, setNumX, effectiveNumX]() {
             if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
             if (setNumX) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
-                    m_settings.m_alpacaNumX, m_alpacaClientId, m_alpacaClientTransactionId, doAxisY,
+                    effectiveNumX, m_alpacaClientId, m_alpacaClientTransactionId, doAxisY,
                     [this]() { m_lastAlpacaNumX = m_settings.m_alpacaNumX; });
             } else {
                 doAxisY();
@@ -777,7 +791,7 @@ void CameraWorker::alpacaSetCameraParams()
         else if (setNumX)
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
-                m_settings.m_alpacaNumX, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetStartXAfterNum,
+                effectiveNumX, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetStartXAfterNum,
                 [this]() { m_lastAlpacaNumX = m_settings.m_alpacaNumX; });
         }
         else
@@ -1000,6 +1014,8 @@ void CameraWorker::alpacaQueryCameraCapabilities()
         }
 
         m_alpacaSensorType = info->sensorType;
+        m_alpacaCameraSizeX = std::max(0, info->cameraSizeX);
+        m_alpacaCameraSizeY = std::max(0, info->cameraSizeY);
         info->exposureMinMs = std::max(0.001, info->exposureMinMs);
         info->exposureResolutionMs = std::max(0.001, info->exposureResolutionMs);
         info->exposureMaxMs = std::max(info->exposureMinMs, info->exposureMaxMs);

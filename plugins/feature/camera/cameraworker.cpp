@@ -1265,8 +1265,37 @@ void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNe
         return;
     }
 
-    qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
-             << "error" << reply->error() << reply->errorString() << payload;
+    int alpacaErrorNumber = 0;
+    QString alpacaErrorMessage;
+    bool alpacaPayloadParsed = false;
+
+    const QJsonDocument doc = QJsonDocument::fromJson(payload);
+
+    if (doc.isObject())
+    {
+        const QJsonObject root = doc.object();
+
+        if (root.contains(QStringLiteral("ErrorNumber")) || root.contains(QStringLiteral("ErrorMessage")))
+        {
+            alpacaPayloadParsed = true;
+            alpacaErrorNumber = root.value(QStringLiteral("ErrorNumber")).toInt(0);
+            alpacaErrorMessage = root.value(QStringLiteral("ErrorMessage")).toString();
+        }
+    }
+
+    if (alpacaPayloadParsed)
+    {
+        qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
+                 << "transportError" << reply->error() << reply->errorString()
+                 << "alpacaError" << alpacaErrorNumber << alpacaErrorMessage
+                 << payload;
+    }
+    else
+    {
+        qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
+                 << "transportError" << reply->error() << reply->errorString()
+                 << payload;
+    }
 }
 
 QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const

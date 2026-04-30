@@ -22,11 +22,15 @@
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QDateTime>
+#include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <QGraphicsView>
+#include <QLineEdit>
+#include <QNetworkReply>
 #include <QPainter>
 #include <QPixmap>
 #include <QSet>
@@ -297,62 +301,6 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         return true;
     }
-    else if (CameraPostProcessor::MsgDownloadProgress::match(message))
-    {
-        const CameraPostProcessor::MsgDownloadProgress& report = (CameraPostProcessor::MsgDownloadProgress&) message;
-
-        if (m_progressDialog)
-        {
-            m_progressDialog->setValue(100 * report.getBytesRead() / report.getTotalBytes());
-        }
-        else
-        {
-            QString text = QString("Downloading: %1\nTo: %2.")
-                .arg(report.getURL())
-                .arg(report.getFilename());
-
-            m_progressDialog = new QProgressDialog(this);
-            m_progressDialog->setCancelButton(nullptr);
-            m_progressDialog->setMinimumDuration(500);
-            m_progressDialog->setLabelText(text);
-        }
-
-        return true;
-    }
-    else if (CameraPostProcessor::MsgDownloadComplete::match(message))
-    {
-        const CameraPostProcessor::MsgDownloadComplete& report = (CameraPostProcessor::MsgDownloadComplete&) message;
-
-        // Close progress dialog
-        if (m_progressDialog)
-        {
-            m_progressDialog->close();
-            m_progressDialog->deleteLater();
-            m_progressDialog = nullptr;
-        }
-
-        // Report any errors
-        if (!report.getSuccess())
-        {
-            QString error = report.getError();
-            if (!error.isEmpty())
-            {
-                error = QString("An unknown error occurred during download from %1 to %2.")
-                    .arg(report.getURL())
-                    .arg(report.getFilename());
-            }
-            QMessageBox::warning(this, "Download failed", error);
-        }
-
-        // Update settings to use downloaded file rather than URL
-        if (report.getURL() == m_settings.m_yoloModelPath) {
-            settingsUI()->yoloModelPathCombo->setCurrentText(report.getFilename());
-        }
-        if (report.getURL() == m_settings.m_yoloLabelsPath) {
-            settingsUI()->yoloLabelsPathCombo->setCurrentText(report.getFilename());
-        }
-        return true;
-    }
     else if (CameraPostProcessor::MsgReportSaveVideoState::match(message))
     {
         const CameraPostProcessor::MsgReportSaveVideoState& report = (CameraPostProcessor::MsgReportSaveVideoState&) message;
@@ -515,6 +463,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     connect(&m_statusTimer, &QTimer::timeout, this, &CameraGUI::updateStatus);
     connect(m_settingsDialog, &QDialog::finished, this, &CameraGUI::onSettingsDialogFinished);
     connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
+    connect(&m_dlm, &HttpDownloadManager::downloadComplete, this, &CameraGUI::handleYoloDownloadComplete);
     m_qtStillCaptureTimer.setSingleShot(false);
 
     settingsUI()->fpsLabel->addItem(tr("Frame Rate"), CameraSettings::CaptureModeFrameRate);
@@ -887,9 +836,15 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->spectrumOffsetYSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetYSlider_valueChanged);
     QObject::connect(settingsUI()->spectrumScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_spectrumScaleSpin_valueChanged);
     QObject::connect(ui->yoloButton, &QToolButton::toggled, this, &CameraGUI::on_yoloButton_toggled);
-    QObject::connect(settingsUI()->yoloModelPathCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_yoloModelPathCombo_currentTextChanged);
+    QObject::connect(settingsUI()->yoloModelPathCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloModelPathCombo_currentIndexChanged);
+    if (settingsUI()->yoloModelPathCombo->lineEdit()) {
+        QObject::connect(settingsUI()->yoloModelPathCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_yoloModelPathEdit_editingFinished);
+    }
     QObject::connect(settingsUI()->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
-    QObject::connect(settingsUI()->yoloLabelsPathCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_yoloLabelsPathCombo_currentTextChanged);
+    QObject::connect(settingsUI()->yoloLabelsPathCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloLabelsPathCombo_currentIndexChanged);
+    if (settingsUI()->yoloLabelsPathCombo->lineEdit()) {
+        QObject::connect(settingsUI()->yoloLabelsPathCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_yoloLabelsPathEdit_editingFinished);
+    }
     QObject::connect(settingsUI()->yoloLabelsPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloLabelsPathButton_clicked);
     QObject::connect(settingsUI()->yoloTargetCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_yoloTargetCombo_currentIndexChanged);
     QObject::connect(settingsUI()->actionsClassCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_actionsClassCombo_currentIndexChanged);
@@ -2951,11 +2906,133 @@ void CameraGUI::on_yoloButton_toggled(bool checked)
     applySettings();
 }
 
-void CameraGUI::on_yoloModelPathCombo_currentTextChanged(const QString &text)
+void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& path)
 {
-    m_settings.m_yoloModelPath = text;
-    m_settingsKeys.append("yoloModelPath");
+    if (settingKey == "yoloModelPath")
+    {
+        m_settings.m_yoloModelPath = path;
+    }
+    else if (settingKey == "yoloLabelsPath")
+    {
+        m_settings.m_yoloLabelsPath = path;
+        populateActionClasses();
+        rebuildActionTabsForCurrentClass();
+    }
+    else
+    {
+        return;
+    }
+
+    m_settingsKeys.append(settingKey);
     applySettings();
+}
+
+void CameraGUI::showDownloadProgress(const QString& url, const QString& filename, qint64 bytesRead, qint64 totalBytes)
+{
+    if (m_progressDialog)
+    {
+        if (totalBytes > 0) {
+            m_progressDialog->setValue(static_cast<int>((100 * bytesRead) / totalBytes));
+        }
+    }
+    else
+    {
+        const QString text = QString("Downloading: %1\nTo: %2.")
+            .arg(url)
+            .arg(filename);
+
+        m_progressDialog = new QProgressDialog(this);
+        m_progressDialog->setCancelButton(nullptr);
+        m_progressDialog->setMinimumDuration(500);
+        m_progressDialog->setRange(0, 100);
+        m_progressDialog->setLabelText(text);
+
+        if (totalBytes > 0) {
+            m_progressDialog->setValue(static_cast<int>((100 * bytesRead) / totalBytes));
+        }
+    }
+}
+
+void CameraGUI::finishDownloadProgress()
+{
+    if (m_progressDialog)
+    {
+        m_progressDialog->close();
+        m_progressDialog->deleteLater();
+        m_progressDialog = nullptr;
+    }
+}
+
+void CameraGUI::requestYoloDownload(const QString& settingKey, const QString& path)
+{
+    if (!(path.startsWith("http://") || path.startsWith("https://")))
+    {
+        applyYoloPathSetting(settingKey, path);
+        return;
+    }
+
+    QDir downloadDir(HttpDownloadManager::downloadDir());
+    const QString destSubDir = QStringLiteral("onnx");
+    if (!downloadDir.exists(destSubDir) && !downloadDir.mkdir(destSubDir))
+    {
+        QMessageBox::warning(this, tr("Download failed"),
+            tr("Failed to create download directory: %1").arg(downloadDir.filePath(destSubDir)));
+        return;
+    }
+
+    const QString localFilename = CameraSettings::urlToFilename(path, destSubDir);
+    m_pendingYoloDownloads.insert(localFilename, settingKey);
+
+    if (QFileInfo::exists(localFilename))
+    {
+        handleYoloDownloadComplete(localFilename, true, path, QString());
+        return;
+    }
+
+    QNetworkReply *reply = m_dlm.download(QUrl(path), localFilename);
+    connect(reply, &QNetworkReply::downloadProgress, this, [this, path, localFilename](qint64 bytesRead, qint64 totalBytes) {
+        showDownloadProgress(path, localFilename, bytesRead, totalBytes);
+    });
+}
+
+void CameraGUI::handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage)
+{
+    finishDownloadProgress();
+
+    const QString settingKey = m_pendingYoloDownloads.take(filename);
+    if (settingKey.isEmpty()) {
+        return;
+    }
+
+    if (!success)
+    {
+        QString error = errorMessage;
+        if (error.isEmpty())
+        {
+            error = QString("An unknown error occurred during download from %1 to %2.")
+                .arg(url)
+                .arg(filename);
+        }
+        QMessageBox::warning(this, tr("Download failed"), error);
+        return;
+    }
+
+    QComboBox *combo = (settingKey == "yoloModelPath") ? settingsUI()->yoloModelPathCombo : settingsUI()->yoloLabelsPathCombo;
+    const QSignalBlocker blocker(combo);
+    combo->setCurrentText(filename);
+    applyYoloPathSetting(settingKey, filename);
+}
+
+void CameraGUI::on_yoloModelPathCombo_currentIndexChanged(int index)
+{
+    if (index >= 0) {
+        requestYoloDownload("yoloModelPath", settingsUI()->yoloModelPathCombo->itemText(index));
+    }
+}
+
+void CameraGUI::on_yoloModelPathEdit_editingFinished()
+{
+    requestYoloDownload("yoloModelPath", settingsUI()->yoloModelPathCombo->currentText().trimmed());
 }
 
 void CameraGUI::on_yoloModelPathButton_clicked()
@@ -2966,20 +3043,21 @@ void CameraGUI::on_yoloModelPathButton_clicked()
 
     if (!fileName.isEmpty())
     {
-        m_settings.m_yoloModelPath = fileName;
         settingsUI()->yoloModelPathCombo->setCurrentText(fileName);
-        m_settingsKeys.append("yoloModelPath");
-        applySettings();
+        applyYoloPathSetting("yoloModelPath", fileName);
     }
 }
 
-void CameraGUI::on_yoloLabelsPathCombo_currentTextChanged(const QString& text)
+void CameraGUI::on_yoloLabelsPathCombo_currentIndexChanged(int index)
 {
-    m_settings.m_yoloLabelsPath = text;
-    populateActionClasses();
-    rebuildActionTabsForCurrentClass();
-    m_settingsKeys.append("yoloLabelsPath");
-    applySettings();
+    if (index >= 0) {
+        requestYoloDownload("yoloLabelsPath", settingsUI()->yoloLabelsPathCombo->itemText(index));
+    }
+}
+
+void CameraGUI::on_yoloLabelsPathEdit_editingFinished()
+{
+    requestYoloDownload("yoloLabelsPath", settingsUI()->yoloLabelsPathCombo->currentText().trimmed());
 }
 
 void CameraGUI::on_yoloLabelsPathButton_clicked()
@@ -2990,12 +3068,8 @@ void CameraGUI::on_yoloLabelsPathButton_clicked()
 
     if (!fileName.isEmpty())
     {
-        m_settings.m_yoloLabelsPath = fileName;
         settingsUI()->yoloLabelsPathCombo->setCurrentText(fileName);
-        populateActionClasses();
-        rebuildActionTabsForCurrentClass();
-        m_settingsKeys.append("yoloLabelsPath");
-        applySettings();
+        applyYoloPathSetting("yoloLabelsPath", fileName);
     }
 }
 

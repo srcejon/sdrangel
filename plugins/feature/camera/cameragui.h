@@ -24,6 +24,7 @@
 #include <QImage>
 #include <QGraphicsScene>
 #include <QGraphicsPixmapItem>
+#include <QNetworkReply>
 #include <QSize>
 #include <QToolButton>
 #include <QProgressDialog>
@@ -66,6 +67,7 @@ signals:
 #include "camerasettings.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
+#include "util/httpdownloadmanager.h"
 
 class PluginAPI;
 class FeatureUISet;
@@ -118,6 +120,8 @@ private:
     int m_lastFeatureState;
 
     QProgressDialog *m_progressDialog;
+    HttpDownloadManager m_dlm;
+    QHash<QString, QString> m_pendingYoloDownloads;
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraSettingsDialog *m_settingsDialog;
@@ -186,6 +190,11 @@ private:
     void updateActionControls();
     void applyActionSettings();
     void updatePostProcessWhiteBalanceControls();
+    void applyYoloPathSetting(const QString& settingKey, const QString& path);
+    void requestYoloDownload(const QString& settingKey, const QString& path);
+    void showDownloadProgress(const QString& url, const QString& filename, qint64 bytesRead, qint64 totalBytes);
+    void finishDownloadProgress();
+    void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
 
 private slots:
     void handleInputMessages();
@@ -291,9 +300,11 @@ private slots:
     void on_spectrumOffsetYSlider_valueChanged(int value);
     void on_spectrumScaleSpin_valueChanged(double value);
     void on_yoloButton_toggled(bool checked);
-    void on_yoloModelPathCombo_currentTextChanged(const QString &text);
+    void on_yoloModelPathCombo_currentIndexChanged(int index);
+    void on_yoloModelPathEdit_editingFinished();
     void on_yoloModelPathButton_clicked();
-    void on_yoloLabelsPathCombo_currentTextChanged(const QString &text);
+    void on_yoloLabelsPathCombo_currentIndexChanged(int index);
+    void on_yoloLabelsPathEdit_editingFinished();
     void on_yoloLabelsPathButton_clicked();
     void on_yoloTargetCombo_currentIndexChanged(int index);
     void on_actionsClassCombo_currentIndexChanged(int index);

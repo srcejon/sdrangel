@@ -120,6 +120,7 @@ private:
 
     HttpDownloadManagerGUI m_dlm;
     QHash<QString, QString> m_pendingYoloDownloads;
+    QStringList m_alpacaFilterWheelNames;
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraSettingsDialog *m_settingsDialog;
@@ -221,6 +222,11 @@ private slots:
     void on_alpacaFocuserDeviceNumberSpin_valueChanged(int value);
     void on_alpacaFocusPositionSpin_valueChanged(int value);
     void on_alpacaFocusStepSizeSpin_valueChanged(int value);
+    void on_alpacaFilterWheelEnabledCheck_toggled(bool checked);
+    void on_alpacaFilterWheelHostEdit_editingFinished();
+    void on_alpacaFilterWheelPortSpin_valueChanged(int value);
+    void on_alpacaFilterWheelDeviceNumberSpin_valueChanged(int value);
+    void on_alpacaFilterWheelPositionCombo_currentIndexChanged(int index);
     void on_alpacaBinXSpin_valueChanged(int value);
     void on_alpacaBinYSpin_valueChanged(int value);
     void on_alpacaNumXSpin_valueChanged(int value);

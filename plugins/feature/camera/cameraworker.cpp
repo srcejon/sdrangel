@@ -254,6 +254,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaFilterWheelInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
 
@@ -276,6 +277,8 @@ CameraWorker::CameraWorker() :
     m_alpacaImageBytesSupported(true),
     m_alpacaConnected(false),
     m_alpacaConnectionPending(false),
+    m_alpacaFilterWheelConnected(false),
+    m_alpacaFilterWheelConnectionPending(false),
     m_alpacaBootstrapPending(false),
     m_alpacaParamsInitialized(false),
     m_lastAlpacaBinX(0),
@@ -373,6 +376,11 @@ void CameraWorker::stopWork()
         alpacaSetConnected(false);
     }
 
+    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaFilterWheelConnected)
+    {
+        alpacaSetFilterWheelConnected(false);
+    }
+
     m_statusTimer.stop();
 }
 
@@ -383,6 +391,13 @@ void CameraWorker::resetAlpacaConnectionState()
     m_alpacaPendingConnectedContinuations.clear();
     m_alpacaBootstrapPending = false;
     m_alpacaPendingBootstrapContinuations.clear();
+}
+
+void CameraWorker::resetAlpacaFilterWheelConnectionState()
+{
+    m_alpacaFilterWheelConnected = false;
+    m_alpacaFilterWheelConnectionPending = false;
+    m_alpacaPendingFilterWheelConnectedContinuations.clear();
 }
 
 void CameraWorker::handleInputMessages()
@@ -501,9 +516,20 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("alpacaHost")
         || settingsKeys.contains("alpacaPort")
         || settingsKeys.contains("cameraId");
+    const bool alpacaFilterWheelEndpointChanged = force
+        || settingsKeys.contains("alpacaFilterWheelEnabled")
+        || settingsKeys.contains("alpacaFilterWheelHost")
+        || settingsKeys.contains("alpacaFilterWheelPort")
+        || settingsKeys.contains("alpacaFilterWheelDeviceNumber");
+    const bool alpacaFilterWheelPositionChanged = force
+        || settingsKeys.contains("alpacaFilterWheelPosition");
 
     if (alpacaEndpointChanged) {
         resetAlpacaConnectionState();
+    }
+
+    if (alpacaFilterWheelEndpointChanged) {
+        resetAlpacaFilterWheelConnectionState();
     }
 
     if (m_settings.isAlpacaCamera()
@@ -511,6 +537,18 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         && alpacaEndpointChanged)
     {
         alpacaBootstrap();
+    }
+
+    if (m_settings.isAlpacaCamera()
+        && m_networkManager
+        && m_settings.m_alpacaFilterWheelEnabled
+        && (alpacaFilterWheelEndpointChanged || alpacaFilterWheelPositionChanged))
+    {
+        if (alpacaFilterWheelEndpointChanged) {
+            alpacaQueryFilterWheelInfo();
+        } else if (settingsKeys.contains("alpacaFilterWheelPosition")) {
+            alpacaSetFilterWheelPosition();
+        }
     }
 
     if (force || settingsKeys.contains("cameraId"))
@@ -787,6 +825,214 @@ void CameraWorker::alpacaRunWhenConnected(std::function<void()> continuation)
                 continuation();
             }
         }
+    });
+}
+
+void CameraWorker::alpacaSetFilterWheelConnected(bool connected, std::function<void()> continuation)
+{
+    if (!m_networkManager) {
+        return;
+    }
+
+    const QString baseUrl = buildAlpacaFilterWheelBaseUrl();
+    const int deviceNumber = std::max(0, m_settings.m_alpacaFilterWheelDeviceNumber);
+    QUrl url(baseUrl + QString("/api/v1/filterwheel/%1/connected").arg(deviceNumber));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QUrlQuery body;
+    body.addQueryItem("Connected", connected ? QStringLiteral("true") : QStringLiteral("false"));
+    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+
+    const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+    logAlpacaRequest("PUT", url, payload);
+
+    QNetworkReply *reply = m_networkManager->put(request, payload);
+
+    QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply, connected, continuation]() {
+        const QByteArray responseBody = reply->readAll();
+        logAlpacaResponse("PUT", reply->request().url(), reply, responseBody);
+
+        bool success = false;
+
+        if (reply->error() == QNetworkReply::NoError)
+        {
+            const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+
+            if (doc.isObject()) {
+                success = (doc.object().value("ErrorNumber").toInt(-1) == 0);
+            }
+        }
+
+        if (success) {
+            m_alpacaFilterWheelConnected = connected;
+        } else if (connected) {
+            m_alpacaFilterWheelConnected = false;
+        }
+
+        if (!connected) {
+            m_alpacaFilterWheelConnectionPending = false;
+            m_alpacaFilterWheelConnected = false;
+            m_alpacaPendingFilterWheelConnectedContinuations.clear();
+        }
+
+        if (success)
+        {
+            if (continuation) {
+                continuation();
+            }
+        }
+        else if (connected)
+        {
+            m_alpacaFilterWheelConnectionPending = false;
+            m_alpacaPendingFilterWheelConnectedContinuations.clear();
+        }
+
+        reply->deleteLater();
+    });
+}
+
+void CameraWorker::alpacaRunFilterWheelWhenConnected(std::function<void()> continuation)
+{
+    if (m_alpacaFilterWheelConnected)
+    {
+        if (continuation) {
+            continuation();
+        }
+        return;
+    }
+
+    if (continuation) {
+        m_alpacaPendingFilterWheelConnectedContinuations.append(continuation);
+    }
+
+    if (m_alpacaFilterWheelConnectionPending) {
+        return;
+    }
+
+    m_alpacaFilterWheelConnectionPending = true;
+    alpacaSetFilterWheelConnected(true, [this]() {
+        m_alpacaFilterWheelConnectionPending = false;
+        const auto continuations = std::move(m_alpacaPendingFilterWheelConnectedContinuations);
+        m_alpacaPendingFilterWheelConnectedContinuations.clear();
+
+        for (const auto& continuation : continuations)
+        {
+            if (continuation) {
+                continuation();
+            }
+        }
+    });
+}
+
+void CameraWorker::alpacaQueryFilterWheelInfo()
+{
+    if (!m_networkManager || !m_settings.isAlpacaCamera() || !m_settings.m_alpacaFilterWheelEnabled) {
+        return;
+    }
+
+    alpacaRunFilterWheelWhenConnected([this]() {
+        const QString baseUrl = buildAlpacaFilterWheelBaseUrl();
+        const int deviceNumber = std::max(0, m_settings.m_alpacaFilterWheelDeviceNumber);
+
+        struct FilterWheelInfo {
+            QStringList names;
+            int position = -1;
+            int pending = 0;
+        };
+
+        auto info = QSharedPointer<FilterWheelInfo>::create();
+        info->pending = 2;
+
+        auto checkDone = [this, info]() {
+            info->pending--;
+            if (info->pending > 0) {
+                return;
+            }
+
+            if (m_msgQueueToGUI) {
+                m_msgQueueToGUI->push(MsgReportAlpacaFilterWheelInfo::create(info->names, info->position));
+            }
+        };
+
+        auto makeGet = [this, baseUrl, deviceNumber](const QString& prop) {
+            QUrl url(baseUrl + QString("/api/v1/filterwheel/%1/%2").arg(deviceNumber).arg(prop));
+            QUrlQuery q;
+            q.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+            q.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+            url.setQuery(q);
+            logAlpacaRequest("GET", url);
+            return m_networkManager->get(QNetworkRequest(url));
+        };
+
+        QNetworkReply *namesReply = makeGet("names");
+        QObject::connect(namesReply, &QNetworkReply::finished, namesReply, [this, namesReply, info, checkDone]() {
+            const QByteArray responseBody = namesReply->readAll();
+            logAlpacaResponse("GET", namesReply->request().url(), namesReply, responseBody);
+            if (namesReply->error() == QNetworkReply::NoError) {
+                const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+                if (doc.isObject()) {
+                    const QJsonObject root = doc.object();
+                    if (root.value("ErrorNumber").toInt(0) == 0) {
+                        const QJsonArray values = root.value("Value").toArray();
+                        for (const QJsonValue& value : values) {
+                            info->names.append(value.toString());
+                        }
+                    }
+                }
+            }
+            namesReply->deleteLater();
+            checkDone();
+        });
+
+        QNetworkReply *positionReply = makeGet("position");
+        QObject::connect(positionReply, &QNetworkReply::finished, positionReply, [this, positionReply, info, checkDone]() {
+            const QByteArray responseBody = positionReply->readAll();
+            logAlpacaResponse("GET", positionReply->request().url(), positionReply, responseBody);
+            if (positionReply->error() == QNetworkReply::NoError) {
+                const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+                if (doc.isObject()) {
+                    const QJsonObject root = doc.object();
+                    if (root.value("ErrorNumber").toInt(0) == 0) {
+                        info->position = std::max(0, root.value("Value").toInt(0));
+                    }
+                }
+            }
+            positionReply->deleteLater();
+            checkDone();
+        });
+    });
+}
+
+void CameraWorker::alpacaSetFilterWheelPosition()
+{
+    if (!m_networkManager || !m_settings.isAlpacaCamera() || !m_settings.m_alpacaFilterWheelEnabled) {
+        return;
+    }
+
+    alpacaRunFilterWheelWhenConnected([this]() {
+        const QString baseUrl = buildAlpacaFilterWheelBaseUrl();
+        const int deviceNumber = std::max(0, m_settings.m_alpacaFilterWheelDeviceNumber);
+        QUrl url(baseUrl + QString("/api/v1/filterwheel/%1/position").arg(deviceNumber));
+        QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+        QUrlQuery body;
+        body.addQueryItem("Position", QString::number(std::max(0, m_settings.m_alpacaFilterWheelPosition)));
+        body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+        body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+
+        const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+        logAlpacaRequest("PUT", url, payload);
+
+        QNetworkReply *reply = m_networkManager->put(request, payload);
+        QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply]() {
+            const QByteArray responseBody = reply->readAll();
+            logAlpacaResponse("PUT", reply->request().url(), reply, responseBody);
+            reply->deleteLater();
+            alpacaQueryFilterWheelInfo();
+        });
     });
 }
 
@@ -1355,6 +1601,9 @@ void CameraWorker::statusTick()
 {
     if (m_networkManager && m_settings.isAlpacaCamera()) {
         alpacaPollStatus();
+        if (m_settings.m_alpacaFilterWheelEnabled) {
+            alpacaQueryFilterWheelInfo();
+        }
     }
 }
 
@@ -1439,6 +1688,13 @@ QString CameraWorker::buildAlpacaBaseUrl() const
     return QString("http://%1:%2")
         .arg(m_settings.m_alpacaHost)
         .arg(m_settings.m_alpacaPort);
+}
+
+QString CameraWorker::buildAlpacaFilterWheelBaseUrl() const
+{
+    return QString("http://%1:%2")
+        .arg(m_settings.m_alpacaFilterWheelHost)
+        .arg(m_settings.m_alpacaFilterWheelPort);
 }
 
 void CameraWorker::logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload) const

@@ -85,6 +85,11 @@ struct CameraSettings
     int m_alpacaFocuserDeviceNumber;
     int m_alpacaFocusPosition;
     int m_alpacaFocusStepSize;
+    bool m_alpacaFilterWheelEnabled;
+    QString m_alpacaFilterWheelHost;
+    uint16_t m_alpacaFilterWheelPort;
+    int m_alpacaFilterWheelDeviceNumber;
+    int m_alpacaFilterWheelPosition;
     int m_alpacaBinX;
     int m_alpacaBinY;
     int m_alpacaNumX;

@@ -50,7 +50,7 @@ class CameraWorker : public QObject
     Q_OBJECT
 public:
     class MsgConfigureCameraWorker : public Message {
-        MESSAGE_CLASS_DECLARATION
+MESSAGE_CLASS_DECLARATION
 
     public:
         const CameraSettings& getSettings() const { return m_settings; }
@@ -72,6 +72,29 @@ public:
             m_settings(settings),
             m_settingsKeys(settingsKeys),
             m_force(force)
+        { }
+    };
+
+    class MsgReportAlpacaFilterWheelInfo : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QStringList& getNames() const { return m_names; }
+        int getPosition() const { return m_position; }
+
+        static MsgReportAlpacaFilterWheelInfo* create(const QStringList& names, int position)
+        {
+            return new MsgReportAlpacaFilterWheelInfo(names, position);
+        }
+
+    private:
+        QStringList m_names;
+        int m_position;
+
+        MsgReportAlpacaFilterWheelInfo(const QStringList& names, int position) :
+            Message(),
+            m_names(names),
+            m_position(position)
         { }
     };
 
@@ -319,6 +342,9 @@ private:
     bool m_alpacaConnected;
     bool m_alpacaConnectionPending;
     QVector<std::function<void()>> m_alpacaPendingConnectedContinuations;
+    bool m_alpacaFilterWheelConnected;
+    bool m_alpacaFilterWheelConnectionPending;
+    QVector<std::function<void()>> m_alpacaPendingFilterWheelConnectedContinuations;
     bool m_alpacaBootstrapPending;
     QVector<std::function<void()>> m_alpacaPendingBootstrapContinuations;
     bool m_alpacaParamsInitialized;
@@ -349,6 +375,7 @@ private:
     void stopCapture();
     QImage createPlaceholderFrame() const;
     QString buildAlpacaBaseUrl() const;
+    QString buildAlpacaFilterWheelBaseUrl() const;
     void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
     void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray()) const;
     QImage parseAlpacaImageArray(const QByteArray& payload) const;
@@ -366,8 +393,13 @@ private:
     void alpacaPollStatus();
     void alpacaSetConnected(bool connected, std::function<void()> continuation = {});
     void alpacaRunWhenConnected(std::function<void()> continuation);
+    void alpacaSetFilterWheelConnected(bool connected, std::function<void()> continuation = {});
+    void alpacaRunFilterWheelWhenConnected(std::function<void()> continuation);
+    void alpacaQueryFilterWheelInfo();
+    void alpacaSetFilterWheelPosition();
     void alpacaBootstrap(std::function<void()> continuation = {});
     void resetAlpacaConnectionState();
+    void resetAlpacaFilterWheelConnectionState();
 
 private slots:
     void handleInputMessages();

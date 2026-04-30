@@ -147,6 +147,11 @@ void CameraSettings::resetToDefaults()
     m_alpacaFocuserDeviceNumber = 0;
     m_alpacaFocusPosition = 0;
     m_alpacaFocusStepSize = 100;
+    m_alpacaFilterWheelEnabled = false;
+    m_alpacaFilterWheelHost = "127.0.0.1";
+    m_alpacaFilterWheelPort = 11111;
+    m_alpacaFilterWheelDeviceNumber = 0;
+    m_alpacaFilterWheelPosition = 0;
     m_alpacaBinX = 1;
     m_alpacaBinY = 1;
     m_alpacaNumX = 0;
@@ -350,6 +355,11 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(107, m_alpacaFocuserDeviceNumber);
     s.writeS32(108, m_alpacaFocusPosition);
     s.writeS32(109, m_alpacaFocusStepSize);
+    s.writeBool(110, m_alpacaFilterWheelEnabled);
+    s.writeString(111, m_alpacaFilterWheelHost);
+    s.writeU32(112, m_alpacaFilterWheelPort);
+    s.writeS32(113, m_alpacaFilterWheelDeviceNumber);
+    s.writeS32(114, m_alpacaFilterWheelPosition);
 
     return s.final();
 }
@@ -394,9 +404,17 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(107, &m_alpacaFocuserDeviceNumber, 0);
         d.readS32(108, &m_alpacaFocusPosition, 0);
         d.readS32(109, &m_alpacaFocusStepSize, 100);
+        d.readBool(110, &m_alpacaFilterWheelEnabled, false);
+        d.readString(111, &m_alpacaFilterWheelHost, "127.0.0.1");
+        d.readU32(112, &utmp, 11111);
+        m_alpacaFilterWheelPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
+        d.readS32(113, &m_alpacaFilterWheelDeviceNumber, 0);
+        d.readS32(114, &m_alpacaFilterWheelPosition, 0);
         m_alpacaFocuserDeviceNumber = std::max(0, m_alpacaFocuserDeviceNumber);
         m_alpacaFocusPosition = std::max(0, m_alpacaFocusPosition);
         m_alpacaFocusStepSize = std::max(1, m_alpacaFocusStepSize);
+        m_alpacaFilterWheelDeviceNumber = std::max(0, m_alpacaFilterWheelDeviceNumber);
+        m_alpacaFilterWheelPosition = std::max(0, m_alpacaFilterWheelPosition);
         m_captureMode = qBound(CaptureModeFrameRate, m_captureMode, CaptureModeInterval);
         m_captureInterval = std::max(0.1, m_captureInterval);
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, m_captureIntervalUnits, CaptureIntervalMinutes);
@@ -656,6 +674,21 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("alpacaFocusStepSize")) {
         m_alpacaFocusStepSize = std::max(1, settings.m_alpacaFocusStepSize);
+    }
+    if (settingsKeys.contains("alpacaFilterWheelEnabled")) {
+        m_alpacaFilterWheelEnabled = settings.m_alpacaFilterWheelEnabled;
+    }
+    if (settingsKeys.contains("alpacaFilterWheelHost")) {
+        m_alpacaFilterWheelHost = settings.m_alpacaFilterWheelHost;
+    }
+    if (settingsKeys.contains("alpacaFilterWheelPort")) {
+        m_alpacaFilterWheelPort = settings.m_alpacaFilterWheelPort;
+    }
+    if (settingsKeys.contains("alpacaFilterWheelDeviceNumber")) {
+        m_alpacaFilterWheelDeviceNumber = std::max(0, settings.m_alpacaFilterWheelDeviceNumber);
+    }
+    if (settingsKeys.contains("alpacaFilterWheelPosition")) {
+        m_alpacaFilterWheelPosition = std::max(0, settings.m_alpacaFilterWheelPosition);
     }
     if (settingsKeys.contains("alpacaBinX")) {
         m_alpacaBinX = std::max(1, settings.m_alpacaBinX);
@@ -977,6 +1010,21 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("alpacaFocusStepSize") || force) {
         ostr << " m_alpacaFocusStepSize: " << m_alpacaFocusStepSize;
+    }
+    if (settingsKeys.contains("alpacaFilterWheelEnabled") || force) {
+        ostr << " m_alpacaFilterWheelEnabled: " << m_alpacaFilterWheelEnabled;
+    }
+    if (settingsKeys.contains("alpacaFilterWheelHost") || force) {
+        ostr << " m_alpacaFilterWheelHost: " << m_alpacaFilterWheelHost.toStdString();
+    }
+    if (settingsKeys.contains("alpacaFilterWheelPort") || force) {
+        ostr << " m_alpacaFilterWheelPort: " << m_alpacaFilterWheelPort;
+    }
+    if (settingsKeys.contains("alpacaFilterWheelDeviceNumber") || force) {
+        ostr << " m_alpacaFilterWheelDeviceNumber: " << m_alpacaFilterWheelDeviceNumber;
+    }
+    if (settingsKeys.contains("alpacaFilterWheelPosition") || force) {
+        ostr << " m_alpacaFilterWheelPosition: " << m_alpacaFilterWheelPosition;
     }
     if (settingsKeys.contains("alpacaBinX") || force) {
         ostr << " m_alpacaBinX: " << m_alpacaBinX;

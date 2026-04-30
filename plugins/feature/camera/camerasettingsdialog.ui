@@ -584,7 +584,7 @@
        </layout>
        </item>
        <item>
-        <widget class="QGroupBox" name="alpacaFocuserGroup">
+       <widget class="QGroupBox" name="alpacaFocuserGroup">
          <property name="title">
           <string>Alpaca Focuser</string>
          </property>
@@ -665,11 +665,79 @@
             </property>
            </widget>
           </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacer_5">
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="alpacaFilterWheelGroup">
+        <property name="title">
+         <string>Alpaca Filter Wheel</string>
+        </property>
+        <layout class="QFormLayout" name="alpacaFilterWheelLayout">
+         <item row="0" column="0" colspan="2">
+          <widget class="QCheckBox" name="alpacaFilterWheelEnabledCheck">
+           <property name="text">
+            <string>Use Alpaca filter wheel</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="alpacaFilterWheelHostLabel">
+           <property name="text">
+            <string>Filter wheel host</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="alpacaFilterWheelHostEdit"/>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="alpacaFilterWheelPortLabel">
+           <property name="text">
+            <string>Filter wheel port</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QSpinBox" name="alpacaFilterWheelPortSpin">
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="alpacaFilterWheelDeviceNumberLabel">
+           <property name="text">
+            <string>Filter wheel device #</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QSpinBox" name="alpacaFilterWheelDeviceNumberSpin">
+           <property name="maximum">
+            <number>1024</number>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="alpacaFilterWheelPositionLabel">
+           <property name="text">
+            <string>Filter</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QComboBox" name="alpacaFilterWheelPositionCombo">
+           <property name="toolTip">
+            <string>Filter wheel position using the Alpaca names list</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacer_5">
          <property name="orientation">
           <enum>Qt::Orientation::Vertical</enum>
          </property>

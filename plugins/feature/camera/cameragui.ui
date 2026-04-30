@@ -302,6 +302,13 @@
        </widget>
       </item>
       <item>
+       <widget class="Line" name="line_4">
+        <property name="orientation">
+         <enum>Qt::Orientation::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="ButtonSwitch" name="overlayDateTimeButton">
         <property name="toolTip">
          <string>Overlay date and time</string>

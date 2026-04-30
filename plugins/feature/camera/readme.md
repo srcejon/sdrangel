@@ -56,5 +56,4 @@ If imageready is always false, try restarting the ASCOM Remote Server.
 - html by wira wianda from Noun Project (CC BY 3.0)
 - clock by Alv Jørgen Bovolden from Noun Project (CC BY 3.0)
 - invert by Meko from Noun Project (CC BY 3.0)
-- difference by Chintuza from Noun Project (CC BY 3.0)
-
+- subtract-picture by Smashicons from Noun Project (CC BY 3.0)

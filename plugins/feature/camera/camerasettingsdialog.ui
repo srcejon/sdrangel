@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>810</width>
-    <height>738</height>
+    <height>1020</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>4</number>
+      <number>5</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -254,7 +254,7 @@
          <item row="8" column="0">
           <widget class="QLabel" name="alpacaNumXLabel">
            <property name="text">
-            <string>Num X</string>
+            <string>Subframe Width</string>
            </property>
           </widget>
          </item>
@@ -274,7 +274,7 @@
          <item row="9" column="0">
           <widget class="QLabel" name="alpacaNumYLabel">
            <property name="text">
-            <string>Num Y</string>
+            <string>Subframe Height</string>
            </property>
           </widget>
          </item>
@@ -294,7 +294,7 @@
          <item row="10" column="0">
           <widget class="QLabel" name="alpacaStartXLabel">
            <property name="text">
-            <string>Start X</string>
+            <string>Subframe X</string>
            </property>
           </widget>
          </item>
@@ -314,7 +314,7 @@
          <item row="11" column="0">
           <widget class="QLabel" name="alpacaStartYLabel">
            <property name="text">
-            <string>Start Y</string>
+            <string>Subframe Y</string>
            </property>
           </widget>
          </item>
@@ -2173,6 +2173,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </item>
           <item row="1" column="1">
            <widget class="QComboBox" name="yoloLabelsPathCombo">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
             <property name="toolTip">
              <string>Path to plain-text class labels file (one name per line)</string>
             </property>
@@ -2225,6 +2231,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </item>
           <item row="0" column="1">
            <widget class="QComboBox" name="yoloModelPathCombo">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
             <property name="toolTip">
              <string>Path to YOLO ONNX model file</string>
             </property>
@@ -2431,6 +2443,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </item>
           <item row="5" column="1" colspan="2">
            <widget class="QComboBox" name="yoloTargetCombo">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
             <property name="statusTip">
              <string>Target h/w for neural network</string>
             </property>
@@ -2455,125 +2473,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="detectionRoiGroup">
-         <property name="title">
-          <string>Detection ROI</string>
-         </property>
-         <layout class="QFormLayout" name="formLayout_8">
-          <item row="0" column="0">
-           <widget class="QLabel" name="detectionRoiXLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ROI X</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QSpinBox" name="detectionRoiXSpin">
-            <property name="toolTip">
-             <string>Left edge of the detection region of interest</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>4096</number>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="detectionRoiYLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ROI Y</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QSpinBox" name="detectionRoiYSpin">
-            <property name="toolTip">
-             <string>Top edge of the detection region of interest</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>4096</number>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="detectionRoiWidthLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ROI Width</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QSpinBox" name="detectionRoiWidthSpin">
-            <property name="toolTip">
-             <string>Width of the detection region of interest. 0 uses the full frame width.</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>4096</number>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="detectionRoiHeightLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ROI Height</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QSpinBox" name="detectionRoiHeightSpin">
-            <property name="toolTip">
-             <string>Height of the detection region of interest. 0 uses the full frame height.</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>4096</number>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
         <widget class="QGroupBox" name="motionDetectionGroup">
          <property name="title">
           <string>Motion Detection</string>
          </property>
          <layout class="QFormLayout" name="formLayout_4">
-         <item row="0" column="0">
+          <item row="0" column="0">
            <widget class="QLabel" name="motionHistoryLabel">
             <property name="minimumSize">
              <size>
@@ -2637,13 +2542,20 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="2" column="0" colspan="2">
+          <item row="2" column="0">
+           <widget class="QLabel" name="motionDetectShadowsLabel">
+            <property name="text">
+             <string>Detect shadows</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
            <widget class="QCheckBox" name="motionDetectShadowsCheck">
             <property name="toolTip">
              <string>Enable MOG2 shadow detection</string>
             </property>
             <property name="text">
-             <string>Detect shadows</string>
+             <string/>
             </property>
             <property name="checked">
              <bool>true</bool>
@@ -2896,6 +2808,119 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
             <property name="value">
              <number>0</number>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="detectionRoiGroup">
+         <property name="title">
+          <string>Detection ROI</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout_8">
+          <item row="0" column="0">
+           <widget class="QLabel" name="detectionRoiXLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>ROI X</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QSpinBox" name="detectionRoiXSpin">
+            <property name="toolTip">
+             <string>Left edge of the detection region of interest</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>4096</number>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="detectionRoiYLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>ROI Y</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="detectionRoiYSpin">
+            <property name="toolTip">
+             <string>Top edge of the detection region of interest</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>4096</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="detectionRoiWidthLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>ROI Width</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="detectionRoiWidthSpin">
+            <property name="toolTip">
+             <string>Width of the detection region of interest. 0 uses the full frame width.</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>4096</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="detectionRoiHeightLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>ROI Height</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="detectionRoiHeightSpin">
+            <property name="toolTip">
+             <string>Height of the detection region of interest. 0 uses the full frame height.</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>4096</number>
             </property>
            </widget>
           </item>

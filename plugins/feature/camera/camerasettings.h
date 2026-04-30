@@ -76,6 +76,7 @@ struct CameraSettings
     double m_exposureTimeMs;
     int m_isoSensitivity;
     bool m_alpacaDiscoveryEnabled;
+    bool m_alpacaApiLogEnabled;
     QString m_alpacaHost;
     uint16_t m_alpacaPort;
     int m_alpacaBinX;

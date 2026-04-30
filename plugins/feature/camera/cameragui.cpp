@@ -696,6 +696,7 @@ void CameraGUI::displaySettings()
     updateExposureControls();
     settingsUI()->isoSpin->setValue(m_settings.m_isoSensitivity);
     settingsUI()->alpacaDiscoveryCheck->setChecked(m_settings.m_alpacaDiscoveryEnabled);
+    settingsUI()->alpacaApiLogCheck->setChecked(m_settings.m_alpacaApiLogEnabled);
     settingsUI()->alpacaHostEdit->setText(m_settings.m_alpacaHost);
     settingsUI()->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
     settingsUI()->alpacaBinXSpin->setValue(m_settings.m_alpacaBinX);
@@ -901,6 +902,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->exposureUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_exposureUnitsCombo_currentIndexChanged);
     QObject::connect(settingsUI()->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaDiscoveryCheck, &QCheckBox::toggled, this, &CameraGUI::on_alpacaDiscoveryCheck_toggled);
+    QObject::connect(settingsUI()->alpacaApiLogCheck, &QCheckBox::toggled, this, &CameraGUI::on_alpacaApiLogCheck_toggled);
     QObject::connect(settingsUI()->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
     QObject::connect(settingsUI()->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
@@ -2233,6 +2235,13 @@ void CameraGUI::on_alpacaDiscoveryCheck_toggled(bool checked)
 {
     m_settings.m_alpacaDiscoveryEnabled = checked;
     m_settingsKeys.append("alpacaDiscoveryEnabled");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaApiLogCheck_toggled(bool checked)
+{
+    m_settings.m_alpacaApiLogEnabled = checked;
+    m_settingsKeys.append("alpacaApiLogEnabled");
     applySettings();
 }
 

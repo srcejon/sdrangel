@@ -41,6 +41,8 @@
 #include "camerasettings.h"
 
 class QNetworkAccessManager;
+class QNetworkReply;
+class QUrl;
 class CameraPostProcessor;
 
 class CameraWorker : public QObject
@@ -332,6 +334,8 @@ private:
     void stopCapture();
     QImage createPlaceholderFrame() const;
     QString buildAlpacaBaseUrl() const;
+    void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
+    void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray()) const;
     QImage parseAlpacaImageArray(const QByteArray& payload) const;
     QImage parseAlpacaImageBytes(const QByteArray& payload) const;
     QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const;

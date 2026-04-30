@@ -212,6 +212,7 @@ private slots:
     void on_exposureUnitsCombo_currentIndexChanged(int index);
     void on_isoSpin_valueChanged(int value);
     void on_alpacaDiscoveryCheck_toggled(bool checked);
+    void on_alpacaApiLogCheck_toggled(bool checked);
     void on_alpacaHostEdit_editingFinished();
     void on_alpacaPortSpin_valueChanged(int value);
     void on_alpacaBinXSpin_valueChanged(int value);

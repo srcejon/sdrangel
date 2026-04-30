@@ -378,7 +378,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_forceSettings(false),
     m_updateTimer(this),
     m_lastFeatureState(0),
-    m_progressDialog(nullptr),
+    m_dlm(this),
     m_settingsDialog(nullptr),
     m_histogramDialog(nullptr),
     m_alpacaHasNamedGains(false),
@@ -463,7 +463,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     connect(&m_statusTimer, &QTimer::timeout, this, &CameraGUI::updateStatus);
     connect(m_settingsDialog, &QDialog::finished, this, &CameraGUI::onSettingsDialogFinished);
     connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
-    connect(&m_dlm, &HttpDownloadManager::downloadComplete, this, &CameraGUI::handleYoloDownloadComplete);
+    connect(&m_dlm, &HttpDownloadManagerGUI::downloadComplete, this, &CameraGUI::handleYoloDownloadComplete);
     m_qtStillCaptureTimer.setSingleShot(false);
 
     settingsUI()->fpsLabel->addItem(tr("Frame Rate"), CameraSettings::CaptureModeFrameRate);
@@ -2678,7 +2678,7 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->flipYButton->setChecked(false);
 }
 
-/*static*/ void CameraGUI::updateColorButton(QToolButton* btn, const QColor& color)
+void CameraGUI::updateColorButton(QToolButton* btn, const QColor& color)
 {
     QPixmap px(16, 16);
     px.fill(color);
@@ -2927,42 +2927,6 @@ void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& p
     applySettings();
 }
 
-void CameraGUI::showDownloadProgress(const QString& url, const QString& filename, qint64 bytesRead, qint64 totalBytes)
-{
-    if (m_progressDialog)
-    {
-        if (totalBytes > 0) {
-            m_progressDialog->setValue(static_cast<int>((100 * bytesRead) / totalBytes));
-        }
-    }
-    else
-    {
-        const QString text = QString("Downloading: %1\nTo: %2.")
-            .arg(url)
-            .arg(filename);
-
-        m_progressDialog = new QProgressDialog(this);
-        m_progressDialog->setCancelButton(nullptr);
-        m_progressDialog->setMinimumDuration(500);
-        m_progressDialog->setRange(0, 100);
-        m_progressDialog->setLabelText(text);
-
-        if (totalBytes > 0) {
-            m_progressDialog->setValue(static_cast<int>((100 * bytesRead) / totalBytes));
-        }
-    }
-}
-
-void CameraGUI::finishDownloadProgress()
-{
-    if (m_progressDialog)
-    {
-        m_progressDialog->close();
-        m_progressDialog->deleteLater();
-        m_progressDialog = nullptr;
-    }
-}
-
 void CameraGUI::requestYoloDownload(const QString& settingKey, const QString& path)
 {
     if (!(path.startsWith("http://") || path.startsWith("https://")))
@@ -2981,6 +2945,11 @@ void CameraGUI::requestYoloDownload(const QString& settingKey, const QString& pa
     }
 
     const QString localFilename = CameraSettings::urlToFilename(path, destSubDir);
+    if (m_pendingYoloDownloads.contains(localFilename))
+    {
+        // Already downloading this file - just ignore the new request
+        return;
+    }
     m_pendingYoloDownloads.insert(localFilename, settingKey);
 
     if (QFileInfo::exists(localFilename))
@@ -2989,16 +2958,11 @@ void CameraGUI::requestYoloDownload(const QString& settingKey, const QString& pa
         return;
     }
 
-    QNetworkReply *reply = m_dlm.download(QUrl(path), localFilename);
-    connect(reply, &QNetworkReply::downloadProgress, this, [this, path, localFilename](qint64 bytesRead, qint64 totalBytes) {
-        showDownloadProgress(path, localFilename, bytesRead, totalBytes);
-    });
+    m_dlm.download(QUrl(path), localFilename, this);
 }
 
 void CameraGUI::handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage)
 {
-    finishDownloadProgress();
-
     const QString settingKey = m_pendingYoloDownloads.take(filename);
     if (settingKey.isEmpty()) {
         return;

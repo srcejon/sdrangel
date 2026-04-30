@@ -27,7 +27,6 @@
 #include <QNetworkReply>
 #include <QSize>
 #include <QToolButton>
-#include <QProgressDialog>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QVideoFrame>
@@ -67,7 +66,7 @@ signals:
 #include "camerasettings.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
-#include "util/httpdownloadmanager.h"
+#include "gui/httpdownloadmanagergui.h"
 
 class PluginAPI;
 class FeatureUISet;
@@ -119,8 +118,7 @@ private:
     QTimer m_statusTimer;
     int m_lastFeatureState;
 
-    QProgressDialog *m_progressDialog;
-    HttpDownloadManager m_dlm;
+    HttpDownloadManagerGUI m_dlm;
     QHash<QString, QString> m_pendingYoloDownloads;
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
@@ -192,8 +190,6 @@ private:
     void updatePostProcessWhiteBalanceControls();
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
     void requestYoloDownload(const QString& settingKey, const QString& path);
-    void showDownloadProgress(const QString& url, const QString& filename, qint64 bytesRead, qint64 totalBytes);
-    void finishDownloadProgress();
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
 
 private slots:

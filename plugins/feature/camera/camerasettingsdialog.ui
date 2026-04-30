@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>5</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -2310,7 +2310,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </item>
             <item>
              <property name="text">
-              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov9l.onnx</string>
+              <string>https://huggingface.co/sdrangel/object_detection/resolve/main/yolov8l.onnx</string>
              </property>
             </item>
             <item>

@@ -1959,14 +1959,16 @@ void CameraGUI::updateAlpacaSubframeControls()
     const int startY = qBound(0, m_settings.m_alpacaStartY, maxSubframeY - 1);
     const int maxNumX = std::max(1, maxSubframeX - startX);
     const int maxNumY = std::max(1, maxSubframeY - startY);
-    const int numX = (m_settings.m_alpacaNumX <= 0) ? maxNumX : qBound(1, m_settings.m_alpacaNumX, maxNumX);
-    const int numY = (m_settings.m_alpacaNumY <= 0) ? maxNumY : qBound(1, m_settings.m_alpacaNumY, maxNumY);
+    const int numX = (m_settings.m_alpacaNumX == 0) ? 0 : qBound(1, m_settings.m_alpacaNumX, maxNumX);
+    const int numY = (m_settings.m_alpacaNumY == 0) ? 0 : qBound(1, m_settings.m_alpacaNumY, maxNumY);
 
     m_settings.m_alpacaStartX = startX;
     m_settings.m_alpacaStartY = startY;
     m_settings.m_alpacaNumX = numX;
     m_settings.m_alpacaNumY = numY;
 
+    settingsUI()->alpacaNumXSpin->setMinimum(0);
+    settingsUI()->alpacaNumYSpin->setMinimum(0);
     settingsUI()->alpacaStartXSpin->setMaximum(maxSubframeX - 1);
     settingsUI()->alpacaStartYSpin->setMaximum(maxSubframeY - 1);
     settingsUI()->alpacaStartXSpin->setValue(startX);

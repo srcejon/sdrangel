@@ -64,7 +64,9 @@ struct CameraSettings
 
     QString m_title;
     quint32 m_rgbColor;
+    QString m_cameraProtocol;
     QString m_cameraId;
+    QString m_cameraDescription;
     int m_resolutionWidth;
     int m_resolutionHeight;
     int m_framesPerSecond;
@@ -191,6 +193,7 @@ struct CameraSettings
     int cameraIdInt() const;
     QString cameraIdString() const;
     QString cameraDescription() const;
+    QString cameraDisplayName() const;
     bool isIntervalCaptureMode() const;
     double getCaptureIntervalSeconds() const;
     int getCaptureIntervalMs() const;

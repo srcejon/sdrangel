@@ -126,7 +126,9 @@ void CameraSettings::resetToDefaults()
 {
     m_title = "Camera";
     m_rgbColor = QColor(64, 128, 255).rgb();
+    m_cameraProtocol.clear();
     m_cameraId.clear();
+    m_cameraDescription.clear();
     m_resolutionWidth = 1280;
     m_resolutionHeight = 720;
     m_framesPerSecond = 10;
@@ -229,107 +231,109 @@ QByteArray CameraSettings::serialize() const
 
     s.writeString(1, m_title);
     s.writeU32(2, m_rgbColor);
-    s.writeString(3, m_cameraId);
-    s.writeS32(4, m_resolutionWidth);
-    s.writeS32(5, m_resolutionHeight);
-    s.writeS32(6, m_framesPerSecond);
-    s.writeS32(7, m_captureMode);
-    s.writeDouble(8, m_exposureTimeMs);
-    s.writeS32(9, m_isoSensitivity);
-    s.writeString(10, m_alpacaHost);
-    s.writeU32(11, m_alpacaPort);
-    s.writeBool(12, m_saveImage);
-    s.writeString(13, m_imageFileName);
-    s.writeBool(14, m_saveVideo);
-    s.writeString(15, m_videoFileName);
-    s.writeBool(16, m_videoHwAcceleration);
+    s.writeString(3, m_cameraProtocol);
+    s.writeString(4, m_cameraId);
+    s.writeString(5, m_cameraDescription);
+    s.writeS32(6, m_resolutionWidth);
+    s.writeS32(7, m_resolutionHeight);
+    s.writeS32(8, m_framesPerSecond);
+    s.writeS32(9, m_captureMode);
+    s.writeDouble(10, m_exposureTimeMs);
+    s.writeS32(11, m_isoSensitivity);
+    s.writeString(12, m_alpacaHost);
+    s.writeU32(13, m_alpacaPort);
+    s.writeBool(14, m_saveImage);
+    s.writeString(15, m_imageFileName);
+    s.writeBool(16, m_saveVideo);
+    s.writeString(17, m_videoFileName);
+    s.writeBool(18, m_videoHwAcceleration);
 
     if (m_rollupState) {
-        s.writeBlob(17, m_rollupState->serialize());
+        s.writeBlob(19, m_rollupState->serialize());
     }
 
-    s.writeS32(18, m_workspaceIndex);
-    s.writeBlob(19, m_geometryBytes);
-    s.writeS32(20, m_alpacaBinX);
-    s.writeS32(21, m_alpacaBinY);
-    s.writeS32(22, m_alpacaGain);
-    s.writeS32(23, m_alpacaReadoutMode);
-    s.writeS32(24, m_alpacaOffset);
-    s.writeS32(25, m_alpacaNumX);
-    s.writeS32(26, m_alpacaNumY);
-    s.writeS32(27, m_alpacaStartX);
-    s.writeS32(28, m_alpacaStartY);
-    s.writeS32(29, m_postProcessWhiteBalanceMode);
-    s.writeDouble(30, m_postProcessWhiteBalanceRedGain);
-    s.writeDouble(31, m_postProcessWhiteBalanceGreenGain);
-    s.writeDouble(32, m_postProcessWhiteBalanceBlueGain);
-    s.writeDouble(33, m_saturation);
-    s.writeDouble(34, m_gamma);
-    s.writeS32(35, m_gaussianBlur);
-    s.writeS32(36, m_medianBlur);
-    s.writeDouble(37, m_sharpen);
-    s.writeDouble(38, m_sobelEdge);
-    s.writeBool(39, m_flipX);
-    s.writeBool(40, m_flipY);
-    s.writeDouble(41, m_brightness);
-    s.writeDouble(42, m_contrast);
-    s.writeBool(43, m_invertColors);
-    s.writeBool(44, m_overlayDateTime);
-    s.writeU32(45, m_dateTimeColor.rgba());
-    s.writeBool(46, m_diffMask);
-    s.writeS32(47, m_diffThreshold);
-    s.writeS32(48, m_dilationSize);
-    s.writeS32(49, m_diffMaskHistoryFrames);
-    s.writeS32(50, m_diffMaskCloseSize);
-    s.writeString(51, m_overlayFontFamily);
-    s.writeDouble(52, m_overlayFontScale);
-    s.writeS32(53, m_detectionRoiX);
-    s.writeS32(54, m_detectionRoiY);
-    s.writeS32(55, m_detectionRoiWidth);
-    s.writeS32(56, m_detectionRoiHeight);
-    s.writeBool(57, m_motionDetect);
-    s.writeS32(58, m_motionHistory);
-    s.writeDouble(59, m_motionVarThreshold);
-    s.writeBool(60, m_motionDetectShadows);
-    s.writeS32(61, m_motionOpenSize);
-    s.writeS32(62, m_motionCloseSize);
-    s.writeS32(63, m_motionPersistenceFrames);
-    s.writeU32(64, m_motionBoxColor.rgba());
-    s.writeS32(65, m_minContourArea);
-    s.writeBool(66, m_videoPostProcess);
-    s.writeBool(67, m_overlaySpectrum);
-    s.writeString(68, m_spectrumDevice);
-    s.writeS32(69, m_spectrumOffsetX);
-    s.writeS32(70, m_spectrumOffsetY);
-    s.writeDouble(71, m_spectrumScale);
-    s.writeString(72, m_dateTimeFormat);
-    s.writeS32(73, m_dateTimePosX);
-    s.writeS32(74, m_dateTimePosY);
-    s.writeBool(75, m_overlayText);
-    s.writeString(76, m_overlayTextString);
-    s.writeU32(77, m_overlayTextColor.rgba());
-    s.writeString(78, m_overlayTextFontFamily);
-    s.writeDouble(79, m_overlayTextFontScale);
-    s.writeS32(80, m_overlayTextPosX);
-    s.writeS32(81, m_overlayTextPosY);
-    s.writeBool(82, m_yoloEnabled);
-    s.writeString(83, m_yoloModelPath);
-    s.writeString(84, m_yoloLabelsPath);
-    s.writeDouble(85, m_yoloConfThreshold);
-    s.writeDouble(86, m_yoloNmsThreshold);
-    s.writeU32(87, m_yoloBoxColor.rgba());
-    s.writeDouble(88, m_yoloDisappearDebounce);
-    s.writeS32(89, m_yoloDnnTarget);
-    s.writeBlob(90, serializeObjectDeviceSettings(m_objectDeviceSettings));
-    s.writeBool(91, m_audioMute);
-    s.writeString(92, m_audioDeviceName);
-    s.writeS32(93, m_whiteBalanceMode);
-    s.writeDouble(94, m_exposureCompensation);
-    s.writeS32(95, m_focusMode);
-    s.writeDouble(96, m_focusDistance);
-    s.writeDouble(97, m_zoomFactor);
-    s.writeDouble(98, m_captureInterval);
-    s.writeS32(99, m_captureIntervalUnits);
+    s.writeS32(20, m_workspaceIndex);
+    s.writeBlob(21, m_geometryBytes);
+    s.writeS32(22, m_alpacaBinX);
+    s.writeS32(23, m_alpacaBinY);
+    s.writeS32(24, m_alpacaGain);
+    s.writeS32(25, m_alpacaReadoutMode);
+    s.writeS32(26, m_alpacaOffset);
+    s.writeS32(27, m_alpacaNumX);
+    s.writeS32(28, m_alpacaNumY);
+    s.writeS32(29, m_alpacaStartX);
+    s.writeS32(30, m_alpacaStartY);
+    s.writeS32(31, m_postProcessWhiteBalanceMode);
+    s.writeDouble(32, m_postProcessWhiteBalanceRedGain);
+    s.writeDouble(33, m_postProcessWhiteBalanceGreenGain);
+    s.writeDouble(34, m_postProcessWhiteBalanceBlueGain);
+    s.writeDouble(35, m_saturation);
+    s.writeDouble(36, m_gamma);
+    s.writeS32(37, m_gaussianBlur);
+    s.writeS32(38, m_medianBlur);
+    s.writeDouble(39, m_sharpen);
+    s.writeDouble(40, m_sobelEdge);
+    s.writeBool(41, m_flipX);
+    s.writeBool(42, m_flipY);
+    s.writeDouble(43, m_brightness);
+    s.writeDouble(44, m_contrast);
+    s.writeBool(45, m_invertColors);
+    s.writeBool(46, m_overlayDateTime);
+    s.writeU32(47, m_dateTimeColor.rgba());
+    s.writeBool(48, m_diffMask);
+    s.writeS32(49, m_diffThreshold);
+    s.writeS32(50, m_dilationSize);
+    s.writeS32(51, m_diffMaskHistoryFrames);
+    s.writeS32(52, m_diffMaskCloseSize);
+    s.writeString(53, m_overlayFontFamily);
+    s.writeDouble(54, m_overlayFontScale);
+    s.writeS32(55, m_detectionRoiX);
+    s.writeS32(56, m_detectionRoiY);
+    s.writeS32(57, m_detectionRoiWidth);
+    s.writeS32(58, m_detectionRoiHeight);
+    s.writeBool(59, m_motionDetect);
+    s.writeS32(60, m_motionHistory);
+    s.writeDouble(61, m_motionVarThreshold);
+    s.writeBool(62, m_motionDetectShadows);
+    s.writeS32(63, m_motionOpenSize);
+    s.writeS32(64, m_motionCloseSize);
+    s.writeS32(65, m_motionPersistenceFrames);
+    s.writeU32(66, m_motionBoxColor.rgba());
+    s.writeS32(67, m_minContourArea);
+    s.writeBool(68, m_videoPostProcess);
+    s.writeBool(69, m_overlaySpectrum);
+    s.writeString(70, m_spectrumDevice);
+    s.writeS32(71, m_spectrumOffsetX);
+    s.writeS32(72, m_spectrumOffsetY);
+    s.writeDouble(73, m_spectrumScale);
+    s.writeString(74, m_dateTimeFormat);
+    s.writeS32(75, m_dateTimePosX);
+    s.writeS32(76, m_dateTimePosY);
+    s.writeBool(77, m_overlayText);
+    s.writeString(78, m_overlayTextString);
+    s.writeU32(79, m_overlayTextColor.rgba());
+    s.writeString(80, m_overlayTextFontFamily);
+    s.writeDouble(81, m_overlayTextFontScale);
+    s.writeS32(82, m_overlayTextPosX);
+    s.writeS32(83, m_overlayTextPosY);
+    s.writeBool(84, m_yoloEnabled);
+    s.writeString(85, m_yoloModelPath);
+    s.writeString(86, m_yoloLabelsPath);
+    s.writeDouble(87, m_yoloConfThreshold);
+    s.writeDouble(88, m_yoloNmsThreshold);
+    s.writeU32(89, m_yoloBoxColor.rgba());
+    s.writeDouble(90, m_yoloDisappearDebounce);
+    s.writeS32(91, m_yoloDnnTarget);
+    s.writeBlob(92, serializeObjectDeviceSettings(m_objectDeviceSettings));
+    s.writeBool(93, m_audioMute);
+    s.writeString(94, m_audioDeviceName);
+    s.writeS32(95, m_whiteBalanceMode);
+    s.writeDouble(96, m_exposureCompensation);
+    s.writeS32(97, m_focusMode);
+    s.writeDouble(98, m_focusDistance);
+    s.writeDouble(99, m_zoomFactor);
+    s.writeDouble(100, m_captureInterval);
+    s.writeS32(101, m_captureIntervalUnits);
 
     return s.final();
 }
@@ -351,49 +355,51 @@ bool CameraSettings::deserialize(const QByteArray& data)
 
         d.readString(1, &m_title, "Camera");
         d.readU32(2, &m_rgbColor, QColor(64, 128, 255).rgb());
-        d.readString(3, &m_cameraId, "");
-        d.readS32(4, &m_resolutionWidth, 1280);
-        d.readS32(5, &m_resolutionHeight, 720);
-        d.readS32(6, &m_framesPerSecond, 10);
-        d.readS32(7, (qint32 *) &m_captureMode, (qint32) CaptureModeFrameRate);
-        d.readDouble(8, &m_exposureTimeMs, 50.0);
-        d.readS32(9, &m_isoSensitivity, -1);
+        d.readString(3, &m_cameraProtocol, "");
+        d.readString(4, &m_cameraId, "");
+        d.readString(5, &m_cameraDescription, "");
+        d.readS32(6, &m_resolutionWidth, 1280);
+        d.readS32(7, &m_resolutionHeight, 720);
+        d.readS32(8, &m_framesPerSecond, 10);
+        d.readS32(9, (qint32 *) &m_captureMode, (qint32) CaptureModeFrameRate);
+        d.readDouble(10, &m_exposureTimeMs, 50.0);
+        d.readS32(11, &m_isoSensitivity, -1);
         m_resolutionWidth = std::max(16, m_resolutionWidth);
         m_resolutionHeight = std::max(16, m_resolutionHeight);
         m_framesPerSecond = std::max(1, m_framesPerSecond);
-        d.readDouble(98, &m_captureInterval, 1.0);
-        d.readS32(99, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
+        d.readDouble(100, &m_captureInterval, 1.0);
+        d.readS32(101, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
         m_captureMode = qBound(CaptureModeFrameRate, m_captureMode, CaptureModeInterval);
         m_captureInterval = std::max(0.1, m_captureInterval);
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, m_captureIntervalUnits, CaptureIntervalMinutes);
         m_exposureTimeMs = std::max(0.001, m_exposureTimeMs);
         m_isoSensitivity = std::max(-1, m_isoSensitivity);
-        d.readString(10, &m_alpacaHost, "127.0.0.1");
-        d.readU32(11, &utmp, 11111);
+        d.readString(12, &m_alpacaHost, "127.0.0.1");
+        d.readU32(13, &utmp, 11111);
         m_alpacaPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
-        d.readBool(12, &m_saveImage, false);
-        d.readString(13, &m_imageFileName, "camera.jpg");
-        d.readBool(14, &m_saveVideo, false);
-        d.readString(15, &m_videoFileName, "camera.mp4");
-        d.readBool(16, &m_videoHwAcceleration, true);
+        d.readBool(14, &m_saveImage, false);
+        d.readString(15, &m_imageFileName, "camera.jpg");
+        d.readBool(16, &m_saveVideo, false);
+        d.readString(17, &m_videoFileName, "camera.mp4");
+        d.readBool(18, &m_videoHwAcceleration, true);
 
         if (m_rollupState)
         {
-            d.readBlob(17, &bytetmp);
+            d.readBlob(19, &bytetmp);
             m_rollupState->deserialize(bytetmp);
         }
 
-        d.readS32(18, &m_workspaceIndex, 0);
-        d.readBlob(19, &m_geometryBytes);
-        d.readS32(20, &m_alpacaBinX, 1);
-        d.readS32(21, &m_alpacaBinY, 1);
-        d.readS32(22, &m_alpacaGain, 100);
-        d.readS32(23, &m_alpacaReadoutMode, 0);
-        d.readS32(24, &m_alpacaOffset, 1);
-        d.readS32(25, &m_alpacaNumX, 0);
-        d.readS32(26, &m_alpacaNumY, 0);
-        d.readS32(27, &m_alpacaStartX, 0);
-        d.readS32(28, &m_alpacaStartY, 0);
+        d.readS32(20, &m_workspaceIndex, 0);
+        d.readBlob(21, &m_geometryBytes);
+        d.readS32(22, &m_alpacaBinX, 1);
+        d.readS32(23, &m_alpacaBinY, 1);
+        d.readS32(24, &m_alpacaGain, 100);
+        d.readS32(25, &m_alpacaReadoutMode, 0);
+        d.readS32(26, &m_alpacaOffset, 1);
+        d.readS32(27, &m_alpacaNumX, 0);
+        d.readS32(28, &m_alpacaNumY, 0);
+        d.readS32(29, &m_alpacaStartX, 0);
+        d.readS32(30, &m_alpacaStartY, 0);
         m_alpacaBinX = std::max(1, m_alpacaBinX);
         m_alpacaBinY = std::max(1, m_alpacaBinY);
         m_alpacaNumX = std::max(0, m_alpacaNumX);
@@ -401,18 +407,18 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_alpacaStartX = std::max(0, m_alpacaStartX);
         m_alpacaStartY = std::max(0, m_alpacaStartY);
         m_alpacaReadoutMode = std::max(0, m_alpacaReadoutMode);
-        d.readS32(29, &m_postProcessWhiteBalanceMode, 0);
-        d.readDouble(30, &m_postProcessWhiteBalanceRedGain, 1.0);
-        d.readDouble(31, &m_postProcessWhiteBalanceGreenGain, 1.0);
-        d.readDouble(32, &m_postProcessWhiteBalanceBlueGain, 1.0);
-        d.readDouble(33, &m_saturation, 1.0);
-        d.readDouble(34, &m_gamma, 1.0);
-        d.readS32(35, &m_gaussianBlur, 0);
-        d.readS32(36, &m_medianBlur, 0);
-        d.readDouble(37, &m_sharpen, 0.0);
-        d.readDouble(38, &m_sobelEdge, 0.0);
-        d.readBool(39, &m_flipX, false);
-        d.readBool(40, &m_flipY, false);
+        d.readS32(31, &m_postProcessWhiteBalanceMode, 0);
+        d.readDouble(32, &m_postProcessWhiteBalanceRedGain, 1.0);
+        d.readDouble(33, &m_postProcessWhiteBalanceGreenGain, 1.0);
+        d.readDouble(34, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        d.readDouble(35, &m_saturation, 1.0);
+        d.readDouble(36, &m_gamma, 1.0);
+        d.readS32(37, &m_gaussianBlur, 0);
+        d.readS32(38, &m_medianBlur, 0);
+        d.readDouble(39, &m_sharpen, 0.0);
+        d.readDouble(40, &m_sobelEdge, 0.0);
+        d.readBool(41, &m_flipX, false);
+        d.readBool(42, &m_flipY, false);
         m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
         m_postProcessWhiteBalanceRedGain = qBound(0.1, m_postProcessWhiteBalanceRedGain, 8.0);
         m_postProcessWhiteBalanceGreenGain = qBound(0.1, m_postProcessWhiteBalanceGreenGain, 8.0);
@@ -424,18 +430,18 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_sharpen = qBound(0.0, m_sharpen, 3.0);
         m_sobelEdge = qBound(0.0, m_sobelEdge, 3.0);
 
-        d.readDouble(41, &m_brightness, 0.0);
-        d.readDouble(42, &m_contrast, 1.0);
-        d.readBool(43, &m_invertColors, false);
-        d.readBool(44, &m_overlayDateTime, false);
+        d.readDouble(43, &m_brightness, 0.0);
+        d.readDouble(44, &m_contrast, 1.0);
+        d.readBool(45, &m_invertColors, false);
+        d.readBool(46, &m_overlayDateTime, false);
         uint32_t colorRgba = QColor(Qt::white).rgba();
-        d.readU32(45, &colorRgba, QColor(Qt::white).rgba());
+        d.readU32(47, &colorRgba, QColor(Qt::white).rgba());
         m_dateTimeColor = QColor::fromRgba(colorRgba);
-        d.readBool(46, &m_diffMask, false);
-        d.readS32(47, &m_diffThreshold, 30);
-        d.readS32(48, &m_dilationSize, 3);
-        d.readS32(49, &m_diffMaskHistoryFrames, 1);
-        d.readS32(50, &m_diffMaskCloseSize, 0);
+        d.readBool(48, &m_diffMask, false);
+        d.readS32(49, &m_diffThreshold, 30);
+        d.readS32(50, &m_dilationSize, 3);
+        d.readS32(51, &m_diffMaskHistoryFrames, 1);
+        d.readS32(52, &m_diffMaskCloseSize, 0);
         m_brightness = qBound(-100.0, m_brightness, 100.0);
         m_contrast = qBound(0.1, m_contrast, 3.0);
         m_diffThreshold = qBound(0, m_diffThreshold, 255);
@@ -443,23 +449,23 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_diffMaskHistoryFrames = qBound(1, m_diffMaskHistoryFrames, 120);
         m_diffMaskCloseSize = qBound(0, m_diffMaskCloseSize, 20);
 
-        d.readString(51, &m_overlayFontFamily, "");
-        d.readDouble(52, &m_overlayFontScale, 12.0);
-        d.readS32(53, &m_detectionRoiX, 0);
-        d.readS32(54, &m_detectionRoiY, 0);
-        d.readS32(55, &m_detectionRoiWidth, 0);
-        d.readS32(56, &m_detectionRoiHeight, 0);
-        d.readBool(57, &m_motionDetect, false);
-        d.readS32(58, &m_motionHistory, 500);
-        d.readDouble(59, &m_motionVarThreshold, 16.0);
-        d.readBool(60, &m_motionDetectShadows, true);
-        d.readS32(61, &m_motionOpenSize, 0);
-        d.readS32(62, &m_motionCloseSize, 0);
-        d.readS32(63, &m_motionPersistenceFrames, 0);
+        d.readString(53, &m_overlayFontFamily, "");
+        d.readDouble(54, &m_overlayFontScale, 12.0);
+        d.readS32(55, &m_detectionRoiX, 0);
+        d.readS32(56, &m_detectionRoiY, 0);
+        d.readS32(57, &m_detectionRoiWidth, 0);
+        d.readS32(58, &m_detectionRoiHeight, 0);
+        d.readBool(59, &m_motionDetect, false);
+        d.readS32(60, &m_motionHistory, 500);
+        d.readDouble(61, &m_motionVarThreshold, 16.0);
+        d.readBool(62, &m_motionDetectShadows, true);
+        d.readS32(63, &m_motionOpenSize, 0);
+        d.readS32(64, &m_motionCloseSize, 0);
+        d.readS32(65, &m_motionPersistenceFrames, 0);
         uint32_t motionBoxColorRgba = QColor(Qt::red).rgba();
-        d.readU32(64, &motionBoxColorRgba, QColor(Qt::red).rgba());
+        d.readU32(66, &motionBoxColorRgba, QColor(Qt::red).rgba());
         m_motionBoxColor = QColor::fromRgba(motionBoxColorRgba);
-        d.readS32(65, &m_minContourArea, 100);
+        d.readS32(67, &m_minContourArea, 100);
         m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
         m_detectionRoiX = qBound(0, m_detectionRoiX, 4096);
         m_detectionRoiY = qBound(0, m_detectionRoiY, 4096);
@@ -471,59 +477,59 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_motionCloseSize = qBound(0, m_motionCloseSize, 20);
         m_motionPersistenceFrames = qBound(0, m_motionPersistenceFrames, 120);
         m_minContourArea = qBound(0, m_minContourArea, 10000);
-        d.readBool(66, &m_videoPostProcess, false);
-        d.readBool(67, &m_overlaySpectrum, false);
-        d.readString(68, &m_spectrumDevice, "");
-        d.readS32(69, &m_spectrumOffsetX, 0);
-        d.readS32(70, &m_spectrumOffsetY, 0);
+        d.readBool(68, &m_videoPostProcess, false);
+        d.readBool(69, &m_overlaySpectrum, false);
+        d.readString(70, &m_spectrumDevice, "");
+        d.readS32(71, &m_spectrumOffsetX, 0);
+        d.readS32(72, &m_spectrumOffsetY, 0);
         m_spectrumOffsetX = qBound(-4096, m_spectrumOffsetX, 4096);
         m_spectrumOffsetY = qBound(-4096, m_spectrumOffsetY, 4096);
-        d.readDouble(71, &m_spectrumScale, 1.0);
+        d.readDouble(73, &m_spectrumScale, 1.0);
         m_spectrumScale = qBound(0.1, m_spectrumScale, 4.0);
-        d.readString(72, &m_dateTimeFormat, "yyyy-MM-dd hh:mm:ss");
-        d.readS32(73, &m_dateTimePosX, 4);
-        d.readS32(74, &m_dateTimePosY, 0);
+        d.readString(74, &m_dateTimeFormat, "yyyy-MM-dd hh:mm:ss");
+        d.readS32(75, &m_dateTimePosX, 4);
+        d.readS32(76, &m_dateTimePosY, 0);
         m_dateTimePosX = qBound(0, m_dateTimePosX, 4096);
         m_dateTimePosY = qBound(0, m_dateTimePosY, 4096);
-        d.readBool(75, &m_overlayText, false);
-        d.readString(76, &m_overlayTextString, DEFAULT_OVERLAY_TEXT_STRING);
+        d.readBool(77, &m_overlayText, false);
+        d.readString(78, &m_overlayTextString, DEFAULT_OVERLAY_TEXT_STRING);
         uint32_t overlayTextColorRgba = QColor(Qt::white).rgba();
-        d.readU32(77, &overlayTextColorRgba, QColor(Qt::white).rgba());
+        d.readU32(79, &overlayTextColorRgba, QColor(Qt::white).rgba());
         m_overlayTextColor = QColor::fromRgba(overlayTextColorRgba);
-        d.readString(78, &m_overlayTextFontFamily, "");
-        d.readDouble(79, &m_overlayTextFontScale, 12.0);
+        d.readString(80, &m_overlayTextFontFamily, "");
+        d.readDouble(81, &m_overlayTextFontScale, 12.0);
         m_overlayTextFontScale = qBound(4.0, m_overlayTextFontScale, 144.0);
-        d.readS32(80, &m_overlayTextPosX, 4);
-        d.readS32(81, &m_overlayTextPosY, 0);
+        d.readS32(82, &m_overlayTextPosX, 4);
+        d.readS32(83, &m_overlayTextPosY, 0);
         m_overlayTextPosX = qBound(0, m_overlayTextPosX, 4096);
         m_overlayTextPosY = qBound(0, m_overlayTextPosY, 4096);
-        d.readBool(82, &m_yoloEnabled, false);
-        d.readString(83, &m_yoloModelPath, "");
-        d.readString(84, &m_yoloLabelsPath, "");
-        d.readDouble(85, &m_yoloConfThreshold, 0.5);
-        d.readDouble(86, &m_yoloNmsThreshold, 0.45);
+        d.readBool(84, &m_yoloEnabled, false);
+        d.readString(85, &m_yoloModelPath, "");
+        d.readString(86, &m_yoloLabelsPath, "");
+        d.readDouble(87, &m_yoloConfThreshold, 0.5);
+        d.readDouble(88, &m_yoloNmsThreshold, 0.45);
         m_yoloConfThreshold = qBound(0.0, m_yoloConfThreshold, 1.0);
         m_yoloNmsThreshold = qBound(0.0, m_yoloNmsThreshold, 1.0);
         uint32_t yoloBoxColorRgba = QColor(Qt::green).rgba();
-        d.readU32(87, &yoloBoxColorRgba, QColor(Qt::green).rgba());
+        d.readU32(89, &yoloBoxColorRgba, QColor(Qt::green).rgba());
         m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
-        d.readDouble(88, &m_yoloDisappearDebounce, 0.0);
+        d.readDouble(90, &m_yoloDisappearDebounce, 0.0);
         m_yoloDisappearDebounce = qBound(0.0, m_yoloDisappearDebounce, 60.0);
-        d.readS32(89, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
-        d.readBlob(90, &bytetmp);
+        d.readS32(91, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
+        d.readBlob(92, &bytetmp);
         deserializeObjectDeviceSettings(bytetmp, m_objectDeviceSettings);
 
-        d.readBool(91, &m_audioMute, true);
-        d.readString(92, &m_audioDeviceName, "");
-        d.readS32(93, &m_whiteBalanceMode, 0);
+        d.readBool(93, &m_audioMute, true);
+        d.readString(94, &m_audioDeviceName, "");
+        d.readS32(95, &m_whiteBalanceMode, 0);
         m_whiteBalanceMode = std::max(0, m_whiteBalanceMode);
-        d.readDouble(94, &m_exposureCompensation, 0.0);
+        d.readDouble(96, &m_exposureCompensation, 0.0);
         m_exposureCompensation = qBound(-2.0, m_exposureCompensation, 2.0);
-        d.readS32(95, &m_focusMode, 0);
+        d.readS32(97, &m_focusMode, 0);
         m_focusMode = std::max(0, m_focusMode);
-        d.readDouble(96, &m_focusDistance, 1.0);
+        d.readDouble(98, &m_focusDistance, 1.0);
         m_focusDistance = qBound(0.0, m_focusDistance, 1.0);
-        d.readDouble(97, &m_zoomFactor, 1.0);
+        d.readDouble(99, &m_zoomFactor, 1.0);
         m_zoomFactor = std::max(1.0, m_zoomFactor);
 
         return true;
@@ -560,8 +566,14 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("rgbColor")) {
         m_rgbColor = settings.m_rgbColor;
     }
+    if (settingsKeys.contains("cameraProtocol")) {
+        m_cameraProtocol = settings.m_cameraProtocol;
+    }
     if (settingsKeys.contains("cameraId")) {
         m_cameraId = settings.m_cameraId;
+    }
+    if (settingsKeys.contains("cameraDescription")) {
+        m_cameraDescription = settings.m_cameraDescription;
     }
     if (settingsKeys.contains("resolutionWidth")) {
         m_resolutionWidth = std::max(16, settings.m_resolutionWidth);
@@ -851,8 +863,14 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
 {
     std::ostringstream ostr;
 
+    if (settingsKeys.contains("cameraProtocol") || force) {
+        ostr << " m_cameraProtocol: " << m_cameraProtocol.toStdString();
+    }
     if (settingsKeys.contains("cameraId") || force) {
         ostr << " m_cameraId: " << m_cameraId.toStdString();
+    }
+    if (settingsKeys.contains("cameraDescription") || force) {
+        ostr << " m_cameraDescription: " << m_cameraDescription.toStdString();
     }
     if (settingsKeys.contains("resolutionWidth") || force) {
         ostr << " m_resolutionWidth: " << m_resolutionWidth;
@@ -1154,21 +1172,20 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
 
 bool CameraSettings::isAlpacaCamera() const
 {
-    return m_cameraId.startsWith("alpaca:");
+    return m_cameraProtocol == "alpaca";
 }
 
 bool CameraSettings::isQtCamera() const
 {
-    return m_cameraId.startsWith("qt:");
+    return m_cameraProtocol == "qt";
 }
 
 int CameraSettings::cameraIdInt() const
 {
     if (isAlpacaCamera())
     {
-        QString idStr = m_cameraId.split(':')[1];
         bool ok;
-        int id = idStr.toInt(&ok);
+        int id = m_cameraId.toInt(&ok);
         if (ok) {
             return id;
         }
@@ -1178,18 +1195,29 @@ int CameraSettings::cameraIdInt() const
 
 QString CameraSettings::cameraIdString() const
 {
-    if (isQtCamera()) {
-        return m_cameraId.split(':')[1];
-    }
-    return "";
+    return m_cameraId;
 }
 
 QString CameraSettings::cameraDescription() const
 {
-    if (isAlpacaCamera() || isQtCamera()) {
-        return m_cameraId.split(':')[2];
+    return m_cameraDescription;
+}
+
+QString CameraSettings::cameraDisplayName() const
+{
+    if (!m_cameraProtocol.isEmpty() && !m_cameraDescription.isEmpty()) {
+        return QString("%1:%2").arg(m_cameraProtocol, m_cameraDescription);
     }
-    return "";
+
+    if (!m_cameraDescription.isEmpty()) {
+        return m_cameraDescription;
+    }
+
+    if (!m_cameraProtocol.isEmpty()) {
+        return m_cameraProtocol;
+    }
+
+    return m_cameraId;
 }
 
 bool CameraSettings::isIntervalCaptureMode() const

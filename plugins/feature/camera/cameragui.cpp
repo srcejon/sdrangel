@@ -77,6 +77,36 @@
 
 namespace {
 
+enum CameraComboRole
+{
+    CameraProtocolRole = Qt::UserRole,
+    CameraIdRole,
+    CameraDescriptionRole
+};
+
+struct CameraComboEntry
+{
+    QString protocol;
+    QString id;
+    QString description;
+};
+
+CameraComboEntry parseCameraComboEntry(const QString& packed)
+{
+    const int firstColon = packed.indexOf(':');
+    const int secondColon = firstColon >= 0 ? packed.indexOf(':', firstColon + 1) : -1;
+
+    if (firstColon < 0 || secondColon < 0) {
+        return {};
+    }
+
+    return {
+        packed.left(firstColon),
+        packed.mid(firstColon + 1, secondColon - firstColon - 1),
+        packed.mid(secondColon + 1)
+    };
+}
+
 QString resolutionKey(const QSize& size)
 {
     return QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
@@ -204,6 +234,7 @@ bool CameraGUI::deserialize(const QByteArray& data)
 bool CameraGUI::handleMessage(const Message& message)
 {
     const bool wasAlpaca = m_settings.isAlpacaCamera();
+    const QString previousCameraProtocol = m_settings.m_cameraProtocol;
     const QString previousCameraId = m_settings.m_cameraId;
 
     if (Camera::MsgConfigureCamera::match(message))
@@ -216,7 +247,7 @@ bool CameraGUI::handleMessage(const Message& message)
             m_settings.applySettings(cfg.getSettingsKeys(), cfg.getSettings());
         }
 
-        if ((previousCameraId != m_settings.m_cameraId) || (wasAlpaca != m_settings.isAlpacaCamera())) {
+        if ((previousCameraProtocol != m_settings.m_cameraProtocol) || (previousCameraId != m_settings.m_cameraId) || (wasAlpaca != m_settings.isAlpacaCamera())) {
             m_settingsDialog->clearAlpacaStatus();
         }
 
@@ -233,7 +264,7 @@ bool CameraGUI::handleMessage(const Message& message)
     {
         const Camera::MsgStartStop& cfg = (Camera::MsgStartStop&) message;
 
-        if ((previousCameraId != m_settings.m_cameraId) || (wasAlpaca != m_settings.isAlpacaCamera())) {
+        if ((previousCameraProtocol != m_settings.m_cameraProtocol) || (previousCameraId != m_settings.m_cameraId) || (wasAlpaca != m_settings.isAlpacaCamera())) {
             m_settingsDialog->clearAlpacaStatus();
         }
 
@@ -253,32 +284,42 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (CameraWorker::MsgReportCameraList::match(message))
     {
         const CameraWorker::MsgReportCameraList& report = (CameraWorker::MsgReportCameraList&) message;
-        const QString current = ui->cameraCombo->currentText();
-        QString selectedCameraId;
+        CameraComboEntry selectedCamera;
 
         ui->cameraCombo->blockSignals(true);
         ui->cameraCombo->clear();
-        ui->cameraCombo->addItems(report.getCameraIds());
+        for (const QString& packedCamera : report.getCameraIds())
+        {
+            const CameraComboEntry entry = parseCameraComboEntry(packedCamera);
+            const QString displayText = entry.protocol.isEmpty() ? packedCamera : QString("%1:%2").arg(entry.protocol, entry.description);
+            ui->cameraCombo->addItem(displayText);
+            const int itemIndex = ui->cameraCombo->count() - 1;
+            ui->cameraCombo->setItemData(itemIndex, entry.protocol, CameraProtocolRole);
+            ui->cameraCombo->setItemData(itemIndex, entry.id, CameraIdRole);
+            ui->cameraCombo->setItemData(itemIndex, entry.description, CameraDescriptionRole);
+        }
 
-        const int index = ui->cameraCombo->findText(current);
+        int index = findCameraComboIndex(m_settings.m_cameraProtocol, m_settings.m_cameraId, m_settings.m_cameraDescription);
+        if (index < 0 && ui->cameraCombo->count() > 0) {
+            index = 0;
+        }
 
-        if (index >= 0) {
+        if (index >= 0)
+        {
             ui->cameraCombo->setCurrentIndex(index);
-            selectedCameraId = ui->cameraCombo->itemText(index);
-        } else if (!m_settings.m_cameraId.isEmpty()) {
-            ui->cameraCombo->setCurrentText(m_settings.m_cameraId);
-            selectedCameraId = ui->cameraCombo->currentText();
-        } else if (ui->cameraCombo->count() > 0) {
-            ui->cameraCombo->setCurrentIndex(0);
-            selectedCameraId = ui->cameraCombo->itemText(0);
+            selectedCamera.protocol = ui->cameraCombo->itemData(index, CameraProtocolRole).toString();
+            selectedCamera.id = ui->cameraCombo->itemData(index, CameraIdRole).toString();
+            selectedCamera.description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
         }
 
         ui->cameraCombo->blockSignals(false);
 
-        if (m_settings.m_cameraId.isEmpty() && !selectedCameraId.isEmpty())
+        if (m_settings.m_cameraId.isEmpty() && !selectedCamera.id.isEmpty())
         {
-            m_settings.m_cameraId = selectedCameraId;
+            setSelectedCamera(selectedCamera.protocol, selectedCamera.id, selectedCamera.description);
+            m_settingsKeys.append("cameraProtocol");
             m_settingsKeys.append("cameraId");
+            m_settingsKeys.append("cameraDescription");
             updateAlpacaVisibility();
             updateEnabledControls();
             applySettings();
@@ -510,12 +551,39 @@ Ui::CameraSettingsDialog *CameraGUI::settingsUI() const
     return m_settingsDialog->getUI();
 }
 
+void CameraGUI::setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description)
+{
+    m_settings.m_cameraProtocol = protocol;
+    m_settings.m_cameraId = cameraId;
+    m_settings.m_cameraDescription = description;
+}
+
+int CameraGUI::findCameraComboIndex(const QString& protocol, const QString& cameraId, const QString& description) const
+{
+    for (int i = 0; i < ui->cameraCombo->count(); ++i)
+    {
+        if (ui->cameraCombo->itemData(i, CameraProtocolRole).toString() == protocol
+            && ui->cameraCombo->itemData(i, CameraIdRole).toString() == cameraId
+            && ui->cameraCombo->itemData(i, CameraDescriptionRole).toString() == description)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
 void CameraGUI::displaySettings()
 {
     setWindowTitle(m_settings.m_title);
     setTitle(m_settings.m_title);
 
-    ui->cameraCombo->setCurrentText(m_settings.m_cameraId);
+    const int cameraIndex = findCameraComboIndex(m_settings.m_cameraProtocol, m_settings.m_cameraId, m_settings.m_cameraDescription);
+    if (cameraIndex >= 0) {
+        ui->cameraCombo->setCurrentIndex(cameraIndex);
+    } else if (!m_settings.cameraDisplayName().isEmpty()) {
+        ui->cameraCombo->setCurrentText(m_settings.cameraDisplayName());
+    }
 
     const QString resText = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
     const int resIdx = settingsUI()->resolutionCombo->findText(resText);
@@ -736,7 +804,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->cameraSettingsButton, &QToolButton::clicked, this, &CameraGUI::on_cameraSettingsButton_clicked);
     QObject::connect(ui->startStop, &QPushButton::clicked, this, &CameraGUI::on_startStop_clicked);
     QObject::connect(ui->refreshCamerasButton, &QPushButton::clicked, this, &CameraGUI::on_refreshCamerasButton_clicked);
-    QObject::connect(ui->cameraCombo, &QComboBox::currentTextChanged, this, &CameraGUI::on_cameraCombo_currentTextChanged);
+    QObject::connect(ui->cameraCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cameraCombo_currentIndexChanged);
     QObject::connect(settingsUI()->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fpsLabel, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsLabel_currentIndexChanged);
     QObject::connect(settingsUI()->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
@@ -1260,10 +1328,12 @@ void CameraGUI::setupQtCapture()
     }
 
     QCameraDevice selectedDevice = cameras.front();
+    const QString targetId = m_settings.cameraIdString();
+    const QString targetDescription = m_settings.cameraDescription();
     for (const QCameraDevice& device : cameras)
     {
         const QString id = QString::fromUtf8(device.id());
-        if ((id == m_settings.m_cameraId) || (device.description() == m_settings.m_cameraId)) {
+        if ((id == targetId) || (device.description() == targetDescription)) {
             selectedDevice = device;
             break;
         }
@@ -1419,10 +1489,12 @@ void CameraGUI::setupQtCapture()
     }
 
     QCameraInfo selectedInfo = cameras.front();
+    const QString targetId = m_settings.cameraIdString();
+    const QString targetDescription = m_settings.cameraDescription();
     for (const QCameraInfo& info : cameras)
     {
         const QString id = info.deviceName();
-        if ((id == m_settings.m_cameraId) || (info.description() == m_settings.m_cameraId))
+        if ((id == targetId) || (info.description() == targetDescription))
         {
             selectedInfo = info;
             break;
@@ -1915,10 +1987,18 @@ void CameraGUI::on_refreshCamerasButton_clicked()
     m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
 }
 
-void CameraGUI::on_cameraCombo_currentTextChanged(const QString& text)
+void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
 {
+    if (index < 0) {
+        return;
+    }
+
     const bool wasAlpaca = m_settings.isAlpacaCamera();
-    m_settings.m_cameraId = text;
+    setSelectedCamera(
+        ui->cameraCombo->itemData(index, CameraProtocolRole).toString(),
+        ui->cameraCombo->itemData(index, CameraIdRole).toString(),
+        ui->cameraCombo->itemData(index, CameraDescriptionRole).toString());
+
     if (wasAlpaca != m_settings.isAlpacaCamera()) {
         m_settingsDialog->clearAlpacaStatus();
     }
@@ -1932,7 +2012,9 @@ void CameraGUI::on_cameraCombo_currentTextChanged(const QString& text)
             settingsUI()->fpsLabel->setCurrentIndex(intervalIndex);
         }
     }
+    m_settingsKeys.append("cameraProtocol");
     m_settingsKeys.append("cameraId");
+    m_settingsKeys.append("cameraDescription");
     updateAlpacaVisibility();
     updateEnabledControls();
     applySettings();

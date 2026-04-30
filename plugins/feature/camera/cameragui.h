@@ -188,6 +188,8 @@ private:
     void updateActionControls();
     void applyActionSettings();
     void updatePostProcessWhiteBalanceControls();
+    void setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description);
+    int findCameraComboIndex(const QString& protocol, const QString& cameraId, const QString& description) const;
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
@@ -196,7 +198,7 @@ private slots:
     void handleInputMessages();
     void on_startStop_clicked(bool checked);
     void on_refreshCamerasButton_clicked();
-    void on_cameraCombo_currentTextChanged(const QString& text);
+    void on_cameraCombo_currentIndexChanged(int index);
     void on_resolutionCombo_currentIndexChanged(int index);
     void on_fpsLabel_currentIndexChanged(int index);
     void on_fpsSpin_valueChanged(int value);

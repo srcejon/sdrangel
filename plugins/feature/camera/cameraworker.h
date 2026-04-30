@@ -313,6 +313,8 @@ private:
     int m_alpacaSensorType;          // 0=Mono, 1=Colour, 2=RGGB, 3=CMYG, 4=CMYG2, 5=LRGB
     int m_alpacaCameraSizeX;
     int m_alpacaCameraSizeY;
+    int m_alpacaBayerOffsetX;
+    int m_alpacaBayerOffsetY;
     bool m_alpacaImageBytesSupported; // true = try ImageBytes binary protocol; false = use JSON
     bool m_alpacaConnected;
     bool m_alpacaConnectionPending;

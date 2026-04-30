@@ -271,6 +271,8 @@ CameraWorker::CameraWorker() :
     m_alpacaSensorType(0),
     m_alpacaCameraSizeX(0),
     m_alpacaCameraSizeY(0),
+    m_alpacaBayerOffsetX(0),
+    m_alpacaBayerOffsetY(0),
     m_alpacaImageBytesSupported(true),
     m_alpacaConnected(false),
     m_alpacaConnectionPending(false),
@@ -1194,6 +1196,8 @@ void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuat
         QStringList readoutModes;
         QString sensorName;
         int sensorType = 0;
+        int bayerOffsetX = 0;
+        int bayerOffsetY = 0;
         double pixelSizeX = 0.0;
         double pixelSizeY = 0.0;
         int cameraSizeX = 0;
@@ -1213,7 +1217,7 @@ void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuat
         "name", "description",
         "maxbinx", "maxbiny", "gains", "gainmin", "gainmax",
         "offsets", "offsetmin", "offsetmax",
-        "readoutmodes", "sensorname", "sensortype",
+        "readoutmodes", "sensorname", "sensortype", "bayeroffsetx", "bayeroffsety",
         "pixelsizex", "pixelsizey", "cameraxsize", "cameraysize",
         "ccdtemperature", "exposuremin", "exposuremax", "exposureresolution"
     };
@@ -1229,6 +1233,8 @@ void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuat
         m_alpacaSensorType = info->sensorType;
         m_alpacaCameraSizeX = std::max(0, info->cameraSizeX);
         m_alpacaCameraSizeY = std::max(0, info->cameraSizeY);
+        m_alpacaBayerOffsetX = info->bayerOffsetX;
+        m_alpacaBayerOffsetY = info->bayerOffsetY;
         info->exposureMinMs = std::max(0.001, info->exposureMinMs);
         info->exposureResolutionMs = std::max(0.001, info->exposureResolutionMs);
         info->exposureMaxMs = std::max(info->exposureMinMs, info->exposureMaxMs);
@@ -1310,6 +1316,10 @@ void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuat
                             info->sensorName = val.toString();
                         } else if (prop == "sensortype") {
                             info->sensorType = val.toInt(0);
+                        } else if (prop == "bayeroffsetx") {
+                            info->bayerOffsetX = val.toInt(0);
+                        } else if (prop == "bayeroffsety") {
+                            info->bayerOffsetY = val.toInt(0);
                         } else if (prop == "pixelsizex") {
                             info->pixelSizeX = val.toDouble(0.0);
                         } else if (prop == "pixelsizey") {
@@ -1613,7 +1623,7 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
 QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const
 {
     // Bayer demosaicing for sensorType 2 (RGGB).
-    // RGGB pattern (bayerOffsetX/Y assumed 0):
+    // RGGB pattern shifted by BayerOffsetX/Y:
     //   (even x, even y) = R
     //   (odd  x, even y) = G1
     //   (even x, odd  y) = G2
@@ -1627,21 +1637,26 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
         auto safe  = [&raw, width, height](int x, int y) -> int {
             return raw[qBound(0, x, width-1)][qBound(0, y, height-1)];
         };
+        const int phaseX = ((m_alpacaBayerOffsetX % 2) + 2) % 2;
+        const int phaseY = ((m_alpacaBayerOffsetY % 2) + 2) % 2;
 
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
                 int r, g, b;
-                if ((x % 2 == 0) && (y % 2 == 0)) {
+                const int shiftedX = (x + phaseX) % 2;
+                const int shiftedY = (y + phaseY) % 2;
+
+                if ((shiftedX == 0) && (shiftedY == 0)) {
                     // R site
                     r = raw[x][y];
                     g = clamp((safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4);
                     b = clamp((safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4);
-                } else if ((x % 2 == 1) && (y % 2 == 0)) {
+                } else if ((shiftedX == 1) && (shiftedY == 0)) {
                     // G1 site (R row)
                     r = clamp((safe(x-1,y) + safe(x+1,y)) / 2);
                     g = raw[x][y];
                     b = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
-                } else if ((x % 2 == 0) && (y % 2 == 1)) {
+                } else if ((shiftedX == 0) && (shiftedY == 1)) {
                     // G2 site (B row)
                     r = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
                     g = raw[x][y];

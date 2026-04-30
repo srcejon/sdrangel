@@ -335,11 +335,11 @@
          <string>Overlay spectrum</string>
         </property>
         <property name="text">
-         <string>Spec</string>
+         <string/>
         </property>
         <property name="icon">
-         <iconset resource="../../../sdrgui/resources/res.qrc">
-          <normaloff>:/carrier.png</normaloff>:/carrier.png</iconset>
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/spectrum.png</normaloff>:/camera/icons/spectrum.png</iconset>
         </property>
        </widget>
       </item>

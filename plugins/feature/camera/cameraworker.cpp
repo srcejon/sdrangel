@@ -251,6 +251,7 @@ int findQtCameraAudioInputIndex(const CameraSettings& settings)
 } // namespace
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaDeviceList, Message)
@@ -359,8 +360,6 @@ void CameraWorker::startWork()
         m_msgQueueToGUI->push(MsgReportAvailableDevices::create(longIds));
     }
 
-    startCapture();
-
     // Handle any messages already on the queue
     handleInputMessages();
 }
@@ -468,6 +467,18 @@ bool CameraWorker::handleMessage(const Message& cmd)
         QMutexLocker locker(&m_mutex);
         MsgConfigureCameraWorker& cfg = (MsgConfigureCameraWorker&) cmd;
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
+        return true;
+    }
+    else if (MsgStartStop::match(cmd))
+    {
+        MsgStartStop& cfg = (MsgStartStop&) cmd;
+
+        if (cfg.getStartStop()) {
+            startCapture();
+        } else {
+            stopCapture();
+        }
+
         return true;
     }
     else if (MainCore::MsgImage::match(cmd))
@@ -976,9 +987,28 @@ void CameraWorker::alpacaQueryFilterWheelInfo()
                 if (doc.isObject()) {
                     const QJsonObject root = doc.object();
                     if (root.value("ErrorNumber").toInt(0) == 0) {
-                        const QJsonArray values = root.value("Value").toArray();
-                        for (const QJsonValue& value : values) {
-                            info->names.append(value.toString());
+                        const QJsonValue namesValue = root.contains(QStringLiteral("Value"))
+                            ? root.value(QStringLiteral("Value"))
+                            : root.value(QStringLiteral("value"));
+
+                        if (namesValue.isArray())
+                        {
+                            const QJsonArray values = namesValue.toArray();
+
+                            for (const QJsonValue& value : values)
+                            {
+                                if (value.isString()) {
+                                    info->names.append(value.toString());
+                                } else if (value.isObject()) {
+                                    const QJsonObject obj = value.toObject();
+                                    info->names.append(obj.value(QStringLiteral("Name")).toString(
+                                        obj.value(QStringLiteral("name")).toString()));
+                                }
+                            }
+                        }
+                        else if (namesValue.isString())
+                        {
+                            info->names.append(namesValue.toString());
                         }
                     }
                 }
@@ -996,7 +1026,10 @@ void CameraWorker::alpacaQueryFilterWheelInfo()
                 if (doc.isObject()) {
                     const QJsonObject root = doc.object();
                     if (root.value("ErrorNumber").toInt(0) == 0) {
-                        info->position = std::max(0, root.value("Value").toInt(0));
+                        const QJsonValue positionValue = root.contains(QStringLiteral("Value"))
+                            ? root.value(QStringLiteral("Value"))
+                            : root.value(QStringLiteral("value"));
+                        info->position = std::max(0, positionValue.toInt(0));
                     }
                 }
             }

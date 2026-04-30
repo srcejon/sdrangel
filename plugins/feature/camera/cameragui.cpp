@@ -426,10 +426,56 @@ bool CameraGUI::handleMessage(const Message& message)
     }
     else if (CameraWorker::MsgReportAlpacaDeviceList::match(message))
     {
+        QList<QString> settingsKeys;
+        const QString previousFocuserHost = m_settings.m_alpacaFocuserHost;
+        const quint16 previousFocuserPort = m_settings.m_alpacaFocuserPort;
+        const int previousFocuserDeviceNumber = m_settings.m_alpacaFocuserDeviceNumber;
+        const QString previousFilterWheelHost = m_settings.m_alpacaFilterWheelHost;
+        const quint16 previousFilterWheelPort = m_settings.m_alpacaFilterWheelPort;
+        const int previousFilterWheelDeviceNumber = m_settings.m_alpacaFilterWheelDeviceNumber;
         const CameraWorker::MsgReportAlpacaDeviceList& report = (CameraWorker::MsgReportAlpacaDeviceList&) message;
         m_discoveredAlpacaFocusers = report.getFocuserIds();
         m_discoveredAlpacaFilterWheels = report.getFilterWheelIds();
         populateAlpacaAccessoryCombos();
+
+        {
+            QSignalBlocker blocker1(settingsUI()->alpacaFocuserHostEdit);
+            QSignalBlocker blocker2(settingsUI()->alpacaFocuserPortSpin);
+            QSignalBlocker blocker3(settingsUI()->alpacaFocuserDeviceNumberSpin);
+            QSignalBlocker blocker4(settingsUI()->alpacaFilterWheelHostEdit);
+            QSignalBlocker blocker5(settingsUI()->alpacaFilterWheelPortSpin);
+            QSignalBlocker blocker6(settingsUI()->alpacaFilterWheelDeviceNumberSpin);
+            settingsUI()->alpacaFocuserHostEdit->setText(m_settings.m_alpacaFocuserHost);
+            settingsUI()->alpacaFocuserPortSpin->setValue(m_settings.m_alpacaFocuserPort);
+            settingsUI()->alpacaFocuserDeviceNumberSpin->setValue(m_settings.m_alpacaFocuserDeviceNumber);
+            settingsUI()->alpacaFilterWheelHostEdit->setText(m_settings.m_alpacaFilterWheelHost);
+            settingsUI()->alpacaFilterWheelPortSpin->setValue(m_settings.m_alpacaFilterWheelPort);
+            settingsUI()->alpacaFilterWheelDeviceNumberSpin->setValue(m_settings.m_alpacaFilterWheelDeviceNumber);
+        }
+
+        if ((previousFocuserHost != m_settings.m_alpacaFocuserHost)
+            || (previousFocuserPort != m_settings.m_alpacaFocuserPort)
+            || (previousFocuserDeviceNumber != m_settings.m_alpacaFocuserDeviceNumber))
+        {
+            settingsKeys.append("alpacaFocuserHost");
+            settingsKeys.append("alpacaFocuserPort");
+            settingsKeys.append("alpacaFocuserDeviceNumber");
+        }
+
+        if ((previousFilterWheelHost != m_settings.m_alpacaFilterWheelHost)
+            || (previousFilterWheelPort != m_settings.m_alpacaFilterWheelPort)
+            || (previousFilterWheelDeviceNumber != m_settings.m_alpacaFilterWheelDeviceNumber))
+        {
+            settingsKeys.append("alpacaFilterWheelHost");
+            settingsKeys.append("alpacaFilterWheelPort");
+            settingsKeys.append("alpacaFilterWheelDeviceNumber");
+        }
+
+        if (!settingsKeys.isEmpty()) {
+            m_settingsKeys.append(settingsKeys);
+            applySettings();
+        }
+
         return true;
     }
     else if (CameraPostProcessor::MsgReportFrame::match(message))
@@ -959,7 +1005,7 @@ void CameraGUI::populateAlpacaAccessoryCombos()
                             const QStringList& packedEntries,
                             const QString& currentHost,
                             quint16 currentPort,
-                            int currentDeviceNumber)
+                            int currentDeviceNumber) -> bool
     {
         QList<AlpacaAccessoryEntry> entries;
         QHash<QString, int> displayCounts;
@@ -976,6 +1022,7 @@ void CameraGUI::populateAlpacaAccessoryCombos()
         combo->clear();
 
         int selectedIndex = -1;
+        bool foundSelection = false;
 
         for (const AlpacaAccessoryEntry& entry : entries)
         {
@@ -1001,25 +1048,46 @@ void CameraGUI::populateAlpacaAccessoryCombos()
 
             if ((entry.alpacaHost == currentHost) && (entry.alpacaPort == currentPort) && (safeDeviceNumber == currentDeviceNumber)) {
                 selectedIndex = itemIndex;
+                foundSelection = true;
             }
         }
 
         if (selectedIndex >= 0) {
             combo->setCurrentIndex(selectedIndex);
+        } else if (combo->count() > 0) {
+            combo->setCurrentIndex(0);
         }
+
+        return foundSelection;
     };
 
-    populateCombo(settingsUI()->alpacaFocuserCombo,
+    const bool focuserSelectionFound = populateCombo(settingsUI()->alpacaFocuserCombo,
         m_discoveredAlpacaFocusers,
         m_settings.m_alpacaFocuserHost,
         m_settings.m_alpacaFocuserPort,
         m_settings.m_alpacaFocuserDeviceNumber);
 
-    populateCombo(settingsUI()->alpacaFilterWheelCombo,
+    if (!focuserSelectionFound && (settingsUI()->alpacaFocuserCombo->count() > 0))
+    {
+        const int index = settingsUI()->alpacaFocuserCombo->currentIndex();
+        m_settings.m_alpacaFocuserHost = settingsUI()->alpacaFocuserCombo->itemData(index, AccessoryAlpacaHostRole).toString();
+        m_settings.m_alpacaFocuserPort = static_cast<uint16_t>(settingsUI()->alpacaFocuserCombo->itemData(index, AccessoryAlpacaPortRole).toUInt());
+        m_settings.m_alpacaFocuserDeviceNumber = settingsUI()->alpacaFocuserCombo->itemData(index, AccessoryDeviceNumberRole).toInt();
+    }
+
+    const bool filterWheelSelectionFound = populateCombo(settingsUI()->alpacaFilterWheelCombo,
         m_discoveredAlpacaFilterWheels,
         m_settings.m_alpacaFilterWheelHost,
         m_settings.m_alpacaFilterWheelPort,
         m_settings.m_alpacaFilterWheelDeviceNumber);
+
+    if (!filterWheelSelectionFound && (settingsUI()->alpacaFilterWheelCombo->count() > 0))
+    {
+        const int index = settingsUI()->alpacaFilterWheelCombo->currentIndex();
+        m_settings.m_alpacaFilterWheelHost = settingsUI()->alpacaFilterWheelCombo->itemData(index, AccessoryAlpacaHostRole).toString();
+        m_settings.m_alpacaFilterWheelPort = static_cast<uint16_t>(settingsUI()->alpacaFilterWheelCombo->itemData(index, AccessoryAlpacaPortRole).toUInt());
+        m_settings.m_alpacaFilterWheelDeviceNumber = settingsUI()->alpacaFilterWheelCombo->itemData(index, AccessoryDeviceNumberRole).toInt();
+    }
 }
 
 void CameraGUI::updateImageWidget()

@@ -314,7 +314,6 @@ CameraWorker::CameraWorker() :
 
 CameraWorker::~CameraWorker()
 {
-    delete m_networkManager;
     stopWork();
     m_inputMessageQueue.clear();
     QObject::disconnect(
@@ -327,6 +326,8 @@ CameraWorker::~CameraWorker()
         &AvailableDeviceHandler::devicesChanged,
         this,
         &CameraWorker::onAvailableDevicesChanged);
+    delete m_networkManager;
+    m_networkManager = nullptr;
 }
 
 void CameraWorker::startWork()

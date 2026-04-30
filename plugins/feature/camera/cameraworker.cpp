@@ -374,6 +374,12 @@ void CameraWorker::stopWork()
     QObject::disconnect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
     QObject::disconnect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
     stopCapture();
+
+    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaConnected)
+    {
+        alpacaSetConnected(false);
+    }
+
     m_statusTimer.stop();
 }
 
@@ -606,11 +612,6 @@ void CameraWorker::stopCapture()
     m_capturing = false;
     m_captureTimer.stop();
     m_alpacaCaptureTimer.invalidate();
-
-    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaConnected)
-    {
-        alpacaSetConnected(false);
-    }
 
     if (m_capturingAudio)
     {

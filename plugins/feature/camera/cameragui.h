@@ -109,6 +109,8 @@ private:
     QList<QString> m_settingsKeys;
     RollupState m_rollupState;
     bool m_doApplySettings;
+    bool m_forceSettings;
+    QTimer m_updateTimer;
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
@@ -313,6 +315,7 @@ private slots:
     void on_zoomSpin_valueChanged(double value);
     void on_cameraSettingsButton_clicked();
     void updateStatus();
+    void updateHardware();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void onQtVideoFrame(const QVideoFrame& frame);

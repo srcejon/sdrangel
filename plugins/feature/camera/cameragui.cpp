@@ -427,6 +427,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_pluginAPI(pluginAPI),
     m_featureUISet(featureUISet),
     m_doApplySettings(true),
+    m_forceSettings(false),
+    m_updateTimer(this),
     m_lastFeatureState(0),
     m_progressDialog(nullptr),
     m_settingsDialog(nullptr),
@@ -525,6 +527,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     settingsUI()->exposureUnitsCombo->addItem(tr("min"), 60000.0);
     settingsUI()->exposureUnitsCombo->setCurrentIndex(1);
     m_statusTimer.start(250);
+
+    connect(&m_updateTimer, &QTimer::timeout, this, &CameraGUI::updateHardware);
 
     displaySettings();
     applySettings(true);
@@ -742,12 +746,14 @@ void CameraGUI::applySettings(bool force)
         return;
     }
 
-    Camera::MsgConfigureCamera *msg = Camera::MsgConfigureCamera::create(m_settings, m_settingsKeys, force);
-    m_camera->getInputMessageQueue()->push(msg);
+    if (force) {
+        m_forceSettings = true;
+    }
 
-    applyQtCameraSettings(m_settingsKeys, force);
-
-    m_settingsKeys.clear();
+    // Combine updates to avoid applying settings in h/w multiple times when multiple values are changed at once, as that can be slow
+    if (!m_updateTimer.isActive()) {
+        m_updateTimer.start(100);
+    }
 }
 
 void CameraGUI::updateImageWidget()
@@ -3229,5 +3235,20 @@ void CameraGUI::updateStatus()
         }
 
         m_lastFeatureState = state;
+    }
+}
+
+void CameraGUI::updateHardware()
+{
+    if (m_doApplySettings)
+    {
+        Camera::MsgConfigureCamera *msg = Camera::MsgConfigureCamera::create(m_settings, m_settingsKeys, m_forceSettings);
+        m_camera->getInputMessageQueue()->push(msg);
+
+        applyQtCameraSettings(m_settingsKeys, m_forceSettings);
+
+        m_forceSettings = false;
+        m_settingsKeys.clear();
+        m_updateTimer.stop();
     }
 }

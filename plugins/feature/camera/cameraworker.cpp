@@ -277,6 +277,8 @@ CameraWorker::CameraWorker() :
     m_lastAlpacaBinY(0),
     m_lastAlpacaNumX(0),
     m_lastAlpacaNumY(0),
+    m_lastAlpacaEffectiveNumX(-1),
+    m_lastAlpacaEffectiveNumY(-1),
     m_lastAlpacaStartX(0),
     m_lastAlpacaStartY(0),
     m_lastAlpacaGain(-1),
@@ -538,6 +540,8 @@ void CameraWorker::startCapture()
     m_lastAlpacaBinY = m_settings.m_alpacaBinY;
     m_lastAlpacaNumX = m_settings.m_alpacaNumX;
     m_lastAlpacaNumY = m_settings.m_alpacaNumY;
+    m_lastAlpacaEffectiveNumX = -1;
+    m_lastAlpacaEffectiveNumY = -1;
     m_lastAlpacaStartX = m_settings.m_alpacaStartX;
     m_lastAlpacaStartY = m_settings.m_alpacaStartY;
     m_lastAlpacaGain = m_settings.m_alpacaGain;
@@ -650,20 +654,22 @@ void CameraWorker::alpacaSetCameraParams()
     const bool forceAllParams = !m_alpacaParamsInitialized;
     const int maxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_settings.m_alpacaBinX));
     const int maxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_settings.m_alpacaBinY));
-    const int effectiveNumX = (m_settings.m_alpacaNumX > 0) ? m_settings.m_alpacaNumX
-        : std::max(1, maxSubframeX - std::max(0, m_settings.m_alpacaStartX));
-    const int effectiveNumY = (m_settings.m_alpacaNumY > 0) ? m_settings.m_alpacaNumY
-        : std::max(1, maxSubframeY - std::max(0, m_settings.m_alpacaStartY));
-    const int lastMaxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_lastAlpacaBinX));
-    const int lastMaxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_lastAlpacaBinY));
-    const int lastEffectiveNumX = (m_lastAlpacaNumX > 0) ? m_lastAlpacaNumX
-        : std::max(1, lastMaxSubframeX - std::max(0, m_lastAlpacaStartX));
-    const int lastEffectiveNumY = (m_lastAlpacaNumY > 0) ? m_lastAlpacaNumY
-        : std::max(1, lastMaxSubframeY - std::max(0, m_lastAlpacaStartY));
+    const bool fullFrameNumXRequested = (m_settings.m_alpacaNumX == 0);
+    const bool fullFrameNumYRequested = (m_settings.m_alpacaNumY == 0);
+    const bool canResolveNumX = !fullFrameNumXRequested || (m_alpacaCameraSizeX > 0);
+    const bool canResolveNumY = !fullFrameNumYRequested || (m_alpacaCameraSizeY > 0);
+    const int effectiveNumX = fullFrameNumXRequested
+        ? std::max(1, maxSubframeX - std::max(0, m_settings.m_alpacaStartX))
+        : m_settings.m_alpacaNumX;
+    const int effectiveNumY = fullFrameNumYRequested
+        ? std::max(1, maxSubframeY - std::max(0, m_settings.m_alpacaStartY))
+        : m_settings.m_alpacaNumY;
     const bool setBinX = forceAllParams || (m_lastAlpacaBinX != m_settings.m_alpacaBinX);
     const bool setBinY = forceAllParams || (m_lastAlpacaBinY != m_settings.m_alpacaBinY);
-    const bool setNumX = forceAllParams || (lastEffectiveNumX != effectiveNumX);
-    const bool setNumY = forceAllParams || (lastEffectiveNumY != effectiveNumY);
+    const bool setNumX = canResolveNumX
+        && (forceAllParams || (m_lastAlpacaEffectiveNumX != effectiveNumX));
+    const bool setNumY = canResolveNumY
+        && (forceAllParams || (m_lastAlpacaEffectiveNumY != effectiveNumY));
     const bool setStartX = forceAllParams || (m_lastAlpacaStartX != m_settings.m_alpacaStartX);
     const bool setStartY = forceAllParams || (m_lastAlpacaStartY != m_settings.m_alpacaStartY);
     const bool setGain = (m_settings.m_alpacaGain >= 0)
@@ -733,7 +739,10 @@ void CameraWorker::alpacaSetCameraParams()
             if (setNumY) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
                     effectiveNumY, m_alpacaClientId, m_alpacaClientTransactionId, doGain,
-                    [this]() { m_lastAlpacaNumY = m_settings.m_alpacaNumY; });
+                    [this, effectiveNumY]() {
+                        m_lastAlpacaNumY = m_settings.m_alpacaNumY;
+                        m_lastAlpacaEffectiveNumY = effectiveNumY;
+                    });
             } else {
                 doGain();
             }
@@ -749,7 +758,10 @@ void CameraWorker::alpacaSetCameraParams()
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
                 effectiveNumY, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetStartYAfterNum,
-                [this]() { m_lastAlpacaNumY = m_settings.m_alpacaNumY; });
+                [this, effectiveNumY]() {
+                    m_lastAlpacaNumY = m_settings.m_alpacaNumY;
+                    m_lastAlpacaEffectiveNumY = effectiveNumY;
+                });
         }
         else
         {
@@ -776,7 +788,10 @@ void CameraWorker::alpacaSetCameraParams()
             if (setNumX) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
                     effectiveNumX, m_alpacaClientId, m_alpacaClientTransactionId, doAxisY,
-                    [this]() { m_lastAlpacaNumX = m_settings.m_alpacaNumX; });
+                    [this, effectiveNumX]() {
+                        m_lastAlpacaNumX = m_settings.m_alpacaNumX;
+                        m_lastAlpacaEffectiveNumX = effectiveNumX;
+                    });
             } else {
                 doAxisY();
             }
@@ -792,7 +807,10 @@ void CameraWorker::alpacaSetCameraParams()
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
                 effectiveNumX, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetStartXAfterNum,
-                [this]() { m_lastAlpacaNumX = m_settings.m_alpacaNumX; });
+                [this, effectiveNumX]() {
+                    m_lastAlpacaNumX = m_settings.m_alpacaNumX;
+                    m_lastAlpacaEffectiveNumX = effectiveNumX;
+                });
         }
         else
         {

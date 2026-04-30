@@ -309,6 +309,8 @@ private:
     int m_lastAlpacaBinY;
     int m_lastAlpacaNumX;
     int m_lastAlpacaNumY;
+    int m_lastAlpacaEffectiveNumX;
+    int m_lastAlpacaEffectiveNumY;
     int m_lastAlpacaStartX;
     int m_lastAlpacaStartY;
     int m_lastAlpacaGain;

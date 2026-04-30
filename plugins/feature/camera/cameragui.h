@@ -176,6 +176,7 @@ private:
     void updateEnabledControls();
     void updateCaptureModeControls();
     void updateExposureControls();
+    void probeQtCameraCapabilities();
     void reportResolutions();
     void populateQtFormatControls(const QList<QSize>& resolutions, const QHash<QString, FrameRateOptions>& frameRateOptionsByResolution);
     void updateFrameRateControlForResolution(const QString& resolutionText);

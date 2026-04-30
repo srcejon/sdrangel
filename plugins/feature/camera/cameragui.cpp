@@ -1465,6 +1465,151 @@ void CameraGUI::updateExposureControls()
     }
 }
 
+void CameraGUI::probeQtCameraCapabilities()
+{
+    if (!m_settings.isQtCamera()) {
+        return;
+    }
+
+    reportResolutions();
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
+    if (cameras.isEmpty()) {
+        return;
+    }
+
+    QCameraDevice selectedDevice = cameras.front();
+    const QString targetId = m_settings.cameraIdString();
+    const QString targetDescription = m_settings.cameraDescription();
+
+    for (const QCameraDevice& device : cameras)
+    {
+        const QString id = QString::fromUtf8(device.id());
+        if ((id == targetId) || (device.description() == targetDescription)) {
+            selectedDevice = device;
+            break;
+        }
+    }
+
+    QCamera probeCamera(selectedDevice);
+    const QCamera::Features cameraFeatures = probeCamera.supportedFeatures();
+    m_qtManualExposureSupported = cameraFeatures.testFlag(QCamera::Feature::ManualExposureTime);
+    m_qtIsoSensitivitySupported = cameraFeatures.testFlag(QCamera::Feature::IsoSensitivity);
+    m_qtWhiteBalanceModeSupported = cameraFeatures.testFlag(QCamera::Feature::ColorTemperature);
+    m_qtExposureCompensationSupported = cameraFeatures.testFlag(QCamera::Feature::ExposureCompensation);
+
+    const float minZoom = probeCamera.minimumZoomFactor();
+    const float maxZoom = probeCamera.maximumZoomFactor();
+    m_qtZoomSupported = (maxZoom > minZoom + 0.01f);
+
+    blockApplySettings(true);
+    settingsUI()->zoomSpin->setMinimum(minZoom);
+    settingsUI()->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
+    settingsUI()->zoomSpin->setEnabled(m_qtZoomSupported);
+    settingsUI()->zoomLabel->setEnabled(m_qtZoomSupported);
+    settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->exposureSlider->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->exposureUnitsCombo->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
+    settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
+    settingsUI()->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
+    settingsUI()->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
+    settingsUI()->exposureCompLabel->setEnabled(m_qtExposureCompensationSupported);
+    settingsUI()->exposureCompSpin->setEnabled(m_qtExposureCompensationSupported);
+
+    static const QList<int> kFocusModes = {
+        static_cast<int>(QCamera::FocusModeAuto),
+        static_cast<int>(QCamera::FocusModeAutoNear),
+        static_cast<int>(QCamera::FocusModeAutoFar),
+        static_cast<int>(QCamera::FocusModeHyperfocal),
+        static_cast<int>(QCamera::FocusModeInfinity),
+        static_cast<int>(QCamera::FocusModeManual),
+    };
+    QList<int> supportedModes;
+    for (int mode : kFocusModes) {
+        if ((mode == static_cast<int>(QCamera::FocusModeManual))
+            && !cameraFeatures.testFlag(QCamera::Feature::FocusDistance))
+        {
+            continue;
+        }
+
+        if (probeCamera.isFocusModeSupported(static_cast<QCamera::FocusMode>(mode))) {
+            supportedModes.append(mode);
+        }
+    }
+
+    for (int i = 0; i < settingsUI()->focusModeCombo->count(); ++i)
+    {
+        const int modeVal = settingsUI()->focusModeCombo->itemData(i).toInt();
+        const QStandardItemModel *model = qobject_cast<QStandardItemModel*>(settingsUI()->focusModeCombo->model());
+        if (model) {
+            QStandardItem *item = model->item(i);
+            if (item) {
+                item->setEnabled(supportedModes.contains(modeVal));
+            }
+        }
+    }
+    if (!supportedModes.isEmpty() && !supportedModes.contains(m_settings.m_focusMode))
+    {
+        m_settings.m_focusMode = supportedModes.first();
+        const int idx = settingsUI()->focusModeCombo->findData(m_settings.m_focusMode);
+        if (idx >= 0) {
+            settingsUI()->focusModeCombo->setCurrentIndex(idx);
+        }
+    }
+    blockApplySettings(false);
+#else
+    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+    if (cameras.isEmpty()) {
+        return;
+    }
+
+    QCameraInfo selectedInfo = cameras.front();
+    const QString targetId = m_settings.cameraIdString();
+    const QString targetDescription = m_settings.cameraDescription();
+    for (const QCameraInfo& info : cameras)
+    {
+        const QString id = info.deviceName();
+        if ((id == targetId) || (info.description() == targetDescription))
+        {
+            selectedInfo = info;
+            break;
+        }
+    }
+
+    QCamera probeCamera(selectedInfo);
+    QCameraFocus *cameraFocus = probeCamera.focus();
+    const qreal minZoom = 1.0;
+    const qreal maxZoom = cameraFocus ? cameraFocus->maximumOpticalZoom() : 1.0;
+    m_qtZoomSupported = (maxZoom > minZoom + 0.01);
+
+    QCameraExposure *exp = probeCamera.exposure();
+    m_qtManualExposureSupported = (exp != nullptr);
+    m_qtIsoSensitivitySupported = exp && !exp->supportedIsoSensitivities().isEmpty();
+
+    QCameraImageProcessing *ip = probeCamera.imageProcessing();
+    m_qtWhiteBalanceModeSupported =
+        ip && ip->isWhiteBalanceModeSupported(QCameraImageProcessing::WhiteBalanceAuto);
+
+    blockApplySettings(true);
+    settingsUI()->zoomSpin->setMinimum(minZoom);
+    settingsUI()->zoomSpin->setMaximum(maxZoom > minZoom ? maxZoom : minZoom);
+    settingsUI()->zoomSpin->setEnabled(m_qtZoomSupported);
+    settingsUI()->zoomLabel->setEnabled(m_qtZoomSupported);
+    settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->exposureSlider->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->exposureUnitsCombo->setEnabled(m_qtManualExposureSupported);
+    settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
+    settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
+    settingsUI()->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
+    settingsUI()->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
+    blockApplySettings(false);
+#endif
+}
+
 QStringList CameraGUI::loadActionObjectClasses() const
 {
     QStringList classes;
@@ -2374,6 +2519,10 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
             QSignalBlocker blocker(settingsUI()->fpsLabel);
             settingsUI()->fpsLabel->setCurrentIndex(intervalIndex);
         }
+    }
+    else if (!m_settings.isAlpacaCamera() && !ui->startStop->isChecked())
+    {
+        probeQtCameraCapabilities();
     }
     m_settingsKeys.append("cameraProtocol");
     m_settingsKeys.append("cameraId");

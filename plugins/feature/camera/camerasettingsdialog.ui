@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>5</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -1507,6 +1507,12 @@
           </item>
           <item row="0" column="0">
            <widget class="QLabel" name="spectrumDeviceLabel">
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
             <property name="text">
              <string>Device Set</string>
             </property>
@@ -1643,70 +1649,14 @@
           <string>Date / Time Overlay</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_2">
-          <item row="2" column="3">
-           <widget class="QDoubleSpinBox" name="overlayFontScaleSpin">
-            <property name="toolTip">
-             <string>Font point size for date/time overlay</string>
-            </property>
-            <property name="decimals">
-             <number>0</number>
-            </property>
-            <property name="minimum">
-             <double>4.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>144.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>1.000000000000000</double>
-            </property>
-            <property name="value">
-             <double>12.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="4">
-           <widget class="QToolButton" name="dateTimeColorButton">
-            <property name="toolTip">
-             <string>Select date/time text colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="dateTimeFormatLabel">
-            <property name="text">
-             <string>Format</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1" colspan="2">
+          <item row="1" column="1" colspan="2">
            <widget class="QFontComboBox" name="overlayFontCombo">
             <property name="toolTip">
              <string>Select font to use for date and time text</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="1" colspan="2">
-           <widget class="QLineEdit" name="dateTimeFormatEdit">
-            <property name="toolTip">
-             <string>Date/time format string (e.g. yyyy-MM-dd hh:mm:ss)</string>
-            </property>
-            <property name="text">
-             <string>yyyy-MM-dd hh:mm:ss</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="overlayFontLabel">
-            <property name="text">
-             <string>Font</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1" colspan="4">
+          <item row="2" column="1" colspan="4">
            <layout class="QHBoxLayout" name="dateTimePosLayout">
             <item>
              <widget class="QLabel" name="dateTimePosXLabel">
@@ -1801,10 +1751,78 @@
             </item>
            </layout>
           </item>
-          <item row="3" column="0">
+          <item row="1" column="0">
+           <widget class="QLabel" name="overlayFontLabel">
+            <property name="text">
+             <string>Font</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="4">
+           <widget class="QToolButton" name="dateTimeColorButton">
+            <property name="toolTip">
+             <string>Select date/time text colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
            <widget class="QLabel" name="dateTimePosLabel">
             <property name="text">
              <string>Position</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="dateTimeFormatLabel">
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Format</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QDoubleSpinBox" name="overlayFontScaleSpin">
+            <property name="toolTip">
+             <string>Font point size for date/time overlay</string>
+            </property>
+            <property name="decimals">
+             <number>0</number>
+            </property>
+            <property name="minimum">
+             <double>4.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>144.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>12.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1" colspan="4">
+           <widget class="QLineEdit" name="dateTimeFormatEdit">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>1</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="toolTip">
+             <string>Date/time format string (e.g. yyyy-MM-dd hh:mm:ss)</string>
+            </property>
+            <property name="text">
+             <string>yyyy-MM-dd hh:mm:ss</string>
             </property>
            </widget>
           </item>
@@ -1829,6 +1847,12 @@
           </item>
           <item row="0" column="0">
            <widget class="QLabel" name="overlayTextEditLabel">
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
             <property name="text">
              <string>HTML</string>
             </property>
@@ -1967,6 +1991,12 @@
           </item>
           <item row="0" column="1" colspan="5">
            <widget class="QTextEdit" name="overlayTextEdit">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+              <horstretch>1</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
             <property name="minimumSize">
              <size>
               <width>0</width>

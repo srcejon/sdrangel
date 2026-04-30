@@ -75,6 +75,7 @@ struct CameraSettings
     CaptureIntervalUnits m_captureIntervalUnits;
     double m_exposureTimeMs;
     int m_isoSensitivity;
+    bool m_alpacaDiscoveryEnabled;
     QString m_alpacaHost;
     uint16_t m_alpacaPort;
     int m_alpacaBinX;

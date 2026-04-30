@@ -29,6 +29,8 @@
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QGraphicsView>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLineEdit>
 #include <QNetworkReply>
 #include <QPainter>
@@ -81,7 +83,9 @@ enum CameraComboRole
 {
     CameraProtocolRole = Qt::UserRole,
     CameraIdRole,
-    CameraDescriptionRole
+    CameraDescriptionRole,
+    CameraAlpacaHostRole,
+    CameraAlpacaPortRole
 };
 
 struct CameraComboEntry
@@ -89,10 +93,31 @@ struct CameraComboEntry
     QString protocol;
     QString id;
     QString description;
+    QString alpacaHost;
+    quint16 alpacaPort = 0;
 };
 
 CameraComboEntry parseCameraComboEntry(const QString& packed)
 {
+    const QByteArray packedUtf8 = packed.toUtf8();
+
+    if (!packedUtf8.isEmpty() && packedUtf8.startsWith('{'))
+    {
+        const QJsonDocument doc = QJsonDocument::fromJson(packedUtf8);
+
+        if (doc.isObject())
+        {
+            const QJsonObject obj = doc.object();
+            return {
+                obj.value(QStringLiteral("protocol")).toString(),
+                obj.value(QStringLiteral("id")).toString(),
+                obj.value(QStringLiteral("description")).toString(),
+                obj.value(QStringLiteral("host")).toString(),
+                static_cast<quint16>(obj.value(QStringLiteral("port")).toInt(0))
+            };
+        }
+    }
+
     const int firstColon = packed.indexOf(':');
     const int secondColon = firstColon >= 0 ? packed.indexOf(':', firstColon + 1) : -1;
 
@@ -103,7 +128,9 @@ CameraComboEntry parseCameraComboEntry(const QString& packed)
     return {
         packed.left(firstColon),
         packed.mid(firstColon + 1, secondColon - firstColon - 1),
-        packed.mid(secondColon + 1)
+        packed.mid(secondColon + 1),
+        {},
+        0
     };
 }
 
@@ -285,21 +312,45 @@ bool CameraGUI::handleMessage(const Message& message)
     {
         const CameraWorker::MsgReportCameraList& report = (CameraWorker::MsgReportCameraList&) message;
         CameraComboEntry selectedCamera;
+        QList<CameraComboEntry> entries;
+        QHash<QString, int> displayCounts;
 
-        ui->cameraCombo->blockSignals(true);
-        ui->cameraCombo->clear();
         for (const QString& packedCamera : report.getCameraIds())
         {
             const CameraComboEntry entry = parseCameraComboEntry(packedCamera);
-            const QString displayText = entry.protocol.isEmpty() ? packedCamera : QString("%1:%2").arg(entry.protocol, entry.description);
+            entries.append(entry);
+
+            const QString displayKey = entry.protocol.isEmpty()
+                ? packedCamera
+                : QString("%1:%2").arg(entry.protocol, entry.description);
+            displayCounts[displayKey] = displayCounts.value(displayKey) + 1;
+        }
+
+        ui->cameraCombo->blockSignals(true);
+        ui->cameraCombo->clear();
+        for (const CameraComboEntry& entry : entries)
+        {
+            QString displayText = entry.protocol.isEmpty() ? entry.id : QString("%1:%2").arg(entry.protocol, entry.description);
+
+            if (!entry.alpacaHost.isEmpty() && displayCounts.value(displayText) > 1) {
+                displayText = QString("%1 (%2:%3)").arg(displayText, entry.alpacaHost).arg(entry.alpacaPort);
+            }
+
             ui->cameraCombo->addItem(displayText);
             const int itemIndex = ui->cameraCombo->count() - 1;
             ui->cameraCombo->setItemData(itemIndex, entry.protocol, CameraProtocolRole);
             ui->cameraCombo->setItemData(itemIndex, entry.id, CameraIdRole);
             ui->cameraCombo->setItemData(itemIndex, entry.description, CameraDescriptionRole);
+            ui->cameraCombo->setItemData(itemIndex, entry.alpacaHost, CameraAlpacaHostRole);
+            ui->cameraCombo->setItemData(itemIndex, static_cast<int>(entry.alpacaPort), CameraAlpacaPortRole);
         }
 
-        int index = findCameraComboIndex(m_settings.m_cameraProtocol, m_settings.m_cameraId, m_settings.m_cameraDescription);
+        int index = findCameraComboIndex(
+            m_settings.m_cameraProtocol,
+            m_settings.m_cameraId,
+            m_settings.m_cameraDescription,
+            m_settings.m_alpacaHost,
+            m_settings.m_alpacaPort);
         if (index < 0 && ui->cameraCombo->count() > 0) {
             index = 0;
         }
@@ -310,16 +361,23 @@ bool CameraGUI::handleMessage(const Message& message)
             selectedCamera.protocol = ui->cameraCombo->itemData(index, CameraProtocolRole).toString();
             selectedCamera.id = ui->cameraCombo->itemData(index, CameraIdRole).toString();
             selectedCamera.description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
+            selectedCamera.alpacaHost = ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString();
+            selectedCamera.alpacaPort = static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt());
         }
 
         ui->cameraCombo->blockSignals(false);
 
         if (m_settings.m_cameraId.isEmpty() && !selectedCamera.id.isEmpty())
         {
-            setSelectedCamera(selectedCamera.protocol, selectedCamera.id, selectedCamera.description);
+            setSelectedCamera(selectedCamera.protocol, selectedCamera.id, selectedCamera.description,
+                selectedCamera.alpacaHost, selectedCamera.alpacaPort);
             m_settingsKeys.append("cameraProtocol");
             m_settingsKeys.append("cameraId");
             m_settingsKeys.append("cameraDescription");
+            if (!selectedCamera.alpacaHost.isEmpty()) {
+                m_settingsKeys.append("alpacaHost");
+                m_settingsKeys.append("alpacaPort");
+            }
             updateAlpacaVisibility();
             updateEnabledControls();
             applySettings();
@@ -551,20 +609,41 @@ Ui::CameraSettingsDialog *CameraGUI::settingsUI() const
     return m_settingsDialog->getUI();
 }
 
-void CameraGUI::setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description)
+void CameraGUI::setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description,
+    const QString& alpacaHost, quint16 alpacaPort)
 {
     m_settings.m_cameraProtocol = protocol;
     m_settings.m_cameraId = cameraId;
     m_settings.m_cameraDescription = description;
+
+    if (protocol == QLatin1String("alpaca") && !alpacaHost.isEmpty())
+    {
+        m_settings.m_alpacaHost = alpacaHost;
+        m_settings.m_alpacaPort = alpacaPort;
+    }
 }
 
-int CameraGUI::findCameraComboIndex(const QString& protocol, const QString& cameraId, const QString& description) const
+int CameraGUI::findCameraComboIndex(const QString& protocol, const QString& cameraId, const QString& description,
+    const QString& alpacaHost, quint16 alpacaPort) const
 {
     for (int i = 0; i < ui->cameraCombo->count(); ++i)
     {
-        if (ui->cameraCombo->itemData(i, CameraProtocolRole).toString() == protocol
-            && ui->cameraCombo->itemData(i, CameraIdRole).toString() == cameraId
-            && ui->cameraCombo->itemData(i, CameraDescriptionRole).toString() == description)
+        if (ui->cameraCombo->itemData(i, CameraProtocolRole).toString() != protocol
+            || ui->cameraCombo->itemData(i, CameraIdRole).toString() != cameraId
+            || ui->cameraCombo->itemData(i, CameraDescriptionRole).toString() != description)
+        {
+            continue;
+        }
+
+        if (protocol == QLatin1String("alpaca"))
+        {
+            if (ui->cameraCombo->itemData(i, CameraAlpacaHostRole).toString() == alpacaHost
+                && static_cast<quint16>(ui->cameraCombo->itemData(i, CameraAlpacaPortRole).toUInt()) == alpacaPort)
+            {
+                return i;
+            }
+        }
+        else
         {
             return i;
         }
@@ -578,7 +657,12 @@ void CameraGUI::displaySettings()
     setWindowTitle(m_settings.m_title);
     setTitle(m_settings.m_title);
 
-    const int cameraIndex = findCameraComboIndex(m_settings.m_cameraProtocol, m_settings.m_cameraId, m_settings.m_cameraDescription);
+    const int cameraIndex = findCameraComboIndex(
+        m_settings.m_cameraProtocol,
+        m_settings.m_cameraId,
+        m_settings.m_cameraDescription,
+        m_settings.m_alpacaHost,
+        m_settings.m_alpacaPort);
     if (cameraIndex >= 0) {
         ui->cameraCombo->setCurrentIndex(cameraIndex);
     } else if (!m_settings.cameraDisplayName().isEmpty()) {
@@ -611,6 +695,7 @@ void CameraGUI::displaySettings()
     rebuildActionTabsForCurrentClass();
     updateExposureControls();
     settingsUI()->isoSpin->setValue(m_settings.m_isoSensitivity);
+    settingsUI()->alpacaDiscoveryCheck->setChecked(m_settings.m_alpacaDiscoveryEnabled);
     settingsUI()->alpacaHostEdit->setText(m_settings.m_alpacaHost);
     settingsUI()->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
     settingsUI()->alpacaBinXSpin->setValue(m_settings.m_alpacaBinX);
@@ -815,6 +900,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->exposureSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
     QObject::connect(settingsUI()->exposureUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_exposureUnitsCombo_currentIndexChanged);
     QObject::connect(settingsUI()->isoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_isoSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaDiscoveryCheck, &QCheckBox::toggled, this, &CameraGUI::on_alpacaDiscoveryCheck_toggled);
     QObject::connect(settingsUI()->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
     QObject::connect(settingsUI()->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
@@ -2000,7 +2086,9 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     setSelectedCamera(
         ui->cameraCombo->itemData(index, CameraProtocolRole).toString(),
         ui->cameraCombo->itemData(index, CameraIdRole).toString(),
-        ui->cameraCombo->itemData(index, CameraDescriptionRole).toString());
+        ui->cameraCombo->itemData(index, CameraDescriptionRole).toString(),
+        ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString(),
+        static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt()));
 
     if (wasAlpaca != m_settings.isAlpacaCamera()) {
         m_settingsDialog->clearAlpacaStatus();
@@ -2018,6 +2106,10 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     m_settingsKeys.append("cameraProtocol");
     m_settingsKeys.append("cameraId");
     m_settingsKeys.append("cameraDescription");
+    if (m_settings.isAlpacaCamera()) {
+        m_settingsKeys.append("alpacaHost");
+        m_settingsKeys.append("alpacaPort");
+    }
     updateAlpacaVisibility();
     updateEnabledControls();
     applySettings();
@@ -2134,6 +2226,13 @@ void CameraGUI::on_isoSpin_valueChanged(int value)
 {
     m_settings.m_isoSensitivity = value;
     m_settingsKeys.append("isoSensitivity");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaDiscoveryCheck_toggled(bool checked)
+{
+    m_settings.m_alpacaDiscoveryEnabled = checked;
+    m_settingsKeys.append("alpacaDiscoveryEnabled");
     applySettings();
 }
 

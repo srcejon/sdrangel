@@ -20,8 +20,11 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
+#include <QHostAddress>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QTimer>
+#include <QUdpSocket>
 #include <QUrl>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -35,21 +38,39 @@
 #include "camerafinder.h"
 #include "cameraworker.h"
 
+namespace {
+
+constexpr quint16 kAlpacaDiscoveryPort = 32227;
+constexpr int kAlpacaDiscoveryTimeoutMs = 1000;
+const QByteArray kAlpacaDiscoveryMessage("alpacadiscovery1");
+
+}
+
 CameraFinder::CameraFinder(QObject* parent) :
     QObject(parent),
     m_msgQueueToGUI(nullptr),
-    m_networkManager(nullptr)
+    m_networkManager(nullptr),
+    m_discoverySocket(nullptr),
+    m_discoveryTimer(nullptr),
+    m_requestId(0),
+    m_pendingConfiguredDeviceReplies(0)
 {
 }
 
 CameraFinder::~CameraFinder()
 {
+    delete m_discoveryTimer;
+    delete m_discoverySocket;
     delete m_networkManager;
 }
 
 void CameraFinder::reportCameraList(const CameraSettings& settings)
 {
-    const QStringList qtCameraIds = listQtCameraIds();
+    m_pendingSettings = settings;
+    m_currentCameraIds = listQtCameraIds();
+    m_discoveredEndpointKeys.clear();
+    m_pendingConfiguredDeviceReplies = 0;
+    ++m_requestId;
 
     if (!m_msgQueueToGUI) {
         return;
@@ -59,22 +80,11 @@ void CameraFinder::reportCameraList(const CameraSettings& settings)
         m_networkManager = new QNetworkAccessManager(this);
     }
 
-    QNetworkRequest request(QUrl(buildAlpacaBaseUrl(settings) + "/management/v1/configureddevices"));
-    QNetworkReply* reply = m_networkManager->get(request);
-
-    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, qtCameraIds]() {
-        QStringList cameraIds = qtCameraIds;
-
-        if (reply->error() == QNetworkReply::NoError) {
-            cameraIds.append(parseAlpacaCameraList(reply->readAll()));
-        }
-
-        if (m_msgQueueToGUI) {
-            m_msgQueueToGUI->push(CameraWorker::MsgReportCameraList::create(cameraIds));
-        }
-
-        reply->deleteLater();
-    });
+    if (settings.m_alpacaDiscoveryEnabled) {
+        startAlpacaDiscovery(m_requestId, settings);
+    } else {
+        queryConfiguredDevices({{settings.m_alpacaHost, settings.m_alpacaPort}}, m_requestId);
+    }
 }
 
 QStringList CameraFinder::listQtCameraIds()
@@ -102,7 +112,7 @@ QStringList CameraFinder::listQtCameraIds()
     return qtCameraIds;
 }
 
-QStringList CameraFinder::parseAlpacaCameraList(const QByteArray& payload)
+QStringList CameraFinder::parseAlpacaCameraList(const QByteArray& payload, const QString& host, quint16 port)
 {
     QStringList result;
     const QJsonDocument doc = QJsonDocument::fromJson(payload);
@@ -137,7 +147,7 @@ QStringList CameraFinder::parseAlpacaCameraList(const QByteArray& payload)
         const QString name = obj.value("DeviceName").toString();
 
         if (number >= 0) {
-            result.append(QString("alpaca:%1:%2").arg(number).arg(name));
+            result.append(packAlpacaCameraEntry(number, name, host, port));
         }
     }
 
@@ -146,7 +156,191 @@ QStringList CameraFinder::parseAlpacaCameraList(const QByteArray& payload)
 
 QString CameraFinder::buildAlpacaBaseUrl(const CameraSettings& settings)
 {
-    return QString("http://%1:%2")
-        .arg(settings.m_alpacaHost)
-        .arg(settings.m_alpacaPort);
+    return buildAlpacaBaseUrl(settings.m_alpacaHost, settings.m_alpacaPort);
+}
+
+QString CameraFinder::buildAlpacaBaseUrl(const QString& host, quint16 port)
+{
+    return QString("http://%1:%2").arg(host).arg(port);
+}
+
+QString CameraFinder::packAlpacaCameraEntry(int number, const QString& name, const QString& host, quint16 port)
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("protocol"), QStringLiteral("alpaca"));
+    obj.insert(QStringLiteral("id"), QString::number(number));
+    obj.insert(QStringLiteral("description"), name);
+    obj.insert(QStringLiteral("host"), host);
+    obj.insert(QStringLiteral("port"), static_cast<int>(port));
+    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
+QString CameraFinder::endpointKey(const QString& host, quint16 port)
+{
+    return QStringLiteral("%1:%2").arg(host).arg(port);
+}
+
+void CameraFinder::finalizeCameraList(int requestId)
+{
+    if (requestId != m_requestId || !m_msgQueueToGUI) {
+        return;
+    }
+
+    m_msgQueueToGUI->push(CameraWorker::MsgReportCameraList::create(m_currentCameraIds));
+}
+
+void CameraFinder::startAlpacaDiscovery(int requestId, const CameraSettings& settings)
+{
+    if (!m_discoverySocket)
+    {
+        m_discoverySocket = new QUdpSocket(this);
+        connect(m_discoverySocket, &QUdpSocket::readyRead, this, &CameraFinder::readAlpacaDiscoveryResponses);
+    }
+
+    if (!m_discoveryTimer)
+    {
+        m_discoveryTimer = new QTimer(this);
+        m_discoveryTimer->setSingleShot(true);
+        connect(m_discoveryTimer, &QTimer::timeout, this, [this]() { finishAlpacaDiscovery(m_requestId); });
+    }
+
+    m_discoverySocket->close();
+    m_discoverySocket->bind(QHostAddress::AnyIPv4, 0, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
+    m_discoveredEndpointKeys.clear();
+
+    m_discoverySocket->writeDatagram(kAlpacaDiscoveryMessage, QHostAddress::Broadcast, kAlpacaDiscoveryPort);
+    m_discoveryTimer->start(kAlpacaDiscoveryTimeoutMs);
+
+    Q_UNUSED(requestId)
+    Q_UNUSED(settings)
+}
+
+void CameraFinder::finishAlpacaDiscovery(int requestId)
+{
+    if (requestId != m_requestId) {
+        return;
+    }
+
+    QList<AlpacaEndpoint> endpoints;
+
+    for (auto it = m_discoveredEndpointKeys.cbegin(); it != m_discoveredEndpointKeys.cend(); ++it)
+    {
+        const QString& key = *it;
+        const int separator = key.lastIndexOf(':');
+
+        if (separator <= 0) {
+            continue;
+        }
+
+        bool ok = false;
+        const quint16 port = key.mid(separator + 1).toUShort(&ok);
+
+        if (!ok) {
+            continue;
+        }
+
+        endpoints.append({key.left(separator), port});
+    }
+
+    if (endpoints.isEmpty()) {
+        endpoints.append({m_pendingSettings.m_alpacaHost, m_pendingSettings.m_alpacaPort});
+    }
+
+    queryConfiguredDevices(endpoints, requestId);
+}
+
+void CameraFinder::queryConfiguredDevices(const QList<AlpacaEndpoint>& endpoints, int requestId)
+{
+    if (requestId != m_requestId) {
+        return;
+    }
+
+    QList<AlpacaEndpoint> uniqueEndpoints;
+    QSet<QString> seenEndpoints;
+
+    for (const AlpacaEndpoint& endpoint : endpoints)
+    {
+        if (endpoint.host.isEmpty() || endpoint.port == 0) {
+            continue;
+        }
+
+        const QString key = endpointKey(endpoint.host, endpoint.port);
+
+        if (!seenEndpoints.contains(key))
+        {
+            seenEndpoints.insert(key);
+            uniqueEndpoints.append(endpoint);
+        }
+    }
+
+    m_pendingConfiguredDeviceReplies = uniqueEndpoints.size();
+
+    if (m_pendingConfiguredDeviceReplies == 0)
+    {
+        finalizeCameraList(requestId);
+        return;
+    }
+
+    for (const AlpacaEndpoint& endpoint : uniqueEndpoints)
+    {
+        QNetworkRequest request(QUrl(buildAlpacaBaseUrl(endpoint.host, endpoint.port) + "/management/v1/configureddevices"));
+        QNetworkReply* reply = m_networkManager->get(request);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply, endpoint, requestId]() {
+            if (requestId == m_requestId && reply->error() == QNetworkReply::NoError) {
+                m_currentCameraIds.append(parseAlpacaCameraList(reply->readAll(), endpoint.host, endpoint.port));
+            }
+
+            reply->deleteLater();
+
+            if (requestId != m_requestId) {
+                return;
+            }
+
+            --m_pendingConfiguredDeviceReplies;
+
+            if (m_pendingConfiguredDeviceReplies <= 0) {
+                finalizeCameraList(requestId);
+            }
+        });
+    }
+}
+
+void CameraFinder::readAlpacaDiscoveryResponses()
+{
+    if (!m_discoverySocket) {
+        return;
+    }
+
+    while (m_discoverySocket->hasPendingDatagrams())
+    {
+        QHostAddress sender;
+        quint16 senderPort = 0;
+        QByteArray payload;
+        payload.resize(static_cast<int>(m_discoverySocket->pendingDatagramSize()));
+        m_discoverySocket->readDatagram(payload.data(), payload.size(), &sender, &senderPort);
+
+        Q_UNUSED(senderPort)
+
+        const QJsonDocument doc = QJsonDocument::fromJson(payload);
+
+        if (!doc.isObject()) {
+            continue;
+        }
+
+        const QJsonObject obj = doc.object();
+        const QJsonValue portValue = obj.value(QStringLiteral("AlpacaPort"));
+
+        if (!portValue.isDouble()) {
+            continue;
+        }
+
+        const int alpacaPort = portValue.toInt(0);
+
+        if (alpacaPort <= 0 || alpacaPort > 65535) {
+            continue;
+        }
+
+        m_discoveredEndpointKeys.insert(endpointKey(sender.toString(), static_cast<quint16>(alpacaPort)));
+    }
 }

@@ -137,6 +137,7 @@ void CameraSettings::resetToDefaults()
     m_captureIntervalUnits = CaptureIntervalSeconds;
     m_exposureTimeMs = 50;
     m_isoSensitivity = -1; // -1 is auto
+    m_alpacaDiscoveryEnabled = false;
     m_alpacaHost = "127.0.0.1";
     m_alpacaPort = 11111;
     m_alpacaBinX = 1;
@@ -334,6 +335,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(99, m_zoomFactor);
     s.writeDouble(100, m_captureInterval);
     s.writeS32(101, m_captureIntervalUnits);
+    s.writeBool(102, m_alpacaDiscoveryEnabled);
 
     return s.final();
 }
@@ -369,6 +371,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_framesPerSecond = std::max(1, m_framesPerSecond);
         d.readDouble(100, &m_captureInterval, 1.0);
         d.readS32(101, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
+        d.readBool(102, &m_alpacaDiscoveryEnabled, false);
         m_captureMode = qBound(CaptureModeFrameRate, m_captureMode, CaptureModeInterval);
         m_captureInterval = std::max(0.1, m_captureInterval);
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, m_captureIntervalUnits, CaptureIntervalMinutes);
@@ -598,6 +601,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("isoSensitivity")) {
         m_isoSensitivity = std::max(-1, settings.m_isoSensitivity);
+    }
+    if (settingsKeys.contains("alpacaDiscoveryEnabled")) {
+        m_alpacaDiscoveryEnabled = settings.m_alpacaDiscoveryEnabled;
     }
     if (settingsKeys.contains("alpacaHost")) {
         m_alpacaHost = settings.m_alpacaHost;
@@ -895,6 +901,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("isoSensitivity") || force) {
         ostr << " m_isoSensitivity: " << m_isoSensitivity;
+    }
+    if (settingsKeys.contains("alpacaDiscoveryEnabled") || force) {
+        ostr << " m_alpacaDiscoveryEnabled: " << m_alpacaDiscoveryEnabled;
     }
     if (settingsKeys.contains("alpacaHost") || force) {
         ostr << " m_alpacaHost: " << m_alpacaHost.toStdString();

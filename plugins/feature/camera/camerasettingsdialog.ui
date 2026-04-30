@@ -640,6 +640,16 @@
             </property>
            </widget>
           </item>
+          <item row="2" column="0" colspan="2">
+           <widget class="QCheckBox" name="alpacaDiscoveryCheck">
+            <property name="toolTip">
+             <string>Discover Alpaca servers on the local network and populate the camera list from the responses</string>
+            </property>
+            <property name="text">
+             <string>Discover Alpaca servers</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

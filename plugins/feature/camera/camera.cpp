@@ -191,7 +191,7 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    if ((settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort") || force) && m_cameraFinder)
+    if ((settingsKeys.contains("alpacaDiscoveryEnabled") || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort") || force) && m_cameraFinder)
     {
         m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
         m_cameraFinder->reportCameraList(m_settings);

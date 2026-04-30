@@ -188,8 +188,10 @@ private:
     void updateActionControls();
     void applyActionSettings();
     void updatePostProcessWhiteBalanceControls();
-    void setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description);
-    int findCameraComboIndex(const QString& protocol, const QString& cameraId, const QString& description) const;
+    void setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description,
+                           const QString& alpacaHost = QString(), quint16 alpacaPort = 0);
+    int findCameraComboIndex(const QString& protocol, const QString& cameraId, const QString& description,
+                             const QString& alpacaHost = QString(), quint16 alpacaPort = 0) const;
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
@@ -209,6 +211,7 @@ private slots:
     void on_exposureSpin_valueChanged(double value);
     void on_exposureUnitsCombo_currentIndexChanged(int index);
     void on_isoSpin_valueChanged(int value);
+    void on_alpacaDiscoveryCheck_toggled(bool checked);
     void on_alpacaHostEdit_editingFinished();
     void on_alpacaPortSpin_valueChanged(int value);
     void on_alpacaBinXSpin_valueChanged(int value);

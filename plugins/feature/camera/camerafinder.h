@@ -20,12 +20,15 @@
 #define INCLUDE_FEATURE_CAMERAFINDER_H_
 
 #include <QObject>
+#include <QSet>
 #include <QStringList>
 
 #include "camerasettings.h"
 
 class MessageQueue;
 class QNetworkAccessManager;
+class QTimer;
+class QUdpSocket;
 
 class CameraFinder : public QObject
 {
@@ -38,12 +41,36 @@ public:
     void reportCameraList(const CameraSettings& settings);
 
 private:
+    struct AlpacaEndpoint
+    {
+        QString host;
+        quint16 port;
+    };
+
     MessageQueue* m_msgQueueToGUI;
     QNetworkAccessManager* m_networkManager;
+    QUdpSocket* m_discoverySocket;
+    QTimer* m_discoveryTimer;
+    int m_requestId;
+    int m_pendingConfiguredDeviceReplies;
+    CameraSettings m_pendingSettings;
+    QStringList m_currentCameraIds;
+    QSet<QString> m_discoveredEndpointKeys;
 
     static QStringList listQtCameraIds();
-    static QStringList parseAlpacaCameraList(const QByteArray& payload);
+    static QStringList parseAlpacaCameraList(const QByteArray& payload, const QString& host, quint16 port);
     static QString buildAlpacaBaseUrl(const CameraSettings& settings);
+    static QString buildAlpacaBaseUrl(const QString& host, quint16 port);
+    static QString packAlpacaCameraEntry(int number, const QString& name, const QString& host, quint16 port);
+    static QString endpointKey(const QString& host, quint16 port);
+
+    void finalizeCameraList(int requestId);
+    void startAlpacaDiscovery(int requestId, const CameraSettings& settings);
+    void finishAlpacaDiscovery(int requestId);
+    void queryConfiguredDevices(const QList<AlpacaEndpoint>& endpoints, int requestId);
+
+private slots:
+    void readAlpacaDiscoveryResponses();
 };
 
 #endif // INCLUDE_FEATURE_CAMERAFINDER_H_

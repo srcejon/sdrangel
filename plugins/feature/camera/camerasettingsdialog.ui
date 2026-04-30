@@ -596,66 +596,80 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="alpacaFocuserHostLabel">
-            <property name="text">
-             <string>Focuser host</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
+         <item row="1" column="0">
+          <widget class="QLabel" name="alpacaFocuserComboLabel">
+           <property name="text">
+            <string>Focuser</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QComboBox" name="alpacaFocuserCombo">
+           <property name="toolTip">
+            <string>Discovered Alpaca focusers</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="alpacaFocuserHostLabel">
+           <property name="text">
+            <string>Focuser host</string>
+           </property>
+          </widget>
+         </item>
+          <item row="2" column="1">
            <widget class="QLineEdit" name="alpacaFocuserHostEdit"/>
           </item>
-          <item row="2" column="0">
+          <item row="3" column="0">
            <widget class="QLabel" name="alpacaFocuserPortLabel">
             <property name="text">
              <string>Focuser port</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="3" column="1">
            <widget class="QSpinBox" name="alpacaFocuserPortSpin">
             <property name="maximum">
              <number>65535</number>
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
+          <item row="4" column="0">
            <widget class="QLabel" name="alpacaFocuserDeviceNumberLabel">
             <property name="text">
              <string>Focuser device #</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="4" column="1">
            <widget class="QSpinBox" name="alpacaFocuserDeviceNumberSpin">
             <property name="maximum">
              <number>1024</number>
             </property>
            </widget>
           </item>
-          <item row="4" column="0">
+          <item row="5" column="0">
            <widget class="QLabel" name="alpacaFocusPositionLabel">
             <property name="text">
              <string>Focus position</string>
             </property>
            </widget>
           </item>
-          <item row="4" column="1">
+          <item row="5" column="1">
            <widget class="QSpinBox" name="alpacaFocusPositionSpin">
             <property name="maximum">
              <number>1000000</number>
             </property>
            </widget>
           </item>
-          <item row="5" column="0">
+          <item row="6" column="0">
            <widget class="QLabel" name="alpacaFocusStepSizeLabel">
             <property name="text">
              <string>Focus step size</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="1">
+          <item row="6" column="1">
            <widget class="QSpinBox" name="alpacaFocusStepSizeSpin">
             <property name="minimum">
              <number>1</number>
@@ -682,51 +696,65 @@
           </widget>
          </item>
          <item row="1" column="0">
+          <widget class="QLabel" name="alpacaFilterWheelComboLabel">
+           <property name="text">
+            <string>Filter wheel</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QComboBox" name="alpacaFilterWheelCombo">
+           <property name="toolTip">
+            <string>Discovered Alpaca filter wheels</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
           <widget class="QLabel" name="alpacaFilterWheelHostLabel">
            <property name="text">
             <string>Filter wheel host</string>
            </property>
           </widget>
          </item>
-         <item row="1" column="1">
+         <item row="2" column="1">
           <widget class="QLineEdit" name="alpacaFilterWheelHostEdit"/>
          </item>
-         <item row="2" column="0">
+         <item row="3" column="0">
           <widget class="QLabel" name="alpacaFilterWheelPortLabel">
            <property name="text">
             <string>Filter wheel port</string>
            </property>
           </widget>
          </item>
-         <item row="2" column="1">
+         <item row="3" column="1">
           <widget class="QSpinBox" name="alpacaFilterWheelPortSpin">
            <property name="maximum">
             <number>65535</number>
            </property>
           </widget>
          </item>
-         <item row="3" column="0">
+         <item row="4" column="0">
           <widget class="QLabel" name="alpacaFilterWheelDeviceNumberLabel">
            <property name="text">
             <string>Filter wheel device #</string>
            </property>
           </widget>
          </item>
-         <item row="3" column="1">
+         <item row="4" column="1">
           <widget class="QSpinBox" name="alpacaFilterWheelDeviceNumberSpin">
            <property name="maximum">
             <number>1024</number>
            </property>
           </widget>
          </item>
-         <item row="4" column="0">
+         <item row="5" column="0">
           <widget class="QLabel" name="alpacaFilterWheelPositionLabel">
            <property name="text">
             <string>Filter</string>
            </property>
           </widget>
          </item>
-         <item row="4" column="1">
+         <item row="5" column="1">
           <widget class="QComboBox" name="alpacaFilterWheelPositionCombo">
            <property name="toolTip">
             <string>Filter wheel position using the Alpaca names list</string>

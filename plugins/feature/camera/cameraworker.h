@@ -151,6 +151,29 @@ MESSAGE_CLASS_DECLARATION
         { }
     };
 
+    class MsgReportAlpacaDeviceList : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QStringList& getFocuserIds() const { return m_focuserIds; }
+        const QStringList& getFilterWheelIds() const { return m_filterWheelIds; }
+
+        static MsgReportAlpacaDeviceList* create(const QStringList& focuserIds, const QStringList& filterWheelIds)
+        {
+            return new MsgReportAlpacaDeviceList(focuserIds, filterWheelIds);
+        }
+
+    private:
+        QStringList m_focuserIds;
+        QStringList m_filterWheelIds;
+
+        MsgReportAlpacaDeviceList(const QStringList& focuserIds, const QStringList& filterWheelIds) :
+            Message(),
+            m_focuserIds(focuserIds),
+            m_filterWheelIds(filterWheelIds)
+        { }
+    };
+
     class MsgReportAlpacaCameraInfo : public Message {
         MESSAGE_CLASS_DECLARATION
 

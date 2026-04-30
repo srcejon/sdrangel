@@ -121,6 +121,8 @@ private:
     HttpDownloadManagerGUI m_dlm;
     QHash<QString, QString> m_pendingYoloDownloads;
     QStringList m_alpacaFilterWheelNames;
+    QStringList m_discoveredAlpacaFocusers;
+    QStringList m_discoveredAlpacaFilterWheels;
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraSettingsDialog *m_settingsDialog;
@@ -167,6 +169,7 @@ private:
     bool handleMessage(const Message& message);
     void makeUIConnections();
     void updateAlpacaVisibility();
+    void populateAlpacaAccessoryCombos();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateAlpacaSubframeControls();
     void updateImageWidget();
@@ -217,12 +220,14 @@ private slots:
     void on_alpacaHostEdit_editingFinished();
     void on_alpacaPortSpin_valueChanged(int value);
     void on_alpacaFocuserEnabledCheck_toggled(bool checked);
+    void on_alpacaFocuserCombo_currentIndexChanged(int index);
     void on_alpacaFocuserHostEdit_editingFinished();
     void on_alpacaFocuserPortSpin_valueChanged(int value);
     void on_alpacaFocuserDeviceNumberSpin_valueChanged(int value);
     void on_alpacaFocusPositionSpin_valueChanged(int value);
     void on_alpacaFocusStepSizeSpin_valueChanged(int value);
     void on_alpacaFilterWheelEnabledCheck_toggled(bool checked);
+    void on_alpacaFilterWheelCombo_currentIndexChanged(int index);
     void on_alpacaFilterWheelHostEdit_editingFinished();
     void on_alpacaFilterWheelPortSpin_valueChanged(int value);
     void on_alpacaFilterWheelDeviceNumberSpin_valueChanged(int value);

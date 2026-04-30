@@ -55,13 +55,15 @@ private:
     int m_pendingConfiguredDeviceReplies;
     CameraSettings m_pendingSettings;
     QStringList m_currentCameraIds;
+    QStringList m_currentFocuserIds;
+    QStringList m_currentFilterWheelIds;
     QSet<QString> m_discoveredEndpointKeys;
 
     static QStringList listQtCameraIds();
-    static QStringList parseAlpacaCameraList(const QByteArray& payload, const QString& host, quint16 port);
+    static QStringList parseAlpacaDeviceList(const QByteArray& payload, const QString& deviceType, const QString& host, quint16 port);
     static QString buildAlpacaBaseUrl(const CameraSettings& settings);
     static QString buildAlpacaBaseUrl(const QString& host, quint16 port);
-    static QString packAlpacaCameraEntry(int number, const QString& name, const QString& host, quint16 port);
+    static QString packAlpacaDeviceEntry(const QString& deviceType, int number, const QString& name, const QString& host, quint16 port);
     static QString endpointKey(const QString& host, quint16 port);
 
     void finalizeCameraList(int requestId);

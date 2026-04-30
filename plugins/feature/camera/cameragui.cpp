@@ -1208,6 +1208,7 @@ void CameraGUI::rebuildActionTabsForCurrentClass()
     {
         CameraObjectDeviceSettingsGUI *deviceSettingsGUI =
             new CameraObjectDeviceSettingsGUI(deviceSettings, settingsUI()->actionsTabWidget, settingsUI()->actionsTabWidget);
+        connect(deviceSettingsGUI, &CameraObjectDeviceSettingsGUI::settingsChanged, this, &CameraGUI::applyActionSettings);
         const int index = settingsUI()->actionsTabWidget->addTab(deviceSettingsGUI, QString("R%1").arg(deviceSettings->m_deviceSetIndex));
         settingsUI()->actionsTabWidget->setCurrentIndex(index);
         m_actionDeviceSettingsGUIs.append(deviceSettingsGUI);
@@ -3160,6 +3161,7 @@ void CameraGUI::on_actionsAddButton_clicked()
     CameraSettings::ObjectDeviceSettings *deviceSettings = new CameraSettings::ObjectDeviceSettings();
     CameraObjectDeviceSettingsGUI *deviceSettingsGUI =
         new CameraObjectDeviceSettingsGUI(deviceSettings, settingsUI()->actionsTabWidget, settingsUI()->actionsTabWidget);
+    connect(deviceSettingsGUI, &CameraObjectDeviceSettingsGUI::settingsChanged, this, &CameraGUI::applyActionSettings);
 
     const int index = settingsUI()->actionsTabWidget->addTab(deviceSettingsGUI, QStringLiteral("R0"));
     settingsUI()->actionsTabWidget->setCurrentIndex(index);

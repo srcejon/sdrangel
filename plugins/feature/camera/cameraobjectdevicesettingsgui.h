@@ -41,6 +41,9 @@ public:
 
     void accept();
 
+signals:
+    void settingsChanged();
+
 private slots:
     void onDeviceSetChanged(const QString& text);
 

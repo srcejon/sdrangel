@@ -99,6 +99,15 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     }
 
     connect(m_deviceSetWidget, &QComboBox::currentTextChanged, this, &CameraObjectDeviceSettingsGUI::onDeviceSetChanged);
+    connect(m_presetWidget, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_startOnDetectWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_stopOnDisappearWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_startStopFileSinkWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_recordVideoWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_detectCommandWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_disappearCommandWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_detectSpeechWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_disappearSpeechWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
 }
 
 void CameraObjectDeviceSettingsGUI::addDeviceSets()
@@ -205,6 +214,8 @@ void CameraObjectDeviceSettingsGUI::onDeviceSetChanged(const QString& text)
     if (currentTabIndex >= 0) {
         m_tab->setTabText(currentTabIndex, text);
     }
+
+    emit settingsChanged();
 }
 
 void CameraObjectDeviceSettingsGUI::accept()

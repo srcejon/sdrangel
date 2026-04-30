@@ -272,6 +272,8 @@ CameraWorker::CameraWorker() :
     m_alpacaCameraSizeX(0),
     m_alpacaCameraSizeY(0),
     m_alpacaImageBytesSupported(true),
+    m_alpacaConnected(false),
+    m_alpacaConnectionPending(false),
     m_alpacaParamsInitialized(false),
     m_lastAlpacaBinX(0),
     m_lastAlpacaBinY(0),
@@ -351,8 +353,12 @@ void CameraWorker::startWork()
 
     if (m_settings.isAlpacaCamera())
     {
-        alpacaQueryCameraCapabilities();
-        m_statusTimer.start(m_alpacaStatusPollIntervalMs);
+        alpacaRunWhenConnected([this]() {
+            alpacaQueryCameraCapabilities();
+            if (!m_statusTimer.isActive()) {
+                m_statusTimer.start(m_alpacaStatusPollIntervalMs);
+            }
+        });
     }
 
     startCapture();
@@ -368,6 +374,13 @@ void CameraWorker::stopWork()
     QObject::disconnect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
     stopCapture();
     m_statusTimer.stop();
+}
+
+void CameraWorker::resetAlpacaConnectionState()
+{
+    m_alpacaConnected = false;
+    m_alpacaConnectionPending = false;
+    m_alpacaPendingConnectedContinuations.clear();
 }
 
 void CameraWorker::handleInputMessages()
@@ -482,14 +495,25 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         startCapture();
     }
 
+    const bool alpacaEndpointChanged = force
+        || settingsKeys.contains("alpacaHost")
+        || settingsKeys.contains("alpacaPort")
+        || settingsKeys.contains("cameraId");
+
+    if (alpacaEndpointChanged) {
+        resetAlpacaConnectionState();
+    }
+
     if (m_settings.isAlpacaCamera()
         && m_networkManager
-        && (force
-            || settingsKeys.contains("alpacaHost")
-            || settingsKeys.contains("alpacaPort")
-            || settingsKeys.contains("cameraId")))
+        && alpacaEndpointChanged)
     {
-        alpacaQueryCameraCapabilities();
+        alpacaRunWhenConnected([this]() {
+            alpacaQueryCameraCapabilities();
+            if (!m_statusTimer.isActive()) {
+                m_statusTimer.start(m_alpacaStatusPollIntervalMs);
+            }
+        });
     }
 
     if (force || settingsKeys.contains("cameraId"))
@@ -582,6 +606,11 @@ void CameraWorker::stopCapture()
     m_captureTimer.stop();
     m_alpacaCaptureTimer.invalidate();
 
+    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaConnected)
+    {
+        alpacaSetConnected(false);
+    }
+
     if (m_capturingAudio)
     {
         qDebug() << "CameraWorker: stopping audio capture";
@@ -607,7 +636,12 @@ void CameraWorker::captureTick()
         m_alpacaCaptureTimer.start();
     }
     m_alpacaFrameRequestPending = true;
-    alpacaSetCameraParams();
+    alpacaRunWhenConnected([this]() {
+        if (!m_capturing || !m_alpacaFrameRequestPending) {
+            return;
+        }
+        alpacaSetCameraParams();
+    });
 }
 
 // Helper: PUT a simple integer property on the Alpaca camera synchronously (via async reply),
@@ -653,6 +687,108 @@ static void alpacaPutIntProperty(
         }
         reply->deleteLater();
         continuation();
+    });
+}
+
+void CameraWorker::alpacaSetConnected(bool connected, std::function<void()> continuation)
+{
+    if (!m_networkManager) {
+        return;
+    }
+
+    const QString baseUrl = buildAlpacaBaseUrl();
+    const int camId = m_settings.cameraIdInt();
+    QUrl url(baseUrl + QString("/api/v1/camera/%1/connected").arg(camId));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QUrlQuery body;
+    body.addQueryItem("Connected", connected ? QStringLiteral("true") : QStringLiteral("false"));
+    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+
+    const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+    logAlpacaRequest("PUT", url, payload);
+
+    QNetworkReply *reply = m_networkManager->put(request, payload);
+
+    QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply, connected, continuation]() {
+        const QByteArray responseBody = reply->readAll();
+        logAlpacaResponse("PUT", reply->request().url(), reply, responseBody);
+
+        bool success = false;
+
+        if (reply->error() == QNetworkReply::NoError)
+        {
+            const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+
+            if (doc.isObject()) {
+                success = (doc.object().value("ErrorNumber").toInt(-1) == 0);
+            }
+        }
+
+        if (success)
+        {
+            m_alpacaConnected = connected;
+        }
+        else if (connected)
+        {
+            m_alpacaConnected = false;
+            m_alpacaFrameRequestPending = false;
+        }
+
+        if (!connected) {
+            m_alpacaConnectionPending = false;
+            m_alpacaConnected = false;
+            m_alpacaPendingConnectedContinuations.clear();
+        }
+
+        if (success)
+        {
+            if (continuation) {
+                continuation();
+            }
+        }
+        else if (connected)
+        {
+            m_alpacaConnectionPending = false;
+            m_alpacaPendingConnectedContinuations.clear();
+        }
+
+        reply->deleteLater();
+    });
+}
+
+void CameraWorker::alpacaRunWhenConnected(std::function<void()> continuation)
+{
+    if (m_alpacaConnected)
+    {
+        if (continuation) {
+            continuation();
+        }
+        return;
+    }
+
+    if (continuation) {
+        m_alpacaPendingConnectedContinuations.append(continuation);
+    }
+
+    if (m_alpacaConnectionPending) {
+        return;
+    }
+
+    m_alpacaConnectionPending = true;
+    alpacaSetConnected(true, [this]() {
+        m_alpacaConnectionPending = false;
+        const auto continuations = std::move(m_alpacaPendingConnectedContinuations);
+        m_alpacaPendingConnectedContinuations.clear();
+
+        for (const auto& continuation : continuations)
+        {
+            if (continuation) {
+                continuation();
+            }
+        }
     });
 }
 

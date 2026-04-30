@@ -306,6 +306,9 @@ private:
     int m_alpacaCameraSizeX;
     int m_alpacaCameraSizeY;
     bool m_alpacaImageBytesSupported; // true = try ImageBytes binary protocol; false = use JSON
+    bool m_alpacaConnected;
+    bool m_alpacaConnectionPending;
+    QVector<std::function<void()>> m_alpacaPendingConnectedContinuations;
     bool m_alpacaParamsInitialized;
     int m_lastAlpacaBinX;
     int m_lastAlpacaBinY;
@@ -349,6 +352,9 @@ private:
     void alpacaQueryCameraCapabilities();
     void alpacaSetCameraParams();
     void alpacaPollStatus();
+    void alpacaSetConnected(bool connected, std::function<void()> continuation = {});
+    void alpacaRunWhenConnected(std::function<void()> continuation);
+    void resetAlpacaConnectionState();
 
 private slots:
     void handleInputMessages();

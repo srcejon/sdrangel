@@ -139,6 +139,8 @@ void CameraSettingsDialog::clearAlpacaStatus()
 {
     ui->cameraStateLabel->setText("-");
     ui->captureTimeLabel->setText("-");
+    ui->alpacaNameLabel->setText("-");
+    ui->alpacaDescriptionLabel->setText("-");
     ui->sensorNameLabel->setText("-");
     ui->sensorTypeLabel->setText("-");
     ui->pixelSizeLabel->setText("-");

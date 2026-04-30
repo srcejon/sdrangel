@@ -132,6 +132,8 @@ public:
         MESSAGE_CLASS_DECLARATION
 
     public:
+        const QString& getName() const { return m_name; }
+        const QString& getDescription() const { return m_description; }
         int getMaxBinX() const { return m_maxBinX; }
         int getMaxBinY() const { return m_maxBinY; }
         const QStringList& getGains() const { return m_gains; }
@@ -154,6 +156,7 @@ public:
         double getExposureResolutionMs() const { return m_exposureResolutionMs; }
 
         static MsgReportAlpacaCameraInfo* create(
+            const QString& name, const QString& description,
             int maxBinX, int maxBinY,
             const QStringList& gains, int gainMin, int gainMax,
             const QStringList& offsets, int offsetMin, int offsetMax,
@@ -165,13 +168,15 @@ public:
             double exposureMinMs, double exposureMaxMs, double exposureResolutionMs)
         {
             return new MsgReportAlpacaCameraInfo(
-                maxBinX, maxBinY, gains, gainMin, gainMax, offsets, offsetMin, offsetMax,
+                name, description, maxBinX, maxBinY, gains, gainMin, gainMax, offsets, offsetMin, offsetMax,
                 readoutModes, sensorName, sensorType, pixelSizeX, pixelSizeY,
                 cameraSizeX, cameraSizeY, ccdTemperature, ccdTemperatureValid,
                 exposureMinMs, exposureMaxMs, exposureResolutionMs);
         }
 
     private:
+        QString m_name;
+        QString m_description;
         int m_maxBinX;
         int m_maxBinY;
         QStringList m_gains;
@@ -194,6 +199,7 @@ public:
         double m_exposureResolutionMs;
 
         MsgReportAlpacaCameraInfo(
+            const QString& name, const QString& description,
             int maxBinX, int maxBinY,
             const QStringList& gains, int gainMin, int gainMax,
             const QStringList& offsets, int offsetMin, int offsetMax,
@@ -204,6 +210,8 @@ public:
             double ccdTemperature, bool ccdTemperatureValid,
             double exposureMinMs, double exposureMaxMs, double exposureResolutionMs) :
             Message(),
+            m_name(name),
+            m_description(description),
             m_maxBinX(maxBinX),
             m_maxBinY(maxBinY),
             m_gains(gains),

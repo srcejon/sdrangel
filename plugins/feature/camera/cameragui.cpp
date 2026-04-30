@@ -2006,6 +2006,8 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     updateExposureControls();
 
     // Status labels
+    settingsUI()->alpacaNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
+    settingsUI()->alpacaDescriptionLabel->setText(info.getDescription().isEmpty() ? "-" : info.getDescription());
     settingsUI()->sensorNameLabel->setText(info.getSensorName().isEmpty() ? "-" : info.getSensorName());
 
     static const QStringList sensorTypeNames = {

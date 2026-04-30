@@ -1144,6 +1144,8 @@ void CameraWorker::alpacaQueryCameraCapabilities()
 
     // Struct to accumulate results from parallel requests
     struct CapInfo {
+        QString name;
+        QString description;
         int maxBinX = 1;
         int maxBinY = 1;
         QStringList gains;
@@ -1171,6 +1173,7 @@ void CameraWorker::alpacaQueryCameraCapabilities()
 
     // Properties to query: name, JSON Value key, handler
     static const QStringList properties = {
+        "name", "description",
         "maxbinx", "maxbiny", "gains", "gainmin", "gainmax",
         "offsets", "offsetmin", "offsetmax",
         "readoutmodes", "sensorname", "sensortype",
@@ -1195,6 +1198,7 @@ void CameraWorker::alpacaQueryCameraCapabilities()
 
         if (m_msgQueueToGUI) {
             m_msgQueueToGUI->push(MsgReportAlpacaCameraInfo::create(
+                info->name, info->description,
                 info->maxBinX, info->maxBinY,
                 info->gains, info->gainMin, info->gainMax,
                 info->offsets, info->offsetMin, info->offsetMax,
@@ -1227,7 +1231,11 @@ void CameraWorker::alpacaQueryCameraCapabilities()
                     const int errNum = root.value("ErrorNumber").toInt(0);
                     if (errNum == 0) {
                         const QJsonValue val = root.value("Value");
-                        if (prop == "maxbinx") {
+                        if (prop == "name") {
+                            info->name = val.toString();
+                        } else if (prop == "description") {
+                            info->description = val.toString();
+                        } else if (prop == "maxbinx") {
                             info->maxBinX = std::max(1, val.toInt(1));
                         } else if (prop == "maxbiny") {
                             info->maxBinY = std::max(1, val.toInt(1));
@@ -1398,6 +1406,16 @@ void CameraWorker::logAlpacaRequest(const QString& method, const QUrl& url, cons
 void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload) const
 {
     if (!m_settings.m_alpacaApiLogEnabled) {
+        return;
+    }
+
+    const QString path = url.path();
+
+    if (path.endsWith(QStringLiteral("/imagearray"), Qt::CaseInsensitive))
+    {
+        qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
+                 << "transportError" << reply->error() << reply->errorString()
+                 << "<imagearray payload omitted>";
         return;
     }
 

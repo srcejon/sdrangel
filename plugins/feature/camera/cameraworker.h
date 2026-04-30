@@ -317,6 +317,8 @@ private:
     bool m_alpacaConnected;
     bool m_alpacaConnectionPending;
     QVector<std::function<void()>> m_alpacaPendingConnectedContinuations;
+    bool m_alpacaBootstrapPending;
+    QVector<std::function<void()>> m_alpacaPendingBootstrapContinuations;
     bool m_alpacaParamsInitialized;
     int m_lastAlpacaBinX;
     int m_lastAlpacaBinY;
@@ -357,11 +359,12 @@ private:
     void alpacaStartExposure();
     void alpacaCheckImageReady();
     void alpacaFetchImageArray();
-    void alpacaQueryCameraCapabilities();
+    void alpacaQueryCameraCapabilities(std::function<void()> continuation = {});
     void alpacaSetCameraParams();
     void alpacaPollStatus();
     void alpacaSetConnected(bool connected, std::function<void()> continuation = {});
     void alpacaRunWhenConnected(std::function<void()> continuation);
+    void alpacaBootstrap(std::function<void()> continuation = {});
     void resetAlpacaConnectionState();
 
 private slots:

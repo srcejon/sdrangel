@@ -274,6 +274,7 @@ CameraWorker::CameraWorker() :
     m_alpacaImageBytesSupported(true),
     m_alpacaConnected(false),
     m_alpacaConnectionPending(false),
+    m_alpacaBootstrapPending(false),
     m_alpacaParamsInitialized(false),
     m_lastAlpacaBinX(0),
     m_lastAlpacaBinY(0),
@@ -352,16 +353,6 @@ void CameraWorker::startWork()
         m_msgQueueToGUI->push(MsgReportAvailableDevices::create(longIds));
     }
 
-    if (m_settings.isAlpacaCamera())
-    {
-        alpacaRunWhenConnected([this]() {
-            alpacaQueryCameraCapabilities();
-            if (!m_statusTimer.isActive()) {
-                m_statusTimer.start(m_alpacaStatusPollIntervalMs);
-            }
-        });
-    }
-
     startCapture();
 
     // Handle any messages already on the queue
@@ -388,6 +379,8 @@ void CameraWorker::resetAlpacaConnectionState()
     m_alpacaConnected = false;
     m_alpacaConnectionPending = false;
     m_alpacaPendingConnectedContinuations.clear();
+    m_alpacaBootstrapPending = false;
+    m_alpacaPendingBootstrapContinuations.clear();
 }
 
 void CameraWorker::handleInputMessages()
@@ -515,12 +508,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         && m_networkManager
         && alpacaEndpointChanged)
     {
-        alpacaRunWhenConnected([this]() {
-            alpacaQueryCameraCapabilities();
-            if (!m_statusTimer.isActive()) {
-                m_statusTimer.start(m_alpacaStatusPollIntervalMs);
-            }
-        });
+        alpacaBootstrap();
     }
 
     if (force || settingsKeys.contains("cameraId"))
@@ -586,7 +574,12 @@ void CameraWorker::startCapture()
         m_captureTimer.start(m_settings.isIntervalCaptureMode()
             ? m_settings.getCaptureIntervalMs()
             : std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond)))));
-        captureTick();
+
+        if (m_alpacaConnected && !m_alpacaBootstrapPending && (m_alpacaCameraSizeX > 0) && (m_alpacaCameraSizeY > 0)) {
+            captureTick();
+        } else {
+            alpacaBootstrap();
+        }
     }
     else if (m_settings.isQtCamera())
     {
@@ -634,16 +627,17 @@ void CameraWorker::captureTick()
         return;
     }
 
+    if (!m_alpacaConnected || m_alpacaConnectionPending || m_alpacaBootstrapPending)
+    {
+        alpacaBootstrap();
+        return;
+    }
+
     if (!m_alpacaCaptureTimer.isValid()) {
         m_alpacaCaptureTimer.start();
     }
     m_alpacaFrameRequestPending = true;
-    alpacaRunWhenConnected([this]() {
-        if (!m_capturing || !m_alpacaFrameRequestPending) {
-            return;
-        }
-        alpacaSetCameraParams();
-    });
+    alpacaSetCameraParams();
 }
 
 // Helper: PUT a simple integer property on the Alpaca camera synchronously (via async reply),
@@ -791,6 +785,47 @@ void CameraWorker::alpacaRunWhenConnected(std::function<void()> continuation)
                 continuation();
             }
         }
+    });
+}
+
+void CameraWorker::alpacaBootstrap(std::function<void()> continuation)
+{
+    if (!m_networkManager) {
+        return;
+    }
+
+    if (continuation) {
+        m_alpacaPendingBootstrapContinuations.append(continuation);
+    }
+
+    if (m_alpacaBootstrapPending) {
+        return;
+    }
+
+    m_alpacaBootstrapPending = true;
+
+    alpacaRunWhenConnected([this]() {
+        if (!m_statusTimer.isActive()) {
+            m_statusTimer.start(m_alpacaStatusPollIntervalMs);
+        }
+
+        alpacaQueryCameraCapabilities([this]() {
+            m_alpacaBootstrapPending = false;
+
+            const auto continuations = std::move(m_alpacaPendingBootstrapContinuations);
+            m_alpacaPendingBootstrapContinuations.clear();
+
+            for (const auto& continuation : continuations)
+            {
+                if (continuation) {
+                    continuation();
+                }
+            }
+
+            if (m_capturing && !m_alpacaFrameRequestPending) {
+                captureTick();
+            }
+        });
     });
 }
 
@@ -1131,7 +1166,7 @@ void CameraWorker::alpacaFetchImageArray()
     });
 }
 
-void CameraWorker::alpacaQueryCameraCapabilities()
+void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuation)
 {
     if (!m_networkManager) {
         return;
@@ -1185,7 +1220,7 @@ void CameraWorker::alpacaQueryCameraCapabilities()
 
     info->pending = properties.size();
 
-    auto checkDone = [this, info]() {
+    auto checkDone = [this, info, continuation]() {
         info->pending--;
         if (info->pending > 0) {
             return;
@@ -1210,6 +1245,10 @@ void CameraWorker::alpacaQueryCameraCapabilities()
                 info->cameraSizeX, info->cameraSizeY,
                 info->ccdTemperature, info->ccdTemperatureValid,
                 info->exposureMinMs, info->exposureMaxMs, info->exposureResolutionMs));
+        }
+
+        if (continuation) {
+            continuation();
         }
     };
 

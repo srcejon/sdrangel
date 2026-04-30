@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>810</width>
-    <height>1020</height>
+    <width>683</width>
+    <height>710</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>5</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -677,112 +677,112 @@
             <item>
              <layout class="QFormLayout" name="alpacaStatusLayout">
               <item row="0" column="0">
-               <widget class="QLabel" name="cameraStateTextLabel">
-                <property name="text">
-                 <string>Camera state</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QLabel" name="cameraStateLabel">
-                <property name="text">
-                 <string>-</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="captureTimeTextLabel">
-                <property name="text">
-                 <string>Capture time (ms)</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QLabel" name="captureTimeLabel">
-                <property name="text">
-                 <string>-</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="0">
                <widget class="QLabel" name="alpacaNameTextLabel">
                 <property name="text">
                  <string>Name</string>
                 </property>
                </widget>
               </item>
-              <item row="2" column="1">
+              <item row="0" column="1">
                <widget class="QLabel" name="alpacaNameLabel">
                 <property name="text">
                  <string>-</string>
                 </property>
                </widget>
               </item>
-              <item row="3" column="0">
+              <item row="1" column="0">
                <widget class="QLabel" name="alpacaDescriptionTextLabel">
                 <property name="text">
                  <string>Description</string>
                 </property>
                </widget>
               </item>
-              <item row="3" column="1">
+              <item row="1" column="1">
                <widget class="QLabel" name="alpacaDescriptionLabel">
                 <property name="text">
                  <string>-</string>
                 </property>
                </widget>
               </item>
-              <item row="4" column="0">
+              <item row="2" column="0">
                <widget class="QLabel" name="sensorNameTextLabel">
                 <property name="text">
                  <string>Sensor</string>
                 </property>
                </widget>
               </item>
-              <item row="4" column="1">
+              <item row="2" column="1">
                <widget class="QLabel" name="sensorNameLabel">
                 <property name="text">
                  <string>-</string>
                 </property>
                </widget>
               </item>
-              <item row="5" column="0">
+              <item row="3" column="0">
                <widget class="QLabel" name="sensorTypeTextLabel">
                 <property name="text">
                  <string>Sensor type</string>
                 </property>
                </widget>
               </item>
-              <item row="5" column="1">
+              <item row="3" column="1">
                <widget class="QLabel" name="sensorTypeLabel">
                 <property name="text">
                  <string>-</string>
                 </property>
                </widget>
               </item>
-              <item row="6" column="0">
+              <item row="4" column="0">
                <widget class="QLabel" name="pixelSizeTextLabel">
                 <property name="text">
                  <string>Pixel size (um)</string>
                 </property>
                </widget>
               </item>
-              <item row="6" column="1">
+              <item row="4" column="1">
                <widget class="QLabel" name="pixelSizeLabel">
                 <property name="text">
                  <string>-</string>
                 </property>
                </widget>
               </item>
-              <item row="7" column="0">
+              <item row="5" column="0">
                <widget class="QLabel" name="cameraSizeTextLabel">
                 <property name="text">
                  <string>Sensor size (px)</string>
                 </property>
                </widget>
               </item>
-              <item row="7" column="1">
+              <item row="5" column="1">
                <widget class="QLabel" name="cameraSizeLabel">
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="0">
+               <widget class="QLabel" name="cameraStateTextLabel">
+                <property name="text">
+                 <string>Camera state</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="1">
+               <widget class="QLabel" name="cameraStateLabel">
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="0">
+               <widget class="QLabel" name="captureTimeTextLabel">
+                <property name="text">
+                 <string>Capture time (ms)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="1">
+               <widget class="QLabel" name="captureTimeLabel">
                 <property name="text">
                  <string>-</string>
                 </property>
@@ -2555,20 +2555,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
          <property name="title">
           <string>Motion Detection</string>
          </property>
-         <layout class="QFormLayout" name="formLayout_4">
-          <item row="0" column="0">
-           <widget class="QLabel" name="motionHistoryLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>History</string>
-            </property>
-           </widget>
-          </item>
+         <layout class="QGridLayout" name="gridLayout_8">
           <item row="0" column="1">
            <widget class="QSpinBox" name="motionHistorySpin">
             <property name="toolTip">
@@ -2585,7 +2572,63 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
+          <item row="3" column="0">
+           <widget class="QLabel" name="motionOpenSizeLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Open size</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="motionHistoryLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>History</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="motionBoxColorLabel">
+            <property name="text">
+             <string>BBox Colour</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QToolButton" name="motionBoxColorButton">
+            <property name="toolTip">
+             <string>Select bounding box colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="motionOpenSizeSpin">
+            <property name="toolTip">
+             <string>Kernel radius for motion-mask morphological open (0 disables)</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>20</number>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
            <widget class="QLabel" name="motionVarThresholdLabel">
             <property name="minimumSize">
              <size>
@@ -2598,7 +2641,33 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
+          <item row="5" column="1">
+           <widget class="QSpinBox" name="motionPersistenceFramesSpin">
+            <property name="toolTip">
+             <string>Keep the last motion boxes for this many frames after motion disappears</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>120</number>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="motionPersistenceFramesLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Persistence</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
            <widget class="QDoubleSpinBox" name="motionVarThresholdSpin">
             <property name="toolTip">
              <string>Variance threshold for MOG2 foreground classification</string>
@@ -2620,14 +2689,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
+          <item row="7" column="2">
            <widget class="QLabel" name="motionDetectShadowsLabel">
             <property name="text">
              <string>Detect shadows</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="7" column="3">
            <widget class="QCheckBox" name="motionDetectShadowsCheck">
             <property name="toolTip">
              <string>Enable MOG2 shadow detection</string>
@@ -2640,33 +2709,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="motionOpenSizeLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Open size</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QSpinBox" name="motionOpenSizeSpin">
-            <property name="toolTip">
-             <string>Kernel radius for motion-mask morphological open (0 disables)</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>20</number>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
+          <item row="3" column="2">
            <widget class="QLabel" name="motionCloseSizeLabel">
             <property name="minimumSize">
              <size>
@@ -2679,7 +2722,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="4" column="1">
+          <item row="3" column="3">
            <widget class="QSpinBox" name="motionCloseSizeSpin">
             <property name="toolTip">
              <string>Kernel radius for motion-mask morphological close (0 disables)</string>
@@ -2692,33 +2735,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="motionPersistenceFramesLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Persistence</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QSpinBox" name="motionPersistenceFramesSpin">
-            <property name="toolTip">
-             <string>Keep the last motion boxes for this many frames after motion disappears</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>120</number>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="0">
+          <item row="5" column="2">
            <widget class="QLabel" name="minContourAreaLabel">
             <property name="minimumSize">
              <size>
@@ -2731,7 +2748,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="6" column="1">
+          <item row="5" column="3">
            <widget class="QSpinBox" name="minContourAreaSpin">
             <property name="toolTip">
              <string>Minimum contour area (px²)</string>
@@ -2747,23 +2764,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="7" column="0">
-           <widget class="QLabel" name="motionBoxColorLabel">
-            <property name="text">
-             <string>BBox Colour</string>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="1">
-           <widget class="QToolButton" name="motionBoxColorButton">
-            <property name="toolTip">
-             <string>Select bounding box colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
          </layout>
         </widget>
        </item>
@@ -2772,9 +2772,25 @@ li.checked::marker { content: &quot;\2612&quot;; }
          <property name="title">
           <string>Difference Detection</string>
          </property>
-         <layout class="QFormLayout" name="formLayout_5">
-          <item row="0" column="0">
-           <widget class="QLabel" name="dilationLabel">
+         <layout class="QGridLayout" name="gridLayout_7">
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="diffMaskHistoryFramesSpin">
+            <property name="toolTip">
+             <string>Number of diff masks to keep and combine with bitwise OR</string>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>120</number>
+            </property>
+            <property name="value">
+             <number>1</number>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="diffThresholdLabel">
             <property name="minimumSize">
              <size>
               <width>130</width>
@@ -2782,7 +2798,20 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </size>
             </property>
             <property name="text">
-             <string>Dilation</string>
+             <string>Threshold</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="diffMaskHistoryFramesLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Mask history</string>
             </property>
            </widget>
           </item>
@@ -2802,8 +2831,8 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="diffThresholdLabel">
+          <item row="0" column="0">
+           <widget class="QLabel" name="dilationLabel">
             <property name="minimumSize">
              <size>
               <width>130</width>
@@ -2811,11 +2840,11 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </size>
             </property>
             <property name="text">
-             <string>Threshold</string>
+             <string>Dilation</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
+          <item row="0" column="3">
            <widget class="QSpinBox" name="diffThresholdSpin">
             <property name="toolTip">
              <string>Pixel difference threshold for the diff mask</string>
@@ -2831,36 +2860,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="diffMaskHistoryFramesLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Mask history</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QSpinBox" name="diffMaskHistoryFramesSpin">
-            <property name="toolTip">
-             <string>Number of diff masks to keep and combine with bitwise OR</string>
-            </property>
-            <property name="minimum">
-             <number>1</number>
-            </property>
-            <property name="maximum">
-             <number>120</number>
-            </property>
-            <property name="value">
-             <number>1</number>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
+          <item row="2" column="2">
            <widget class="QLabel" name="diffMaskCloseSizeLabel">
             <property name="minimumSize">
              <size>
@@ -2873,7 +2873,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="2" column="3">
            <widget class="QSpinBox" name="diffMaskCloseSizeSpin">
             <property name="toolTip">
              <string>Kernel radius for morphological close after accumulated bitwise OR (0 disables)</string>
@@ -2897,9 +2897,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
          <property name="title">
           <string>Detection ROI</string>
          </property>
-         <layout class="QFormLayout" name="formLayout_8">
-          <item row="0" column="0">
-           <widget class="QLabel" name="detectionRoiXLabel">
+         <layout class="QGridLayout" name="gridLayout_5">
+          <item row="0" column="2">
+           <widget class="QLabel" name="detectionRoiYLabel">
             <property name="minimumSize">
              <size>
               <width>130</width>
@@ -2907,7 +2907,20 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </size>
             </property>
             <property name="text">
-             <string>ROI X</string>
+             <string>ROI Y</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="detectionRoiWidthSpin">
+            <property name="toolTip">
+             <string>Width of the detection region of interest. 0 uses the full frame width.</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>4096</number>
             </property>
            </widget>
           </item>
@@ -2924,33 +2937,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="detectionRoiYLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ROI Y</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QSpinBox" name="detectionRoiYSpin">
-            <property name="toolTip">
-             <string>Top edge of the detection region of interest</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>4096</number>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
+          <item row="3" column="0">
            <widget class="QLabel" name="detectionRoiWidthLabel">
             <property name="minimumSize">
              <size>
@@ -2963,10 +2950,23 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
-           <widget class="QSpinBox" name="detectionRoiWidthSpin">
+          <item row="0" column="0">
+           <widget class="QLabel" name="detectionRoiXLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>ROI X</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QSpinBox" name="detectionRoiYSpin">
             <property name="toolTip">
-             <string>Width of the detection region of interest. 0 uses the full frame width.</string>
+             <string>Top edge of the detection region of interest</string>
             </property>
             <property name="minimum">
              <number>0</number>
@@ -2976,7 +2976,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
+          <item row="3" column="2">
            <widget class="QLabel" name="detectionRoiHeightLabel">
             <property name="minimumSize">
              <size>
@@ -2989,7 +2989,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="3" column="3">
            <widget class="QSpinBox" name="detectionRoiHeightSpin">
             <property name="toolTip">
              <string>Height of the detection region of interest. 0 uses the full frame height.</string>

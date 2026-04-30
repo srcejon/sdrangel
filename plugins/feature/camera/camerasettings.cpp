@@ -141,6 +141,12 @@ void CameraSettings::resetToDefaults()
     m_alpacaApiLogEnabled = false;
     m_alpacaHost = "127.0.0.1";
     m_alpacaPort = 11111;
+    m_alpacaFocuserEnabled = false;
+    m_alpacaFocuserHost = "127.0.0.1";
+    m_alpacaFocuserPort = 11111;
+    m_alpacaFocuserDeviceNumber = 0;
+    m_alpacaFocusPosition = 0;
+    m_alpacaFocusStepSize = 100;
     m_alpacaBinX = 1;
     m_alpacaBinY = 1;
     m_alpacaNumX = 0;
@@ -338,6 +344,12 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(101, m_captureIntervalUnits);
     s.writeBool(102, m_alpacaDiscoveryEnabled);
     s.writeBool(103, m_alpacaApiLogEnabled);
+    s.writeBool(104, m_alpacaFocuserEnabled);
+    s.writeString(105, m_alpacaFocuserHost);
+    s.writeU32(106, m_alpacaFocuserPort);
+    s.writeS32(107, m_alpacaFocuserDeviceNumber);
+    s.writeS32(108, m_alpacaFocusPosition);
+    s.writeS32(109, m_alpacaFocusStepSize);
 
     return s.final();
 }
@@ -375,6 +387,16 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(101, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
         d.readBool(102, &m_alpacaDiscoveryEnabled, false);
         d.readBool(103, &m_alpacaApiLogEnabled, false);
+        d.readBool(104, &m_alpacaFocuserEnabled, false);
+        d.readString(105, &m_alpacaFocuserHost, "127.0.0.1");
+        d.readU32(106, &utmp, 11111);
+        m_alpacaFocuserPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
+        d.readS32(107, &m_alpacaFocuserDeviceNumber, 0);
+        d.readS32(108, &m_alpacaFocusPosition, 0);
+        d.readS32(109, &m_alpacaFocusStepSize, 100);
+        m_alpacaFocuserDeviceNumber = std::max(0, m_alpacaFocuserDeviceNumber);
+        m_alpacaFocusPosition = std::max(0, m_alpacaFocusPosition);
+        m_alpacaFocusStepSize = std::max(1, m_alpacaFocusStepSize);
         m_captureMode = qBound(CaptureModeFrameRate, m_captureMode, CaptureModeInterval);
         m_captureInterval = std::max(0.1, m_captureInterval);
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, m_captureIntervalUnits, CaptureIntervalMinutes);
@@ -616,6 +638,24 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("alpacaPort")) {
         m_alpacaPort = settings.m_alpacaPort;
+    }
+    if (settingsKeys.contains("alpacaFocuserEnabled")) {
+        m_alpacaFocuserEnabled = settings.m_alpacaFocuserEnabled;
+    }
+    if (settingsKeys.contains("alpacaFocuserHost")) {
+        m_alpacaFocuserHost = settings.m_alpacaFocuserHost;
+    }
+    if (settingsKeys.contains("alpacaFocuserPort")) {
+        m_alpacaFocuserPort = settings.m_alpacaFocuserPort;
+    }
+    if (settingsKeys.contains("alpacaFocuserDeviceNumber")) {
+        m_alpacaFocuserDeviceNumber = std::max(0, settings.m_alpacaFocuserDeviceNumber);
+    }
+    if (settingsKeys.contains("alpacaFocusPosition")) {
+        m_alpacaFocusPosition = std::max(0, settings.m_alpacaFocusPosition);
+    }
+    if (settingsKeys.contains("alpacaFocusStepSize")) {
+        m_alpacaFocusStepSize = std::max(1, settings.m_alpacaFocusStepSize);
     }
     if (settingsKeys.contains("alpacaBinX")) {
         m_alpacaBinX = std::max(1, settings.m_alpacaBinX);
@@ -919,6 +959,24 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("alpacaPort") || force) {
         ostr << " m_alpacaPort: " << m_alpacaPort;
+    }
+    if (settingsKeys.contains("alpacaFocuserEnabled") || force) {
+        ostr << " m_alpacaFocuserEnabled: " << m_alpacaFocuserEnabled;
+    }
+    if (settingsKeys.contains("alpacaFocuserHost") || force) {
+        ostr << " m_alpacaFocuserHost: " << m_alpacaFocuserHost.toStdString();
+    }
+    if (settingsKeys.contains("alpacaFocuserPort") || force) {
+        ostr << " m_alpacaFocuserPort: " << m_alpacaFocuserPort;
+    }
+    if (settingsKeys.contains("alpacaFocuserDeviceNumber") || force) {
+        ostr << " m_alpacaFocuserDeviceNumber: " << m_alpacaFocuserDeviceNumber;
+    }
+    if (settingsKeys.contains("alpacaFocusPosition") || force) {
+        ostr << " m_alpacaFocusPosition: " << m_alpacaFocusPosition;
+    }
+    if (settingsKeys.contains("alpacaFocusStepSize") || force) {
+        ostr << " m_alpacaFocusStepSize: " << m_alpacaFocusStepSize;
     }
     if (settingsKeys.contains("alpacaBinX") || force) {
         ostr << " m_alpacaBinX: " << m_alpacaBinX;

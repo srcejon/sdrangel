@@ -699,6 +699,12 @@ void CameraGUI::displaySettings()
     settingsUI()->alpacaApiLogCheck->setChecked(m_settings.m_alpacaApiLogEnabled);
     settingsUI()->alpacaHostEdit->setText(m_settings.m_alpacaHost);
     settingsUI()->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
+    settingsUI()->alpacaFocuserEnabledCheck->setChecked(m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocuserHostEdit->setText(m_settings.m_alpacaFocuserHost);
+    settingsUI()->alpacaFocuserPortSpin->setValue(m_settings.m_alpacaFocuserPort);
+    settingsUI()->alpacaFocuserDeviceNumberSpin->setValue(m_settings.m_alpacaFocuserDeviceNumber);
+    settingsUI()->alpacaFocusPositionSpin->setValue(m_settings.m_alpacaFocusPosition);
+    settingsUI()->alpacaFocusStepSizeSpin->setValue(m_settings.m_alpacaFocusStepSize);
     settingsUI()->alpacaBinXSpin->setValue(m_settings.m_alpacaBinX);
     settingsUI()->alpacaBinYSpin->setValue(m_settings.m_alpacaBinY);
     settingsUI()->alpacaNumXSpin->setValue(m_settings.m_alpacaNumX);
@@ -905,6 +911,12 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->alpacaApiLogCheck, &QCheckBox::toggled, this, &CameraGUI::on_alpacaApiLogCheck_toggled);
     QObject::connect(settingsUI()->alpacaHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaHostEdit_editingFinished);
     QObject::connect(settingsUI()->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaFocuserEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_alpacaFocuserEnabledCheck_toggled);
+    QObject::connect(settingsUI()->alpacaFocuserHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaFocuserHostEdit_editingFinished);
+    QObject::connect(settingsUI()->alpacaFocuserPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocuserPortSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaFocuserDeviceNumberSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocuserDeviceNumberSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaFocusPositionSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocusPositionSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaFocusStepSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocusStepSizeSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaNumXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaNumXSpin_valueChanged);
@@ -1898,6 +1910,17 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaOffsetSpin->setVisible(alpaca && !m_alpacaHasNamedOffsets);
     settingsUI()->alpacaReadoutModeLabel->setVisible(alpaca);
     settingsUI()->alpacaReadoutModeCombo->setVisible(alpaca);
+    settingsUI()->alpacaFocuserGroup->setVisible(alpaca);
+    settingsUI()->alpacaFocuserHostLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocuserHostEdit->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocuserPortLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocuserPortSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocuserDeviceNumberLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocuserDeviceNumberSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocusPositionLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocusPositionSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocusStepSizeLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
+    settingsUI()->alpacaFocusStepSizeSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaStatusGroup->setVisible(alpaca);
     ui->audioMute->setVisible(!alpaca);
 
@@ -2258,6 +2281,49 @@ void CameraGUI::on_alpacaPortSpin_valueChanged(int value)
 {
     m_settings.m_alpacaPort = static_cast<uint16_t>(value);
     m_settingsKeys.append("alpacaPort");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaFocuserEnabledCheck_toggled(bool checked)
+{
+    m_settings.m_alpacaFocuserEnabled = checked;
+    m_settingsKeys.append("alpacaFocuserEnabled");
+    updateAlpacaVisibility();
+    applySettings();
+}
+
+void CameraGUI::on_alpacaFocuserHostEdit_editingFinished()
+{
+    m_settings.m_alpacaFocuserHost = settingsUI()->alpacaFocuserHostEdit->text();
+    m_settingsKeys.append("alpacaFocuserHost");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaFocuserPortSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaFocuserPort = static_cast<uint16_t>(value);
+    m_settingsKeys.append("alpacaFocuserPort");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaFocuserDeviceNumberSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaFocuserDeviceNumber = value;
+    m_settingsKeys.append("alpacaFocuserDeviceNumber");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaFocusPositionSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaFocusPosition = value;
+    m_settingsKeys.append("alpacaFocusPosition");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaFocusStepSizeSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaFocusStepSize = value;
+    m_settingsKeys.append("alpacaFocusStepSize");
     applySettings();
 }
 

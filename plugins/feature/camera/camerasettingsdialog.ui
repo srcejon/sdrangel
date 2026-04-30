@@ -581,7 +581,92 @@
            </widget>
           </widget>
          </item>
-        </layout>
+       </layout>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="alpacaFocuserGroup">
+         <property name="title">
+          <string>Alpaca Focuser</string>
+         </property>
+         <layout class="QFormLayout" name="alpacaFocuserLayout">
+          <item row="0" column="0" colspan="2">
+           <widget class="QCheckBox" name="alpacaFocuserEnabledCheck">
+            <property name="text">
+             <string>Use Alpaca focuser</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="alpacaFocuserHostLabel">
+            <property name="text">
+             <string>Focuser host</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="alpacaFocuserHostEdit"/>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="alpacaFocuserPortLabel">
+            <property name="text">
+             <string>Focuser port</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="alpacaFocuserPortSpin">
+            <property name="maximum">
+             <number>65535</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="alpacaFocuserDeviceNumberLabel">
+            <property name="text">
+             <string>Focuser device #</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="alpacaFocuserDeviceNumberSpin">
+            <property name="maximum">
+             <number>1024</number>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="alpacaFocusPositionLabel">
+            <property name="text">
+             <string>Focus position</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QSpinBox" name="alpacaFocusPositionSpin">
+            <property name="maximum">
+             <number>1000000</number>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="alpacaFocusStepSizeLabel">
+            <property name="text">
+             <string>Focus step size</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QSpinBox" name="alpacaFocusStepSizeSpin">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>100000</number>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
        </item>
        <item>
         <spacer name="verticalSpacer_5">

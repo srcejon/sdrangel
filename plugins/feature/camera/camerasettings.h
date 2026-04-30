@@ -79,6 +79,12 @@ struct CameraSettings
     bool m_alpacaApiLogEnabled;
     QString m_alpacaHost;
     uint16_t m_alpacaPort;
+    bool m_alpacaFocuserEnabled;
+    QString m_alpacaFocuserHost;
+    uint16_t m_alpacaFocuserPort;
+    int m_alpacaFocuserDeviceNumber;
+    int m_alpacaFocusPosition;
+    int m_alpacaFocusStepSize;
     int m_alpacaBinX;
     int m_alpacaBinY;
     int m_alpacaNumX;

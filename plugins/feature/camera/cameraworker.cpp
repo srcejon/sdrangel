@@ -273,6 +273,10 @@ CameraWorker::CameraWorker() :
     m_alpacaParamsInitialized(false),
     m_lastAlpacaBinX(0),
     m_lastAlpacaBinY(0),
+    m_lastAlpacaNumX(0),
+    m_lastAlpacaNumY(0),
+    m_lastAlpacaStartX(0),
+    m_lastAlpacaStartY(0),
     m_lastAlpacaGain(-1),
     m_lastAlpacaOffset(-1),
     m_lastAlpacaReadoutMode(0),
@@ -530,6 +534,10 @@ void CameraWorker::startCapture()
     m_alpacaParamsInitialized = false;
     m_lastAlpacaBinX = m_settings.m_alpacaBinX;
     m_lastAlpacaBinY = m_settings.m_alpacaBinY;
+    m_lastAlpacaNumX = m_settings.m_alpacaNumX;
+    m_lastAlpacaNumY = m_settings.m_alpacaNumY;
+    m_lastAlpacaStartX = m_settings.m_alpacaStartX;
+    m_lastAlpacaStartY = m_settings.m_alpacaStartY;
     m_lastAlpacaGain = m_settings.m_alpacaGain;
     m_lastAlpacaOffset = m_settings.m_alpacaOffset;
     m_lastAlpacaReadoutMode = m_settings.m_alpacaReadoutMode;
@@ -634,12 +642,18 @@ static void alpacaPutIntProperty(
 
 void CameraWorker::alpacaSetCameraParams()
 {
-    // Chain: binX -> binY -> gain -> offset -> readoutMode -> startExposure
+    // Chain: binX -> binY -> subframe ROI -> gain -> offset -> readoutMode -> startExposure
     const QString baseUrl = buildAlpacaBaseUrl();
     const int camId = m_settings.cameraIdInt();
     const bool forceAllParams = !m_alpacaParamsInitialized;
     const bool setBinX = forceAllParams || (m_lastAlpacaBinX != m_settings.m_alpacaBinX);
     const bool setBinY = forceAllParams || (m_lastAlpacaBinY != m_settings.m_alpacaBinY);
+    const bool setNumX = (m_settings.m_alpacaNumX > 0)
+        && (forceAllParams || (m_lastAlpacaNumX != m_settings.m_alpacaNumX));
+    const bool setNumY = (m_settings.m_alpacaNumY > 0)
+        && (forceAllParams || (m_lastAlpacaNumY != m_settings.m_alpacaNumY));
+    const bool setStartX = forceAllParams || (m_lastAlpacaStartX != m_settings.m_alpacaStartX);
+    const bool setStartY = forceAllParams || (m_lastAlpacaStartY != m_settings.m_alpacaStartY);
     const bool setGain = (m_settings.m_alpacaGain >= 0)
         && (forceAllParams || (m_lastAlpacaGain != m_settings.m_alpacaGain));
     const bool setOffset = (m_settings.m_alpacaOffset >= 0)
@@ -688,14 +702,100 @@ void CameraWorker::alpacaSetCameraParams()
         }
     };
 
-    auto doBinY = [this, baseUrl, camId, doGain, setBinY]() {
+    auto doAxisY = [this, baseUrl, camId, doGain, setNumY, setStartY]() {
+        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+
+        std::function<void()> maybeSetStartYAfterNum = [this, baseUrl, camId, doGain, setStartY]() {
+            if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+            if (setStartY) {
+                alpacaPutIntProperty(m_networkManager, baseUrl, camId, "starty", "StartY",
+                    m_settings.m_alpacaStartY, m_alpacaClientId, m_alpacaClientTransactionId, doGain,
+                    [this]() { m_lastAlpacaStartY = m_settings.m_alpacaStartY; });
+            } else {
+                doGain();
+            }
+        };
+
+        std::function<void()> maybeSetNumYAfterStart = [this, baseUrl, camId, doGain, setNumY]() {
+            if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+            if (setNumY) {
+                alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
+                    m_settings.m_alpacaNumY, m_alpacaClientId, m_alpacaClientTransactionId, doGain,
+                    [this]() { m_lastAlpacaNumY = m_settings.m_alpacaNumY; });
+            } else {
+                doGain();
+            }
+        };
+
+        if (setStartY && (m_settings.m_alpacaStartY < m_lastAlpacaStartY))
+        {
+            alpacaPutIntProperty(m_networkManager, baseUrl, camId, "starty", "StartY",
+                m_settings.m_alpacaStartY, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetNumYAfterStart,
+                [this]() { m_lastAlpacaStartY = m_settings.m_alpacaStartY; });
+        }
+        else if (setNumY)
+        {
+            alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
+                m_settings.m_alpacaNumY, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetStartYAfterNum,
+                [this]() { m_lastAlpacaNumY = m_settings.m_alpacaNumY; });
+        }
+        else
+        {
+            maybeSetStartYAfterNum();
+        }
+    };
+
+    auto doAxisX = [this, baseUrl, camId, doAxisY, setNumX, setStartX]() {
+        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+
+        std::function<void()> maybeSetStartXAfterNum = [this, baseUrl, camId, doAxisY, setStartX]() {
+            if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+            if (setStartX) {
+                alpacaPutIntProperty(m_networkManager, baseUrl, camId, "startx", "StartX",
+                    m_settings.m_alpacaStartX, m_alpacaClientId, m_alpacaClientTransactionId, doAxisY,
+                    [this]() { m_lastAlpacaStartX = m_settings.m_alpacaStartX; });
+            } else {
+                doAxisY();
+            }
+        };
+
+        std::function<void()> maybeSetNumXAfterStart = [this, baseUrl, camId, doAxisY, setNumX]() {
+            if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+            if (setNumX) {
+                alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
+                    m_settings.m_alpacaNumX, m_alpacaClientId, m_alpacaClientTransactionId, doAxisY,
+                    [this]() { m_lastAlpacaNumX = m_settings.m_alpacaNumX; });
+            } else {
+                doAxisY();
+            }
+        };
+
+        if (setStartX && (m_settings.m_alpacaStartX < m_lastAlpacaStartX))
+        {
+            alpacaPutIntProperty(m_networkManager, baseUrl, camId, "startx", "StartX",
+                m_settings.m_alpacaStartX, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetNumXAfterStart,
+                [this]() { m_lastAlpacaStartX = m_settings.m_alpacaStartX; });
+        }
+        else if (setNumX)
+        {
+            alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
+                m_settings.m_alpacaNumX, m_alpacaClientId, m_alpacaClientTransactionId, maybeSetStartXAfterNum,
+                [this]() { m_lastAlpacaNumX = m_settings.m_alpacaNumX; });
+        }
+        else
+        {
+            maybeSetStartXAfterNum();
+        }
+    };
+
+    auto doBinY = [this, baseUrl, camId, doAxisX, setBinY]() {
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
         if (setBinY) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "biny", "BinY",
-                m_settings.m_alpacaBinY, m_alpacaClientId, m_alpacaClientTransactionId, doGain,
+                m_settings.m_alpacaBinY, m_alpacaClientId, m_alpacaClientTransactionId, doAxisX,
                 [this]() { m_lastAlpacaBinY = m_settings.m_alpacaBinY; });
         } else {
-            doGain();
+            doAxisX();
         }
     };
 

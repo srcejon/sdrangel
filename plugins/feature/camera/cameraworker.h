@@ -305,6 +305,10 @@ private:
     bool m_alpacaParamsInitialized;
     int m_lastAlpacaBinX;
     int m_lastAlpacaBinY;
+    int m_lastAlpacaNumX;
+    int m_lastAlpacaNumY;
+    int m_lastAlpacaStartX;
+    int m_lastAlpacaStartY;
     int m_lastAlpacaGain;
     int m_lastAlpacaOffset;
     int m_lastAlpacaReadoutMode;

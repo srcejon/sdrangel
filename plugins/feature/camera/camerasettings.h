@@ -77,6 +77,10 @@ struct CameraSettings
     uint16_t m_alpacaPort;
     int m_alpacaBinX;
     int m_alpacaBinY;
+    int m_alpacaNumX;
+    int m_alpacaNumY;
+    int m_alpacaStartX;
+    int m_alpacaStartY;
     int m_alpacaGain;         // index into named gains list, or numeric value; -1 = do not set
     int m_alpacaOffset;       // index into named offsets list, or numeric value; -1 = do not set
     int m_alpacaReadoutMode;  // index into readoutmodes list
@@ -124,6 +128,10 @@ struct CameraSettings
     int m_diffMaskCloseSize;  ///< Kernel radius for morphological close on accumulated diff mask: 0..20
     QString m_overlayFontFamily; ///< QPainter font family name (empty = system default)
     double  m_overlayFontScale;  ///< Font point size for QPainter text: 4.0..144.0
+    int    m_detectionRoiX;     ///< Detection ROI X origin in pixels; 0..4096
+    int    m_detectionRoiY;     ///< Detection ROI Y origin in pixels; 0..4096
+    int    m_detectionRoiWidth; ///< Detection ROI width in pixels; 0 disables ROI/full width
+    int    m_detectionRoiHeight; ///< Detection ROI height in pixels; 0 disables ROI/full height
     bool   m_motionDetect;      ///< Enable MOG2 background subtractor
     int    m_motionHistory;     ///< Background subtractor history length: 1..5000
     double m_motionVarThreshold; ///< Variance threshold for MOG2 foreground classification: 1.0..200.0

@@ -122,6 +122,8 @@ private:
     CameraHistogramDialog *m_histogramDialog;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
+    int m_alpacaCameraSizeX;
+    int m_alpacaCameraSizeY;
     bool m_qtZoomSupported;             // true when the active Qt camera reports zoom range > 1.0
     bool m_qtManualExposureSupported;   // true when the active Qt camera supports manual exposure time
     bool m_qtIsoSensitivitySupported;   // true when the active Qt camera supports manual ISO sensitivity
@@ -161,6 +163,7 @@ private:
     void makeUIConnections();
     void updateAlpacaVisibility();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
+    void updateAlpacaSubframeControls();
     void updateImageWidget();
     void updateEnabledControls();
     void updateCaptureModeControls();
@@ -201,6 +204,10 @@ private slots:
     void on_alpacaPortSpin_valueChanged(int value);
     void on_alpacaBinXSpin_valueChanged(int value);
     void on_alpacaBinYSpin_valueChanged(int value);
+    void on_alpacaNumXSpin_valueChanged(int value);
+    void on_alpacaNumYSpin_valueChanged(int value);
+    void on_alpacaStartXSpin_valueChanged(int value);
+    void on_alpacaStartYSpin_valueChanged(int value);
     void on_alpacaGainCombo_currentIndexChanged(int index);
     void on_alpacaGainSlider_valueChanged(int value);
     void on_alpacaGainSpin_valueChanged(int value);
@@ -263,6 +270,10 @@ private slots:
     void on_overlayFontScaleSpin_valueChanged(double value);
     void on_overlayTextFontCombo_currentFontChanged(const QFont& font);
     void on_overlayTextFontScaleSpin_valueChanged(double value);
+    void on_detectionRoiXSpin_valueChanged(int value);
+    void on_detectionRoiYSpin_valueChanged(int value);
+    void on_detectionRoiWidthSpin_valueChanged(int value);
+    void on_detectionRoiHeightSpin_valueChanged(int value);
     void on_motionDetectButton_toggled(bool checked);
     void on_motionHistorySpin_valueChanged(int value);
     void on_motionVarThresholdSpin_valueChanged(double value);

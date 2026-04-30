@@ -139,6 +139,10 @@ void CameraSettings::resetToDefaults()
     m_alpacaPort = 11111;
     m_alpacaBinX = 1;
     m_alpacaBinY = 1;
+    m_alpacaNumX = 0;
+    m_alpacaNumY = 0;
+    m_alpacaStartX = 0;
+    m_alpacaStartY = 0;
     m_alpacaGain = -1;
     m_alpacaOffset = -1;
     m_alpacaReadoutMode = 0;
@@ -183,6 +187,10 @@ void CameraSettings::resetToDefaults()
     m_diffMaskCloseSize = 0;
     m_overlayFontFamily.clear();
     m_overlayFontScale = 12.0;
+    m_detectionRoiX = 0;
+    m_detectionRoiY = 0;
+    m_detectionRoiWidth = 0;
+    m_detectionRoiHeight = 0;
     m_motionDetect = false;
     m_motionHistory = 500;
     m_motionVarThreshold = 16.0;
@@ -247,6 +255,10 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(23, m_alpacaGain);
     s.writeS32(24, m_alpacaReadoutMode);
     s.writeS32(25, m_alpacaOffset);
+    s.writeS32(93, m_alpacaNumX);
+    s.writeS32(94, m_alpacaNumY);
+    s.writeS32(95, m_alpacaStartX);
+    s.writeS32(96, m_alpacaStartY);
     s.writeS32(69, m_postProcessWhiteBalanceMode);
     s.writeDouble(70, m_postProcessWhiteBalanceRedGain);
     s.writeDouble(71, m_postProcessWhiteBalanceGreenGain);
@@ -271,6 +283,10 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(85, m_diffMaskCloseSize);
     s.writeString(33, m_overlayFontFamily);
     s.writeDouble(34, m_overlayFontScale);
+    s.writeS32(97, m_detectionRoiX);
+    s.writeS32(98, m_detectionRoiY);
+    s.writeS32(99, m_detectionRoiWidth);
+    s.writeS32(100, m_detectionRoiHeight);
     s.writeBool(35, m_motionDetect);
     s.writeS32(87, m_motionHistory);
     s.writeDouble(88, m_motionVarThreshold);
@@ -378,8 +394,16 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(23, &m_alpacaGain, -1);
         d.readS32(24, &m_alpacaReadoutMode, 0);
         d.readS32(25, &m_alpacaOffset, -1);
+        d.readS32(93, &m_alpacaNumX, 0);
+        d.readS32(94, &m_alpacaNumY, 0);
+        d.readS32(95, &m_alpacaStartX, 0);
+        d.readS32(96, &m_alpacaStartY, 0);
         m_alpacaBinX = std::max(1, m_alpacaBinX);
         m_alpacaBinY = std::max(1, m_alpacaBinY);
+        m_alpacaNumX = std::max(0, m_alpacaNumX);
+        m_alpacaNumY = std::max(0, m_alpacaNumY);
+        m_alpacaStartX = std::max(0, m_alpacaStartX);
+        m_alpacaStartY = std::max(0, m_alpacaStartY);
         m_alpacaReadoutMode = std::max(0, m_alpacaReadoutMode);
         d.readS32(69, &m_postProcessWhiteBalanceMode, 0);
         d.readDouble(70, &m_postProcessWhiteBalanceRedGain, 1.0);
@@ -425,6 +449,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
 
         d.readString(33, &m_overlayFontFamily, "");
         d.readDouble(34, &m_overlayFontScale, 12.0);
+        d.readS32(97, &m_detectionRoiX, 0);
+        d.readS32(98, &m_detectionRoiY, 0);
+        d.readS32(99, &m_detectionRoiWidth, 0);
+        d.readS32(100, &m_detectionRoiHeight, 0);
         d.readBool(35, &m_motionDetect, false);
         d.readS32(87, &m_motionHistory, 500);
         d.readDouble(88, &m_motionVarThreshold, 16.0);
@@ -437,6 +465,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_motionBoxColor = QColor::fromRgba(motionBoxColorRgba);
         d.readS32(37, &m_minContourArea, 100);
         m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
+        m_detectionRoiX = qBound(0, m_detectionRoiX, 4096);
+        m_detectionRoiY = qBound(0, m_detectionRoiY, 4096);
+        m_detectionRoiWidth = qBound(0, m_detectionRoiWidth, 4096);
+        m_detectionRoiHeight = qBound(0, m_detectionRoiHeight, 4096);
         m_motionHistory = qBound(1, m_motionHistory, 5000);
         m_motionVarThreshold = qBound(1.0, m_motionVarThreshold, 200.0);
         m_motionOpenSize = qBound(0, m_motionOpenSize, 20);
@@ -549,8 +581,16 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(23, &m_alpacaGain, -1);
         d.readS32(24, &m_alpacaReadoutMode, 0);
         d.readS32(25, &m_alpacaOffset, -1);
+        d.readS32(93, &m_alpacaNumX, 0);
+        d.readS32(94, &m_alpacaNumY, 0);
+        d.readS32(95, &m_alpacaStartX, 0);
+        d.readS32(96, &m_alpacaStartY, 0);
         m_alpacaBinX = std::max(1, m_alpacaBinX);
         m_alpacaBinY = std::max(1, m_alpacaBinY);
+        m_alpacaNumX = std::max(0, m_alpacaNumX);
+        m_alpacaNumY = std::max(0, m_alpacaNumY);
+        m_alpacaStartX = std::max(0, m_alpacaStartX);
+        m_alpacaStartY = std::max(0, m_alpacaStartY);
         m_alpacaReadoutMode = std::max(0, m_alpacaReadoutMode);
         d.readS32(69, &m_postProcessWhiteBalanceMode, 0);
         d.readDouble(70, &m_postProcessWhiteBalanceRedGain, 1.0);
@@ -596,6 +636,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
 
         d.readString(33, &m_overlayFontFamily, "");
         d.readDouble(34, &m_overlayFontScale, 12.0);
+        d.readS32(97, &m_detectionRoiX, 0);
+        d.readS32(98, &m_detectionRoiY, 0);
+        d.readS32(99, &m_detectionRoiWidth, 0);
+        d.readS32(100, &m_detectionRoiHeight, 0);
         d.readBool(35, &m_motionDetect, false);
         d.readS32(87, &m_motionHistory, 500);
         d.readDouble(88, &m_motionVarThreshold, 16.0);
@@ -608,6 +652,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_motionBoxColor = QColor::fromRgba(motionBoxColorRgba);
         d.readS32(37, &m_minContourArea, 100);
         m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
+        m_detectionRoiX = qBound(0, m_detectionRoiX, 4096);
+        m_detectionRoiY = qBound(0, m_detectionRoiY, 4096);
+        m_detectionRoiWidth = qBound(0, m_detectionRoiWidth, 4096);
+        m_detectionRoiHeight = qBound(0, m_detectionRoiHeight, 4096);
         m_motionHistory = qBound(1, m_motionHistory, 5000);
         m_motionVarThreshold = qBound(1.0, m_motionVarThreshold, 200.0);
         m_motionOpenSize = qBound(0, m_motionOpenSize, 20);
@@ -742,6 +790,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("alpacaBinY")) {
         m_alpacaBinY = std::max(1, settings.m_alpacaBinY);
     }
+    if (settingsKeys.contains("alpacaNumX")) {
+        m_alpacaNumX = std::max(0, settings.m_alpacaNumX);
+    }
+    if (settingsKeys.contains("alpacaNumY")) {
+        m_alpacaNumY = std::max(0, settings.m_alpacaNumY);
+    }
+    if (settingsKeys.contains("alpacaStartX")) {
+        m_alpacaStartX = std::max(0, settings.m_alpacaStartX);
+    }
+    if (settingsKeys.contains("alpacaStartY")) {
+        m_alpacaStartY = std::max(0, settings.m_alpacaStartY);
+    }
     if (settingsKeys.contains("alpacaGain")) {
         m_alpacaGain = settings.m_alpacaGain;
     }
@@ -840,6 +900,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("overlayFontScale")) {
         m_overlayFontScale = qBound(4.0, settings.m_overlayFontScale, 144.0);
+    }
+    if (settingsKeys.contains("detectionRoiX")) {
+        m_detectionRoiX = qBound(0, settings.m_detectionRoiX, 4096);
+    }
+    if (settingsKeys.contains("detectionRoiY")) {
+        m_detectionRoiY = qBound(0, settings.m_detectionRoiY, 4096);
+    }
+    if (settingsKeys.contains("detectionRoiWidth")) {
+        m_detectionRoiWidth = qBound(0, settings.m_detectionRoiWidth, 4096);
+    }
+    if (settingsKeys.contains("detectionRoiHeight")) {
+        m_detectionRoiHeight = qBound(0, settings.m_detectionRoiHeight, 4096);
     }
     if (settingsKeys.contains("motionDetect")) {
         m_motionDetect = settings.m_motionDetect;
@@ -1009,6 +1081,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("alpacaBinY") || force) {
         ostr << " m_alpacaBinY: " << m_alpacaBinY;
     }
+    if (settingsKeys.contains("alpacaNumX") || force) {
+        ostr << " m_alpacaNumX: " << m_alpacaNumX;
+    }
+    if (settingsKeys.contains("alpacaNumY") || force) {
+        ostr << " m_alpacaNumY: " << m_alpacaNumY;
+    }
+    if (settingsKeys.contains("alpacaStartX") || force) {
+        ostr << " m_alpacaStartX: " << m_alpacaStartX;
+    }
+    if (settingsKeys.contains("alpacaStartY") || force) {
+        ostr << " m_alpacaStartY: " << m_alpacaStartY;
+    }
     if (settingsKeys.contains("alpacaGain") || force) {
         ostr << " m_alpacaGain: " << m_alpacaGain;
     }
@@ -1104,6 +1188,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("overlayFontScale") || force) {
         ostr << " m_overlayFontScale: " << m_overlayFontScale;
+    }
+    if (settingsKeys.contains("detectionRoiX") || force) {
+        ostr << " m_detectionRoiX: " << m_detectionRoiX;
+    }
+    if (settingsKeys.contains("detectionRoiY") || force) {
+        ostr << " m_detectionRoiY: " << m_detectionRoiY;
+    }
+    if (settingsKeys.contains("detectionRoiWidth") || force) {
+        ostr << " m_detectionRoiWidth: " << m_detectionRoiWidth;
+    }
+    if (settingsKeys.contains("detectionRoiHeight") || force) {
+        ostr << " m_detectionRoiHeight: " << m_detectionRoiHeight;
     }
     if (settingsKeys.contains("motionDetect") || force) {
         ostr << " m_motionDetect: " << m_motionDetect;

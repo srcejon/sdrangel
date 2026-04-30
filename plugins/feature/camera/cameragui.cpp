@@ -433,6 +433,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_histogramDialog(nullptr),
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
+    m_alpacaCameraSizeX(0),
+    m_alpacaCameraSizeY(0),
     m_qtZoomSupported(false),
     m_qtManualExposureSupported(true),
     m_qtIsoSensitivitySupported(true),
@@ -592,6 +594,10 @@ void CameraGUI::displaySettings()
     settingsUI()->alpacaPortSpin->setValue(m_settings.m_alpacaPort);
     settingsUI()->alpacaBinXSpin->setValue(m_settings.m_alpacaBinX);
     settingsUI()->alpacaBinYSpin->setValue(m_settings.m_alpacaBinY);
+    settingsUI()->alpacaNumXSpin->setValue(m_settings.m_alpacaNumX);
+    settingsUI()->alpacaNumYSpin->setValue(m_settings.m_alpacaNumY);
+    settingsUI()->alpacaStartXSpin->setValue(m_settings.m_alpacaStartX);
+    settingsUI()->alpacaStartYSpin->setValue(m_settings.m_alpacaStartY);
 
     if (m_alpacaHasNamedGains) {
         settingsUI()->alpacaGainCombo->setCurrentIndex(m_settings.m_alpacaGain >= 0 ? m_settings.m_alpacaGain : 0);
@@ -667,6 +673,10 @@ void CameraGUI::displaySettings()
     settingsUI()->overlayFontScaleSpin->setValue(m_settings.m_overlayFontScale);
     settingsUI()->overlayTextFontCombo->setCurrentText(m_settings.m_overlayTextFontFamily);
     settingsUI()->overlayTextFontScaleSpin->setValue(m_settings.m_overlayTextFontScale);
+    settingsUI()->detectionRoiXSpin->setValue(m_settings.m_detectionRoiX);
+    settingsUI()->detectionRoiYSpin->setValue(m_settings.m_detectionRoiY);
+    settingsUI()->detectionRoiWidthSpin->setValue(m_settings.m_detectionRoiWidth);
+    settingsUI()->detectionRoiHeightSpin->setValue(m_settings.m_detectionRoiHeight);
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
     settingsUI()->motionHistorySpin->setValue(m_settings.m_motionHistory);
     settingsUI()->motionVarThresholdSpin->setValue(m_settings.m_motionVarThreshold);
@@ -786,6 +796,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->alpacaPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaPortSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaNumXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaNumXSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaNumYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaNumYSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaStartXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaStartXSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaStartYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaStartYSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaGainCombo_currentIndexChanged);
     QObject::connect(settingsUI()->alpacaGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_alpacaGainSlider_valueChanged);
     QObject::connect(settingsUI()->alpacaGainSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaGainSpin_valueChanged);
@@ -848,6 +862,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->overlayFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayFontScaleSpin_valueChanged);
     QObject::connect(settingsUI()->overlayTextFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayTextFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->overlayTextFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayTextFontScaleSpin_valueChanged);
+    QObject::connect(settingsUI()->detectionRoiXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiXSpin_valueChanged);
+    QObject::connect(settingsUI()->detectionRoiYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiYSpin_valueChanged);
+    QObject::connect(settingsUI()->detectionRoiWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiWidthSpin_valueChanged);
+    QObject::connect(settingsUI()->detectionRoiHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiHeightSpin_valueChanged);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
     QObject::connect(settingsUI()->motionHistorySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionHistorySpin_valueChanged);
     QObject::connect(settingsUI()->motionVarThresholdSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_motionVarThresholdSpin_valueChanged);
@@ -1740,6 +1758,14 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaBinXSpin->setVisible(alpaca);
     settingsUI()->alpacaBinYLabel->setVisible(alpaca);
     settingsUI()->alpacaBinYSpin->setVisible(alpaca);
+    settingsUI()->alpacaNumXLabel->setVisible(alpaca);
+    settingsUI()->alpacaNumXSpin->setVisible(alpaca);
+    settingsUI()->alpacaNumYLabel->setVisible(alpaca);
+    settingsUI()->alpacaNumYSpin->setVisible(alpaca);
+    settingsUI()->alpacaStartXLabel->setVisible(alpaca);
+    settingsUI()->alpacaStartXSpin->setVisible(alpaca);
+    settingsUI()->alpacaStartYLabel->setVisible(alpaca);
+    settingsUI()->alpacaStartYSpin->setVisible(alpaca);
     settingsUI()->alpacaGainLabel->setVisible(alpaca);
     settingsUI()->alpacaGainCombo->setVisible(alpaca && m_alpacaHasNamedGains);
     settingsUI()->alpacaGainSlider->setVisible(alpaca && !m_alpacaHasNamedGains);
@@ -1792,6 +1818,9 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     // Bin Y
     settingsUI()->alpacaBinYSpin->setMaximum(std::max(1, info.getMaxBinY()));
     settingsUI()->alpacaBinYSpin->setValue(qBound(1, m_settings.m_alpacaBinY, info.getMaxBinY()));
+    m_alpacaCameraSizeX = std::max(0, info.getCameraSizeX());
+    m_alpacaCameraSizeY = std::max(0, info.getCameraSizeY());
+    updateAlpacaSubframeControls();
 
     // Gain
     m_alpacaHasNamedGains = !info.getGains().isEmpty();
@@ -1887,6 +1916,32 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
 
     updateAlpacaVisibility();
     blockApplySettings(false);
+}
+
+void CameraGUI::updateAlpacaSubframeControls()
+{
+    const int maxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_settings.m_alpacaBinX));
+    const int maxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_settings.m_alpacaBinY));
+    const int startX = qBound(0, m_settings.m_alpacaStartX, maxSubframeX - 1);
+    const int startY = qBound(0, m_settings.m_alpacaStartY, maxSubframeY - 1);
+    const int maxNumX = std::max(1, maxSubframeX - startX);
+    const int maxNumY = std::max(1, maxSubframeY - startY);
+    const int numX = (m_settings.m_alpacaNumX <= 0) ? maxNumX : qBound(1, m_settings.m_alpacaNumX, maxNumX);
+    const int numY = (m_settings.m_alpacaNumY <= 0) ? maxNumY : qBound(1, m_settings.m_alpacaNumY, maxNumY);
+
+    m_settings.m_alpacaStartX = startX;
+    m_settings.m_alpacaStartY = startY;
+    m_settings.m_alpacaNumX = numX;
+    m_settings.m_alpacaNumY = numY;
+
+    settingsUI()->alpacaStartXSpin->setMaximum(maxSubframeX - 1);
+    settingsUI()->alpacaStartYSpin->setMaximum(maxSubframeY - 1);
+    settingsUI()->alpacaStartXSpin->setValue(startX);
+    settingsUI()->alpacaStartYSpin->setValue(startY);
+    settingsUI()->alpacaNumXSpin->setMaximum(maxNumX);
+    settingsUI()->alpacaNumYSpin->setMaximum(maxNumY);
+    settingsUI()->alpacaNumXSpin->setValue(numX);
+    settingsUI()->alpacaNumYSpin->setValue(numY);
 }
 
 void CameraGUI::on_startStop_clicked(bool checked)
@@ -2053,14 +2108,56 @@ void CameraGUI::on_alpacaPortSpin_valueChanged(int value)
 void CameraGUI::on_alpacaBinXSpin_valueChanged(int value)
 {
     m_settings.m_alpacaBinX = value;
+    updateAlpacaSubframeControls();
     m_settingsKeys.append("alpacaBinX");
+    m_settingsKeys.append("alpacaNumX");
+    m_settingsKeys.append("alpacaStartX");
     applySettings();
 }
 
 void CameraGUI::on_alpacaBinYSpin_valueChanged(int value)
 {
     m_settings.m_alpacaBinY = value;
+    updateAlpacaSubframeControls();
     m_settingsKeys.append("alpacaBinY");
+    m_settingsKeys.append("alpacaNumY");
+    m_settingsKeys.append("alpacaStartY");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaNumXSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaNumX = value;
+    updateAlpacaSubframeControls();
+    m_settingsKeys.append("alpacaNumX");
+    m_settingsKeys.append("alpacaStartX");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaNumYSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaNumY = value;
+    updateAlpacaSubframeControls();
+    m_settingsKeys.append("alpacaNumY");
+    m_settingsKeys.append("alpacaStartY");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaStartXSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaStartX = value;
+    updateAlpacaSubframeControls();
+    m_settingsKeys.append("alpacaStartX");
+    m_settingsKeys.append("alpacaNumX");
+    applySettings();
+}
+
+void CameraGUI::on_alpacaStartYSpin_valueChanged(int value)
+{
+    m_settings.m_alpacaStartY = value;
+    updateAlpacaSubframeControls();
+    m_settingsKeys.append("alpacaStartY");
+    m_settingsKeys.append("alpacaNumY");
     applySettings();
 }
 
@@ -2704,6 +2801,34 @@ void CameraGUI::on_overlayTextFontScaleSpin_valueChanged(double value)
 {
     m_settings.m_overlayTextFontScale = value;
     m_settingsKeys.append("overlayTextFontScale");
+    applySettings();
+}
+
+void CameraGUI::on_detectionRoiXSpin_valueChanged(int value)
+{
+    m_settings.m_detectionRoiX = value;
+    m_settingsKeys.append("detectionRoiX");
+    applySettings();
+}
+
+void CameraGUI::on_detectionRoiYSpin_valueChanged(int value)
+{
+    m_settings.m_detectionRoiY = value;
+    m_settingsKeys.append("detectionRoiY");
+    applySettings();
+}
+
+void CameraGUI::on_detectionRoiWidthSpin_valueChanged(int value)
+{
+    m_settings.m_detectionRoiWidth = value;
+    m_settingsKeys.append("detectionRoiWidth");
+    applySettings();
+}
+
+void CameraGUI::on_detectionRoiHeightSpin_valueChanged(int value)
+{
+    m_settings.m_detectionRoiHeight = value;
+    m_settingsKeys.append("detectionRoiHeight");
     applySettings();
 }
 

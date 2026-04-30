@@ -284,13 +284,14 @@ private:
     void applyFlip(cv::Mat& bgrMat) const;
     void applyBrightnessContrast(cv::Mat& bgrMat) const;
     void applyInvertColors(cv::Mat& bgrMat) const;
-    void applyDiffMask(cv::Mat& bgrMat);
-    void applyMotionDetection(cv::Mat& bgrMat);
+    [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
+    void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi);
+    void applyMotionDetection(cv::Mat& bgrMat, const cv::Rect& roi);
     void applySpectrumOverlay(cv::Mat& bgrMat) const;
     [[nodiscard]] QImage convertBgrToRgbImage(cv::Mat& bgrMat) const;
     void applyDateTimeOverlay(QImage& image) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
-    void runYoloDetections(cv::Mat& bgrMat);
+    void runYoloDetections(cv::Mat& bgrMat, const cv::Rect& roi);
     void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
     void applyObjectDetectedSettings(const QString& className);
     void applyObjectDisappearedSettings(const QString& className);

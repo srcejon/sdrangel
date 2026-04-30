@@ -485,6 +485,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "diffMask", "diffThreshold", "dilationSize", "diffMaskHistoryFrames", "diffMaskCloseSize", "overlayFontFamily", "overlayFontScale",
+        "detectionRoiX", "detectionRoiY", "detectionRoiWidth", "detectionRoiHeight",
         "motionDetect", "motionHistory", "motionVarThreshold", "motionDetectShadows", "motionOpenSize", "motionCloseSize", "motionPersistenceFrames",
         "motionBoxColor", "minContourArea",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
@@ -529,12 +530,21 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         || settingsKeys.contains("diffThreshold")
         || settingsKeys.contains("dilationSize")
         || settingsKeys.contains("diffMaskHistoryFrames")
-        || settingsKeys.contains("diffMaskCloseSize"))
+        || settingsKeys.contains("diffMaskCloseSize")
+        || settingsKeys.contains("detectionRoiX")
+        || settingsKeys.contains("detectionRoiY")
+        || settingsKeys.contains("detectionRoiWidth")
+        || settingsKeys.contains("detectionRoiHeight"))
     {
         m_diffMaskHistory.clear();
     }
 
-    if ((force && !m_settings.m_diffMask) || (settingsKeys.contains("diffMask") && !m_settings.m_diffMask)) {
+    if ((force && !m_settings.m_diffMask)
+        || (settingsKeys.contains("diffMask") && !m_settings.m_diffMask)
+        || settingsKeys.contains("detectionRoiX")
+        || settingsKeys.contains("detectionRoiY")
+        || settingsKeys.contains("detectionRoiWidth")
+        || settingsKeys.contains("detectionRoiHeight")) {
         m_previousRawFrame = QImage();
     }
 
@@ -542,7 +552,11 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         || settingsKeys.contains("motionDetect")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
-        || settingsKeys.contains("motionDetectShadows"))
+        || settingsKeys.contains("motionDetectShadows")
+        || settingsKeys.contains("detectionRoiX")
+        || settingsKeys.contains("detectionRoiY")
+        || settingsKeys.contains("detectionRoiWidth")
+        || settingsKeys.contains("detectionRoiHeight"))
     {
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
     }
@@ -555,7 +569,11 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         || settingsKeys.contains("motionOpenSize")
         || settingsKeys.contains("motionCloseSize")
         || settingsKeys.contains("motionPersistenceFrames")
-        || settingsKeys.contains("minContourArea"))
+        || settingsKeys.contains("minContourArea")
+        || settingsKeys.contains("detectionRoiX")
+        || settingsKeys.contains("detectionRoiY")
+        || settingsKeys.contains("detectionRoiWidth")
+        || settingsKeys.contains("detectionRoiHeight"))
     {
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
@@ -803,7 +821,22 @@ void CameraPostProcessor::applyInvertColors(cv::Mat& bgrMat) const
     cv::bitwise_not(bgrMat, bgrMat);
 }
 
-void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat)
+cv::Rect CameraPostProcessor::resolveDetectionRoi(const cv::Size& frameSize) const
+{
+    const int frameWidth = std::max(1, frameSize.width);
+    const int frameHeight = std::max(1, frameSize.height);
+    const int x = qBound(0, m_settings.m_detectionRoiX, frameWidth - 1);
+    const int y = qBound(0, m_settings.m_detectionRoiY, frameHeight - 1);
+    const int width = (m_settings.m_detectionRoiWidth <= 0)
+        ? (frameWidth - x)
+        : qBound(1, m_settings.m_detectionRoiWidth, frameWidth - x);
+    const int height = (m_settings.m_detectionRoiHeight <= 0)
+        ? (frameHeight - y)
+        : qBound(1, m_settings.m_detectionRoiHeight, frameHeight - y);
+    return cv::Rect(x, y, width, height);
+}
+
+void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi)
 {
     const QImage prevRgb = m_previousRawFrame.convertToFormat(QImage::Format_RGB888);
     cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
@@ -812,10 +845,12 @@ void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat)
     cv::Mat prevBgr;
     cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
 
-    cv::Mat gray, prevGray, diff, mask;
+    cv::Mat gray, prevGray;
     cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
     cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
-    cv::absdiff(gray, prevGray, diff);
+    cv::Mat diff;
+    cv::absdiff(gray(roi), prevGray(roi), diff);
+    cv::Mat mask;
     cv::threshold(diff, mask, m_settings.m_diffThreshold, 255, cv::THRESH_BINARY);
 
     if (m_settings.m_dilationSize > 0)
@@ -849,11 +884,13 @@ void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat)
     }
 
     cv::Mat result = cv::Mat::zeros(bgrMat.size(), bgrMat.type());
-    cv::bitwise_and(bgrMat, bgrMat, result, combinedMask);
+    cv::Mat fullMask = cv::Mat::zeros(bgrMat.rows, bgrMat.cols, combinedMask.type());
+    combinedMask.copyTo(fullMask(roi));
+    cv::bitwise_and(bgrMat, bgrMat, result, fullMask);
     bgrMat = result;
 }
 
-void CameraPostProcessor::applyMotionDetection(cv::Mat& bgrMat)
+void CameraPostProcessor::applyMotionDetection(cv::Mat& bgrMat, const cv::Rect& roi)
 {
     if (!m_bgSubtractor) {
         m_bgSubtractor = cv::createBackgroundSubtractorMOG2(
@@ -863,7 +900,7 @@ void CameraPostProcessor::applyMotionDetection(cv::Mat& bgrMat)
     }
 
     cv::Mat fgMask;
-    m_bgSubtractor->apply(bgrMat, fgMask);
+    m_bgSubtractor->apply(bgrMat(roi), fgMask);
     cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
 
     if (m_settings.m_motionOpenSize > 0)
@@ -888,7 +925,10 @@ void CameraPostProcessor::applyMotionDetection(cv::Mat& bgrMat)
     for (const auto& contour : contours)
     {
         if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea)) {
-            boxes.push_back(cv::boundingRect(contour));
+            cv::Rect box = cv::boundingRect(contour);
+            box.x += roi.x;
+            box.y += roi.y;
+            boxes.push_back(box);
         }
     }
 
@@ -1064,6 +1104,7 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
                 static_cast<size_t>(rgb.bytesPerLine()));
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+    const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
 
     if (needsWhiteBalance) { applyWhiteBalance(bgrMat); }
     if (needsSaturation) { applySaturation(bgrMat); }
@@ -1078,12 +1119,12 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
     if (m_settings.m_diffMask && !m_previousRawFrame.isNull()
         && m_previousRawFrame.width() == input.width()
         && m_previousRawFrame.height() == input.height()) {
-        applyDiffMask(bgrMat);
+        applyDiffMask(bgrMat, detectionRoi);
     }
-    if (m_settings.m_motionDetect) { applyMotionDetection(bgrMat); }
+    if (m_settings.m_motionDetect) { applyMotionDetection(bgrMat, detectionRoi); }
 
     if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
-        runYoloDetections(bgrMat);
+        runYoloDetections(bgrMat, detectionRoi);
     }
 
     if (needsSpectrumOverlay) { applySpectrumOverlay(bgrMat); }
@@ -1097,7 +1138,7 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
     return result;
 }
 
-void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
+void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat, const cv::Rect& roi)
 {
     PROFILER_START();
 
@@ -1200,11 +1241,12 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
         m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
     }
 
-    const float scaleX = static_cast<float>(bgrMat.cols) / m_yoloInputSize.width;
-    const float scaleY = static_cast<float>(bgrMat.rows) / m_yoloInputSize.height;
+    cv::Mat roiMat = bgrMat(roi);
+    const float scaleX = static_cast<float>(roiMat.cols) / m_yoloInputSize.width;
+    const float scaleY = static_cast<float>(roiMat.rows) / m_yoloInputSize.height;
 
     cv::Mat blob;
-    cv::dnn::blobFromImage(bgrMat, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
+    cv::dnn::blobFromImage(roiMat, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
     m_yoloNet.setInput(blob);
 
     std::vector<cv::Mat> outputs;
@@ -1266,7 +1308,11 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
             const float w = det.at<float>(2, a) * scaleX;
             const float h = det.at<float>(3, a) * scaleY;
 
-            boxes.push_back(cv::Rect(static_cast<int>(cx - w / 2.0f), static_cast<int>(cy - h / 2.0f), static_cast<int>(w), static_cast<int>(h)));
+            boxes.push_back(cv::Rect(
+                roi.x + static_cast<int>(cx - w / 2.0f),
+                roi.y + static_cast<int>(cy - h / 2.0f),
+                static_cast<int>(w),
+                static_cast<int>(h)));
             scores.push_back(bestScore);
             classIds.push_back(bestClass);
         }
@@ -1305,7 +1351,11 @@ void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat)
             const float w = det.at<float>(a, 2) * scaleX;
             const float h = det.at<float>(a, 3) * scaleY;
 
-            boxes.push_back(cv::Rect(static_cast<int>(cx - w / 2.0f), static_cast<int>(cy - h / 2.0f), static_cast<int>(w), static_cast<int>(h)));
+            boxes.push_back(cv::Rect(
+                roi.x + static_cast<int>(cx - w / 2.0f),
+                roi.y + static_cast<int>(cy - h / 2.0f),
+                static_cast<int>(w),
+                static_cast<int>(h)));
             scores.push_back(bestScore);
             classIds.push_back(bestClass);
         }

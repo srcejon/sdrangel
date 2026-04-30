@@ -184,6 +184,12 @@ void CameraSettings::resetToDefaults()
     m_overlayFontFamily.clear();
     m_overlayFontScale = 12.0;
     m_motionDetect = false;
+    m_motionHistory = 500;
+    m_motionVarThreshold = 16.0;
+    m_motionDetectShadows = true;
+    m_motionOpenSize = 0;
+    m_motionCloseSize = 0;
+    m_motionPersistenceFrames = 0;
     m_motionBoxColor = Qt::red;
     m_minContourArea = 100;
     m_videoPostProcess = false;
@@ -266,6 +272,12 @@ QByteArray CameraSettings::serialize() const
     s.writeString(33, m_overlayFontFamily);
     s.writeDouble(34, m_overlayFontScale);
     s.writeBool(35, m_motionDetect);
+    s.writeS32(87, m_motionHistory);
+    s.writeDouble(88, m_motionVarThreshold);
+    s.writeBool(89, m_motionDetectShadows);
+    s.writeS32(90, m_motionOpenSize);
+    s.writeS32(91, m_motionCloseSize);
+    s.writeS32(92, m_motionPersistenceFrames);
     s.writeU32(36, m_motionBoxColor.rgba());
     s.writeS32(37, m_minContourArea);
     s.writeBool(38, m_videoPostProcess);
@@ -414,11 +426,22 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(33, &m_overlayFontFamily, "");
         d.readDouble(34, &m_overlayFontScale, 12.0);
         d.readBool(35, &m_motionDetect, false);
+        d.readS32(87, &m_motionHistory, 500);
+        d.readDouble(88, &m_motionVarThreshold, 16.0);
+        d.readBool(89, &m_motionDetectShadows, true);
+        d.readS32(90, &m_motionOpenSize, 0);
+        d.readS32(91, &m_motionCloseSize, 0);
+        d.readS32(92, &m_motionPersistenceFrames, 0);
         uint32_t motionBoxColorRgba = QColor(Qt::red).rgba();
         d.readU32(36, &motionBoxColorRgba, QColor(Qt::red).rgba());
         m_motionBoxColor = QColor::fromRgba(motionBoxColorRgba);
         d.readS32(37, &m_minContourArea, 100);
         m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
+        m_motionHistory = qBound(1, m_motionHistory, 5000);
+        m_motionVarThreshold = qBound(1.0, m_motionVarThreshold, 200.0);
+        m_motionOpenSize = qBound(0, m_motionOpenSize, 20);
+        m_motionCloseSize = qBound(0, m_motionCloseSize, 20);
+        m_motionPersistenceFrames = qBound(0, m_motionPersistenceFrames, 120);
         m_minContourArea = qBound(0, m_minContourArea, 10000);
         d.readBool(38, &m_videoPostProcess, false);
         d.readBool(39, &m_overlaySpectrum, false);
@@ -574,11 +597,22 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(33, &m_overlayFontFamily, "");
         d.readDouble(34, &m_overlayFontScale, 12.0);
         d.readBool(35, &m_motionDetect, false);
+        d.readS32(87, &m_motionHistory, 500);
+        d.readDouble(88, &m_motionVarThreshold, 16.0);
+        d.readBool(89, &m_motionDetectShadows, true);
+        d.readS32(90, &m_motionOpenSize, 0);
+        d.readS32(91, &m_motionCloseSize, 0);
+        d.readS32(92, &m_motionPersistenceFrames, 0);
         uint32_t motionBoxColorRgba = QColor(Qt::red).rgba();
         d.readU32(36, &motionBoxColorRgba, QColor(Qt::red).rgba());
         m_motionBoxColor = QColor::fromRgba(motionBoxColorRgba);
         d.readS32(37, &m_minContourArea, 100);
         m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
+        m_motionHistory = qBound(1, m_motionHistory, 5000);
+        m_motionVarThreshold = qBound(1.0, m_motionVarThreshold, 200.0);
+        m_motionOpenSize = qBound(0, m_motionOpenSize, 20);
+        m_motionCloseSize = qBound(0, m_motionCloseSize, 20);
+        m_motionPersistenceFrames = qBound(0, m_motionPersistenceFrames, 120);
         m_minContourArea = qBound(0, m_minContourArea, 10000);
         d.readBool(38, &m_videoPostProcess, false);
         d.readBool(39, &m_overlaySpectrum, false);
@@ -809,6 +843,24 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("motionDetect")) {
         m_motionDetect = settings.m_motionDetect;
+    }
+    if (settingsKeys.contains("motionHistory")) {
+        m_motionHistory = qBound(1, settings.m_motionHistory, 5000);
+    }
+    if (settingsKeys.contains("motionVarThreshold")) {
+        m_motionVarThreshold = qBound(1.0, settings.m_motionVarThreshold, 200.0);
+    }
+    if (settingsKeys.contains("motionDetectShadows")) {
+        m_motionDetectShadows = settings.m_motionDetectShadows;
+    }
+    if (settingsKeys.contains("motionOpenSize")) {
+        m_motionOpenSize = qBound(0, settings.m_motionOpenSize, 20);
+    }
+    if (settingsKeys.contains("motionCloseSize")) {
+        m_motionCloseSize = qBound(0, settings.m_motionCloseSize, 20);
+    }
+    if (settingsKeys.contains("motionPersistenceFrames")) {
+        m_motionPersistenceFrames = qBound(0, settings.m_motionPersistenceFrames, 120);
     }
     if (settingsKeys.contains("motionBoxColor")) {
         m_motionBoxColor = settings.m_motionBoxColor;
@@ -1055,6 +1107,24 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("motionDetect") || force) {
         ostr << " m_motionDetect: " << m_motionDetect;
+    }
+    if (settingsKeys.contains("motionHistory") || force) {
+        ostr << " m_motionHistory: " << m_motionHistory;
+    }
+    if (settingsKeys.contains("motionVarThreshold") || force) {
+        ostr << " m_motionVarThreshold: " << m_motionVarThreshold;
+    }
+    if (settingsKeys.contains("motionDetectShadows") || force) {
+        ostr << " m_motionDetectShadows: " << m_motionDetectShadows;
+    }
+    if (settingsKeys.contains("motionOpenSize") || force) {
+        ostr << " m_motionOpenSize: " << m_motionOpenSize;
+    }
+    if (settingsKeys.contains("motionCloseSize") || force) {
+        ostr << " m_motionCloseSize: " << m_motionCloseSize;
+    }
+    if (settingsKeys.contains("motionPersistenceFrames") || force) {
+        ostr << " m_motionPersistenceFrames: " << m_motionPersistenceFrames;
     }
     if (settingsKeys.contains("minContourArea") || force) {
         ostr << " m_minContourArea: " << m_minContourArea;

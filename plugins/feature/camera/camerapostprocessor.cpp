@@ -363,6 +363,7 @@ CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_captureActive(false),
     m_imageSaved(false),
+    m_motionPersistenceRemaining(0),
     m_yoloInputSize(640, 640),
     m_autoWhiteBalanceGains(1.0, 1.0, 1.0),
     m_autoWhiteBalanceInitialized(false),
@@ -484,7 +485,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "diffMask", "diffThreshold", "dilationSize", "diffMaskHistoryFrames", "diffMaskCloseSize", "overlayFontFamily", "overlayFontScale",
-        "motionDetect", "motionBoxColor", "minContourArea",
+        "motionDetect", "motionHistory", "motionVarThreshold", "motionDetectShadows", "motionOpenSize", "motionCloseSize", "motionPersistenceFrames",
+        "motionBoxColor", "minContourArea",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
         "yoloEnabled", "yoloModelPath", "yoloLabelsPath", "yoloConfThreshold", "yoloNmsThreshold", "yoloBoxColor"
     };
@@ -506,6 +508,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_lastRawFrame = QImage();
         m_previousRawFrame = QImage();
         m_diffMaskHistory.clear();
+        m_lastMotionBoxes.clear();
+        m_motionPersistenceRemaining = 0;
         m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
         m_autoWhiteBalanceInitialized = false;
     }
@@ -534,8 +538,27 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_previousRawFrame = QImage();
     }
 
-    if ((force && !m_settings.m_motionDetect) || (settingsKeys.contains("motionDetect") && !m_settings.m_motionDetect)) {
+    if (force
+        || settingsKeys.contains("motionDetect")
+        || settingsKeys.contains("motionHistory")
+        || settingsKeys.contains("motionVarThreshold")
+        || settingsKeys.contains("motionDetectShadows"))
+    {
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
+    }
+
+    if (force
+        || settingsKeys.contains("motionDetect")
+        || settingsKeys.contains("motionHistory")
+        || settingsKeys.contains("motionVarThreshold")
+        || settingsKeys.contains("motionDetectShadows")
+        || settingsKeys.contains("motionOpenSize")
+        || settingsKeys.contains("motionCloseSize")
+        || settingsKeys.contains("motionPersistenceFrames")
+        || settingsKeys.contains("minContourArea"))
+    {
+        m_lastMotionBoxes.clear();
+        m_motionPersistenceRemaining = 0;
     }
 
     if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
@@ -833,23 +856,57 @@ void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat)
 void CameraPostProcessor::applyMotionDetection(cv::Mat& bgrMat)
 {
     if (!m_bgSubtractor) {
-        m_bgSubtractor = cv::createBackgroundSubtractorMOG2();
+        m_bgSubtractor = cv::createBackgroundSubtractorMOG2(
+            m_settings.m_motionHistory,
+            m_settings.m_motionVarThreshold,
+            m_settings.m_motionDetectShadows);
     }
 
     cv::Mat fgMask;
     m_bgSubtractor->apply(bgrMat, fgMask);
     cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
 
+    if (m_settings.m_motionOpenSize > 0)
+    {
+        const int ksize = 2 * m_settings.m_motionOpenSize + 1;
+        const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+        cv::morphologyEx(fgMask, fgMask, cv::MORPH_OPEN, kernel);
+    }
+
+    if (m_settings.m_motionCloseSize > 0)
+    {
+        const int ksize = 2 * m_settings.m_motionCloseSize + 1;
+        const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+        cv::morphologyEx(fgMask, fgMask, cv::MORPH_CLOSE, kernel);
+    }
+
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    const QColor& bc = m_settings.m_motionBoxColor;
-    const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
+    std::vector<cv::Rect> boxes;
+    boxes.reserve(contours.size());
     for (const auto& contour : contours)
     {
         if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea)) {
-            cv::rectangle(bgrMat, cv::boundingRect(contour), boxColor, 2);
+            boxes.push_back(cv::boundingRect(contour));
         }
+    }
+
+    if (!boxes.empty()) {
+        m_lastMotionBoxes = boxes;
+        m_motionPersistenceRemaining = m_settings.m_motionPersistenceFrames;
+    } else if ((m_motionPersistenceRemaining > 0) && !m_lastMotionBoxes.empty()) {
+        boxes = m_lastMotionBoxes;
+        --m_motionPersistenceRemaining;
+    } else {
+        m_lastMotionBoxes.clear();
+        m_motionPersistenceRemaining = 0;
+    }
+
+    const QColor& bc = m_settings.m_motionBoxColor;
+    const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
+    for (const auto& box : boxes) {
+        cv::rectangle(bgrMat, box, boxColor, 2);
     }
 }
 

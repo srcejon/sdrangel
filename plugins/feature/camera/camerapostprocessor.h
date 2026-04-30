@@ -21,6 +21,7 @@
 
 #include <QObject>
 #include <deque>
+#include <vector>
 #include <QHash>
 #include <QImage>
 #include <QDateTime>
@@ -249,6 +250,8 @@ private:
     std::deque<cv::Mat> m_diffMaskHistory;
     QDateTime m_captureDateTime;
     cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
+    std::vector<cv::Rect> m_lastMotionBoxes;
+    int m_motionPersistenceRemaining;
     cv::dnn::Net m_yoloNet;
     cv::Size m_yoloInputSize;
     QString m_yoloLoadedModelPath;

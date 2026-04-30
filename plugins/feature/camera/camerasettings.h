@@ -125,6 +125,12 @@ struct CameraSettings
     QString m_overlayFontFamily; ///< QPainter font family name (empty = system default)
     double  m_overlayFontScale;  ///< Font point size for QPainter text: 4.0..144.0
     bool   m_motionDetect;      ///< Enable MOG2 background subtractor
+    int    m_motionHistory;     ///< Background subtractor history length: 1..5000
+    double m_motionVarThreshold; ///< Variance threshold for MOG2 foreground classification: 1.0..200.0
+    bool   m_motionDetectShadows; ///< Enable MOG2 shadow detection
+    int    m_motionOpenSize;    ///< Kernel radius for motion-mask morphological open: 0..20
+    int    m_motionCloseSize;   ///< Kernel radius for motion-mask morphological close: 0..20
+    int    m_motionPersistenceFrames; ///< Keep last motion boxes for this many frames after motion disappears: 0..120
     QColor m_motionBoxColor;    ///< Bounding box colour for motion contours
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
     bool   m_videoPostProcess;  ///< When true, write post-processed frames to video; when false, write raw frames

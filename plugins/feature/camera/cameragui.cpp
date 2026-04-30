@@ -668,6 +668,12 @@ void CameraGUI::displaySettings()
     settingsUI()->overlayTextFontCombo->setCurrentText(m_settings.m_overlayTextFontFamily);
     settingsUI()->overlayTextFontScaleSpin->setValue(m_settings.m_overlayTextFontScale);
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
+    settingsUI()->motionHistorySpin->setValue(m_settings.m_motionHistory);
+    settingsUI()->motionVarThresholdSpin->setValue(m_settings.m_motionVarThreshold);
+    settingsUI()->motionDetectShadowsCheck->setChecked(m_settings.m_motionDetectShadows);
+    settingsUI()->motionOpenSizeSpin->setValue(m_settings.m_motionOpenSize);
+    settingsUI()->motionCloseSizeSpin->setValue(m_settings.m_motionCloseSize);
+    settingsUI()->motionPersistenceFramesSpin->setValue(m_settings.m_motionPersistenceFrames);
     settingsUI()->minContourAreaSpin->setValue(m_settings.m_minContourArea);
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
@@ -843,6 +849,12 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->overlayTextFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayTextFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->overlayTextFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayTextFontScaleSpin_valueChanged);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
+    QObject::connect(settingsUI()->motionHistorySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionHistorySpin_valueChanged);
+    QObject::connect(settingsUI()->motionVarThresholdSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_motionVarThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->motionDetectShadowsCheck, &QCheckBox::toggled, this, &CameraGUI::on_motionDetectShadowsCheck_toggled);
+    QObject::connect(settingsUI()->motionOpenSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionOpenSizeSpin_valueChanged);
+    QObject::connect(settingsUI()->motionCloseSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionCloseSizeSpin_valueChanged);
+    QObject::connect(settingsUI()->motionPersistenceFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionPersistenceFramesSpin_valueChanged);
     QObject::connect(settingsUI()->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
     QObject::connect(settingsUI()->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
     QObject::connect(ui->spectrumOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_spectrumOverlayButton_toggled);
@@ -2699,6 +2711,48 @@ void CameraGUI::on_motionDetectButton_toggled(bool checked)
 {
     m_settings.m_motionDetect = checked;
     m_settingsKeys.append("motionDetect");
+    applySettings();
+}
+
+void CameraGUI::on_motionHistorySpin_valueChanged(int value)
+{
+    m_settings.m_motionHistory = value;
+    m_settingsKeys.append("motionHistory");
+    applySettings();
+}
+
+void CameraGUI::on_motionVarThresholdSpin_valueChanged(double value)
+{
+    m_settings.m_motionVarThreshold = value;
+    m_settingsKeys.append("motionVarThreshold");
+    applySettings();
+}
+
+void CameraGUI::on_motionDetectShadowsCheck_toggled(bool checked)
+{
+    m_settings.m_motionDetectShadows = checked;
+    m_settingsKeys.append("motionDetectShadows");
+    applySettings();
+}
+
+void CameraGUI::on_motionOpenSizeSpin_valueChanged(int value)
+{
+    m_settings.m_motionOpenSize = value;
+    m_settingsKeys.append("motionOpenSize");
+    applySettings();
+}
+
+void CameraGUI::on_motionCloseSizeSpin_valueChanged(int value)
+{
+    m_settings.m_motionCloseSize = value;
+    m_settingsKeys.append("motionCloseSize");
+    applySettings();
+}
+
+void CameraGUI::on_motionPersistenceFramesSpin_valueChanged(int value)
+{
+    m_settings.m_motionPersistenceFrames = value;
+    m_settingsKeys.append("motionPersistenceFrames");
     applySettings();
 }
 

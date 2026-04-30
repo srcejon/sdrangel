@@ -264,6 +264,12 @@ private slots:
     void on_overlayTextFontCombo_currentFontChanged(const QFont& font);
     void on_overlayTextFontScaleSpin_valueChanged(double value);
     void on_motionDetectButton_toggled(bool checked);
+    void on_motionHistorySpin_valueChanged(int value);
+    void on_motionVarThresholdSpin_valueChanged(double value);
+    void on_motionDetectShadowsCheck_toggled(bool checked);
+    void on_motionOpenSizeSpin_valueChanged(int value);
+    void on_motionCloseSizeSpin_valueChanged(int value);
+    void on_motionPersistenceFramesSpin_valueChanged(int value);
     void on_minContourAreaSpin_valueChanged(int value);
     void on_motionBoxColorButton_clicked();
     void on_spectrumOverlayButton_toggled(bool checked);

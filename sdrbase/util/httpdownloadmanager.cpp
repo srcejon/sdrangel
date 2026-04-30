@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) 2020-2023 Jon Beniston, M7RCE <jon@beniston.com>                //
+// Copyright (C) 2020-2026 Jon Beniston, M7RCE <jon@beniston.com>                //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -46,6 +46,17 @@ QNetworkReply *HttpDownloadManager::download(const QUrl &url, const QString &fil
 bool HttpDownloadManager::downloading() const
 {
     return m_filenames.size() > 0;
+}
+
+// Check if we are downloading a specific file from a specific URL
+bool HttpDownloadManager::downloading(const QString &url, const QString &filename) const
+{
+    for (int i = 0; i < m_downloads.size(); i++)
+    {
+        if (m_filenames[i] == filename && m_downloads[i]->url().toEncoded().constData() == url)
+            return true;
+    }
+    return false;
 }
 
 qint64 HttpDownloadManager::fileAgeInDays(const QString& filename)

@@ -2,7 +2,7 @@
 // Copyright (C) 2012 maintech GmbH, Otto-Hahn-Str. 15, 97204 Hoechberg, Germany //
 // written by Christian Daniel                                                   //
 // Copyright (C) 2015-2016, 2018-2019 Edouard Griffiths, F4EXB <f4exb06@gmail.com> //
-// Copyright (C) 2020-2022 Jon Beniston, M7RCE <jon@beniston.com>                //
+// Copyright (C) 2020-2026 Jon Beniston, M7RCE <jon@beniston.com>                //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -36,6 +36,7 @@ public:
     HttpDownloadManager(QObject *parent = nullptr);
     QNetworkReply *download(const QUrl &url, const QString &filename);
     bool downloading() const;
+    bool downloading(const QString &url, const QString &filename) const;
 
     static QString downloadDir();
 

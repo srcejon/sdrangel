@@ -27,12 +27,16 @@
 #include <QSharedPointer>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QDateTime>
+
+#include "util/astronomy.h"
 
 #include "alpacaprotocol.h"
 
 namespace
 {
     constexpr int kTelescopeDeviceNumber = 0;
+    constexpr int kAlpacaCoordinatePrecision = 8;
 }
 
 AlpacaProtocol::AlpacaProtocol() :
@@ -41,6 +45,12 @@ AlpacaProtocol::AlpacaProtocol() :
     m_clientTransactionId(1),
     m_connected(false),
     m_connectionPending(false),
+    m_capabilitiesReady(false),
+    m_capabilitiesPending(false),
+    m_canSlewAltAzAsync(false),
+    m_canSlewAltAz(false),
+    m_canSlewAsync(false),
+    m_canSlew(false),
     m_slewPending(false)
 {
 }
@@ -80,6 +90,12 @@ void AlpacaProtocol::applySettings(const GS232ControllerSettings& settings, cons
     {
         m_connected = false;
         m_connectionPending = false;
+        m_capabilitiesReady = false;
+        m_capabilitiesPending = false;
+        m_canSlewAltAzAsync = false;
+        m_canSlewAltAz = false;
+        m_canSlewAsync = false;
+        m_canSlew = false;
         m_slewPending = false;
         m_pendingConnectedContinuations.clear();
     }
@@ -108,13 +124,15 @@ QUrlQuery AlpacaProtocol::transactionQuery()
     return query;
 }
 
-bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context)
+bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context, bool reportErrors)
 {
     if (reply->error() != QNetworkReply::NoError)
     {
         const QString message = QString("%1 transport error: %2").arg(context).arg(reply->errorString());
         qWarning() << "AlpacaProtocol::parseAlpacaResponse -" << message;
-        reportError(message);
+        if (reportErrors) {
+            reportError(message);
+        }
         return false;
     }
 
@@ -124,7 +142,9 @@ bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray&
     {
         const QString message = QString("%1 returned invalid JSON").arg(context);
         qWarning() << "AlpacaProtocol::parseAlpacaResponse -" << message << payload;
-        reportError(message);
+        if (reportErrors) {
+            reportError(message);
+        }
         return false;
     }
 
@@ -136,7 +156,9 @@ bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray&
         const QString errorMessage = object.value("ErrorMessage").toString();
         const QString message = QString("%1 Alpaca error %2: %3").arg(context).arg(errorNumber).arg(errorMessage);
         qWarning() << "AlpacaProtocol::parseAlpacaResponse -" << message;
-        reportError(message);
+        if (reportErrors) {
+            reportError(message);
+        }
         return false;
     }
 
@@ -147,8 +169,35 @@ void AlpacaProtocol::runWhenConnected(const std::function<void()>& continuation)
 {
     if (m_connected)
     {
+        if (m_capabilitiesReady)
+        {
+            if (continuation) {
+                continuation();
+            }
+            return;
+        }
+
         if (continuation) {
-            continuation();
+            m_pendingConnectedContinuations.append(continuation);
+        }
+
+        if (!m_capabilitiesPending)
+        {
+            queryCapabilities([this](bool capabilitiesOk) {
+                const auto continuations = m_pendingConnectedContinuations;
+                m_pendingConnectedContinuations.clear();
+
+                if (!capabilitiesOk) {
+                    return;
+                }
+
+                for (const auto& continuation : continuations)
+                {
+                    if (continuation) {
+                        continuation();
+                    }
+                }
+            });
         }
         return;
     }
@@ -172,15 +221,21 @@ void AlpacaProtocol::runWhenConnected(const std::function<void()>& continuation)
             return;
         }
 
-        const auto continuations = m_pendingConnectedContinuations;
-        m_pendingConnectedContinuations.clear();
+        queryCapabilities([this](bool capabilitiesOk) {
+            const auto continuations = m_pendingConnectedContinuations;
+            m_pendingConnectedContinuations.clear();
 
-        for (const auto& continuation : continuations)
-        {
-            if (continuation) {
-                continuation();
+            if (!capabilitiesOk) {
+                return;
             }
-        }
+
+            for (const auto& continuation : continuations)
+            {
+                if (continuation) {
+                    continuation();
+                }
+            }
+        });
     });
 }
 
@@ -217,33 +272,180 @@ void AlpacaProtocol::setConnected(bool connected, const std::function<void(bool)
     });
 }
 
+void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continuation)
+{
+    if (m_capabilitiesReady)
+    {
+        if (continuation) {
+            continuation(true);
+        }
+        return;
+    }
+
+    if (m_capabilitiesPending) {
+        return;
+    }
+
+    struct CapabilityInfo {
+        bool canSlewAltAzAsync = false;
+        bool canSlewAltAz = false;
+        bool canSlewAsync = false;
+        bool canSlew = false;
+        bool canSlewAltAzAsyncValid = false;
+        bool canSlewAltAzValid = false;
+        bool canSlewAsyncValid = false;
+        bool canSlewValid = false;
+        int pending = 4;
+    };
+
+    m_capabilitiesPending = true;
+
+    auto info = QSharedPointer<CapabilityInfo>::create();
+    auto checkDone = [this, info, continuation]() {
+        info->pending--;
+
+        if (info->pending != 0) {
+            return;
+        }
+
+        m_capabilitiesPending = false;
+
+        if (!info->canSlewAltAzAsyncValid
+            || !info->canSlewAltAzValid
+            || !info->canSlewAsyncValid
+            || !info->canSlewValid)
+        {
+            reportError("Failed to query Alpaca telescope slew capabilities");
+            if (continuation) {
+                continuation(false);
+            }
+            return;
+        }
+
+        m_canSlewAltAzAsync = info->canSlewAltAzAsync;
+        m_canSlewAltAz = info->canSlewAltAz;
+        m_canSlewAsync = info->canSlewAsync;
+        m_canSlew = info->canSlew;
+        m_capabilitiesReady = true;
+
+        qDebug() << "AlpacaProtocol::queryCapabilities"
+                 << "CanSlewAltAzAsync" << m_canSlewAltAzAsync
+                 << "CanSlewAltAz" << m_canSlewAltAz
+                 << "CanSlewAsync" << m_canSlewAsync
+                 << "CanSlew" << m_canSlew;
+
+        if (continuation) {
+            continuation(true);
+        }
+    };
+
+    getBoolProperty("canslewaltazasync", &info->canSlewAltAzAsync, &info->canSlewAltAzAsyncValid, checkDone);
+    getBoolProperty("canslewaltaz", &info->canSlewAltAz, &info->canSlewAltAzValid, checkDone);
+    getBoolProperty("canslewasync", &info->canSlewAsync, &info->canSlewAsyncValid, checkDone);
+    getBoolProperty("canslew", &info->canSlew, &info->canSlewValid, checkDone);
+}
+
+void AlpacaProtocol::getBoolProperty(const QString& property, bool *value, bool *valid, const std::function<void()>& checkDone)
+{
+    QUrl url = deviceUrl(property);
+    url.setQuery(transactionQuery());
+
+    QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, property, value, valid, checkDone]() {
+        const QByteArray payload = reply->readAll();
+        QJsonObject response;
+
+        if (parseAlpacaResponse(reply, payload, response, QString("Telescope %1").arg(property), false))
+        {
+            *value = response.value("Value").toBool();
+            *valid = true;
+        }
+
+        if (checkDone) {
+            checkDone();
+        }
+
+        reply->deleteLater();
+    });
+}
+
 void AlpacaProtocol::slewToAltAz(float azimuth, float elevation)
 {
     if (m_slewPending) {
         return;
     }
 
-    QUrl url = deviceUrl("slewtoaltazasync");
+    if (m_canSlewAltAzAsync || m_canSlewAltAz)
+    {
+        QUrlQuery body;
+        body.addQueryItem("Azimuth", QString::number(azimuth, 'f', kAlpacaCoordinatePrecision));
+        body.addQueryItem("Altitude", QString::number(elevation, 'f', kAlpacaCoordinatePrecision));
+
+        if (m_canSlewAltAzAsync) {
+            sendSlewCommand("slewtoaltazasync", body, "Telescope slewtoaltazasync");
+        } else {
+            sendSlewCommand("slewtoaltaz", body, "Telescope slewtoaltaz");
+        }
+    }
+    else if (m_canSlewAsync || m_canSlew)
+    {
+        slewToRaDec(azimuth, elevation, m_canSlewAsync);
+    }
+    else
+    {
+        reportError("Alpaca telescope driver does not support Alt/Az or RA/Dec slewing");
+    }
+}
+
+void AlpacaProtocol::sendSlewCommand(const QString& method, const QUrlQuery& commandBody, const QString& context)
+{
+    QUrl url = deviceUrl(method);
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
     QUrlQuery body = transactionQuery();
-    body.addQueryItem("Azimuth", QString::number(azimuth, 'f', m_settings.m_precision));
-    body.addQueryItem("Altitude", QString::number(elevation, 'f', m_settings.m_precision));
+    const auto queryItems = commandBody.queryItems();
+
+    for (const auto& queryItem : queryItems) {
+        body.addQueryItem(queryItem.first, queryItem.second);
+    }
 
     const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
-    qDebug() << "AlpacaProtocol::slewToAltAz" << url.toString() << payload;
+    qDebug() << "AlpacaProtocol::sendSlewCommand" << url.toString() << payload;
 
     m_slewPending = true;
     QNetworkReply *reply = m_networkManager->put(request, payload);
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, context]() {
         const QByteArray payload = reply->readAll();
         QJsonObject response;
-        parseAlpacaResponse(reply, payload, response, "Telescope slewtoaltazasync");
+        parseAlpacaResponse(reply, payload, response, context);
         m_slewPending = false;
         reply->deleteLater();
     });
+}
+
+void AlpacaProtocol::slewToRaDec(float azimuth, float elevation, bool asynchronous)
+{
+    float latitude, longitude;
+    getPosition(latitude, longitude);
+
+    AzAlt aa;
+    aa.az = azimuth;
+    aa.alt = elevation;
+
+    RADec rd = Astronomy::azAltToRaDec(aa, latitude, longitude, QDateTime::currentDateTime());
+
+    QUrlQuery body;
+    body.addQueryItem("RightAscension", QString::number(rd.ra, 'f', kAlpacaCoordinatePrecision));
+    body.addQueryItem("Declination", QString::number(rd.dec, 'f', kAlpacaCoordinatePrecision));
+
+    if (asynchronous) {
+        sendSlewCommand("slewtocoordinatesasync", body, "Telescope slewtocoordinatesasync");
+    } else {
+        sendSlewCommand("slewtocoordinates", body, "Telescope slewtocoordinates");
+    }
 }
 
 void AlpacaProtocol::pollAzimuthAltitude()

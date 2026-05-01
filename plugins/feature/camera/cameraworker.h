@@ -423,7 +423,7 @@ private:
     QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const;
 
     static const int m_alpacaStatusPollIntervalMs = 2000;
-    static const int m_alpacaImageReadyPollIntervalMs = 50;
+    static const int m_alpacaImageReadyPollIntervalMs = 100;
 
     void alpacaStartExposure();
     void alpacaCheckImageReady();

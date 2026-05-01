@@ -402,6 +402,7 @@ private:
     QString buildAlpacaFilterWheelBaseUrl() const;
     void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
     void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray()) const;
+    QString transportError(QNetworkReply *reply) const;
     QImage parseAlpacaImageArray(const QByteArray& payload) const;
     QImage parseAlpacaImageBytes(const QByteArray& payload) const;
     QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const;

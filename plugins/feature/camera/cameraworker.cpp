@@ -34,6 +34,7 @@
 #include <QtEndian>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QMetaEnum>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
@@ -1758,8 +1759,8 @@ void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNe
     if (path.endsWith(QStringLiteral("/imagearray"), Qt::CaseInsensitive))
     {
         qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
-                 << "transportError" << reply->error() << reply->errorString()
-                 << "<imagearray payload omitted>";
+                 << transportError(reply)
+                 << QString("<imagearray payload of %1 bytes omitted>").arg(payload.size());
         return;
     }
 
@@ -1784,15 +1785,24 @@ void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNe
     if (alpacaPayloadParsed)
     {
         qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
-                 << "transportError" << reply->error() << reply->errorString()
+                 << transportError(reply)
                  << "alpacaError" << alpacaErrorNumber << alpacaErrorMessage
                  << payload;
     }
     else
     {
         qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
-                 << "transportError" << reply->error() << reply->errorString()
+                 << transportError(reply)
                  << payload;
+    }
+}
+
+QString CameraWorker::transportError(QNetworkReply *reply) const
+{
+    if (reply->error() == QNetworkReply::NoError) {
+        return "";
+    } else {
+        return QString().arg(QMetaEnum::fromType<QNetworkReply::NetworkError>().valueToKey(reply->error())).arg(reply->errorString());
     }
 }
 

@@ -383,7 +383,7 @@ private:
     int m_lastAlpacaGain;
     int m_lastAlpacaOffset;
     int m_lastAlpacaReadoutMode;
-    QTimer m_statusTimer;   // polls camerastate + ccdtemperature every 2 s
+    QTimer m_statusTimer;   // polls camerastate + ccdtemperature
     QElapsedTimer m_alpacaCaptureTimer;
     qint64 m_lastAlpacaCaptureTimeMs;
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device

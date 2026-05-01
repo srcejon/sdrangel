@@ -229,14 +229,12 @@ private slots:
     void on_alpacaFocuserCombo_currentIndexChanged(int index);
     void on_alpacaFocuserHostEdit_editingFinished();
     void on_alpacaFocuserPortSpin_valueChanged(int value);
-    void on_alpacaFocuserDeviceNumberSpin_valueChanged(int value);
     void on_alpacaFocusPositionSpin_valueChanged(int value);
     void on_alpacaFocusStepSizeSpin_valueChanged(int value);
     void on_alpacaFilterWheelEnabledCheck_toggled(bool checked);
     void on_alpacaFilterWheelCombo_currentIndexChanged(int index);
     void on_alpacaFilterWheelHostEdit_editingFinished();
     void on_alpacaFilterWheelPortSpin_valueChanged(int value);
-    void on_alpacaFilterWheelDeviceNumberSpin_valueChanged(int value);
     void on_alpacaFilterWheelPositionCombo_currentIndexChanged(int index);
     void on_alpacaBinXSpin_valueChanged(int value);
     void on_alpacaBinYSpin_valueChanged(int value);

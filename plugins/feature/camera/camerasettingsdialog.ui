@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>687</width>
-    <height>896</height>
+    <height>830</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>1</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -657,92 +657,6 @@
           <item row="3" column="1">
            <widget class="QLineEdit" name="alpacaFocuserHostEdit"/>
           </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="alpacaFocuserDeviceNumberLabel">
-            <property name="text">
-             <string>Focuser device #</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QCheckBox" name="alpacaDiscoveryCheck">
-            <property name="toolTip">
-             <string>Discover Alpaca servers on the local network and populate the camera list from the responses</string>
-            </property>
-            <property name="text">
-             <string>Discover Alpaca servers</string>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="0">
-           <widget class="QLabel" name="alpacaFilterWheelHostLabel">
-            <property name="text">
-             <string>Filter wheel address</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QSpinBox" name="alpacaFocuserDeviceNumberSpin">
-            <property name="maximum">
-             <number>1024</number>
-            </property>
-           </widget>
-          </item>
-          <item row="8" column="1">
-           <widget class="QSpinBox" name="alpacaFilterWheelDeviceNumberSpin">
-            <property name="maximum">
-             <number>1024</number>
-            </property>
-           </widget>
-          </item>
-          <item row="9" column="0">
-           <widget class="QCheckBox" name="alpacaApiLogCheck">
-            <property name="toolTip">
-             <string>Log Alpaca API requests and responses using qDebug</string>
-            </property>
-            <property name="text">
-             <string>Log Alpaca API</string>
-            </property>
-           </widget>
-          </item>
-          <item row="8" column="0">
-           <widget class="QLabel" name="alpacaFilterWheelDeviceNumberLabel">
-            <property name="text">
-             <string>Filter wheel device #</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="2">
-           <widget class="QLabel" name="alpacaPortLabel">
-            <property name="text">
-             <string>Port</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QLineEdit" name="alpacaHostEdit">
-            <property name="toolTip">
-             <string>IP address / hostname of ASCOM Remote Server</string>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="1">
-           <widget class="QLineEdit" name="alpacaFilterWheelHostEdit"/>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="alpacaFocuserHostLabel">
-            <property name="text">
-             <string>Focuser address</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="alpacaHostLabel">
-            <property name="text">
-             <string>Camera address</string>
-            </property>
-           </widget>
-          </item>
           <item row="1" column="3">
            <widget class="QSpinBox" name="alpacaPortSpin">
             <property name="toolTip">
@@ -760,6 +674,23 @@
             </property>
            </widget>
           </item>
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="alpacaDiscoveryCheck">
+            <property name="toolTip">
+             <string>Discover Alpaca servers on the local network and populate the camera list from the responses</string>
+            </property>
+            <property name="text">
+             <string>Discover Alpaca servers</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="alpacaFilterWheelHostLabel">
+            <property name="text">
+             <string>Filter wheel address</string>
+            </property>
+           </widget>
+          </item>
           <item row="3" column="3">
            <widget class="QSpinBox" name="alpacaFocuserPortSpin">
             <property name="maximum">
@@ -767,17 +698,58 @@
             </property>
            </widget>
           </item>
-          <item row="6" column="2">
+          <item row="7" column="0">
+           <widget class="QCheckBox" name="alpacaApiLogCheck">
+            <property name="toolTip">
+             <string>Log Alpaca API requests and responses using qDebug</string>
+            </property>
+            <property name="text">
+             <string>Log Alpaca API</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="3">
+           <widget class="QSpinBox" name="alpacaFilterWheelPortSpin">
+            <property name="maximum">
+             <number>65535</number>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="2">
            <widget class="QLabel" name="alpacaFilterWheelPortLabel">
             <property name="text">
              <string>Port</string>
             </property>
            </widget>
           </item>
-          <item row="6" column="3">
-           <widget class="QSpinBox" name="alpacaFilterWheelPortSpin">
-            <property name="maximum">
-             <number>65535</number>
+          <item row="1" column="2">
+           <widget class="QLabel" name="alpacaPortLabel">
+            <property name="text">
+             <string>Port</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="alpacaHostEdit">
+            <property name="toolTip">
+             <string>IP address / hostname of ASCOM Remote Server</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QLineEdit" name="alpacaFilterWheelHostEdit"/>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="alpacaFocuserHostLabel">
+            <property name="text">
+             <string>Focuser address</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="alpacaHostLabel">
+            <property name="text">
+             <string>Camera address</string>
             </property>
            </widget>
           </item>
@@ -793,7 +765,7 @@
           <item row="0" column="0">
            <widget class="QCheckBox" name="alpacaFocuserEnabledCheck">
             <property name="text">
-             <string>Use Alpaca focuser</string>
+             <string>Use focuser</string>
             </property>
            </widget>
           </item>
@@ -807,7 +779,7 @@
           <item row="1" column="0">
            <widget class="QCheckBox" name="alpacaFilterWheelEnabledCheck">
             <property name="text">
-             <string>Use Alpaca filter wheel</string>
+             <string>Use filter wheel</string>
             </property>
            </widget>
           </item>

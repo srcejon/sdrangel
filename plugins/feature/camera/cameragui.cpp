@@ -474,16 +474,12 @@ bool CameraGUI::handleMessage(const Message& message)
         {
             QSignalBlocker blocker1(settingsUI()->alpacaFocuserHostEdit);
             QSignalBlocker blocker2(settingsUI()->alpacaFocuserPortSpin);
-            QSignalBlocker blocker3(settingsUI()->alpacaFocuserDeviceNumberSpin);
             QSignalBlocker blocker4(settingsUI()->alpacaFilterWheelHostEdit);
             QSignalBlocker blocker5(settingsUI()->alpacaFilterWheelPortSpin);
-            QSignalBlocker blocker6(settingsUI()->alpacaFilterWheelDeviceNumberSpin);
             settingsUI()->alpacaFocuserHostEdit->setText(m_settings.m_alpacaFocuserHost);
             settingsUI()->alpacaFocuserPortSpin->setValue(m_settings.m_alpacaFocuserPort);
-            settingsUI()->alpacaFocuserDeviceNumberSpin->setValue(m_settings.m_alpacaFocuserDeviceNumber);
             settingsUI()->alpacaFilterWheelHostEdit->setText(m_settings.m_alpacaFilterWheelHost);
             settingsUI()->alpacaFilterWheelPortSpin->setValue(m_settings.m_alpacaFilterWheelPort);
-            settingsUI()->alpacaFilterWheelDeviceNumberSpin->setValue(m_settings.m_alpacaFilterWheelDeviceNumber);
         }
 
         if ((previousFocuserHost != m_settings.m_alpacaFocuserHost)
@@ -854,13 +850,11 @@ void CameraGUI::displaySettings()
     populateAlpacaAccessoryCombos();
     settingsUI()->alpacaFocuserHostEdit->setText(m_settings.m_alpacaFocuserHost);
     settingsUI()->alpacaFocuserPortSpin->setValue(m_settings.m_alpacaFocuserPort);
-    settingsUI()->alpacaFocuserDeviceNumberSpin->setValue(m_settings.m_alpacaFocuserDeviceNumber);
     settingsUI()->alpacaFocusPositionSpin->setValue(m_settings.m_alpacaFocusPosition);
     settingsUI()->alpacaFocusStepSizeSpin->setValue(m_settings.m_alpacaFocusStepSize);
     settingsUI()->alpacaFilterWheelEnabledCheck->setChecked(m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaFilterWheelHostEdit->setText(m_settings.m_alpacaFilterWheelHost);
     settingsUI()->alpacaFilterWheelPortSpin->setValue(m_settings.m_alpacaFilterWheelPort);
-    settingsUI()->alpacaFilterWheelDeviceNumberSpin->setValue(m_settings.m_alpacaFilterWheelDeviceNumber);
     if (!m_alpacaFilterWheelNames.isEmpty())
     {
         QSignalBlocker blocker(settingsUI()->alpacaFilterWheelPositionCombo);
@@ -1173,14 +1167,12 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->alpacaFocuserCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaFocuserCombo_currentIndexChanged);
     QObject::connect(settingsUI()->alpacaFocuserHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaFocuserHostEdit_editingFinished);
     QObject::connect(settingsUI()->alpacaFocuserPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocuserPortSpin_valueChanged);
-    QObject::connect(settingsUI()->alpacaFocuserDeviceNumberSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocuserDeviceNumberSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaFocusPositionSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocusPositionSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaFocusStepSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocusStepSizeSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaFilterWheelEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_alpacaFilterWheelEnabledCheck_toggled);
     QObject::connect(settingsUI()->alpacaFilterWheelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaFilterWheelCombo_currentIndexChanged);
     QObject::connect(settingsUI()->alpacaFilterWheelHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaFilterWheelHostEdit_editingFinished);
     QObject::connect(settingsUI()->alpacaFilterWheelPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFilterWheelPortSpin_valueChanged);
-    QObject::connect(settingsUI()->alpacaFilterWheelDeviceNumberSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFilterWheelDeviceNumberSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaFilterWheelPositionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaFilterWheelPositionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
@@ -2325,8 +2317,6 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaFocuserHostEdit->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaFocuserPortLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaFocuserPortSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
-    settingsUI()->alpacaFocuserDeviceNumberLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
-    settingsUI()->alpacaFocuserDeviceNumberSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaFocusPositionLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaFocusPositionSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaFocusStepSizeLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
@@ -2336,8 +2326,6 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaFilterWheelHostEdit->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaFilterWheelPortLabel->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaFilterWheelPortSpin->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
-    settingsUI()->alpacaFilterWheelDeviceNumberLabel->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
-    settingsUI()->alpacaFilterWheelDeviceNumberSpin->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaFilterWheelPositionLabel->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaFilterWheelPositionCombo->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaStatusGroup->setVisible(alpaca);
@@ -2751,7 +2739,6 @@ void CameraGUI::on_alpacaFocuserCombo_currentIndexChanged(int index)
     m_settings.m_alpacaFocuserDeviceNumber = settingsUI()->alpacaFocuserCombo->itemData(index, AccessoryDeviceNumberRole).toInt();
     settingsUI()->alpacaFocuserHostEdit->setText(m_settings.m_alpacaFocuserHost);
     settingsUI()->alpacaFocuserPortSpin->setValue(m_settings.m_alpacaFocuserPort);
-    settingsUI()->alpacaFocuserDeviceNumberSpin->setValue(m_settings.m_alpacaFocuserDeviceNumber);
     m_settingsKeys.append("alpacaFocuserHost");
     m_settingsKeys.append("alpacaFocuserPort");
     m_settingsKeys.append("alpacaFocuserDeviceNumber");
@@ -2769,13 +2756,6 @@ void CameraGUI::on_alpacaFocuserPortSpin_valueChanged(int value)
 {
     m_settings.m_alpacaFocuserPort = static_cast<uint16_t>(value);
     m_settingsKeys.append("alpacaFocuserPort");
-    applySettings();
-}
-
-void CameraGUI::on_alpacaFocuserDeviceNumberSpin_valueChanged(int value)
-{
-    m_settings.m_alpacaFocuserDeviceNumber = value;
-    m_settingsKeys.append("alpacaFocuserDeviceNumber");
     applySettings();
 }
 
@@ -2812,7 +2792,6 @@ void CameraGUI::on_alpacaFilterWheelCombo_currentIndexChanged(int index)
     m_settings.m_alpacaFilterWheelDeviceNumber = settingsUI()->alpacaFilterWheelCombo->itemData(index, AccessoryDeviceNumberRole).toInt();
     settingsUI()->alpacaFilterWheelHostEdit->setText(m_settings.m_alpacaFilterWheelHost);
     settingsUI()->alpacaFilterWheelPortSpin->setValue(m_settings.m_alpacaFilterWheelPort);
-    settingsUI()->alpacaFilterWheelDeviceNumberSpin->setValue(m_settings.m_alpacaFilterWheelDeviceNumber);
     m_settingsKeys.append("alpacaFilterWheelHost");
     m_settingsKeys.append("alpacaFilterWheelPort");
     m_settingsKeys.append("alpacaFilterWheelDeviceNumber");
@@ -2830,13 +2809,6 @@ void CameraGUI::on_alpacaFilterWheelPortSpin_valueChanged(int value)
 {
     m_settings.m_alpacaFilterWheelPort = static_cast<uint16_t>(value);
     m_settingsKeys.append("alpacaFilterWheelPort");
-    applySettings();
-}
-
-void CameraGUI::on_alpacaFilterWheelDeviceNumberSpin_valueChanged(int value)
-{
-    m_settings.m_alpacaFilterWheelDeviceNumber = value;
-    m_settingsKeys.append("alpacaFilterWheelDeviceNumber");
     applySettings();
 }
 

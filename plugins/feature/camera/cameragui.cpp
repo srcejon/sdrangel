@@ -2320,8 +2320,6 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaOffsetSpin->setVisible(alpaca && !m_alpacaHasNamedOffsets);
     settingsUI()->alpacaReadoutModeLabel->setVisible(alpaca);
     settingsUI()->alpacaReadoutModeCombo->setVisible(alpaca);
-    settingsUI()->alpacaFocuserGroup->setVisible(alpaca);
-    settingsUI()->alpacaFocuserComboLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaFocuserCombo->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled && (settingsUI()->alpacaFocuserCombo->count() > 0));
     settingsUI()->alpacaFocuserHostLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaFocuserHostEdit->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
@@ -2333,8 +2331,6 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaFocusPositionSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaFocusStepSizeLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
     settingsUI()->alpacaFocusStepSizeSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
-    settingsUI()->alpacaFilterWheelGroup->setVisible(alpaca);
-    settingsUI()->alpacaFilterWheelComboLabel->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaFilterWheelCombo->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled && (settingsUI()->alpacaFilterWheelCombo->count() > 0));
     settingsUI()->alpacaFilterWheelHostLabel->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaFilterWheelHostEdit->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);

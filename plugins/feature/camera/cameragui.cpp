@@ -324,6 +324,8 @@ bool CameraGUI::handleMessage(const Message& message)
             m_lastAlpacaCameraState = -1;
             m_lastAlpacaCaptureTimeMs = -1;
             m_lastAlpacaCcdTemperatureValid = false;
+            m_lastAlpacaErrorNumber = 0;
+            m_lastAlpacaErrorMessage.clear();
             m_settingsDialog->clearAlpacaStatus();
         }
 
@@ -349,6 +351,8 @@ bool CameraGUI::handleMessage(const Message& message)
             m_lastAlpacaCameraState = -1;
             m_lastAlpacaCaptureTimeMs = -1;
             m_lastAlpacaCcdTemperatureValid = false;
+            m_lastAlpacaErrorNumber = 0;
+            m_lastAlpacaErrorMessage.clear();
             m_settingsDialog->clearAlpacaStatus();
         }
 
@@ -577,6 +581,8 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastAlpacaCaptureTimeMs = status.getCaptureTimeMs();
         m_lastAlpacaCcdTemperature = status.getCcdTemperature();
         m_lastAlpacaCcdTemperatureValid = status.isCcdTemperatureValid();
+        m_lastAlpacaErrorNumber = status.getLastErrorNumber();
+        m_lastAlpacaErrorMessage = status.getLastErrorMessage();
         updateAlpacaStatusDisplay();
 
         if (status.isCcdTemperatureValid()) {
@@ -634,6 +640,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_lastAlpacaCaptureTimeMs(-1),
     m_lastAlpacaCcdTemperature(0.0),
     m_lastAlpacaCcdTemperatureValid(false),
+    m_lastAlpacaErrorNumber(0),
+    m_lastAlpacaErrorMessage(),
     m_alpacaCameraSizeX(0),
     m_alpacaCameraSizeY(0),
     m_qtZoomSupported(false),
@@ -2379,6 +2387,9 @@ void CameraGUI::updateAlpacaStatusDisplay()
         m_lastAlpacaCaptureTimeMs >= 0 ? QString::number(m_lastAlpacaCaptureTimeMs) : "-");
     settingsUI()->ccdTempLabel->setText(
         m_lastAlpacaCcdTemperatureValid ? QString::number(m_lastAlpacaCcdTemperature, 'f', 1) : "-");
+    settingsUI()->alpacaErrorCodeLabel->setText(QString::number(m_lastAlpacaErrorNumber));
+    settingsUI()->alpacaErrorMessageLabel->setText(
+        m_lastAlpacaErrorMessage.isEmpty() ? "-" : m_lastAlpacaErrorMessage);
 }
 
 

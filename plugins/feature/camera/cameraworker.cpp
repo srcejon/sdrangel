@@ -278,6 +278,8 @@ CameraWorker::CameraWorker() :
     m_alpacaBayerOffsetX(0),
     m_alpacaBayerOffsetY(0),
     m_alpacaImageBytesSupported(true),
+    m_lastAlpacaErrorNumber(0),
+    m_lastAlpacaErrorMessage(),
     m_alpacaConnected(false),
     m_alpacaConnectionPending(false),
     m_alpacaFocuserConnected(false),
@@ -399,6 +401,8 @@ void CameraWorker::resetAlpacaConnectionState()
     m_alpacaPendingConnectedContinuations.clear();
     m_alpacaBootstrapPending = false;
     m_alpacaPendingBootstrapContinuations.clear();
+    m_lastAlpacaErrorNumber = 0;
+    m_lastAlpacaErrorMessage.clear();
 }
 
 void CameraWorker::resetAlpacaFilterWheelConnectionState()
@@ -1896,7 +1900,9 @@ void CameraWorker::alpacaPollStatus()
                 status->cameraState,
                 status->ccdTemperature,
                 status->ccdTemperatureValid,
-                m_lastAlpacaCaptureTimeMs));
+                m_lastAlpacaCaptureTimeMs,
+                m_lastAlpacaErrorNumber,
+                m_lastAlpacaErrorMessage));
         }
     };
 
@@ -1980,21 +1986,9 @@ void CameraWorker::logAlpacaRequest(const QString& method, const QUrl& url, cons
     }
 }
 
-void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload) const
+void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload)
 {
-    if (!m_settings.m_alpacaApiLogEnabled) {
-        return;
-    }
-
     const QString path = url.path();
-
-    if (path.endsWith(QStringLiteral("/imagearray"), Qt::CaseInsensitive))
-    {
-        qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
-                 << transportError(reply)
-                 << QString("<imagearray payload of %1 bytes omitted>").arg(payload.size());
-        return;
-    }
 
     int alpacaErrorNumber = 0;
     QString alpacaErrorMessage;
@@ -2012,6 +2006,22 @@ void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNe
             alpacaErrorNumber = root.value(QStringLiteral("ErrorNumber")).toInt(0);
             alpacaErrorMessage = root.value(QStringLiteral("ErrorMessage")).toString();
         }
+    }
+
+    m_lastAlpacaErrorNumber = alpacaErrorNumber;
+    m_lastAlpacaErrorMessage = alpacaErrorMessage;
+
+    if (!m_settings.m_alpacaApiLogEnabled) {
+        return;
+    }
+
+    if (path.endsWith(QStringLiteral("/imagearray"), Qt::CaseInsensitive))
+    {
+        qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
+                 << transportError(reply)
+                 << "alpacaError" << alpacaErrorNumber << alpacaErrorMessage
+                 << QString("<imagearray payload of %1 bytes omitted>").arg(payload.size());
+        return;
     }
 
     if (alpacaPayloadParsed)

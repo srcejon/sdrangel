@@ -146,6 +146,8 @@ void CameraSettingsDialog::clearAlpacaStatus()
     ui->pixelSizeLabel->setText("-");
     ui->cameraSizeLabel->setText("-");
     ui->ccdTempLabel->setText("-");
+    ui->alpacaErrorCodeLabel->setText("0");
+    ui->alpacaErrorMessageLabel->setText("-");
 
     if (m_tempSeries) {
         m_tempSeries->clear();

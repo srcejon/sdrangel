@@ -127,6 +127,8 @@ private:
     qint64 m_lastAlpacaCaptureTimeMs;
     double m_lastAlpacaCcdTemperature;
     bool m_lastAlpacaCcdTemperatureValid;
+    int m_lastAlpacaErrorNumber;
+    QString m_lastAlpacaErrorMessage;
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraSettingsDialog *m_settingsDialog;

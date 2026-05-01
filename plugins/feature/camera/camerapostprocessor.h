@@ -185,7 +185,6 @@ private:
     MessageQueue *m_msgQueueToGUI;
     CameraSettings m_settings;
     bool m_captureActive;
-    bool m_imageSaved;
     QImage m_lastRawFrame;
     QImage m_previousRawFrame;
     std::deque<cv::Mat> m_diffMaskHistory;

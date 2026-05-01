@@ -360,7 +360,6 @@ cv::Size readOnnxInputSize(const QString& modelPath)
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_captureActive(false),
-    m_imageSaved(false),
     m_motionPersistenceRemaining(0),
     m_yoloInputSize(640, 640),
     m_autoWhiteBalanceGains(1.0, 1.0, 1.0),
@@ -448,7 +447,6 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
 
         if (m_captureActive)
         {
-            m_imageSaved = false;
             m_previousRawFrame = QImage();
             m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
             m_autoWhiteBalanceInitialized = false;

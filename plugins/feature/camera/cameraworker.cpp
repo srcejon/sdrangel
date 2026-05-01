@@ -1205,6 +1205,71 @@ void CameraWorker::alpacaQueryFilterWheelInfo()
     });
 }
 
+void CameraWorker::alpacaQueryFilterWheelPosition(std::function<void(int)> continuation)
+{
+    if (!m_networkManager || !m_settings.isAlpacaCamera() || !m_settings.m_alpacaFilterWheelEnabled) {
+        if (continuation) {
+            continuation(-1);
+        }
+        return;
+    }
+
+    alpacaRunFilterWheelWhenConnected([this, continuation]() {
+        const QString baseUrl = buildAlpacaFilterWheelBaseUrl();
+        const int deviceNumber = std::max(0, m_settings.m_alpacaFilterWheelDeviceNumber);
+        QUrl url(baseUrl + QString("/api/v1/filterwheel/%1/position").arg(deviceNumber));
+        QUrlQuery q;
+        q.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+        q.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+        url.setQuery(q);
+        logAlpacaRequest("GET", url);
+
+        QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+        QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply, continuation]() {
+            int position = -1;
+            const QByteArray responseBody = reply->readAll();
+            logAlpacaResponse("GET", reply->request().url(), reply, responseBody);
+            if (reply->error() == QNetworkReply::NoError) {
+                const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+                if (doc.isObject()) {
+                    const QJsonObject root = doc.object();
+                    if (root.value("ErrorNumber").toInt(0) == 0) {
+                        const QJsonValue positionValue = root.contains(QStringLiteral("Value"))
+                            ? root.value(QStringLiteral("Value"))
+                            : root.value(QStringLiteral("value"));
+                        position = positionValue.toInt(-1);
+                    }
+                }
+            }
+            reply->deleteLater();
+            if (continuation) {
+                continuation(position);
+            }
+        });
+    });
+}
+
+void CameraWorker::alpacaWaitForFilterWheelPosition(int retriesRemaining)
+{
+    if (retriesRemaining <= 0 || !m_networkManager || !m_settings.isAlpacaCamera() || !m_settings.m_alpacaFilterWheelEnabled) {
+        return;
+    }
+
+    alpacaQueryFilterWheelPosition([this, retriesRemaining](int position) {
+        if (position >= 0)
+        {
+            if (m_msgQueueToGUI) {
+                m_msgQueueToGUI->push(MsgReportAlpacaFilterWheelInfo::create(QStringList(), position));
+            }
+            return;
+        }
+
+        QTimer::singleShot(250, this, [this, retriesRemaining]() {
+            alpacaWaitForFilterWheelPosition(retriesRemaining - 1);
+        });
+    });
+}
+
 void CameraWorker::alpacaSetFilterWheelPosition()
 {
     if (!m_networkManager || !m_settings.isAlpacaCamera() || !m_settings.m_alpacaFilterWheelEnabled) {
@@ -1231,7 +1296,7 @@ void CameraWorker::alpacaSetFilterWheelPosition()
             const QByteArray responseBody = reply->readAll();
             logAlpacaResponse("PUT", reply->request().url(), reply, responseBody);
             reply->deleteLater();
-            alpacaQueryFilterWheelInfo();
+            alpacaWaitForFilterWheelPosition(20);
         });
     });
 }

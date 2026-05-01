@@ -427,6 +427,8 @@ private:
     void alpacaSetFocuserPosition();
     void alpacaSetFilterWheelConnected(bool connected, std::function<void()> continuation = {});
     void alpacaRunFilterWheelWhenConnected(std::function<void()> continuation);
+    void alpacaQueryFilterWheelPosition(std::function<void(int)> continuation);
+    void alpacaWaitForFilterWheelPosition(int retriesRemaining);
     void alpacaQueryFilterWheelInfo();
     void alpacaSetFilterWheelPosition();
     void alpacaBootstrap(std::function<void()> continuation = {});

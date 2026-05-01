@@ -542,24 +542,29 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (CameraWorker::MsgReportAlpacaFilterWheelInfo::match(message))
     {
         const CameraWorker::MsgReportAlpacaFilterWheelInfo& info = (CameraWorker::MsgReportAlpacaFilterWheelInfo&) message;
-        m_alpacaFilterWheelNames = info.getNames();
+        if (!info.getNames().isEmpty()) {
+            m_alpacaFilterWheelNames = info.getNames();
+        }
 
         QSignalBlocker blocker(settingsUI()->alpacaFilterWheelPositionCombo);
-        settingsUI()->alpacaFilterWheelPositionCombo->clear();
+        if (!info.getNames().isEmpty())
+        {
+            settingsUI()->alpacaFilterWheelPositionCombo->clear();
 
-        for (int i = 0; i < m_alpacaFilterWheelNames.size(); ++i) {
-            settingsUI()->alpacaFilterWheelPositionCombo->addItem(m_alpacaFilterWheelNames.at(i), i);
+            for (int i = 0; i < m_alpacaFilterWheelNames.size(); ++i) {
+                settingsUI()->alpacaFilterWheelPositionCombo->addItem(m_alpacaFilterWheelNames.at(i), i);
+            }
         }
 
-        if ((info.getPosition() >= 0) && (info.getPosition() < settingsUI()->alpacaFilterWheelPositionCombo->count())) {
+        if ((info.getPosition() >= 0) && (info.getPosition() < settingsUI()->alpacaFilterWheelPositionCombo->count()))
+        {
             settingsUI()->alpacaFilterWheelPositionCombo->setCurrentIndex(info.getPosition());
-        } else if (settingsUI()->alpacaFilterWheelPositionCombo->count() > 0) {
+            m_settings.m_alpacaFilterWheelPosition = info.getPosition();
+        }
+        else if (!info.getNames().isEmpty() && (settingsUI()->alpacaFilterWheelPositionCombo->count() > 0))
+        {
             settingsUI()->alpacaFilterWheelPositionCombo->setCurrentIndex(
                 qBound(0, m_settings.m_alpacaFilterWheelPosition, settingsUI()->alpacaFilterWheelPositionCombo->count() - 1));
-        }
-
-        if (info.getPosition() >= 0) {
-            m_settings.m_alpacaFilterWheelPosition = info.getPosition();
         }
 
         updateAlpacaVisibility();

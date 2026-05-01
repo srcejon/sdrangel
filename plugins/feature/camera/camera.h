@@ -109,9 +109,10 @@ public:
 
     MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
     MessageQueue* getPostProcessorInputMessageQueue() { return m_postProcessor ? m_postProcessor->getInputMessageQueue() : nullptr; }
+    void setMessageQueueToGUI(MessageQueue *queue) override;
 
 private:
-    QThread *m_thread;
+    QThread *m_workerThread;
     CameraWorker *m_worker;
     QThread *m_postProcessorThread;
     CameraPostProcessor *m_postProcessor;

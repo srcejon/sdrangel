@@ -32,7 +32,7 @@ const char* const Camera::m_featureId = "Camera";
 
 Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),
-    m_thread(new QThread()),
+    m_workerThread(new QThread()),
     m_worker(new CameraWorker()),
     m_postProcessorThread(new QThread()),
     m_postProcessor(new CameraPostProcessor()),
@@ -43,15 +43,17 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_errorMessage = "Camera error";
     m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
 
-    m_worker->moveToThread(m_thread);
-    QObject::connect(m_thread, &QThread::started, m_worker, &CameraWorker::startWork);
-    QObject::connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
-    QObject::connect(m_thread, &QThread::finished, m_thread, &QThread::deleteLater);
+    // The worker needs to run continuously, to be able to query camera capabilities.
+    m_worker->moveToThread(m_workerThread);
+    QObject::connect(m_workerThread, &QThread::started, m_worker, &CameraWorker::startWork);
+    QObject::connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
+    QObject::connect(m_workerThread, &QThread::finished, m_workerThread, &QThread::deleteLater);
     m_worker->setMessageQueueToGUI(getMessageQueueToGUI());
     m_worker->setPostProcessorInputMessageQueue(getPostProcessorInputMessageQueue());
-    m_thread->start();
+    m_workerThread->start();
     m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(m_settings, QList<QString>(), true));
 
+    // The post-processor runs continously, to be able to update the image when post processing settings are changed.
     m_postProcessor->moveToThread(m_postProcessorThread);
     QObject::connect(m_postProcessorThread, &QThread::started, m_postProcessor, &CameraPostProcessor::startWork);
     QObject::connect(m_postProcessorThread, &QThread::finished, m_postProcessor, &QObject::deleteLater);
@@ -65,11 +67,11 @@ Camera::~Camera()
 {
     stop();
 
-    if (m_thread)
+    if (m_workerThread)
     {
-        m_thread->quit();
-        m_thread->wait();
-        m_thread = nullptr;
+        m_workerThread->quit();
+        m_workerThread->wait();
+        m_workerThread = nullptr;
         m_worker = nullptr;
     }
 
@@ -95,10 +97,8 @@ void Camera::start()
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
     }
     if (m_postProcessor) {
-        m_postProcessor->setMessageQueueToGUI(getMessageQueueToGUI());
         m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(true));
     }
-
     if (m_guiMessageQueue) {
         m_guiMessageQueue->push(Camera::MsgStartStop::create(true));
     }
@@ -121,6 +121,20 @@ void Camera::stop()
     }
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(false));
+    }
+}
+
+void Camera::setMessageQueueToGUI(MessageQueue *queue)
+{
+    Feature::setMessageQueueToGUI(queue);
+    if (m_worker) {
+        m_worker->setMessageQueueToGUI(queue);
+    }
+    if (m_postProcessor) {
+        m_postProcessor->setMessageQueueToGUI(queue);
+    }
+    if (m_cameraFinder) {
+        m_cameraFinder->setMessageQueueToGUI(queue);
     }
 }
 
@@ -188,7 +202,6 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(settings, settingsKeys, force));
     }
     if (m_postProcessor) {
-        m_postProcessor->setMessageQueueToGUI(getMessageQueueToGUI());
         m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgConfigureCameraPostProcessor::create(settings, settingsKeys, force));
     }
 
@@ -198,9 +211,7 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    if ((settingsKeys.contains("alpacaDiscoveryEnabled") || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort") || force) && m_cameraFinder)
-    {
-        m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
+    if ((settingsKeys.contains("alpacaDiscoveryEnabled") || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort") || force) && m_cameraFinder) {
         m_cameraFinder->reportCameraList(m_settings);
     }
 }

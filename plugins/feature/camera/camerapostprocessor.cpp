@@ -625,14 +625,13 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
 
     reportFrameToGUI(processed);
 
-    if (m_captureActive && m_settings.m_saveImage && !m_imageSaved && !m_settings.m_imageFileName.isEmpty())
+    if (m_captureActive && m_settings.m_saveImage && !m_settings.m_imageFileName.isEmpty())
     {
         QFileInfo fileInfo(m_settings.m_imageFileName);
         QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
         qDebug() << "CameraPostProcessor: Saving image to" << filename;
         const QImage& frameToSave = m_settings.m_videoPostProcess ? processed : image;
         frameToSave.save(filename);
-        m_imageSaved = true;
     }
 
     if (m_captureActive && m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())

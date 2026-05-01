@@ -321,6 +321,9 @@ bool CameraGUI::handleMessage(const Message& message)
             || (previousAlpacaHost != m_settings.m_alpacaHost)
             || (previousAlpacaPort != m_settings.m_alpacaPort))
         {
+            m_lastAlpacaCameraState = -1;
+            m_lastAlpacaCaptureTimeMs = -1;
+            m_lastAlpacaCcdTemperatureValid = false;
             m_settingsDialog->clearAlpacaStatus();
         }
 
@@ -343,6 +346,9 @@ bool CameraGUI::handleMessage(const Message& message)
             || (previousAlpacaHost != m_settings.m_alpacaHost)
             || (previousAlpacaPort != m_settings.m_alpacaPort))
         {
+            m_lastAlpacaCameraState = -1;
+            m_lastAlpacaCaptureTimeMs = -1;
+            m_lastAlpacaCcdTemperatureValid = false;
             m_settingsDialog->clearAlpacaStatus();
         }
 
@@ -566,18 +572,13 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (CameraWorker::MsgReportAlpacaStatus::match(message))
     {
         const CameraWorker::MsgReportAlpacaStatus& status = (CameraWorker::MsgReportAlpacaStatus&) message;
-
-        static const QStringList cameraStateNames = {
-            "Idle", "Waiting", "Exposing", "Reading", "Download", "Error"
-        };
-        const int cs = status.getCameraState();
-        settingsUI()->cameraStateLabel->setText(
-            (cs >= 0 && cs < cameraStateNames.size()) ? cameraStateNames[cs] : (cs >= 0 ? QString::number(cs) : "-"));
-        settingsUI()->captureTimeLabel->setText(
-            status.getCaptureTimeMs() >= 0 ? QString::number(status.getCaptureTimeMs()) : "-");
+        m_lastAlpacaCameraState = status.getCameraState();
+        m_lastAlpacaCaptureTimeMs = status.getCaptureTimeMs();
+        m_lastAlpacaCcdTemperature = status.getCcdTemperature();
+        m_lastAlpacaCcdTemperatureValid = status.isCcdTemperatureValid();
+        updateAlpacaStatusDisplay();
 
         if (status.isCcdTemperatureValid()) {
-            settingsUI()->ccdTempLabel->setText(QString::number(status.getCcdTemperature(), 'f', 1));
             m_settingsDialog->appendTemperatureSample(QDateTime::currentDateTime(), status.getCcdTemperature());
         }
 
@@ -628,6 +629,10 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_histogramDialog(nullptr),
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
+    m_lastAlpacaCameraState(-1),
+    m_lastAlpacaCaptureTimeMs(-1),
+    m_lastAlpacaCcdTemperature(0.0),
+    m_lastAlpacaCcdTemperatureValid(false),
     m_alpacaCameraSizeX(0),
     m_alpacaCameraSizeY(0),
     m_qtZoomSupported(false),
@@ -1005,6 +1010,7 @@ void CameraGUI::displaySettings()
 
     settingsUI()->zoomSpin->setValue(m_settings.m_zoomFactor);
     updateAlpacaVisibility();
+    updateAlpacaStatusDisplay();
     updateEnabledControls();
     applyVideoPath();
     applyImagePath();
@@ -2362,6 +2368,28 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->focusDistLabel->setVisible(false);
     settingsUI()->focusDistSpin->setVisible(false);
 #endif
+
+    updateAlpacaStatusDisplay();
+}
+
+void CameraGUI::updateAlpacaStatusDisplay()
+{
+    if (!m_settingsDialog || !m_settings.isAlpacaCamera()) {
+        return;
+    }
+
+    static const QStringList cameraStateNames = {
+        "Idle", "Waiting", "Exposing", "Reading", "Download", "Error"
+    };
+
+    settingsUI()->cameraStateLabel->setText(
+        (m_lastAlpacaCameraState >= 0 && m_lastAlpacaCameraState < cameraStateNames.size())
+            ? cameraStateNames[m_lastAlpacaCameraState]
+            : (m_lastAlpacaCameraState >= 0 ? QString::number(m_lastAlpacaCameraState) : "-"));
+    settingsUI()->captureTimeLabel->setText(
+        m_lastAlpacaCaptureTimeMs >= 0 ? QString::number(m_lastAlpacaCaptureTimeMs) : "-");
+    settingsUI()->ccdTempLabel->setText(
+        m_lastAlpacaCcdTemperatureValid ? QString::number(m_lastAlpacaCcdTemperature, 'f', 1) : "-");
 }
 
 
@@ -2535,6 +2563,9 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
         static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt()));
 
     if (wasAlpaca != m_settings.isAlpacaCamera()) {
+        m_lastAlpacaCameraState = -1;
+        m_lastAlpacaCaptureTimeMs = -1;
+        m_lastAlpacaCcdTemperatureValid = false;
         m_settingsDialog->clearAlpacaStatus();
     }
     if (m_settings.isAlpacaCamera() && (m_settings.m_captureMode != CameraSettings::CaptureModeInterval))

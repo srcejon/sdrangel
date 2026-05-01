@@ -123,6 +123,10 @@ private:
     QStringList m_alpacaFilterWheelNames;
     QStringList m_discoveredAlpacaFocusers;
     QStringList m_discoveredAlpacaFilterWheels;
+    int m_lastAlpacaCameraState;
+    qint64 m_lastAlpacaCaptureTimeMs;
+    double m_lastAlpacaCcdTemperature;
+    bool m_lastAlpacaCcdTemperatureValid;
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraSettingsDialog *m_settingsDialog;
@@ -171,6 +175,7 @@ private:
     void updateAlpacaVisibility();
     void populateAlpacaAccessoryCombos();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
+    void updateAlpacaStatusDisplay();
     void updateAlpacaSubframeControls();
     void updateImageWidget();
     void updateEnabledControls();

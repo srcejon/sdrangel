@@ -21,6 +21,7 @@
 #include <functional>
 
 #include <QObject>
+#include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
 
@@ -47,12 +48,17 @@ private:
     QString baseUrl() const;
     QUrl deviceUrl(const QString& property) const;
     QUrlQuery transactionQuery();
-    bool parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context, bool reportErrors = true);
+    bool parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context, bool reportErrors = true, int *errorNumber = nullptr);
     void runWhenConnected(const std::function<void()>& continuation);
     void setConnected(bool connected, const std::function<void(bool)>& continuation = {});
     void queryCapabilities(const std::function<void(bool)>& continuation);
     void getBoolProperty(const QString& property, bool *value, bool *valid, const std::function<void()>& checkDone);
     void slewToAltAz(float azimuth, float elevation);
+    void queueSlew(float azimuth, float elevation);
+    void scheduleSlewAttempt(int delayMs);
+    void attemptQueuedSlew();
+    void querySlewing(const std::function<void(bool, bool)>& continuation);
+    void dispatchSlew(float azimuth, float elevation);
     void sendSlewCommand(const QString& method, const QUrlQuery& commandBody, const QString& context);
     void slewToRaDec(float azimuth, float elevation, bool asynchronous);
     void pollAzimuthAltitude();
@@ -70,6 +76,11 @@ private:
     bool m_canSlewAsync;
     bool m_canSlew;
     bool m_slewPending;
+    bool m_slewingQueryPending;
+    bool m_queuedSlew;
+    float m_queuedAzimuth;
+    float m_queuedElevation;
+    QTimer m_slewRetryTimer;
     QList<std::function<void()>> m_pendingConnectedContinuations;
 };
 

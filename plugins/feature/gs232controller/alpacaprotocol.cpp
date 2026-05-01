@@ -37,6 +37,9 @@ namespace
 {
     constexpr int kTelescopeDeviceNumber = 0;
     constexpr int kAlpacaCoordinatePrecision = 8;
+    constexpr int kSlewDebounceMs = 250;
+    constexpr int kSlewRetryMs = 1000;
+    constexpr int kAlpacaErrorInvalidOperation = 1279;
 }
 
 AlpacaProtocol::AlpacaProtocol() :
@@ -51,8 +54,15 @@ AlpacaProtocol::AlpacaProtocol() :
     m_canSlewAltAz(false),
     m_canSlewAsync(false),
     m_canSlew(false),
-    m_slewPending(false)
+    m_slewPending(false),
+    m_slewingQueryPending(false),
+    m_queuedSlew(false),
+    m_queuedAzimuth(0.0f),
+    m_queuedElevation(0.0f),
+    m_slewRetryTimer(this)
 {
+    m_slewRetryTimer.setSingleShot(true);
+    connect(&m_slewRetryTimer, &QTimer::timeout, this, &AlpacaProtocol::attemptQueuedSlew);
 }
 
 AlpacaProtocol::~AlpacaProtocol()
@@ -62,7 +72,7 @@ AlpacaProtocol::~AlpacaProtocol()
 void AlpacaProtocol::setAzimuthElevation(float azimuth, float elevation)
 {
     runWhenConnected([this, azimuth, elevation]() {
-        slewToAltAz(azimuth, elevation);
+        queueSlew(azimuth, elevation);
     });
 
     ControllerProtocol::setAzimuthElevation(azimuth, elevation);
@@ -97,6 +107,9 @@ void AlpacaProtocol::applySettings(const GS232ControllerSettings& settings, cons
         m_canSlewAsync = false;
         m_canSlew = false;
         m_slewPending = false;
+        m_slewingQueryPending = false;
+        m_queuedSlew = false;
+        m_slewRetryTimer.stop();
         m_pendingConnectedContinuations.clear();
     }
 
@@ -124,8 +137,12 @@ QUrlQuery AlpacaProtocol::transactionQuery()
     return query;
 }
 
-bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context, bool reportErrors)
+bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context, bool reportErrors, int *errorNumber)
 {
+    if (errorNumber) {
+        *errorNumber = 0;
+    }
+
     if (reply->error() != QNetworkReply::NoError)
     {
         const QString message = QString("%1 transport error: %2").arg(context).arg(reply->errorString());
@@ -149,12 +166,16 @@ bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray&
     }
 
     object = doc.object();
-    const int errorNumber = object.value("ErrorNumber").toInt(0);
+    const int alpacaErrorNumber = object.value("ErrorNumber").toInt(0);
 
-    if (errorNumber != 0)
+    if (errorNumber) {
+        *errorNumber = alpacaErrorNumber;
+    }
+
+    if (alpacaErrorNumber != 0)
     {
         const QString errorMessage = object.value("ErrorMessage").toString();
-        const QString message = QString("%1 Alpaca error %2: %3").arg(context).arg(errorNumber).arg(errorMessage);
+        const QString message = QString("%1 Alpaca error %2: %3").arg(context).arg(alpacaErrorNumber).arg(errorMessage);
         qWarning() << "AlpacaProtocol::parseAlpacaResponse -" << message;
         if (reportErrors) {
             reportError(message);
@@ -372,6 +393,71 @@ void AlpacaProtocol::getBoolProperty(const QString& property, bool *value, bool 
 
 void AlpacaProtocol::slewToAltAz(float azimuth, float elevation)
 {
+    queueSlew(azimuth, elevation);
+}
+
+void AlpacaProtocol::queueSlew(float azimuth, float elevation)
+{
+    m_queuedAzimuth = azimuth;
+    m_queuedElevation = elevation;
+    m_queuedSlew = true;
+    scheduleSlewAttempt(kSlewDebounceMs);
+}
+
+void AlpacaProtocol::scheduleSlewAttempt(int delayMs)
+{
+    m_slewRetryTimer.start(delayMs);
+}
+
+void AlpacaProtocol::attemptQueuedSlew()
+{
+    if (!m_queuedSlew || m_slewPending || m_slewingQueryPending) {
+        return;
+    }
+
+    querySlewing([this](bool success, bool slewing) {
+        if (!m_queuedSlew) {
+            return;
+        }
+
+        if (success && slewing)
+        {
+            scheduleSlewAttempt(kSlewRetryMs);
+            return;
+        }
+
+        const float azimuth = m_queuedAzimuth;
+        const float elevation = m_queuedElevation;
+        m_queuedSlew = false;
+        dispatchSlew(azimuth, elevation);
+    });
+}
+
+void AlpacaProtocol::querySlewing(const std::function<void(bool, bool)>& continuation)
+{
+    QUrl url = deviceUrl("slewing");
+    url.setQuery(transactionQuery());
+
+    m_slewingQueryPending = true;
+    QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, continuation]() {
+        const QByteArray payload = reply->readAll();
+        QJsonObject response;
+        const bool success = parseAlpacaResponse(reply, payload, response, "Telescope slewing", false);
+        const bool slewing = success && response.value("Value").toBool();
+        m_slewingQueryPending = false;
+
+        if (continuation) {
+            continuation(success, slewing);
+        }
+
+        reply->deleteLater();
+    });
+}
+
+void AlpacaProtocol::dispatchSlew(float azimuth, float elevation)
+{
     if (m_slewPending) {
         return;
     }
@@ -420,8 +506,28 @@ void AlpacaProtocol::sendSlewCommand(const QString& method, const QUrlQuery& com
     connect(reply, &QNetworkReply::finished, this, [this, reply, context]() {
         const QByteArray payload = reply->readAll();
         QJsonObject response;
-        parseAlpacaResponse(reply, payload, response, context);
+        int errorNumber = 0;
+        const bool success = parseAlpacaResponse(reply, payload, response, context, false, &errorNumber);
         m_slewPending = false;
+
+        if (!success && (errorNumber == kAlpacaErrorInvalidOperation))
+        {
+            qDebug() << "AlpacaProtocol::sendSlewCommand - telescope is moving, will retry queued target";
+            m_queuedSlew = true;
+            scheduleSlewAttempt(kSlewRetryMs);
+        }
+        else if (!success)
+        {
+            const QString errorMessage = response.value("ErrorMessage").toString();
+            reportError(errorMessage.isEmpty()
+                ? QString("%1 failed").arg(context)
+                : QString("%1 Alpaca error %2: %3").arg(context).arg(errorNumber).arg(errorMessage));
+        }
+        else if (m_queuedSlew)
+        {
+            scheduleSlewAttempt(kSlewDebounceMs);
+        }
+
         reply->deleteLater();
     });
 }

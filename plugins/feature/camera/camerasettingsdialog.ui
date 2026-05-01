@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>683</width>
-    <height>710</height>
+    <width>687</width>
+    <height>896</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>1</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -581,180 +581,45 @@
            </widget>
           </widget>
          </item>
-       </layout>
-       </item>
-       <item>
-       <widget class="QGroupBox" name="alpacaFocuserGroup">
-         <property name="title">
-          <string>Alpaca Focuser</string>
-         </property>
-         <layout class="QFormLayout" name="alpacaFocuserLayout">
-          <item row="0" column="0" colspan="2">
-           <widget class="QCheckBox" name="alpacaFocuserEnabledCheck">
-            <property name="text">
-             <string>Use Alpaca focuser</string>
-            </property>
-           </widget>
-          </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="alpacaFocuserComboLabel">
+         <item row="18" column="0">
+          <widget class="QLabel" name="alpacaFocusPositionLabel">
            <property name="text">
-            <string>Focuser</string>
+            <string>Focus position</string>
            </property>
           </widget>
          </item>
-         <item row="1" column="1">
-          <widget class="QComboBox" name="alpacaFocuserCombo">
-           <property name="toolTip">
-            <string>Discovered Alpaca focusers</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="alpacaFocuserHostLabel">
-           <property name="text">
-            <string>Focuser host</string>
-           </property>
-          </widget>
-         </item>
-          <item row="2" column="1">
-           <widget class="QLineEdit" name="alpacaFocuserHostEdit"/>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="alpacaFocuserPortLabel">
-            <property name="text">
-             <string>Focuser port</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QSpinBox" name="alpacaFocuserPortSpin">
-            <property name="maximum">
-             <number>65535</number>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="alpacaFocuserDeviceNumberLabel">
-            <property name="text">
-             <string>Focuser device #</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QSpinBox" name="alpacaFocuserDeviceNumberSpin">
-            <property name="maximum">
-             <number>1024</number>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="alpacaFocusPositionLabel">
-            <property name="text">
-             <string>Focus position</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QSpinBox" name="alpacaFocusPositionSpin">
-            <property name="maximum">
-             <number>1000000</number>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="0">
-           <widget class="QLabel" name="alpacaFocusStepSizeLabel">
-            <property name="text">
-             <string>Focus step size</string>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="1">
-           <widget class="QSpinBox" name="alpacaFocusStepSizeSpin">
-            <property name="minimum">
-             <number>1</number>
-            </property>
-            <property name="maximum">
-             <number>100000</number>
-            </property>
-           </widget>
-          </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QGroupBox" name="alpacaFilterWheelGroup">
-        <property name="title">
-         <string>Alpaca Filter Wheel</string>
-        </property>
-        <layout class="QFormLayout" name="alpacaFilterWheelLayout">
-         <item row="0" column="0" colspan="2">
-          <widget class="QCheckBox" name="alpacaFilterWheelEnabledCheck">
-           <property name="text">
-            <string>Use Alpaca filter wheel</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="alpacaFilterWheelComboLabel">
-           <property name="text">
-            <string>Filter wheel</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QComboBox" name="alpacaFilterWheelCombo">
-           <property name="toolTip">
-            <string>Discovered Alpaca filter wheels</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="alpacaFilterWheelHostLabel">
-           <property name="text">
-            <string>Filter wheel host</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QLineEdit" name="alpacaFilterWheelHostEdit"/>
-         </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="alpacaFilterWheelPortLabel">
-           <property name="text">
-            <string>Filter wheel port</string>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <widget class="QSpinBox" name="alpacaFilterWheelPortSpin">
+         <item row="18" column="1">
+          <widget class="QSpinBox" name="alpacaFocusPositionSpin">
            <property name="maximum">
-            <number>65535</number>
+            <number>1000000</number>
            </property>
           </widget>
          </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="alpacaFilterWheelDeviceNumberLabel">
+         <item row="20" column="0">
+          <widget class="QLabel" name="alpacaFocusStepSizeLabel">
            <property name="text">
-            <string>Filter wheel device #</string>
+            <string>Focus step size</string>
            </property>
           </widget>
          </item>
-         <item row="4" column="1">
-          <widget class="QSpinBox" name="alpacaFilterWheelDeviceNumberSpin">
+         <item row="20" column="1">
+          <widget class="QSpinBox" name="alpacaFocusStepSizeSpin">
+           <property name="minimum">
+            <number>1</number>
+           </property>
            <property name="maximum">
-            <number>1024</number>
+            <number>100000</number>
            </property>
           </widget>
          </item>
-         <item row="5" column="0">
+         <item row="21" column="0">
           <widget class="QLabel" name="alpacaFilterWheelPositionLabel">
            <property name="text">
             <string>Filter</string>
            </property>
           </widget>
          </item>
-         <item row="5" column="1">
+         <item row="21" column="1">
           <widget class="QComboBox" name="alpacaFilterWheelPositionCombo">
            <property name="toolTip">
             <string>Filter wheel position using the Alpaca names list</string>
@@ -762,10 +627,9 @@
           </widget>
          </item>
         </layout>
-       </widget>
-      </item>
-      <item>
-       <spacer name="verticalSpacer_5">
+       </item>
+       <item>
+        <spacer name="verticalSpacer_5">
          <property name="orientation">
           <enum>Qt::Orientation::Vertical</enum>
          </property>
@@ -787,41 +651,20 @@
        <item>
         <widget class="QGroupBox" name="alpacaServerSettingsGroup">
          <property name="title">
-          <string>ASCOM Alpaca Remote Server</string>
+          <string>ASCOM Alpaca</string>
          </property>
-         <layout class="QFormLayout" name="formLayout">
+         <layout class="QGridLayout" name="gridLayout_10">
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="alpacaFocuserHostEdit"/>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="alpacaFocuserDeviceNumberLabel">
+            <property name="text">
+             <string>Focuser device #</string>
+            </property>
+           </widget>
+          </item>
           <item row="0" column="0">
-           <widget class="QLabel" name="alpacaHostLabel">
-            <property name="text">
-             <string>Address</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QLineEdit" name="alpacaHostEdit">
-            <property name="toolTip">
-             <string>IP address / hostname of ASCOM Remote Server</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="alpacaPortLabel">
-            <property name="text">
-             <string>Port</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QSpinBox" name="alpacaPortSpin">
-            <property name="toolTip">
-             <string>IP port number for ASCOM Remote Server</string>
-            </property>
-            <property name="maximum">
-             <number>65535</number>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0" colspan="2">
            <widget class="QCheckBox" name="alpacaDiscoveryCheck">
             <property name="toolTip">
              <string>Discover Alpaca servers on the local network and populate the camera list from the responses</string>
@@ -831,13 +674,147 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="0" colspan="2">
+          <item row="6" column="0">
+           <widget class="QLabel" name="alpacaFilterWheelHostLabel">
+            <property name="text">
+             <string>Filter wheel address</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QSpinBox" name="alpacaFocuserDeviceNumberSpin">
+            <property name="maximum">
+             <number>1024</number>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <widget class="QSpinBox" name="alpacaFilterWheelDeviceNumberSpin">
+            <property name="maximum">
+             <number>1024</number>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="0">
            <widget class="QCheckBox" name="alpacaApiLogCheck">
             <property name="toolTip">
              <string>Log Alpaca API requests and responses using qDebug</string>
             </property>
             <property name="text">
              <string>Log Alpaca API</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="alpacaFilterWheelDeviceNumberLabel">
+            <property name="text">
+             <string>Filter wheel device #</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QLabel" name="alpacaPortLabel">
+            <property name="text">
+             <string>Port</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="alpacaHostEdit">
+            <property name="toolTip">
+             <string>IP address / hostname of ASCOM Remote Server</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QLineEdit" name="alpacaFilterWheelHostEdit"/>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="alpacaFocuserHostLabel">
+            <property name="text">
+             <string>Focuser address</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="alpacaHostLabel">
+            <property name="text">
+             <string>Camera address</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QSpinBox" name="alpacaPortSpin">
+            <property name="toolTip">
+             <string>IP port number for ASCOM Remote Server</string>
+            </property>
+            <property name="maximum">
+             <number>65535</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QLabel" name="alpacaFocuserPortLabel">
+            <property name="text">
+             <string>Port</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="3">
+           <widget class="QSpinBox" name="alpacaFocuserPortSpin">
+            <property name="maximum">
+             <number>65535</number>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="2">
+           <widget class="QLabel" name="alpacaFilterWheelPortLabel">
+            <property name="text">
+             <string>Port</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="3">
+           <widget class="QSpinBox" name="alpacaFilterWheelPortSpin">
+            <property name="maximum">
+             <number>65535</number>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="alpacaDevicesGroup">
+         <property name="title">
+          <string>Devices</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout_3">
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="alpacaFocuserEnabledCheck">
+            <property name="text">
+             <string>Use Alpaca focuser</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="alpacaFocuserCombo">
+            <property name="toolTip">
+             <string>Discovered Alpaca focusers</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QCheckBox" name="alpacaFilterWheelEnabledCheck">
+            <property name="text">
+             <string>Use Alpaca filter wheel</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="alpacaFilterWheelCombo">
+            <property name="toolTip">
+             <string>Discovered Alpaca filter wheels</string>
             </property>
            </widget>
           </item>
@@ -941,53 +918,32 @@
                 </property>
                </widget>
               </item>
-              <item row="6" column="0">
-               <widget class="QLabel" name="cameraStateTextLabel">
-                <property name="text">
-                 <string>Camera state</string>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="1">
+             </layout>
+            </item>
+            <item>
+             <layout class="QGridLayout" name="gridLayout_9">
+              <item row="0" column="1">
                <widget class="QLabel" name="cameraStateLabel">
                 <property name="text">
                  <string>-</string>
                 </property>
                </widget>
               </item>
-              <item row="7" column="0">
-               <widget class="QLabel" name="captureTimeTextLabel">
-                <property name="text">
-                 <string>Capture time (ms)</string>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="1">
+              <item row="1" column="1">
                <widget class="QLabel" name="captureTimeLabel">
                 <property name="text">
                  <string>-</string>
                 </property>
                </widget>
               </item>
-              <item row="8" column="0">
-               <widget class="QLabel" name="ccdTempTextLabel">
+              <item row="0" column="0">
+               <widget class="QLabel" name="cameraStateTextLabel">
                 <property name="text">
-                 <string>CCD temp (C)</string>
+                 <string>Camera state</string>
                 </property>
                </widget>
               </item>
-              <item row="8" column="1">
-               <widget class="QLabel" name="ccdTempLabel">
-                <property name="text">
-                 <string>-</string>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <item>
-             <layout class="QVBoxLayout" name="alpacaLayout_3">
-              <item>
+              <item row="3" column="0">
                <spacer name="alpacaSpacer">
                 <property name="orientation">
                  <enum>Qt::Orientation::Vertical</enum>
@@ -1000,7 +956,28 @@
                 </property>
                </spacer>
               </item>
-              <item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="ccdTempTextLabel">
+                <property name="text">
+                 <string>CCD temp (C)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="captureTimeTextLabel">
+                <property name="text">
+                 <string>Capture time (ms)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLabel" name="ccdTempLabel">
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="0">
                <widget class="QToolButton" name="clearChart">
                 <property name="toolTip">
                  <string>Clear chart</string>
@@ -1019,19 +996,6 @@
            </layout>
           </item>
           <item>
-           <spacer name="alpacaSpacer_2">
-            <property name="orientation">
-             <enum>Qt::Orientation::Horizontal</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>40</width>
-              <height>20</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-          <item>
            <widget class="QWidget" name="alpacaTempChartContainer" native="true">
             <property name="minimumSize">
              <size>
@@ -1041,21 +1005,21 @@
             </property>
            </widget>
           </item>
+          <item>
+           <spacer name="verticalSpacer_2">
+            <property name="orientation">
+             <enum>Qt::Orientation::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
          </layout>
         </widget>
-       </item>
-       <item>
-        <spacer name="alpacaVerticalSpacer">
-         <property name="orientation">
-          <enum>Qt::Orientation::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
        </item>
       </layout>
      </widget>

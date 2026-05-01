@@ -2034,7 +2034,7 @@ QString CameraWorker::transportError(QNetworkReply *reply) const
     if (reply->error() == QNetworkReply::NoError) {
         return "";
     } else {
-        return QString().arg(QMetaEnum::fromType<QNetworkReply::NetworkError>().valueToKey(reply->error())).arg(reply->errorString());
+        return QString("%1 %2").arg(QMetaEnum::fromType<QNetworkReply::NetworkError>().valueToKey(reply->error())).arg(reply->errorString());
     }
 }
 

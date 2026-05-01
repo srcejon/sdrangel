@@ -280,6 +280,8 @@ CameraWorker::CameraWorker() :
     m_alpacaImageBytesSupported(true),
     m_alpacaConnected(false),
     m_alpacaConnectionPending(false),
+    m_alpacaFocuserConnected(false),
+    m_alpacaFocuserConnectionPending(false),
     m_alpacaFilterWheelConnected(false),
     m_alpacaFilterWheelConnectionPending(false),
     m_alpacaBootstrapPending(false),
@@ -377,6 +379,11 @@ void CameraWorker::stopWork()
         alpacaSetConnected(false);
     }
 
+    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaFocuserConnected)
+    {
+        alpacaSetFocuserConnected(false);
+    }
+
     if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaFilterWheelConnected)
     {
         alpacaSetFilterWheelConnected(false);
@@ -399,6 +406,13 @@ void CameraWorker::resetAlpacaFilterWheelConnectionState()
     m_alpacaFilterWheelConnected = false;
     m_alpacaFilterWheelConnectionPending = false;
     m_alpacaPendingFilterWheelConnectedContinuations.clear();
+}
+
+void CameraWorker::resetAlpacaFocuserConnectionState()
+{
+    m_alpacaFocuserConnected = false;
+    m_alpacaFocuserConnectionPending = false;
+    m_alpacaPendingFocuserConnectedContinuations.clear();
 }
 
 void CameraWorker::handleInputMessages()
@@ -531,6 +545,13 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("alpacaHost")
         || settingsKeys.contains("alpacaPort")
         || settingsKeys.contains("cameraId");
+    const bool alpacaFocuserEndpointChanged = force
+        || settingsKeys.contains("alpacaFocuserEnabled")
+        || settingsKeys.contains("alpacaFocuserHost")
+        || settingsKeys.contains("alpacaFocuserPort")
+        || settingsKeys.contains("alpacaFocuserDeviceNumber");
+    const bool alpacaFocuserPositionChanged = force
+        || settingsKeys.contains("alpacaFocusPosition");
     const bool alpacaFilterWheelEndpointChanged = force
         || settingsKeys.contains("alpacaFilterWheelEnabled")
         || settingsKeys.contains("alpacaFilterWheelHost")
@@ -547,11 +568,25 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         resetAlpacaFilterWheelConnectionState();
     }
 
+    if (alpacaFocuserEndpointChanged) {
+        resetAlpacaFocuserConnectionState();
+    }
+
     if (m_settings.isAlpacaCamera()
         && m_networkManager
         && alpacaEndpointChanged)
     {
         alpacaBootstrap();
+    }
+
+    if (m_settings.isAlpacaCamera()
+        && m_networkManager
+        && m_settings.m_alpacaFocuserEnabled
+        && (alpacaFocuserEndpointChanged || alpacaFocuserPositionChanged))
+    {
+        if (settingsKeys.contains("alpacaFocusPosition")) {
+            alpacaSetFocuserPosition();
+        }
     }
 
     if (m_settings.isAlpacaCamera()
@@ -840,6 +875,134 @@ void CameraWorker::alpacaRunWhenConnected(std::function<void()> continuation)
                 continuation();
             }
         }
+    });
+}
+
+void CameraWorker::alpacaSetFocuserConnected(bool connected, std::function<void()> continuation)
+{
+    if (!m_networkManager || !m_settings.isAlpacaCamera() || !m_settings.m_alpacaFocuserEnabled) {
+        return;
+    }
+
+    const QString baseUrl = buildAlpacaFocuserBaseUrl();
+    const int deviceNumber = std::max(0, m_settings.m_alpacaFocuserDeviceNumber);
+    QUrl url(baseUrl + QString("/api/v1/focuser/%1/connected").arg(deviceNumber));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QUrlQuery body;
+    body.addQueryItem("Connected", connected ? "true" : "false");
+    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+
+    const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+    logAlpacaRequest("PUT", url, payload);
+
+    QNetworkReply *reply = m_networkManager->put(request, payload);
+
+    QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply, connected, continuation]() {
+        const QByteArray responseBody = reply->readAll();
+        logAlpacaResponse("PUT", reply->request().url(), reply, responseBody);
+
+        bool success = false;
+
+        if (reply->error() == QNetworkReply::NoError)
+        {
+            const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+
+            if (doc.isObject()) {
+                success = (doc.object().value("ErrorNumber").toInt(-1) == 0);
+            }
+        }
+
+        if (success) {
+            m_alpacaFocuserConnected = connected;
+        } else if (connected) {
+            m_alpacaFocuserConnected = false;
+        }
+
+        if (!connected) {
+            m_alpacaFocuserConnectionPending = false;
+            m_alpacaFocuserConnected = false;
+            m_alpacaPendingFocuserConnectedContinuations.clear();
+        }
+
+        if (success)
+        {
+            if (continuation) {
+                continuation();
+            }
+        }
+        else if (connected)
+        {
+            m_alpacaFocuserConnectionPending = false;
+            m_alpacaPendingFocuserConnectedContinuations.clear();
+        }
+
+        reply->deleteLater();
+    });
+}
+
+void CameraWorker::alpacaRunFocuserWhenConnected(std::function<void()> continuation)
+{
+    if (m_alpacaFocuserConnected)
+    {
+        if (continuation) {
+            continuation();
+        }
+        return;
+    }
+
+    if (continuation) {
+        m_alpacaPendingFocuserConnectedContinuations.append(continuation);
+    }
+
+    if (m_alpacaFocuserConnectionPending) {
+        return;
+    }
+
+    m_alpacaFocuserConnectionPending = true;
+    alpacaSetFocuserConnected(true, [this]() {
+        m_alpacaFocuserConnectionPending = false;
+        const auto continuations = std::move(m_alpacaPendingFocuserConnectedContinuations);
+        m_alpacaPendingFocuserConnectedContinuations.clear();
+
+        for (const auto& continuation : continuations)
+        {
+            if (continuation) {
+                continuation();
+            }
+        }
+    });
+}
+
+void CameraWorker::alpacaSetFocuserPosition()
+{
+    if (!m_networkManager || !m_settings.isAlpacaCamera() || !m_settings.m_alpacaFocuserEnabled) {
+        return;
+    }
+
+    alpacaRunFocuserWhenConnected([this]() {
+        const QString baseUrl = buildAlpacaFocuserBaseUrl();
+        const int deviceNumber = std::max(0, m_settings.m_alpacaFocuserDeviceNumber);
+        QUrl url(baseUrl + QString("/api/v1/focuser/%1/move").arg(deviceNumber));
+        QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+        QUrlQuery body;
+        body.addQueryItem("Position", QString::number(std::max(0, m_settings.m_alpacaFocusPosition)));
+        body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+        body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+
+        const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+        logAlpacaRequest("PUT", url, payload);
+
+        QNetworkReply *reply = m_networkManager->put(request, payload);
+        QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply]() {
+            const QByteArray responseBody = reply->readAll();
+            logAlpacaResponse("PUT", reply->request().url(), reply, responseBody);
+            reply->deleteLater();
+        });
     });
 }
 
@@ -1728,6 +1891,13 @@ QString CameraWorker::buildAlpacaBaseUrl() const
         .arg(m_settings.m_alpacaPort);
 }
 
+QString CameraWorker::buildAlpacaFocuserBaseUrl() const
+{
+    return QString("http://%1:%2")
+        .arg(m_settings.m_alpacaFocuserHost)
+        .arg(m_settings.m_alpacaFocuserPort);
+}
+
 QString CameraWorker::buildAlpacaFilterWheelBaseUrl() const
 {
     return QString("http://%1:%2")
@@ -2218,4 +2388,3 @@ void CameraWorker::onCaptureAudioDataReady()
         m_outputAudioFifo.write(m_audioTransferBuffer.data(), nbRead);
     }
 }
-

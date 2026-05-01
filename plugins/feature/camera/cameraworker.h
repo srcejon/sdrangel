@@ -366,6 +366,9 @@ private:
     bool m_alpacaConnected;
     bool m_alpacaConnectionPending;
     QVector<std::function<void()>> m_alpacaPendingConnectedContinuations;
+    bool m_alpacaFocuserConnected;
+    bool m_alpacaFocuserConnectionPending;
+    QVector<std::function<void()>> m_alpacaPendingFocuserConnectedContinuations;
     bool m_alpacaFilterWheelConnected;
     bool m_alpacaFilterWheelConnectionPending;
     QVector<std::function<void()>> m_alpacaPendingFilterWheelConnectedContinuations;
@@ -399,6 +402,7 @@ private:
     void stopCapture();
     QImage createPlaceholderFrame() const;
     QString buildAlpacaBaseUrl() const;
+    QString buildAlpacaFocuserBaseUrl() const;
     QString buildAlpacaFilterWheelBaseUrl() const;
     void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
     void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray()) const;
@@ -418,12 +422,16 @@ private:
     void alpacaPollStatus();
     void alpacaSetConnected(bool connected, std::function<void()> continuation = {});
     void alpacaRunWhenConnected(std::function<void()> continuation);
+    void alpacaSetFocuserConnected(bool connected, std::function<void()> continuation = {});
+    void alpacaRunFocuserWhenConnected(std::function<void()> continuation);
+    void alpacaSetFocuserPosition();
     void alpacaSetFilterWheelConnected(bool connected, std::function<void()> continuation = {});
     void alpacaRunFilterWheelWhenConnected(std::function<void()> continuation);
     void alpacaQueryFilterWheelInfo();
     void alpacaSetFilterWheelPosition();
     void alpacaBootstrap(std::function<void()> continuation = {});
     void resetAlpacaConnectionState();
+    void resetAlpacaFocuserConnectionState();
     void resetAlpacaFilterWheelConnectionState();
 
 private slots:

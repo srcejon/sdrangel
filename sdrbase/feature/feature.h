@@ -26,7 +26,6 @@
 #include <QObject>
 #include <QString>
 #include <QByteArray>
-#include <QDebug>
 
 #include "export.h"
 #include "util/messagequeue.h"

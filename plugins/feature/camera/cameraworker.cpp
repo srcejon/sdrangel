@@ -499,6 +499,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     qDebug() << "CameraWorker::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
     const bool recapture = force
+        || settingsKeys.contains("cameraProtocol")
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("audioDeviceName")
         || settingsKeys.contains("resolutionWidth")
@@ -525,6 +526,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     }
 
     const bool alpacaEndpointChanged = force
+        || settingsKeys.contains("cameraProtocol")
         || settingsKeys.contains("alpacaHost")
         || settingsKeys.contains("alpacaPort")
         || settingsKeys.contains("cameraId");
@@ -563,7 +565,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         }
     }
 
-    if (force || settingsKeys.contains("cameraId"))
+    if (force || settingsKeys.contains("cameraProtocol") || settingsKeys.contains("cameraId"))
     {
         if (m_settings.isAlpacaCamera()) {
             if (!m_statusTimer.isActive()) {
@@ -1093,6 +1095,7 @@ void CameraWorker::alpacaBootstrap(std::function<void()> continuation)
 
         alpacaQueryCameraCapabilities([this]() {
             m_alpacaBootstrapPending = false;
+            alpacaPollStatus();
 
             const auto continuations = std::move(m_alpacaPendingBootstrapContinuations);
             m_alpacaPendingBootstrapContinuations.clear();

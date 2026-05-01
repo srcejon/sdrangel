@@ -302,6 +302,8 @@ bool CameraGUI::handleMessage(const Message& message)
     const bool wasAlpaca = m_settings.isAlpacaCamera();
     const QString previousCameraProtocol = m_settings.m_cameraProtocol;
     const QString previousCameraId = m_settings.m_cameraId;
+    const QString previousAlpacaHost = m_settings.m_alpacaHost;
+    const quint16 previousAlpacaPort = m_settings.m_alpacaPort;
 
     if (Camera::MsgConfigureCamera::match(message))
     {
@@ -313,7 +315,12 @@ bool CameraGUI::handleMessage(const Message& message)
             m_settings.applySettings(cfg.getSettingsKeys(), cfg.getSettings());
         }
 
-        if ((previousCameraProtocol != m_settings.m_cameraProtocol) || (previousCameraId != m_settings.m_cameraId) || (wasAlpaca != m_settings.isAlpacaCamera())) {
+        if ((previousCameraProtocol != m_settings.m_cameraProtocol)
+            || (previousCameraId != m_settings.m_cameraId)
+            || (wasAlpaca != m_settings.isAlpacaCamera())
+            || (previousAlpacaHost != m_settings.m_alpacaHost)
+            || (previousAlpacaPort != m_settings.m_alpacaPort))
+        {
             m_settingsDialog->clearAlpacaStatus();
         }
 
@@ -330,7 +337,12 @@ bool CameraGUI::handleMessage(const Message& message)
     {
         const Camera::MsgStartStop& cfg = (Camera::MsgStartStop&) message;
 
-        if ((previousCameraProtocol != m_settings.m_cameraProtocol) || (previousCameraId != m_settings.m_cameraId) || (wasAlpaca != m_settings.isAlpacaCamera())) {
+        if ((previousCameraProtocol != m_settings.m_cameraProtocol)
+            || (previousCameraId != m_settings.m_cameraId)
+            || (wasAlpaca != m_settings.isAlpacaCamera())
+            || (previousAlpacaHost != m_settings.m_alpacaHost)
+            || (previousAlpacaPort != m_settings.m_alpacaPort))
+        {
             m_settingsDialog->clearAlpacaStatus();
         }
 
@@ -406,7 +418,15 @@ bool CameraGUI::handleMessage(const Message& message)
 
         ui->cameraCombo->blockSignals(false);
 
-        if (m_settings.m_cameraId.isEmpty() && !selectedCamera.id.isEmpty())
+        const bool selectedCameraDiffers =
+            !selectedCamera.id.isEmpty()
+            && ((selectedCamera.protocol != m_settings.m_cameraProtocol)
+                || (selectedCamera.id != m_settings.m_cameraId)
+                || (selectedCamera.description != m_settings.m_cameraDescription)
+                || (selectedCamera.alpacaHost != m_settings.m_alpacaHost)
+                || (selectedCamera.alpacaPort != m_settings.m_alpacaPort));
+
+        if (selectedCameraDiffers)
         {
             setSelectedCamera(selectedCamera.protocol, selectedCamera.id, selectedCamera.description,
                 selectedCamera.alpacaHost, selectedCamera.alpacaPort);
@@ -420,6 +440,13 @@ bool CameraGUI::handleMessage(const Message& message)
             updateAlpacaVisibility();
             updateEnabledControls();
             applySettings();
+        }
+        else if ((selectedCamera.protocol == QLatin1String("qt")) && !ui->startStop->isChecked())
+        {
+            setSelectedCamera(selectedCamera.protocol, selectedCamera.id, selectedCamera.description,
+                selectedCamera.alpacaHost, selectedCamera.alpacaPort);
+            probeQtCameraCapabilities();
+            updateEnabledControls();
         }
 
         return true;

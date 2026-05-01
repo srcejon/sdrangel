@@ -26,6 +26,7 @@
 #include <QObject>
 #include <QString>
 #include <QByteArray>
+#include <QDebug>
 
 #include "export.h"
 #include "util/messagequeue.h"
@@ -151,7 +152,7 @@ public:
     const QString& getErrorMessage() const { return m_errorMessage; }
 
 	MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; } //!< Get the queue for asynchronous inbound communication
-    void setMessageQueueToGUI(MessageQueue *queue) { m_guiMessageQueue = queue; }
+    virtual void setMessageQueueToGUI(MessageQueue *queue) { m_guiMessageQueue = queue; }
     MessageQueue *getMessageQueueToGUI() { return m_guiMessageQueue; }
     void setWorkspaceIndex(int index) { m_workspaceIndex = index; }
     int getWorkspaceIndex() const { return m_workspaceIndex; }

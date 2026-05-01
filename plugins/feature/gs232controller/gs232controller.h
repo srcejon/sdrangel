@@ -88,6 +88,34 @@ public:
         { }
     };
 
+    class MsgPark : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgPark* create() {
+            return new MsgPark();
+        }
+
+    protected:
+        MsgPark() :
+            Message()
+        { }
+    };
+
+    class MsgUnpark : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgUnpark* create() {
+            return new MsgUnpark();
+        }
+
+    protected:
+        MsgUnpark() :
+            Message()
+        { }
+    };
+
     class MsgReportWorker : public Message {
         MESSAGE_CLASS_DECLARATION
 

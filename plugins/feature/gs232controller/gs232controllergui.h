@@ -69,6 +69,9 @@ private:
     QTimer m_statusTimer;
     int m_lastFeatureState;
     bool m_lastOnTarget;
+    bool m_alpacaCanPark;
+    bool m_alpacaAtPark;
+    bool m_alpacaParkStateValid;
 
     DFMStatusDialog m_dfmStatusDialog;
 
@@ -95,6 +98,7 @@ private:
     void updatePipeList(const AvailableChannelOrFeatureList& sources, const QStringList& renameFrom, const QStringList& renameTo);
     void updateSerialPortList();
     void updateSerialPortList(const QStringList& serialPorts);
+    void updateAlpacaParkControls();
     bool handleMessage(const Message& message);
     void makeUIConnections();
     void azElToDisplay(float az, float el, float& coord1, float& coord2) const;
@@ -131,6 +135,8 @@ private slots:
     void on_dfmBrakes_clicked(bool checked=false);
     void on_dfmDrives_clicked(bool checked=false);
     void on_dfmShowStatus_clicked();
+    void on_alpacaPark_clicked();
+    void on_alpacaUnpark_clicked();
     void updateStatus();
     void on_inputController_currentIndexChanged(int index);
     void on_inputConfigure_clicked();
@@ -144,4 +150,3 @@ private slots:
 };
 
 #endif // INCLUDE_FEATURE_GS232CONTROLLERGUI_H_
-

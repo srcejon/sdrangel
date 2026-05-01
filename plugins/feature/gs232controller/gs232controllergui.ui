@@ -298,6 +298,50 @@
       </item>
      </layout>
     </item>
+    <item>
+     <widget class="Line" name="alpacaLine">
+      <property name="orientation">
+       <enum>Qt::Orientation::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="alpacaLayout">
+      <item>
+       <widget class="QToolButton" name="alpacaPark">
+        <property name="toolTip">
+         <string>Park the Alpaca telescope mount</string>
+        </property>
+        <property name="text">
+         <string>Park</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="alpacaUnpark">
+        <property name="toolTip">
+         <string>Unpark the Alpaca telescope mount</string>
+        </property>
+        <property name="text">
+         <string>Unpark</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="alpacaSpacer">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
    </layout>
   </widget>
   <widget class="QWidget" name="settingsContainer" native="true">
@@ -848,6 +892,8 @@
   <tabstop>dfmBrakes</tabstop>
   <tabstop>dfmDrives</tabstop>
   <tabstop>dfmShowStatus</tabstop>
+  <tabstop>alpacaPark</tabstop>
+  <tabstop>alpacaUnpark</tabstop>
  </tabstops>
  <resources>
   <include location="../../../sdrgui/resources/res.qrc"/>

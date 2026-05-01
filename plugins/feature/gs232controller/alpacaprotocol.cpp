@@ -33,6 +33,8 @@
 
 #include "alpacaprotocol.h"
 
+MESSAGE_CLASS_DEFINITION(AlpacaProtocol::MsgReportParkState, Message)
+
 namespace
 {
     constexpr int kTelescopeDeviceNumber = 0;
@@ -54,6 +56,10 @@ AlpacaProtocol::AlpacaProtocol() :
     m_canSlewAltAz(false),
     m_canSlewAsync(false),
     m_canSlew(false),
+    m_canPark(false),
+    m_atPark(false),
+    m_atParkValid(false),
+    m_atParkQueryPending(false),
     m_slewPending(false),
     m_slewingQueryPending(false),
     m_queuedSlew(false),
@@ -86,6 +92,37 @@ void AlpacaProtocol::update()
 {
     runWhenConnected([this]() {
         pollAzimuthAltitude();
+        queryAtPark();
+    });
+}
+
+void AlpacaProtocol::park()
+{
+    runWhenConnected([this]() {
+        if (!m_canPark)
+        {
+            reportError("Alpaca telescope driver does not support parking");
+            return;
+        }
+
+        m_queuedSlew = false;
+        m_slewRetryTimer.stop();
+        sendSimplePutCommand("park", "Telescope park", [this](bool success) {
+            if (success) {
+                queryAtPark();
+            }
+        });
+    });
+}
+
+void AlpacaProtocol::unpark()
+{
+    runWhenConnected([this]() {
+        sendSimplePutCommand("unpark", "Telescope unpark", [this](bool success) {
+            if (success) {
+                queryAtPark();
+            }
+        });
     });
 }
 
@@ -106,6 +143,10 @@ void AlpacaProtocol::applySettings(const GS232ControllerSettings& settings, cons
         m_canSlewAltAz = false;
         m_canSlewAsync = false;
         m_canSlew = false;
+        m_canPark = false;
+        m_atPark = false;
+        m_atParkValid = false;
+        m_atParkQueryPending = false;
         m_slewPending = false;
         m_slewingQueryPending = false;
         m_queuedSlew = false;
@@ -312,11 +353,13 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
         bool canSlewAltAz = false;
         bool canSlewAsync = false;
         bool canSlew = false;
+        bool canPark = false;
         bool canSlewAltAzAsyncValid = false;
         bool canSlewAltAzValid = false;
         bool canSlewAsyncValid = false;
         bool canSlewValid = false;
-        int pending = 4;
+        bool canParkValid = false;
+        int pending = 5;
     };
 
     m_capabilitiesPending = true;
@@ -334,9 +377,10 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
         if (!info->canSlewAltAzAsyncValid
             || !info->canSlewAltAzValid
             || !info->canSlewAsyncValid
-            || !info->canSlewValid)
+            || !info->canSlewValid
+            || !info->canParkValid)
         {
-            reportError("Failed to query Alpaca telescope slew capabilities");
+            reportError("Failed to query Alpaca telescope capabilities");
             if (continuation) {
                 continuation(false);
             }
@@ -347,13 +391,18 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
         m_canSlewAltAz = info->canSlewAltAz;
         m_canSlewAsync = info->canSlewAsync;
         m_canSlew = info->canSlew;
+        m_canPark = info->canPark;
         m_capabilitiesReady = true;
 
         qDebug() << "AlpacaProtocol::queryCapabilities"
                  << "CanSlewAltAzAsync" << m_canSlewAltAzAsync
                  << "CanSlewAltAz" << m_canSlewAltAz
                  << "CanSlewAsync" << m_canSlewAsync
-                 << "CanSlew" << m_canSlew;
+                 << "CanSlew" << m_canSlew
+                 << "CanPark" << m_canPark;
+
+        queryAtPark();
+        reportParkState();
 
         if (continuation) {
             continuation(true);
@@ -364,6 +413,7 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
     getBoolProperty("canslewaltaz", &info->canSlewAltAz, &info->canSlewAltAzValid, checkDone);
     getBoolProperty("canslewasync", &info->canSlewAsync, &info->canSlewAsyncValid, checkDone);
     getBoolProperty("canslew", &info->canSlew, &info->canSlewValid, checkDone);
+    getBoolProperty("canpark", &info->canPark, &info->canParkValid, checkDone);
 }
 
 void AlpacaProtocol::getBoolProperty(const QString& property, bool *value, bool *valid, const std::function<void()>& checkDone)
@@ -462,6 +512,13 @@ void AlpacaProtocol::dispatchSlew(float azimuth, float elevation)
         return;
     }
 
+    if (m_atParkValid && m_atPark)
+    {
+        m_queuedSlew = false;
+        reportError("Alpaca telescope is parked. Unpark before slewing.");
+        return;
+    }
+
     if (m_canSlewAltAzAsync || m_canSlewAltAz)
     {
         QUrlQuery body;
@@ -532,6 +589,30 @@ void AlpacaProtocol::sendSlewCommand(const QString& method, const QUrlQuery& com
     });
 }
 
+void AlpacaProtocol::sendSimplePutCommand(const QString& method, const QString& context, const std::function<void(bool)>& continuation)
+{
+    QUrl url = deviceUrl(method);
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    const QByteArray payload = transactionQuery().toString(QUrl::FullyEncoded).toUtf8();
+    qDebug() << "AlpacaProtocol::sendSimplePutCommand" << url.toString() << payload;
+
+    QNetworkReply *reply = m_networkManager->put(request, payload);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, context, continuation]() {
+        const QByteArray payload = reply->readAll();
+        QJsonObject response;
+        const bool success = parseAlpacaResponse(reply, payload, response, context);
+
+        if (continuation) {
+            continuation(success);
+        }
+
+        reply->deleteLater();
+    });
+}
+
 void AlpacaProtocol::slewToRaDec(float azimuth, float elevation, bool asynchronous)
 {
     float latitude, longitude;
@@ -586,6 +667,50 @@ void AlpacaProtocol::pollAzimuthAltitude()
     connect(altReply, &QNetworkReply::finished, this, [this, altReply, info, checkDone]() {
         handlePositionReply("altitude", altReply, info->altitude, info->altitudeValid, checkDone);
     });
+}
+
+void AlpacaProtocol::queryAtPark(const std::function<void(bool, bool)>& continuation)
+{
+    if (m_atParkQueryPending) {
+        return;
+    }
+
+    QUrl url = deviceUrl("atpark");
+    url.setQuery(transactionQuery());
+
+    m_atParkQueryPending = true;
+    QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, continuation]() {
+        const QByteArray payload = reply->readAll();
+        QJsonObject response;
+        const bool success = parseAlpacaResponse(reply, payload, response, "Telescope atpark", false);
+
+        if (success)
+        {
+            m_atPark = response.value("Value").toBool();
+            m_atParkValid = true;
+            reportParkState();
+        }
+        else
+        {
+            m_atParkValid = false;
+            reportParkState(false);
+        }
+
+        m_atParkQueryPending = false;
+
+        if (continuation) {
+            continuation(success, m_atPark);
+        }
+
+        reply->deleteLater();
+    });
+}
+
+void AlpacaProtocol::reportParkState(bool valid)
+{
+    sendMessage(MsgReportParkState::create(m_canPark, m_atPark, valid && m_atParkValid));
 }
 
 void AlpacaProtocol::handlePositionReply(const QString& property, QNetworkReply *reply, double& value, bool& valid, const std::function<void()>& checkDone)

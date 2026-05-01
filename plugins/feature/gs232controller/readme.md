@@ -49,6 +49,7 @@ Selects which protocol to use. This can be GS-232, SPID (rot2prog), rotctld, DFM
 
 Selects whether to use a serial connection or TCP.
 For Alpaca, the Host (11) and Port (12) settings are used directly by the HTTP API and the Connection setting is disabled.
+When the selected Alpaca telescope reports `CanPark` and a valid `AtPark` state, Park and Unpark buttons are shown for parking control.
 
 <h3>9: Serial Port</h3>
 

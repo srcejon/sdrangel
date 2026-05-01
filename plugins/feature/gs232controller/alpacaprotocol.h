@@ -25,6 +25,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include "util/message.h"
 #include "controllerprotocol.h"
 
 class QJsonObject;
@@ -35,6 +36,33 @@ class AlpacaProtocol : public QObject, public ControllerProtocol
 {
     Q_OBJECT
 public:
+    class MsgReportParkState : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool canPark() const { return m_canPark; }
+        bool atPark() const { return m_atPark; }
+        bool valid() const { return m_valid; }
+
+        static MsgReportParkState* create(bool canPark, bool atPark, bool valid)
+        {
+            return new MsgReportParkState(canPark, atPark, valid);
+        }
+
+    private:
+        bool m_canPark;
+        bool m_atPark;
+        bool m_valid;
+
+        MsgReportParkState(bool canPark, bool atPark, bool valid) :
+            Message(),
+            m_canPark(canPark),
+            m_atPark(atPark),
+            m_valid(valid)
+        {
+        }
+    };
+
     AlpacaProtocol();
     ~AlpacaProtocol();
 
@@ -42,6 +70,8 @@ public:
     void readData() override;
     void update() override;
     bool usesIODevice() const override { return false; }
+    void park() override;
+    void unpark() override;
     void applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force) override;
 
 private:
@@ -60,8 +90,11 @@ private:
     void querySlewing(const std::function<void(bool, bool)>& continuation);
     void dispatchSlew(float azimuth, float elevation);
     void sendSlewCommand(const QString& method, const QUrlQuery& commandBody, const QString& context);
+    void sendSimplePutCommand(const QString& method, const QString& context, const std::function<void(bool)>& continuation = {});
     void slewToRaDec(float azimuth, float elevation, bool asynchronous);
     void pollAzimuthAltitude();
+    void queryAtPark(const std::function<void(bool, bool)>& continuation = {});
+    void reportParkState(bool valid = true);
     void handlePositionReply(const QString& property, QNetworkReply *reply, double& value, bool& valid, const std::function<void()>& checkDone);
 
     QNetworkAccessManager *m_networkManager;
@@ -75,6 +108,10 @@ private:
     bool m_canSlewAltAz;
     bool m_canSlewAsync;
     bool m_canSlew;
+    bool m_canPark;
+    bool m_atPark;
+    bool m_atParkValid;
+    bool m_atParkQueryPending;
     bool m_slewPending;
     bool m_slewingQueryPending;
     bool m_queuedSlew;

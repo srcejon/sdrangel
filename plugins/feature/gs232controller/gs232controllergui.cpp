@@ -32,6 +32,7 @@
 #include "gs232controller.h"
 #include "gs232controllergui.h"
 #include "gs232controllerreport.h"
+#include "alpacaprotocol.h"
 #include "dfmprotocol.h"
 #include "maincore.h"
 
@@ -181,6 +182,15 @@ bool GS232ControllerGUI::handleMessage(const Message& message)
         m_dfmStatusDialog.displayStatus(report.getDFMStatus());
         return true;
     }
+    else if (AlpacaProtocol::MsgReportParkState::match(message))
+    {
+        AlpacaProtocol::MsgReportParkState& report = (AlpacaProtocol::MsgReportParkState&) message;
+        m_alpacaCanPark = report.canPark();
+        m_alpacaAtPark = report.atPark();
+        m_alpacaParkStateValid = report.valid();
+        updateAlpacaParkControls();
+        return true;
+    }
 
     return false;
 }
@@ -214,6 +224,9 @@ GS232ControllerGUI::GS232ControllerGUI(PluginAPI* pluginAPI, FeatureUISet *featu
     m_doApplySettings(true),
     m_lastFeatureState(0),
     m_lastOnTarget(false),
+    m_alpacaCanPark(false),
+    m_alpacaAtPark(false),
+    m_alpacaParkStateValid(false),
     m_dfmStatusDialog(),
     m_inputController(nullptr),
     m_inputCoord1(0.0),
@@ -668,6 +681,13 @@ void GS232ControllerGUI::setProtocol(GS232ControllerSettings::Protocol protocol)
     ui->dfmBrakes->setVisible(dfm);
     ui->dfmDrives->setVisible(dfm);
     ui->dfmShowStatus->setVisible(dfm);
+
+    bool alpaca = protocol == GS232ControllerSettings::ALPACA;
+    ui->alpacaLine->setVisible(alpaca);
+    ui->alpacaPark->setVisible(alpaca);
+    ui->alpacaUnpark->setVisible(alpaca);
+    updateAlpacaParkControls();
+
     updateConnectionWidgets();
 
     // See RemoteControlGUI::createGUI() for additional weirdness in trying
@@ -692,6 +712,13 @@ void GS232ControllerGUI::setPrecision()
     ui->tolerance->setSingleStep(step);
     ui->azimuthOffset->setSingleStep(step);
     ui->elevationOffset->setSingleStep(step);
+}
+
+void GS232ControllerGUI::updateAlpacaParkControls()
+{
+    const bool alpaca = m_settings.m_protocol == GS232ControllerSettings::ALPACA;
+    ui->alpacaPark->setEnabled(alpaca && m_alpacaCanPark && m_alpacaParkStateValid && !m_alpacaAtPark);
+    ui->alpacaUnpark->setEnabled(alpaca && m_alpacaParkStateValid && m_alpacaAtPark);
 }
 
 void GS232ControllerGUI::on_protocol_currentIndexChanged(int index)
@@ -913,6 +940,16 @@ void GS232ControllerGUI::on_dfmShowStatus_clicked()
     m_dfmStatusDialog.activateWindow();
 }
 
+void GS232ControllerGUI::on_alpacaPark_clicked()
+{
+    m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgPark::create());
+}
+
+void GS232ControllerGUI::on_alpacaUnpark_clicked()
+{
+    m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgUnpark::create());
+}
+
 void GS232ControllerGUI::updateStatus()
 {
     int state = m_gs232Controller->getState();
@@ -1023,4 +1060,6 @@ void GS232ControllerGUI::makeUIConnections()
     QObject::connect(ui->dfmBrakes, &QToolButton::toggled, this, &GS232ControllerGUI::on_dfmBrakes_clicked);
     QObject::connect(ui->dfmDrives, &QToolButton::toggled, this, &GS232ControllerGUI::on_dfmDrives_clicked);
     QObject::connect(ui->dfmShowStatus, &QToolButton::clicked, this, &GS232ControllerGUI::on_dfmShowStatus_clicked);
+    QObject::connect(ui->alpacaPark, &QToolButton::clicked, this, &GS232ControllerGUI::on_alpacaPark_clicked);
+    QObject::connect(ui->alpacaUnpark, &QToolButton::clicked, this, &GS232ControllerGUI::on_alpacaUnpark_clicked);
 }

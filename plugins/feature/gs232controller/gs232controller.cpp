@@ -39,9 +39,12 @@
 #include "gs232controllerworker.h"
 #include "gs232controllerreport.h"
 #include "dfmprotocol.h"
+#include "alpacaprotocol.h"
 
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgConfigureGS232Controller, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgStartStop, Message)
+MESSAGE_CLASS_DEFINITION(GS232Controller::MsgPark, Message)
+MESSAGE_CLASS_DEFINITION(GS232Controller::MsgUnpark, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgReportWorker, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgReportAvailableChannelOrFeatures, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgScanAvailableChannelOrFeatures, Message)
@@ -172,6 +175,20 @@ bool GS232Controller::handleMessage(const Message& cmd)
 
         return true;
     }
+    else if (MsgPark::match(cmd))
+    {
+        if (m_worker) {
+            m_worker->getInputMessageQueue()->push(GS232ControllerWorker::MsgPark::create());
+        }
+        return true;
+    }
+    else if (MsgUnpark::match(cmd))
+    {
+        if (m_worker) {
+            m_worker->getInputMessageQueue()->push(GS232ControllerWorker::MsgUnpark::create());
+        }
+        return true;
+    }
     else if (MsgReportWorker::match(cmd))
     {
         MsgReportWorker& report = (MsgReportWorker&) cmd;
@@ -236,6 +253,15 @@ bool GS232Controller::handleMessage(const Message& cmd)
         {
             DFMProtocol::MsgReportDFMStatus& report = (DFMProtocol::MsgReportDFMStatus&) cmd;
             getMessageQueueToGUI()->push(new DFMProtocol::MsgReportDFMStatus(report));
+        }
+        return true;
+    }
+    else if (AlpacaProtocol::MsgReportParkState::match(cmd))
+    {
+        if (getMessageQueueToGUI())
+        {
+            AlpacaProtocol::MsgReportParkState& report = (AlpacaProtocol::MsgReportParkState&) cmd;
+            getMessageQueueToGUI()->push(new AlpacaProtocol::MsgReportParkState(report));
         }
         return true;
     }

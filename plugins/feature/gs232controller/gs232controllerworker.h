@@ -64,6 +64,36 @@ public:
         { }
     };
 
+    class MsgPark : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgPark* create()
+        {
+            return new MsgPark();
+        }
+
+    private:
+        MsgPark() :
+            Message()
+        { }
+    };
+
+    class MsgUnpark : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgUnpark* create()
+        {
+            return new MsgUnpark();
+        }
+
+    private:
+        MsgUnpark() :
+            Message()
+        { }
+    };
+
     GS232ControllerWorker(GS232Controller *controller);
     ~GS232ControllerWorker();
     void startWork();
@@ -95,6 +125,8 @@ private:
     QIODevice *openSocket(const GS232ControllerSettings& settings);
     void setAzimuth(float azimuth);
     void setAzimuthElevation(float azimuth, float elevation);
+    void park();
+    void unpark();
     void sendToSkyMap(float azimuth, float elevation);
 
 private slots:
@@ -104,4 +136,3 @@ private slots:
 };
 
 #endif // INCLUDE_FEATURE_GS232CONTROLLERWORKER_H_
-

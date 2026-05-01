@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>687</width>
-    <height>830</height>
+    <width>810</width>
+    <height>859</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -44,410 +44,6 @@
           <widget class="QComboBox" name="fpsLabel">
            <property name="toolTip">
             <string>Select whether the camera captures video frames continuously or still images at an interval</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="exposureLabel">
-           <property name="text">
-            <string>Exposure</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <layout class="QHBoxLayout" name="exposureLayout">
-           <item>
-            <widget class="QSlider" name="exposureSlider">
-             <property name="toolTip">
-              <string>Exposure time</string>
-             </property>
-             <property name="minimum">
-              <number>0</number>
-             </property>
-             <property name="maximum">
-              <number>59999</number>
-             </property>
-             <property name="value">
-              <number>0</number>
-             </property>
-             <property name="orientation">
-              <enum>Qt::Orientation::Horizontal</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QDoubleSpinBox" name="exposureSpin">
-             <property name="toolTip">
-              <string>Exposure time</string>
-             </property>
-             <property name="decimals">
-              <number>0</number>
-             </property>
-             <property name="minimum">
-              <double>1.000000000000000</double>
-             </property>
-             <property name="maximum">
-              <double>60000.000000000000000</double>
-             </property>
-             <property name="singleStep">
-              <double>1.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QComboBox" name="exposureUnitsCombo">
-             <property name="toolTip">
-              <string>Exposure time units</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="isoLabel">
-           <property name="text">
-            <string>ISO</string>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <widget class="QSpinBox" name="isoSpin">
-           <property name="toolTip">
-            <string>ISO setting. -1 for auto</string>
-           </property>
-           <property name="minimum">
-            <number>-1</number>
-           </property>
-           <property name="maximum">
-            <number>25600</number>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="0">
-          <widget class="QLabel" name="alpacaBinXLabel">
-           <property name="text">
-            <string>Bin X</string>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="1">
-          <widget class="QSpinBox" name="alpacaBinXSpin">
-           <property name="toolTip">
-            <string>Camera sensor binning in X direction</string>
-           </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>16</number>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="0">
-          <widget class="QLabel" name="alpacaBinYLabel">
-           <property name="text">
-            <string>Bin Y</string>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="1">
-          <widget class="QSpinBox" name="alpacaBinYSpin">
-           <property name="toolTip">
-            <string>Camera sensor binning in Y direction</string>
-           </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>16</number>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="alpacaGainLabel">
-           <property name="text">
-            <string>Gain</string>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="1">
-          <layout class="QHBoxLayout" name="gainLayout">
-           <item>
-            <widget class="QComboBox" name="alpacaGainCombo">
-             <property name="toolTip">
-              <string>Camera gain</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSlider" name="alpacaGainSlider">
-             <property name="toolTip">
-              <string>Camera gain</string>
-             </property>
-             <property name="maximum">
-              <number>10000</number>
-             </property>
-             <property name="orientation">
-              <enum>Qt::Orientation::Horizontal</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSpinBox" name="alpacaGainSpin">
-             <property name="toolTip">
-              <string>Camera gain</string>
-             </property>
-             <property name="minimum">
-              <number>0</number>
-             </property>
-             <property name="maximum">
-              <number>10000</number>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item row="5" column="0">
-          <widget class="QLabel" name="alpacaOffsetLabel">
-           <property name="text">
-            <string>Offset</string>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="1">
-          <layout class="QHBoxLayout" name="offsetLayout">
-           <item>
-            <widget class="QComboBox" name="alpacaOffsetCombo">
-             <property name="toolTip">
-              <string>Camera offset</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSlider" name="alpacaOffsetSlider">
-             <property name="toolTip">
-              <string>Camera offset</string>
-             </property>
-             <property name="maximum">
-              <number>10000</number>
-             </property>
-             <property name="orientation">
-              <enum>Qt::Orientation::Horizontal</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSpinBox" name="alpacaOffsetSpin">
-             <property name="toolTip">
-              <string>Camera offset</string>
-             </property>
-             <property name="minimum">
-              <number>0</number>
-             </property>
-             <property name="maximum">
-              <number>10000</number>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item row="8" column="0">
-          <widget class="QLabel" name="alpacaNumXLabel">
-           <property name="text">
-            <string>Subframe Width</string>
-           </property>
-          </widget>
-         </item>
-         <item row="8" column="1">
-          <widget class="QSpinBox" name="alpacaNumXSpin">
-           <property name="toolTip">
-            <string>Subframe width after binning (0 uses the full available width)</string>
-           </property>
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>65535</number>
-           </property>
-          </widget>
-         </item>
-         <item row="9" column="0">
-          <widget class="QLabel" name="alpacaNumYLabel">
-           <property name="text">
-            <string>Subframe Height</string>
-           </property>
-          </widget>
-         </item>
-         <item row="9" column="1">
-          <widget class="QSpinBox" name="alpacaNumYSpin">
-           <property name="toolTip">
-            <string>Subframe height after binning (0 uses the full available height)</string>
-           </property>
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>65535</number>
-           </property>
-          </widget>
-         </item>
-         <item row="10" column="0">
-          <widget class="QLabel" name="alpacaStartXLabel">
-           <property name="text">
-            <string>Subframe X</string>
-           </property>
-          </widget>
-         </item>
-         <item row="10" column="1">
-          <widget class="QSpinBox" name="alpacaStartXSpin">
-           <property name="toolTip">
-            <string>Subframe X offset after binning</string>
-           </property>
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>65535</number>
-           </property>
-          </widget>
-         </item>
-         <item row="11" column="0">
-          <widget class="QLabel" name="alpacaStartYLabel">
-           <property name="text">
-            <string>Subframe Y</string>
-           </property>
-          </widget>
-         </item>
-         <item row="11" column="1">
-          <widget class="QSpinBox" name="alpacaStartYSpin">
-           <property name="toolTip">
-            <string>Subframe Y offset after binning</string>
-           </property>
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>65535</number>
-           </property>
-          </widget>
-         </item>
-         <item row="12" column="0">
-          <widget class="QLabel" name="alpacaReadoutModeLabel">
-           <property name="text">
-            <string>Readout mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="12" column="1">
-          <widget class="QComboBox" name="alpacaReadoutModeCombo">
-           <property name="toolTip">
-            <string>Sensor readout mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="13" column="0">
-          <widget class="QLabel" name="whiteBalanceLabel">
-           <property name="text">
-            <string>White balance</string>
-           </property>
-          </widget>
-         </item>
-         <item row="13" column="1">
-          <widget class="QComboBox" name="whiteBalanceCombo">
-           <property name="toolTip">
-            <string>White balance mode (Qt cameras only)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="14" column="0">
-          <widget class="QLabel" name="exposureCompLabel">
-           <property name="text">
-            <string>Exp. comp. (EV)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="14" column="1">
-          <widget class="QDoubleSpinBox" name="exposureCompSpin">
-           <property name="toolTip">
-            <string>Exposure compensation in EV steps: -2.0 to +2.0 (Qt 6 cameras only)</string>
-           </property>
-           <property name="decimals">
-            <number>1</number>
-           </property>
-           <property name="minimum">
-            <double>-2.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>2.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.100000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="15" column="0">
-          <widget class="QLabel" name="focusModeLabel">
-           <property name="text">
-            <string>Focus mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="15" column="1">
-          <widget class="QComboBox" name="focusModeCombo">
-           <property name="toolTip">
-            <string>Focus mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="16" column="0">
-          <widget class="QLabel" name="focusDistLabel">
-           <property name="text">
-            <string>Focus distance</string>
-           </property>
-          </widget>
-         </item>
-         <item row="16" column="1">
-          <widget class="QDoubleSpinBox" name="focusDistSpin">
-           <property name="toolTip">
-            <string>Normalised focus distance: 0.0 = near, 1.0 = far/infinity (Qt 6 manual focus only)</string>
-           </property>
-           <property name="decimals">
-            <number>2</number>
-           </property>
-           <property name="minimum">
-            <double>0.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.010000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="17" column="0">
-          <widget class="QLabel" name="zoomLabel">
-           <property name="text">
-            <string>Zoom</string>
-           </property>
-          </widget>
-         </item>
-         <item row="17" column="1">
-          <widget class="QDoubleSpinBox" name="zoomSpin">
-           <property name="toolTip">
-            <string>Hardware optical zoom factor</string>
-           </property>
-           <property name="decimals">
-            <number>2</number>
-           </property>
-           <property name="minimum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>32.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.100000000000000</double>
            </property>
           </widget>
          </item>
@@ -581,6 +177,410 @@
            </widget>
           </widget>
          </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="exposureLabel">
+           <property name="text">
+            <string>Exposure</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <layout class="QHBoxLayout" name="exposureLayout">
+           <item>
+            <widget class="QSlider" name="exposureSlider">
+             <property name="toolTip">
+              <string>Exposure time</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>59999</number>
+             </property>
+             <property name="value">
+              <number>0</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QDoubleSpinBox" name="exposureSpin">
+             <property name="toolTip">
+              <string>Exposure time</string>
+             </property>
+             <property name="decimals">
+              <number>0</number>
+             </property>
+             <property name="minimum">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="maximum">
+              <double>60000.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>1.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="exposureUnitsCombo">
+             <property name="toolTip">
+              <string>Exposure time units</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="isoLabel">
+           <property name="text">
+            <string>ISO</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QSpinBox" name="isoSpin">
+           <property name="toolTip">
+            <string>ISO setting. -1 for auto</string>
+           </property>
+           <property name="minimum">
+            <number>-1</number>
+           </property>
+           <property name="maximum">
+            <number>25600</number>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="whiteBalanceLabel">
+           <property name="text">
+            <string>White balance</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QComboBox" name="whiteBalanceCombo">
+           <property name="toolTip">
+            <string>White balance mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="exposureCompLabel">
+           <property name="text">
+            <string>Exp. comp. (EV)</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QDoubleSpinBox" name="exposureCompSpin">
+           <property name="toolTip">
+            <string>Exposure compensation in EV steps: -2.0 to +2.0</string>
+           </property>
+           <property name="decimals">
+            <number>1</number>
+           </property>
+           <property name="minimum">
+            <double>-2.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>2.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.100000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="0">
+          <widget class="QLabel" name="focusModeLabel">
+           <property name="text">
+            <string>Focus mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <widget class="QComboBox" name="focusModeCombo">
+           <property name="toolTip">
+            <string>Focus mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="0">
+          <widget class="QLabel" name="focusDistLabel">
+           <property name="text">
+            <string>Focus distance</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="1">
+          <widget class="QDoubleSpinBox" name="focusDistSpin">
+           <property name="toolTip">
+            <string>Normalised focus distance: 0.0 = near, 1.0 = far/infinity</string>
+           </property>
+           <property name="decimals">
+            <number>2</number>
+           </property>
+           <property name="minimum">
+            <double>0.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>1.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.010000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="8" column="0">
+          <widget class="QLabel" name="zoomLabel">
+           <property name="text">
+            <string>Zoom</string>
+           </property>
+          </widget>
+         </item>
+         <item row="8" column="1">
+          <widget class="QDoubleSpinBox" name="zoomSpin">
+           <property name="toolTip">
+            <string>Hardware optical zoom factor</string>
+           </property>
+           <property name="decimals">
+            <number>2</number>
+           </property>
+           <property name="minimum">
+            <double>1.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>32.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.100000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="9" column="0">
+          <widget class="QLabel" name="alpacaGainLabel">
+           <property name="text">
+            <string>Gain</string>
+           </property>
+          </widget>
+         </item>
+         <item row="9" column="1">
+          <layout class="QHBoxLayout" name="gainLayout">
+           <item>
+            <widget class="QComboBox" name="alpacaGainCombo">
+             <property name="toolTip">
+              <string>Camera gain</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="alpacaGainSlider">
+             <property name="toolTip">
+              <string>Camera gain</string>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="alpacaGainSpin">
+             <property name="toolTip">
+              <string>Camera gain</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="10" column="0">
+          <widget class="QLabel" name="alpacaOffsetLabel">
+           <property name="text">
+            <string>Offset</string>
+           </property>
+          </widget>
+         </item>
+         <item row="10" column="1">
+          <layout class="QHBoxLayout" name="offsetLayout">
+           <item>
+            <widget class="QComboBox" name="alpacaOffsetCombo">
+             <property name="toolTip">
+              <string>Camera offset</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="alpacaOffsetSlider">
+             <property name="toolTip">
+              <string>Camera offset</string>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="alpacaOffsetSpin">
+             <property name="toolTip">
+              <string>Camera offset</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="11" column="0">
+          <widget class="QLabel" name="alpacaBinXLabel">
+           <property name="text">
+            <string>Bin X</string>
+           </property>
+          </widget>
+         </item>
+         <item row="11" column="1">
+          <widget class="QSpinBox" name="alpacaBinXSpin">
+           <property name="toolTip">
+            <string>Camera sensor binning in X direction</string>
+           </property>
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>16</number>
+           </property>
+          </widget>
+         </item>
+         <item row="12" column="0">
+          <widget class="QLabel" name="alpacaBinYLabel">
+           <property name="text">
+            <string>Bin Y</string>
+           </property>
+          </widget>
+         </item>
+         <item row="12" column="1">
+          <widget class="QSpinBox" name="alpacaBinYSpin">
+           <property name="toolTip">
+            <string>Camera sensor binning in Y direction</string>
+           </property>
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>16</number>
+           </property>
+          </widget>
+         </item>
+         <item row="13" column="0">
+          <widget class="QLabel" name="alpacaNumXLabel">
+           <property name="text">
+            <string>Subframe Width</string>
+           </property>
+          </widget>
+         </item>
+         <item row="13" column="1">
+          <widget class="QSpinBox" name="alpacaNumXSpin">
+           <property name="toolTip">
+            <string>Subframe width after binning (0 uses the full available width)</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+          </widget>
+         </item>
+         <item row="14" column="0">
+          <widget class="QLabel" name="alpacaNumYLabel">
+           <property name="text">
+            <string>Subframe Height</string>
+           </property>
+          </widget>
+         </item>
+         <item row="14" column="1">
+          <widget class="QSpinBox" name="alpacaNumYSpin">
+           <property name="toolTip">
+            <string>Subframe height after binning (0 uses the full available height)</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+          </widget>
+         </item>
+         <item row="15" column="0">
+          <widget class="QLabel" name="alpacaStartXLabel">
+           <property name="text">
+            <string>Subframe X</string>
+           </property>
+          </widget>
+         </item>
+         <item row="15" column="1">
+          <widget class="QSpinBox" name="alpacaStartXSpin">
+           <property name="toolTip">
+            <string>Subframe X offset after binning</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+          </widget>
+         </item>
+         <item row="16" column="0">
+          <widget class="QLabel" name="alpacaStartYLabel">
+           <property name="text">
+            <string>Subframe Y</string>
+           </property>
+          </widget>
+         </item>
+         <item row="16" column="1">
+          <widget class="QSpinBox" name="alpacaStartYSpin">
+           <property name="toolTip">
+            <string>Subframe Y offset after binning</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+          </widget>
+         </item>
+         <item row="17" column="0">
+          <widget class="QLabel" name="alpacaReadoutModeLabel">
+           <property name="text">
+            <string>Readout mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="17" column="1">
+          <widget class="QComboBox" name="alpacaReadoutModeCombo">
+           <property name="toolTip">
+            <string>Sensor readout mode</string>
+           </property>
+          </widget>
+         </item>
          <item row="18" column="0">
           <widget class="QLabel" name="alpacaFocusPositionLabel">
            <property name="text">
@@ -595,14 +595,14 @@
            </property>
           </widget>
          </item>
-         <item row="20" column="0">
+         <item row="19" column="0">
           <widget class="QLabel" name="alpacaFocusStepSizeLabel">
            <property name="text">
             <string>Focus step size</string>
            </property>
           </widget>
          </item>
-         <item row="20" column="1">
+         <item row="19" column="1">
           <widget class="QSpinBox" name="alpacaFocusStepSizeSpin">
            <property name="minimum">
             <number>1</number>
@@ -612,14 +612,14 @@
            </property>
           </widget>
          </item>
-         <item row="21" column="0">
+         <item row="20" column="0">
           <widget class="QLabel" name="alpacaFilterWheelPositionLabel">
            <property name="text">
             <string>Filter</string>
            </property>
           </widget>
          </item>
-         <item row="21" column="1">
+         <item row="20" column="1">
           <widget class="QComboBox" name="alpacaFilterWheelPositionCombo">
            <property name="toolTip">
             <string>Filter wheel position using the Alpaca names list</string>

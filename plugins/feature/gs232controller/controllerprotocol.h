@@ -34,6 +34,7 @@ public:
     virtual void setAzimuthElevation(float azimuth, float elevation) = 0;
     virtual void readData() = 0;
     virtual void update() = 0;
+    virtual bool usesIODevice() const { return true; }
     void setDevice(QIODevice *device) { m_device = device; }
     virtual void applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force);
     void setMessageQueue(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
@@ -55,4 +56,3 @@ private:
 };
 
 #endif // INCLUDE_FEATURE_CONTROLLERPROTOCOL_H_
-

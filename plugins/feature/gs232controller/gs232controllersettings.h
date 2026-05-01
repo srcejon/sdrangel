@@ -45,7 +45,7 @@ struct GS232ControllerSettings
     int m_elevationMin;
     int m_elevationMax;
     float m_tolerance;
-    enum Protocol { GS232, SPID, ROTCTLD, DFM } m_protocol;
+    enum Protocol { GS232, SPID, ROTCTLD, DFM, ALPACA } m_protocol;
     enum Connection { SERIAL, TCP } m_connection;
     int m_precision;
     enum Coordinates { AZ_EL, X_Y_85, X_Y_30 } m_coordinates;

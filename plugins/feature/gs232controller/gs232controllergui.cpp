@@ -503,7 +503,8 @@ void GS232ControllerGUI::displaySettings()
 
 void GS232ControllerGUI::updateConnectionWidgets()
 {
-    bool serial = m_settings.m_connection == GS232ControllerSettings::SERIAL;
+    bool serial = (m_settings.m_connection == GS232ControllerSettings::SERIAL)
+        && (m_settings.m_protocol != GS232ControllerSettings::ALPACA);
     ui->serialPortLabel->setVisible(serial);
     ui->serialPort->setVisible(serial);
     ui->baudRateLabel->setVisible(serial);
@@ -512,6 +513,7 @@ void GS232ControllerGUI::updateConnectionWidgets()
     ui->host->setVisible(!serial);
     ui->portLabel->setVisible(!serial);
     ui->port->setVisible(!serial);
+    ui->connection->setEnabled(m_settings.m_protocol != GS232ControllerSettings::ALPACA);
 }
 
 void GS232ControllerGUI::updateSerialPortList()
@@ -666,6 +668,7 @@ void GS232ControllerGUI::setProtocol(GS232ControllerSettings::Protocol protocol)
     ui->dfmBrakes->setVisible(dfm);
     ui->dfmDrives->setVisible(dfm);
     ui->dfmShowStatus->setVisible(dfm);
+    updateConnectionWidgets();
 
     // See RemoteControlGUI::createGUI() for additional weirdness in trying
     // to resize a window after widgets are changed
@@ -1021,4 +1024,3 @@ void GS232ControllerGUI::makeUIConnections()
     QObject::connect(ui->dfmDrives, &QToolButton::toggled, this, &GS232ControllerGUI::on_dfmDrives_clicked);
     QObject::connect(ui->dfmShowStatus, &QToolButton::clicked, this, &GS232ControllerGUI::on_dfmShowStatus_clicked);
 }
-

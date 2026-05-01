@@ -144,7 +144,15 @@ void GS232ControllerWorker::applySettings(const GS232ControllerSettings& setting
         }
     }
 
-    if (settings.m_connection == GS232ControllerSettings::TCP)
+    if (m_controllerProtocol && !m_controllerProtocol->usesIODevice())
+    {
+        if (m_device && m_device->isOpen())
+        {
+            m_device->close();
+            m_device = nullptr;
+        }
+    }
+    else if (settings.m_connection == GS232ControllerSettings::TCP)
     {
         if (settingsKeys.contains("host") || settingsKeys.contains("port") || force)
         {
@@ -179,7 +187,7 @@ void GS232ControllerWorker::applySettings(const GS232ControllerSettings& setting
         m_controllerProtocol->applySettings(settings, settingsKeys, force);
     }
 
-    if (m_device != nullptr)
+    if (m_controllerProtocol && (!m_controllerProtocol->usesIODevice() || (m_device != nullptr)))
     {
         // Apply offset then clamp
 
@@ -255,7 +263,7 @@ QIODevice *GS232ControllerWorker::openSocket(const GS232ControllerSettings& sett
 
 void GS232ControllerWorker::setAzimuth(float azimuth)
 {
-    if (m_device && m_device->isOpen() && m_controllerProtocol) {
+    if (m_controllerProtocol && (!m_controllerProtocol->usesIODevice() || (m_device && m_device->isOpen()))) {
         m_controllerProtocol->setAzimuth(azimuth);
     }
 
@@ -264,7 +272,7 @@ void GS232ControllerWorker::setAzimuth(float azimuth)
 
 void GS232ControllerWorker::setAzimuthElevation(float azimuth, float elevation)
 {
-    if (m_device && m_device->isOpen() && m_controllerProtocol) {
+    if (m_controllerProtocol && (!m_controllerProtocol->usesIODevice() || (m_device && m_device->isOpen()))) {
         m_controllerProtocol->setAzimuthElevation(azimuth, elevation);
     }
 
@@ -282,7 +290,7 @@ void GS232ControllerWorker::readData()
 void GS232ControllerWorker::update()
 {
     // Request current Az/El from controller
-    if (m_device && m_device->isOpen() && m_controllerProtocol) {
+    if (m_controllerProtocol && (!m_controllerProtocol->usesIODevice() || (m_device && m_device->isOpen()))) {
         m_controllerProtocol->update();
     }
 }

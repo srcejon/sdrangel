@@ -11,6 +11,7 @@ set(gs232controller_SOURCES
     spidprotocol.cpp
     rotctrldprotocol.cpp
     dfmprotocol.cpp
+    alpacaprotocol.cpp
 )
 
 set(gs232controller_HEADERS
@@ -25,6 +26,7 @@ set(gs232controller_HEADERS
     spidprotocol.h
     rotctrldprotocol.h
     dfmprotocol.h
+    alpacaprotocol.h
 )
 
 include_directories(
@@ -86,6 +88,7 @@ endif()
 
 target_link_libraries(${TARGET_NAME} PRIVATE
     Qt::Core
+    Qt::Network
     Qt::SerialPort
     ${TARGET_LIB}
     sdrbase

@@ -2,7 +2,7 @@
 
 <h2>Introduction</h2>
 
-The Rotator Controller feature plugin allows SDRangel to send commands to GS-232 and SPID rotators as well as hamlib's rotctld, via a serial or TCP connection.
+The Rotator Controller feature plugin allows SDRangel to send commands to GS-232 and SPID rotators, hamlib's rotctld, and ASCOM Alpaca telescopes.
 This allows SDRangel to point antennas mounted on a rotator to a specified azimuth and elevation.
 
 Azimuth and elevation can be set manually by a user in the GUI, via the REST API, via another plugin, such as the Map Feature, the ADS-B Demodulator, or the Star Tracker, or by controller/gamepads (such as an XBox Wireless Controller).
@@ -43,11 +43,12 @@ For example, the ADS-B plugin will display the flight number of the target aircr
 
 <h3>7: Protocol</h3>
 
-Selects which protocol to use. This can be GS-232, SPID (rot2prog) or rotctld.
+Selects which protocol to use. This can be GS-232, SPID (rot2prog), rotctld, DFM or ASCOM Alpaca.
 
 <h3>8: Connection</h3>
 
 Selects whether to use a serial connection or TCP.
+For Alpaca, the Host (11) and Port (12) settings are used directly by the HTTP API and the Connection setting is disabled.
 
 <h3>9: Serial Port</h3>
 
@@ -60,10 +61,12 @@ Specifies the baud rate that will be used to send commands to the rotator. Typic
 <h3>11: Host</h3>
 
 Specifies the hostname / IP address of the computer to connect to.
+For Alpaca, this is the host running the ASCOM Remote Server.
 
 <h3>12: Port</h3>
 
 Specifies the TCP port number to connect to.
+For Alpaca, this is the ASCOM Remote Server port, typically 11111. Telescope device number 0 is used.
 
 <h3>13: Azimuth Offset</h3>
 

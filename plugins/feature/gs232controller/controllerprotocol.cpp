@@ -26,6 +26,7 @@
 #include "spidprotocol.h"
 #include "rotctrldprotocol.h"
 #include "dfmprotocol.h"
+#include "alpacaprotocol.h"
 
 ControllerProtocol::ControllerProtocol() :
     m_device(nullptr),
@@ -149,9 +150,11 @@ ControllerProtocol *ControllerProtocol::create(GS232ControllerSettings::Protocol
     case GS232ControllerSettings::DFM:
         return new DFMProtocol();
         break;
+    case GS232ControllerSettings::ALPACA:
+        return new AlpacaProtocol();
+        break;
     default:
         return nullptr;
     }
 }
-
 

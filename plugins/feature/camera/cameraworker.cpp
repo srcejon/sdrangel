@@ -1802,9 +1802,6 @@ void CameraWorker::statusTick()
 {
     if (m_networkManager && m_settings.isAlpacaCamera()) {
         alpacaPollStatus();
-        if (m_settings.m_alpacaFilterWheelEnabled) {
-            alpacaQueryFilterWheelInfo();
-        }
     }
 }
 

@@ -160,9 +160,7 @@ bool Camera::handleMessage(const Message& cmd)
     }
     else if (MsgRefreshCameraList::match(cmd))
     {
-        if (m_cameraFinder)
-        {
-            m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
+        if (m_cameraFinder) {
             m_cameraFinder->reportCameraList(m_settings);
         }
 

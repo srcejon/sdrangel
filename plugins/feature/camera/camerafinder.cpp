@@ -38,13 +38,7 @@
 #include "camerafinder.h"
 #include "cameraworker.h"
 
-namespace {
-
-constexpr quint16 kAlpacaDiscoveryPort = 32227;
-constexpr int kAlpacaDiscoveryTimeoutMs = 1000;
-const QByteArray kAlpacaDiscoveryMessage("alpacadiscovery1");
-
-}
+const QByteArray CameraFinder::m_alpacaDiscoveryMessage("alpacadiscovery1");
 
 CameraFinder::CameraFinder(QObject* parent) :
     QObject(parent),
@@ -83,7 +77,7 @@ void CameraFinder::reportCameraList(const CameraSettings& settings)
     }
 
     if (settings.m_alpacaDiscoveryEnabled) {
-        startAlpacaDiscovery(m_requestId, settings);
+        startAlpacaDiscovery();
     } else {
         queryConfiguredDevices({{settings.m_alpacaHost, settings.m_alpacaPort}}, m_requestId);
     }
@@ -193,7 +187,7 @@ void CameraFinder::finalizeCameraList(int requestId)
     m_msgQueueToGUI->push(CameraWorker::MsgReportAlpacaDeviceList::create(m_currentFocuserIds, m_currentFilterWheelIds));
 }
 
-void CameraFinder::startAlpacaDiscovery(int requestId, const CameraSettings& settings)
+void CameraFinder::startAlpacaDiscovery()
 {
     if (!m_discoverySocket)
     {
@@ -212,11 +206,8 @@ void CameraFinder::startAlpacaDiscovery(int requestId, const CameraSettings& set
     m_discoverySocket->bind(QHostAddress::AnyIPv4, 0, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
     m_discoveredEndpointKeys.clear();
 
-    m_discoverySocket->writeDatagram(kAlpacaDiscoveryMessage, QHostAddress::Broadcast, kAlpacaDiscoveryPort);
-    m_discoveryTimer->start(kAlpacaDiscoveryTimeoutMs);
-
-    Q_UNUSED(requestId)
-    Q_UNUSED(settings)
+    m_discoverySocket->writeDatagram(m_alpacaDiscoveryMessage, QHostAddress::Broadcast, m_alpacaDiscoveryPort);
+    m_discoveryTimer->start(m_alpacaDiscoveryTimeoutMs);
 }
 
 void CameraFinder::finishAlpacaDiscovery(int requestId)
@@ -264,11 +255,11 @@ void CameraFinder::queryConfiguredDevices(const QList<AlpacaEndpoint>& endpoints
 
     for (const AlpacaEndpoint& endpoint : endpoints)
     {
-        if (endpoint.host.isEmpty() || endpoint.port == 0) {
+        if (endpoint.m_host.isEmpty() || endpoint.m_port == 0) {
             continue;
         }
 
-        const QString key = endpointKey(endpoint.host, endpoint.port);
+        const QString key = endpointKey(endpoint.m_host, endpoint.m_port);
 
         if (!seenEndpoints.contains(key))
         {
@@ -287,15 +278,16 @@ void CameraFinder::queryConfiguredDevices(const QList<AlpacaEndpoint>& endpoints
 
     for (const AlpacaEndpoint& endpoint : uniqueEndpoints)
     {
-        QNetworkRequest request(QUrl(buildAlpacaBaseUrl(endpoint.host, endpoint.port) + "/management/v1/configureddevices"));
+        QNetworkRequest request(QUrl(buildAlpacaBaseUrl(endpoint.m_host, endpoint.m_port) + "/management/v1/configureddevices"));
         QNetworkReply* reply = m_networkManager->get(request);
 
         connect(reply, &QNetworkReply::finished, this, [this, reply, endpoint, requestId]() {
-            if (requestId == m_requestId && reply->error() == QNetworkReply::NoError) {
+            if (requestId == m_requestId && reply->error() == QNetworkReply::NoError)
+            {
                 const QByteArray payload = reply->readAll();
-                m_currentCameraIds.append(parseAlpacaDeviceList(payload, QStringLiteral("camera"), endpoint.host, endpoint.port));
-                m_currentFocuserIds.append(parseAlpacaDeviceList(payload, QStringLiteral("focuser"), endpoint.host, endpoint.port));
-                m_currentFilterWheelIds.append(parseAlpacaDeviceList(payload, QStringLiteral("filterwheel"), endpoint.host, endpoint.port));
+                m_currentCameraIds.append(parseAlpacaDeviceList(payload, QStringLiteral("camera"), endpoint.m_host, endpoint.m_port));
+                m_currentFocuserIds.append(parseAlpacaDeviceList(payload, QStringLiteral("focuser"), endpoint.m_host, endpoint.m_port));
+                m_currentFilterWheelIds.append(parseAlpacaDeviceList(payload, QStringLiteral("filterwheel"), endpoint.m_host, endpoint.m_port));
             }
 
             reply->deleteLater();

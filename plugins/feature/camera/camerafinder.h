@@ -34,6 +34,25 @@ class CameraFinder : public QObject
 {
     Q_OBJECT
 public:
+
+    struct CameraInfo
+    {
+        QString m_protocol;     // "qt" for Qt cameras, "alpaca" for Alpaca cameras
+        QString m_id;
+        QString m_description;
+        QString m_host;         // alpaca only
+        quint16 m_port = 0;     // alpaca only
+    };
+
+    struct AlpacaDeviceInfo
+    {
+        QString m_type;         // e.g. "camera", "focuser", "filterwheel"
+        QString m_id;           // A number, typically 0
+        QString m_description;
+        QString m_host;
+        quint16 m_port = 0;
+    };
+
     explicit CameraFinder(QObject* parent = nullptr);
     ~CameraFinder() override;
 
@@ -43,8 +62,8 @@ public:
 private:
     struct AlpacaEndpoint
     {
-        QString host;
-        quint16 port;
+        QString m_host;
+        quint16 m_port;
     };
 
     MessageQueue* m_msgQueueToGUI;
@@ -59,6 +78,10 @@ private:
     QStringList m_currentFilterWheelIds;
     QSet<QString> m_discoveredEndpointKeys;
 
+    static constexpr quint16 m_alpacaDiscoveryPort = 32227;
+    static constexpr int m_alpacaDiscoveryTimeoutMs = 1000;
+    static const QByteArray m_alpacaDiscoveryMessage;
+
     static QStringList listQtCameraIds();
     static QStringList parseAlpacaDeviceList(const QByteArray& payload, const QString& deviceType, const QString& host, quint16 port);
     static QString buildAlpacaBaseUrl(const CameraSettings& settings);
@@ -67,7 +90,7 @@ private:
     static QString endpointKey(const QString& host, quint16 port);
 
     void finalizeCameraList(int requestId);
-    void startAlpacaDiscovery(int requestId, const CameraSettings& settings);
+    void startAlpacaDiscovery();
     void finishAlpacaDiscovery(int requestId);
     void queryConfiguredDevices(const QList<AlpacaEndpoint>& endpoints, int requestId);
 

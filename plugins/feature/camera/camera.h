@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERA_H_
 
 #include <QThread>
+
 #include "feature/feature.h"
 #include "util/message.h"
 #include "camerasettings.h"
@@ -116,7 +117,7 @@ private:
     CameraWorker *m_worker;
     QThread *m_postProcessorThread;
     CameraPostProcessor *m_postProcessor;
-    CameraFinder* m_cameraFinder;
+    CameraFinder *m_cameraFinder;
     CameraSettings m_settings;
 
     void start();

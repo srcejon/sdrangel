@@ -39,6 +39,7 @@
 #include <QTextStream>
 #include <QWheelEvent>
 #include <QMessageBox>
+#include <QUrl>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
 #include <QCameraDevice>
@@ -46,6 +47,7 @@
 #include <QImageCapture>
 #include <QMediaCaptureSession>
 #include <QMediaDevices>
+#include <QMediaPlayer>
 #include <QVideoFrame>
 #include <QVideoSink>
 #else
@@ -171,7 +173,7 @@ bool CameraGUI::handleMessage(const Message& message)
 
         if (cfg.getStartStop())
         {
-            if (m_settings.isQtCamera()) {
+            if (m_settings.isQtCamera() || m_settings.isFileCamera()) {
                 setupQtCapture();
             }
         }
@@ -195,7 +197,9 @@ bool CameraGUI::handleMessage(const Message& message)
 
             const QString displayKey = camera.m_protocol.isEmpty()
                 ? camera.m_id
-                : QString("%1:%2").arg(camera.m_protocol, camera.m_description);
+                : (camera.m_protocol == QLatin1String("file")
+                    ? (camera.m_description.isEmpty() ? QStringLiteral("file:") : QStringLiteral("file:%1").arg(camera.m_description))
+                    : QString("%1:%2").arg(camera.m_protocol, camera.m_description));
             displayCounts[displayKey] = displayCounts.value(displayKey) + 1;
         }
 
@@ -203,7 +207,11 @@ bool CameraGUI::handleMessage(const Message& message)
         ui->cameraCombo->clear();
         for (const CameraInfo& entry : entries)
         {
-            QString displayText = entry.m_protocol.isEmpty() ? entry.m_id : QString("%1:%2").arg(entry.m_protocol, entry.m_description);
+            QString displayText = entry.m_protocol.isEmpty()
+                ? entry.m_id
+                : (entry.m_protocol == QLatin1String("file")
+                    ? (entry.m_description.isEmpty() ? QStringLiteral("file:") : QStringLiteral("file:%1").arg(entry.m_description))
+                    : QString("%1:%2").arg(entry.m_protocol, entry.m_description));
 
             if (!entry.m_host.isEmpty() && displayCounts.value(displayText) > 1) {
                 displayText = QString("%1 (%2:%3)").arg(displayText, entry.m_host).arg(entry.m_port);
@@ -253,6 +261,9 @@ bool CameraGUI::handleMessage(const Message& message)
             setSelectedCamera(selectedCamera.m_protocol, selectedCamera.m_id, selectedCamera.m_description,
                 selectedCamera.m_host, selectedCamera.m_port);
             QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
+            if (selectedCamera.m_protocol == QLatin1String("file")) {
+                settingsKeys.append("videoFileCameraPath");
+            }
             if (!selectedCamera.m_host.isEmpty()) {
                 settingsKeys.append("alpacaHost");
                 settingsKeys.append("alpacaPort");
@@ -465,6 +476,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     m_qtCamera(nullptr),
     m_imageCapture(nullptr),
+    m_mediaPlayer(nullptr),
     m_videoSink(nullptr),
     m_captureSession(nullptr)
 #else
@@ -584,6 +596,10 @@ void CameraGUI::setSelectedCamera(const QString& protocol, const QString& camera
     m_settings.m_cameraId = cameraId;
     m_settings.m_cameraDescription = description;
 
+    if (protocol == QLatin1String("file")) {
+        m_settings.m_videoFileCameraPath = cameraId;
+    }
+
     if (protocol == QLatin1String("alpaca") && !alpacaHost.isEmpty())
     {
         m_settings.m_alpacaHost = alpacaHost;
@@ -618,6 +634,39 @@ int CameraGUI::findCameraComboIndex(const QString& protocol, const QString& came
     }
 
     return -1;
+}
+
+bool CameraGUI::chooseVideoFileCameraFile(int comboIndex, const QString& previousCameraProtocol,
+    const QString& previousCameraId, const QString& previousCameraDescription,
+    const QString& previousAlpacaHost, quint16 previousAlpacaPort)
+{
+    const QString filePath = QFileDialog::getOpenFileName(
+        this,
+        tr("Select Video File"),
+        m_settings.m_videoFileCameraPath,
+        tr("Video Files (*.mp4 *.mkv *.mov *.avi *.m4v *.wmv *.webm);;All Files (*.*)"));
+
+    if (filePath.isEmpty())
+    {
+        const int previousIndex = findCameraComboIndex(
+            previousCameraProtocol,
+            previousCameraId,
+            previousCameraDescription,
+            previousAlpacaHost,
+            previousAlpacaPort);
+        if (previousIndex >= 0)
+        {
+            QSignalBlocker blocker(ui->cameraCombo);
+            ui->cameraCombo->setCurrentIndex(previousIndex);
+        }
+        return false;
+    }
+
+    const QString description = QFileInfo(filePath).fileName();
+    ui->cameraCombo->setItemData(comboIndex, filePath, CameraIdRole);
+    ui->cameraCombo->setItemData(comboIndex, description, CameraDescriptionRole);
+    ui->cameraCombo->setItemText(comboIndex, QStringLiteral("file:%1").arg(description));
+    return true;
 }
 
 CameraGUI::FrameRateOptions CameraGUI::makeFrameRateOptions(const QSet<int>& fpsValues)
@@ -662,6 +711,7 @@ void CameraGUI::displaySettings()
     } else if (!m_settings.cameraDisplayName().isEmpty()) {
         ui->cameraCombo->setCurrentText(m_settings.cameraDisplayName());
     }
+    updateFileCameraControls();
 
     const QString resText = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
     const int resIdx = settingsUI()->resolutionCombo->findText(resText);
@@ -1005,6 +1055,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->startStop, &QPushButton::clicked, this, &CameraGUI::on_startStop_clicked);
     QObject::connect(ui->refreshCamerasButton, &QPushButton::clicked, this, &CameraGUI::on_refreshCamerasButton_clicked);
     QObject::connect(ui->cameraCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cameraCombo_currentIndexChanged);
+    QObject::connect(ui->browseVideoFileButton, &QToolButton::clicked, this, &CameraGUI::on_browseVideoFileButton_clicked);
+    QObject::connect(ui->restartVideoFileButton, &QToolButton::clicked, this, &CameraGUI::on_restartVideoFileButton_clicked);
     QObject::connect(settingsUI()->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fpsLabel, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsLabel_currentIndexChanged);
     QObject::connect(settingsUI()->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
@@ -1346,6 +1398,17 @@ void CameraGUI::updateExposureControls()
     }
 }
 
+void CameraGUI::updateFileCameraControls()
+{
+    const bool fileCameraSelected = m_settings.isFileCamera();
+    const bool hasVideoFile = fileCameraSelected && !m_settings.m_videoFileCameraPath.isEmpty();
+
+    ui->browseVideoFileButton->setVisible(fileCameraSelected);
+    ui->browseVideoFileButton->setEnabled(fileCameraSelected);
+    ui->restartVideoFileButton->setVisible(fileCameraSelected);
+    ui->restartVideoFileButton->setEnabled(hasVideoFile);
+}
+
 void CameraGUI::probeQtCameraCapabilities()
 {
     if (!m_settings.isQtCamera()) {
@@ -1678,6 +1741,29 @@ void CameraGUI::setupQtCapture()
     m_qtStillCaptureTimer.stop();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_settings.isFileCamera())
+    {
+        if (m_settings.m_videoFileCameraPath.isEmpty()) {
+            return;
+        }
+
+        m_captureSession = new QMediaCaptureSession(this);
+        m_mediaPlayer = new QMediaPlayer(this);
+        m_videoSink = new QVideoSink(this);
+        m_captureSession->setVideoOutput(m_videoSink);
+        m_mediaPlayer->setVideoOutput(m_videoSink);
+        connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
+        m_mediaPlayer->setSource(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath));
+        m_mediaPlayer->play();
+
+        m_qtZoomSupported = false;
+        m_qtManualExposureSupported = false;
+        m_qtIsoSensitivitySupported = false;
+        m_qtWhiteBalanceModeSupported = false;
+        m_qtExposureCompensationSupported = false;
+        updateEnabledControls();
+        return;
+    }
 
     const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
     if (cameras.isEmpty()) {
@@ -1967,6 +2053,12 @@ void CameraGUI::cleanupQtCapture()
         delete m_imageCapture;
         m_imageCapture = nullptr;
     }
+    if (m_mediaPlayer)
+    {
+        m_mediaPlayer->stop();
+        delete m_mediaPlayer;
+        m_mediaPlayer = nullptr;
+    }
     if (m_videoSink)
     {
         delete m_videoSink;
@@ -2005,10 +2097,14 @@ void CameraGUI::cleanupQtCapture()
 
 void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool force)
 {
-    if (!m_settings.isQtCamera())
+    if (!m_settings.isQtCamera() && !m_settings.isFileCamera())
     {
         // Camera type switched away from Qt — stop any running Qt camera
-        if (m_qtCamera) {
+        if (m_qtCamera
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            || m_mediaPlayer
+#endif
+        ) {
             cleanupQtCapture();
         }
         m_qtFrameRateOptionsByResolution.clear();
@@ -2020,11 +2116,11 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         return;
     }
 
-    if (force || settingsKeys.contains("cameraId")) {
+    if (m_settings.isQtCamera() && (force || settingsKeys.contains("cameraId"))) {
         reportResolutions();
     }
 
-    if (force || settingsKeys.contains("resolutionWidth") || settingsKeys.contains("resolutionHeight")) {
+    if (m_settings.isQtCamera() && (force || settingsKeys.contains("resolutionWidth") || settingsKeys.contains("resolutionHeight"))) {
         updateFrameRateControlForResolution(resolutionKey(m_settings.m_resolutionWidth, m_settings.m_resolutionHeight));
     }
 
@@ -2032,7 +2128,9 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
     updateCaptureModeControls();
 
     const bool recapture = force
+        || settingsKeys.contains("cameraProtocol")
         || settingsKeys.contains("cameraId")
+        || settingsKeys.contains("videoFileCameraPath")
         || settingsKeys.contains("resolutionWidth")
         || settingsKeys.contains("resolutionHeight")
         || settingsKeys.contains("captureMode")
@@ -2042,14 +2140,21 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("isoSensitivity");
 
-    if (!m_qtCamera && (m_camera->getState() == Feature::StRunning))
+    const bool hasActiveVisualSource =
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        (m_qtCamera != nullptr) || (m_mediaPlayer != nullptr);
+#else
+        (m_qtCamera != nullptr);
+#endif
+
+    if (!hasActiveVisualSource && (m_camera->getState() == Feature::StRunning))
     {
-        // Start the camera (we've probably just switched to Qt camera type)
+        // Start the visual source (we've probably just switched to Qt or file camera type)
         setupQtCapture();
     }
-    else if (recapture && m_qtCamera)
+    else if (recapture && hasActiveVisualSource)
     {
-        // Restart the camera so the new format / exposure parameters take effect
+        // Restart the visual source so the new source or capture parameters take effect
         setupQtCapture();
     }
     else if (m_qtCamera)
@@ -2399,19 +2504,89 @@ void CameraGUI::on_refreshCamerasButton_clicked()
     m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
 }
 
+void CameraGUI::on_browseVideoFileButton_clicked()
+{
+    if (!m_settings.isFileCamera()) {
+        return;
+    }
+
+    const int index = ui->cameraCombo->currentIndex();
+    if (index < 0) {
+        return;
+    }
+
+    if (!chooseVideoFileCameraFile(
+            index,
+            m_settings.m_cameraProtocol,
+            m_settings.m_cameraId,
+            m_settings.m_cameraDescription,
+            m_settings.m_alpacaHost,
+            m_settings.m_alpacaPort))
+    {
+        return;
+    }
+
+    m_settings.m_cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
+    m_settings.m_cameraDescription = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
+    m_settings.m_videoFileCameraPath = m_settings.m_cameraId;
+    updateFileCameraControls();
+    applySettings({"cameraId", "cameraDescription", "videoFileCameraPath"});
+}
+
+void CameraGUI::on_restartVideoFileButton_clicked()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (!m_settings.isFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
+        return;
+    }
+
+    if (!m_mediaPlayer && (m_camera->getState() == Feature::StRunning)) {
+        setupQtCapture();
+    }
+
+    if (m_mediaPlayer)
+    {
+        m_mediaPlayer->setPosition(0);
+        m_mediaPlayer->play();
+    }
+#endif
+}
+
 void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
 {
     if (index < 0) {
         return;
     }
 
+    const QString previousCameraProtocol = m_settings.m_cameraProtocol;
+    const QString previousCameraId = m_settings.m_cameraId;
+    const QString previousCameraDescription = m_settings.m_cameraDescription;
+    const QString previousAlpacaHost = m_settings.m_alpacaHost;
+    const quint16 previousAlpacaPort = m_settings.m_alpacaPort;
     const bool wasAlpaca = m_settings.isAlpacaCamera();
-    setSelectedCamera(
-        ui->cameraCombo->itemData(index, CameraProtocolRole).toString(),
-        ui->cameraCombo->itemData(index, CameraIdRole).toString(),
-        ui->cameraCombo->itemData(index, CameraDescriptionRole).toString(),
-        ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString(),
-        static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt()));
+    const QString protocol = ui->cameraCombo->itemData(index, CameraProtocolRole).toString();
+    QString cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
+    QString description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
+    const QString alpacaHost = ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString();
+    const quint16 alpacaPort = static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt());
+
+    if (protocol == QLatin1String("file"))
+    {
+        if (!chooseVideoFileCameraFile(index,
+                previousCameraProtocol,
+                previousCameraId,
+                previousCameraDescription,
+                previousAlpacaHost,
+                previousAlpacaPort))
+        {
+            return;
+        }
+
+        cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
+        description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
+    }
+
+    setSelectedCamera(protocol, cameraId, description, alpacaHost, alpacaPort);
 
     if (wasAlpaca != m_settings.isAlpacaCamera()) {
         m_lastAlpacaCameraState = -1;
@@ -2429,17 +2604,21 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
             settingsUI()->fpsLabel->setCurrentIndex(intervalIndex);
         }
     }
-    else if (!m_settings.isAlpacaCamera() && !ui->startStop->isChecked())
+    else if (m_settings.isQtCamera() && !ui->startStop->isChecked())
     {
         probeQtCameraCapabilities();
     }
     QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
+    if (m_settings.isFileCamera()) {
+        settingsKeys.append("videoFileCameraPath");
+    }
     if (m_settings.isAlpacaCamera()) {
         settingsKeys.append("alpacaHost");
         settingsKeys.append("alpacaPort");
     }
     updateAlpacaVisibility();
     updateEnabledControls();
+    updateFileCameraControls();
     applySettings(settingsKeys);
 }
 
@@ -3225,6 +3404,23 @@ void CameraGUI::updateEnabledControls()
         settingsUI()->exposureSpin->setEnabled(true);
         settingsUI()->exposureUnitsCombo->setEnabled(true);
     }
+    else if (m_settings.isFileCamera())
+    {
+        settingsUI()->zoomLabel->setEnabled(false);
+        settingsUI()->zoomSpin->setEnabled(false);
+        settingsUI()->exposureLabel->setEnabled(false);
+        settingsUI()->exposureSlider->setEnabled(false);
+        settingsUI()->exposureSpin->setEnabled(false);
+        settingsUI()->exposureUnitsCombo->setEnabled(false);
+        settingsUI()->isoLabel->setEnabled(false);
+        settingsUI()->isoSpin->setEnabled(false);
+        settingsUI()->exposureCompLabel->setEnabled(false);
+        settingsUI()->exposureCompSpin->setEnabled(false);
+        settingsUI()->whiteBalanceLabel->setEnabled(false);
+        settingsUI()->whiteBalanceCombo->setEnabled(false);
+        settingsUI()->focusDistLabel->setEnabled(false);
+        settingsUI()->focusDistSpin->setEnabled(false);
+    }
     else
     {
         // Zoom and exposure control enabled states are set inside setupQtCapture;
@@ -3257,6 +3453,8 @@ void CameraGUI::updateEnabledControls()
             settingsUI()->whiteBalanceCombo->setEnabled(false);
         }
     }
+
+    updateFileCameraControls();
 }
 
 void CameraGUI::on_overlayFontCombo_currentFontChanged(const QFont& font)

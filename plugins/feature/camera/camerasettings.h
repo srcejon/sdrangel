@@ -102,6 +102,7 @@ struct CameraSettings
     bool m_saveImage;
     QString m_imageFileName;
     bool m_saveVideo;
+    QString m_videoFileCameraPath;
     QString m_videoFileName;
     bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported
     Serializable *m_rollupState;
@@ -203,6 +204,7 @@ struct CameraSettings
     QString getDebugString(const QStringList& settingsKeys, bool force=false) const;
     bool isAlpacaCamera() const;
     bool isQtCamera() const;
+    bool isFileCamera() const;
     int cameraIdInt() const;
     QString cameraIdString() const;
     QString cameraDescription() const;

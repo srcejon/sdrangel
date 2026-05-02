@@ -164,6 +164,7 @@ void CameraSettings::resetToDefaults()
     m_saveImage = false;
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
+    m_videoFileCameraPath.clear();
     m_videoFileName = "camera.mp4";
     m_videoHwAcceleration = true;
     m_workspaceIndex = 0;
@@ -360,6 +361,7 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(112, m_alpacaFilterWheelPort);
     s.writeS32(113, m_alpacaFilterWheelDeviceNumber);
     s.writeS32(114, m_alpacaFilterWheelPosition);
+    s.writeString(115, m_videoFileCameraPath);
 
     return s.final();
 }
@@ -428,6 +430,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(16, &m_saveVideo, false);
         d.readString(17, &m_videoFileName, "camera.mp4");
         d.readBool(18, &m_videoHwAcceleration, true);
+        d.readString(115, &m_videoFileCameraPath, "");
 
         if (m_rollupState)
         {
@@ -728,6 +731,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoFileName")) {
         m_videoFileName = settings.m_videoFileName;
+    }
+    if (settingsKeys.contains("videoFileCameraPath")) {
+        m_videoFileCameraPath = settings.m_videoFileCameraPath;
     }
     if (settingsKeys.contains("videoHwAcceleration")) {
         m_videoHwAcceleration = settings.m_videoHwAcceleration;
@@ -1065,6 +1071,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("videoFileName") || force) {
         ostr << " m_videoFileName: " << m_videoFileName.toStdString();
     }
+    if (settingsKeys.contains("videoFileCameraPath") || force) {
+        ostr << " m_videoFileCameraPath: " << m_videoFileCameraPath.toStdString();
+    }
     if (settingsKeys.contains("videoHwAcceleration") || force) {
         ostr << " m_videoHwAcceleration: " << m_videoHwAcceleration;
     }
@@ -1304,6 +1313,11 @@ bool CameraSettings::isQtCamera() const
     return m_cameraProtocol == "qt";
 }
 
+bool CameraSettings::isFileCamera() const
+{
+    return m_cameraProtocol == "file";
+}
+
 int CameraSettings::cameraIdInt() const
 {
     if (isAlpacaCamera())
@@ -1329,6 +1343,10 @@ QString CameraSettings::cameraDescription() const
 
 QString CameraSettings::cameraDisplayName() const
 {
+    if (isFileCamera()) {
+        return m_cameraDescription.isEmpty() ? QStringLiteral("file:") : QStringLiteral("file:%1").arg(m_cameraDescription);
+    }
+
     if (!m_cameraProtocol.isEmpty() && !m_cameraDescription.isEmpty()) {
         return QString("%1:%2").arg(m_cameraProtocol, m_cameraDescription);
     }

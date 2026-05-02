@@ -55,6 +55,7 @@ class QDoubleSpinBox;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 class QCamera;
 class QImageCapture;
+class QMediaPlayer;
 class QVideoSink;
 class QMediaCaptureSession;
 #else
@@ -180,6 +181,7 @@ private:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
     QImageCapture *m_imageCapture;
+    QMediaPlayer *m_mediaPlayer;
     QVideoSink *m_videoSink;
     QMediaCaptureSession *m_captureSession;
 #else
@@ -211,6 +213,7 @@ private:
     void updateEnabledControls();
     void updateCaptureModeControls();
     void updateExposureControls();
+    void updateFileCameraControls();
     void probeQtCameraCapabilities();
     void reportResolutions();
     void populateQtFormatControls(const QList<QSize>& resolutions, const QHash<QString, FrameRateOptions>& frameRateOptionsByResolution);
@@ -235,6 +238,11 @@ private:
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
+    bool chooseVideoFileCameraFile(int comboIndex, const QString& previousCameraProtocol = QString(),
+                                   const QString& previousCameraId = QString(),
+                                   const QString& previousCameraDescription = QString(),
+                                   const QString& previousAlpacaHost = QString(),
+                                   quint16 previousAlpacaPort = 0);
     static CameraGUI::FrameRateOptions makeFrameRateOptions(const QSet<int>& fpsValues);
     static QString resolutionKey(const QSize& size);
     static QString resolutionKey(int width, int height);
@@ -250,6 +258,8 @@ private slots:
     void on_startStop_clicked(bool checked);
     void on_refreshCamerasButton_clicked();
     void on_cameraCombo_currentIndexChanged(int index);
+    void on_browseVideoFileButton_clicked();
+    void on_restartVideoFileButton_clicked();
     void on_resolutionCombo_currentIndexChanged(int index);
     void on_fpsLabel_currentIndexChanged(int index);
     void on_fpsSpin_valueChanged(int value);

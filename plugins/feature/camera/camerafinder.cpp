@@ -21,6 +21,7 @@
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QHostAddress>
+#include <QFileInfo>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QTimer>
@@ -62,6 +63,13 @@ void CameraFinder::reportCameraList(const CameraSettings& settings)
 {
     m_pendingSettings = settings;
     m_currentCameras = listQtCameras();
+    m_currentCameras.append({
+        QStringLiteral("file"),
+        settings.m_videoFileCameraPath,
+        settings.m_videoFileCameraPath.isEmpty() ? QString() : QFileInfo(settings.m_videoFileCameraPath).fileName(),
+        {},
+        0
+    });
     m_currentFocusers.clear();
     m_currentFilterWheels.clear();
     m_discoveredEndpointKeys.clear();

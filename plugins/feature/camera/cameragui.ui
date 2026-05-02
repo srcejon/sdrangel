@@ -61,8 +61,8 @@
         </property>
        </widget>
       </item>
-      <item>
-       <widget class="QComboBox" name="cameraCombo">
+       <item>
+        <widget class="QComboBox" name="cameraCombo">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -75,10 +75,30 @@
         <property name="editable">
          <bool>true</bool>
         </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="refreshCamerasButton">
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="browseVideoFileButton">
+         <property name="toolTip">
+          <string>Select the video file used by the file camera source</string>
+         </property>
+         <property name="text">
+          <string>Browse video</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="restartVideoFileButton">
+         <property name="toolTip">
+          <string>Restart playback of the selected video file</string>
+         </property>
+         <property name="text">
+          <string>Restart video</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="refreshCamerasButton">
         <property name="toolTip">
          <string>Refresh camera list</string>
         </property>

@@ -51,6 +51,7 @@ class Camera;
 class CameraSettingsDialog;
 class CameraHistogramDialog;
 class Message;
+class QDoubleSpinBox;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 class QCamera;
 class QImageCapture;
@@ -110,6 +111,23 @@ public:
     virtual QByteArray getGeometryBytes() const { return m_settings.m_geometryBytes; }
 
 private:
+    enum CameraComboRole
+    {
+        CameraProtocolRole = Qt::UserRole,
+        CameraIdRole,
+        CameraDescriptionRole,
+        CameraAlpacaHostRole,
+        CameraAlpacaPortRole
+    };
+
+    enum AccessoryComboRole
+    {
+        AccessoryDeviceNumberRole = Qt::UserRole + 100,
+        AccessoryDescriptionRole,
+        AccessoryAlpacaHostRole,
+        AccessoryAlpacaPortRole
+    };
+
     Ui::CameraGUI* ui;
     PluginAPI* m_pluginAPI;
     FeatureUISet* m_featureUISet;
@@ -216,6 +234,14 @@ private:
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
     static CameraGUI::FrameRateOptions makeFrameRateOptions(const QSet<int>& fpsValues);
+    static QString resolutionKey(const QSize& size);
+    static QString resolutionKey(int width, int height);
+    static int decimalsForStepSize(double step);
+    static int doubleSpinBoxSliderMaximum(const QDoubleSpinBox *spinBox);
+    static int doubleSpinBoxValueToSlider(const QDoubleSpinBox *spinBox, double value);
+    static double sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int sliderValue);
+    static double currentExposureUnitScaleMs(const Ui::CameraSettingsDialog *ui);
+    static void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps);
 
 private slots:
     void handleInputMessages();

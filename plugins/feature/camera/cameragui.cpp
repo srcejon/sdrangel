@@ -75,36 +75,22 @@
 #include "cameraworker.h"
 #include "cameragui.h"
 
-namespace {
-
-enum CameraComboRole
+CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
-    CameraProtocolRole = Qt::UserRole,
-    CameraIdRole,
-    CameraDescriptionRole,
-    CameraAlpacaHostRole,
-    CameraAlpacaPortRole
-};
+    return new CameraGUI(pluginAPI, featureUISet, feature);
+}
 
-enum AccessoryComboRole
-{
-    AccessoryDeviceNumberRole = Qt::UserRole + 100,
-    AccessoryDescriptionRole,
-    AccessoryAlpacaHostRole,
-    AccessoryAlpacaPortRole
-};
-
-QString resolutionKey(const QSize& size)
+QString CameraGUI::resolutionKey(const QSize& size)
 {
     return QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
 }
 
-QString resolutionKey(int width, int height)
+QString CameraGUI::resolutionKey(int width, int height)
 {
     return QStringLiteral("%1x%2").arg(width).arg(height);
 }
 
-int decimalsForStepSize(double step)
+int CameraGUI::decimalsForStepSize(double step)
 {
     const double normalizedStep = std::max(0.001, step);
 
@@ -119,32 +105,32 @@ int decimalsForStepSize(double step)
     return 6;
 }
 
-int doubleSpinBoxSliderMaximum(const QDoubleSpinBox *spinBox)
+int CameraGUI::doubleSpinBoxSliderMaximum(const QDoubleSpinBox *spinBox)
 {
     const double step = std::max(0.000001, spinBox->singleStep());
     return std::max(0, static_cast<int>(std::llround((spinBox->maximum() - spinBox->minimum()) / step)));
 }
 
-int doubleSpinBoxValueToSlider(const QDoubleSpinBox *spinBox, double value)
+int CameraGUI::doubleSpinBoxValueToSlider(const QDoubleSpinBox *spinBox, double value)
 {
     const double step = std::max(0.000001, spinBox->singleStep());
     const int sliderValue = static_cast<int>(std::llround((value - spinBox->minimum()) / step));
     return qBound(0, sliderValue, doubleSpinBoxSliderMaximum(spinBox));
 }
 
-double sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int sliderValue)
+double CameraGUI::sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int sliderValue)
 {
     const double step = std::max(0.000001, spinBox->singleStep());
     return qBound(spinBox->minimum(), spinBox->minimum() + (sliderValue * step), spinBox->maximum());
 }
 
-double currentExposureUnitScaleMs(const Ui::CameraSettingsDialog *ui)
+double CameraGUI::currentExposureUnitScaleMs(const Ui::CameraSettingsDialog *ui)
 {
     const QVariant data = ui->exposureUnitsCombo->currentData();
     return data.isValid() ? data.toDouble() : 1.0;
 }
 
-void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
+void CameraGUI::appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
 {
     const int minRounded = qMax(1, static_cast<int>(std::ceil(minFps)));
     const int maxRounded = qMax(minRounded, static_cast<int>(std::floor(maxFps)));
@@ -152,13 +138,6 @@ void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
     for (int fps = minRounded; fps <= maxRounded; ++fps) {
         fpsValues.insert(fps);
     }
-}
-
-} // namespace
-
-CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
-{
-    return new CameraGUI(pluginAPI, featureUISet, feature);
 }
 
 void CameraGUI::destroy()

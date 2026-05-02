@@ -88,7 +88,7 @@ void CameraGUI::resetToDefaults()
 {
     m_settings.resetToDefaults();
     displaySettings();
-    applySettings(true);
+    applyAllSettings();
 }
 
 QByteArray CameraGUI::serialize() const
@@ -102,7 +102,7 @@ bool CameraGUI::deserialize(const QByteArray& data)
     {
         m_feature->setWorkspaceIndex(m_settings.m_workspaceIndex);
         displaySettings();
-        applySettings(true);
+        applyAllSettings();
         return true;
     }
 
@@ -252,16 +252,14 @@ bool CameraGUI::handleMessage(const Message& message)
         {
             setSelectedCamera(selectedCamera.m_protocol, selectedCamera.m_id, selectedCamera.m_description,
                 selectedCamera.m_host, selectedCamera.m_port);
-            m_settingsKeys.append("cameraProtocol");
-            m_settingsKeys.append("cameraId");
-            m_settingsKeys.append("cameraDescription");
+            QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
             if (!selectedCamera.m_host.isEmpty()) {
-                m_settingsKeys.append("alpacaHost");
-                m_settingsKeys.append("alpacaPort");
+                settingsKeys.append("alpacaHost");
+                settingsKeys.append("alpacaPort");
             }
             updateAlpacaVisibility();
             updateEnabledControls();
-            applySettings();
+            applySettings(settingsKeys);
         }
         else if ((selectedCamera.m_protocol == QLatin1String("qt")) && !ui->startStop->isChecked())
         {
@@ -317,8 +315,7 @@ bool CameraGUI::handleMessage(const Message& message)
         }
 
         if (!settingsKeys.isEmpty()) {
-            m_settingsKeys.append(settingsKeys);
-            applySettings();
+            applySettings(settingsKeys);
         }
 
         return true;
@@ -345,8 +342,7 @@ bool CameraGUI::handleMessage(const Message& message)
         ui->saveVideoCheck->blockSignals(true);
         ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
         ui->saveVideoCheck->blockSignals(false);
-        m_settingsKeys.append("saveVideo");
-        applySettings();
+        applySetting("saveVideo");
         return true;
     }
     else if (CameraWorker::MsgReportAlpacaCameraInfo::match(message))
@@ -551,7 +547,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     connect(&m_updateTimer, &QTimer::timeout, this, &CameraGUI::updateHardware);
 
     displaySettings();
-    applySettings(true);
+    applyAllSettings();
     makeUIConnections();
     m_resizer.enableChildMouseTracking();
 
@@ -861,8 +857,15 @@ void CameraGUI::displaySettings()
     applyImagePath();
 }
 
-void CameraGUI::applySettings(bool force)
+void CameraGUI::applySetting(const QString& settingsKey)
 {
+    applySettings({settingsKey});
+}
+
+void CameraGUI::applySettings(const QStringList& settingsKeys, bool force)
+{
+    m_settingsKeys.append(settingsKeys);
+
     if (!m_doApplySettings) {
         return;
     }
@@ -875,6 +878,11 @@ void CameraGUI::applySettings(bool force)
     if (!m_updateTimer.isActive()) {
         m_updateTimer.start(100);
     }
+}
+
+void CameraGUI::applyAllSettings()
+{
+    applySettings(QStringList(), true);
 }
 
 void CameraGUI::populateAlpacaAccessoryCombos()
@@ -1594,9 +1602,7 @@ void CameraGUI::updateActionControls()
 void CameraGUI::applyActionSettings()
 {
     saveCurrentActionClassSettings();
-    m_settingsKeys.append("yoloDisappearDebounce");
-    m_settingsKeys.append("objectDeviceSettings");
-    applySettings();
+    applySettings({"yoloDisappearDebounce", "objectDeviceSettings"});
 }
 
 // ---------------------------------------------------------------------------
@@ -2427,16 +2433,14 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     {
         probeQtCameraCapabilities();
     }
-    m_settingsKeys.append("cameraProtocol");
-    m_settingsKeys.append("cameraId");
-    m_settingsKeys.append("cameraDescription");
+    QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
     if (m_settings.isAlpacaCamera()) {
-        m_settingsKeys.append("alpacaHost");
-        m_settingsKeys.append("alpacaPort");
+        settingsKeys.append("alpacaHost");
+        settingsKeys.append("alpacaPort");
     }
     updateAlpacaVisibility();
     updateEnabledControls();
-    applySettings();
+    applySettings(settingsKeys);
 }
 
 void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
@@ -2455,10 +2459,7 @@ void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
             m_settings.m_resolutionWidth = width;
             m_settings.m_resolutionHeight = height;
             updateFrameRateControlForResolution(settingsUI()->resolutionCombo->currentText());
-            m_settingsKeys.append("resolutionWidth");
-            m_settingsKeys.append("resolutionHeight");
-            m_settingsKeys.append("framesPerSecond");
-            applySettings();
+            applySettings({"resolutionWidth", "resolutionHeight", "framesPerSecond"});
         }
     }
 }
@@ -2475,15 +2476,13 @@ void CameraGUI::on_fpsLabel_currentIndexChanged(int index)
 
     m_settings.m_captureMode = static_cast<CameraSettings::CaptureMode>(settingsUI()->fpsLabel->itemData(index).toInt());
     updateCaptureModeControls();
-    m_settingsKeys.append("captureMode");
-    applySettings();
+    applySetting("captureMode");
 }
 
 void CameraGUI::on_fpsSpin_valueChanged(int value)
 {
     m_settings.m_framesPerSecond = value;
-    m_settingsKeys.append("framesPerSecond");
-    applySettings();
+    applySetting("framesPerSecond");
 }
 
 void CameraGUI::on_fpsCombo_currentIndexChanged(int index)
@@ -2493,15 +2492,13 @@ void CameraGUI::on_fpsCombo_currentIndexChanged(int index)
     }
 
     m_settings.m_framesPerSecond = settingsUI()->fpsCombo->itemData(index).toInt();
-    m_settingsKeys.append("framesPerSecond");
-    applySettings();
+    applySetting("framesPerSecond");
 }
 
 void CameraGUI::on_intervalSpin_valueChanged(double value)
 {
     m_settings.m_captureInterval = value;
-    m_settingsKeys.append("captureInterval");
-    applySettings();
+    applySetting("captureInterval");
 }
 
 void CameraGUI::on_intervalUnitsCombo_currentIndexChanged(int index)
@@ -2511,8 +2508,7 @@ void CameraGUI::on_intervalUnitsCombo_currentIndexChanged(int index)
     }
 
     m_settings.m_captureIntervalUnits = static_cast<CameraSettings::CaptureIntervalUnits>(settingsUI()->intervalUnitsCombo->itemData(index).toInt());
-    m_settingsKeys.append("captureIntervalUnits");
-    applySettings();
+    applySetting("captureIntervalUnits");
 }
 
 void CameraGUI::on_exposureSlider_valueChanged(int value)
@@ -2523,8 +2519,7 @@ void CameraGUI::on_exposureSlider_valueChanged(int value)
     settingsUI()->exposureSpin->setValue(exposureValue);
     settingsUI()->exposureSpin->blockSignals(false);
     m_settings.m_exposureTimeMs = exposureMs;
-    m_settingsKeys.append("exposureTimeMs");
-    applySettings();
+    applySetting("exposureTimeMs");
 }
 
 void CameraGUI::on_exposureSpin_valueChanged(double value)
@@ -2533,8 +2528,7 @@ void CameraGUI::on_exposureSpin_valueChanged(double value)
     settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, value));
     settingsUI()->exposureSlider->blockSignals(false);
     m_settings.m_exposureTimeMs = value * currentExposureUnitScaleMs(settingsUI());
-    m_settingsKeys.append("exposureTimeMs");
-    applySettings();
+    applySetting("exposureTimeMs");
 }
 
 void CameraGUI::on_exposureUnitsCombo_currentIndexChanged(int index)
@@ -2549,44 +2543,38 @@ void CameraGUI::on_exposureUnitsCombo_currentIndexChanged(int index)
 void CameraGUI::on_isoSpin_valueChanged(int value)
 {
     m_settings.m_isoSensitivity = value;
-    m_settingsKeys.append("isoSensitivity");
-    applySettings();
+    applySetting("isoSensitivity");
 }
 
 void CameraGUI::on_alpacaDiscoveryCheck_toggled(bool checked)
 {
     m_settings.m_alpacaDiscoveryEnabled = checked;
-    m_settingsKeys.append("alpacaDiscoveryEnabled");
-    applySettings();
+    applySetting("alpacaDiscoveryEnabled");
 }
 
 void CameraGUI::on_alpacaApiLogCheck_toggled(bool checked)
 {
     m_settings.m_alpacaApiLogEnabled = checked;
-    m_settingsKeys.append("alpacaApiLogEnabled");
-    applySettings();
+    applySetting("alpacaApiLogEnabled");
 }
 
 void CameraGUI::on_alpacaHostEdit_editingFinished()
 {
     m_settings.m_alpacaHost = settingsUI()->alpacaHostEdit->text();
-    m_settingsKeys.append("alpacaHost");
-    applySettings();
+    applySetting("alpacaHost");
 }
 
 void CameraGUI::on_alpacaPortSpin_valueChanged(int value)
 {
     m_settings.m_alpacaPort = static_cast<uint16_t>(value);
-    m_settingsKeys.append("alpacaPort");
-    applySettings();
+    applySetting("alpacaPort");
 }
 
 void CameraGUI::on_alpacaFocuserEnabledCheck_toggled(bool checked)
 {
     m_settings.m_alpacaFocuserEnabled = checked;
-    m_settingsKeys.append("alpacaFocuserEnabled");
     updateAlpacaVisibility();
-    applySettings();
+    applySetting("alpacaFocuserEnabled");
 }
 
 void CameraGUI::on_alpacaFocuserCombo_currentIndexChanged(int index)
@@ -2600,46 +2588,38 @@ void CameraGUI::on_alpacaFocuserCombo_currentIndexChanged(int index)
     m_settings.m_alpacaFocuserDeviceNumber = settingsUI()->alpacaFocuserCombo->itemData(index, AccessoryDeviceNumberRole).toInt();
     settingsUI()->alpacaFocuserHostEdit->setText(m_settings.m_alpacaFocuserHost);
     settingsUI()->alpacaFocuserPortSpin->setValue(m_settings.m_alpacaFocuserPort);
-    m_settingsKeys.append("alpacaFocuserHost");
-    m_settingsKeys.append("alpacaFocuserPort");
-    m_settingsKeys.append("alpacaFocuserDeviceNumber");
-    applySettings();
+    applySettings({"alpacaFocuserHost", "alpacaFocuserPort", "alpacaFocuserDeviceNumber"});
 }
 
 void CameraGUI::on_alpacaFocuserHostEdit_editingFinished()
 {
     m_settings.m_alpacaFocuserHost = settingsUI()->alpacaFocuserHostEdit->text();
-    m_settingsKeys.append("alpacaFocuserHost");
-    applySettings();
+    applySetting("alpacaFocuserHost");
 }
 
 void CameraGUI::on_alpacaFocuserPortSpin_valueChanged(int value)
 {
     m_settings.m_alpacaFocuserPort = static_cast<uint16_t>(value);
-    m_settingsKeys.append("alpacaFocuserPort");
-    applySettings();
+    applySetting("alpacaFocuserPort");
 }
 
 void CameraGUI::on_alpacaFocusPositionSpin_valueChanged(int value)
 {
     m_settings.m_alpacaFocusPosition = value;
-    m_settingsKeys.append("alpacaFocusPosition");
-    applySettings();
+    applySetting("alpacaFocusPosition");
 }
 
 void CameraGUI::on_alpacaFocusStepSizeSpin_valueChanged(int value)
 {
     m_settings.m_alpacaFocusStepSize = value;
-    m_settingsKeys.append("alpacaFocusStepSize");
-    applySettings();
+    applySetting("alpacaFocusStepSize");
 }
 
 void CameraGUI::on_alpacaFilterWheelEnabledCheck_toggled(bool checked)
 {
     m_settings.m_alpacaFilterWheelEnabled = checked;
-    m_settingsKeys.append("alpacaFilterWheelEnabled");
     updateAlpacaVisibility();
-    applySettings();
+    applySetting("alpacaFilterWheelEnabled");
 }
 
 void CameraGUI::on_alpacaFilterWheelCombo_currentIndexChanged(int index)
@@ -2653,24 +2633,19 @@ void CameraGUI::on_alpacaFilterWheelCombo_currentIndexChanged(int index)
     m_settings.m_alpacaFilterWheelDeviceNumber = settingsUI()->alpacaFilterWheelCombo->itemData(index, AccessoryDeviceNumberRole).toInt();
     settingsUI()->alpacaFilterWheelHostEdit->setText(m_settings.m_alpacaFilterWheelHost);
     settingsUI()->alpacaFilterWheelPortSpin->setValue(m_settings.m_alpacaFilterWheelPort);
-    m_settingsKeys.append("alpacaFilterWheelHost");
-    m_settingsKeys.append("alpacaFilterWheelPort");
-    m_settingsKeys.append("alpacaFilterWheelDeviceNumber");
-    applySettings();
+    applySettings({"alpacaFilterWheelHost", "alpacaFilterWheelPort", "alpacaFilterWheelDeviceNumber"});
 }
 
 void CameraGUI::on_alpacaFilterWheelHostEdit_editingFinished()
 {
     m_settings.m_alpacaFilterWheelHost = settingsUI()->alpacaFilterWheelHostEdit->text();
-    m_settingsKeys.append("alpacaFilterWheelHost");
-    applySettings();
+    applySetting("alpacaFilterWheelHost");
 }
 
 void CameraGUI::on_alpacaFilterWheelPortSpin_valueChanged(int value)
 {
     m_settings.m_alpacaFilterWheelPort = static_cast<uint16_t>(value);
-    m_settingsKeys.append("alpacaFilterWheelPort");
-    applySettings();
+    applySetting("alpacaFilterWheelPort");
 }
 
 void CameraGUI::on_alpacaFilterWheelPositionCombo_currentIndexChanged(int index)
@@ -2680,71 +2655,55 @@ void CameraGUI::on_alpacaFilterWheelPositionCombo_currentIndexChanged(int index)
     }
 
     m_settings.m_alpacaFilterWheelPosition = settingsUI()->alpacaFilterWheelPositionCombo->itemData(index).toInt();
-    m_settingsKeys.append("alpacaFilterWheelPosition");
-    applySettings();
+    applySetting("alpacaFilterWheelPosition");
 }
 
 void CameraGUI::on_alpacaBinXSpin_valueChanged(int value)
 {
     m_settings.m_alpacaBinX = value;
     updateAlpacaSubframeControls();
-    m_settingsKeys.append("alpacaBinX");
-    m_settingsKeys.append("alpacaNumX");
-    m_settingsKeys.append("alpacaStartX");
-    applySettings();
+    applySettings({"alpacaBinX", "alpacaNumX", "alpacaStartX"});
 }
 
 void CameraGUI::on_alpacaBinYSpin_valueChanged(int value)
 {
     m_settings.m_alpacaBinY = value;
     updateAlpacaSubframeControls();
-    m_settingsKeys.append("alpacaBinY");
-    m_settingsKeys.append("alpacaNumY");
-    m_settingsKeys.append("alpacaStartY");
-    applySettings();
+    applySettings({"alpacaBinY", "alpacaNumY", "alpacaStartY"});
 }
 
 void CameraGUI::on_alpacaNumXSpin_valueChanged(int value)
 {
     m_settings.m_alpacaNumX = value;
     updateAlpacaSubframeControls();
-    m_settingsKeys.append("alpacaNumX");
-    m_settingsKeys.append("alpacaStartX");
-    applySettings();
+    applySettings({"alpacaNumX", "alpacaStartX"});
 }
 
 void CameraGUI::on_alpacaNumYSpin_valueChanged(int value)
 {
     m_settings.m_alpacaNumY = value;
     updateAlpacaSubframeControls();
-    m_settingsKeys.append("alpacaNumY");
-    m_settingsKeys.append("alpacaStartY");
-    applySettings();
+    applySettings({"alpacaNumY", "alpacaStartY"});
 }
 
 void CameraGUI::on_alpacaStartXSpin_valueChanged(int value)
 {
     m_settings.m_alpacaStartX = value;
     updateAlpacaSubframeControls();
-    m_settingsKeys.append("alpacaStartX");
-    m_settingsKeys.append("alpacaNumX");
-    applySettings();
+    applySettings({"alpacaStartX", "alpacaNumX"});
 }
 
 void CameraGUI::on_alpacaStartYSpin_valueChanged(int value)
 {
     m_settings.m_alpacaStartY = value;
     updateAlpacaSubframeControls();
-    m_settingsKeys.append("alpacaStartY");
-    m_settingsKeys.append("alpacaNumY");
-    applySettings();
+    applySettings({"alpacaStartY", "alpacaNumY"});
 }
 
 void CameraGUI::on_alpacaGainCombo_currentIndexChanged(int index)
 {
     m_settings.m_alpacaGain = index;
-    m_settingsKeys.append("alpacaGain");
-    applySettings();
+    applySetting("alpacaGain");
 }
 
 void CameraGUI::on_alpacaGainSlider_valueChanged(int value)
@@ -2753,8 +2712,7 @@ void CameraGUI::on_alpacaGainSlider_valueChanged(int value)
     settingsUI()->alpacaGainSpin->setValue(value);
     settingsUI()->alpacaGainSpin->blockSignals(false);
     m_settings.m_alpacaGain = value;
-    m_settingsKeys.append("alpacaGain");
-    applySettings();
+    applySetting("alpacaGain");
 }
 
 void CameraGUI::on_alpacaGainSpin_valueChanged(int value)
@@ -2763,15 +2721,13 @@ void CameraGUI::on_alpacaGainSpin_valueChanged(int value)
     settingsUI()->alpacaGainSlider->setValue(value);
     settingsUI()->alpacaGainSlider->blockSignals(false);
     m_settings.m_alpacaGain = value;
-    m_settingsKeys.append("alpacaGain");
-    applySettings();
+    applySetting("alpacaGain");
 }
 
 void CameraGUI::on_alpacaOffsetCombo_currentIndexChanged(int index)
 {
     m_settings.m_alpacaOffset = index;
-    m_settingsKeys.append("alpacaOffset");
-    applySettings();
+    applySetting("alpacaOffset");
 }
 
 void CameraGUI::on_alpacaOffsetSlider_valueChanged(int value)
@@ -2780,8 +2736,7 @@ void CameraGUI::on_alpacaOffsetSlider_valueChanged(int value)
     settingsUI()->alpacaOffsetSpin->setValue(value);
     settingsUI()->alpacaOffsetSpin->blockSignals(false);
     m_settings.m_alpacaOffset = value;
-    m_settingsKeys.append("alpacaOffset");
-    applySettings();
+    applySetting("alpacaOffset");
 }
 
 void CameraGUI::on_alpacaOffsetSpin_valueChanged(int value)
@@ -2790,29 +2745,25 @@ void CameraGUI::on_alpacaOffsetSpin_valueChanged(int value)
     settingsUI()->alpacaOffsetSlider->setValue(value);
     settingsUI()->alpacaOffsetSlider->blockSignals(false);
     m_settings.m_alpacaOffset = value;
-    m_settingsKeys.append("alpacaOffset");
-    applySettings();
+    applySetting("alpacaOffset");
 }
 
 void CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_alpacaReadoutMode = index;
-    m_settingsKeys.append("alpacaReadoutMode");
-    applySettings();
+    applySetting("alpacaReadoutMode");
 }
 
 void CameraGUI::on_saveImageCheck_toggled(bool checked)
 {
     m_settings.m_saveImage = checked;
-    m_settingsKeys.append("saveImage");
-    applySettings();
+    applySetting("saveImage");
 }
 
 void CameraGUI::on_imagePathEdit_editingFinished()
 {
     m_settings.m_imageFileName = settingsUI()->imagePathEdit->text();
-    m_settingsKeys.append("imageFileName");
-    applySettings();
+    applySetting("imageFileName");
     applyImagePath();
 }
 
@@ -2824,8 +2775,7 @@ void CameraGUI::on_imagePathButton_clicked()
     {
         m_settings.m_imageFileName = fileName;
         settingsUI()->imagePathEdit->setText(fileName);
-        m_settingsKeys.append("imageFileName");
-        applySettings();
+        applySetting("imageFileName");
         applyImagePath();
     }
 }
@@ -2833,15 +2783,13 @@ void CameraGUI::on_imagePathButton_clicked()
 void CameraGUI::on_saveVideoCheck_toggled(bool checked)
 {
     m_settings.m_saveVideo = checked;
-    m_settingsKeys.append("saveVideo");
-    applySettings();
+    applySetting("saveVideo");
 }
 
 void CameraGUI::on_videoPathEdit_editingFinished()
 {
     m_settings.m_videoFileName = settingsUI()->videoPathEdit->text();
-    m_settingsKeys.append("videoFileName");
-    applySettings();
+    applySetting("videoFileName");
     applyVideoPath();
 }
 
@@ -2853,8 +2801,7 @@ void CameraGUI::on_videoPathButton_clicked()
     {
         m_settings.m_videoFileName = fileName;
         settingsUI()->videoPathEdit->setText(fileName);
-        m_settingsKeys.append("videoFileName");
-        applySettings();
+        applySetting("videoFileName");
         applyVideoPath();
     }
 }
@@ -2862,15 +2809,13 @@ void CameraGUI::on_videoPathButton_clicked()
 void CameraGUI::on_videoHwAccelerationCheck_toggled(bool checked)
 {
     m_settings.m_videoHwAcceleration = checked;
-    m_settingsKeys.append("videoHwAcceleration");
-    applySettings();
+    applySetting("videoHwAcceleration");
 }
 
 void CameraGUI::on_videoPostProcessCombo_currentIndexChanged(int index)
 {
     m_settings.m_videoPostProcess = static_cast<bool>(index);
-    m_settingsKeys.append("videoPostProcess");
-    applySettings();
+    applySetting("videoPostProcess");
 }
 
 void CameraGUI::updatePostProcessWhiteBalanceControls()
@@ -2888,8 +2833,7 @@ void CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int inde
 {
     m_settings.m_postProcessWhiteBalanceMode = index;
     updatePostProcessWhiteBalanceControls();
-    m_settingsKeys.append("postProcessWhiteBalanceMode");
-    applySettings();
+    applySetting("postProcessWhiteBalanceMode");
 }
 
 void CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value)
@@ -2899,8 +2843,7 @@ void CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value)
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(gain);
     settingsUI()->postProcessWhiteBalanceRedGainSpin->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceRedGain = gain;
-    m_settingsKeys.append("postProcessWhiteBalanceRedGain");
-    applySettings();
+    applySetting("postProcessWhiteBalanceRedGain");
 }
 
 void CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value)
@@ -2909,8 +2852,7 @@ void CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value)
     settingsUI()->postProcessWhiteBalanceRedGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceRedGainSpin, value));
     settingsUI()->postProcessWhiteBalanceRedGainSlider->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceRedGain = value;
-    m_settingsKeys.append("postProcessWhiteBalanceRedGain");
-    applySettings();
+    applySetting("postProcessWhiteBalanceRedGain");
 }
 
 void CameraGUI::on_postProcessWhiteBalanceGreenGainSlider_valueChanged(int value)
@@ -2920,8 +2862,7 @@ void CameraGUI::on_postProcessWhiteBalanceGreenGainSlider_valueChanged(int value
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(gain);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceGreenGain = gain;
-    m_settingsKeys.append("postProcessWhiteBalanceGreenGain");
-    applySettings();
+    applySetting("postProcessWhiteBalanceGreenGain");
 }
 
 void CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged(double value)
@@ -2930,8 +2871,7 @@ void CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged(double valu
     settingsUI()->postProcessWhiteBalanceGreenGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceGreenGainSpin, value));
     settingsUI()->postProcessWhiteBalanceGreenGainSlider->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceGreenGain = value;
-    m_settingsKeys.append("postProcessWhiteBalanceGreenGain");
-    applySettings();
+    applySetting("postProcessWhiteBalanceGreenGain");
 }
 
 void CameraGUI::on_postProcessWhiteBalanceBlueGainSlider_valueChanged(int value)
@@ -2941,8 +2881,7 @@ void CameraGUI::on_postProcessWhiteBalanceBlueGainSlider_valueChanged(int value)
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(gain);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceBlueGain = gain;
-    m_settingsKeys.append("postProcessWhiteBalanceBlueGain");
-    applySettings();
+    applySetting("postProcessWhiteBalanceBlueGain");
 }
 
 void CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value)
@@ -2951,8 +2890,7 @@ void CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, value));
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceBlueGain = value;
-    m_settingsKeys.append("postProcessWhiteBalanceBlueGain");
-    applySettings();
+    applySetting("postProcessWhiteBalanceBlueGain");
 }
 
 void CameraGUI::on_saturationSlider_valueChanged(int value)
@@ -2961,8 +2899,7 @@ void CameraGUI::on_saturationSlider_valueChanged(int value)
     settingsUI()->saturationSpin->blockSignals(true);
     settingsUI()->saturationSpin->setValue(m_settings.m_saturation);
     settingsUI()->saturationSpin->blockSignals(false);
-    m_settingsKeys.append("saturation");
-    applySettings();
+    applySetting("saturation");
 }
 
 void CameraGUI::on_saturationSpin_valueChanged(double value)
@@ -2971,8 +2908,7 @@ void CameraGUI::on_saturationSpin_valueChanged(double value)
     settingsUI()->saturationSlider->setValue(static_cast<int>(value * 100.0));
     settingsUI()->saturationSlider->blockSignals(false);
     m_settings.m_saturation = value;
-    m_settingsKeys.append("saturation");
-    applySettings();
+    applySetting("saturation");
 }
 
 void CameraGUI::on_gammaSlider_valueChanged(int value)
@@ -2981,8 +2917,7 @@ void CameraGUI::on_gammaSlider_valueChanged(int value)
     settingsUI()->gammaSpin->blockSignals(true);
     settingsUI()->gammaSpin->setValue(m_settings.m_gamma);
     settingsUI()->gammaSpin->blockSignals(false);
-    m_settingsKeys.append("gamma");
-    applySettings();
+    applySetting("gamma");
 }
 
 void CameraGUI::on_gammaSpin_valueChanged(double value)
@@ -2991,8 +2926,7 @@ void CameraGUI::on_gammaSpin_valueChanged(double value)
     settingsUI()->gammaSlider->setValue(static_cast<int>(value * 100.0));
     settingsUI()->gammaSlider->blockSignals(false);
     m_settings.m_gamma = value;
-    m_settingsKeys.append("gamma");
-    applySettings();
+    applySetting("gamma");
 }
 
 void CameraGUI::on_gaussianBlurSlider_valueChanged(int value)
@@ -3001,8 +2935,7 @@ void CameraGUI::on_gaussianBlurSlider_valueChanged(int value)
     settingsUI()->gaussianBlurSpin->setValue(value);
     settingsUI()->gaussianBlurSpin->blockSignals(false);
     m_settings.m_gaussianBlur = value;
-    m_settingsKeys.append("gaussianBlur");
-    applySettings();
+    applySetting("gaussianBlur");
 }
 
 void CameraGUI::on_gaussianBlurSpin_valueChanged(int value)
@@ -3011,8 +2944,7 @@ void CameraGUI::on_gaussianBlurSpin_valueChanged(int value)
     settingsUI()->gaussianBlurSlider->setValue(value);
     settingsUI()->gaussianBlurSlider->blockSignals(false);
     m_settings.m_gaussianBlur = value;
-    m_settingsKeys.append("gaussianBlur");
-    applySettings();
+    applySetting("gaussianBlur");
 }
 
 void CameraGUI::on_medianBlurSlider_valueChanged(int value)
@@ -3021,8 +2953,7 @@ void CameraGUI::on_medianBlurSlider_valueChanged(int value)
     settingsUI()->medianBlurSpin->setValue(value);
     settingsUI()->medianBlurSpin->blockSignals(false);
     m_settings.m_medianBlur = value;
-    m_settingsKeys.append("medianBlur");
-    applySettings();
+    applySetting("medianBlur");
 }
 
 void CameraGUI::on_medianBlurSpin_valueChanged(int value)
@@ -3031,8 +2962,7 @@ void CameraGUI::on_medianBlurSpin_valueChanged(int value)
     settingsUI()->medianBlurSlider->setValue(value);
     settingsUI()->medianBlurSlider->blockSignals(false);
     m_settings.m_medianBlur = value;
-    m_settingsKeys.append("medianBlur");
-    applySettings();
+    applySetting("medianBlur");
 }
 
 void CameraGUI::on_sharpenSlider_valueChanged(int value)
@@ -3041,8 +2971,7 @@ void CameraGUI::on_sharpenSlider_valueChanged(int value)
     settingsUI()->sharpenSpin->blockSignals(true);
     settingsUI()->sharpenSpin->setValue(m_settings.m_sharpen);
     settingsUI()->sharpenSpin->blockSignals(false);
-    m_settingsKeys.append("sharpen");
-    applySettings();
+    applySetting("sharpen");
 }
 
 void CameraGUI::on_sharpenSpin_valueChanged(double value)
@@ -3051,8 +2980,7 @@ void CameraGUI::on_sharpenSpin_valueChanged(double value)
     settingsUI()->sharpenSlider->setValue(static_cast<int>(value * 100.0));
     settingsUI()->sharpenSlider->blockSignals(false);
     m_settings.m_sharpen = value;
-    m_settingsKeys.append("sharpen");
-    applySettings();
+    applySetting("sharpen");
 }
 
 void CameraGUI::on_sobelEdgeSlider_valueChanged(int value)
@@ -3061,8 +2989,7 @@ void CameraGUI::on_sobelEdgeSlider_valueChanged(int value)
     settingsUI()->sobelEdgeSpin->blockSignals(true);
     settingsUI()->sobelEdgeSpin->setValue(m_settings.m_sobelEdge);
     settingsUI()->sobelEdgeSpin->blockSignals(false);
-    m_settingsKeys.append("sobelEdge");
-    applySettings();
+    applySetting("sobelEdge");
 }
 
 void CameraGUI::on_sobelEdgeSpin_valueChanged(double value)
@@ -3071,22 +2998,19 @@ void CameraGUI::on_sobelEdgeSpin_valueChanged(double value)
     settingsUI()->sobelEdgeSlider->setValue(static_cast<int>(value * 100.0));
     settingsUI()->sobelEdgeSlider->blockSignals(false);
     m_settings.m_sobelEdge = value;
-    m_settingsKeys.append("sobelEdge");
-    applySettings();
+    applySetting("sobelEdge");
 }
 
 void CameraGUI::on_flipXButton_toggled(bool checked)
 {
     m_settings.m_flipX = checked;
-    m_settingsKeys.append("flipX");
-    applySettings();
+    applySetting("flipX");
 }
 
 void CameraGUI::on_flipYButton_toggled(bool checked)
 {
     m_settings.m_flipY = checked;
-    m_settingsKeys.append("flipY");
-    applySettings();
+    applySetting("flipY");
 }
 
 void CameraGUI::on_brightnessSlider_valueChanged(int value)
@@ -3095,8 +3019,7 @@ void CameraGUI::on_brightnessSlider_valueChanged(int value)
     settingsUI()->brightnessSpin->blockSignals(true);
     settingsUI()->brightnessSpin->setValue(value);
     settingsUI()->brightnessSpin->blockSignals(false);
-    m_settingsKeys.append("brightness");
-    applySettings();
+    applySetting("brightness");
 }
 
 void CameraGUI::on_brightnessSpin_valueChanged(int value)
@@ -3105,8 +3028,7 @@ void CameraGUI::on_brightnessSpin_valueChanged(int value)
     settingsUI()->brightnessSlider->setValue(value);
     settingsUI()->brightnessSlider->blockSignals(false);
     m_settings.m_brightness = static_cast<double>(value);
-    m_settingsKeys.append("brightness");
-    applySettings();
+    applySetting("brightness");
 }
 
 void CameraGUI::on_contrastSlider_valueChanged(int value)
@@ -3115,8 +3037,7 @@ void CameraGUI::on_contrastSlider_valueChanged(int value)
     settingsUI()->contrastSpin->blockSignals(true);
     settingsUI()->contrastSpin->setValue(m_settings.m_contrast);
     settingsUI()->contrastSpin->blockSignals(false);
-    m_settingsKeys.append("contrast");
-    applySettings();
+    applySetting("contrast");
 }
 
 void CameraGUI::on_contrastSpin_valueChanged(double value)
@@ -3125,22 +3046,19 @@ void CameraGUI::on_contrastSpin_valueChanged(double value)
     settingsUI()->contrastSlider->setValue(static_cast<int>(value * 100.0));
     settingsUI()->contrastSlider->blockSignals(false);
     m_settings.m_contrast = value;
-    m_settingsKeys.append("contrast");
-    applySettings();
+    applySetting("contrast");
 }
 
 void CameraGUI::on_invertColorsButton_toggled(bool checked)
 {
     m_settings.m_invertColors = checked;
-    m_settingsKeys.append("invertColors");
-    applySettings();
+    applySetting("invertColors");
 }
 
 void CameraGUI::on_overlayDateTimeButton_toggled(bool checked)
 {
     m_settings.m_overlayDateTime = checked;
-    m_settingsKeys.append("overlayDateTime");
-    applySettings();
+    applySetting("overlayDateTime");
 }
 
 void CameraGUI::on_dateTimeColorButton_clicked()
@@ -3151,39 +3069,34 @@ void CameraGUI::on_dateTimeColorButton_clicked()
     {
         m_settings.m_dateTimeColor = color;
         updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
-        m_settingsKeys.append("dateTimeColor");
-        applySettings();
+        applySetting("dateTimeColor");
     }
 }
 
 void CameraGUI::on_dateTimeFormatEdit_editingFinished()
 {
     m_settings.m_dateTimeFormat = settingsUI()->dateTimeFormatEdit->text();
-    m_settingsKeys.append("dateTimeFormat");
-    applySettings();
+    applySetting("dateTimeFormat");
 }
 
 void CameraGUI::on_dateTimePosXSlider_valueChanged(int value)
 {
     m_settings.m_dateTimePosX = value;
     settingsUI()->dateTimePosXValue->setText(QString::number(value));
-    m_settingsKeys.append("dateTimePosX");
-    applySettings();
+    applySetting("dateTimePosX");
 }
 
 void CameraGUI::on_dateTimePosYSlider_valueChanged(int value)
 {
     m_settings.m_dateTimePosY = value;
     settingsUI()->dateTimePosYValue->setText(QString::number(value));
-    m_settingsKeys.append("dateTimePosY");
-    applySettings();
+    applySetting("dateTimePosY");
 }
 
 void CameraGUI::on_overlayTextButton_toggled(bool checked)
 {
     m_settings.m_overlayText = checked;
-    m_settingsKeys.append("overlayText");
-    applySettings();
+    applySetting("overlayText");
 }
 
 void CameraGUI::on_overlayTextColorButton_clicked()
@@ -3194,67 +3107,58 @@ void CameraGUI::on_overlayTextColorButton_clicked()
     {
         m_settings.m_overlayTextColor = color;
         updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
-        m_settingsKeys.append("overlayTextColor");
-        applySettings();
+        applySetting("overlayTextColor");
     }
 }
 
 void CameraGUI::on_overlayTextEdit_textChanged()
 {
     m_settings.m_overlayTextString = settingsUI()->overlayTextEdit->toPlainText();
-    m_settingsKeys.append("overlayTextString");
-    applySettings();
+    applySetting("overlayTextString");
 }
 
 void CameraGUI::on_overlayTextPosXSlider_valueChanged(int value)
 {
     m_settings.m_overlayTextPosX = value;
     settingsUI()->overlayTextPosXValue->setText(QString::number(value));
-    m_settingsKeys.append("overlayTextPosX");
-    applySettings();
+    applySetting("overlayTextPosX");
 }
 
 void CameraGUI::on_overlayTextPosYSlider_valueChanged(int value)
 {
     m_settings.m_overlayTextPosY = value;
     settingsUI()->overlayTextPosYValue->setText(QString::number(value));
-    m_settingsKeys.append("overlayTextPosY");
-    applySettings();
+    applySetting("overlayTextPosY");
 }
 
 void CameraGUI::on_diffMaskButton_toggled(bool checked)
 {
     m_settings.m_diffMask = checked;
-    m_settingsKeys.append("diffMask");
-    applySettings();
+    applySetting("diffMask");
 }
 
 void CameraGUI::on_diffThresholdSpin_valueChanged(int value)
 {
     m_settings.m_diffThreshold = value;
-    m_settingsKeys.append("diffThreshold");
-    applySettings();
+    applySetting("diffThreshold");
 }
 
 void CameraGUI::on_dilationSpin_valueChanged(int value)
 {
     m_settings.m_dilationSize = value;
-    m_settingsKeys.append("dilationSize");
-    applySettings();
+    applySetting("dilationSize");
 }
 
 void CameraGUI::on_diffMaskHistoryFramesSpin_valueChanged(int value)
 {
     m_settings.m_diffMaskHistoryFrames = value;
-    m_settingsKeys.append("diffMaskHistoryFrames");
-    applySettings();
+    applySetting("diffMaskHistoryFrames");
 }
 
 void CameraGUI::on_diffMaskCloseSizeSpin_valueChanged(int value)
 {
     m_settings.m_diffMaskCloseSize = value;
-    m_settingsKeys.append("diffMaskCloseSize");
-    applySettings();
+    applySetting("diffMaskCloseSize");
 }
 
 void CameraGUI::on_histogramButton_clicked()
@@ -3358,113 +3262,97 @@ void CameraGUI::updateEnabledControls()
 void CameraGUI::on_overlayFontCombo_currentFontChanged(const QFont& font)
 {
     m_settings.m_overlayFontFamily = font.family();
-    m_settingsKeys.append("overlayFontFamily");
-    applySettings();
+    applySetting("overlayFontFamily");
 }
 
 void CameraGUI::on_overlayFontScaleSpin_valueChanged(double value)
 {
     m_settings.m_overlayFontScale = value;
-    m_settingsKeys.append("overlayFontScale");
-    applySettings();
+    applySetting("overlayFontScale");
 }
 
 void CameraGUI::on_overlayTextFontCombo_currentFontChanged(const QFont& font)
 {
     m_settings.m_overlayTextFontFamily = font.family();
-    m_settingsKeys.append("overlayTextFontFamily");
-    applySettings();
+    applySetting("overlayTextFontFamily");
 }
 
 void CameraGUI::on_overlayTextFontScaleSpin_valueChanged(double value)
 {
     m_settings.m_overlayTextFontScale = value;
-    m_settingsKeys.append("overlayTextFontScale");
-    applySettings();
+    applySetting("overlayTextFontScale");
 }
 
 void CameraGUI::on_detectionRoiXSpin_valueChanged(int value)
 {
     m_settings.m_detectionRoiX = value;
-    m_settingsKeys.append("detectionRoiX");
-    applySettings();
+    applySetting("detectionRoiX");
 }
 
 void CameraGUI::on_detectionRoiYSpin_valueChanged(int value)
 {
     m_settings.m_detectionRoiY = value;
-    m_settingsKeys.append("detectionRoiY");
-    applySettings();
+    applySetting("detectionRoiY");
 }
 
 void CameraGUI::on_detectionRoiWidthSpin_valueChanged(int value)
 {
     m_settings.m_detectionRoiWidth = value;
-    m_settingsKeys.append("detectionRoiWidth");
-    applySettings();
+    applySetting("detectionRoiWidth");
 }
 
 void CameraGUI::on_detectionRoiHeightSpin_valueChanged(int value)
 {
     m_settings.m_detectionRoiHeight = value;
-    m_settingsKeys.append("detectionRoiHeight");
-    applySettings();
+    applySetting("detectionRoiHeight");
 }
 
 void CameraGUI::on_motionDetectButton_toggled(bool checked)
 {
     m_settings.m_motionDetect = checked;
-    m_settingsKeys.append("motionDetect");
-    applySettings();
+    applySetting("motionDetect");
 }
 
 void CameraGUI::on_motionHistorySpin_valueChanged(int value)
 {
     m_settings.m_motionHistory = value;
-    m_settingsKeys.append("motionHistory");
-    applySettings();
+    applySetting("motionHistory");
 }
 
 void CameraGUI::on_motionVarThresholdSpin_valueChanged(double value)
 {
     m_settings.m_motionVarThreshold = value;
-    m_settingsKeys.append("motionVarThreshold");
-    applySettings();
+    applySetting("motionVarThreshold");
 }
 
 void CameraGUI::on_motionDetectShadowsCheck_toggled(bool checked)
 {
     m_settings.m_motionDetectShadows = checked;
-    m_settingsKeys.append("motionDetectShadows");
-    applySettings();
+    applySetting("motionDetectShadows");
 }
 
 void CameraGUI::on_motionOpenSizeSpin_valueChanged(int value)
 {
     m_settings.m_motionOpenSize = value;
-    m_settingsKeys.append("motionOpenSize");
-    applySettings();
+    applySetting("motionOpenSize");
 }
 
 void CameraGUI::on_motionCloseSizeSpin_valueChanged(int value)
 {
     m_settings.m_motionCloseSize = value;
-    m_settingsKeys.append("motionCloseSize");
-    applySettings();
+    applySetting("motionCloseSize");
 }
 
 void CameraGUI::on_motionPersistenceFramesSpin_valueChanged(int value)
 {
     m_settings.m_motionPersistenceFrames = value;
-    m_settingsKeys.append("motionPersistenceFrames");
-    applySettings();
+    applySetting("motionPersistenceFrames");
 }
 
 void CameraGUI::on_minContourAreaSpin_valueChanged(int value)
 {
     m_settings.m_minContourArea = value;
-    m_settingsKeys.append("minContourArea");
-    applySettings();
+    applySetting("minContourArea");
 }
 
 void CameraGUI::on_motionBoxColorButton_clicked()
@@ -3475,53 +3363,46 @@ void CameraGUI::on_motionBoxColorButton_clicked()
     {
         m_settings.m_motionBoxColor = color;
         updateColorButton(settingsUI()->motionBoxColorButton, color);
-        m_settingsKeys.append("motionBoxColor");
-        applySettings();
+        applySetting("motionBoxColor");
     }
 }
 
 void CameraGUI::on_spectrumOverlayButton_toggled(bool checked)
 {
     m_settings.m_overlaySpectrum = checked;
-    m_settingsKeys.append("overlaySpectrum");
-    applySettings();
+    applySetting("overlaySpectrum");
 }
 
 void CameraGUI::on_spectrumDeviceCombo_currentIndexChanged(int index)
 {
     m_settings.m_spectrumDevice = settingsUI()->spectrumDeviceCombo->itemText(index);
-    m_settingsKeys.append("spectrumDevice");
-    applySettings();
+    applySetting("spectrumDevice");
 }
 
 void CameraGUI::on_spectrumOffsetXSlider_valueChanged(int value)
 {
     m_settings.m_spectrumOffsetX = value;
     settingsUI()->spectrumOffsetXValue->setText(QString::number(value));
-    m_settingsKeys.append("spectrumOffsetX");
-    applySettings();
+    applySetting("spectrumOffsetX");
 }
 
 void CameraGUI::on_spectrumOffsetYSlider_valueChanged(int value)
 {
     m_settings.m_spectrumOffsetY = value;
     settingsUI()->spectrumOffsetYValue->setText(QString::number(value));
-    m_settingsKeys.append("spectrumOffsetY");
-    applySettings();
+    applySetting("spectrumOffsetY");
 }
 
 void CameraGUI::on_spectrumScaleSpin_valueChanged(double value)
 {
     m_settings.m_spectrumScale = value;
-    m_settingsKeys.append("spectrumScale");
-    applySettings();
+    applySetting("spectrumScale");
 }
 
 void CameraGUI::on_yoloButton_toggled(bool checked)
 {
     m_settings.m_yoloEnabled = checked;
-    m_settingsKeys.append("yoloEnabled");
-    applySettings();
+    applySetting("yoloEnabled");
 }
 
 void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& path)
@@ -3541,8 +3422,7 @@ void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& p
         return;
     }
 
-    m_settingsKeys.append(settingKey);
-    applySettings();
+    applySetting(settingKey);
 }
 
 void CameraGUI::requestYoloDownload(const QString& settingKey, const QString& path)
@@ -3658,8 +3538,7 @@ void CameraGUI::on_yoloLabelsPathButton_clicked()
 void CameraGUI::on_yoloTargetCombo_currentIndexChanged(int index)
 {
     m_settings.m_yoloDnnTarget = static_cast<CameraSettings::DNNTarget>(index);
-    m_settingsKeys.append("yoloDnnTarget");
-    applySettings();
+    applySetting("yoloDnnTarget");
 }
 
 void CameraGUI::on_actionsClassCombo_currentIndexChanged(int index)
@@ -3670,8 +3549,7 @@ void CameraGUI::on_actionsClassCombo_currentIndexChanged(int index)
 
     saveCurrentActionClassSettings();
     rebuildActionTabsForCurrentClass();
-    m_settingsKeys.append("objectDeviceSettings");
-    applySettings();
+    applySetting("objectDeviceSettings");
 }
 
 void CameraGUI::on_actionsDisappearDebounceSpin_valueChanged(double value)
@@ -3721,15 +3599,13 @@ void CameraGUI::on_actionsTabWidget_tabCloseRequested(int index)
 void CameraGUI::on_yoloConfSpin_valueChanged(double value)
 {
     m_settings.m_yoloConfThreshold = value;
-    m_settingsKeys.append("yoloConfThreshold");
-    applySettings();
+    applySetting("yoloConfThreshold");
 }
 
 void CameraGUI::on_yoloNmsSpin_valueChanged(double value)
 {
     m_settings.m_yoloNmsThreshold = value;
-    m_settingsKeys.append("yoloNmsThreshold");
-    applySettings();
+    applySetting("yoloNmsThreshold");
 }
 
 void CameraGUI::on_yoloBoxColorButton_clicked()
@@ -3740,8 +3616,7 @@ void CameraGUI::on_yoloBoxColorButton_clicked()
     {
         m_settings.m_yoloBoxColor = color;
         updateColorButton(settingsUI()->yoloBoxColorButton, color);
-        m_settingsKeys.append("yoloBoxColor");
-        applySettings();
+        applySetting("yoloBoxColor");
     }
 }
 
@@ -3779,8 +3654,7 @@ void CameraGUI::on_fitInViewButton_clicked()
 void CameraGUI::on_audioMute_toggled(bool checked)
 {
     m_settings.m_audioMute = checked;
-    m_settingsKeys.append("audioMute");
-    applySettings();
+    applySetting("audioMute");
 }
 
 void CameraGUI::audioSelect(const QPoint& p)
@@ -3794,45 +3668,39 @@ void CameraGUI::audioSelect(const QPoint& p)
     if (audioSelect.m_selected)
     {
         m_settings.m_audioDeviceName = audioSelect.m_audioDeviceName;
-        m_settingsKeys.append("audioDeviceName");
-        applySettings();
+        applySetting("audioDeviceName");
     }
 }
 
 void CameraGUI::on_whiteBalanceCombo_currentIndexChanged(int index)
 {
     m_settings.m_whiteBalanceMode = settingsUI()->whiteBalanceCombo->itemData(index).toInt();
-    m_settingsKeys.append("whiteBalanceMode");
-    applySettings();
+    applySetting("whiteBalanceMode");
 }
 
 void CameraGUI::on_exposureCompSpin_valueChanged(double value)
 {
     m_settings.m_exposureCompensation = value;
-    m_settingsKeys.append("exposureCompensation");
-    applySettings();
+    applySetting("exposureCompensation");
 }
 
 void CameraGUI::on_focusModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_focusMode = settingsUI()->focusModeCombo->itemData(index).toInt();
-    m_settingsKeys.append("focusMode");
     updateEnabledControls();
-    applySettings();
+    applySetting("focusMode");
 }
 
 void CameraGUI::on_focusDistSpin_valueChanged(double value)
 {
     m_settings.m_focusDistance = value;
-    m_settingsKeys.append("focusDistance");
-    applySettings();
+    applySetting("focusDistance");
 }
 
 void CameraGUI::on_zoomSpin_valueChanged(double value)
 {
     m_settings.m_zoomFactor = value;
-    m_settingsKeys.append("zoomFactor");
-    applySettings();
+    applySetting("zoomFactor");
 }
 
 void CameraGUI::on_cameraSettingsButton_clicked()
@@ -3969,3 +3837,5 @@ void CameraGUI::appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
         fpsValues.insert(fps);
     }
 }
+
+

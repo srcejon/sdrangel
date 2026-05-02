@@ -195,7 +195,9 @@ private:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
     void blockApplySettings(bool block);
-    void applySettings(bool force = false);
+    void applySetting(const QString& settingsKey);
+    void applySettings(const QStringList& settingsKeys, bool force = false);
+    void applyAllSettings();
     void displaySettings();
     Ui::CameraSettingsDialog *settingsUI() const;
     bool handleMessage(const Message& message);

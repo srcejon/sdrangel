@@ -308,9 +308,9 @@
     <item>
      <layout class="QHBoxLayout" name="alpacaLayout">
       <item>
-       <widget class="QToolButton" name="alpacaPark">
+       <widget class="ButtonSwitch" name="alpacaPark">
         <property name="toolTip">
-         <string>Park the Alpaca telescope mount</string>
+         <string>Park or unpark the Alpaca telescope mount</string>
         </property>
         <property name="text">
          <string>Park</string>
@@ -318,12 +318,12 @@
        </widget>
       </item>
       <item>
-       <widget class="QToolButton" name="alpacaUnpark">
+       <widget class="ButtonSwitch" name="alpacaHome">
         <property name="toolTip">
-         <string>Unpark the Alpaca telescope mount</string>
+         <string>Find the Alpaca telescope home position</string>
         </property>
         <property name="text">
-         <string>Unpark</string>
+         <string>Home</string>
         </property>
        </widget>
       </item>
@@ -893,7 +893,7 @@
   <tabstop>dfmDrives</tabstop>
   <tabstop>dfmShowStatus</tabstop>
   <tabstop>alpacaPark</tabstop>
-  <tabstop>alpacaUnpark</tabstop>
+  <tabstop>alpacaHome</tabstop>
  </tabstops>
  <resources>
   <include location="../../../sdrgui/resources/res.qrc"/>

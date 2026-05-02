@@ -37,6 +37,7 @@ public:
     virtual bool usesIODevice() const { return true; }
     virtual void park() {}
     virtual void unpark() {}
+    virtual void home() {}
     void setDevice(QIODevice *device) { m_device = device; }
     virtual void applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force);
     void setMessageQueue(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }

@@ -36,6 +36,7 @@
 MESSAGE_CLASS_DEFINITION(GS232ControllerWorker::MsgConfigureGS232ControllerWorker, Message)
 MESSAGE_CLASS_DEFINITION(GS232ControllerWorker::MsgPark, Message)
 MESSAGE_CLASS_DEFINITION(GS232ControllerWorker::MsgUnpark, Message)
+MESSAGE_CLASS_DEFINITION(GS232ControllerWorker::MsgHome, Message)
 MESSAGE_CLASS_DEFINITION(GS232ControllerReport::MsgReportAzAl, Message)
 
 GS232ControllerWorker::GS232ControllerWorker(GS232Controller *controller) :
@@ -124,6 +125,11 @@ bool GS232ControllerWorker::handleMessage(const Message& cmd)
     else if (MsgUnpark::match(cmd))
     {
         unpark();
+        return true;
+    }
+    else if (MsgHome::match(cmd))
+    {
+        home();
         return true;
     }
     else
@@ -303,6 +309,13 @@ void GS232ControllerWorker::unpark()
 {
     if (m_controllerProtocol) {
         m_controllerProtocol->unpark();
+    }
+}
+
+void GS232ControllerWorker::home()
+{
+    if (m_controllerProtocol) {
+        m_controllerProtocol->home();
     }
 }
 

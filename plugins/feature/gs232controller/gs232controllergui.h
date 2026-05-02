@@ -72,6 +72,9 @@ private:
     bool m_alpacaCanPark;
     bool m_alpacaAtPark;
     bool m_alpacaParkStateValid;
+    bool m_alpacaCanFindHome;
+    bool m_alpacaAtHome;
+    bool m_alpacaHomeStateValid;
 
     DFMStatusDialog m_dfmStatusDialog;
 
@@ -135,8 +138,8 @@ private slots:
     void on_dfmBrakes_clicked(bool checked=false);
     void on_dfmDrives_clicked(bool checked=false);
     void on_dfmShowStatus_clicked();
-    void on_alpacaPark_clicked();
-    void on_alpacaUnpark_clicked();
+    void on_alpacaPark_toggled(bool checked);
+    void on_alpacaHome_clicked(bool checked);
     void updateStatus();
     void on_inputController_currentIndexChanged(int index);
     void on_inputConfigure_clicked();

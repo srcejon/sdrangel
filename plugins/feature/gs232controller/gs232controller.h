@@ -116,6 +116,20 @@ public:
         { }
     };
 
+    class MsgHome : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgHome* create() {
+            return new MsgHome();
+        }
+
+    protected:
+        MsgHome() :
+            Message()
+        { }
+    };
+
     class MsgReportWorker : public Message {
         MESSAGE_CLASS_DECLARATION
 

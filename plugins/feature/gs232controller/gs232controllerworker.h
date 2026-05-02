@@ -94,6 +94,21 @@ public:
         { }
     };
 
+    class MsgHome : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgHome* create()
+        {
+            return new MsgHome();
+        }
+
+    private:
+        MsgHome() :
+            Message()
+        { }
+    };
+
     GS232ControllerWorker(GS232Controller *controller);
     ~GS232ControllerWorker();
     void startWork();
@@ -127,6 +142,7 @@ private:
     void setAzimuthElevation(float azimuth, float elevation);
     void park();
     void unpark();
+    void home();
     void sendToSkyMap(float azimuth, float elevation);
 
 private slots:

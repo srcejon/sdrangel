@@ -187,7 +187,10 @@ bool GS232ControllerGUI::handleMessage(const Message& message)
         AlpacaProtocol::MsgReportParkState& report = (AlpacaProtocol::MsgReportParkState&) message;
         m_alpacaCanPark = report.canPark();
         m_alpacaAtPark = report.atPark();
-        m_alpacaParkStateValid = report.valid();
+        m_alpacaParkStateValid = report.parkValid();
+        m_alpacaCanFindHome = report.canFindHome();
+        m_alpacaAtHome = report.atHome();
+        m_alpacaHomeStateValid = report.homeValid();
         updateAlpacaParkControls();
         return true;
     }
@@ -227,6 +230,9 @@ GS232ControllerGUI::GS232ControllerGUI(PluginAPI* pluginAPI, FeatureUISet *featu
     m_alpacaCanPark(false),
     m_alpacaAtPark(false),
     m_alpacaParkStateValid(false),
+    m_alpacaCanFindHome(false),
+    m_alpacaAtHome(false),
+    m_alpacaHomeStateValid(false),
     m_dfmStatusDialog(),
     m_inputController(nullptr),
     m_inputCoord1(0.0),
@@ -685,7 +691,7 @@ void GS232ControllerGUI::setProtocol(GS232ControllerSettings::Protocol protocol)
     bool alpaca = protocol == GS232ControllerSettings::ALPACA;
     ui->alpacaLine->setVisible(alpaca);
     ui->alpacaPark->setVisible(alpaca);
-    ui->alpacaUnpark->setVisible(alpaca);
+    ui->alpacaHome->setVisible(alpaca);
     updateAlpacaParkControls();
 
     updateConnectionWidgets();
@@ -717,8 +723,16 @@ void GS232ControllerGUI::setPrecision()
 void GS232ControllerGUI::updateAlpacaParkControls()
 {
     const bool alpaca = m_settings.m_protocol == GS232ControllerSettings::ALPACA;
-    ui->alpacaPark->setEnabled(alpaca && m_alpacaCanPark && m_alpacaParkStateValid && !m_alpacaAtPark);
-    ui->alpacaUnpark->setEnabled(alpaca && m_alpacaParkStateValid && m_alpacaAtPark);
+
+    bool oldParkState = ui->alpacaPark->blockSignals(true);
+    ui->alpacaPark->setChecked(alpaca && m_alpacaParkStateValid && m_alpacaAtPark);
+    ui->alpacaPark->blockSignals(oldParkState);
+    ui->alpacaPark->setEnabled(alpaca && m_alpacaParkStateValid && (m_alpacaAtPark || m_alpacaCanPark));
+
+    bool oldHomeState = ui->alpacaHome->blockSignals(true);
+    ui->alpacaHome->setChecked(alpaca && m_alpacaHomeStateValid && m_alpacaAtHome);
+    ui->alpacaHome->blockSignals(oldHomeState);
+    ui->alpacaHome->setEnabled(alpaca && m_alpacaCanFindHome);
 }
 
 void GS232ControllerGUI::on_protocol_currentIndexChanged(int index)
@@ -940,14 +954,22 @@ void GS232ControllerGUI::on_dfmShowStatus_clicked()
     m_dfmStatusDialog.activateWindow();
 }
 
-void GS232ControllerGUI::on_alpacaPark_clicked()
+void GS232ControllerGUI::on_alpacaPark_toggled(bool checked)
 {
-    m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgPark::create());
+    if (checked) {
+        m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgPark::create());
+    } else {
+        m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgUnpark::create());
+    }
 }
 
-void GS232ControllerGUI::on_alpacaUnpark_clicked()
+void GS232ControllerGUI::on_alpacaHome_clicked(bool checked)
 {
-    m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgUnpark::create());
+    if (checked) {
+        m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgHome::create());
+    } else {
+        updateAlpacaParkControls();
+    }
 }
 
 void GS232ControllerGUI::updateStatus()
@@ -1060,6 +1082,6 @@ void GS232ControllerGUI::makeUIConnections()
     QObject::connect(ui->dfmBrakes, &QToolButton::toggled, this, &GS232ControllerGUI::on_dfmBrakes_clicked);
     QObject::connect(ui->dfmDrives, &QToolButton::toggled, this, &GS232ControllerGUI::on_dfmDrives_clicked);
     QObject::connect(ui->dfmShowStatus, &QToolButton::clicked, this, &GS232ControllerGUI::on_dfmShowStatus_clicked);
-    QObject::connect(ui->alpacaPark, &QToolButton::clicked, this, &GS232ControllerGUI::on_alpacaPark_clicked);
-    QObject::connect(ui->alpacaUnpark, &QToolButton::clicked, this, &GS232ControllerGUI::on_alpacaUnpark_clicked);
+    QObject::connect(ui->alpacaPark, &ButtonSwitch::toggled, this, &GS232ControllerGUI::on_alpacaPark_toggled);
+    QObject::connect(ui->alpacaHome, &ButtonSwitch::clicked, this, &GS232ControllerGUI::on_alpacaHome_clicked);
 }

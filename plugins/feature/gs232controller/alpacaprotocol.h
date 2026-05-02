@@ -42,23 +42,33 @@ public:
     public:
         bool canPark() const { return m_canPark; }
         bool atPark() const { return m_atPark; }
-        bool valid() const { return m_valid; }
+        bool parkValid() const { return m_parkValid; }
+        bool canFindHome() const { return m_canFindHome; }
+        bool atHome() const { return m_atHome; }
+        bool homeValid() const { return m_homeValid; }
+        bool valid() const { return m_parkValid; }
 
-        static MsgReportParkState* create(bool canPark, bool atPark, bool valid)
+        static MsgReportParkState* create(bool canPark, bool atPark, bool parkValid, bool canFindHome, bool atHome, bool homeValid)
         {
-            return new MsgReportParkState(canPark, atPark, valid);
+            return new MsgReportParkState(canPark, atPark, parkValid, canFindHome, atHome, homeValid);
         }
 
     private:
         bool m_canPark;
         bool m_atPark;
-        bool m_valid;
+        bool m_parkValid;
+        bool m_canFindHome;
+        bool m_atHome;
+        bool m_homeValid;
 
-        MsgReportParkState(bool canPark, bool atPark, bool valid) :
+        MsgReportParkState(bool canPark, bool atPark, bool parkValid, bool canFindHome, bool atHome, bool homeValid) :
             Message(),
             m_canPark(canPark),
             m_atPark(atPark),
-            m_valid(valid)
+            m_parkValid(parkValid),
+            m_canFindHome(canFindHome),
+            m_atHome(atHome),
+            m_homeValid(homeValid)
         {
         }
     };
@@ -72,6 +82,7 @@ public:
     bool usesIODevice() const override { return false; }
     void park() override;
     void unpark() override;
+    void home() override;
     void applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force) override;
 
 private:
@@ -94,7 +105,8 @@ private:
     void slewToRaDec(float azimuth, float elevation, bool asynchronous);
     void pollAzimuthAltitude();
     void queryAtPark(const std::function<void(bool, bool)>& continuation = {});
-    void reportParkState(bool valid = true);
+    void queryAtHome(const std::function<void(bool, bool)>& continuation = {});
+    void reportParkState(bool parkValid = true, bool homeValid = true);
     void handlePositionReply(const QString& property, QNetworkReply *reply, double& value, bool& valid, const std::function<void()>& checkDone);
 
     QNetworkAccessManager *m_networkManager;
@@ -109,9 +121,13 @@ private:
     bool m_canSlewAsync;
     bool m_canSlew;
     bool m_canPark;
+    bool m_canFindHome;
     bool m_atPark;
     bool m_atParkValid;
     bool m_atParkQueryPending;
+    bool m_atHome;
+    bool m_atHomeValid;
+    bool m_atHomeQueryPending;
     bool m_slewPending;
     bool m_slewingQueryPending;
     bool m_queuedSlew;

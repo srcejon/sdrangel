@@ -57,9 +57,13 @@ AlpacaProtocol::AlpacaProtocol() :
     m_canSlewAsync(false),
     m_canSlew(false),
     m_canPark(false),
+    m_canFindHome(false),
     m_atPark(false),
     m_atParkValid(false),
     m_atParkQueryPending(false),
+    m_atHome(false),
+    m_atHomeValid(false),
+    m_atHomeQueryPending(false),
     m_slewPending(false),
     m_slewingQueryPending(false),
     m_queuedSlew(false),
@@ -93,6 +97,9 @@ void AlpacaProtocol::update()
     runWhenConnected([this]() {
         pollAzimuthAltitude();
         queryAtPark();
+        if (m_canFindHome) {
+            queryAtHome();
+        }
     });
 }
 
@@ -126,6 +133,25 @@ void AlpacaProtocol::unpark()
     });
 }
 
+void AlpacaProtocol::home()
+{
+    runWhenConnected([this]() {
+        if (!m_canFindHome)
+        {
+            reportError("Alpaca telescope driver does not support find home");
+            return;
+        }
+
+        m_queuedSlew = false;
+        m_slewRetryTimer.stop();
+        sendSimplePutCommand("findhome", "Telescope findhome", [this](bool success) {
+            if (success) {
+                queryAtHome();
+            }
+        });
+    });
+}
+
 void AlpacaProtocol::applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
     const bool endpointChanged = force
@@ -144,9 +170,13 @@ void AlpacaProtocol::applySettings(const GS232ControllerSettings& settings, cons
         m_canSlewAsync = false;
         m_canSlew = false;
         m_canPark = false;
+        m_canFindHome = false;
         m_atPark = false;
         m_atParkValid = false;
         m_atParkQueryPending = false;
+        m_atHome = false;
+        m_atHomeValid = false;
+        m_atHomeQueryPending = false;
         m_slewPending = false;
         m_slewingQueryPending = false;
         m_queuedSlew = false;
@@ -354,12 +384,14 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
         bool canSlewAsync = false;
         bool canSlew = false;
         bool canPark = false;
+        bool canFindHome = false;
         bool canSlewAltAzAsyncValid = false;
         bool canSlewAltAzValid = false;
         bool canSlewAsyncValid = false;
         bool canSlewValid = false;
         bool canParkValid = false;
-        int pending = 5;
+        bool canFindHomeValid = false;
+        int pending = 6;
     };
 
     m_capabilitiesPending = true;
@@ -392,6 +424,7 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
         m_canSlewAsync = info->canSlewAsync;
         m_canSlew = info->canSlew;
         m_canPark = info->canPark;
+        m_canFindHome = info->canFindHomeValid && info->canFindHome;
         m_capabilitiesReady = true;
 
         qDebug() << "AlpacaProtocol::queryCapabilities"
@@ -399,9 +432,13 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
                  << "CanSlewAltAz" << m_canSlewAltAz
                  << "CanSlewAsync" << m_canSlewAsync
                  << "CanSlew" << m_canSlew
-                 << "CanPark" << m_canPark;
+                 << "CanPark" << m_canPark
+                 << "CanFindHome" << m_canFindHome;
 
         queryAtPark();
+        if (m_canFindHome) {
+            queryAtHome();
+        }
         reportParkState();
 
         if (continuation) {
@@ -414,6 +451,7 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
     getBoolProperty("canslewasync", &info->canSlewAsync, &info->canSlewAsyncValid, checkDone);
     getBoolProperty("canslew", &info->canSlew, &info->canSlewValid, checkDone);
     getBoolProperty("canpark", &info->canPark, &info->canParkValid, checkDone);
+    getBoolProperty("canfindhome", &info->canFindHome, &info->canFindHomeValid, checkDone);
 }
 
 void AlpacaProtocol::getBoolProperty(const QString& property, bool *value, bool *valid, const std::function<void()>& checkDone)
@@ -708,9 +746,55 @@ void AlpacaProtocol::queryAtPark(const std::function<void(bool, bool)>& continua
     });
 }
 
-void AlpacaProtocol::reportParkState(bool valid)
+void AlpacaProtocol::queryAtHome(const std::function<void(bool, bool)>& continuation)
 {
-    sendMessage(MsgReportParkState::create(m_canPark, m_atPark, valid && m_atParkValid));
+    if (m_atHomeQueryPending) {
+        return;
+    }
+
+    QUrl url = deviceUrl("athome");
+    url.setQuery(transactionQuery());
+
+    m_atHomeQueryPending = true;
+    QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, continuation]() {
+        const QByteArray payload = reply->readAll();
+        QJsonObject response;
+        const bool success = parseAlpacaResponse(reply, payload, response, "Telescope athome", false);
+
+        if (success)
+        {
+            m_atHome = response.value("Value").toBool();
+            m_atHomeValid = true;
+            reportParkState();
+        }
+        else
+        {
+            m_atHomeValid = false;
+            reportParkState(true, false);
+        }
+
+        m_atHomeQueryPending = false;
+
+        if (continuation) {
+            continuation(success, m_atHome);
+        }
+
+        reply->deleteLater();
+    });
+}
+
+void AlpacaProtocol::reportParkState(bool parkValid, bool homeValid)
+{
+    sendMessage(MsgReportParkState::create(
+        m_canPark,
+        m_atPark,
+        parkValid && m_atParkValid,
+        m_canFindHome,
+        m_atHome,
+        homeValid && m_atHomeValid
+    ));
 }
 
 void AlpacaProtocol::handlePositionReply(const QString& property, QNetworkReply *reply, double& value, bool& valid, const std::function<void()>& checkDone)

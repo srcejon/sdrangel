@@ -94,16 +94,16 @@ public:
     };
 
     Camera(WebAPIAdapterInterface *webAPIAdapterInterface);
-    virtual ~Camera();
-    virtual void destroy() { delete this; }
-    virtual bool handleMessage(const Message& cmd);
+    ~Camera() override;
+    void destroy() override { delete this; }
+    bool handleMessage(const Message& cmd) override;
 
-    virtual void getIdentifier(QString& id) const { id = objectName(); }
-    virtual QString getIdentifier() const { return objectName(); }
-    virtual void getTitle(QString& title) const { title = m_settings.m_title; }
+    void getIdentifier(QString& id) const override { id = objectName(); }
+    QString getIdentifier() const override { return objectName(); }
+    void getTitle(QString& title) const override { title = m_settings.m_title; }
 
-    virtual QByteArray serialize() const;
-    virtual bool deserialize(const QByteArray& data);
+    QByteArray serialize() const override;
+    bool deserialize(const QByteArray& data) override;
 
     static const char* const m_featureIdURI;
     static const char* const m_featureId;

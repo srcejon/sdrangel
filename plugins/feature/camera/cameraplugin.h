@@ -33,12 +33,12 @@ class CameraPlugin : public QObject, PluginInterface {
 public:
     explicit CameraPlugin(QObject* parent = nullptr);
 
-    const PluginDescriptor& getPluginDescriptor() const;
-    void initPlugin(PluginAPI* pluginAPI);
+    const PluginDescriptor& getPluginDescriptor() const override;
+    void initPlugin(PluginAPI* pluginAPI) override;
 
-    virtual FeatureGUI* createFeatureGUI(FeatureUISet *featureUISet, Feature *feature) const;
-    virtual Feature* createFeature(WebAPIAdapterInterface *webAPIAdapterInterface) const;
-    virtual FeatureWebAPIAdapter* createFeatureWebAPIAdapter() const;
+    FeatureGUI* createFeatureGUI(FeatureUISet *featureUISet, Feature *feature) const override;
+    Feature* createFeature(WebAPIAdapterInterface *webAPIAdapterInterface) const override;
+    FeatureWebAPIAdapter* createFeatureWebAPIAdapter() const override;
 
 private:
     static const PluginDescriptor m_pluginDescriptor;

@@ -99,16 +99,16 @@ class CameraGUI : public FeatureGUI {
 public:
 
     static CameraGUI* create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature);
-    virtual void destroy();
+    void destroy() override;
 
     void resetToDefaults();
-    QByteArray serialize() const;
-    bool deserialize(const QByteArray& data);
-    virtual MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
-    virtual void setWorkspaceIndex(int index);
-    virtual int getWorkspaceIndex() const { return m_settings.m_workspaceIndex; }
-    virtual void setGeometryBytes(const QByteArray& blob) { m_settings.m_geometryBytes = blob; }
-    virtual QByteArray getGeometryBytes() const { return m_settings.m_geometryBytes; }
+    QByteArray serialize() const override;
+    bool deserialize(const QByteArray& data) override;
+    MessageQueue *getInputMessageQueue() override { return &m_inputMessageQueue; }
+    void setWorkspaceIndex(int index) override;
+    int getWorkspaceIndex() const override { return m_settings.m_workspaceIndex; }
+    void setGeometryBytes(const QByteArray& blob) override { m_settings.m_geometryBytes = blob; }
+    QByteArray getGeometryBytes() const override { return m_settings.m_geometryBytes; }
 
 private:
     enum CameraComboRole
@@ -190,7 +190,7 @@ private:
     QTimer m_qtStillCaptureTimer;
 
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
-    virtual ~CameraGUI();
+    ~CameraGUI() override;
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 

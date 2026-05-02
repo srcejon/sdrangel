@@ -25,10 +25,10 @@
 class CameraWebAPIAdapter : public FeatureWebAPIAdapter {
 public:
     CameraWebAPIAdapter() = default;
-    virtual ~CameraWebAPIAdapter() = default;
+    ~CameraWebAPIAdapter() override = default;
 
-    virtual QByteArray serialize() const { return m_settings.serialize(); }
-    virtual bool deserialize(const QByteArray& data) { return m_settings.deserialize(data); }
+    QByteArray serialize() const override { return m_settings.serialize(); }
+    bool deserialize(const QByteArray& data) override { return m_settings.deserialize(data); }
 
 private:
     CameraSettings m_settings;

@@ -21,8 +21,8 @@
 
 #include <QObject>
 #include <QSet>
-#include <QStringList>
 
+#include "camerainfo.h"
 #include "camerasettings.h"
 
 class MessageQueue;
@@ -34,25 +34,6 @@ class CameraFinder : public QObject
 {
     Q_OBJECT
 public:
-
-    struct CameraInfo
-    {
-        QString m_protocol;     // "qt" for Qt cameras, "alpaca" for Alpaca cameras
-        QString m_id;
-        QString m_description;
-        QString m_host;         // alpaca only
-        quint16 m_port = 0;     // alpaca only
-    };
-
-    struct AlpacaDeviceInfo
-    {
-        QString m_type;         // e.g. "camera", "focuser", "filterwheel"
-        QString m_id;           // A number, typically 0
-        QString m_description;
-        QString m_host;
-        quint16 m_port = 0;
-    };
-
     explicit CameraFinder(QObject* parent = nullptr);
     ~CameraFinder() override;
 
@@ -73,20 +54,19 @@ private:
     int m_requestId;
     int m_pendingConfiguredDeviceReplies;
     CameraSettings m_pendingSettings;
-    QStringList m_currentCameraIds;
-    QStringList m_currentFocuserIds;
-    QStringList m_currentFilterWheelIds;
+    QList<CameraInfo> m_currentCameras;
+    QList<AlpacaDeviceInfo> m_currentFocusers;
+    QList<AlpacaDeviceInfo> m_currentFilterWheels;
     QSet<QString> m_discoveredEndpointKeys;
 
     static constexpr quint16 m_alpacaDiscoveryPort = 32227;
     static constexpr int m_alpacaDiscoveryTimeoutMs = 1000;
     static const QByteArray m_alpacaDiscoveryMessage;
 
-    static QStringList listQtCameraIds();
-    static QStringList parseAlpacaDeviceList(const QByteArray& payload, const QString& deviceType, const QString& host, quint16 port);
+    static QList<CameraInfo> listQtCameras();
+    static QList<AlpacaDeviceInfo> parseAlpacaDeviceList(const QByteArray& payload, const QString& deviceType, const QString& host, quint16 port);
     static QString buildAlpacaBaseUrl(const CameraSettings& settings);
     static QString buildAlpacaBaseUrl(const QString& host, quint16 port);
-    static QString packAlpacaDeviceEntry(const QString& deviceType, int number, const QString& name, const QString& host, quint16 port);
     static QString endpointKey(const QString& host, quint16 port);
 
     void finalizeCameraList(int requestId);

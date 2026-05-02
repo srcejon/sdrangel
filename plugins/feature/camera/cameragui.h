@@ -62,6 +62,7 @@ signals:
 #include "feature/featuregui.h"
 #include "util/messagequeue.h"
 #include "settings/rollupstate.h"
+#include "camerainfo.h"
 #include "cameraobjectdevicesettingsgui.h"
 #include "camerasettings.h"
 #include "camerapostprocessor.h"
@@ -121,8 +122,8 @@ private:
     HttpDownloadManagerGUI m_dlm;
     QHash<QString, QString> m_pendingYoloDownloads;
     QStringList m_alpacaFilterWheelNames;
-    QStringList m_discoveredAlpacaFocusers;
-    QStringList m_discoveredAlpacaFilterWheels;
+    QList<AlpacaDeviceInfo> m_discoveredAlpacaFocusers;
+    QList<AlpacaDeviceInfo> m_discoveredAlpacaFilterWheels;
     int m_lastAlpacaCameraState;
     qint64 m_lastAlpacaCaptureTimeMs;
     double m_lastAlpacaCcdTemperature;

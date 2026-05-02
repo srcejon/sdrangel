@@ -29,8 +29,6 @@
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QGraphicsView>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLineEdit>
 #include <QNetworkReply>
 #include <QPainter>
@@ -95,83 +93,6 @@ enum AccessoryComboRole
     AccessoryAlpacaHostRole,
     AccessoryAlpacaPortRole
 };
-
-struct CameraComboEntry
-{
-    QString protocol;
-    QString id;
-    QString description;
-    QString alpacaHost;
-    quint16 alpacaPort = 0;
-};
-
-struct AlpacaAccessoryEntry
-{
-    QString id;
-    QString description;
-    QString alpacaHost;
-    quint16 alpacaPort = 0;
-};
-
-CameraComboEntry parseCameraComboEntry(const QString& packed)
-{
-    const QByteArray packedUtf8 = packed.toUtf8();
-
-    if (!packedUtf8.isEmpty() && packedUtf8.startsWith('{'))
-    {
-        const QJsonDocument doc = QJsonDocument::fromJson(packedUtf8);
-
-        if (doc.isObject())
-        {
-            const QJsonObject obj = doc.object();
-            return {
-                obj.value(QStringLiteral("protocol")).toString(),
-                obj.value(QStringLiteral("id")).toString(),
-                obj.value(QStringLiteral("description")).toString(),
-                obj.value(QStringLiteral("host")).toString(),
-                static_cast<quint16>(obj.value(QStringLiteral("port")).toInt(0))
-            };
-        }
-    }
-
-    const int firstColon = packed.indexOf(':');
-    const int secondColon = firstColon >= 0 ? packed.indexOf(':', firstColon + 1) : -1;
-
-    if (firstColon < 0 || secondColon < 0) {
-        return {};
-    }
-
-    return {
-        packed.left(firstColon),
-        packed.mid(firstColon + 1, secondColon - firstColon - 1),
-        packed.mid(secondColon + 1),
-        {},
-        0
-    };
-}
-
-AlpacaAccessoryEntry parseAlpacaAccessoryEntry(const QString& packed)
-{
-    const QByteArray packedUtf8 = packed.toUtf8();
-
-    if (!packedUtf8.isEmpty() && packedUtf8.startsWith('{'))
-    {
-        const QJsonDocument doc = QJsonDocument::fromJson(packedUtf8);
-
-        if (doc.isObject())
-        {
-            const QJsonObject obj = doc.object();
-            return {
-                obj.value(QStringLiteral("id")).toString(),
-                obj.value(QStringLiteral("description")).toString(),
-                obj.value(QStringLiteral("host")).toString(),
-                static_cast<quint16>(obj.value(QStringLiteral("port")).toInt(0))
-            };
-        }
-    }
-
-    return {};
-}
 
 QString resolutionKey(const QSize& size)
 {
@@ -372,38 +293,37 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (CameraWorker::MsgReportCameraList::match(message))
     {
         const CameraWorker::MsgReportCameraList& report = (CameraWorker::MsgReportCameraList&) message;
-        CameraComboEntry selectedCamera;
-        QList<CameraComboEntry> entries;
+        CameraInfo selectedCamera;
+        QList<CameraInfo> entries;
         QHash<QString, int> displayCounts;
 
-        for (const QString& packedCamera : report.getCameraIds())
+        for (const CameraInfo& camera : report.getCameras())
         {
-            const CameraComboEntry entry = parseCameraComboEntry(packedCamera);
-            entries.append(entry);
+            entries.append(camera);
 
-            const QString displayKey = entry.protocol.isEmpty()
-                ? packedCamera
-                : QString("%1:%2").arg(entry.protocol, entry.description);
+            const QString displayKey = camera.m_protocol.isEmpty()
+                ? camera.m_id
+                : QString("%1:%2").arg(camera.m_protocol, camera.m_description);
             displayCounts[displayKey] = displayCounts.value(displayKey) + 1;
         }
 
         ui->cameraCombo->blockSignals(true);
         ui->cameraCombo->clear();
-        for (const CameraComboEntry& entry : entries)
+        for (const CameraInfo& entry : entries)
         {
-            QString displayText = entry.protocol.isEmpty() ? entry.id : QString("%1:%2").arg(entry.protocol, entry.description);
+            QString displayText = entry.m_protocol.isEmpty() ? entry.m_id : QString("%1:%2").arg(entry.m_protocol, entry.m_description);
 
-            if (!entry.alpacaHost.isEmpty() && displayCounts.value(displayText) > 1) {
-                displayText = QString("%1 (%2:%3)").arg(displayText, entry.alpacaHost).arg(entry.alpacaPort);
+            if (!entry.m_host.isEmpty() && displayCounts.value(displayText) > 1) {
+                displayText = QString("%1 (%2:%3)").arg(displayText, entry.m_host).arg(entry.m_port);
             }
 
             ui->cameraCombo->addItem(displayText);
             const int itemIndex = ui->cameraCombo->count() - 1;
-            ui->cameraCombo->setItemData(itemIndex, entry.protocol, CameraProtocolRole);
-            ui->cameraCombo->setItemData(itemIndex, entry.id, CameraIdRole);
-            ui->cameraCombo->setItemData(itemIndex, entry.description, CameraDescriptionRole);
-            ui->cameraCombo->setItemData(itemIndex, entry.alpacaHost, CameraAlpacaHostRole);
-            ui->cameraCombo->setItemData(itemIndex, static_cast<int>(entry.alpacaPort), CameraAlpacaPortRole);
+            ui->cameraCombo->setItemData(itemIndex, entry.m_protocol, CameraProtocolRole);
+            ui->cameraCombo->setItemData(itemIndex, entry.m_id, CameraIdRole);
+            ui->cameraCombo->setItemData(itemIndex, entry.m_description, CameraDescriptionRole);
+            ui->cameraCombo->setItemData(itemIndex, entry.m_host, CameraAlpacaHostRole);
+            ui->cameraCombo->setItemData(itemIndex, static_cast<int>(entry.m_port), CameraAlpacaPortRole);
         }
 
         int index = findCameraComboIndex(
@@ -419,31 +339,31 @@ bool CameraGUI::handleMessage(const Message& message)
         if (index >= 0)
         {
             ui->cameraCombo->setCurrentIndex(index);
-            selectedCamera.protocol = ui->cameraCombo->itemData(index, CameraProtocolRole).toString();
-            selectedCamera.id = ui->cameraCombo->itemData(index, CameraIdRole).toString();
-            selectedCamera.description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
-            selectedCamera.alpacaHost = ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString();
-            selectedCamera.alpacaPort = static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt());
+            selectedCamera.m_protocol = ui->cameraCombo->itemData(index, CameraProtocolRole).toString();
+            selectedCamera.m_id = ui->cameraCombo->itemData(index, CameraIdRole).toString();
+            selectedCamera.m_description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
+            selectedCamera.m_host = ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString();
+            selectedCamera.m_port = static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt());
         }
 
         ui->cameraCombo->blockSignals(false);
 
         const bool selectedCameraDiffers =
-            !selectedCamera.id.isEmpty()
-            && ((selectedCamera.protocol != m_settings.m_cameraProtocol)
-                || (selectedCamera.id != m_settings.m_cameraId)
-                || (selectedCamera.description != m_settings.m_cameraDescription)
-                || (selectedCamera.alpacaHost != m_settings.m_alpacaHost)
-                || (selectedCamera.alpacaPort != m_settings.m_alpacaPort));
+            !selectedCamera.m_id.isEmpty()
+            && ((selectedCamera.m_protocol != m_settings.m_cameraProtocol)
+                || (selectedCamera.m_id != m_settings.m_cameraId)
+                || (selectedCamera.m_description != m_settings.m_cameraDescription)
+                || (selectedCamera.m_host != m_settings.m_alpacaHost)
+                || (selectedCamera.m_port != m_settings.m_alpacaPort));
 
         if (selectedCameraDiffers)
         {
-            setSelectedCamera(selectedCamera.protocol, selectedCamera.id, selectedCamera.description,
-                selectedCamera.alpacaHost, selectedCamera.alpacaPort);
+            setSelectedCamera(selectedCamera.m_protocol, selectedCamera.m_id, selectedCamera.m_description,
+                selectedCamera.m_host, selectedCamera.m_port);
             m_settingsKeys.append("cameraProtocol");
             m_settingsKeys.append("cameraId");
             m_settingsKeys.append("cameraDescription");
-            if (!selectedCamera.alpacaHost.isEmpty()) {
+            if (!selectedCamera.m_host.isEmpty()) {
                 m_settingsKeys.append("alpacaHost");
                 m_settingsKeys.append("alpacaPort");
             }
@@ -451,10 +371,10 @@ bool CameraGUI::handleMessage(const Message& message)
             updateEnabledControls();
             applySettings();
         }
-        else if ((selectedCamera.protocol == QLatin1String("qt")) && !ui->startStop->isChecked())
+        else if ((selectedCamera.m_protocol == QLatin1String("qt")) && !ui->startStop->isChecked())
         {
-            setSelectedCamera(selectedCamera.protocol, selectedCamera.id, selectedCamera.description,
-                selectedCamera.alpacaHost, selectedCamera.alpacaPort);
+            setSelectedCamera(selectedCamera.m_protocol, selectedCamera.m_id, selectedCamera.m_description,
+                selectedCamera.m_host, selectedCamera.m_port);
             probeQtCameraCapabilities();
             updateEnabledControls();
         }
@@ -471,8 +391,8 @@ bool CameraGUI::handleMessage(const Message& message)
         const quint16 previousFilterWheelPort = m_settings.m_alpacaFilterWheelPort;
         const int previousFilterWheelDeviceNumber = m_settings.m_alpacaFilterWheelDeviceNumber;
         const CameraWorker::MsgReportAlpacaDeviceList& report = (CameraWorker::MsgReportAlpacaDeviceList&) message;
-        m_discoveredAlpacaFocusers = report.getFocuserIds();
-        m_discoveredAlpacaFilterWheels = report.getFilterWheelIds();
+        m_discoveredAlpacaFocusers = report.getFocusers();
+        m_discoveredAlpacaFilterWheels = report.getFilterWheels();
         populateAlpacaAccessoryCombos();
 
         {
@@ -1042,19 +962,16 @@ void CameraGUI::applySettings(bool force)
 void CameraGUI::populateAlpacaAccessoryCombos()
 {
     auto populateCombo = [](QComboBox *combo,
-                            const QStringList& packedEntries,
+                            const QList<AlpacaDeviceInfo>& entries,
                             const QString& currentHost,
                             quint16 currentPort,
                             int currentDeviceNumber) -> bool
     {
-        QList<AlpacaAccessoryEntry> entries;
         QHash<QString, int> displayCounts;
 
-        for (const QString& packedEntry : packedEntries)
+        for (const AlpacaDeviceInfo& entry : entries)
         {
-            const AlpacaAccessoryEntry entry = parseAlpacaAccessoryEntry(packedEntry);
-            entries.append(entry);
-            const QString displayKey = entry.description.isEmpty() ? entry.id : entry.description;
+            const QString displayKey = entry.m_description.isEmpty() ? entry.m_id : entry.m_description;
             displayCounts[displayKey] = displayCounts.value(displayKey) + 1;
         }
 
@@ -1064,29 +981,29 @@ void CameraGUI::populateAlpacaAccessoryCombos()
         int selectedIndex = -1;
         bool foundSelection = false;
 
-        for (const AlpacaAccessoryEntry& entry : entries)
+        for (const AlpacaDeviceInfo& entry : entries)
         {
             bool ok = false;
-            const int deviceNumber = entry.id.toInt(&ok);
+            const int deviceNumber = entry.m_id.toInt(&ok);
             const int safeDeviceNumber = ok ? deviceNumber : 0;
-            QString displayText = entry.description.isEmpty() ? entry.id : entry.description;
+            QString displayText = entry.m_description.isEmpty() ? entry.m_id : entry.m_description;
 
             if (displayCounts.value(displayText) > 1 || displayText.isEmpty()) {
                 displayText = QStringLiteral("%1 (%2:%3 #%4)")
                     .arg(displayText.isEmpty() ? QStringLiteral("Device") : displayText)
-                    .arg(entry.alpacaHost)
-                    .arg(entry.alpacaPort)
+                    .arg(entry.m_host)
+                    .arg(entry.m_port)
                     .arg(safeDeviceNumber);
             }
 
             combo->addItem(displayText);
             const int itemIndex = combo->count() - 1;
             combo->setItemData(itemIndex, safeDeviceNumber, AccessoryDeviceNumberRole);
-            combo->setItemData(itemIndex, entry.description, AccessoryDescriptionRole);
-            combo->setItemData(itemIndex, entry.alpacaHost, AccessoryAlpacaHostRole);
-            combo->setItemData(itemIndex, static_cast<int>(entry.alpacaPort), AccessoryAlpacaPortRole);
+            combo->setItemData(itemIndex, entry.m_description, AccessoryDescriptionRole);
+            combo->setItemData(itemIndex, entry.m_host, AccessoryAlpacaHostRole);
+            combo->setItemData(itemIndex, static_cast<int>(entry.m_port), AccessoryAlpacaPortRole);
 
-            if ((entry.alpacaHost == currentHost) && (entry.alpacaPort == currentPort) && (safeDeviceNumber == currentDeviceNumber)) {
+            if ((entry.m_host == currentHost) && (entry.m_port == currentPort) && (safeDeviceNumber == currentDeviceNumber)) {
                 selectedIndex = itemIndex;
                 foundSelection = true;
             }

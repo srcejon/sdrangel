@@ -61,9 +61,9 @@ CameraFinder::~CameraFinder()
 void CameraFinder::reportCameraList(const CameraSettings& settings)
 {
     m_pendingSettings = settings;
-    m_currentCameraIds = listQtCameraIds();
-    m_currentFocuserIds.clear();
-    m_currentFilterWheelIds.clear();
+    m_currentCameras = listQtCameras();
+    m_currentFocusers.clear();
+    m_currentFilterWheels.clear();
     m_discoveredEndpointKeys.clear();
     m_pendingConfiguredDeviceReplies = 0;
     ++m_requestId;
@@ -83,34 +83,44 @@ void CameraFinder::reportCameraList(const CameraSettings& settings)
     }
 }
 
-QStringList CameraFinder::listQtCameraIds()
+QList<CameraInfo> CameraFinder::listQtCameras()
 {
-    QStringList qtCameraIds;
+    QList<CameraInfo> qtCameras;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
 
     for (const QCameraDevice& camera : cameras)
     {
-        const QString id = QString("qt:%1:%2").arg(QString::fromUtf8(camera.id())).arg(camera.description());
-        qtCameraIds.append(id);
+        qtCameras.append({
+            QStringLiteral("qt"),
+            QString::fromUtf8(camera.id()),
+            camera.description(),
+            {},
+            0
+        });
     }
 #else
     const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
 
     for (const QCameraInfo& info : cameras)
     {
-        const QString id = QString("qt:%1:%2").arg(info.deviceName()).arg(info.description());
-        qtCameraIds.append(id);
+        qtCameras.append({
+            QStringLiteral("qt"),
+            info.deviceName(),
+            info.description(),
+            {},
+            0
+        });
     }
 #endif
 
-    return qtCameraIds;
+    return qtCameras;
 }
 
-QStringList CameraFinder::parseAlpacaDeviceList(const QByteArray& payload, const QString& deviceType, const QString& host, quint16 port)
+QList<AlpacaDeviceInfo> CameraFinder::parseAlpacaDeviceList(const QByteArray& payload, const QString& deviceType, const QString& host, quint16 port)
 {
-    QStringList result;
+    QList<AlpacaDeviceInfo> result;
     const QJsonDocument doc = QJsonDocument::fromJson(payload);
 
     if (!doc.isObject()) {
@@ -143,7 +153,13 @@ QStringList CameraFinder::parseAlpacaDeviceList(const QByteArray& payload, const
         const QString name = obj.value("DeviceName").toString();
 
         if (number >= 0) {
-            result.append(packAlpacaDeviceEntry(deviceType, number, name, host, port));
+            result.append({
+                deviceType,
+                QString::number(number),
+                name,
+                host,
+                port
+            });
         }
     }
 
@@ -160,18 +176,6 @@ QString CameraFinder::buildAlpacaBaseUrl(const QString& host, quint16 port)
     return QString("http://%1:%2").arg(host).arg(port);
 }
 
-QString CameraFinder::packAlpacaDeviceEntry(const QString& deviceType, int number, const QString& name, const QString& host, quint16 port)
-{
-    QJsonObject obj;
-    obj.insert(QStringLiteral("protocol"), QStringLiteral("alpaca"));
-    obj.insert(QStringLiteral("deviceType"), deviceType);
-    obj.insert(QStringLiteral("id"), QString::number(number));
-    obj.insert(QStringLiteral("description"), name);
-    obj.insert(QStringLiteral("host"), host);
-    obj.insert(QStringLiteral("port"), static_cast<int>(port));
-    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-}
-
 QString CameraFinder::endpointKey(const QString& host, quint16 port)
 {
     return QStringLiteral("%1:%2").arg(host).arg(port);
@@ -183,8 +187,8 @@ void CameraFinder::finalizeCameraList(int requestId)
         return;
     }
 
-    m_msgQueueToGUI->push(CameraWorker::MsgReportCameraList::create(m_currentCameraIds));
-    m_msgQueueToGUI->push(CameraWorker::MsgReportAlpacaDeviceList::create(m_currentFocuserIds, m_currentFilterWheelIds));
+    m_msgQueueToGUI->push(CameraWorker::MsgReportCameraList::create(m_currentCameras));
+    m_msgQueueToGUI->push(CameraWorker::MsgReportAlpacaDeviceList::create(m_currentFocusers, m_currentFilterWheels));
 }
 
 void CameraFinder::startAlpacaDiscovery()
@@ -285,9 +289,19 @@ void CameraFinder::queryConfiguredDevices(const QList<AlpacaEndpoint>& endpoints
             if (requestId == m_requestId && reply->error() == QNetworkReply::NoError)
             {
                 const QByteArray payload = reply->readAll();
-                m_currentCameraIds.append(parseAlpacaDeviceList(payload, QStringLiteral("camera"), endpoint.m_host, endpoint.m_port));
-                m_currentFocuserIds.append(parseAlpacaDeviceList(payload, QStringLiteral("focuser"), endpoint.m_host, endpoint.m_port));
-                m_currentFilterWheelIds.append(parseAlpacaDeviceList(payload, QStringLiteral("filterwheel"), endpoint.m_host, endpoint.m_port));
+                const QList<AlpacaDeviceInfo> cameras = parseAlpacaDeviceList(payload, QStringLiteral("camera"), endpoint.m_host, endpoint.m_port);
+                for (const AlpacaDeviceInfo& camera : cameras)
+                {
+                    m_currentCameras.append({
+                        QStringLiteral("alpaca"),
+                        camera.m_id,
+                        camera.m_description,
+                        camera.m_host,
+                        camera.m_port
+                    });
+                }
+                m_currentFocusers.append(parseAlpacaDeviceList(payload, QStringLiteral("focuser"), endpoint.m_host, endpoint.m_port));
+                m_currentFilterWheels.append(parseAlpacaDeviceList(payload, QStringLiteral("filterwheel"), endpoint.m_host, endpoint.m_port));
             }
 
             reply->deleteLater();

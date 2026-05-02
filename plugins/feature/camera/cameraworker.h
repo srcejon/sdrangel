@@ -39,6 +39,7 @@
 #include "util/messagequeue.h"
 #include "audio/audiofifo.h"
 #include "availabledevicehandler.h"
+#include "camerainfo.h"
 #include "camerasettings.h"
 
 class QNetworkAccessManager;
@@ -136,19 +137,19 @@ MESSAGE_CLASS_DECLARATION
         MESSAGE_CLASS_DECLARATION
 
     public:
-        const QStringList& getCameraIds() const { return m_cameraIds; }
+        const QList<CameraInfo>& getCameras() const { return m_cameras; }
 
-        static MsgReportCameraList* create(const QStringList& cameraIds)
+        static MsgReportCameraList* create(const QList<CameraInfo>& cameras)
         {
-            return new MsgReportCameraList(cameraIds);
+            return new MsgReportCameraList(cameras);
         }
 
     private:
-        QStringList m_cameraIds;
+        QList<CameraInfo> m_cameras;
 
-        MsgReportCameraList(const QStringList& cameraIds) :
+        MsgReportCameraList(const QList<CameraInfo>& cameras) :
             Message(),
-            m_cameraIds(cameraIds)
+            m_cameras(cameras)
         { }
     };
 
@@ -156,22 +157,22 @@ MESSAGE_CLASS_DECLARATION
         MESSAGE_CLASS_DECLARATION
 
     public:
-        const QStringList& getFocuserIds() const { return m_focuserIds; }
-        const QStringList& getFilterWheelIds() const { return m_filterWheelIds; }
+        const QList<AlpacaDeviceInfo>& getFocusers() const { return m_focusers; }
+        const QList<AlpacaDeviceInfo>& getFilterWheels() const { return m_filterWheels; }
 
-        static MsgReportAlpacaDeviceList* create(const QStringList& focuserIds, const QStringList& filterWheelIds)
+        static MsgReportAlpacaDeviceList* create(const QList<AlpacaDeviceInfo>& focusers, const QList<AlpacaDeviceInfo>& filterWheels)
         {
-            return new MsgReportAlpacaDeviceList(focuserIds, filterWheelIds);
+            return new MsgReportAlpacaDeviceList(focusers, filterWheels);
         }
 
     private:
-        QStringList m_focuserIds;
-        QStringList m_filterWheelIds;
+        QList<AlpacaDeviceInfo> m_focusers;
+        QList<AlpacaDeviceInfo> m_filterWheels;
 
-        MsgReportAlpacaDeviceList(const QStringList& focuserIds, const QStringList& filterWheelIds) :
+        MsgReportAlpacaDeviceList(const QList<AlpacaDeviceInfo>& focusers, const QList<AlpacaDeviceInfo>& filterWheels) :
             Message(),
-            m_focuserIds(focuserIds),
-            m_filterWheelIds(filterWheelIds)
+            m_focusers(focusers),
+            m_filterWheels(filterWheels)
         { }
     };
 

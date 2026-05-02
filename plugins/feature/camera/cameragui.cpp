@@ -3837,5 +3837,3 @@ void CameraGUI::appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
         fpsValues.insert(fps);
     }
 }
-
-

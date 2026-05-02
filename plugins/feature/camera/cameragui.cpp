@@ -2248,16 +2248,20 @@ void CameraGUI::triggerQtStillCapture()
 void CameraGUI::updateAlpacaVisibility()
 {
     const bool alpaca = m_settings.isAlpacaCamera();
+    const bool fileCamera = m_settings.isFileCamera();
+    const bool qtCamera = m_settings.isQtCamera();
 
-    settingsUI()->resolutionLabel->setVisible(!alpaca);
-    settingsUI()->resolutionCombo->setVisible(!alpaca);
-    settingsUI()->fpsLabel->setEnabled(!alpaca);
+    settingsUI()->resolutionLabel->setVisible(qtCamera);
+    settingsUI()->resolutionCombo->setVisible(qtCamera);
+    settingsUI()->fpsLabel->setVisible(!fileCamera);
+    settingsUI()->fpsLabel->setEnabled(!alpaca && !fileCamera);
     updateCaptureModeControls();
-    if (alpaca || !m_settings.isIntervalCaptureMode()) {
+    settingsUI()->captureValueStack->setVisible(!fileCamera);
+    if (alpaca || fileCamera || !m_settings.isIntervalCaptureMode()) {
         settingsUI()->fpsStack->setCurrentWidget(settingsUI()->fpsSpinPage);
     }
-    settingsUI()->isoLabel->setVisible(!alpaca);
-    settingsUI()->isoSpin->setVisible(!alpaca);
+    settingsUI()->isoLabel->setVisible(qtCamera);
+    settingsUI()->isoSpin->setVisible(qtCamera);
     settingsUI()->alpacaBinXLabel->setVisible(alpaca);
     settingsUI()->alpacaBinXSpin->setVisible(alpaca);
     settingsUI()->alpacaBinYLabel->setVisible(alpaca);
@@ -2298,21 +2302,25 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaFilterWheelPositionLabel->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaFilterWheelPositionCombo->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
     settingsUI()->alpacaStatusGroup->setVisible(alpaca);
-    ui->audioMute->setVisible(!alpaca);
+    ui->audioMute->setVisible(qtCamera);
 
     // Qt-camera-only controls
-    settingsUI()->whiteBalanceLabel->setVisible(!alpaca);
-    settingsUI()->whiteBalanceCombo->setVisible(!alpaca);
-    settingsUI()->zoomLabel->setVisible(!alpaca);
-    settingsUI()->zoomSpin->setVisible(!alpaca);
+    settingsUI()->exposureLabel->setVisible(!fileCamera);
+    settingsUI()->exposureSlider->setVisible(!fileCamera);
+    settingsUI()->exposureSpin->setVisible(!fileCamera);
+    settingsUI()->exposureUnitsCombo->setVisible(!fileCamera);
+    settingsUI()->whiteBalanceLabel->setVisible(qtCamera);
+    settingsUI()->whiteBalanceCombo->setVisible(qtCamera);
+    settingsUI()->zoomLabel->setVisible(qtCamera);
+    settingsUI()->zoomSpin->setVisible(qtCamera);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    settingsUI()->exposureCompLabel->setVisible(!alpaca);
-    settingsUI()->exposureCompSpin->setVisible(!alpaca);
-    settingsUI()->focusModeLabel->setVisible(!alpaca);
-    settingsUI()->focusModeCombo->setVisible(!alpaca);
-    settingsUI()->focusDistLabel->setVisible(!alpaca);
-    settingsUI()->focusDistSpin->setVisible(!alpaca);
+    settingsUI()->exposureCompLabel->setVisible(qtCamera);
+    settingsUI()->exposureCompSpin->setVisible(qtCamera);
+    settingsUI()->focusModeLabel->setVisible(qtCamera);
+    settingsUI()->focusModeCombo->setVisible(qtCamera);
+    settingsUI()->focusDistLabel->setVisible(qtCamera);
+    settingsUI()->focusDistSpin->setVisible(qtCamera);
 #else
     settingsUI()->exposureCompLabel->setVisible(false);
     settingsUI()->exposureCompSpin->setVisible(false);
@@ -2570,7 +2578,7 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     const QString alpacaHost = ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString();
     const quint16 alpacaPort = static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt());
 
-    if (protocol == QLatin1String("file"))
+    if ((protocol == QLatin1String("file")) && cameraId.isEmpty())
     {
         if (!chooseVideoFileCameraFile(index,
                 previousCameraProtocol,

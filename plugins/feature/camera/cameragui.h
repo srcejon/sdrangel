@@ -27,36 +27,12 @@
 #include <QNetworkReply>
 #include <QSize>
 #include <QToolButton>
-
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QVideoFrame>
-class QCamera;
-class QImageCapture;
-class QVideoSink;
-class QMediaCaptureSession;
 #else
 #include <QAbstractVideoSurface>
 #include <QAbstractVideoBuffer>
 #include <QVideoFrame>
-class QCamera;
-class QCameraImageCapture;
-class CameraGUI;
-
-/// Qt5 video surface: receives raw frames from QCamera and emits them as QImage signals.
-class CameraVideoSurface : public QAbstractVideoSurface
-{
-    Q_OBJECT
-public:
-    explicit CameraVideoSurface(QObject *parent = nullptr);
-
-    QList<QVideoFrame::PixelFormat> supportedPixelFormats(
-        QAbstractVideoBuffer::HandleType handleType = QAbstractVideoBuffer::NoHandle) const override;
-
-    bool present(const QVideoFrame& frame) override;
-
-signals:
-    void frameAvailable(const QImage& image);
-};
 #endif
 
 #include "feature/featuregui.h"
@@ -75,21 +51,51 @@ class Camera;
 class CameraSettingsDialog;
 class CameraHistogramDialog;
 class Message;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+class QCamera;
+class QImageCapture;
+class QVideoSink;
+class QMediaCaptureSession;
+#else
+class QCamera;
+class QCameraImageCapture;
+class CameraGUI;
+#endif
 
 namespace Ui {
     class CameraGUI;
     class CameraSettingsDialog;
 }
 
-class CameraGUI : public FeatureGUI {
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+/// Qt5 video surface: receives raw frames from QCamera and emits them as QImage signals.
+class CameraVideoSurface : public QAbstractVideoSurface
+{
     Q_OBJECT
 public:
+    explicit CameraVideoSurface(QObject *parent = nullptr);
+
+    QList<QVideoFrame::PixelFormat> supportedPixelFormats(
+        QAbstractVideoBuffer::HandleType handleType = QAbstractVideoBuffer::NoHandle) const override;
+
+    bool present(const QVideoFrame& frame) override;
+
+signals:
+    void frameAvailable(const QImage& image);
+};
+#endif
+
+class CameraGUI : public FeatureGUI {
+    Q_OBJECT
+
     struct FrameRateOptions {
         bool contiguous;
         int minFps;
         int maxFps;
         QList<int> values;
     };
+
+public:
 
     static CameraGUI* create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature);
     virtual void destroy();
@@ -152,6 +158,7 @@ private:
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
 
+    // Qt camera code appears to need to be on GUI thread. Would hang on clean up in the worker thread.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
     QImageCapture *m_imageCapture;
@@ -208,6 +215,7 @@ private:
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
+    static CameraGUI::FrameRateOptions makeFrameRateOptions(const QSet<int>& fpsValues);
 
 private slots:
     void handleInputMessages();

@@ -154,33 +154,7 @@ void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
     }
 }
 
-CameraGUI::FrameRateOptions makeFrameRateOptions(const QSet<int>& fpsValues)
-{
-    CameraGUI::FrameRateOptions options{true, 1, 1, {}};
-    options.values = fpsValues.values();
-    std::sort(options.values.begin(), options.values.end());
-
-    if (options.values.isEmpty()) {
-        options.values.append(1);
-    }
-
-    options.minFps = options.values.first();
-    options.maxFps = options.values.last();
-    options.contiguous = true;
-
-    for (int i = 1; i < options.values.size(); ++i)
-    {
-        if (options.values.at(i) != options.values.at(i - 1) + 1)
-        {
-            options.contiguous = false;
-            break;
-        }
-    }
-
-    return options;
-}
-
-}
+} // namespace
 
 CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
@@ -730,6 +704,32 @@ int CameraGUI::findCameraComboIndex(const QString& protocol, const QString& came
     }
 
     return -1;
+}
+
+CameraGUI::FrameRateOptions CameraGUI::makeFrameRateOptions(const QSet<int>& fpsValues)
+{
+    CameraGUI::FrameRateOptions options{true, 1, 1, {}};
+    options.values = fpsValues.values();
+    std::sort(options.values.begin(), options.values.end());
+
+    if (options.values.isEmpty()) {
+        options.values.append(1);
+    }
+
+    options.minFps = options.values.first();
+    options.maxFps = options.values.last();
+    options.contiguous = true;
+
+    for (int i = 1; i < options.values.size(); ++i)
+    {
+        if (options.values.at(i) != options.values.at(i - 1) + 1)
+        {
+            options.contiguous = false;
+            break;
+        }
+    }
+
+    return options;
 }
 
 void CameraGUI::displaySettings()

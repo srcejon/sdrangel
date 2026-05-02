@@ -103,12 +103,12 @@ QList<CameraInfo> CameraFinder::listQtCameras()
 #else
     const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
 
-    for (const QCameraInfo& info : cameras)
+    for (const QCameraInfo& camera : cameras)
     {
         qtCameras.append({
             QStringLiteral("qt"),
-            info.deviceName(),
-            info.description(),
+            camera.deviceName(),
+            camera.description(),
             {},
             0
         });

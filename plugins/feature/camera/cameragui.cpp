@@ -39,13 +39,6 @@
 #include <QTextStream>
 #include <QWheelEvent>
 #include <QMessageBox>
-
-#include "feature/featureuiset.h"
-#include "gui/crightclickenabler.h"
-#include "gui/audioselectdialog.h"
-#include "gui/dialogpositioner.h"
-#include "dsp/dspengine.h"
-
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
 #include <QCameraDevice>
@@ -68,6 +61,12 @@
 #include <QVideoFrame>
 #endif
 
+#include "feature/featureuiset.h"
+#include "gui/crightclickenabler.h"
+#include "gui/audioselectdialog.h"
+#include "gui/dialogpositioner.h"
+#include "dsp/dspengine.h"
+
 #include "ui_cameragui.h"
 #include "camera.h"
 #include "camerahistogramdialog.h"
@@ -78,66 +77,6 @@
 CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
     return new CameraGUI(pluginAPI, featureUISet, feature);
-}
-
-QString CameraGUI::resolutionKey(const QSize& size)
-{
-    return QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
-}
-
-QString CameraGUI::resolutionKey(int width, int height)
-{
-    return QStringLiteral("%1x%2").arg(width).arg(height);
-}
-
-int CameraGUI::decimalsForStepSize(double step)
-{
-    const double normalizedStep = std::max(0.001, step);
-
-    for (int decimals = 0; decimals <= 6; ++decimals)
-    {
-        const double scaled = normalizedStep * std::pow(10.0, decimals);
-        if (std::abs(scaled - std::round(scaled)) < 1e-6) {
-            return decimals;
-        }
-    }
-
-    return 6;
-}
-
-int CameraGUI::doubleSpinBoxSliderMaximum(const QDoubleSpinBox *spinBox)
-{
-    const double step = std::max(0.000001, spinBox->singleStep());
-    return std::max(0, static_cast<int>(std::llround((spinBox->maximum() - spinBox->minimum()) / step)));
-}
-
-int CameraGUI::doubleSpinBoxValueToSlider(const QDoubleSpinBox *spinBox, double value)
-{
-    const double step = std::max(0.000001, spinBox->singleStep());
-    const int sliderValue = static_cast<int>(std::llround((value - spinBox->minimum()) / step));
-    return qBound(0, sliderValue, doubleSpinBoxSliderMaximum(spinBox));
-}
-
-double CameraGUI::sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int sliderValue)
-{
-    const double step = std::max(0.000001, spinBox->singleStep());
-    return qBound(spinBox->minimum(), spinBox->minimum() + (sliderValue * step), spinBox->maximum());
-}
-
-double CameraGUI::currentExposureUnitScaleMs(const Ui::CameraSettingsDialog *ui)
-{
-    const QVariant data = ui->exposureUnitsCombo->currentData();
-    return data.isValid() ? data.toDouble() : 1.0;
-}
-
-void CameraGUI::appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
-{
-    const int minRounded = qMax(1, static_cast<int>(std::ceil(minFps)));
-    const int maxRounded = qMax(minRounded, static_cast<int>(std::floor(maxFps)));
-
-    for (int fps = minRounded; fps <= maxRounded; ++fps) {
-        fpsValues.insert(fps);
-    }
 }
 
 void CameraGUI::destroy()
@@ -2003,7 +1942,8 @@ void CameraGUI::setupQtCapture()
         settingsUI()->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
         blockApplySettings(false);
 
-        if (cameraFocus && maxZoom > minZoom) {
+        if (cameraFocus && maxZoom > minZoom)
+        {
             const qreal clampedZoom = qBound(minZoom, static_cast<qreal>(m_settings.m_zoomFactor), maxZoom);
             cameraFocus->zoomTo(clampedZoom, 1.0);
         }
@@ -2016,33 +1956,40 @@ void CameraGUI::cleanupQtCapture()
 {
     m_qtStillCaptureTimer.stop();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (m_imageCapture) {
+    if (m_imageCapture)
+    {
         delete m_imageCapture;
         m_imageCapture = nullptr;
     }
-    if (m_videoSink) {
+    if (m_videoSink)
+    {
         delete m_videoSink;
         m_videoSink = nullptr;
     }
-    if (m_captureSession) {
+    if (m_captureSession)
+    {
         delete m_captureSession;
         m_captureSession = nullptr;
     }
-    if (m_qtCamera) {
+    if (m_qtCamera)
+    {
         m_qtCamera->stop();
         delete m_qtCamera;
         m_qtCamera = nullptr;
     }
 #else
-    if (m_imageCapture) {
+    if (m_imageCapture)
+    {
         delete m_imageCapture;
         m_imageCapture = nullptr;
     }
-    if (m_videoSurface) {
+    if (m_videoSurface)
+    {
         delete m_videoSurface;
         m_videoSurface = nullptr;
     }
-    if (m_qtCamera) {
+    if (m_qtCamera)
+    {
         m_qtCamera->stop();
         delete m_qtCamera;
         m_qtCamera = nullptr;
@@ -2115,7 +2062,8 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         if (force || settingsKeys.contains("focusDistance")) {
             m_qtCamera->setFocusDistance(static_cast<float>(m_settings.m_focusDistance));
         }
-        if (force || settingsKeys.contains("zoomFactor")) {
+        if (force || settingsKeys.contains("zoomFactor"))
+        {
             const float clampedZoom = static_cast<float>(
                 qBound(m_qtCamera->minimumZoomFactor(),
                        static_cast<float>(m_settings.m_zoomFactor),
@@ -3959,5 +3907,65 @@ void CameraGUI::updateHardware()
         m_forceSettings = false;
         m_settingsKeys.clear();
         m_updateTimer.stop();
+    }
+}
+
+QString CameraGUI::resolutionKey(const QSize& size)
+{
+    return QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
+}
+
+QString CameraGUI::resolutionKey(int width, int height)
+{
+    return QStringLiteral("%1x%2").arg(width).arg(height);
+}
+
+int CameraGUI::decimalsForStepSize(double step)
+{
+    const double normalizedStep = std::max(0.001, step);
+
+    for (int decimals = 0; decimals <= 6; ++decimals)
+    {
+        const double scaled = normalizedStep * std::pow(10.0, decimals);
+        if (std::abs(scaled - std::round(scaled)) < 1e-6) {
+            return decimals;
+        }
+    }
+
+    return 6;
+}
+
+int CameraGUI::doubleSpinBoxSliderMaximum(const QDoubleSpinBox *spinBox)
+{
+    const double step = std::max(0.000001, spinBox->singleStep());
+    return std::max(0, static_cast<int>(std::llround((spinBox->maximum() - spinBox->minimum()) / step)));
+}
+
+int CameraGUI::doubleSpinBoxValueToSlider(const QDoubleSpinBox *spinBox, double value)
+{
+    const double step = std::max(0.000001, spinBox->singleStep());
+    const int sliderValue = static_cast<int>(std::llround((value - spinBox->minimum()) / step));
+    return qBound(0, sliderValue, doubleSpinBoxSliderMaximum(spinBox));
+}
+
+double CameraGUI::sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int sliderValue)
+{
+    const double step = std::max(0.000001, spinBox->singleStep());
+    return qBound(spinBox->minimum(), spinBox->minimum() + (sliderValue * step), spinBox->maximum());
+}
+
+double CameraGUI::currentExposureUnitScaleMs(const Ui::CameraSettingsDialog *ui)
+{
+    const QVariant data = ui->exposureUnitsCombo->currentData();
+    return data.isValid() ? data.toDouble() : 1.0;
+}
+
+void CameraGUI::appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps)
+{
+    const int minRounded = qMax(1, static_cast<int>(std::ceil(minFps)));
+    const int maxRounded = qMax(minRounded, static_cast<int>(std::floor(maxFps)));
+
+    for (int fps = minRounded; fps <= maxRounded; ++fps) {
+        fpsValues.insert(fps);
     }
 }

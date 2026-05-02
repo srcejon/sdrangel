@@ -313,7 +313,11 @@
          <string>Park or unpark the Alpaca telescope mount</string>
         </property>
         <property name="text">
-         <string>Park</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="gs232controllericons.qrc">
+          <normaloff>:/gs232controller/icons/park.png</normaloff>:/gs232controller/icons/park.png</iconset>
         </property>
        </widget>
       </item>
@@ -323,7 +327,11 @@
          <string>Find the Alpaca telescope home position</string>
         </property>
         <property name="text">
-         <string>Home</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="gs232controllericons.qrc">
+          <normaloff>:/gs232controller/icons/home.png</normaloff>:/gs232controller/icons/home.png</iconset>
         </property>
        </widget>
       </item>
@@ -850,15 +858,15 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>ButtonSwitch</class>
-   <extends>QToolButton</extends>
-   <header>gui/buttonswitch.h</header>
-  </customwidget>
-  <customwidget>
    <class>RollupContents</class>
    <extends>QWidget</extends>
    <header>gui/rollupcontents.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ButtonSwitch</class>
+   <extends>QToolButton</extends>
+   <header>gui/buttonswitch.h</header>
   </customwidget>
  </customwidgets>
  <tabstops>
@@ -897,6 +905,7 @@
  </tabstops>
  <resources>
   <include location="../../../sdrgui/resources/res.qrc"/>
+  <include location="gs232controllericons.qrc"/>
  </resources>
  <connections/>
 </ui>

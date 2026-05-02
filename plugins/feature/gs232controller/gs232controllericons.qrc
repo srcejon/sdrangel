@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/gs232controller/">
+      <file>icons/home.png</file>
+      <file>icons/park.png</file>
+    </qresource>
+</RCC>

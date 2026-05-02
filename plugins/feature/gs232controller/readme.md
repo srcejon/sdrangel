@@ -203,3 +203,8 @@ Full details of the API can be found in the Swagger documentation. Here is a qui
 To start sending commands to the rotator:
 
     curl -X POST "http://127.0.0.1:8091/sdrangel/featureset/feature/0/run"
+
+<h2>Attribution</h2>
+
+- House by Alex Podolsky from Noun Project (CC BY 3.0)
+- scar park by Ferdinand Partahi Jaya Tambunan from Noun Project (CC BY 3.0)

@@ -38,6 +38,7 @@ if(NOT SERVER_MODE)
         ${gs232controller_SOURCES}
         gs232controllergui.cpp
         gs232controllergui.ui
+        gs232controllericons.qrc
         dfmstatusdialog.cpp
         dfmstatusdialog.ui
         inputcontroller.cpp

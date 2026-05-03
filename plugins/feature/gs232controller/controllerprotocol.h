@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CONTROLLERPROTOCOL_H_
 
 #include <QIODevice>
+#include <QDateTime>
 
 #include "util/messagequeue.h"
 #include "gs232controllersettings.h"
@@ -38,6 +39,7 @@ public:
     virtual void park() {}
     virtual void unpark() {}
     virtual void home() {}
+    virtual void setSite(double latitude, double longitude, double elevation, const QDateTime& utcDate) { (void) latitude; (void) longitude; (void) elevation; (void) utcDate; }
     void setDevice(QIODevice *device) { m_device = device; }
     virtual void applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force);
     void setMessageQueue(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }

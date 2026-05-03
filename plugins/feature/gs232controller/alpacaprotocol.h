@@ -20,6 +20,7 @@
 
 #include <functional>
 
+#include <QDateTime>
 #include <QObject>
 #include <QTimer>
 #include <QUrl>
@@ -73,6 +74,72 @@ public:
         }
     };
 
+    class MsgReportSiteMismatch : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        double telescopeLatitude() const { return m_telescopeLatitude; }
+        double telescopeLongitude() const { return m_telescopeLongitude; }
+        double telescopeElevation() const { return m_telescopeElevation; }
+        QDateTime telescopeUtcDate() const { return m_telescopeUtcDate; }
+        double localLatitude() const { return m_localLatitude; }
+        double localLongitude() const { return m_localLongitude; }
+        double localElevation() const { return m_localElevation; }
+        QDateTime localUtcDate() const { return m_localUtcDate; }
+
+        static MsgReportSiteMismatch* create(
+            double telescopeLatitude,
+            double telescopeLongitude,
+            double telescopeElevation,
+            const QDateTime& telescopeUtcDate,
+            double localLatitude,
+            double localLongitude,
+            double localElevation,
+            const QDateTime& localUtcDate)
+        {
+            return new MsgReportSiteMismatch(
+                telescopeLatitude,
+                telescopeLongitude,
+                telescopeElevation,
+                telescopeUtcDate,
+                localLatitude,
+                localLongitude,
+                localElevation,
+                localUtcDate);
+        }
+
+    private:
+        double m_telescopeLatitude;
+        double m_telescopeLongitude;
+        double m_telescopeElevation;
+        QDateTime m_telescopeUtcDate;
+        double m_localLatitude;
+        double m_localLongitude;
+        double m_localElevation;
+        QDateTime m_localUtcDate;
+
+        MsgReportSiteMismatch(
+            double telescopeLatitude,
+            double telescopeLongitude,
+            double telescopeElevation,
+            const QDateTime& telescopeUtcDate,
+            double localLatitude,
+            double localLongitude,
+            double localElevation,
+            const QDateTime& localUtcDate) :
+            Message(),
+            m_telescopeLatitude(telescopeLatitude),
+            m_telescopeLongitude(telescopeLongitude),
+            m_telescopeElevation(telescopeElevation),
+            m_telescopeUtcDate(telescopeUtcDate),
+            m_localLatitude(localLatitude),
+            m_localLongitude(localLongitude),
+            m_localElevation(localElevation),
+            m_localUtcDate(localUtcDate)
+        {
+        }
+    };
+
     AlpacaProtocol();
     ~AlpacaProtocol();
 
@@ -83,13 +150,15 @@ public:
     void park() override;
     void unpark() override;
     void home() override;
+    void setSite(double latitude, double longitude, double elevation, const QDateTime& utcDate) override;
     void applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force) override;
 
 private:
     QString baseUrl() const;
     QUrl deviceUrl(const QString& property) const;
     QUrlQuery transactionQuery();
-    bool parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context, bool reportErrors = true, int *errorNumber = nullptr);
+    bool parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context, bool reportErrors = true, int *errorNumber = nullptr, QString *errorMessage = nullptr);
+    bool isMovingError(int errorNumber, const QString& errorMessage) const;
     void runWhenConnected(const std::function<void()>& continuation);
     void setConnected(bool connected, const std::function<void(bool)>& continuation = {});
     void queryCapabilities(const std::function<void(bool)>& continuation);
@@ -107,6 +176,8 @@ private:
     void queryAtPark(const std::function<void(bool, bool)>& continuation = {});
     void queryAtHome(const std::function<void(bool, bool)>& continuation = {});
     void reportParkState(bool parkValid = true, bool homeValid = true);
+    void querySiteState();
+    void setSiteProperty(const QString& method, const QString& parameter, const QString& value, const QString& context);
     void handlePositionReply(const QString& property, QNetworkReply *reply, double& value, bool& valid, const std::function<void()>& checkDone);
 
     QNetworkAccessManager *m_networkManager;
@@ -114,6 +185,7 @@ private:
     quint32 m_clientTransactionId;
     bool m_connected;
     bool m_connectionPending;
+    bool m_siteStateChecked;
     bool m_capabilitiesReady;
     bool m_capabilitiesPending;
     bool m_canSlewAltAzAsync;

@@ -29,6 +29,7 @@
 #include "settings/rollupstate.h"
 
 #include "gs232controllersettings.h"
+#include "alpacaprotocol.h"
 #include "dfmstatusdialog.h"
 #include "inputcontroller.h"
 
@@ -102,6 +103,7 @@ private:
     void updateSerialPortList();
     void updateSerialPortList(const QStringList& serialPorts);
     void updateAlpacaParkControls();
+    void handleAlpacaSiteMismatch(const AlpacaProtocol::MsgReportSiteMismatch& report);
     bool handleMessage(const Message& message);
     void makeUIConnections();
     void azElToDisplay(float az, float el, float& coord1, float& coord2) const;

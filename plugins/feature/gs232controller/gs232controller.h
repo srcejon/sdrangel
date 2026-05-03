@@ -24,6 +24,7 @@
 #include <QNetworkRequest>
 #include <QHash>
 #include <QTimer>
+#include <QDateTime>
 
 #include "feature/feature.h"
 #include "util/message.h"
@@ -127,6 +128,34 @@ public:
     protected:
         MsgHome() :
             Message()
+        { }
+    };
+
+    class MsgSetSite : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        double latitude() const { return m_latitude; }
+        double longitude() const { return m_longitude; }
+        double elevation() const { return m_elevation; }
+        QDateTime utcDate() const { return m_utcDate; }
+
+        static MsgSetSite* create(double latitude, double longitude, double elevation, const QDateTime& utcDate) {
+            return new MsgSetSite(latitude, longitude, elevation, utcDate);
+        }
+
+    protected:
+        double m_latitude;
+        double m_longitude;
+        double m_elevation;
+        QDateTime m_utcDate;
+
+        MsgSetSite(double latitude, double longitude, double elevation, const QDateTime& utcDate) :
+            Message(),
+            m_latitude(latitude),
+            m_longitude(longitude),
+            m_elevation(elevation),
+            m_utcDate(utcDate)
         { }
     };
 

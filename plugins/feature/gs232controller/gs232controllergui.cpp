@@ -19,6 +19,7 @@
 
 #include <cmath>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSerialPortInfo>
 
 #include "SWGTargetAzimuthElevation.h"
@@ -192,6 +193,12 @@ bool GS232ControllerGUI::handleMessage(const Message& message)
         m_alpacaAtHome = report.atHome();
         m_alpacaHomeStateValid = report.homeValid();
         updateAlpacaParkControls();
+        return true;
+    }
+    else if (AlpacaProtocol::MsgReportSiteMismatch::match(message))
+    {
+        AlpacaProtocol::MsgReportSiteMismatch& report = (AlpacaProtocol::MsgReportSiteMismatch&) message;
+        handleAlpacaSiteMismatch(report);
         return true;
     }
 
@@ -733,6 +740,58 @@ void GS232ControllerGUI::updateAlpacaParkControls()
     ui->alpacaHome->setChecked(alpaca && m_alpacaHomeStateValid && m_alpacaAtHome);
     ui->alpacaHome->blockSignals(oldHomeState);
     ui->alpacaHome->setEnabled(alpaca && m_alpacaCanFindHome);
+}
+
+void GS232ControllerGUI::handleAlpacaSiteMismatch(const AlpacaProtocol::MsgReportSiteMismatch& report)
+{
+    const QString telescopeUtc = report.telescopeUtcDate().toUTC().toString(Qt::ISODateWithMs);
+    const QString localUtc = report.localUtcDate().toUTC().toString(Qt::ISODateWithMs);
+
+    QMessageBox msgBox(this);
+    msgBox.setIcon(QMessageBox::Question);
+    msgBox.setWindowTitle(tr("Alpaca telescope site mismatch"));
+    msgBox.setText(tr("The Alpaca telescope site or clock differs from SDRangel."));
+    msgBox.setInformativeText(QString(
+        "Telescope:\n"
+        "  Latitude: %1\n"
+        "  Longitude: %2\n"
+        "  Elevation: %3 m\n"
+        "  UTC date: %4\n\n"
+        "SDRangel:\n"
+        "  Latitude: %5\n"
+        "  Longitude: %6\n"
+        "  Elevation: %7 m\n"
+        "  UTC date: %8\n\n"
+        "Updating SDRangel changes the station position. The system clock is not changed.")
+        .arg(report.telescopeLatitude(), 0, 'f', 6)
+        .arg(report.telescopeLongitude(), 0, 'f', 6)
+        .arg(report.telescopeElevation(), 0, 'f', 1)
+        .arg(telescopeUtc)
+        .arg(report.localLatitude(), 0, 'f', 6)
+        .arg(report.localLongitude(), 0, 'f', 6)
+        .arg(report.localElevation(), 0, 'f', 1)
+        .arg(localUtc));
+
+    QPushButton *updateTelescope = msgBox.addButton(tr("Update Telescope"), QMessageBox::ActionRole);
+    QPushButton *updateSDRangel = msgBox.addButton(tr("Update SDRangel"), QMessageBox::ActionRole);
+    msgBox.addButton(tr("No Change"), QMessageBox::RejectRole);
+    msgBox.setDefaultButton(updateTelescope);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == updateTelescope)
+    {
+        m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgSetSite::create(
+            report.localLatitude(),
+            report.localLongitude(),
+            report.localElevation(),
+            QDateTime::currentDateTimeUtc()));
+    }
+    else if (msgBox.clickedButton() == updateSDRangel)
+    {
+        MainCore::instance()->getMutableSettings().setLatitude((float) report.telescopeLatitude());
+        MainCore::instance()->getMutableSettings().setLongitude((float) report.telescopeLongitude());
+        MainCore::instance()->getMutableSettings().setAltitude((float) report.telescopeElevation());
+    }
 }
 
 void GS232ControllerGUI::on_protocol_currentIndexChanged(int index)

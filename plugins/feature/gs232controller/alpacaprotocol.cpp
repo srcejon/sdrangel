@@ -29,11 +29,13 @@
 #include <QUrlQuery>
 #include <QDateTime>
 
+#include "maincore.h"
 #include "util/astronomy.h"
 
 #include "alpacaprotocol.h"
 
 MESSAGE_CLASS_DEFINITION(AlpacaProtocol::MsgReportParkState, Message)
+MESSAGE_CLASS_DEFINITION(AlpacaProtocol::MsgReportSiteMismatch, Message)
 
 namespace
 {
@@ -50,6 +52,7 @@ AlpacaProtocol::AlpacaProtocol() :
     m_clientTransactionId(1),
     m_connected(false),
     m_connectionPending(false),
+    m_siteStateChecked(false),
     m_capabilitiesReady(false),
     m_capabilitiesPending(false),
     m_canSlewAltAzAsync(false),
@@ -152,6 +155,17 @@ void AlpacaProtocol::home()
     });
 }
 
+void AlpacaProtocol::setSite(double latitude, double longitude, double elevation, const QDateTime& utcDate)
+{
+    runWhenConnected([this, latitude, longitude, elevation, utcDate]() {
+        setSiteProperty("sitelatitude", "SiteLatitude", QString::number(latitude, 'f', kAlpacaCoordinatePrecision), "Telescope sitelatitude");
+        setSiteProperty("sitelongitude", "SiteLongitude", QString::number(longitude, 'f', kAlpacaCoordinatePrecision), "Telescope sitelongitude");
+        setSiteProperty("siteelevation", "SiteElevation", QString::number(elevation, 'f', 2), "Telescope siteelevation");
+        setSiteProperty("utcdate", "UTCDate", utcDate.toUTC().toString(Qt::ISODateWithMs), "Telescope utcdate");
+        m_siteStateChecked = false;
+    });
+}
+
 void AlpacaProtocol::applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
     const bool endpointChanged = force
@@ -163,6 +177,7 @@ void AlpacaProtocol::applySettings(const GS232ControllerSettings& settings, cons
     {
         m_connected = false;
         m_connectionPending = false;
+        m_siteStateChecked = false;
         m_capabilitiesReady = false;
         m_capabilitiesPending = false;
         m_canSlewAltAzAsync = false;
@@ -208,10 +223,13 @@ QUrlQuery AlpacaProtocol::transactionQuery()
     return query;
 }
 
-bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context, bool reportErrors, int *errorNumber)
+bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray& payload, QJsonObject& object, const QString& context, bool reportErrors, int *errorNumber, QString *errorMessage)
 {
     if (errorNumber) {
         *errorNumber = 0;
+    }
+    if (errorMessage) {
+        errorMessage->clear();
     }
 
     if (reply->error() != QNetworkReply::NoError)
@@ -245,8 +263,11 @@ bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray&
 
     if (alpacaErrorNumber != 0)
     {
-        const QString errorMessage = object.value("ErrorMessage").toString();
-        const QString message = QString("%1 Alpaca error %2: %3").arg(context).arg(alpacaErrorNumber).arg(errorMessage);
+        const QString alpacaErrorMessage = object.value("ErrorMessage").toString();
+        if (errorMessage) {
+            *errorMessage = alpacaErrorMessage;
+        }
+        const QString message = QString("%1 Alpaca error %2: %3").arg(context).arg(alpacaErrorNumber).arg(alpacaErrorMessage);
         qWarning() << "AlpacaProtocol::parseAlpacaResponse -" << message;
         if (reportErrors) {
             reportError(message);
@@ -255,6 +276,19 @@ bool AlpacaProtocol::parseAlpacaResponse(QNetworkReply *reply, const QByteArray&
     }
 
     return true;
+}
+
+bool AlpacaProtocol::isMovingError(int errorNumber, const QString& errorMessage) const
+{
+    if (errorNumber != kAlpacaErrorInvalidOperation) {
+        return false;
+    }
+
+    const QString lowerMessage = errorMessage.toLower();
+    return lowerMessage.contains("moving")
+        || lowerMessage.contains("slewing")
+        || lowerMessage.contains("busy")
+        || lowerMessage.contains("in progress");
 }
 
 void AlpacaProtocol::runWhenConnected(const std::function<void()>& continuation)
@@ -426,6 +460,7 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
         m_canPark = info->canPark;
         m_canFindHome = info->canFindHomeValid && info->canFindHome;
         m_capabilitiesReady = true;
+        querySiteState();
 
         qDebug() << "AlpacaProtocol::queryCapabilities"
                  << "CanSlewAltAzAsync" << m_canSlewAltAzAsync
@@ -452,6 +487,101 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
     getBoolProperty("canslew", &info->canSlew, &info->canSlewValid, checkDone);
     getBoolProperty("canpark", &info->canPark, &info->canParkValid, checkDone);
     getBoolProperty("canfindhome", &info->canFindHome, &info->canFindHomeValid, checkDone);
+}
+
+void AlpacaProtocol::querySiteState()
+{
+    if (m_siteStateChecked) {
+        return;
+    }
+
+    struct SiteInfo {
+        double latitude = 0.0;
+        double longitude = 0.0;
+        double elevation = 0.0;
+        QDateTime utcDate;
+        bool latitudeValid = false;
+        bool longitudeValid = false;
+        bool elevationValid = false;
+        bool utcDateValid = false;
+        int pending = 4;
+    };
+
+    m_siteStateChecked = true;
+    auto info = QSharedPointer<SiteInfo>::create();
+    auto checkDone = [this, info]() {
+        info->pending--;
+
+        if (info->pending != 0) {
+            return;
+        }
+
+        if (!info->latitudeValid || !info->longitudeValid || !info->elevationValid || !info->utcDateValid) {
+            qDebug() << "AlpacaProtocol::querySiteState - failed to query complete Alpaca site state";
+            return;
+        }
+
+        const double localLatitude = MainCore::instance()->getSettings().getLatitude();
+        const double localLongitude = MainCore::instance()->getSettings().getLongitude();
+        const double localElevation = MainCore::instance()->getSettings().getAltitude();
+        const QDateTime localUtcDate = QDateTime::currentDateTimeUtc();
+
+        const bool latitudeMismatch = std::abs(info->latitude - localLatitude) > 0.001;
+        const bool longitudeMismatch = std::abs(info->longitude - localLongitude) > 0.001;
+        const bool elevationMismatch = std::abs(info->elevation - localElevation) > 10.0;
+        const bool timeMismatch = std::abs(info->utcDate.secsTo(localUtcDate)) > 60;
+
+        if (latitudeMismatch || longitudeMismatch || elevationMismatch || timeMismatch)
+        {
+            sendMessage(MsgReportSiteMismatch::create(
+                info->latitude,
+                info->longitude,
+                info->elevation,
+                info->utcDate,
+                localLatitude,
+                localLongitude,
+                localElevation,
+                localUtcDate));
+        }
+    };
+
+    auto getDoubleProperty = [this, info, checkDone](const QString& property, double *value, bool *valid) {
+        QUrl url = deviceUrl(property);
+        url.setQuery(transactionQuery());
+        QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply, property, value, valid, checkDone]() {
+            const QByteArray payload = reply->readAll();
+            QJsonObject response;
+            if (parseAlpacaResponse(reply, payload, response, QString("Telescope %1").arg(property), false))
+            {
+                *value = response.value("Value").toDouble();
+                *valid = true;
+            }
+            checkDone();
+            reply->deleteLater();
+        });
+    };
+
+    getDoubleProperty("sitelatitude", &info->latitude, &info->latitudeValid);
+    getDoubleProperty("sitelongitude", &info->longitude, &info->longitudeValid);
+    getDoubleProperty("siteelevation", &info->elevation, &info->elevationValid);
+
+    QUrl url = deviceUrl("utcdate");
+    url.setQuery(transactionQuery());
+    QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, info, checkDone]() {
+        const QByteArray payload = reply->readAll();
+        QJsonObject response;
+        if (parseAlpacaResponse(reply, payload, response, "Telescope utcdate", false))
+        {
+            info->utcDate = QDateTime::fromString(response.value("Value").toString(), Qt::ISODate).toUTC();
+            info->utcDateValid = info->utcDate.isValid();
+        }
+        checkDone();
+        reply->deleteLater();
+    });
 }
 
 void AlpacaProtocol::getBoolProperty(const QString& property, bool *value, bool *valid, const std::function<void()>& checkDone)
@@ -602,10 +732,11 @@ void AlpacaProtocol::sendSlewCommand(const QString& method, const QUrlQuery& com
         const QByteArray payload = reply->readAll();
         QJsonObject response;
         int errorNumber = 0;
-        const bool success = parseAlpacaResponse(reply, payload, response, context, false, &errorNumber);
+        QString errorMessage;
+        const bool success = parseAlpacaResponse(reply, payload, response, context, false, &errorNumber, &errorMessage);
         m_slewPending = false;
 
-        if (!success && (errorNumber == kAlpacaErrorInvalidOperation))
+        if (!success && isMovingError(errorNumber, errorMessage))
         {
             qDebug() << "AlpacaProtocol::sendSlewCommand - telescope is moving, will retry queued target";
             m_queuedSlew = true;
@@ -613,7 +744,6 @@ void AlpacaProtocol::sendSlewCommand(const QString& method, const QUrlQuery& com
         }
         else if (!success)
         {
-            const QString errorMessage = response.value("ErrorMessage").toString();
             reportError(errorMessage.isEmpty()
                 ? QString("%1 failed").arg(context)
                 : QString("%1 Alpaca error %2: %3").arg(context).arg(errorNumber).arg(errorMessage));
@@ -647,6 +777,32 @@ void AlpacaProtocol::sendSimplePutCommand(const QString& method, const QString& 
             continuation(success);
         }
 
+        reply->deleteLater();
+    });
+}
+
+void AlpacaProtocol::setSiteProperty(const QString& method, const QString& parameter, const QString& value, const QString& context)
+{
+    QUrl url = deviceUrl(method);
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QUrlQuery body;
+    const auto transactionItems = transactionQuery().queryItems();
+    for (const auto& queryItem : transactionItems) {
+        body.addQueryItem(queryItem.first, queryItem.second);
+    }
+    body.addQueryItem(parameter, value);
+
+    const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+    qDebug() << "AlpacaProtocol::setSiteProperty" << url.toString() << payload;
+
+    QNetworkReply *reply = m_networkManager->put(request, payload);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, context]() {
+        const QByteArray payload = reply->readAll();
+        QJsonObject response;
+        parseAlpacaResponse(reply, payload, response, context);
         reply->deleteLater();
     });
 }

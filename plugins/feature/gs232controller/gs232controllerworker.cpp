@@ -37,6 +37,7 @@ MESSAGE_CLASS_DEFINITION(GS232ControllerWorker::MsgConfigureGS232ControllerWorke
 MESSAGE_CLASS_DEFINITION(GS232ControllerWorker::MsgPark, Message)
 MESSAGE_CLASS_DEFINITION(GS232ControllerWorker::MsgUnpark, Message)
 MESSAGE_CLASS_DEFINITION(GS232ControllerWorker::MsgHome, Message)
+MESSAGE_CLASS_DEFINITION(GS232ControllerWorker::MsgSetSite, Message)
 MESSAGE_CLASS_DEFINITION(GS232ControllerReport::MsgReportAzAl, Message)
 
 GS232ControllerWorker::GS232ControllerWorker(GS232Controller *controller) :
@@ -130,6 +131,12 @@ bool GS232ControllerWorker::handleMessage(const Message& cmd)
     else if (MsgHome::match(cmd))
     {
         home();
+        return true;
+    }
+    else if (MsgSetSite::match(cmd))
+    {
+        MsgSetSite& cfg = (MsgSetSite&) cmd;
+        setSite(cfg.latitude(), cfg.longitude(), cfg.elevation(), cfg.utcDate());
         return true;
     }
     else
@@ -316,6 +323,13 @@ void GS232ControllerWorker::home()
 {
     if (m_controllerProtocol) {
         m_controllerProtocol->home();
+    }
+}
+
+void GS232ControllerWorker::setSite(double latitude, double longitude, double elevation, const QDateTime& utcDate)
+{
+    if (m_controllerProtocol) {
+        m_controllerProtocol->setSite(latitude, longitude, elevation, utcDate);
     }
 }
 

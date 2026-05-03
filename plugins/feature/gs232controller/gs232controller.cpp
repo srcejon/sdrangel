@@ -46,6 +46,7 @@ MESSAGE_CLASS_DEFINITION(GS232Controller::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgPark, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgUnpark, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgHome, Message)
+MESSAGE_CLASS_DEFINITION(GS232Controller::MsgSetSite, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgReportWorker, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgReportAvailableChannelOrFeatures, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgScanAvailableChannelOrFeatures, Message)
@@ -197,6 +198,14 @@ bool GS232Controller::handleMessage(const Message& cmd)
         }
         return true;
     }
+    else if (MsgSetSite::match(cmd))
+    {
+        MsgSetSite& cfg = (MsgSetSite&) cmd;
+        if (m_worker) {
+            m_worker->getInputMessageQueue()->push(GS232ControllerWorker::MsgSetSite::create(cfg.latitude(), cfg.longitude(), cfg.elevation(), cfg.utcDate()));
+        }
+        return true;
+    }
     else if (MsgReportWorker::match(cmd))
     {
         MsgReportWorker& report = (MsgReportWorker&) cmd;
@@ -270,6 +279,15 @@ bool GS232Controller::handleMessage(const Message& cmd)
         {
             AlpacaProtocol::MsgReportParkState& report = (AlpacaProtocol::MsgReportParkState&) cmd;
             getMessageQueueToGUI()->push(new AlpacaProtocol::MsgReportParkState(report));
+        }
+        return true;
+    }
+    else if (AlpacaProtocol::MsgReportSiteMismatch::match(cmd))
+    {
+        if (getMessageQueueToGUI())
+        {
+            AlpacaProtocol::MsgReportSiteMismatch& report = (AlpacaProtocol::MsgReportSiteMismatch&) cmd;
+            getMessageQueueToGUI()->push(new AlpacaProtocol::MsgReportSiteMismatch(report));
         }
         return true;
     }

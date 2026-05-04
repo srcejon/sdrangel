@@ -320,6 +320,7 @@ const QMap<QString, QString> WebAPIUtils::m_featureTypeToSettingsKey = {
     {"AMBE", "AMBESettings"},
     {"AntennaTools", "AntennaToolsSettings"},
     {"APRS", "APRSSettings"},
+    {"Camera", "CameraSettings"},
     {"DemodAnalyzer", "DemodAnalyzerSettings"},
     {"FreqDisplay", "FreqDisplaySettings"},
     {"JogdialController", "JogdialControllerSettings"},
@@ -341,6 +342,7 @@ const QMap<QString, QString> WebAPIUtils::m_featureTypeToSettingsKey = {
 const QMap<QString, QString> WebAPIUtils::m_featureTypeToActionsKey = {
     {"AFC", "AFCActions"},
     {"AMBE", "AMBEActions"},
+    {"Camera", "CameraActions"},
     {"GS232Controller", "GS232ControllerActions"},
     {"LimeRFE", "LimeRFEActions"},
     {"Map", "MapActions"},
@@ -361,6 +363,7 @@ const QMap<QString, QString> WebAPIUtils::m_featureURIToSettingsKey = {
     {"sdrangel.feature.ambe", "AMBESSettings"},
     {"sdrangel.feature.antennatools", "AntennaToolsSettings"},
     {"sdrangel.feature.aprs", "APRSSettings"},
+    {"sdrangel.feature.camera", "CameraSettings"},
     {"sdrangel.feature.demodanalyzer", "DemodAnalyzerSettings"},
     {"sdrangel.feature.freqdisplay", "FreqDisplaySettings"},
     {"sdrangel.feature.jogdialcontroller", "JogdialControllerSettings"},

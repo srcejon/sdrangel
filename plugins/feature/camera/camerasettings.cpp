@@ -237,6 +237,11 @@ void CameraSettings::resetToDefaults()
     m_focusMode = 0;
     m_focusDistance = 1.0;
     m_zoomFactor = 1.0;
+    m_useReverseAPI = false;
+    m_reverseAPIAddress = "127.0.0.1";
+    m_reverseAPIPort = 8888;
+    m_reverseAPIFeatureSetIndex = 0;
+    m_reverseAPIFeatureIndex = 0;
 }
 
 QByteArray CameraSettings::serialize() const
@@ -362,6 +367,12 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(113, m_alpacaFilterWheelDeviceNumber);
     s.writeS32(114, m_alpacaFilterWheelPosition);
     s.writeString(115, m_videoFileCameraPath);
+
+    s.writeBool(116, m_useReverseAPI);
+    s.writeString(117, m_reverseAPIAddress);
+    s.writeU32(118, m_reverseAPIPort);
+    s.writeU32(119, m_reverseAPIFeatureSetIndex);
+    s.writeU32(120, m_reverseAPIFeatureIndex);
 
     return s.final();
 }
@@ -580,6 +591,20 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_focusDistance = qBound(0.0, m_focusDistance, 1.0);
         d.readDouble(99, &m_zoomFactor, 1.0);
         m_zoomFactor = std::max(1.0, m_zoomFactor);
+
+        d.readBool(116, &m_useReverseAPI);
+        d.readString(117, &m_reverseAPIAddress);
+        d.readU32(118, &utmp, 0);
+
+        if ((utmp > 1023) && (utmp < 65535)) {
+            m_reverseAPIPort = utmp;
+        } else {
+            m_reverseAPIPort = 8888;
+        }
+        d.readU32(119, &utmp, 0);
+        m_reverseAPIFeatureSetIndex = utmp > 99 ? 99 : utmp;
+        d.readU32(120, &utmp, 0);
+        m_reverseAPIFeatureIndex = utmp > 99 ? 99 : utmp;
 
         return true;
     }

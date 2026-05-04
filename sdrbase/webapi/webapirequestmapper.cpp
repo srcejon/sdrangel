@@ -5269,6 +5269,11 @@ bool WebAPIRequestMapper::getFeatureSettings(
             featureSettings->setAprsSettings(new SWGSDRangel::SWGAPRSSettings());
             featureSettings->getAprsSettings()->fromJsonObject(settingsJsonObject);
         }
+        else if (featureSettingsKey == "CameraSettings")
+        {
+            featureSettings->setCameraSettings(new SWGSDRangel::SWGCameraSettings());
+            featureSettings->getCameraSettings()->fromJsonObject(settingsJsonObject);
+        }
         else if (featureSettingsKey == "DemodAnalyzerSettings")
         {
             featureSettings->setDemodAnalyzerSettings(new SWGSDRangel::SWGDemodAnalyzerSettings());
@@ -5388,6 +5393,11 @@ bool WebAPIRequestMapper::getFeatureActions(
         {
             featureActions->setAmbeActions(new SWGSDRangel::SWGAMBEActions());
             featureActions->getAmbeActions()->fromJsonObject(actionsJsonObject);
+        }
+        else if (featureActionsKey == "CameraActions")
+        {
+            featureActions->setCameraActions(new SWGSDRangel::SWGCameraActions());
+            featureActions->getCameraActions()->fromJsonObject(actionsJsonObject);
         }
         else if (featureActionsKey == "GS232ControllerActions")
         {
@@ -5693,6 +5703,7 @@ void WebAPIRequestMapper::resetFeatureSettings(SWGSDRangel::SWGFeatureSettings& 
     featureSettings.setAisSettings(nullptr);
     featureSettings.setAntennaToolsSettings(nullptr);
     featureSettings.setAprsSettings(nullptr);
+    featureSettings.setCameraSettings(nullptr);
     featureSettings.setFreqDisplaySettings(nullptr);
     featureSettings.setGs232ControllerSettings(nullptr);
     featureSettings.setMapSettings(nullptr);
@@ -5711,6 +5722,7 @@ void WebAPIRequestMapper::resetFeatureReport(SWGSDRangel::SWGFeatureReport& feat
     featureReport.cleanup();
     featureReport.setFeatureType(nullptr);
     featureReport.setAfcReport(nullptr);
+    featureReport.setCameraReport(nullptr);
     featureReport.setFreqDisplayReport(nullptr);
     featureReport.setGs232ControllerReport(nullptr);
     featureReport.setPerTesterReport(nullptr);
@@ -5728,6 +5740,7 @@ void WebAPIRequestMapper::resetFeatureActions(SWGSDRangel::SWGFeatureActions& fe
     featureActions.cleanup();
     featureActions.setFeatureType(nullptr);
     featureActions.setAfcActions(nullptr);
+    featureActions.setCameraActions(nullptr);
     featureActions.setGs232ControllerActions(nullptr);
     featureActions.setMapActions(nullptr);
     featureActions.setPerTesterActions(nullptr);

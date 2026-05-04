@@ -27,6 +27,8 @@
 #include "SWGCameraReport.h"
 #include "SWGCameraActions.h"
 
+#include "settings/serializable.h"
+
 #include "camera.h"
 #include "camerafinder.h"
 #include "cameraworker.h"

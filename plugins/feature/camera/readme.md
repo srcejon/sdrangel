@@ -71,16 +71,6 @@ model.export(format="onnx", opset=12)
 
 COCO class list: https://raw.githubusercontent.com/amikelive/coco-labels/refs/heads/master/coco-labels-2014_2017.txt
 
-<h2>API</h2>
-
-Full details of the API can be found in the Swagger documentation. 
-
-    curl -X PATCH "http://127.0.0.1:8091/sdrangel/featureset/feature/0/settings" -d '{"featureType": "Camera",  "CameraSettings": { "azimuth": 180, "elevation": 45 }}'
-
-To camera an image/vidoe:
-
-    curl -X POST "http://127.0.0.1:8091/sdrangel/featureset/feature/0/run"
-
 <h2>Optional Prerequisites</h2>
 
 ASCOM Platform:
@@ -98,7 +88,15 @@ ASCOM Alpaca Device API docs are at: https://ascom-standards.org/api/
 
 If imageready is always false, try restarting the ASCOM Remote Server.
 
+<h2>API</h2>
 
+Full details of the API can be found in the Swagger documentation. Here is a quick example of how to set the camera and capture interval from the command line:
+
+    curl -X PATCH "http://127.0.0.1:8091/sdrangel/featureset/feature/0/settings" -d '{"featureType": "Camera",  "CameraSettings": { "cameraDescription": "c922 Pro Stream Webcam", "captureInterval": 1.0 }}'
+
+To start capturing:
+
+    curl -X POST "http://127.0.0.1:8091/sdrangel/featureset/feature/0/run"
 
 <h2>Attribution</h2>
 

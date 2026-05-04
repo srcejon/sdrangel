@@ -192,6 +192,12 @@ struct CameraSettings
     double m_focusDistance;         ///< Normalised focus distance: 0.0 (near) .. 1.0 (far/infinity) (Qt 6 manual focus only)
     double m_zoomFactor;            ///< Hardware optical zoom factor; 1.0 = no zoom
 
+    bool m_useReverseAPI;
+    QString m_reverseAPIAddress;
+    uint16_t m_reverseAPIPort;
+    uint16_t m_reverseAPIFeatureSetIndex;
+    uint16_t m_reverseAPIFeatureIndex;
+
     CameraSettings();
     ~CameraSettings() = default;
     void resetToDefaults();

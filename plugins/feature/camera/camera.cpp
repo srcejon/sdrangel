@@ -19,6 +19,14 @@
 #include <QCoreApplication>
 #include <QDebug>
 
+#include "SWGFeatureSettings.h"
+#include "SWGFeatureReport.h"
+#include "SWGFeatureActions.h"
+#include "SWGDeviceState.h"
+#include "SWGCameraSettings.h"
+#include "SWGCameraReport.h"
+#include "SWGCameraActions.h"
+
 #include "camera.h"
 #include "camerafinder.h"
 #include "cameraworker.h"
@@ -211,5 +219,724 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
 
     if ((settingsKeys.contains("alpacaDiscoveryEnabled") || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort") || force) && m_cameraFinder) {
         m_cameraFinder->reportCameraList(m_settings);
+    }
+}
+
+int Camera::webapiRun(bool run, SWGSDRangel::SWGDeviceState& response, QString& errorMessage)
+{
+    (void) errorMessage;
+    getFeatureStateStr(*response.getState());
+    MsgStartStop *msg = MsgStartStop::create(run);
+    getInputMessageQueue()->push(msg);
+    return 202;
+}
+
+int Camera::webapiSettingsGet(SWGSDRangel::SWGFeatureSettings& response, QString& errorMessage)
+{
+    (void) errorMessage;
+    response.setCameraSettings(new SWGSDRangel::SWGCameraSettings());
+    response.getCameraSettings()->init();
+    webapiFormatFeatureSettings(response, m_settings);
+    return 200;
+}
+
+int Camera::webapiSettingsPutPatch(
+        bool force,
+        const QStringList& featureSettingsKeys,
+        SWGSDRangel::SWGFeatureSettings& response,
+        QString& errorMessage)
+{
+    (void) errorMessage;
+    CameraSettings settings = m_settings;
+    webapiUpdateFeatureSettings(settings, featureSettingsKeys, response);
+
+    MsgConfigureCamera *msg = MsgConfigureCamera::create(settings, featureSettingsKeys, force);
+    m_inputMessageQueue.push(msg);
+
+    if (m_guiMessageQueue)
+    {
+        MsgConfigureCamera *msgToGUI = MsgConfigureCamera::create(settings, featureSettingsKeys, force);
+        m_guiMessageQueue->push(msgToGUI);
+    }
+
+    webapiFormatFeatureSettings(response, settings);
+    return 200;
+}
+
+int Camera::webapiReportGet(SWGSDRangel::SWGFeatureReport& response, QString& errorMessage)
+{
+    (void) errorMessage;
+    response.setCameraReport(new SWGSDRangel::SWGCameraReport());
+    response.getCameraReport()->init();
+    webapiFormatFeatureReport(response);
+    return 200;
+}
+
+void Camera::webapiFormatFeatureReport(SWGSDRangel::SWGFeatureReport& response)
+{
+    response.getCameraReport()->setRunningState(getState());
+}
+
+int Camera::webapiActionsPost(
+        const QStringList& featureActionsKeys,
+        SWGSDRangel::SWGFeatureActions& query,
+        QString& errorMessage)
+{
+    SWGSDRangel::SWGCameraActions *swgCameraActions = query.getCameraActions();
+
+    if (swgCameraActions)
+    {
+        if (featureActionsKeys.contains("run"))
+        {
+            bool featureRun = swgCameraActions->getRun() != 0;
+            MsgStartStop *msg = MsgStartStop::create(featureRun);
+            getInputMessageQueue()->push(msg);
+            return 202;
+        }
+        else
+        {
+            errorMessage = "Unknown action";
+            return 400;
+        }
+    }
+    else
+    {
+        errorMessage = "Missing CameraActions in query";
+        return 400;
+    }
+}
+
+void Camera::webapiFormatFeatureSettings(
+        SWGSDRangel::SWGFeatureSettings& response,
+        const CameraSettings& settings)
+{
+    SWGSDRangel::SWGCameraSettings *swg = response.getCameraSettings();
+
+    // Basic
+    if (swg->getTitle()) {
+        *swg->getTitle() = settings.m_title;
+    } else {
+        swg->setTitle(new QString(settings.m_title));
+    }
+    swg->setRgbColor(settings.m_rgbColor);
+
+    // Camera selection
+    swg->setCameraProtocol(new QString(settings.m_cameraProtocol));
+    swg->setCameraId(new QString(settings.m_cameraId));
+    swg->setCameraDescription(new QString(settings.m_cameraDescription));
+    swg->setResolutionWidth(settings.m_resolutionWidth);
+    swg->setResolutionHeight(settings.m_resolutionHeight);
+    swg->setFramesPerSecond(settings.m_framesPerSecond);
+    swg->setCaptureMode((int) settings.m_captureMode);
+    swg->setCaptureInterval(settings.m_captureInterval);
+    swg->setCaptureIntervalUnits((int) settings.m_captureIntervalUnits);
+    swg->setExposureTimeMs(settings.m_exposureTimeMs);
+    swg->setIsoSensitivity(settings.m_isoSensitivity);
+
+    // ALPACA
+    swg->setAlpacaDiscoveryEnabled(settings.m_alpacaDiscoveryEnabled ? 1 : 0);
+    swg->setAlpacaApiLogEnabled(settings.m_alpacaApiLogEnabled ? 1 : 0);
+    swg->setAlpacaHost(new QString(settings.m_alpacaHost));
+    swg->setAlpacaPort(settings.m_alpacaPort);
+    swg->setAlpacaFocuserEnabled(settings.m_alpacaFocuserEnabled ? 1 : 0);
+    swg->setAlpacaFocuserHost(new QString(settings.m_alpacaFocuserHost));
+    swg->setAlpacaFocuserPort(settings.m_alpacaFocuserPort);
+    swg->setAlpacaFocuserDeviceNumber(settings.m_alpacaFocuserDeviceNumber);
+    swg->setAlpacaFocusPosition(settings.m_alpacaFocusPosition);
+    swg->setAlpacaFocusStepSize(settings.m_alpacaFocusStepSize);
+    swg->setAlpacaFilterWheelEnabled(settings.m_alpacaFilterWheelEnabled ? 1 : 0);
+    swg->setAlpacaFilterWheelHost(new QString(settings.m_alpacaFilterWheelHost));
+    swg->setAlpacaFilterWheelPort(settings.m_alpacaFilterWheelPort);
+    swg->setAlpacaFilterWheelDeviceNumber(settings.m_alpacaFilterWheelDeviceNumber);
+    swg->setAlpacaFilterWheelPosition(settings.m_alpacaFilterWheelPosition);
+    swg->setAlpacaBinX(settings.m_alpacaBinX);
+    swg->setAlpacaBinY(settings.m_alpacaBinY);
+    swg->setAlpacaNumX(settings.m_alpacaNumX);
+    swg->setAlpacaNumY(settings.m_alpacaNumY);
+    swg->setAlpacaStartX(settings.m_alpacaStartX);
+    swg->setAlpacaStartY(settings.m_alpacaStartY);
+    swg->setAlpacaGain(settings.m_alpacaGain);
+    swg->setAlpacaOffset(settings.m_alpacaOffset);
+    swg->setAlpacaReadoutMode(settings.m_alpacaReadoutMode);
+
+    // Image / video output
+    swg->setSaveImage(settings.m_saveImage ? 1 : 0);
+    swg->setImageFileName(new QString(settings.m_imageFileName));
+    swg->setSaveVideo(settings.m_saveVideo ? 1 : 0);
+    swg->setVideoFileCameraPath(new QString(settings.m_videoFileCameraPath));
+    swg->setVideoFileName(new QString(settings.m_videoFileName));
+    swg->setVideoHwAcceleration(settings.m_videoHwAcceleration ? 1 : 0);
+
+    // Post-processing – tone / colour
+    swg->setPostProcessWhiteBalanceMode(settings.m_postProcessWhiteBalanceMode);
+    swg->setPostProcessWhiteBalanceRedGain(settings.m_postProcessWhiteBalanceRedGain);
+    swg->setPostProcessWhiteBalanceGreenGain(settings.m_postProcessWhiteBalanceGreenGain);
+    swg->setPostProcessWhiteBalanceBlueGain(settings.m_postProcessWhiteBalanceBlueGain);
+    swg->setSaturation(settings.m_saturation);
+    swg->setGamma(settings.m_gamma);
+    swg->setBrightness(settings.m_brightness);
+    swg->setContrast(settings.m_contrast);
+    swg->setGaussianBlur(settings.m_gaussianBlur);
+    swg->setMedianBlur(settings.m_medianBlur);
+    swg->setSharpen(settings.m_sharpen);
+    swg->setSobelEdge(settings.m_sobelEdge);
+    swg->setFlipX(settings.m_flipX ? 1 : 0);
+    swg->setFlipY(settings.m_flipY ? 1 : 0);
+    swg->setInvertColors(settings.m_invertColors ? 1 : 0);
+
+    // Date/time overlay
+    swg->setOverlayDateTime(settings.m_overlayDateTime ? 1 : 0);
+    swg->setDateTimeColor((qint32) settings.m_dateTimeColor.rgb());
+    swg->setDateTimeFormat(new QString(settings.m_dateTimeFormat));
+    swg->setDateTimePosX(settings.m_dateTimePosX);
+    swg->setDateTimePosY(settings.m_dateTimePosY);
+
+    // Text overlay
+    swg->setOverlayText(settings.m_overlayText ? 1 : 0);
+    swg->setOverlayTextString(new QString(settings.m_overlayTextString));
+    swg->setOverlayTextColor((qint32) settings.m_overlayTextColor.rgb());
+    swg->setOverlayTextFontFamily(new QString(settings.m_overlayTextFontFamily));
+    swg->setOverlayTextFontScale(settings.m_overlayTextFontScale);
+    swg->setOverlayTextPosX(settings.m_overlayTextPosX);
+    swg->setOverlayTextPosY(settings.m_overlayTextPosY);
+
+    // Diff-mask
+    swg->setDiffMask(settings.m_diffMask ? 1 : 0);
+    swg->setDiffThreshold(settings.m_diffThreshold);
+    swg->setDilationSize(settings.m_dilationSize);
+    swg->setDiffMaskHistoryFrames(settings.m_diffMaskHistoryFrames);
+    swg->setDiffMaskCloseSize(settings.m_diffMaskCloseSize);
+
+    // Detection ROI
+    swg->setDetectionRoiX(settings.m_detectionRoiX);
+    swg->setDetectionRoiY(settings.m_detectionRoiY);
+    swg->setDetectionRoiWidth(settings.m_detectionRoiWidth);
+    swg->setDetectionRoiHeight(settings.m_detectionRoiHeight);
+
+    // Motion detection
+    swg->setMotionDetect(settings.m_motionDetect ? 1 : 0);
+    swg->setMotionHistory(settings.m_motionHistory);
+    swg->setMotionVarThreshold(settings.m_motionVarThreshold);
+    swg->setMotionDetectShadows(settings.m_motionDetectShadows ? 1 : 0);
+    swg->setMotionOpenSize(settings.m_motionOpenSize);
+    swg->setMotionCloseSize(settings.m_motionCloseSize);
+    swg->setMotionPersistenceFrames(settings.m_motionPersistenceFrames);
+    swg->setMotionBoxColor((qint32) settings.m_motionBoxColor.rgb());
+    swg->setMinContourArea(settings.m_minContourArea);
+    swg->setVideoPostProcess(settings.m_videoPostProcess ? 1 : 0);
+
+    // Spectrum overlay
+    swg->setOverlaySpectrum(settings.m_overlaySpectrum ? 1 : 0);
+    swg->setSpectrumDevice(new QString(settings.m_spectrumDevice));
+    swg->setSpectrumOffsetX(settings.m_spectrumOffsetX);
+    swg->setSpectrumOffsetY(settings.m_spectrumOffsetY);
+    swg->setSpectrumScale(settings.m_spectrumScale);
+
+    // YOLO
+    swg->setYoloEnabled(settings.m_yoloEnabled ? 1 : 0);
+    swg->setYoloModelPath(new QString(settings.m_yoloModelPath));
+    swg->setYoloLabelsPath(new QString(settings.m_yoloLabelsPath));
+    swg->setYoloConfThreshold(settings.m_yoloConfThreshold);
+    swg->setYoloNmsThreshold(settings.m_yoloNmsThreshold);
+    swg->setYoloBoxColor((qint32) settings.m_yoloBoxColor.rgb());
+    swg->setYoloDisappearDebounce(settings.m_yoloDisappearDebounce);
+    swg->setYoloDnnTarget((int) settings.m_yoloDnnTarget);
+
+    // YOLO per-class device settings
+    auto *swgObjectList = new QList<SWGSDRangel::SWGCameraObjectClassSettings*>();
+    for (auto it = settings.m_objectDeviceSettings.cbegin(); it != settings.m_objectDeviceSettings.cend(); ++it)
+    {
+        auto *swgClassSettings = new SWGSDRangel::SWGCameraObjectClassSettings();
+        swgClassSettings->init();
+        swgClassSettings->setClassName(new QString(it.key()));
+        auto *swgDeviceList = new QList<SWGSDRangel::SWGCameraObjectDeviceSettings*>();
+        for (const auto *ds : *it.value())
+        {
+            auto *swgDs = new SWGSDRangel::SWGCameraObjectDeviceSettings();
+            swgDs->init();
+            swgDs->setDeviceSetIndex(ds->m_deviceSetIndex);
+            swgDs->setPresetGroup(new QString(ds->m_presetGroup));
+            swgDs->setPresetFrequency(ds->m_presetFrequency);
+            swgDs->setPresetDescription(new QString(ds->m_presetDescription));
+            swgDs->setStartOnDetect(ds->m_startOnDetect ? 1 : 0);
+            swgDs->setStopOnDisappear(ds->m_stopOnDisappear ? 1 : 0);
+            swgDs->setStartStopFileSink(ds->m_startStopFileSink ? 1 : 0);
+            swgDs->setRecordVideo(ds->m_recordVideo ? 1 : 0);
+            swgDs->setDetectCommand(new QString(ds->m_detectCommand));
+            swgDs->setDisappearCommand(new QString(ds->m_disappearCommand));
+            swgDs->setDetectSpeech(new QString(ds->m_detectSpeech));
+            swgDs->setDisappearSpeech(new QString(ds->m_disappearSpeech));
+            swgDeviceList->append(swgDs);
+        }
+        swgClassSettings->setDeviceSettings(swgDeviceList);
+        swgObjectList->append(swgClassSettings);
+    }
+    swg->setObjectDeviceSettings(swgObjectList);
+
+    // Audio (Qt camera)
+    swg->setAudioMute(settings.m_audioMute ? 1 : 0);
+    swg->setAudioDeviceName(new QString(settings.m_audioDeviceName));
+
+    // Qt camera controls
+    swg->setWhiteBalanceMode(settings.m_whiteBalanceMode);
+    swg->setExposureCompensation(settings.m_exposureCompensation);
+    swg->setFocusMode(settings.m_focusMode);
+    swg->setFocusDistance(settings.m_focusDistance);
+    swg->setZoomFactor(settings.m_zoomFactor);
+
+    // Reverse API
+    swg->setUseReverseApi(settings.m_useReverseAPI ? 1 : 0);
+    if (swg->getReverseApiAddress()) {
+        *swg->getReverseApiAddress() = settings.m_reverseAPIAddress;
+    } else {
+        swg->setReverseApiAddress(new QString(settings.m_reverseAPIAddress));
+    }
+    swg->setReverseApiPort(settings.m_reverseAPIPort);
+    swg->setReverseApiFeatureSetIndex(settings.m_reverseAPIFeatureSetIndex);
+    swg->setReverseApiFeatureIndex(settings.m_reverseAPIFeatureIndex);
+
+    // Rollup state
+    if (settings.m_rollupState)
+    {
+        if (swg->getRollupState()) {
+            settings.m_rollupState->formatTo(swg->getRollupState());
+        } else {
+            SWGSDRangel::SWGRollupState *swgRollupState = new SWGSDRangel::SWGRollupState();
+            settings.m_rollupState->formatTo(swgRollupState);
+            swg->setRollupState(swgRollupState);
+        }
+    }
+
+    swg->setWorkspaceIndex(settings.m_workspaceIndex);
+}
+
+void Camera::webapiUpdateFeatureSettings(
+        CameraSettings& settings,
+        const QStringList& featureSettingsKeys,
+        SWGSDRangel::SWGFeatureSettings& response)
+{
+    SWGSDRangel::SWGCameraSettings *swg = response.getCameraSettings();
+
+    // Basic
+    if (featureSettingsKeys.contains("title")) {
+        settings.m_title = *swg->getTitle();
+    }
+    if (featureSettingsKeys.contains("rgbColor")) {
+        settings.m_rgbColor = swg->getRgbColor();
+    }
+
+    // Camera selection
+    if (featureSettingsKeys.contains("cameraProtocol")) {
+        settings.m_cameraProtocol = *swg->getCameraProtocol();
+    }
+    if (featureSettingsKeys.contains("cameraId")) {
+        settings.m_cameraId = *swg->getCameraId();
+    }
+    if (featureSettingsKeys.contains("cameraDescription")) {
+        settings.m_cameraDescription = *swg->getCameraDescription();
+    }
+    if (featureSettingsKeys.contains("resolutionWidth")) {
+        settings.m_resolutionWidth = swg->getResolutionWidth();
+    }
+    if (featureSettingsKeys.contains("resolutionHeight")) {
+        settings.m_resolutionHeight = swg->getResolutionHeight();
+    }
+    if (featureSettingsKeys.contains("framesPerSecond")) {
+        settings.m_framesPerSecond = swg->getFramesPerSecond();
+    }
+    if (featureSettingsKeys.contains("captureMode")) {
+        settings.m_captureMode = (CameraSettings::CaptureMode) swg->getCaptureMode();
+    }
+    if (featureSettingsKeys.contains("captureInterval")) {
+        settings.m_captureInterval = swg->getCaptureInterval();
+    }
+    if (featureSettingsKeys.contains("captureIntervalUnits")) {
+        settings.m_captureIntervalUnits = (CameraSettings::CaptureIntervalUnits) swg->getCaptureIntervalUnits();
+    }
+    if (featureSettingsKeys.contains("exposureTimeMs")) {
+        settings.m_exposureTimeMs = swg->getExposureTimeMs();
+    }
+    if (featureSettingsKeys.contains("isoSensitivity")) {
+        settings.m_isoSensitivity = swg->getIsoSensitivity();
+    }
+
+    // ALPACA
+    if (featureSettingsKeys.contains("alpacaDiscoveryEnabled")) {
+        settings.m_alpacaDiscoveryEnabled = swg->getAlpacaDiscoveryEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("alpacaApiLogEnabled")) {
+        settings.m_alpacaApiLogEnabled = swg->getAlpacaApiLogEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("alpacaHost")) {
+        settings.m_alpacaHost = *swg->getAlpacaHost();
+    }
+    if (featureSettingsKeys.contains("alpacaPort")) {
+        settings.m_alpacaPort = (uint16_t) swg->getAlpacaPort();
+    }
+    if (featureSettingsKeys.contains("alpacaFocuserEnabled")) {
+        settings.m_alpacaFocuserEnabled = swg->getAlpacaFocuserEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("alpacaFocuserHost")) {
+        settings.m_alpacaFocuserHost = *swg->getAlpacaFocuserHost();
+    }
+    if (featureSettingsKeys.contains("alpacaFocuserPort")) {
+        settings.m_alpacaFocuserPort = (uint16_t) swg->getAlpacaFocuserPort();
+    }
+    if (featureSettingsKeys.contains("alpacaFocuserDeviceNumber")) {
+        settings.m_alpacaFocuserDeviceNumber = swg->getAlpacaFocuserDeviceNumber();
+    }
+    if (featureSettingsKeys.contains("alpacaFocusPosition")) {
+        settings.m_alpacaFocusPosition = swg->getAlpacaFocusPosition();
+    }
+    if (featureSettingsKeys.contains("alpacaFocusStepSize")) {
+        settings.m_alpacaFocusStepSize = swg->getAlpacaFocusStepSize();
+    }
+    if (featureSettingsKeys.contains("alpacaFilterWheelEnabled")) {
+        settings.m_alpacaFilterWheelEnabled = swg->getAlpacaFilterWheelEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("alpacaFilterWheelHost")) {
+        settings.m_alpacaFilterWheelHost = *swg->getAlpacaFilterWheelHost();
+    }
+    if (featureSettingsKeys.contains("alpacaFilterWheelPort")) {
+        settings.m_alpacaFilterWheelPort = (uint16_t) swg->getAlpacaFilterWheelPort();
+    }
+    if (featureSettingsKeys.contains("alpacaFilterWheelDeviceNumber")) {
+        settings.m_alpacaFilterWheelDeviceNumber = swg->getAlpacaFilterWheelDeviceNumber();
+    }
+    if (featureSettingsKeys.contains("alpacaFilterWheelPosition")) {
+        settings.m_alpacaFilterWheelPosition = swg->getAlpacaFilterWheelPosition();
+    }
+    if (featureSettingsKeys.contains("alpacaBinX")) {
+        settings.m_alpacaBinX = swg->getAlpacaBinX();
+    }
+    if (featureSettingsKeys.contains("alpacaBinY")) {
+        settings.m_alpacaBinY = swg->getAlpacaBinY();
+    }
+    if (featureSettingsKeys.contains("alpacaNumX")) {
+        settings.m_alpacaNumX = swg->getAlpacaNumX();
+    }
+    if (featureSettingsKeys.contains("alpacaNumY")) {
+        settings.m_alpacaNumY = swg->getAlpacaNumY();
+    }
+    if (featureSettingsKeys.contains("alpacaStartX")) {
+        settings.m_alpacaStartX = swg->getAlpacaStartX();
+    }
+    if (featureSettingsKeys.contains("alpacaStartY")) {
+        settings.m_alpacaStartY = swg->getAlpacaStartY();
+    }
+    if (featureSettingsKeys.contains("alpacaGain")) {
+        settings.m_alpacaGain = swg->getAlpacaGain();
+    }
+    if (featureSettingsKeys.contains("alpacaOffset")) {
+        settings.m_alpacaOffset = swg->getAlpacaOffset();
+    }
+    if (featureSettingsKeys.contains("alpacaReadoutMode")) {
+        settings.m_alpacaReadoutMode = swg->getAlpacaReadoutMode();
+    }
+
+    // Image / video output
+    if (featureSettingsKeys.contains("saveImage")) {
+        settings.m_saveImage = swg->getSaveImage() != 0;
+    }
+    if (featureSettingsKeys.contains("imageFileName")) {
+        settings.m_imageFileName = *swg->getImageFileName();
+    }
+    if (featureSettingsKeys.contains("saveVideo")) {
+        settings.m_saveVideo = swg->getSaveVideo() != 0;
+    }
+    if (featureSettingsKeys.contains("videoFileCameraPath")) {
+        settings.m_videoFileCameraPath = *swg->getVideoFileCameraPath();
+    }
+    if (featureSettingsKeys.contains("videoFileName")) {
+        settings.m_videoFileName = *swg->getVideoFileName();
+    }
+    if (featureSettingsKeys.contains("videoHwAcceleration")) {
+        settings.m_videoHwAcceleration = swg->getVideoHwAcceleration() != 0;
+    }
+
+    // Post-processing – tone / colour
+    if (featureSettingsKeys.contains("postProcessWhiteBalanceMode")) {
+        settings.m_postProcessWhiteBalanceMode = swg->getPostProcessWhiteBalanceMode();
+    }
+    if (featureSettingsKeys.contains("postProcessWhiteBalanceRedGain")) {
+        settings.m_postProcessWhiteBalanceRedGain = swg->getPostProcessWhiteBalanceRedGain();
+    }
+    if (featureSettingsKeys.contains("postProcessWhiteBalanceGreenGain")) {
+        settings.m_postProcessWhiteBalanceGreenGain = swg->getPostProcessWhiteBalanceGreenGain();
+    }
+    if (featureSettingsKeys.contains("postProcessWhiteBalanceBlueGain")) {
+        settings.m_postProcessWhiteBalanceBlueGain = swg->getPostProcessWhiteBalanceBlueGain();
+    }
+    if (featureSettingsKeys.contains("saturation")) {
+        settings.m_saturation = swg->getSaturation();
+    }
+    if (featureSettingsKeys.contains("gamma")) {
+        settings.m_gamma = swg->getGamma();
+    }
+    if (featureSettingsKeys.contains("brightness")) {
+        settings.m_brightness = swg->getBrightness();
+    }
+    if (featureSettingsKeys.contains("contrast")) {
+        settings.m_contrast = swg->getContrast();
+    }
+    if (featureSettingsKeys.contains("gaussianBlur")) {
+        settings.m_gaussianBlur = swg->getGaussianBlur();
+    }
+    if (featureSettingsKeys.contains("medianBlur")) {
+        settings.m_medianBlur = swg->getMedianBlur();
+    }
+    if (featureSettingsKeys.contains("sharpen")) {
+        settings.m_sharpen = swg->getSharpen();
+    }
+    if (featureSettingsKeys.contains("sobelEdge")) {
+        settings.m_sobelEdge = swg->getSobelEdge();
+    }
+    if (featureSettingsKeys.contains("flipX")) {
+        settings.m_flipX = swg->getFlipX() != 0;
+    }
+    if (featureSettingsKeys.contains("flipY")) {
+        settings.m_flipY = swg->getFlipY() != 0;
+    }
+    if (featureSettingsKeys.contains("invertColors")) {
+        settings.m_invertColors = swg->getInvertColors() != 0;
+    }
+
+    // Date/time overlay
+    if (featureSettingsKeys.contains("overlayDateTime")) {
+        settings.m_overlayDateTime = swg->getOverlayDateTime() != 0;
+    }
+    if (featureSettingsKeys.contains("dateTimeColor")) {
+        settings.m_dateTimeColor = QColor(swg->getDateTimeColor());
+    }
+    if (featureSettingsKeys.contains("dateTimeFormat")) {
+        settings.m_dateTimeFormat = *swg->getDateTimeFormat();
+    }
+    if (featureSettingsKeys.contains("dateTimePosX")) {
+        settings.m_dateTimePosX = swg->getDateTimePosX();
+    }
+    if (featureSettingsKeys.contains("dateTimePosY")) {
+        settings.m_dateTimePosY = swg->getDateTimePosY();
+    }
+
+    // Text overlay
+    if (featureSettingsKeys.contains("overlayText")) {
+        settings.m_overlayText = swg->getOverlayText() != 0;
+    }
+    if (featureSettingsKeys.contains("overlayTextString")) {
+        settings.m_overlayTextString = *swg->getOverlayTextString();
+    }
+    if (featureSettingsKeys.contains("overlayTextColor")) {
+        settings.m_overlayTextColor = QColor(swg->getOverlayTextColor());
+    }
+    if (featureSettingsKeys.contains("overlayTextFontFamily")) {
+        settings.m_overlayTextFontFamily = *swg->getOverlayTextFontFamily();
+    }
+    if (featureSettingsKeys.contains("overlayTextFontScale")) {
+        settings.m_overlayTextFontScale = swg->getOverlayTextFontScale();
+    }
+    if (featureSettingsKeys.contains("overlayTextPosX")) {
+        settings.m_overlayTextPosX = swg->getOverlayTextPosX();
+    }
+    if (featureSettingsKeys.contains("overlayTextPosY")) {
+        settings.m_overlayTextPosY = swg->getOverlayTextPosY();
+    }
+
+    // Diff-mask
+    if (featureSettingsKeys.contains("diffMask")) {
+        settings.m_diffMask = swg->getDiffMask() != 0;
+    }
+    if (featureSettingsKeys.contains("diffThreshold")) {
+        settings.m_diffThreshold = swg->getDiffThreshold();
+    }
+    if (featureSettingsKeys.contains("dilationSize")) {
+        settings.m_dilationSize = swg->getDilationSize();
+    }
+    if (featureSettingsKeys.contains("diffMaskHistoryFrames")) {
+        settings.m_diffMaskHistoryFrames = swg->getDiffMaskHistoryFrames();
+    }
+    if (featureSettingsKeys.contains("diffMaskCloseSize")) {
+        settings.m_diffMaskCloseSize = swg->getDiffMaskCloseSize();
+    }
+
+    // Detection ROI
+    if (featureSettingsKeys.contains("detectionRoiX")) {
+        settings.m_detectionRoiX = swg->getDetectionRoiX();
+    }
+    if (featureSettingsKeys.contains("detectionRoiY")) {
+        settings.m_detectionRoiY = swg->getDetectionRoiY();
+    }
+    if (featureSettingsKeys.contains("detectionRoiWidth")) {
+        settings.m_detectionRoiWidth = swg->getDetectionRoiWidth();
+    }
+    if (featureSettingsKeys.contains("detectionRoiHeight")) {
+        settings.m_detectionRoiHeight = swg->getDetectionRoiHeight();
+    }
+
+    // Motion detection
+    if (featureSettingsKeys.contains("motionDetect")) {
+        settings.m_motionDetect = swg->getMotionDetect() != 0;
+    }
+    if (featureSettingsKeys.contains("motionHistory")) {
+        settings.m_motionHistory = swg->getMotionHistory();
+    }
+    if (featureSettingsKeys.contains("motionVarThreshold")) {
+        settings.m_motionVarThreshold = swg->getMotionVarThreshold();
+    }
+    if (featureSettingsKeys.contains("motionDetectShadows")) {
+        settings.m_motionDetectShadows = swg->getMotionDetectShadows() != 0;
+    }
+    if (featureSettingsKeys.contains("motionOpenSize")) {
+        settings.m_motionOpenSize = swg->getMotionOpenSize();
+    }
+    if (featureSettingsKeys.contains("motionCloseSize")) {
+        settings.m_motionCloseSize = swg->getMotionCloseSize();
+    }
+    if (featureSettingsKeys.contains("motionPersistenceFrames")) {
+        settings.m_motionPersistenceFrames = swg->getMotionPersistenceFrames();
+    }
+    if (featureSettingsKeys.contains("motionBoxColor")) {
+        settings.m_motionBoxColor = QColor(swg->getMotionBoxColor());
+    }
+    if (featureSettingsKeys.contains("minContourArea")) {
+        settings.m_minContourArea = swg->getMinContourArea();
+    }
+    if (featureSettingsKeys.contains("videoPostProcess")) {
+        settings.m_videoPostProcess = swg->getVideoPostProcess() != 0;
+    }
+
+    // Spectrum overlay
+    if (featureSettingsKeys.contains("overlaySpectrum")) {
+        settings.m_overlaySpectrum = swg->getOverlaySpectrum() != 0;
+    }
+    if (featureSettingsKeys.contains("spectrumDevice")) {
+        settings.m_spectrumDevice = *swg->getSpectrumDevice();
+    }
+    if (featureSettingsKeys.contains("spectrumOffsetX")) {
+        settings.m_spectrumOffsetX = swg->getSpectrumOffsetX();
+    }
+    if (featureSettingsKeys.contains("spectrumOffsetY")) {
+        settings.m_spectrumOffsetY = swg->getSpectrumOffsetY();
+    }
+    if (featureSettingsKeys.contains("spectrumScale")) {
+        settings.m_spectrumScale = swg->getSpectrumScale();
+    }
+
+    // YOLO
+    if (featureSettingsKeys.contains("yoloEnabled")) {
+        settings.m_yoloEnabled = swg->getYoloEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("yoloModelPath")) {
+        settings.m_yoloModelPath = *swg->getYoloModelPath();
+    }
+    if (featureSettingsKeys.contains("yoloLabelsPath")) {
+        settings.m_yoloLabelsPath = *swg->getYoloLabelsPath();
+    }
+    if (featureSettingsKeys.contains("yoloConfThreshold")) {
+        settings.m_yoloConfThreshold = swg->getYoloConfThreshold();
+    }
+    if (featureSettingsKeys.contains("yoloNmsThreshold")) {
+        settings.m_yoloNmsThreshold = swg->getYoloNmsThreshold();
+    }
+    if (featureSettingsKeys.contains("yoloBoxColor")) {
+        settings.m_yoloBoxColor = QColor(swg->getYoloBoxColor());
+    }
+    if (featureSettingsKeys.contains("yoloDisappearDebounce")) {
+        settings.m_yoloDisappearDebounce = swg->getYoloDisappearDebounce();
+    }
+    if (featureSettingsKeys.contains("yoloDnnTarget")) {
+        settings.m_yoloDnnTarget = (CameraSettings::DNNTarget) swg->getYoloDnnTarget();
+    }
+
+    // YOLO per-class device settings
+    if (featureSettingsKeys.contains("objectDeviceSettings"))
+    {
+        // Clear existing entries
+        for (auto it = settings.m_objectDeviceSettings.begin(); it != settings.m_objectDeviceSettings.end(); ++it) {
+            qDeleteAll(*it.value());
+            delete it.value();
+        }
+        settings.m_objectDeviceSettings.clear();
+
+        QList<SWGSDRangel::SWGCameraObjectClassSettings*> *swgObjectList = swg->getObjectDeviceSettings();
+        if (swgObjectList)
+        {
+            for (auto *swgClassSettings : *swgObjectList)
+            {
+                QString className = swgClassSettings->getClassName() ? *swgClassSettings->getClassName() : QString();
+                auto *deviceList = new QList<CameraSettings::ObjectDeviceSettings*>();
+                QList<SWGSDRangel::SWGCameraObjectDeviceSettings*> *swgDeviceList = swgClassSettings->getDeviceSettings();
+                if (swgDeviceList)
+                {
+                    for (auto *swgDs : *swgDeviceList)
+                    {
+                        auto *ds = new CameraSettings::ObjectDeviceSettings();
+                        ds->m_deviceSetIndex    = swgDs->getDeviceSetIndex();
+                        ds->m_presetGroup       = swgDs->getPresetGroup()       ? *swgDs->getPresetGroup()       : QString();
+                        ds->m_presetFrequency   = (quint64) swgDs->getPresetFrequency();
+                        ds->m_presetDescription = swgDs->getPresetDescription() ? *swgDs->getPresetDescription() : QString();
+                        ds->m_startOnDetect     = swgDs->getStartOnDetect()     != 0;
+                        ds->m_stopOnDisappear   = swgDs->getStopOnDisappear()   != 0;
+                        ds->m_startStopFileSink = swgDs->getStartStopFileSink() != 0;
+                        ds->m_recordVideo       = swgDs->getRecordVideo()       != 0;
+                        ds->m_detectCommand     = swgDs->getDetectCommand()     ? *swgDs->getDetectCommand()     : QString();
+                        ds->m_disappearCommand  = swgDs->getDisappearCommand()  ? *swgDs->getDisappearCommand()  : QString();
+                        ds->m_detectSpeech      = swgDs->getDetectSpeech()      ? *swgDs->getDetectSpeech()      : QString();
+                        ds->m_disappearSpeech   = swgDs->getDisappearSpeech()   ? *swgDs->getDisappearSpeech()   : QString();
+                        deviceList->append(ds);
+                    }
+                }
+                settings.m_objectDeviceSettings[className] = deviceList;
+            }
+        }
+    }
+
+    // Audio (Qt camera)
+    if (featureSettingsKeys.contains("audioMute")) {
+        settings.m_audioMute = swg->getAudioMute() != 0;
+    }
+    if (featureSettingsKeys.contains("audioDeviceName")) {
+        settings.m_audioDeviceName = *swg->getAudioDeviceName();
+    }
+
+    // Qt camera controls
+    if (featureSettingsKeys.contains("whiteBalanceMode")) {
+        settings.m_whiteBalanceMode = swg->getWhiteBalanceMode();
+    }
+    if (featureSettingsKeys.contains("exposureCompensation")) {
+        settings.m_exposureCompensation = swg->getExposureCompensation();
+    }
+    if (featureSettingsKeys.contains("focusMode")) {
+        settings.m_focusMode = swg->getFocusMode();
+    }
+    if (featureSettingsKeys.contains("focusDistance")) {
+        settings.m_focusDistance = swg->getFocusDistance();
+    }
+    if (featureSettingsKeys.contains("zoomFactor")) {
+        settings.m_zoomFactor = swg->getZoomFactor();
+    }
+
+    // Reverse API
+    if (featureSettingsKeys.contains("useReverseAPI")) {
+        settings.m_useReverseAPI = swg->getUseReverseApi() != 0;
+    }
+    if (featureSettingsKeys.contains("reverseAPIAddress")) {
+        settings.m_reverseAPIAddress = *swg->getReverseApiAddress();
+    }
+    if (featureSettingsKeys.contains("reverseAPIPort")) {
+        settings.m_reverseAPIPort = (uint16_t) swg->getReverseApiPort();
+    }
+    if (featureSettingsKeys.contains("reverseAPIFeatureSetIndex")) {
+        settings.m_reverseAPIFeatureSetIndex = swg->getReverseApiFeatureSetIndex();
+    }
+    if (featureSettingsKeys.contains("reverseAPIFeatureIndex")) {
+        settings.m_reverseAPIFeatureIndex = swg->getReverseApiFeatureIndex();
+    }
+
+    if (settings.m_rollupState && featureSettingsKeys.contains("rollupState")) {
+        settings.m_rollupState->updateFrom(featureSettingsKeys, swg->getRollupState());
+    }
+
+    if (featureSettingsKeys.contains("workspaceIndex")) {
+        settings.m_workspaceIndex = swg->getWorkspaceIndex();
     }
 }

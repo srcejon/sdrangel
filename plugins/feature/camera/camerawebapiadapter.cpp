@@ -16,4 +16,31 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include "SWGFeatureSettings.h"
+#include "SWGCameraSettings.h"
+
+#include "camera.h"
 #include "camerawebapiadapter.h"
+
+int CameraWebAPIAdapter::webapiSettingsGet(
+        SWGSDRangel::SWGFeatureSettings& response,
+        QString& errorMessage)
+{
+    (void) errorMessage;
+    response.setCameraSettings(new SWGSDRangel::SWGCameraSettings());
+    response.getCameraSettings()->init();
+    Camera::webapiFormatFeatureSettings(response, m_settings);
+    return 200;
+}
+
+int CameraWebAPIAdapter::webapiSettingsPutPatch(
+        bool force,
+        const QStringList& featureSettingsKeys,
+        SWGSDRangel::SWGFeatureSettings& response,
+        QString& errorMessage)
+{
+    (void) force;
+    (void) errorMessage;
+    Camera::webapiUpdateFeatureSettings(m_settings, featureSettingsKeys, response);
+    return 200;
+}

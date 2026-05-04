@@ -23,6 +23,8 @@ FeatureSettings:
       $ref: "http://swgserver:8081/api/swagger/include/AntennaTools.yaml#/AntennaToolsSettings"
     APRSSettings:
       $ref: "http://swgserver:8081/api/swagger/include/APRS.yaml#/APRSSettings"
+    CameraSettings:
+      $ref: "http://swgserver:8081/api/swagger/include/Camera.yaml#/CameraSettings"
     DemodAnalyzerSettings:
       $ref: "http://swgserver:8081/api/swagger/include/DemodAnalyzer.yaml#/DemodAnalyzerSettings"
     DenoiserSettings:

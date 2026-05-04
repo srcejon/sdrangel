@@ -27,7 +27,7 @@
 const PluginDescriptor DenoiserPlugin::m_pluginDescriptor = {
     Denoiser::m_featureId,
     QStringLiteral("Denoiser"),
-    QStringLiteral("7.23.2"),
+    QStringLiteral("7.25.0"),
     QStringLiteral("(c) Edouard Griffiths, F4EXB"),
     QStringLiteral("https://github.com/f4exb/sdrangel"),
     true,

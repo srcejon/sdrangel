@@ -32,8 +32,8 @@ int MeshtasticDemodWebAPIAdapter::webapiSettingsGet(
         QString& errorMessage)
 {
     (void) errorMessage;
-    response.setChirpChatDemodSettings(new SWGSDRangel::SWGChirpChatDemodSettings());
-    response.getChirpChatDemodSettings()->init();
+    response.setMeshtasticDemodSettings(new SWGSDRangel::SWGMeshtasticDemodSettings());
+    response.getMeshtasticDemodSettings()->init();
     MeshtasticDemod::webapiFormatChannelSettings(response, m_settings);
     return 200;
 }

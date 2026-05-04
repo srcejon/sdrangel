@@ -1381,6 +1381,19 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="udpSendJson">
+        <property name="toolTip">
+         <string>Send decoded message as JSON via UDP</string>
+        </property>
+        <property name="layoutDirection">
+         <enum>Qt::RightToLeft</enum>
+        </property>
+        <property name="text">
+         <string>JSON</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="horizontalSpacer_6">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>

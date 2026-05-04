@@ -43,7 +43,8 @@ class DeviceAPI;
 class QThread;
 class ObjectPipe;
 class MeshtasticDemodDecoder;
-namespace modemmeshtastic { struct TxRadioSettings; }
+namespace MeshtasticDemodMsg { class MsgReportDecodeBytes; }
+namespace modemmeshtastic { struct TxRadioSettings; struct DecodeResult; }
 
 class MeshtasticDemod : public BasebandSampleSink, public ChannelAPI {
 public:
@@ -213,6 +214,9 @@ private:
 
 	virtual bool handleMessage(const Message& cmd);
     void applySettings(MeshtasticDemodSettings settings, bool force = false);
+    QString buildMeshtasticJsonPacket(
+        const MeshtasticDemodMsg::MsgReportDecodeBytes& msg,
+        const modemmeshtastic::DecodeResult& meshResult) const;
     void makePipelineConfigFromSettings(int configId, PipelineConfig& config, const MeshtasticDemodSettings& settings) const;
     MeshtasticDemodSettings makePipelineSettingsFromMeshRadio(
         const MeshtasticDemodSettings& baseSettings,

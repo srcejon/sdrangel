@@ -61,6 +61,7 @@ struct MeshtasticDemodSettings
     static const bool m_hasCRC;                 //!< Payload has CRC (LoRa)
     static const bool m_hasHeader;              //!< Header present before actual payload (LoRa)
     bool m_sendViaUDP;             //!< Send decoded message via UDP
+    bool m_sendJsonViaUDP;         //!< Send decoded message as JSON via UDP
     bool m_invertRamps;            //!< Invert chirp ramps vs standard LoRa (up/down/up is standard)
     QString m_udpAddress;          //!< UDP address where to send message
     uint16_t m_udpPort;            //!< UDP port where to send message

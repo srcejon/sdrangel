@@ -30,6 +30,16 @@ public:
     QByteArray serialize() const override { return m_settings.serialize(); }
     bool deserialize(const QByteArray& data) override { return m_settings.deserialize(data); }
 
+    virtual int webapiSettingsGet(
+            SWGSDRangel::SWGFeatureSettings& response,
+            QString& errorMessage) override;
+
+    virtual int webapiSettingsPutPatch(
+            bool force,
+            const QStringList& featureSettingsKeys,
+            SWGSDRangel::SWGFeatureSettings& response,
+            QString& errorMessage) override;
+
 private:
     CameraSettings m_settings;
 };

@@ -30,6 +30,13 @@
 class WebAPIAdapterInterface;
 class CameraFinder;
 
+namespace SWGSDRangel {
+    class SWGDeviceState;
+    class SWGFeatureSettings;
+    class SWGFeatureReport;
+    class SWGFeatureActions;
+}
+
 class Camera : public Feature
 {
     Q_OBJECT
@@ -105,6 +112,38 @@ public:
     QByteArray serialize() const override;
     bool deserialize(const QByteArray& data) override;
 
+    virtual int webapiRun(bool run,
+            SWGSDRangel::SWGDeviceState& response,
+            QString& errorMessage) override;
+
+    virtual int webapiSettingsGet(
+            SWGSDRangel::SWGFeatureSettings& response,
+            QString& errorMessage) override;
+
+    virtual int webapiSettingsPutPatch(
+            bool force,
+            const QStringList& featureSettingsKeys,
+            SWGSDRangel::SWGFeatureSettings& response,
+            QString& errorMessage) override;
+
+    virtual int webapiReportGet(
+            SWGSDRangel::SWGFeatureReport& response,
+            QString& errorMessage) override;
+
+    virtual int webapiActionsPost(
+            const QStringList& featureActionsKeys,
+            SWGSDRangel::SWGFeatureActions& query,
+            QString& errorMessage) override;
+
+    static void webapiFormatFeatureSettings(
+            SWGSDRangel::SWGFeatureSettings& response,
+            const CameraSettings& settings);
+
+    static void webapiUpdateFeatureSettings(
+            CameraSettings& settings,
+            const QStringList& featureSettingsKeys,
+            SWGSDRangel::SWGFeatureSettings& response);
+
     static const char* const m_featureIdURI;
     static const char* const m_featureId;
 
@@ -123,6 +162,7 @@ private:
     void start();
     void stop();
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
+    void webapiFormatFeatureReport(SWGSDRangel::SWGFeatureReport& response);
 };
 
 #endif // INCLUDE_FEATURE_CAMERA_H_

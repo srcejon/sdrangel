@@ -38,6 +38,7 @@ public:
     ~CameraFinder() override;
 
     void setMessageQueueToGUI(MessageQueue* messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setMessageQueueToFeature(MessageQueue* messageQueue) { m_msgQueueToFeature = messageQueue; }
     void reportCameraList(const CameraSettings& settings);
 
 private:
@@ -48,6 +49,7 @@ private:
     };
 
     MessageQueue* m_msgQueueToGUI;
+    MessageQueue* m_msgQueueToFeature;
     QNetworkAccessManager* m_networkManager;
     QUdpSocket* m_discoverySocket;
     QTimer* m_discoveryTimer;

@@ -44,6 +44,7 @@ const QByteArray CameraFinder::m_alpacaDiscoveryMessage("alpacadiscovery1");
 CameraFinder::CameraFinder(QObject* parent) :
     QObject(parent),
     m_msgQueueToGUI(nullptr),
+    m_msgQueueToFeature(nullptr),
     m_networkManager(nullptr),
     m_discoverySocket(nullptr),
     m_discoveryTimer(nullptr),
@@ -201,6 +202,9 @@ void CameraFinder::finalizeCameraList(int requestId)
 
     m_msgQueueToGUI->push(CameraWorker::MsgReportCameraList::create(m_currentCameras));
     m_msgQueueToGUI->push(CameraWorker::MsgReportAlpacaDeviceList::create(m_currentFocusers, m_currentFilterWheels));
+    if (m_msgQueueToFeature) {
+        m_msgQueueToFeature->push(CameraWorker::MsgReportCameraList::create(m_currentCameras));
+    }
 }
 
 void CameraFinder::startAlpacaDiscovery()

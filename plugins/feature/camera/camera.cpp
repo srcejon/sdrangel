@@ -52,6 +52,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_state = StIdle;
     m_errorMessage = "Camera error";
     m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_cameraFinder->setMessageQueueToFeature(&m_inputMessageQueue);
 
     // The worker needs to run continuously, to be able to query camera capabilities.
     m_worker->moveToThread(m_workerThread);
@@ -176,6 +177,17 @@ bool Camera::handleMessage(const Message& cmd)
 
         return true;
     }
+    else if (CameraWorker::MsgReportCameraList::match(cmd))
+    {
+        const CameraWorker::MsgReportCameraList& report = (const CameraWorker::MsgReportCameraList&) cmd;
+        m_cameraList = report.getCameras();
+
+        if (m_guiMessageQueue) {
+            m_guiMessageQueue->push(CameraWorker::MsgReportCameraList::create(m_cameraList));
+        }
+
+        return true;
+    }
 
     return false;
 }
@@ -250,7 +262,7 @@ int Camera::webapiSettingsPutPatch(
 {
     (void) errorMessage;
     CameraSettings settings = m_settings;
-    webapiUpdateFeatureSettings(settings, featureSettingsKeys, response);
+    webapiUpdateFeatureSettings(settings, featureSettingsKeys, response, m_cameraList);
 
     MsgConfigureCamera *msg = MsgConfigureCamera::create(settings, featureSettingsKeys, force);
     m_inputMessageQueue.push(msg);
@@ -515,7 +527,8 @@ void Camera::webapiFormatFeatureSettings(
 void Camera::webapiUpdateFeatureSettings(
         CameraSettings& settings,
         const QStringList& featureSettingsKeys,
-        SWGSDRangel::SWGFeatureSettings& response)
+        SWGSDRangel::SWGFeatureSettings& response,
+        const QList<CameraInfo>& cameraList)
 {
     SWGSDRangel::SWGCameraSettings *swg = response.getCameraSettings();
 
@@ -536,6 +549,22 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("cameraDescription")) {
         settings.m_cameraDescription = *swg->getCameraDescription();
+
+        // If neither protocol nor id was supplied, resolve them from the
+        // cached camera list using the description as a lookup key
+        if (!featureSettingsKeys.contains("cameraProtocol") &&
+            !featureSettingsKeys.contains("cameraId"))
+        {
+            for (const CameraInfo& info : cameraList)
+            {
+                if (info.m_description == settings.m_cameraDescription)
+                {
+                    settings.m_cameraProtocol = info.m_protocol;
+                    settings.m_cameraId       = info.m_id;
+                    break;
+                }
+            }
+        }
     }
     if (featureSettingsKeys.contains("resolutionWidth")) {
         settings.m_resolutionWidth = swg->getResolutionWidth();

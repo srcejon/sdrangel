@@ -23,6 +23,7 @@
 
 #include "feature/feature.h"
 #include "util/message.h"
+#include "camerainfo.h"
 #include "camerasettings.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
@@ -142,7 +143,8 @@ public:
     static void webapiUpdateFeatureSettings(
             CameraSettings& settings,
             const QStringList& featureSettingsKeys,
-            SWGSDRangel::SWGFeatureSettings& response);
+            SWGSDRangel::SWGFeatureSettings& response,
+            const QList<CameraInfo>& cameraList = {});
 
     static const char* const m_featureIdURI;
     static const char* const m_featureId;
@@ -158,6 +160,7 @@ private:
     CameraPostProcessor *m_postProcessor;
     CameraFinder *m_cameraFinder;
     CameraSettings m_settings;
+    QList<CameraInfo> m_cameraList;
 
     void start();
     void stop();

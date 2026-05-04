@@ -144,6 +144,45 @@ bool CameraGUI::handleMessage(const Message& message)
             m_settingsDialog->clearAlpacaStatus();
         }
 
+        // Web API may supply cameraDescription without cameraProtocol/cameraId.
+        // Resolve the full selection from the combo box and push a follow-up
+        // configure so the engine also receives the correct protocol and id.
+        if (!cfg.getForce()
+            && cfg.getSettingsKeys().contains("cameraDescription")
+            && !cfg.getSettingsKeys().contains("cameraProtocol")
+            && !cfg.getSettingsKeys().contains("cameraId"))
+        {
+            for (int i = 0; i < ui->cameraCombo->count(); ++i)
+            {
+                if (ui->cameraCombo->itemData(i, CameraDescriptionRole).toString()
+                        == m_settings.m_cameraDescription)
+                {
+                    const QString protocol = ui->cameraCombo->itemData(i, CameraProtocolRole).toString();
+                    const QString id       = ui->cameraCombo->itemData(i, CameraIdRole).toString();
+                    const QString host     = ui->cameraCombo->itemData(i, CameraAlpacaHostRole).toString();
+                    const quint16 port     = static_cast<quint16>(
+                        ui->cameraCombo->itemData(i, CameraAlpacaPortRole).toUInt());
+
+                    if (protocol != m_settings.m_cameraProtocol
+                        || id     != m_settings.m_cameraId)
+                    {
+                        setSelectedCamera(protocol, id, m_settings.m_cameraDescription, host, port);
+
+                        QStringList resolvedKeys {"cameraProtocol", "cameraId", "cameraDescription"};
+                        if (protocol == QLatin1String("file")) {
+                            resolvedKeys.append("videoFileCameraPath");
+                        }
+                        if (!host.isEmpty()) {
+                            resolvedKeys.append("alpacaHost");
+                            resolvedKeys.append("alpacaPort");
+                        }
+                        applySettings(resolvedKeys);
+                    }
+                    break;
+                }
+            }
+        }
+
         blockApplySettings(true);
         displaySettings();
         blockApplySettings(false);

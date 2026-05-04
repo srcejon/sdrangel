@@ -1,0 +1,457 @@
+CameraSettings:
+  description: "Camera feature settings"
+  properties:
+    title:
+      type: string
+    rgbColor:
+      type: integer
+    cameraProtocol:
+      description: "Camera protocol identifier (e.g. 'ALPACA', 'QT', 'file:')"
+      type: string
+    cameraId:
+      description: "Camera device identifier"
+      type: string
+    cameraDescription:
+      description: "Human-readable camera description"
+      type: string
+    resolutionWidth:
+      description: "Capture resolution width in pixels"
+      type: integer
+    resolutionHeight:
+      description: "Capture resolution height in pixels"
+      type: integer
+    framesPerSecond:
+      description: "Capture frame rate in frames per second"
+      type: integer
+    captureMode:
+      description: >
+        Capture timing mode
+          * 0 - Frame rate
+          * 1 - Interval
+      type: integer
+    captureInterval:
+      description: "Capture interval duration"
+      type: number
+      format: double
+    captureIntervalUnits:
+      description: >
+        Units for captureInterval
+          * 0 - Seconds
+          * 1 - Minutes
+      type: integer
+    exposureTimeMs:
+      description: "Exposure time in milliseconds (ALPACA cameras)"
+      type: number
+      format: double
+    isoSensitivity:
+      description: "ISO sensitivity value (ALPACA cameras)"
+      type: integer
+    alpacaDiscoveryEnabled:
+      description: "Enable ALPACA device discovery (1 for yes, 0 for no)"
+      type: integer
+    alpacaApiLogEnabled:
+      description: "Enable ALPACA API request logging (1 for yes, 0 for no)"
+      type: integer
+    alpacaHost:
+      description: "Hostname or IP address of ALPACA camera server"
+      type: string
+    alpacaPort:
+      description: "TCP port of ALPACA camera server"
+      type: integer
+    alpacaFocuserEnabled:
+      description: "Enable ALPACA focuser control (1 for yes, 0 for no)"
+      type: integer
+    alpacaFocuserHost:
+      description: "Hostname or IP address of ALPACA focuser server"
+      type: string
+    alpacaFocuserPort:
+      description: "TCP port of ALPACA focuser server"
+      type: integer
+    alpacaFocuserDeviceNumber:
+      description: "ALPACA device number for the focuser"
+      type: integer
+    alpacaFocusPosition:
+      description: "Target focuser position in steps"
+      type: integer
+    alpacaFocusStepSize:
+      description: "Focuser step size for focus adjustments"
+      type: integer
+    alpacaFilterWheelEnabled:
+      description: "Enable ALPACA filter wheel control (1 for yes, 0 for no)"
+      type: integer
+    alpacaFilterWheelHost:
+      description: "Hostname or IP address of ALPACA filter wheel server"
+      type: string
+    alpacaFilterWheelPort:
+      description: "TCP port of ALPACA filter wheel server"
+      type: integer
+    alpacaFilterWheelDeviceNumber:
+      description: "ALPACA device number for the filter wheel"
+      type: integer
+    alpacaFilterWheelPosition:
+      description: "Filter wheel position index"
+      type: integer
+    alpacaBinX:
+      description: "ALPACA camera X binning factor"
+      type: integer
+    alpacaBinY:
+      description: "ALPACA camera Y binning factor"
+      type: integer
+    alpacaNumX:
+      description: "ALPACA camera ROI width in binned pixels (0 = full width)"
+      type: integer
+    alpacaNumY:
+      description: "ALPACA camera ROI height in binned pixels (0 = full height)"
+      type: integer
+    alpacaStartX:
+      description: "ALPACA camera ROI X origin in unbinned pixels"
+      type: integer
+    alpacaStartY:
+      description: "ALPACA camera ROI Y origin in unbinned pixels"
+      type: integer
+    alpacaGain:
+      description: "ALPACA camera gain index or numeric value (-1 = do not set)"
+      type: integer
+    alpacaOffset:
+      description: "ALPACA camera offset index or numeric value (-1 = do not set)"
+      type: integer
+    alpacaReadoutMode:
+      description: "ALPACA camera readout mode index"
+      type: integer
+    saveImage:
+      description: "Save captured frames as still images (1 for yes, 0 for no)"
+      type: integer
+    imageFileName:
+      description: "File path template for saved still images"
+      type: string
+    saveVideo:
+      description: "Record captured frames to a video file (1 for yes, 0 for no)"
+      type: integer
+    videoFileCameraPath:
+      description: "File path for file-based camera video source"
+      type: string
+    videoFileName:
+      description: "File path for recorded video output"
+      type: string
+    videoHwAcceleration:
+      description: "Prefer hardware-accelerated video encoding when available (1 for yes, 0 for no)"
+      type: integer
+    postProcessWhiteBalanceMode:
+      description: >
+        Post-processing white balance mode
+          * 0 - Off
+          * 1 - Auto
+          * 2 - Manual
+      type: integer
+    postProcessWhiteBalanceRedGain:
+      description: "Manual white balance red channel gain: 0.1 to 8.0"
+      type: number
+      format: double
+    postProcessWhiteBalanceGreenGain:
+      description: "Manual white balance green channel gain: 0.1 to 8.0"
+      type: number
+      format: double
+    postProcessWhiteBalanceBlueGain:
+      description: "Manual white balance blue channel gain: 0.1 to 8.0"
+      type: number
+      format: double
+    saturation:
+      description: "Saturation multiplier: 0.0 to 3.0"
+      type: number
+      format: double
+    gamma:
+      description: "Gamma correction exponent: 0.1 to 3.0"
+      type: number
+      format: double
+    brightness:
+      description: "Brightness adjustment: -100.0 to 100.0"
+      type: number
+      format: double
+    contrast:
+      description: "Contrast multiplier: 0.1 to 3.0"
+      type: number
+      format: double
+    gaussianBlur:
+      description: "Gaussian blur kernel radius: 0 (off) to 15"
+      type: integer
+    medianBlur:
+      description: "Median blur kernel radius: 0 (off) to 15"
+      type: integer
+    sharpen:
+      description: "Sharpening amount: 0.0 to 3.0"
+      type: number
+      format: double
+    sobelEdge:
+      description: "Sobel edge blend amount: 0.0 to 3.0"
+      type: number
+      format: double
+    flipX:
+      description: "Flip image horizontally (1 for yes, 0 for no)"
+      type: integer
+    flipY:
+      description: "Flip image vertically (1 for yes, 0 for no)"
+      type: integer
+    invertColors:
+      description: "Invert all colour channels (1 for yes, 0 for no)"
+      type: integer
+    overlayDateTime:
+      description: "Draw current date and time on each frame (1 for yes, 0 for no)"
+      type: integer
+    dateTimeColor:
+      description: "Colour for the date/time overlay text as 0xRRGGBB integer"
+      type: integer
+    dateTimeFormat:
+      description: "QDateTime::toString format string for the date/time overlay (e.g. 'yyyy-MM-dd hh:mm:ss')"
+      type: string
+    dateTimePosX:
+      description: "X pixel offset from the left edge for the date/time overlay: 0 to 4096"
+      type: integer
+    dateTimePosY:
+      description: "Y pixel offset from the top edge for the date/time overlay: 0 to 4096 (0 = auto bottom)"
+      type: integer
+    overlayText:
+      description: "Draw custom HTML text on each frame (1 for yes, 0 for no)"
+      type: integer
+    overlayTextString:
+      description: "HTML text content to render on the frame"
+      type: string
+    overlayTextColor:
+      description: "Colour for the text overlay as 0xRRGGBB integer"
+      type: integer
+    overlayTextFontFamily:
+      description: "Font family name for the text overlay (empty = system default)"
+      type: string
+    overlayTextFontScale:
+      description: "Font point size for the text overlay: 4.0 to 144.0"
+      type: number
+      format: double
+    overlayTextPosX:
+      description: "X pixel offset from the left edge for the text overlay: 0 to 4096"
+      type: integer
+    overlayTextPosY:
+      description: "Y pixel offset from the top edge for the text overlay: 0 to 4096 (0 = auto bottom)"
+      type: integer
+    diffMask:
+      description: "Show pixel differences from the previous frame (1 for yes, 0 for no)"
+      type: integer
+    diffThreshold:
+      description: "Threshold for diff-mask binary classification: 0 to 255"
+      type: integer
+    dilationSize:
+      description: "Kernel radius for diff-mask dilation: 0 to 20"
+      type: integer
+    diffMaskHistoryFrames:
+      description: "Number of diff masks to accumulate with bitwise OR: 1 to 120"
+      type: integer
+    diffMaskCloseSize:
+      description: "Kernel radius for morphological close on the accumulated diff mask: 0 to 20"
+      type: integer
+    detectionRoiX:
+      description: "Detection region-of-interest X origin in pixels: 0 to 4096"
+      type: integer
+    detectionRoiY:
+      description: "Detection region-of-interest Y origin in pixels: 0 to 4096"
+      type: integer
+    detectionRoiWidth:
+      description: "Detection region-of-interest width in pixels (0 = full width)"
+      type: integer
+    detectionRoiHeight:
+      description: "Detection region-of-interest height in pixels (0 = full height)"
+      type: integer
+    motionDetect:
+      description: "Enable MOG2 background subtractor for motion detection (1 for yes, 0 for no)"
+      type: integer
+    motionHistory:
+      description: "Background subtractor history length in frames: 1 to 5000"
+      type: integer
+    motionVarThreshold:
+      description: "Variance threshold for MOG2 foreground classification: 1.0 to 200.0"
+      type: number
+      format: double
+    motionDetectShadows:
+      description: "Enable MOG2 shadow detection (1 for yes, 0 for no)"
+      type: integer
+    motionOpenSize:
+      description: "Kernel radius for motion-mask morphological open: 0 to 20"
+      type: integer
+    motionCloseSize:
+      description: "Kernel radius for motion-mask morphological close: 0 to 20"
+      type: integer
+    motionPersistenceFrames:
+      description: "Keep last motion bounding boxes for this many frames after motion disappears: 0 to 120"
+      type: integer
+    motionBoxColor:
+      description: "Bounding box colour for motion contours as 0xRRGGBB integer"
+      type: integer
+    minContourArea:
+      description: "Minimum contour area in square pixels to draw: 0 to 10000"
+      type: integer
+    videoPostProcess:
+      description: "Write post-processed frames to video file; when 0 write raw frames (1 for yes, 0 for no)"
+      type: integer
+    overlaySpectrum:
+      description: "Overlay the spectrum view image on each frame (1 for yes, 0 for no)"
+      type: integer
+    spectrumDevice:
+      description: "Long ID of the device whose spectrum view to overlay (e.g. 'R0 HackRF')"
+      type: string
+    spectrumOffsetX:
+      description: "X offset in pixels for the top-left corner of the spectrum overlay: -4096 to 4096"
+      type: integer
+    spectrumOffsetY:
+      description: "Y offset in pixels for the top-left corner of the spectrum overlay: -4096 to 4096"
+      type: integer
+    spectrumScale:
+      description: "Scale factor applied to the spectrum image before compositing: 0.1 to 4.0"
+      type: number
+      format: double
+    yoloEnabled:
+      description: "Run YOLO ONNX inference and draw bounding boxes (1 for yes, 0 for no)"
+      type: integer
+    yoloModelPath:
+      description: "Path to the YOLO .onnx model file"
+      type: string
+    yoloLabelsPath:
+      description: "Path to a plain-text file with one class name per line"
+      type: string
+    yoloConfThreshold:
+      description: "Minimum detection confidence to keep: 0.0 to 1.0"
+      type: number
+      format: double
+    yoloNmsThreshold:
+      description: "IoU threshold for non-maximum suppression: 0.0 to 1.0"
+      type: number
+      format: double
+    yoloBoxColor:
+      description: "Default bounding box colour as 0xRRGGBB integer (used when no per-class colour is set)"
+      type: integer
+    yoloDisappearDebounce:
+      description: "Seconds a class must remain absent before it is treated as disappeared"
+      type: number
+      format: double
+    yoloDnnTarget:
+      description: >
+        OpenCV DNN backend for YOLO inference
+          * 0 - CPU
+          * 1 - CUDA (FP32)
+          * 2 - CUDA FP16
+      type: integer
+    objectDeviceSettings:
+      description: "Per-YOLO-class device control settings"
+      type: array
+      items:
+        $ref: "/doc/swagger/include/Camera.yaml#/CameraObjectClassSettings"
+    audioMute:
+      description: "Silence captured camera audio (1 for yes, 0 for no)"
+      type: integer
+    audioDeviceName:
+      description: "Name of the audio output device (empty = system default)"
+      type: string
+    whiteBalanceMode:
+      description: "Qt camera white balance mode index (0 = Auto)"
+      type: integer
+    exposureCompensation:
+      description: "Qt camera exposure compensation in EV steps: -2.0 to 2.0"
+      type: number
+      format: double
+    focusMode:
+      description: "Qt camera focus mode index (0 = Auto)"
+      type: integer
+    focusDistance:
+      description: "Qt camera normalised focus distance: 0.0 (near) to 1.0 (far/infinity)"
+      type: number
+      format: double
+    zoomFactor:
+      description: "Qt camera hardware optical zoom factor (1.0 = no zoom)"
+      type: number
+      format: double
+    useReverseAPI:
+      description: "Synchronize with reverse API (1 for yes, 0 for no)"
+      type: integer
+    reverseAPIAddress:
+      type: string
+    reverseAPIPort:
+      type: integer
+    reverseAPIFeatureSetIndex:
+      type: integer
+    reverseAPIFeatureIndex:
+      type: integer
+    rollupState:
+      $ref: "/doc/swagger/include/RollupState.yaml#/RollupState"
+    workspaceIndex:
+      type: integer
+
+CameraObjectClassSettings:
+  description: "Device control settings for a single YOLO object class"
+  properties:
+    className:
+      description: "YOLO class name this entry applies to"
+      type: string
+    deviceSettings:
+      description: "List of SDRangel device set actions to trigger on detection or disappearance"
+      type: array
+      items:
+        $ref: "/doc/swagger/include/Camera.yaml#/CameraObjectDeviceSettings"
+
+CameraObjectDeviceSettings:
+  description: "SDRangel device set actions triggered by YOLO object detection or disappearance"
+  properties:
+    deviceSetIndex:
+      description: "Device set index in SDRangel"
+      type: integer
+    presetGroup:
+      description: "Preset group to load on object detection"
+      type: string
+    presetFrequency:
+      description: "Preset centre frequency in Hz"
+      type: integer
+      format: int64
+    presetDescription:
+      description: "Preset description to identify the preset"
+      type: string
+    startOnDetect:
+      description: "Start acquisition when the object class is detected (1 for yes, 0 for no)"
+      type: integer
+    stopOnDisappear:
+      description: "Stop acquisition when the object class disappears (1 for yes, 0 for no)"
+      type: integer
+    startStopFileSink:
+      description: "Start/stop file sinks with detection/disappearance (1 for yes, 0 for no)"
+      type: integer
+    recordVideo:
+      description: "Start video recording on detection and stop when the object disappears (1 for yes, 0 for no)"
+      type: integer
+    detectCommand:
+      description: "Command or script to execute when the object class is detected"
+      type: string
+    disappearCommand:
+      description: "Command or script to execute when the object class disappears"
+      type: string
+    detectSpeech:
+      description: "Text to speak when the object class is detected"
+      type: string
+    disappearSpeech:
+      description: "Text to speak when the object class disappears"
+      type: string
+
+CameraReport:
+  description: "Camera feature report"
+  properties:
+    runningState:
+      type: integer
+      description: >
+        Running state
+          * 0 - not started
+          * 1 - idle
+          * 2 - running
+          * 3 - error
+
+CameraActions:
+  description: "Camera feature actions"
+  properties:
+    run:
+      type: integer
+      description: >
+        Set the plugin running state
+          * 0 - idle
+          * 1 - run

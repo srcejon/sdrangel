@@ -44,6 +44,8 @@ SWGFeatureSettings::SWGFeatureSettings() {
     m_antenna_tools_settings_isSet = false;
     aprs_settings = nullptr;
     m_aprs_settings_isSet = false;
+    camera_settings = nullptr;
+    m_camera_settings_isSet = false;
     demod_analyzer_settings = nullptr;
     m_demod_analyzer_settings_isSet = false;
     denoiser_settings = nullptr;
@@ -102,6 +104,8 @@ SWGFeatureSettings::init() {
     m_antenna_tools_settings_isSet = false;
     aprs_settings = new SWGAPRSSettings();
     m_aprs_settings_isSet = false;
+    camera_settings = new SWGCameraSettings();
+    m_camera_settings_isSet = false;
     demod_analyzer_settings = new SWGDemodAnalyzerSettings();
     m_demod_analyzer_settings_isSet = false;
     denoiser_settings = new SWGDenoiserSettings();
@@ -159,6 +163,9 @@ SWGFeatureSettings::cleanup() {
     }
     if(aprs_settings != nullptr) { 
         delete aprs_settings;
+    }
+    if(camera_settings != nullptr) { 
+        delete camera_settings;
     }
     if(demod_analyzer_settings != nullptr) { 
         delete demod_analyzer_settings;
@@ -240,6 +247,8 @@ SWGFeatureSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&aprs_settings, pJson["APRSSettings"], "SWGAPRSSettings", "SWGAPRSSettings");
     
+    ::SWGSDRangel::setValue(&camera_settings, pJson["CameraSettings"], "SWGCameraSettings", "SWGCameraSettings");
+    
     ::SWGSDRangel::setValue(&demod_analyzer_settings, pJson["DemodAnalyzerSettings"], "SWGDemodAnalyzerSettings", "SWGDemodAnalyzerSettings");
     
     ::SWGSDRangel::setValue(&denoiser_settings, pJson["DenoiserSettings"], "SWGDenoiserSettings", "SWGDenoiserSettings");
@@ -313,6 +322,9 @@ SWGFeatureSettings::asJsonObject() {
     }
     if((aprs_settings != nullptr) && (aprs_settings->isSet())){
         toJsonValue(QString("APRSSettings"), aprs_settings, obj, QString("SWGAPRSSettings"));
+    }
+    if((camera_settings != nullptr) && (camera_settings->isSet())){
+        toJsonValue(QString("CameraSettings"), camera_settings, obj, QString("SWGCameraSettings"));
     }
     if((demod_analyzer_settings != nullptr) && (demod_analyzer_settings->isSet())){
         toJsonValue(QString("DemodAnalyzerSettings"), demod_analyzer_settings, obj, QString("SWGDemodAnalyzerSettings"));
@@ -447,6 +459,16 @@ void
 SWGFeatureSettings::setAprsSettings(SWGAPRSSettings* aprs_settings) {
     this->aprs_settings = aprs_settings;
     this->m_aprs_settings_isSet = true;
+}
+
+SWGCameraSettings*
+SWGFeatureSettings::getCameraSettings() {
+    return camera_settings;
+}
+void
+SWGFeatureSettings::setCameraSettings(SWGCameraSettings* camera_settings) {
+    this->camera_settings = camera_settings;
+    this->m_camera_settings_isSet = true;
 }
 
 SWGDemodAnalyzerSettings*
@@ -646,6 +668,9 @@ SWGFeatureSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(aprs_settings && aprs_settings->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(camera_settings && camera_settings->isSet()){
             isObjectUpdated = true; break;
         }
         if(demod_analyzer_settings && demod_analyzer_settings->isSet()){

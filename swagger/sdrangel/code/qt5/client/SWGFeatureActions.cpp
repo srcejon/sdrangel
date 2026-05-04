@@ -38,6 +38,8 @@ SWGFeatureActions::SWGFeatureActions() {
     m_afc_actions_isSet = false;
     ambe_actions = nullptr;
     m_ambe_actions_isSet = false;
+    camera_actions = nullptr;
+    m_camera_actions_isSet = false;
     gs232_controller_actions = nullptr;
     m_gs232_controller_actions_isSet = false;
     lime_rfe_actions = nullptr;
@@ -82,6 +84,8 @@ SWGFeatureActions::init() {
     m_afc_actions_isSet = false;
     ambe_actions = new SWGAMBEActions();
     m_ambe_actions_isSet = false;
+    camera_actions = new SWGCameraActions();
+    m_camera_actions_isSet = false;
     gs232_controller_actions = new SWGGS232ControllerActions();
     m_gs232_controller_actions_isSet = false;
     lime_rfe_actions = new SWGLimeRFEActions();
@@ -122,6 +126,9 @@ SWGFeatureActions::cleanup() {
     }
     if(ambe_actions != nullptr) { 
         delete ambe_actions;
+    }
+    if(camera_actions != nullptr) { 
+        delete camera_actions;
     }
     if(gs232_controller_actions != nullptr) { 
         delete gs232_controller_actions;
@@ -185,6 +192,8 @@ SWGFeatureActions::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&ambe_actions, pJson["AMBEActions"], "SWGAMBEActions", "SWGAMBEActions");
     
+    ::SWGSDRangel::setValue(&camera_actions, pJson["CameraActions"], "SWGCameraActions", "SWGCameraActions");
+    
     ::SWGSDRangel::setValue(&gs232_controller_actions, pJson["GS232ControllerActions"], "SWGGS232ControllerActions", "SWGGS232ControllerActions");
     
     ::SWGSDRangel::setValue(&lime_rfe_actions, pJson["LimeRFEActions"], "SWGLimeRFEActions", "SWGLimeRFEActions");
@@ -241,6 +250,9 @@ SWGFeatureActions::asJsonObject() {
     }
     if((ambe_actions != nullptr) && (ambe_actions->isSet())){
         toJsonValue(QString("AMBEActions"), ambe_actions, obj, QString("SWGAMBEActions"));
+    }
+    if((camera_actions != nullptr) && (camera_actions->isSet())){
+        toJsonValue(QString("CameraActions"), camera_actions, obj, QString("SWGCameraActions"));
     }
     if((gs232_controller_actions != nullptr) && (gs232_controller_actions->isSet())){
         toJsonValue(QString("GS232ControllerActions"), gs232_controller_actions, obj, QString("SWGGS232ControllerActions"));
@@ -333,6 +345,16 @@ void
 SWGFeatureActions::setAmbeActions(SWGAMBEActions* ambe_actions) {
     this->ambe_actions = ambe_actions;
     this->m_ambe_actions_isSet = true;
+}
+
+SWGCameraActions*
+SWGFeatureActions::getCameraActions() {
+    return camera_actions;
+}
+void
+SWGFeatureActions::setCameraActions(SWGCameraActions* camera_actions) {
+    this->camera_actions = camera_actions;
+    this->m_camera_actions_isSet = true;
 }
 
 SWGGS232ControllerActions*
@@ -483,6 +505,9 @@ SWGFeatureActions::isSet(){
             isObjectUpdated = true; break;
         }
         if(ambe_actions && ambe_actions->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(camera_actions && camera_actions->isSet()){
             isObjectUpdated = true; break;
         }
         if(gs232_controller_actions && gs232_controller_actions->isSet()){

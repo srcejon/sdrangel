@@ -24,6 +24,7 @@
 
 #include "SWGAFCActions.h"
 #include "SWGAMBEActions.h"
+#include "SWGCameraActions.h"
 #include "SWGDemodAnalyzerActions.h"
 #include "SWGDenoiserActions.h"
 #include "SWGGS232ControllerActions.h"
@@ -71,6 +72,9 @@ public:
 
     SWGAMBEActions* getAmbeActions();
     void setAmbeActions(SWGAMBEActions* ambe_actions);
+
+    SWGCameraActions* getCameraActions();
+    void setCameraActions(SWGCameraActions* camera_actions);
 
     SWGGS232ControllerActions* getGs232ControllerActions();
     void setGs232ControllerActions(SWGGS232ControllerActions* gs232_controller_actions);
@@ -129,6 +133,9 @@ private:
 
     SWGAMBEActions* ambe_actions;
     bool m_ambe_actions_isSet;
+
+    SWGCameraActions* camera_actions;
+    bool m_camera_actions_isSet;
 
     SWGGS232ControllerActions* gs232_controller_actions;
     bool m_gs232_controller_actions_isSet;

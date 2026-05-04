@@ -34,6 +34,8 @@ SWGFeatureReport::SWGFeatureReport() {
     m_afc_report_isSet = false;
     ambe_report = nullptr;
     m_ambe_report_isSet = false;
+    camera_report = nullptr;
+    m_camera_report_isSet = false;
     freq_display_report = nullptr;
     m_freq_display_report_isSet = false;
     gs232_controller_report = nullptr;
@@ -70,6 +72,8 @@ SWGFeatureReport::init() {
     m_afc_report_isSet = false;
     ambe_report = new SWGAMBEReport();
     m_ambe_report_isSet = false;
+    camera_report = new SWGCameraReport();
+    m_camera_report_isSet = false;
     freq_display_report = new SWGFreqDisplayReport();
     m_freq_display_report_isSet = false;
     gs232_controller_report = new SWGGS232ControllerReport();
@@ -104,6 +108,9 @@ SWGFeatureReport::cleanup() {
     }
     if(ambe_report != nullptr) { 
         delete ambe_report;
+    }
+    if(camera_report != nullptr) { 
+        delete camera_report;
     }
     if(freq_display_report != nullptr) { 
         delete freq_display_report;
@@ -157,6 +164,8 @@ SWGFeatureReport::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&ambe_report, pJson["AMBEReport"], "SWGAMBEReport", "SWGAMBEReport");
     
+    ::SWGSDRangel::setValue(&camera_report, pJson["CameraReport"], "SWGCameraReport", "SWGCameraReport");
+    
     ::SWGSDRangel::setValue(&freq_display_report, pJson["FreqDisplayReport"], "SWGFreqDisplayReport", "SWGFreqDisplayReport");
     
     ::SWGSDRangel::setValue(&gs232_controller_report, pJson["GS232ControllerReport"], "SWGGS232ControllerReport", "SWGGS232ControllerReport");
@@ -203,6 +212,9 @@ SWGFeatureReport::asJsonObject() {
     }
     if((ambe_report != nullptr) && (ambe_report->isSet())){
         toJsonValue(QString("AMBEReport"), ambe_report, obj, QString("SWGAMBEReport"));
+    }
+    if((camera_report != nullptr) && (camera_report->isSet())){
+        toJsonValue(QString("CameraReport"), camera_report, obj, QString("SWGCameraReport"));
     }
     if((freq_display_report != nullptr) && (freq_display_report->isSet())){
         toJsonValue(QString("FreqDisplayReport"), freq_display_report, obj, QString("SWGFreqDisplayReport"));
@@ -269,6 +281,16 @@ void
 SWGFeatureReport::setAmbeReport(SWGAMBEReport* ambe_report) {
     this->ambe_report = ambe_report;
     this->m_ambe_report_isSet = true;
+}
+
+SWGCameraReport*
+SWGFeatureReport::getCameraReport() {
+    return camera_report;
+}
+void
+SWGFeatureReport::setCameraReport(SWGCameraReport* camera_report) {
+    this->camera_report = camera_report;
+    this->m_camera_report_isSet = true;
 }
 
 SWGFreqDisplayReport*
@@ -393,6 +415,9 @@ SWGFeatureReport::isSet(){
             isObjectUpdated = true; break;
         }
         if(ambe_report && ambe_report->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(camera_report && camera_report->isSet()){
             isObjectUpdated = true; break;
         }
         if(freq_display_report && freq_display_report->isSet()){

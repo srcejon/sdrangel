@@ -27,6 +27,7 @@
 #include "SWGAMBESettings.h"
 #include "SWGAPRSSettings.h"
 #include "SWGAntennaToolsSettings.h"
+#include "SWGCameraSettings.h"
 #include "SWGDemodAnalyzerSettings.h"
 #include "SWGDenoiserSettings.h"
 #include "SWGFreqDisplaySettings.h"
@@ -87,6 +88,9 @@ public:
 
     SWGAPRSSettings* getAprsSettings();
     void setAprsSettings(SWGAPRSSettings* aprs_settings);
+
+    SWGCameraSettings* getCameraSettings();
+    void setCameraSettings(SWGCameraSettings* camera_settings);
 
     SWGDemodAnalyzerSettings* getDemodAnalyzerSettings();
     void setDemodAnalyzerSettings(SWGDemodAnalyzerSettings* demod_analyzer_settings);
@@ -166,6 +170,9 @@ private:
 
     SWGAPRSSettings* aprs_settings;
     bool m_aprs_settings_isSet;
+
+    SWGCameraSettings* camera_settings;
+    bool m_camera_settings_isSet;
 
     SWGDemodAnalyzerSettings* demod_analyzer_settings;
     bool m_demod_analyzer_settings_isSet;

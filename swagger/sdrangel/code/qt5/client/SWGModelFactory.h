@@ -77,6 +77,11 @@
 #include "SWGBladeRF2OutputReport.h"
 #include "SWGBladeRF2OutputSettings.h"
 #include "SWGCWKeyerSettings.h"
+#include "SWGCameraActions.h"
+#include "SWGCameraObjectClassSettings.h"
+#include "SWGCameraObjectDeviceSettings.h"
+#include "SWGCameraReport.h"
+#include "SWGCameraSettings.h"
 #include "SWGCapture.h"
 #include "SWGChannel.h"
 #include "SWGChannelActions.h"
@@ -714,6 +719,31 @@ namespace SWGSDRangel {
     }
     if(QString("SWGCWKeyerSettings").compare(type) == 0) {
       SWGCWKeyerSettings *obj = new SWGCWKeyerSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGCameraActions").compare(type) == 0) {
+      SWGCameraActions *obj = new SWGCameraActions();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGCameraObjectClassSettings").compare(type) == 0) {
+      SWGCameraObjectClassSettings *obj = new SWGCameraObjectClassSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGCameraObjectDeviceSettings").compare(type) == 0) {
+      SWGCameraObjectDeviceSettings *obj = new SWGCameraObjectDeviceSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGCameraReport").compare(type) == 0) {
+      SWGCameraReport *obj = new SWGCameraReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGCameraSettings").compare(type) == 0) {
+      SWGCameraSettings *obj = new SWGCameraSettings();
       obj->init();
       return obj;
     }

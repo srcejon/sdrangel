@@ -24,6 +24,7 @@
 
 #include "SWGAFCReport.h"
 #include "SWGAMBEReport.h"
+#include "SWGCameraReport.h"
 #include "SWGFreqDisplayReport.h"
 #include "SWGGS232ControllerReport.h"
 #include "SWGLimeRFEReport.h"
@@ -63,6 +64,9 @@ public:
 
     SWGAMBEReport* getAmbeReport();
     void setAmbeReport(SWGAMBEReport* ambe_report);
+
+    SWGCameraReport* getCameraReport();
+    void setCameraReport(SWGCameraReport* camera_report);
 
     SWGFreqDisplayReport* getFreqDisplayReport();
     void setFreqDisplayReport(SWGFreqDisplayReport* freq_display_report);
@@ -109,6 +113,9 @@ private:
 
     SWGAMBEReport* ambe_report;
     bool m_ambe_report_isSet;
+
+    SWGCameraReport* camera_report;
+    bool m_camera_report_isSet;
 
     SWGFreqDisplayReport* freq_display_report;
     bool m_freq_display_report_isSet;

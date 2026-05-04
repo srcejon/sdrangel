@@ -23,6 +23,8 @@ FeatureSettings:
       $ref: "/doc/swagger/include/AntennaTools.yaml#/AntennaToolsSettings"
     APRSSettings:
       $ref: "/doc/swagger/include/APRS.yaml#/APRSSettings"
+    CameraSettings:
+      $ref: "/doc/swagger/include/Camera.yaml#/CameraSettings"
     DemodAnalyzerSettings:
       $ref: "/doc/swagger/include/DemodAnalyzer.yaml#/DemodAnalyzerSettings"
     DenoiserSettings:

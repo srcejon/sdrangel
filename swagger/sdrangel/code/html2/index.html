@@ -3553,6 +3553,582 @@ margin-bottom: 20px;
     }
   }
 };
+            defs.CameraActions = {
+  "properties" : {
+    "run" : {
+      "type" : "integer",
+      "description" : "Set the plugin running state\n  * 0 - idle\n  * 1 - run\n"
+    }
+  },
+  "description" : "Camera feature actions"
+};
+            defs.CameraObjectClassSettings = {
+  "properties" : {
+    "className" : {
+      "type" : "string",
+      "description" : "YOLO class name this entry applies to"
+    },
+    "deviceSettings" : {
+      "type" : "array",
+      "description" : "List of SDRangel device set actions to trigger on detection or disappearance",
+      "items" : {
+        "$ref" : "#/definitions/CameraObjectDeviceSettings"
+      }
+    }
+  },
+  "description" : "Device control settings for a single YOLO object class"
+};
+            defs.CameraObjectDeviceSettings = {
+  "properties" : {
+    "deviceSetIndex" : {
+      "type" : "integer",
+      "description" : "Device set index in SDRangel"
+    },
+    "presetGroup" : {
+      "type" : "string",
+      "description" : "Preset group to load on object detection"
+    },
+    "presetFrequency" : {
+      "type" : "integer",
+      "format" : "int64",
+      "description" : "Preset centre frequency in Hz"
+    },
+    "presetDescription" : {
+      "type" : "string",
+      "description" : "Preset description to identify the preset"
+    },
+    "startOnDetect" : {
+      "type" : "integer",
+      "description" : "Start acquisition when the object class is detected (1 for yes, 0 for no)"
+    },
+    "stopOnDisappear" : {
+      "type" : "integer",
+      "description" : "Stop acquisition when the object class disappears (1 for yes, 0 for no)"
+    },
+    "startStopFileSink" : {
+      "type" : "integer",
+      "description" : "Start/stop file sinks with detection/disappearance (1 for yes, 0 for no)"
+    },
+    "recordVideo" : {
+      "type" : "integer",
+      "description" : "Start video recording on detection and stop when the object disappears (1 for yes, 0 for no)"
+    },
+    "detectCommand" : {
+      "type" : "string",
+      "description" : "Command or script to execute when the object class is detected"
+    },
+    "disappearCommand" : {
+      "type" : "string",
+      "description" : "Command or script to execute when the object class disappears"
+    },
+    "detectSpeech" : {
+      "type" : "string",
+      "description" : "Text to speak when the object class is detected"
+    },
+    "disappearSpeech" : {
+      "type" : "string",
+      "description" : "Text to speak when the object class disappears"
+    }
+  },
+  "description" : "SDRangel device set actions triggered by YOLO object detection or disappearance"
+};
+            defs.CameraReport = {
+  "properties" : {
+    "runningState" : {
+      "type" : "integer",
+      "description" : "Running state\n  * 0 - not started\n  * 1 - idle\n  * 2 - running\n  * 3 - error\n"
+    }
+  },
+  "description" : "Camera feature report"
+};
+            defs.CameraSettings = {
+  "properties" : {
+    "title" : {
+      "type" : "string"
+    },
+    "rgbColor" : {
+      "type" : "integer"
+    },
+    "cameraProtocol" : {
+      "type" : "string",
+      "description" : "Camera protocol identifier (e.g. 'ALPACA', 'QT', 'file:')"
+    },
+    "cameraId" : {
+      "type" : "string",
+      "description" : "Camera device identifier"
+    },
+    "cameraDescription" : {
+      "type" : "string",
+      "description" : "Human-readable camera description"
+    },
+    "resolutionWidth" : {
+      "type" : "integer",
+      "description" : "Capture resolution width in pixels"
+    },
+    "resolutionHeight" : {
+      "type" : "integer",
+      "description" : "Capture resolution height in pixels"
+    },
+    "framesPerSecond" : {
+      "type" : "integer",
+      "description" : "Capture frame rate in frames per second"
+    },
+    "captureMode" : {
+      "type" : "integer",
+      "description" : "Capture timing mode\n  * 0 - Frame rate\n  * 1 - Interval\n"
+    },
+    "captureInterval" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Capture interval duration"
+    },
+    "captureIntervalUnits" : {
+      "type" : "integer",
+      "description" : "Units for captureInterval\n  * 0 - Seconds\n  * 1 - Minutes\n"
+    },
+    "exposureTimeMs" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Exposure time in milliseconds (ALPACA cameras)"
+    },
+    "isoSensitivity" : {
+      "type" : "integer",
+      "description" : "ISO sensitivity value (ALPACA cameras)"
+    },
+    "alpacaDiscoveryEnabled" : {
+      "type" : "integer",
+      "description" : "Enable ALPACA device discovery (1 for yes, 0 for no)"
+    },
+    "alpacaApiLogEnabled" : {
+      "type" : "integer",
+      "description" : "Enable ALPACA API request logging (1 for yes, 0 for no)"
+    },
+    "alpacaHost" : {
+      "type" : "string",
+      "description" : "Hostname or IP address of ALPACA camera server"
+    },
+    "alpacaPort" : {
+      "type" : "integer",
+      "description" : "TCP port of ALPACA camera server"
+    },
+    "alpacaFocuserEnabled" : {
+      "type" : "integer",
+      "description" : "Enable ALPACA focuser control (1 for yes, 0 for no)"
+    },
+    "alpacaFocuserHost" : {
+      "type" : "string",
+      "description" : "Hostname or IP address of ALPACA focuser server"
+    },
+    "alpacaFocuserPort" : {
+      "type" : "integer",
+      "description" : "TCP port of ALPACA focuser server"
+    },
+    "alpacaFocuserDeviceNumber" : {
+      "type" : "integer",
+      "description" : "ALPACA device number for the focuser"
+    },
+    "alpacaFocusPosition" : {
+      "type" : "integer",
+      "description" : "Target focuser position in steps"
+    },
+    "alpacaFocusStepSize" : {
+      "type" : "integer",
+      "description" : "Focuser step size for focus adjustments"
+    },
+    "alpacaFilterWheelEnabled" : {
+      "type" : "integer",
+      "description" : "Enable ALPACA filter wheel control (1 for yes, 0 for no)"
+    },
+    "alpacaFilterWheelHost" : {
+      "type" : "string",
+      "description" : "Hostname or IP address of ALPACA filter wheel server"
+    },
+    "alpacaFilterWheelPort" : {
+      "type" : "integer",
+      "description" : "TCP port of ALPACA filter wheel server"
+    },
+    "alpacaFilterWheelDeviceNumber" : {
+      "type" : "integer",
+      "description" : "ALPACA device number for the filter wheel"
+    },
+    "alpacaFilterWheelPosition" : {
+      "type" : "integer",
+      "description" : "Filter wheel position index"
+    },
+    "alpacaBinX" : {
+      "type" : "integer",
+      "description" : "ALPACA camera X binning factor"
+    },
+    "alpacaBinY" : {
+      "type" : "integer",
+      "description" : "ALPACA camera Y binning factor"
+    },
+    "alpacaNumX" : {
+      "type" : "integer",
+      "description" : "ALPACA camera ROI width in binned pixels (0 = full width)"
+    },
+    "alpacaNumY" : {
+      "type" : "integer",
+      "description" : "ALPACA camera ROI height in binned pixels (0 = full height)"
+    },
+    "alpacaStartX" : {
+      "type" : "integer",
+      "description" : "ALPACA camera ROI X origin in unbinned pixels"
+    },
+    "alpacaStartY" : {
+      "type" : "integer",
+      "description" : "ALPACA camera ROI Y origin in unbinned pixels"
+    },
+    "alpacaGain" : {
+      "type" : "integer",
+      "description" : "ALPACA camera gain index or numeric value (-1 = do not set)"
+    },
+    "alpacaOffset" : {
+      "type" : "integer",
+      "description" : "ALPACA camera offset index or numeric value (-1 = do not set)"
+    },
+    "alpacaReadoutMode" : {
+      "type" : "integer",
+      "description" : "ALPACA camera readout mode index"
+    },
+    "saveImage" : {
+      "type" : "integer",
+      "description" : "Save captured frames as still images (1 for yes, 0 for no)"
+    },
+    "imageFileName" : {
+      "type" : "string",
+      "description" : "File path template for saved still images"
+    },
+    "saveVideo" : {
+      "type" : "integer",
+      "description" : "Record captured frames to a video file (1 for yes, 0 for no)"
+    },
+    "videoFileCameraPath" : {
+      "type" : "string",
+      "description" : "File path for file-based camera video source"
+    },
+    "videoFileName" : {
+      "type" : "string",
+      "description" : "File path for recorded video output"
+    },
+    "videoHwAcceleration" : {
+      "type" : "integer",
+      "description" : "Prefer hardware-accelerated video encoding when available (1 for yes, 0 for no)"
+    },
+    "postProcessWhiteBalanceMode" : {
+      "type" : "integer",
+      "description" : "Post-processing white balance mode\n  * 0 - Off\n  * 1 - Auto\n  * 2 - Manual\n"
+    },
+    "postProcessWhiteBalanceRedGain" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Manual white balance red channel gain: 0.1 to 8.0"
+    },
+    "postProcessWhiteBalanceGreenGain" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Manual white balance green channel gain: 0.1 to 8.0"
+    },
+    "postProcessWhiteBalanceBlueGain" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Manual white balance blue channel gain: 0.1 to 8.0"
+    },
+    "saturation" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Saturation multiplier: 0.0 to 3.0"
+    },
+    "gamma" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Gamma correction exponent: 0.1 to 3.0"
+    },
+    "brightness" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Brightness adjustment: -100.0 to 100.0"
+    },
+    "contrast" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Contrast multiplier: 0.1 to 3.0"
+    },
+    "gaussianBlur" : {
+      "type" : "integer",
+      "description" : "Gaussian blur kernel radius: 0 (off) to 15"
+    },
+    "medianBlur" : {
+      "type" : "integer",
+      "description" : "Median blur kernel radius: 0 (off) to 15"
+    },
+    "sharpen" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Sharpening amount: 0.0 to 3.0"
+    },
+    "sobelEdge" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Sobel edge blend amount: 0.0 to 3.0"
+    },
+    "flipX" : {
+      "type" : "integer",
+      "description" : "Flip image horizontally (1 for yes, 0 for no)"
+    },
+    "flipY" : {
+      "type" : "integer",
+      "description" : "Flip image vertically (1 for yes, 0 for no)"
+    },
+    "invertColors" : {
+      "type" : "integer",
+      "description" : "Invert all colour channels (1 for yes, 0 for no)"
+    },
+    "overlayDateTime" : {
+      "type" : "integer",
+      "description" : "Draw current date and time on each frame (1 for yes, 0 for no)"
+    },
+    "dateTimeColor" : {
+      "type" : "integer",
+      "description" : "Colour for the date/time overlay text as 0xRRGGBB integer"
+    },
+    "dateTimeFormat" : {
+      "type" : "string",
+      "description" : "QDateTime::toString format string for the date/time overlay (e.g. 'yyyy-MM-dd hh:mm:ss')"
+    },
+    "dateTimePosX" : {
+      "type" : "integer",
+      "description" : "X pixel offset from the left edge for the date/time overlay: 0 to 4096"
+    },
+    "dateTimePosY" : {
+      "type" : "integer",
+      "description" : "Y pixel offset from the top edge for the date/time overlay: 0 to 4096 (0 = auto bottom)"
+    },
+    "overlayText" : {
+      "type" : "integer",
+      "description" : "Draw custom HTML text on each frame (1 for yes, 0 for no)"
+    },
+    "overlayTextString" : {
+      "type" : "string",
+      "description" : "HTML text content to render on the frame"
+    },
+    "overlayTextColor" : {
+      "type" : "integer",
+      "description" : "Colour for the text overlay as 0xRRGGBB integer"
+    },
+    "overlayTextFontFamily" : {
+      "type" : "string",
+      "description" : "Font family name for the text overlay (empty = system default)"
+    },
+    "overlayTextFontScale" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Font point size for the text overlay: 4.0 to 144.0"
+    },
+    "overlayTextPosX" : {
+      "type" : "integer",
+      "description" : "X pixel offset from the left edge for the text overlay: 0 to 4096"
+    },
+    "overlayTextPosY" : {
+      "type" : "integer",
+      "description" : "Y pixel offset from the top edge for the text overlay: 0 to 4096 (0 = auto bottom)"
+    },
+    "diffMask" : {
+      "type" : "integer",
+      "description" : "Show pixel differences from the previous frame (1 for yes, 0 for no)"
+    },
+    "diffThreshold" : {
+      "type" : "integer",
+      "description" : "Threshold for diff-mask binary classification: 0 to 255"
+    },
+    "dilationSize" : {
+      "type" : "integer",
+      "description" : "Kernel radius for diff-mask dilation: 0 to 20"
+    },
+    "diffMaskHistoryFrames" : {
+      "type" : "integer",
+      "description" : "Number of diff masks to accumulate with bitwise OR: 1 to 120"
+    },
+    "diffMaskCloseSize" : {
+      "type" : "integer",
+      "description" : "Kernel radius for morphological close on the accumulated diff mask: 0 to 20"
+    },
+    "detectionRoiX" : {
+      "type" : "integer",
+      "description" : "Detection region-of-interest X origin in pixels: 0 to 4096"
+    },
+    "detectionRoiY" : {
+      "type" : "integer",
+      "description" : "Detection region-of-interest Y origin in pixels: 0 to 4096"
+    },
+    "detectionRoiWidth" : {
+      "type" : "integer",
+      "description" : "Detection region-of-interest width in pixels (0 = full width)"
+    },
+    "detectionRoiHeight" : {
+      "type" : "integer",
+      "description" : "Detection region-of-interest height in pixels (0 = full height)"
+    },
+    "motionDetect" : {
+      "type" : "integer",
+      "description" : "Enable MOG2 background subtractor for motion detection (1 for yes, 0 for no)"
+    },
+    "motionHistory" : {
+      "type" : "integer",
+      "description" : "Background subtractor history length in frames: 1 to 5000"
+    },
+    "motionVarThreshold" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Variance threshold for MOG2 foreground classification: 1.0 to 200.0"
+    },
+    "motionDetectShadows" : {
+      "type" : "integer",
+      "description" : "Enable MOG2 shadow detection (1 for yes, 0 for no)"
+    },
+    "motionOpenSize" : {
+      "type" : "integer",
+      "description" : "Kernel radius for motion-mask morphological open: 0 to 20"
+    },
+    "motionCloseSize" : {
+      "type" : "integer",
+      "description" : "Kernel radius for motion-mask morphological close: 0 to 20"
+    },
+    "motionPersistenceFrames" : {
+      "type" : "integer",
+      "description" : "Keep last motion bounding boxes for this many frames after motion disappears: 0 to 120"
+    },
+    "motionBoxColor" : {
+      "type" : "integer",
+      "description" : "Bounding box colour for motion contours as 0xRRGGBB integer"
+    },
+    "minContourArea" : {
+      "type" : "integer",
+      "description" : "Minimum contour area in square pixels to draw: 0 to 10000"
+    },
+    "videoPostProcess" : {
+      "type" : "integer",
+      "description" : "Write post-processed frames to video file; when 0 write raw frames (1 for yes, 0 for no)"
+    },
+    "overlaySpectrum" : {
+      "type" : "integer",
+      "description" : "Overlay the spectrum view image on each frame (1 for yes, 0 for no)"
+    },
+    "spectrumDevice" : {
+      "type" : "string",
+      "description" : "Long ID of the device whose spectrum view to overlay (e.g. 'R0 HackRF')"
+    },
+    "spectrumOffsetX" : {
+      "type" : "integer",
+      "description" : "X offset in pixels for the top-left corner of the spectrum overlay: -4096 to 4096"
+    },
+    "spectrumOffsetY" : {
+      "type" : "integer",
+      "description" : "Y offset in pixels for the top-left corner of the spectrum overlay: -4096 to 4096"
+    },
+    "spectrumScale" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Scale factor applied to the spectrum image before compositing: 0.1 to 4.0"
+    },
+    "yoloEnabled" : {
+      "type" : "integer",
+      "description" : "Run YOLO ONNX inference and draw bounding boxes (1 for yes, 0 for no)"
+    },
+    "yoloModelPath" : {
+      "type" : "string",
+      "description" : "Path to the YOLO .onnx model file"
+    },
+    "yoloLabelsPath" : {
+      "type" : "string",
+      "description" : "Path to a plain-text file with one class name per line"
+    },
+    "yoloConfThreshold" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Minimum detection confidence to keep: 0.0 to 1.0"
+    },
+    "yoloNmsThreshold" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "IoU threshold for non-maximum suppression: 0.0 to 1.0"
+    },
+    "yoloBoxColor" : {
+      "type" : "integer",
+      "description" : "Default bounding box colour as 0xRRGGBB integer (used when no per-class colour is set)"
+    },
+    "yoloDisappearDebounce" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Seconds a class must remain absent before it is treated as disappeared"
+    },
+    "yoloDnnTarget" : {
+      "type" : "integer",
+      "description" : "OpenCV DNN backend for YOLO inference\n  * 0 - CPU\n  * 1 - CUDA (FP32)\n  * 2 - CUDA FP16\n"
+    },
+    "objectDeviceSettings" : {
+      "type" : "array",
+      "description" : "Per-YOLO-class device control settings",
+      "items" : {
+        "$ref" : "#/definitions/CameraObjectClassSettings"
+      }
+    },
+    "audioMute" : {
+      "type" : "integer",
+      "description" : "Silence captured camera audio (1 for yes, 0 for no)"
+    },
+    "audioDeviceName" : {
+      "type" : "string",
+      "description" : "Name of the audio output device (empty = system default)"
+    },
+    "whiteBalanceMode" : {
+      "type" : "integer",
+      "description" : "Qt camera white balance mode index (0 = Auto)"
+    },
+    "exposureCompensation" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Qt camera exposure compensation in EV steps: -2.0 to 2.0"
+    },
+    "focusMode" : {
+      "type" : "integer",
+      "description" : "Qt camera focus mode index (0 = Auto)"
+    },
+    "focusDistance" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Qt camera normalised focus distance: 0.0 (near) to 1.0 (far/infinity)"
+    },
+    "zoomFactor" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Qt camera hardware optical zoom factor (1.0 = no zoom)"
+    },
+    "useReverseAPI" : {
+      "type" : "integer",
+      "description" : "Synchronize with reverse API (1 for yes, 0 for no)"
+    },
+    "reverseAPIAddress" : {
+      "type" : "string"
+    },
+    "reverseAPIPort" : {
+      "type" : "integer"
+    },
+    "reverseAPIFeatureSetIndex" : {
+      "type" : "integer"
+    },
+    "reverseAPIFeatureIndex" : {
+      "type" : "integer"
+    },
+    "rollupState" : {
+      "$ref" : "#/definitions/RollupState"
+    },
+    "workspaceIndex" : {
+      "type" : "integer"
+    }
+  },
+  "description" : "Camera feature settings"
+};
             defs.Capture = {
   "properties" : {
     "tsms" : {
@@ -6623,6 +7199,9 @@ margin-bottom: 20px;
     "AMBEActions" : {
       "$ref" : "#/definitions/AMBEActions"
     },
+    "CameraActions" : {
+      "$ref" : "#/definitions/CameraActions"
+    },
     "GS232ControllerActions" : {
       "$ref" : "#/definitions/GS232ControllerActions"
     },
@@ -6777,6 +7356,9 @@ margin-bottom: 20px;
     "AMBEReport" : {
       "$ref" : "#/definitions/AMBEReport"
     },
+    "CameraReport" : {
+      "$ref" : "#/definitions/CameraReport"
+    },
     "FreqDisplayReport" : {
       "$ref" : "#/definitions/FreqDisplayReport"
     },
@@ -6877,6 +7459,9 @@ margin-bottom: 20px;
     },
     "APRSSettings" : {
       "$ref" : "#/definitions/APRSSettings"
+    },
+    "CameraSettings" : {
+      "$ref" : "#/definitions/CameraSettings"
     },
     "DemodAnalyzerSettings" : {
       "$ref" : "#/definitions/DemodAnalyzerSettings"
@@ -11087,6 +11672,10 @@ margin-bottom: 20px;
     "sendViaUDP" : {
       "type" : "integer",
       "description" : "boolean 1 to send decoded message via UDP else 0"
+    },
+    "sendJsonViaUDP" : {
+      "type" : "integer",
+      "description" : "boolean 1 to send decoded message as JSON via UDP else 0"
     },
     "udpEnabled" : {
       "type" : "integer",
@@ -60402,7 +60991,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-04-22T21:13:47.209+02:00
+              Generated 2026-05-04T18:32:59.710+02:00
             </div>
           </div>
       </div>

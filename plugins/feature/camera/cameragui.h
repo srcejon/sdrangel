@@ -213,7 +213,7 @@ private:
     void updateEnabledControls();
     void updateCaptureModeControls();
     void updateExposureControls();
-    void updateFileCameraControls();
+    void updateVideoFileControls();
     void probeQtCameraCapabilities();
     void reportResolutions();
     void populateQtFormatControls(const QList<QSize>& resolutions, const QHash<QString, FrameRateOptions>& frameRateOptionsByResolution);
@@ -259,7 +259,8 @@ private slots:
     void on_refreshCamerasButton_clicked();
     void on_cameraCombo_currentIndexChanged(int index);
     void on_browseVideoFileButton_clicked();
-    void on_restartVideoFileButton_clicked();
+    void on_restartVideo_clicked();
+    void on_loopVideo_clicked(bool checked=false);
     void on_resolutionCombo_currentIndexChanged(int index);
     void on_fpsLabel_currentIndexChanged(int index);
     void on_fpsSpin_valueChanged(int value);

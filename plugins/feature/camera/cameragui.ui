@@ -73,35 +73,7 @@
          <string>Select camera to capture from</string>
         </property>
         <property name="editable">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="browseVideoFileButton">
-        <property name="toolTip">
-         <string>Select the video file used by the file camera source</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="../../../sdrgui/resources/res.qrc">
-          <normaloff>:/load.png</normaloff>:/load.png</iconset>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="restartVideoFileButton">
-        <property name="toolTip">
-         <string>Restart playback of the selected video file</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="../../../sdrgui/resources/res.qrc">
-          <normaloff>:/recycle.png</normaloff>:/recycle.png</iconset>
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -130,6 +102,55 @@
         <property name="icon">
          <iconset resource="../../../sdrgui/resources/res.qrc">
           <normaloff>:/gear.png</normaloff>:/gear.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="Line" name="videoLine">
+        <property name="orientation">
+         <enum>Qt::Orientation::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="browseVideoFileButton">
+        <property name="toolTip">
+         <string>Select the video file used by the file camera source</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/load.png</normaloff>:/load.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="restartVideo">
+        <property name="toolTip">
+         <string>Restart playback of the selected video file</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/media_previous.png</normaloff>:/camera/icons/media_previous.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="loopVideo">
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/media_loop.png</normaloff>:/camera/icons/media_loop.png</iconset>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>

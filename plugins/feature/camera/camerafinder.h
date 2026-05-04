@@ -53,7 +53,7 @@ private:
     QTimer* m_discoveryTimer;
     int m_requestId;
     int m_pendingConfiguredDeviceReplies;
-    CameraSettings m_pendingSettings;
+    CameraSettings m_settings;
     QList<CameraInfo> m_currentCameras;
     QList<AlpacaDeviceInfo> m_currentFocusers;
     QList<AlpacaDeviceInfo> m_currentFilterWheels;

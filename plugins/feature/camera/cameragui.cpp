@@ -568,6 +568,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
 CameraGUI::~CameraGUI()
 {
+    if (m_camera) {
+        m_camera->setMessageQueueToGUI(nullptr);
+    }
     cleanupQtCapture();
     delete m_histogramDialog;
     delete ui;
@@ -711,7 +714,7 @@ void CameraGUI::displaySettings()
     } else if (!m_settings.cameraDisplayName().isEmpty()) {
         ui->cameraCombo->setCurrentText(m_settings.cameraDisplayName());
     }
-    updateFileCameraControls();
+    updateVideoFileControls();
 
     const QString resText = QString("%1x%2").arg(m_settings.m_resolutionWidth).arg(m_settings.m_resolutionHeight);
     const int resIdx = settingsUI()->resolutionCombo->findText(resText);
@@ -1056,7 +1059,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->refreshCamerasButton, &QPushButton::clicked, this, &CameraGUI::on_refreshCamerasButton_clicked);
     QObject::connect(ui->cameraCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cameraCombo_currentIndexChanged);
     QObject::connect(ui->browseVideoFileButton, &QToolButton::clicked, this, &CameraGUI::on_browseVideoFileButton_clicked);
-    QObject::connect(ui->restartVideoFileButton, &QToolButton::clicked, this, &CameraGUI::on_restartVideoFileButton_clicked);
+    QObject::connect(ui->restartVideo, &QToolButton::clicked, this, &CameraGUI::on_restartVideo_clicked);
+    QObject::connect(ui->loopVideo, &ButtonSwitch::clicked, this, &CameraGUI::on_loopVideo_clicked);
     QObject::connect(settingsUI()->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fpsLabel, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsLabel_currentIndexChanged);
     QObject::connect(settingsUI()->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
@@ -1398,15 +1402,18 @@ void CameraGUI::updateExposureControls()
     }
 }
 
-void CameraGUI::updateFileCameraControls()
+void CameraGUI::updateVideoFileControls()
 {
     const bool fileCameraSelected = m_settings.isFileCamera();
     const bool hasVideoFile = fileCameraSelected && !m_settings.m_videoFileCameraPath.isEmpty();
 
     ui->browseVideoFileButton->setVisible(fileCameraSelected);
     ui->browseVideoFileButton->setEnabled(fileCameraSelected);
-    ui->restartVideoFileButton->setVisible(fileCameraSelected);
-    ui->restartVideoFileButton->setEnabled(hasVideoFile);
+    ui->restartVideo->setVisible(fileCameraSelected);
+    ui->restartVideo->setEnabled(hasVideoFile);
+    ui->loopVideo->setVisible(fileCameraSelected);
+    ui->loopVideo->setEnabled(hasVideoFile);
+    ui->videoLine->setVisible(fileCameraSelected);
 }
 
 void CameraGUI::probeQtCameraCapabilities()
@@ -2537,11 +2544,11 @@ void CameraGUI::on_browseVideoFileButton_clicked()
     m_settings.m_cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
     m_settings.m_cameraDescription = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
     m_settings.m_videoFileCameraPath = m_settings.m_cameraId;
-    updateFileCameraControls();
+    updateVideoFileControls();
     applySettings({"cameraId", "cameraDescription", "videoFileCameraPath"});
 }
 
-void CameraGUI::on_restartVideoFileButton_clicked()
+void CameraGUI::on_restartVideo_clicked()
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     if (!m_settings.isFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
@@ -2556,6 +2563,30 @@ void CameraGUI::on_restartVideoFileButton_clicked()
     {
         m_mediaPlayer->setPosition(0);
         m_mediaPlayer->play();
+    }
+#endif
+}
+
+void CameraGUI::on_loopVideo_clicked(bool checked)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_mediaPlayer)
+    {
+        // On Windows, setLoops doesn't appear to apply if already playing
+        bool wasPlaying = m_mediaPlayer->isPlaying();
+        qint64 position;
+
+        if (wasPlaying)
+        {
+            position = m_mediaPlayer->position();
+            m_mediaPlayer->stop();
+        }
+        m_mediaPlayer->setLoops(checked ? QMediaPlayer::Infinite : 1);
+        if (wasPlaying)
+        {
+            m_mediaPlayer->setPosition(position);
+            m_mediaPlayer->play();
+        }
     }
 #endif
 }
@@ -2626,7 +2657,7 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     }
     updateAlpacaVisibility();
     updateEnabledControls();
-    updateFileCameraControls();
+    updateVideoFileControls();
     applySettings(settingsKeys);
 }
 
@@ -3462,7 +3493,7 @@ void CameraGUI::updateEnabledControls()
         }
     }
 
-    updateFileCameraControls();
+    updateVideoFileControls();
 }
 
 void CameraGUI::on_overlayFontCombo_currentFontChanged(const QFont& font)

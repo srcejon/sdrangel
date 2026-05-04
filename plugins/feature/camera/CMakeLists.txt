@@ -62,7 +62,8 @@ endif()
 if(NOT Qt6_FOUND)
     add_library(${TARGET_NAME} ${camera_SOURCES})
 else()
-    qt_add_plugin(${TARGET_NAME} CLASS_NAME CameraPlugin ${camera_SOURCES})
+    qt_add_plugin(${TARGET_NAME} CLASS_NAME CameraPlugin)
+    target_sources(${TARGET_NAME} PRIVATE ${camera_SOURCES})
 endif()
 
 if(NOT BUILD_SHARED_LIBS)
@@ -75,7 +76,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     Qt::Gui
     Qt::Multimedia
     ${TARGET_LIB}
-    "${OpenCV_LIBS}"
+    ${OpenCV_LIBS}
     sdrbase
     ${TARGET_LIB_GUI}
 )

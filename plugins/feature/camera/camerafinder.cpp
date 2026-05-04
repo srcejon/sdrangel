@@ -61,15 +61,8 @@ CameraFinder::~CameraFinder()
 
 void CameraFinder::reportCameraList(const CameraSettings& settings)
 {
-    m_pendingSettings = settings;
+    m_settings = settings;
     m_currentCameras = listQtCameras();
-    m_currentCameras.append({
-        QStringLiteral("file"),
-        settings.m_videoFileCameraPath,
-        settings.m_videoFileCameraPath.isEmpty() ? QString() : QFileInfo(settings.m_videoFileCameraPath).fileName(),
-        {},
-        0
-    });
     m_currentFocusers.clear();
     m_currentFilterWheels.clear();
     m_discoveredEndpointKeys.clear();
@@ -195,6 +188,17 @@ void CameraFinder::finalizeCameraList(int requestId)
         return;
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    // Have file: as the last entry
+    m_currentCameras.append({
+        QStringLiteral("file"),
+        m_settings.m_videoFileCameraPath,
+        m_settings.m_videoFileCameraPath.isEmpty() ? QString() : QFileInfo(m_settings.m_videoFileCameraPath).fileName(),
+        {},
+        0
+        });
+#endif
+
     m_msgQueueToGUI->push(CameraWorker::MsgReportCameraList::create(m_currentCameras));
     m_msgQueueToGUI->push(CameraWorker::MsgReportAlpacaDeviceList::create(m_currentFocusers, m_currentFilterWheels));
 }
@@ -250,7 +254,7 @@ void CameraFinder::finishAlpacaDiscovery(int requestId)
     }
 
     if (endpoints.isEmpty()) {
-        endpoints.append({m_pendingSettings.m_alpacaHost, m_pendingSettings.m_alpacaPort});
+        endpoints.append({m_settings.m_alpacaHost, m_settings.m_alpacaPort});
     }
 
     queryConfiguredDevices(endpoints, requestId);

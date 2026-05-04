@@ -8,5 +8,10 @@
       <file>icons/histogram.png</file>
       <file>icons/object_detect.png</file>
       <file>icons/motion_detect.png</file>
+      <file>icons/media_back.png</file>
+      <file>icons/media_forward.png</file>
+      <file>icons/media_loop.png</file>
+      <file>icons/media_next.png</file>
+      <file>icons/media_previous.png</file>
     </qresource>
 </RCC>

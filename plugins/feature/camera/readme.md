@@ -107,3 +107,4 @@ If imageready is always false, try restarting the ASCOM Remote Server.
 - clock by Alv Jørgen Bovolden from Noun Project (CC BY 3.0)
 - invert by Meko from Noun Project (CC BY 3.0)
 - subtract-picture by Smashicons from Noun Project (CC BY 3.0)
+- media player icons by Ranah Pixel Studio from Noun Project (CC BY 3.0)

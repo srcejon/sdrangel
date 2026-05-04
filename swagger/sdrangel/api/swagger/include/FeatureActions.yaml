@@ -17,6 +17,8 @@ FeatureActions:
       $ref: "http://swgserver:8081/api/swagger/include/AFC.yaml#/AFCActions"
     AMBEActions:
       $ref: "http://swgserver:8081/api/swagger/include/AMBE.yaml#/AMBEActions"
+    CameraActions:
+      $ref: "http://swgserver:8081/api/swagger/include/Camera.yaml#/CameraActions"
     GS232ControllerActions:
       $ref: "http://swgserver:8081/api/swagger/include/GS232Controller.yaml#/GS232ControllerActions"
     LimeRFEActions:

@@ -2345,16 +2345,19 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaFilterWheelPositionLabel->setVisible(alpaca);
     settingsUI()->alpacaFilterWheelPositionCombo->setVisible(alpaca);
 
-    settingsUI()->alpacaFocuserEnabledCheck->setEnabled(alpaca);
-    settingsUI()->alpacaFocuserCombo->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled && (settingsUI()->alpacaFocuserCombo->count() > 0));
-    settingsUI()->alpacaFocusPositionLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
-    settingsUI()->alpacaFocusPositionSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
-    settingsUI()->alpacaFocusStepSizeLabel->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
-    settingsUI()->alpacaFocusStepSizeSpin->setEnabled(alpaca && m_settings.m_alpacaFocuserEnabled);
-    settingsUI()->alpacaFilterWheelEnabledCheck->setEnabled(alpaca);
-    settingsUI()->alpacaFilterWheelCombo->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled && (settingsUI()->alpacaFilterWheelCombo->count() > 0));
-    settingsUI()->alpacaFilterWheelPositionLabel->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
-    settingsUI()->alpacaFilterWheelPositionCombo->setEnabled(alpaca && m_settings.m_alpacaFilterWheelEnabled);
+    bool focuserAvailable = alpaca && (settingsUI()->alpacaFocuserCombo->count() > 0);
+    settingsUI()->alpacaFocuserEnabledCheck->setEnabled(focuserAvailable);
+    settingsUI()->alpacaFocuserCombo->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
+    settingsUI()->alpacaFocusPositionLabel->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
+    settingsUI()->alpacaFocusPositionSpin->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
+    settingsUI()->alpacaFocusStepSizeLabel->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
+    settingsUI()->alpacaFocusStepSizeSpin->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
+
+    bool filterWheelAvailable = alpaca && (settingsUI()->alpacaFilterWheelCombo->count() > 0);
+    settingsUI()->alpacaFilterWheelEnabledCheck->setEnabled(filterWheelAvailable);
+    settingsUI()->alpacaFilterWheelCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
+    settingsUI()->alpacaFilterWheelPositionLabel->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
+    settingsUI()->alpacaFilterWheelPositionCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaStatusGroup->setVisible(alpaca);
     ui->audioMute->setVisible(qtCamera);
 

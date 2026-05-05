@@ -24,7 +24,7 @@
 
 struct CameraInfo
 {
-    QString m_protocol;     // "qt" for Qt cameras, "alpaca" for Alpaca cameras
+    QString m_protocol;     // "qt", "asi", "alpaca" or "file"
     QString m_id;
     QString m_description;
     QString m_host;         // alpaca only

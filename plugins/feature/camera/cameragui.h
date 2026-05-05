@@ -207,6 +207,7 @@ private:
     void updateAlpacaVisibility();
     void populateAlpacaAccessoryCombos();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
+    void updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo& info);
     void updateAlpacaStatusDisplay();
     void updateAlpacaSubframeControls();
     void updateImageWidget();

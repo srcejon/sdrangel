@@ -90,15 +90,15 @@ struct CameraSettings
     uint16_t m_alpacaFilterWheelPort;
     int m_alpacaFilterWheelDeviceNumber;
     int m_alpacaFilterWheelPosition;
-    int m_alpacaBinX;
-    int m_alpacaBinY;
-    int m_alpacaNumX;
-    int m_alpacaNumY;
-    int m_alpacaStartX;
-    int m_alpacaStartY;
-    int m_alpacaGain;         // index into named gains list, or numeric value; -1 = do not set
-    int m_alpacaOffset;       // index into named offsets list, or numeric value; -1 = do not set
-    int m_alpacaReadoutMode;  // index into readoutmodes list
+    int m_cameraBinX;
+    int m_cameraBinY;
+    int m_cameraNumX;
+    int m_cameraNumY;
+    int m_cameraStartX;
+    int m_cameraStartY;
+    int m_cameraGain;         // index into named gains list, or numeric value; -1 = do not set
+    int m_cameraOffset;       // index into named offsets list, or numeric value; -1 = do not set
+    int m_cameraReadoutMode;  // index into readoutmodes list
     bool m_saveImage;
     QString m_imageFileName;
     bool m_saveVideo;
@@ -209,6 +209,7 @@ struct CameraSettings
     void applySettings(const QStringList& settingsKeys, const CameraSettings& settings);
     QString getDebugString(const QStringList& settingsKeys, bool force=false) const;
     bool isAlpacaCamera() const;
+    bool isAsiCamera() const;
     bool isQtCamera() const;
     bool isFileCamera() const;
     int cameraIdInt() const;

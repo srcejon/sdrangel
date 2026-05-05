@@ -152,15 +152,15 @@ void CameraSettings::resetToDefaults()
     m_alpacaFilterWheelPort = 11111;
     m_alpacaFilterWheelDeviceNumber = 0;
     m_alpacaFilterWheelPosition = 0;
-    m_alpacaBinX = 1;
-    m_alpacaBinY = 1;
-    m_alpacaNumX = 0;
-    m_alpacaNumY = 0;
-    m_alpacaStartX = 0;
-    m_alpacaStartY = 0;
-    m_alpacaGain = 100;
-    m_alpacaOffset = 1;
-    m_alpacaReadoutMode = 0;
+    m_cameraBinX = 1;
+    m_cameraBinY = 1;
+    m_cameraNumX = 0;
+    m_cameraNumY = 0;
+    m_cameraStartX = 0;
+    m_cameraStartY = 0;
+    m_cameraGain = 100;
+    m_cameraOffset = 1;
+    m_cameraReadoutMode = 0;
     m_saveImage = false;
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
@@ -273,15 +273,15 @@ QByteArray CameraSettings::serialize() const
 
     s.writeS32(20, m_workspaceIndex);
     s.writeBlob(21, m_geometryBytes);
-    s.writeS32(22, m_alpacaBinX);
-    s.writeS32(23, m_alpacaBinY);
-    s.writeS32(24, m_alpacaGain);
-    s.writeS32(25, m_alpacaReadoutMode);
-    s.writeS32(26, m_alpacaOffset);
-    s.writeS32(27, m_alpacaNumX);
-    s.writeS32(28, m_alpacaNumY);
-    s.writeS32(29, m_alpacaStartX);
-    s.writeS32(30, m_alpacaStartY);
+    s.writeS32(22, m_cameraBinX);
+    s.writeS32(23, m_cameraBinY);
+    s.writeS32(24, m_cameraGain);
+    s.writeS32(25, m_cameraReadoutMode);
+    s.writeS32(26, m_cameraOffset);
+    s.writeS32(27, m_cameraNumX);
+    s.writeS32(28, m_cameraNumY);
+    s.writeS32(29, m_cameraStartX);
+    s.writeS32(30, m_cameraStartY);
     s.writeS32(31, m_postProcessWhiteBalanceMode);
     s.writeDouble(32, m_postProcessWhiteBalanceRedGain);
     s.writeDouble(33, m_postProcessWhiteBalanceGreenGain);
@@ -451,22 +451,22 @@ bool CameraSettings::deserialize(const QByteArray& data)
 
         d.readS32(20, &m_workspaceIndex, 0);
         d.readBlob(21, &m_geometryBytes);
-        d.readS32(22, &m_alpacaBinX, 1);
-        d.readS32(23, &m_alpacaBinY, 1);
-        d.readS32(24, &m_alpacaGain, 100);
-        d.readS32(25, &m_alpacaReadoutMode, 0);
-        d.readS32(26, &m_alpacaOffset, 1);
-        d.readS32(27, &m_alpacaNumX, 0);
-        d.readS32(28, &m_alpacaNumY, 0);
-        d.readS32(29, &m_alpacaStartX, 0);
-        d.readS32(30, &m_alpacaStartY, 0);
-        m_alpacaBinX = std::max(1, m_alpacaBinX);
-        m_alpacaBinY = std::max(1, m_alpacaBinY);
-        m_alpacaNumX = std::max(0, m_alpacaNumX);
-        m_alpacaNumY = std::max(0, m_alpacaNumY);
-        m_alpacaStartX = std::max(0, m_alpacaStartX);
-        m_alpacaStartY = std::max(0, m_alpacaStartY);
-        m_alpacaReadoutMode = std::max(0, m_alpacaReadoutMode);
+        d.readS32(22, &m_cameraBinX, 1);
+        d.readS32(23, &m_cameraBinY, 1);
+        d.readS32(24, &m_cameraGain, 100);
+        d.readS32(25, &m_cameraReadoutMode, 0);
+        d.readS32(26, &m_cameraOffset, 1);
+        d.readS32(27, &m_cameraNumX, 0);
+        d.readS32(28, &m_cameraNumY, 0);
+        d.readS32(29, &m_cameraStartX, 0);
+        d.readS32(30, &m_cameraStartY, 0);
+        m_cameraBinX = std::max(1, m_cameraBinX);
+        m_cameraBinY = std::max(1, m_cameraBinY);
+        m_cameraNumX = std::max(0, m_cameraNumX);
+        m_cameraNumY = std::max(0, m_cameraNumY);
+        m_cameraStartX = std::max(0, m_cameraStartX);
+        m_cameraStartY = std::max(0, m_cameraStartY);
+        m_cameraReadoutMode = std::max(0, m_cameraReadoutMode);
         d.readS32(31, &m_postProcessWhiteBalanceMode, 0);
         d.readDouble(32, &m_postProcessWhiteBalanceRedGain, 1.0);
         d.readDouble(33, &m_postProcessWhiteBalanceGreenGain, 1.0);
@@ -718,32 +718,32 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("alpacaFilterWheelPosition")) {
         m_alpacaFilterWheelPosition = std::max(0, settings.m_alpacaFilterWheelPosition);
     }
-    if (settingsKeys.contains("alpacaBinX")) {
-        m_alpacaBinX = std::max(1, settings.m_alpacaBinX);
+    if (settingsKeys.contains("cameraBinX") || settingsKeys.contains("alpacaBinX")) {
+        m_cameraBinX = std::max(1, settings.m_cameraBinX);
     }
-    if (settingsKeys.contains("alpacaBinY")) {
-        m_alpacaBinY = std::max(1, settings.m_alpacaBinY);
+    if (settingsKeys.contains("cameraBinY") || settingsKeys.contains("alpacaBinY")) {
+        m_cameraBinY = std::max(1, settings.m_cameraBinY);
     }
-    if (settingsKeys.contains("alpacaNumX")) {
-        m_alpacaNumX = std::max(0, settings.m_alpacaNumX);
+    if (settingsKeys.contains("cameraNumX") || settingsKeys.contains("alpacaNumX")) {
+        m_cameraNumX = std::max(0, settings.m_cameraNumX);
     }
-    if (settingsKeys.contains("alpacaNumY")) {
-        m_alpacaNumY = std::max(0, settings.m_alpacaNumY);
+    if (settingsKeys.contains("cameraNumY") || settingsKeys.contains("alpacaNumY")) {
+        m_cameraNumY = std::max(0, settings.m_cameraNumY);
     }
-    if (settingsKeys.contains("alpacaStartX")) {
-        m_alpacaStartX = std::max(0, settings.m_alpacaStartX);
+    if (settingsKeys.contains("cameraStartX") || settingsKeys.contains("alpacaStartX")) {
+        m_cameraStartX = std::max(0, settings.m_cameraStartX);
     }
-    if (settingsKeys.contains("alpacaStartY")) {
-        m_alpacaStartY = std::max(0, settings.m_alpacaStartY);
+    if (settingsKeys.contains("cameraStartY") || settingsKeys.contains("alpacaStartY")) {
+        m_cameraStartY = std::max(0, settings.m_cameraStartY);
     }
-    if (settingsKeys.contains("alpacaGain")) {
-        m_alpacaGain = settings.m_alpacaGain;
+    if (settingsKeys.contains("cameraGain") || settingsKeys.contains("alpacaGain")) {
+        m_cameraGain = settings.m_cameraGain;
     }
-    if (settingsKeys.contains("alpacaOffset")) {
-        m_alpacaOffset = settings.m_alpacaOffset;
+    if (settingsKeys.contains("cameraOffset") || settingsKeys.contains("alpacaOffset")) {
+        m_cameraOffset = settings.m_cameraOffset;
     }
-    if (settingsKeys.contains("alpacaReadoutMode")) {
-        m_alpacaReadoutMode = std::max(0, settings.m_alpacaReadoutMode);
+    if (settingsKeys.contains("cameraReadoutMode") || settingsKeys.contains("alpacaReadoutMode")) {
+        m_cameraReadoutMode = std::max(0, settings.m_cameraReadoutMode);
     }
     if (settingsKeys.contains("saveImage")) {
         m_saveImage = settings.m_saveImage;
@@ -1057,32 +1057,32 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("alpacaFilterWheelPosition") || force) {
         ostr << " m_alpacaFilterWheelPosition: " << m_alpacaFilterWheelPosition;
     }
-    if (settingsKeys.contains("alpacaBinX") || force) {
-        ostr << " m_alpacaBinX: " << m_alpacaBinX;
+    if (settingsKeys.contains("cameraBinX") || settingsKeys.contains("alpacaBinX") || force) {
+        ostr << " m_cameraBinX: " << m_cameraBinX;
     }
-    if (settingsKeys.contains("alpacaBinY") || force) {
-        ostr << " m_alpacaBinY: " << m_alpacaBinY;
+    if (settingsKeys.contains("cameraBinY") || settingsKeys.contains("alpacaBinY") || force) {
+        ostr << " m_cameraBinY: " << m_cameraBinY;
     }
-    if (settingsKeys.contains("alpacaNumX") || force) {
-        ostr << " m_alpacaNumX: " << m_alpacaNumX;
+    if (settingsKeys.contains("cameraNumX") || settingsKeys.contains("alpacaNumX") || force) {
+        ostr << " m_cameraNumX: " << m_cameraNumX;
     }
-    if (settingsKeys.contains("alpacaNumY") || force) {
-        ostr << " m_alpacaNumY: " << m_alpacaNumY;
+    if (settingsKeys.contains("cameraNumY") || settingsKeys.contains("alpacaNumY") || force) {
+        ostr << " m_cameraNumY: " << m_cameraNumY;
     }
-    if (settingsKeys.contains("alpacaStartX") || force) {
-        ostr << " m_alpacaStartX: " << m_alpacaStartX;
+    if (settingsKeys.contains("cameraStartX") || settingsKeys.contains("alpacaStartX") || force) {
+        ostr << " m_cameraStartX: " << m_cameraStartX;
     }
-    if (settingsKeys.contains("alpacaStartY") || force) {
-        ostr << " m_alpacaStartY: " << m_alpacaStartY;
+    if (settingsKeys.contains("cameraStartY") || settingsKeys.contains("alpacaStartY") || force) {
+        ostr << " m_cameraStartY: " << m_cameraStartY;
     }
-    if (settingsKeys.contains("alpacaGain") || force) {
-        ostr << " m_alpacaGain: " << m_alpacaGain;
+    if (settingsKeys.contains("cameraGain") || settingsKeys.contains("alpacaGain") || force) {
+        ostr << " m_cameraGain: " << m_cameraGain;
     }
-    if (settingsKeys.contains("alpacaOffset") || force) {
-        ostr << " m_alpacaOffset: " << m_alpacaOffset;
+    if (settingsKeys.contains("cameraOffset") || settingsKeys.contains("alpacaOffset") || force) {
+        ostr << " m_cameraOffset: " << m_cameraOffset;
     }
-    if (settingsKeys.contains("alpacaReadoutMode") || force) {
-        ostr << " m_alpacaReadoutMode: " << m_alpacaReadoutMode;
+    if (settingsKeys.contains("cameraReadoutMode") || settingsKeys.contains("alpacaReadoutMode") || force) {
+        ostr << " m_cameraReadoutMode: " << m_cameraReadoutMode;
     }
     if (settingsKeys.contains("saveImage") || force) {
         ostr << " m_saveImage: " << m_saveImage;
@@ -1333,6 +1333,11 @@ bool CameraSettings::isAlpacaCamera() const
     return m_cameraProtocol == "alpaca";
 }
 
+bool CameraSettings::isAsiCamera() const
+{
+    return m_cameraProtocol == "asi";
+}
+
 bool CameraSettings::isQtCamera() const
 {
     return m_cameraProtocol == "qt";
@@ -1345,7 +1350,7 @@ bool CameraSettings::isFileCamera() const
 
 int CameraSettings::cameraIdInt() const
 {
-    if (isAlpacaCamera())
+    if (isAlpacaCamera() || isAsiCamera())
     {
         bool ok;
         int id = m_cameraId.toInt(&ok);

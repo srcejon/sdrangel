@@ -51,6 +51,7 @@
 #include "maincore.h"
 #include "dsp/dspengine.h"
 #include "audio/audiodevicemanager.h"
+#include "asicamera2api.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
 
@@ -257,6 +258,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaDeviceList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAsiCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaFilterWheelInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
@@ -301,7 +303,23 @@ CameraWorker::CameraWorker() :
     m_lastAlpacaReadoutMode(0),
     m_statusTimer(this),
     m_lastAlpacaCaptureTimeMs(-1),
-    m_spectrumPipeSource(nullptr)
+    m_spectrumPipeSource(nullptr),
+    m_asiCameraOpen(false),
+    m_asiVideoCaptureStarted(false),
+    m_asiCameraSizeX(0),
+    m_asiCameraSizeY(0),
+    m_asiMaxBinX(1),
+    m_asiMaxBinY(1),
+    m_asiBayerPattern(AsiCamera2::BayerRG),
+    m_asiColorCamera(false),
+    m_asiBitDepth(8),
+    m_asiImageType(AsiCamera2::ImageTypeY8),
+    m_asiPixelSizeUm(0.0),
+    m_asiExposureMinMs(0.001),
+    m_asiExposureMaxMs(60000.0),
+    m_asiFrameWidth(0),
+    m_asiFrameHeight(0),
+    m_asiFrameBuffer()
 {
     QObject::connect(
         &m_availableDeviceHandler,
@@ -390,6 +408,8 @@ void CameraWorker::stopWork()
     {
         alpacaSetFilterWheelConnected(false);
     }
+
+    asiCloseCamera();
 
     m_statusTimer.stop();
 }
@@ -529,6 +549,14 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("framesPerSecond")
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("isoSensitivity")
+        || settingsKeys.contains("cameraBinX")
+        || settingsKeys.contains("cameraBinY")
+        || settingsKeys.contains("cameraNumX")
+        || settingsKeys.contains("cameraNumY")
+        || settingsKeys.contains("cameraStartX")
+        || settingsKeys.contains("cameraStartY")
+        || settingsKeys.contains("cameraGain")
+        || settingsKeys.contains("cameraOffset")
         || settingsKeys.contains("alpacaHost")
         || settingsKeys.contains("alpacaPort");
 
@@ -616,6 +644,27 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         }
     }
 
+    if (m_settings.isAsiCamera()
+        && (force
+            || settingsKeys.contains("cameraProtocol")
+            || settingsKeys.contains("cameraId")
+            || settingsKeys.contains("cameraBinX")
+            || settingsKeys.contains("cameraBinY")
+            || settingsKeys.contains("cameraNumX")
+            || settingsKeys.contains("cameraNumY")
+            || settingsKeys.contains("cameraStartX")
+            || settingsKeys.contains("cameraStartY")
+            || settingsKeys.contains("cameraGain")
+            || settingsKeys.contains("cameraOffset")
+            || settingsKeys.contains("exposureTimeMs")))
+    {
+        asiQueryCameraCapabilities();
+    }
+    else if (force || settingsKeys.contains("cameraProtocol") || settingsKeys.contains("cameraId"))
+    {
+        asiCloseCamera();
+    }
+
     // Resolve the device object pointer when spectrumDevice setting changes
     if (force || settingsKeys.contains("spectrumDevice"))
     {
@@ -649,17 +698,17 @@ void CameraWorker::startCapture()
     m_lastAlpacaCaptureTimeMs = -1;
     m_alpacaCaptureTimer.invalidate();
     m_alpacaParamsInitialized = false;
-    m_lastAlpacaBinX = m_settings.m_alpacaBinX;
-    m_lastAlpacaBinY = m_settings.m_alpacaBinY;
-    m_lastAlpacaNumX = m_settings.m_alpacaNumX;
-    m_lastAlpacaNumY = m_settings.m_alpacaNumY;
+    m_lastAlpacaBinX = m_settings.m_cameraBinX;
+    m_lastAlpacaBinY = m_settings.m_cameraBinY;
+    m_lastAlpacaNumX = m_settings.m_cameraNumX;
+    m_lastAlpacaNumY = m_settings.m_cameraNumY;
     m_lastAlpacaEffectiveNumX = -1;
     m_lastAlpacaEffectiveNumY = -1;
-    m_lastAlpacaStartX = m_settings.m_alpacaStartX;
-    m_lastAlpacaStartY = m_settings.m_alpacaStartY;
-    m_lastAlpacaGain = m_settings.m_alpacaGain;
-    m_lastAlpacaOffset = m_settings.m_alpacaOffset;
-    m_lastAlpacaReadoutMode = m_settings.m_alpacaReadoutMode;
+    m_lastAlpacaStartX = m_settings.m_cameraStartX;
+    m_lastAlpacaStartY = m_settings.m_cameraStartY;
+    m_lastAlpacaGain = m_settings.m_cameraGain;
+    m_lastAlpacaOffset = m_settings.m_cameraOffset;
+    m_lastAlpacaReadoutMode = m_settings.m_cameraReadoutMode;
 
     if (m_settings.isAlpacaCamera())
     {
@@ -674,6 +723,13 @@ void CameraWorker::startCapture()
         } else {
             alpacaBootstrap();
         }
+    }
+    else if (m_settings.isAsiCamera())
+    {
+        m_captureTimer.start(m_settings.isIntervalCaptureMode()
+            ? m_settings.getCaptureIntervalMs()
+            : std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond)))));
+        asiCaptureTick();
     }
     else if (m_settings.isQtCamera())
     {
@@ -700,6 +756,12 @@ void CameraWorker::stopCapture()
     m_captureTimer.stop();
     m_alpacaCaptureTimer.invalidate();
 
+    if (m_asiVideoCaptureStarted)
+    {
+        AsiCamera2::Api::instance().stopVideoCapture(m_settings.cameraIdInt());
+        m_asiVideoCaptureStarted = false;
+    }
+
     if (m_capturingAudio)
     {
         qDebug() << "CameraWorker: stopping audio capture";
@@ -714,6 +776,12 @@ void CameraWorker::stopCapture()
 void CameraWorker::captureTick()
 {
     if (!m_capturing) {
+        return;
+    }
+
+    if (m_settings.isAsiCamera())
+    {
+        asiCaptureTick();
         return;
     }
 
@@ -1353,31 +1421,31 @@ void CameraWorker::alpacaSetCameraParams()
     const QString baseUrl = buildAlpacaBaseUrl();
     const int camId = m_settings.cameraIdInt();
     const bool forceAllParams = !m_alpacaParamsInitialized;
-    const int maxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_settings.m_alpacaBinX));
-    const int maxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_settings.m_alpacaBinY));
-    const bool fullFrameNumXRequested = (m_settings.m_alpacaNumX == 0);
-    const bool fullFrameNumYRequested = (m_settings.m_alpacaNumY == 0);
+    const int maxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_settings.m_cameraBinX));
+    const int maxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_settings.m_cameraBinY));
+    const bool fullFrameNumXRequested = (m_settings.m_cameraNumX == 0);
+    const bool fullFrameNumYRequested = (m_settings.m_cameraNumY == 0);
     const bool canResolveNumX = !fullFrameNumXRequested || (m_alpacaCameraSizeX > 0);
     const bool canResolveNumY = !fullFrameNumYRequested || (m_alpacaCameraSizeY > 0);
     const int effectiveNumX = fullFrameNumXRequested
-        ? std::max(1, maxSubframeX - std::max(0, m_settings.m_alpacaStartX))
-        : m_settings.m_alpacaNumX;
+        ? std::max(1, maxSubframeX - std::max(0, m_settings.m_cameraStartX))
+        : m_settings.m_cameraNumX;
     const int effectiveNumY = fullFrameNumYRequested
-        ? std::max(1, maxSubframeY - std::max(0, m_settings.m_alpacaStartY))
-        : m_settings.m_alpacaNumY;
-    const bool setBinX = forceAllParams || (m_lastAlpacaBinX != m_settings.m_alpacaBinX);
-    const bool setBinY = forceAllParams || (m_lastAlpacaBinY != m_settings.m_alpacaBinY);
+        ? std::max(1, maxSubframeY - std::max(0, m_settings.m_cameraStartY))
+        : m_settings.m_cameraNumY;
+    const bool setBinX = forceAllParams || (m_lastAlpacaBinX != m_settings.m_cameraBinX);
+    const bool setBinY = forceAllParams || (m_lastAlpacaBinY != m_settings.m_cameraBinY);
     const bool setNumX = canResolveNumX
         && (forceAllParams || (m_lastAlpacaEffectiveNumX != effectiveNumX));
     const bool setNumY = canResolveNumY
         && (forceAllParams || (m_lastAlpacaEffectiveNumY != effectiveNumY));
-    const bool setStartX = forceAllParams || (m_lastAlpacaStartX != m_settings.m_alpacaStartX);
-    const bool setStartY = forceAllParams || (m_lastAlpacaStartY != m_settings.m_alpacaStartY);
-    const bool setGain = (m_settings.m_alpacaGain >= 0)
-        && (forceAllParams || (m_lastAlpacaGain != m_settings.m_alpacaGain));
-    const bool setOffset = (m_settings.m_alpacaOffset >= 0)
-        && (forceAllParams || (m_lastAlpacaOffset != m_settings.m_alpacaOffset));
-    const bool setReadoutMode = forceAllParams || (m_lastAlpacaReadoutMode != m_settings.m_alpacaReadoutMode);
+    const bool setStartX = forceAllParams || (m_lastAlpacaStartX != m_settings.m_cameraStartX);
+    const bool setStartY = forceAllParams || (m_lastAlpacaStartY != m_settings.m_cameraStartY);
+    const bool setGain = (m_settings.m_cameraGain >= 0)
+        && (forceAllParams || (m_lastAlpacaGain != m_settings.m_cameraGain));
+    const bool setOffset = (m_settings.m_cameraOffset >= 0)
+        && (forceAllParams || (m_lastAlpacaOffset != m_settings.m_cameraOffset));
+    const bool setReadoutMode = forceAllParams || (m_lastAlpacaReadoutMode != m_settings.m_cameraReadoutMode);
 
     auto doStartExposure = [this]() {
         if (m_capturing) {
@@ -1392,8 +1460,8 @@ void CameraWorker::alpacaSetCameraParams()
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
         if (setReadoutMode) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "readoutmode", "ReadoutMode",
-                m_settings.m_alpacaReadoutMode, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doStartExposure,
-                [this]() { m_lastAlpacaReadoutMode = m_settings.m_alpacaReadoutMode; });
+                m_settings.m_cameraReadoutMode, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doStartExposure,
+                [this]() { m_lastAlpacaReadoutMode = m_settings.m_cameraReadoutMode; });
         } else {
             doStartExposure();
         }
@@ -1403,8 +1471,8 @@ void CameraWorker::alpacaSetCameraParams()
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
         if (setOffset) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "offset", "Offset",
-                m_settings.m_alpacaOffset, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doReadoutMode,
-                [this]() { m_lastAlpacaOffset = m_settings.m_alpacaOffset; });
+                m_settings.m_cameraOffset, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doReadoutMode,
+                [this]() { m_lastAlpacaOffset = m_settings.m_cameraOffset; });
         } else {
             doReadoutMode();
         }
@@ -1414,8 +1482,8 @@ void CameraWorker::alpacaSetCameraParams()
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
         if (setGain) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "gain", "Gain",
-                m_settings.m_alpacaGain, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doOffset,
-                [this]() { m_lastAlpacaGain = m_settings.m_alpacaGain; });
+                m_settings.m_cameraGain, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doOffset,
+                [this]() { m_lastAlpacaGain = m_settings.m_cameraGain; });
         } else {
             doOffset();
         }
@@ -1428,8 +1496,8 @@ void CameraWorker::alpacaSetCameraParams()
             if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
             if (setStartY) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "starty", "StartY",
-                    m_settings.m_alpacaStartY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doGain,
-                    [this]() { m_lastAlpacaStartY = m_settings.m_alpacaStartY; });
+                    m_settings.m_cameraStartY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doGain,
+                    [this]() { m_lastAlpacaStartY = m_settings.m_cameraStartY; });
             } else {
                 doGain();
             }
@@ -1441,7 +1509,7 @@ void CameraWorker::alpacaSetCameraParams()
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
                     effectiveNumY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doGain,
                     [this, effectiveNumY]() {
-                        m_lastAlpacaNumY = m_settings.m_alpacaNumY;
+                        m_lastAlpacaNumY = m_settings.m_cameraNumY;
                         m_lastAlpacaEffectiveNumY = effectiveNumY;
                     });
             } else {
@@ -1449,18 +1517,18 @@ void CameraWorker::alpacaSetCameraParams()
             }
         };
 
-        if (setStartY && (m_settings.m_alpacaStartY < m_lastAlpacaStartY))
+        if (setStartY && (m_settings.m_cameraStartY < m_lastAlpacaStartY))
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "starty", "StartY",
-                m_settings.m_alpacaStartY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetNumYAfterStart,
-                [this]() { m_lastAlpacaStartY = m_settings.m_alpacaStartY; });
+                m_settings.m_cameraStartY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetNumYAfterStart,
+                [this]() { m_lastAlpacaStartY = m_settings.m_cameraStartY; });
         }
         else if (setNumY)
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
                 effectiveNumY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetStartYAfterNum,
                 [this, effectiveNumY]() {
-                    m_lastAlpacaNumY = m_settings.m_alpacaNumY;
+                    m_lastAlpacaNumY = m_settings.m_cameraNumY;
                     m_lastAlpacaEffectiveNumY = effectiveNumY;
                 });
         }
@@ -1477,8 +1545,8 @@ void CameraWorker::alpacaSetCameraParams()
             if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
             if (setStartX) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "startx", "StartX",
-                    m_settings.m_alpacaStartX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisY,
-                    [this]() { m_lastAlpacaStartX = m_settings.m_alpacaStartX; });
+                    m_settings.m_cameraStartX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisY,
+                    [this]() { m_lastAlpacaStartX = m_settings.m_cameraStartX; });
             } else {
                 doAxisY();
             }
@@ -1490,7 +1558,7 @@ void CameraWorker::alpacaSetCameraParams()
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
                     effectiveNumX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisY,
                     [this, effectiveNumX]() {
-                        m_lastAlpacaNumX = m_settings.m_alpacaNumX;
+                        m_lastAlpacaNumX = m_settings.m_cameraNumX;
                         m_lastAlpacaEffectiveNumX = effectiveNumX;
                     });
             } else {
@@ -1498,18 +1566,18 @@ void CameraWorker::alpacaSetCameraParams()
             }
         };
 
-        if (setStartX && (m_settings.m_alpacaStartX < m_lastAlpacaStartX))
+        if (setStartX && (m_settings.m_cameraStartX < m_lastAlpacaStartX))
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "startx", "StartX",
-                m_settings.m_alpacaStartX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetNumXAfterStart,
-                [this]() { m_lastAlpacaStartX = m_settings.m_alpacaStartX; });
+                m_settings.m_cameraStartX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetNumXAfterStart,
+                [this]() { m_lastAlpacaStartX = m_settings.m_cameraStartX; });
         }
         else if (setNumX)
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
                 effectiveNumX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetStartXAfterNum,
                 [this, effectiveNumX]() {
-                    m_lastAlpacaNumX = m_settings.m_alpacaNumX;
+                    m_lastAlpacaNumX = m_settings.m_cameraNumX;
                     m_lastAlpacaEffectiveNumX = effectiveNumX;
                 });
         }
@@ -1523,8 +1591,8 @@ void CameraWorker::alpacaSetCameraParams()
         if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
         if (setBinY) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "biny", "BinY",
-                m_settings.m_alpacaBinY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisX,
-                [this]() { m_lastAlpacaBinY = m_settings.m_alpacaBinY; });
+                m_settings.m_cameraBinY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisX,
+                [this]() { m_lastAlpacaBinY = m_settings.m_cameraBinY; });
         } else {
             doAxisX();
         }
@@ -1532,8 +1600,8 @@ void CameraWorker::alpacaSetCameraParams()
 
     if (setBinX) {
         alpacaPutIntProperty(m_networkManager, baseUrl, camId, "binx", "BinX",
-            m_settings.m_alpacaBinX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doBinY,
-            [this]() { m_lastAlpacaBinX = m_settings.m_alpacaBinX; });
+            m_settings.m_cameraBinX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doBinY,
+            [this]() { m_lastAlpacaBinX = m_settings.m_cameraBinX; });
     } else {
         doBinY();
     }
@@ -2441,6 +2509,260 @@ QImage CameraWorker::createPlaceholderFrame() const
 
     image.fill(QColor(32, 32, 32));
     return image;
+}
+
+bool CameraWorker::asiOpenCamera()
+{
+    if (m_asiCameraOpen) {
+        return true;
+    }
+
+    AsiCamera2::Api& api = AsiCamera2::Api::instance();
+    const int cameraId = m_settings.cameraIdInt();
+
+    if ((cameraId < 0) || !api.isAvailable()) {
+        return false;
+    }
+
+    if (!api.openCamera(cameraId)) {
+        return false;
+    }
+
+    if (!api.initCamera(cameraId))
+    {
+        api.closeCamera(cameraId);
+        return false;
+    }
+
+    m_asiCameraOpen = true;
+    return true;
+}
+
+void CameraWorker::asiCloseCamera()
+{
+    const int cameraId = m_settings.cameraIdInt();
+
+    if (m_asiVideoCaptureStarted && (cameraId >= 0))
+    {
+        AsiCamera2::Api::instance().stopVideoCapture(cameraId);
+        m_asiVideoCaptureStarted = false;
+    }
+
+    if (m_asiCameraOpen && (cameraId >= 0))
+    {
+        AsiCamera2::Api::instance().closeCamera(cameraId);
+        m_asiCameraOpen = false;
+    }
+}
+
+void CameraWorker::asiQueryCameraCapabilities()
+{
+    if (!m_settings.isAsiCamera()) {
+        return;
+    }
+
+    asiCloseCamera();
+
+    AsiCamera2::Api& api = AsiCamera2::Api::instance();
+    AsiCamera2::CameraInfo cameraInfo;
+    const int cameraId = m_settings.cameraIdInt();
+
+    if ((cameraId < 0) || !api.getCameraInfo(cameraId, cameraInfo) || !asiOpenCamera()) {
+        return;
+    }
+
+    AsiCamera2::ControlRange gainRange;
+    AsiCamera2::ControlRange offsetRange;
+    AsiCamera2::ControlRange exposureRange;
+    api.getControlRange(cameraId, AsiCamera2::ControlGain, gainRange);
+    api.getControlRange(cameraId, AsiCamera2::ControlOffset, offsetRange);
+    api.getControlRange(cameraId, AsiCamera2::ControlExposure, exposureRange);
+
+    m_asiCameraSizeX = cameraInfo.m_maxWidth;
+    m_asiCameraSizeY = cameraInfo.m_maxHeight;
+    m_asiMaxBinX = 1;
+    m_asiMaxBinY = 1;
+    for (int bin : cameraInfo.m_supportedBins)
+    {
+        m_asiMaxBinX = std::max(m_asiMaxBinX, bin);
+        m_asiMaxBinY = std::max(m_asiMaxBinY, bin);
+    }
+    m_asiBayerPattern = cameraInfo.m_bayerPattern;
+    m_asiColorCamera = cameraInfo.m_isColor;
+    m_asiBitDepth = cameraInfo.m_bitDepth;
+    m_asiPixelSizeUm = cameraInfo.m_pixelSizeUm;
+    m_asiExposureMinMs = exposureRange.m_available ? std::max(0.001, exposureRange.m_minValue / 1000.0) : 0.001;
+    m_asiExposureMaxMs = exposureRange.m_available ? std::max(m_asiExposureMinMs, exposureRange.m_maxValue / 1000.0) : 60000.0;
+
+    if (cameraInfo.m_isColor
+        && cameraInfo.m_supportedImageTypes.contains(AsiCamera2::ImageTypeRgb24)) {
+        m_asiImageType = AsiCamera2::ImageTypeRgb24;
+    } else if (cameraInfo.m_supportedImageTypes.contains(AsiCamera2::ImageTypeRaw8)) {
+        m_asiImageType = AsiCamera2::ImageTypeRaw8;
+    } else if (cameraInfo.m_supportedImageTypes.contains(AsiCamera2::ImageTypeY8)) {
+        m_asiImageType = AsiCamera2::ImageTypeY8;
+    } else if (cameraInfo.m_supportedImageTypes.contains(AsiCamera2::ImageTypeRaw16)) {
+        m_asiImageType = AsiCamera2::ImageTypeRaw16;
+    }
+
+    if (m_msgQueueToGUI)
+    {
+        m_msgQueueToGUI->push(MsgReportAsiCameraInfo::create(
+            cameraInfo.m_name,
+            m_asiMaxBinX,
+            m_asiMaxBinY,
+            gainRange.m_available ? static_cast<int>(gainRange.m_minValue) : 0,
+            gainRange.m_available ? static_cast<int>(gainRange.m_maxValue) : 100,
+            offsetRange.m_available ? static_cast<int>(offsetRange.m_minValue) : 0,
+            offsetRange.m_available ? static_cast<int>(offsetRange.m_maxValue) : 100,
+            m_asiCameraSizeX,
+            m_asiCameraSizeY,
+            m_asiPixelSizeUm,
+            m_asiBitDepth,
+            m_asiColorCamera,
+            m_asiExposureMinMs,
+            m_asiExposureMaxMs));
+    }
+}
+
+bool CameraWorker::asiApplyCameraSettings()
+{
+    if ((m_asiCameraSizeX <= 0) || (m_asiCameraSizeY <= 0)) {
+        asiQueryCameraCapabilities();
+    }
+
+    if (!asiOpenCamera()) {
+        return false;
+    }
+
+    AsiCamera2::Api& api = AsiCamera2::Api::instance();
+    const int cameraId = m_settings.cameraIdInt();
+    const int bin = std::max(1, std::min(m_settings.m_cameraBinX, m_settings.m_cameraBinY));
+    const int maxWidth = std::max(16, m_asiCameraSizeX / std::max(1, bin));
+    const int maxHeight = std::max(16, m_asiCameraSizeY / std::max(1, bin));
+    const int startX = qBound(0, m_settings.m_cameraStartX, maxWidth - 1);
+    const int startY = qBound(0, m_settings.m_cameraStartY, maxHeight - 1);
+    const int width = (m_settings.m_cameraNumX == 0)
+        ? std::max(16, maxWidth - startX)
+        : qBound(16, m_settings.m_cameraNumX, std::max(16, maxWidth - startX));
+    const int height = (m_settings.m_cameraNumY == 0)
+        ? std::max(16, maxHeight - startY)
+        : qBound(16, m_settings.m_cameraNumY, std::max(16, maxHeight - startY));
+
+    api.setStartPos(cameraId, startX, startY);
+    if (!api.setRoiFormat(cameraId, width, height, bin, static_cast<AsiCamera2::ImageType>(m_asiImageType))) {
+        return false;
+    }
+
+    api.setControlValue(cameraId, AsiCamera2::ControlExposure, std::max(1L, static_cast<long>(std::llround(m_settings.m_exposureTimeMs * 1000.0))));
+    api.setControlValue(cameraId, AsiCamera2::ControlGain, std::max(0, m_settings.m_cameraGain));
+    api.setControlValue(cameraId, AsiCamera2::ControlOffset, std::max(0, m_settings.m_cameraOffset));
+
+    m_asiFrameWidth = width;
+    m_asiFrameHeight = height;
+
+    int bytesPerPixel = 1;
+    switch (m_asiImageType)
+    {
+    case AsiCamera2::ImageTypeRgb24:
+        bytesPerPixel = 3;
+        break;
+    case AsiCamera2::ImageTypeRaw16:
+        bytesPerPixel = 2;
+        break;
+    default:
+        bytesPerPixel = 1;
+        break;
+    }
+
+    m_asiFrameBuffer.resize(width * height * bytesPerPixel);
+    return true;
+}
+
+QImage CameraWorker::asiFrameToImage() const
+{
+    if (m_asiFrameWidth <= 0 || m_asiFrameHeight <= 0 || m_asiFrameBuffer.isEmpty()) {
+        return createPlaceholderFrame();
+    }
+
+    if (m_asiImageType == AsiCamera2::ImageTypeRgb24)
+    {
+        QImage image(m_asiFrameBuffer.constData(), m_asiFrameWidth, m_asiFrameHeight, m_asiFrameWidth * 3, QImage::Format_RGB888);
+        return image.copy();
+    }
+
+    if (m_asiImageType == AsiCamera2::ImageTypeY8 || (!m_asiColorCamera && m_asiImageType == AsiCamera2::ImageTypeRaw8))
+    {
+        QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_Grayscale8);
+        for (int y = 0; y < m_asiFrameHeight; ++y) {
+            std::memcpy(image.scanLine(y), m_asiFrameBuffer.constData() + (y * m_asiFrameWidth), static_cast<size_t>(m_asiFrameWidth));
+        }
+        return image;
+    }
+
+    cv::Mat rawMat;
+    if (m_asiImageType == AsiCamera2::ImageTypeRaw16)
+    {
+        cv::Mat raw16(m_asiFrameHeight, m_asiFrameWidth, CV_16UC1, const_cast<uchar*>(m_asiFrameBuffer.constData()));
+        raw16.convertTo(rawMat, CV_8UC1, 1.0 / 256.0);
+    }
+    else
+    {
+        rawMat = cv::Mat(m_asiFrameHeight, m_asiFrameWidth, CV_8UC1, const_cast<uchar*>(m_asiFrameBuffer.constData())).clone();
+    }
+
+    if (!m_asiColorCamera)
+    {
+        QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_Grayscale8);
+        for (int y = 0; y < m_asiFrameHeight; ++y) {
+            std::memcpy(image.scanLine(y), rawMat.ptr(y), static_cast<size_t>(m_asiFrameWidth));
+        }
+        return image;
+    }
+
+    int cvCode = cv::COLOR_BayerRG2RGB;
+    switch (m_asiBayerPattern)
+    {
+    case AsiCamera2::BayerBG: cvCode = cv::COLOR_BayerBG2RGB; break;
+    case AsiCamera2::BayerGR: cvCode = cv::COLOR_BayerGR2RGB; break;
+    case AsiCamera2::BayerGB: cvCode = cv::COLOR_BayerGB2RGB; break;
+    case AsiCamera2::BayerRG:
+    default: cvCode = cv::COLOR_BayerRG2RGB; break;
+    }
+
+    cv::Mat rgbMat;
+    cv::cvtColor(rawMat, rgbMat, cvCode);
+    QImage image(rgbMat.data, rgbMat.cols, rgbMat.rows, static_cast<int>(rgbMat.step), QImage::Format_RGB888);
+    return image.copy();
+}
+
+void CameraWorker::asiCaptureTick()
+{
+    if (!m_capturing) {
+        return;
+    }
+
+    if (!asiApplyCameraSettings()) {
+        return;
+    }
+
+    AsiCamera2::Api& api = AsiCamera2::Api::instance();
+    const int cameraId = m_settings.cameraIdInt();
+
+    if (!m_asiVideoCaptureStarted)
+    {
+        if (!api.startVideoCapture(cameraId)) {
+            return;
+        }
+        m_asiVideoCaptureStarted = true;
+    }
+
+    if (api.getVideoData(cameraId, m_asiFrameBuffer.data(), m_asiFrameBuffer.size(), std::max(10, static_cast<int>(std::ceil(m_settings.m_exposureTimeMs)))))
+    {
+        if (m_postProcessorInputMessageQueue) {
+            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(asiFrameToImage()));
+        }
+    }
 }
 
 

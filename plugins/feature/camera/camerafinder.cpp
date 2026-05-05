@@ -36,6 +36,7 @@
 #endif
 
 #include "util/messagequeue.h"
+#include "asicamera2api.h"
 #include "camerafinder.h"
 #include "cameraworker.h"
 
@@ -63,6 +64,7 @@ void CameraFinder::reportCameraList(const CameraSettings& settings)
 {
     m_settings = settings;
     m_currentCameras = listQtCameras();
+    m_currentCameras.append(listAsiCameras());
     m_currentFocusers.clear();
     m_currentFilterWheels.clear();
     m_discoveredEndpointKeys.clear();
@@ -117,6 +119,25 @@ QList<CameraInfo> CameraFinder::listQtCameras()
 #endif
 
     return qtCameras;
+}
+
+QList<CameraInfo> CameraFinder::listAsiCameras()
+{
+    QList<CameraInfo> asiCameras;
+    const QVector<AsiCamera2::CameraInfo> cameras = AsiCamera2::Api::instance().enumerateCameras();
+
+    for (const AsiCamera2::CameraInfo& camera : cameras)
+    {
+        asiCameras.append({
+            QStringLiteral("asi"),
+            QString::number(camera.m_cameraId),
+            camera.m_name,
+            {},
+            0
+        });
+    }
+
+    return asiCameras;
 }
 
 QList<AlpacaDeviceInfo> CameraFinder::parseAlpacaDeviceList(const QByteArray& payload, const QString& deviceType, const QString& host, quint16 port)

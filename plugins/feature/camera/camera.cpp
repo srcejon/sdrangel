@@ -351,15 +351,15 @@ void Camera::webapiFormatFeatureSettings(
     swg->setAlpacaFilterWheelPort(settings.m_alpacaFilterWheelPort);
     swg->setAlpacaFilterWheelDeviceNumber(settings.m_alpacaFilterWheelDeviceNumber);
     swg->setAlpacaFilterWheelPosition(settings.m_alpacaFilterWheelPosition);
-    swg->setAlpacaBinX(settings.m_alpacaBinX);
-    swg->setAlpacaBinY(settings.m_alpacaBinY);
-    swg->setAlpacaNumX(settings.m_alpacaNumX);
-    swg->setAlpacaNumY(settings.m_alpacaNumY);
-    swg->setAlpacaStartX(settings.m_alpacaStartX);
-    swg->setAlpacaStartY(settings.m_alpacaStartY);
-    swg->setAlpacaGain(settings.m_alpacaGain);
-    swg->setAlpacaOffset(settings.m_alpacaOffset);
-    swg->setAlpacaReadoutMode(settings.m_alpacaReadoutMode);
+    swg->setAlpacaBinX(settings.m_cameraBinX);
+    swg->setAlpacaBinY(settings.m_cameraBinY);
+    swg->setAlpacaNumX(settings.m_cameraNumX);
+    swg->setAlpacaNumY(settings.m_cameraNumY);
+    swg->setAlpacaStartX(settings.m_cameraStartX);
+    swg->setAlpacaStartY(settings.m_cameraStartY);
+    swg->setAlpacaGain(settings.m_cameraGain);
+    swg->setAlpacaOffset(settings.m_cameraOffset);
+    swg->setAlpacaReadoutMode(settings.m_cameraReadoutMode);
 
     // Image / video output
     swg->setSaveImage(settings.m_saveImage ? 1 : 0);
@@ -608,32 +608,32 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("alpacaFilterWheelPosition")) {
         settings.m_alpacaFilterWheelPosition = swg->getAlpacaFilterWheelPosition();
     }
-    if (featureSettingsKeys.contains("alpacaBinX")) {
-        settings.m_alpacaBinX = swg->getAlpacaBinX();
+    if (featureSettingsKeys.contains("cameraBinX") || featureSettingsKeys.contains("alpacaBinX")) {
+        settings.m_cameraBinX = swg->getAlpacaBinX();
     }
-    if (featureSettingsKeys.contains("alpacaBinY")) {
-        settings.m_alpacaBinY = swg->getAlpacaBinY();
+    if (featureSettingsKeys.contains("cameraBinY") || featureSettingsKeys.contains("alpacaBinY")) {
+        settings.m_cameraBinY = swg->getAlpacaBinY();
     }
-    if (featureSettingsKeys.contains("alpacaNumX")) {
-        settings.m_alpacaNumX = swg->getAlpacaNumX();
+    if (featureSettingsKeys.contains("cameraNumX") || featureSettingsKeys.contains("alpacaNumX")) {
+        settings.m_cameraNumX = swg->getAlpacaNumX();
     }
-    if (featureSettingsKeys.contains("alpacaNumY")) {
-        settings.m_alpacaNumY = swg->getAlpacaNumY();
+    if (featureSettingsKeys.contains("cameraNumY") || featureSettingsKeys.contains("alpacaNumY")) {
+        settings.m_cameraNumY = swg->getAlpacaNumY();
     }
-    if (featureSettingsKeys.contains("alpacaStartX")) {
-        settings.m_alpacaStartX = swg->getAlpacaStartX();
+    if (featureSettingsKeys.contains("cameraStartX") || featureSettingsKeys.contains("alpacaStartX")) {
+        settings.m_cameraStartX = swg->getAlpacaStartX();
     }
-    if (featureSettingsKeys.contains("alpacaStartY")) {
-        settings.m_alpacaStartY = swg->getAlpacaStartY();
+    if (featureSettingsKeys.contains("cameraStartY") || featureSettingsKeys.contains("alpacaStartY")) {
+        settings.m_cameraStartY = swg->getAlpacaStartY();
     }
-    if (featureSettingsKeys.contains("alpacaGain")) {
-        settings.m_alpacaGain = swg->getAlpacaGain();
+    if (featureSettingsKeys.contains("cameraGain") || featureSettingsKeys.contains("alpacaGain")) {
+        settings.m_cameraGain = swg->getAlpacaGain();
     }
-    if (featureSettingsKeys.contains("alpacaOffset")) {
-        settings.m_alpacaOffset = swg->getAlpacaOffset();
+    if (featureSettingsKeys.contains("cameraOffset") || featureSettingsKeys.contains("alpacaOffset")) {
+        settings.m_cameraOffset = swg->getAlpacaOffset();
     }
-    if (featureSettingsKeys.contains("alpacaReadoutMode")) {
-        settings.m_alpacaReadoutMode = swg->getAlpacaReadoutMode();
+    if (featureSettingsKeys.contains("cameraReadoutMode") || featureSettingsKeys.contains("alpacaReadoutMode")) {
+        settings.m_cameraReadoutMode = swg->getAlpacaReadoutMode();
     }
 
     // Image / video output

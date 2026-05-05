@@ -28,6 +28,7 @@
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QRecursiveMutex>
+#include <QVector>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -283,6 +284,72 @@ MESSAGE_CLASS_DECLARATION
         { }
     };
 
+    class MsgReportAsiCameraInfo : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QString& getName() const { return m_name; }
+        int getMaxBinX() const { return m_maxBinX; }
+        int getMaxBinY() const { return m_maxBinY; }
+        int getGainMin() const { return m_gainMin; }
+        int getGainMax() const { return m_gainMax; }
+        int getOffsetMin() const { return m_offsetMin; }
+        int getOffsetMax() const { return m_offsetMax; }
+        int getCameraSizeX() const { return m_cameraSizeX; }
+        int getCameraSizeY() const { return m_cameraSizeY; }
+        double getPixelSizeUm() const { return m_pixelSizeUm; }
+        int getBitDepth() const { return m_bitDepth; }
+        bool isColor() const { return m_isColor; }
+        double getExposureMinMs() const { return m_exposureMinMs; }
+        double getExposureMaxMs() const { return m_exposureMaxMs; }
+
+        static MsgReportAsiCameraInfo* create(const QString& name, int maxBinX, int maxBinY,
+            int gainMin, int gainMax, int offsetMin, int offsetMax,
+            int cameraSizeX, int cameraSizeY, double pixelSizeUm, int bitDepth, bool isColor,
+            double exposureMinMs, double exposureMaxMs)
+        {
+            return new MsgReportAsiCameraInfo(name, maxBinX, maxBinY, gainMin, gainMax, offsetMin, offsetMax,
+                cameraSizeX, cameraSizeY, pixelSizeUm, bitDepth, isColor, exposureMinMs, exposureMaxMs);
+        }
+
+    private:
+        QString m_name;
+        int m_maxBinX;
+        int m_maxBinY;
+        int m_gainMin;
+        int m_gainMax;
+        int m_offsetMin;
+        int m_offsetMax;
+        int m_cameraSizeX;
+        int m_cameraSizeY;
+        double m_pixelSizeUm;
+        int m_bitDepth;
+        bool m_isColor;
+        double m_exposureMinMs;
+        double m_exposureMaxMs;
+
+        MsgReportAsiCameraInfo(const QString& name, int maxBinX, int maxBinY,
+            int gainMin, int gainMax, int offsetMin, int offsetMax,
+            int cameraSizeX, int cameraSizeY, double pixelSizeUm, int bitDepth, bool isColor,
+            double exposureMinMs, double exposureMaxMs) :
+            Message(),
+            m_name(name),
+            m_maxBinX(maxBinX),
+            m_maxBinY(maxBinY),
+            m_gainMin(gainMin),
+            m_gainMax(gainMax),
+            m_offsetMin(offsetMin),
+            m_offsetMax(offsetMax),
+            m_cameraSizeX(cameraSizeX),
+            m_cameraSizeY(cameraSizeY),
+            m_pixelSizeUm(pixelSizeUm),
+            m_bitDepth(bitDepth),
+            m_isColor(isColor),
+            m_exposureMinMs(exposureMinMs),
+            m_exposureMaxMs(exposureMaxMs)
+        {}
+    };
+
     // Sent when the set of available spectrum-view devices changes
     class MsgReportAvailableDevices : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -402,6 +469,22 @@ private:
     QElapsedTimer m_alpacaCaptureTimer;
     qint64 m_lastAlpacaCaptureTimeMs;
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
+    bool m_asiCameraOpen;
+    bool m_asiVideoCaptureStarted;
+    int m_asiCameraSizeX;
+    int m_asiCameraSizeY;
+    int m_asiMaxBinX;
+    int m_asiMaxBinY;
+    int m_asiBayerPattern;
+    bool m_asiColorCamera;
+    int m_asiBitDepth;
+    int m_asiImageType;
+    double m_asiPixelSizeUm;
+    double m_asiExposureMinMs;
+    double m_asiExposureMaxMs;
+    int m_asiFrameWidth;
+    int m_asiFrameHeight;
+    QVector<uchar> m_asiFrameBuffer;
 
     // Audio pass-through (Qt camera only)
     AudioFifo m_captureAudioFifo;  ///< Receives captured microphone samples from AudioDeviceManager
@@ -447,6 +530,12 @@ private:
     void resetAlpacaConnectionState();
     void resetAlpacaFocuserConnectionState();
     void resetAlpacaFilterWheelConnectionState();
+    void asiQueryCameraCapabilities();
+    bool asiOpenCamera();
+    void asiCloseCamera();
+    bool asiApplyCameraSettings();
+    void asiCaptureTick();
+    QImage asiFrameToImage() const;
 
 private slots:
     void handleInputMessages();

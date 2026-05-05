@@ -490,6 +490,11 @@ private:
     int m_asiFrameWidth;
     int m_asiFrameHeight;
     QVector<uchar> m_asiFrameBuffer;
+    double m_lastAsiCcdTemperature;
+    bool m_lastAsiCcdTemperatureValid;
+    qint64 m_lastAsiCaptureTimeMs;
+    int m_lastAsiErrorNumber;
+    QString m_lastAsiErrorMessage;
 #endif
 
     // Audio pass-through (Qt camera only)
@@ -541,9 +546,11 @@ private:
     bool asiOpenCamera();
     void asiCloseCamera();
     bool asiApplyCameraSettings();
+    void asiPollStatus();
     void asiCaptureTick();
     QImage asiFrameToImage() const;
     void invalidateAsiSettings();
+    void setLastAsiError(int errorCode, const QString& errorMessage);
 #endif
 
 private slots:

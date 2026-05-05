@@ -2358,7 +2358,7 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaFilterWheelCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaFilterWheelPositionLabel->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaFilterWheelPositionCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
-    settingsUI()->alpacaStatusGroup->setVisible(alpaca);
+    settingsUI()->alpacaStatusGroup->setVisible(sharedHardwareCamera);
     ui->audioMute->setVisible(qtCamera);
 
     // Qt-camera-only controls
@@ -2392,18 +2392,33 @@ void CameraGUI::updateAlpacaVisibility()
 
 void CameraGUI::updateAlpacaStatusDisplay()
 {
-    if (!m_settingsDialog || !m_settings.isAlpacaCamera()) {
+    if (!m_settingsDialog || (!m_settings.isAlpacaCamera() && !m_settings.isAsiCamera())) {
         return;
     }
 
-    static const QStringList cameraStateNames = {
-        "Idle", "Waiting", "Exposing", "Reading", "Download", "Error"
-    };
+    QString cameraStateText;
+    if (m_settings.isAsiCamera())
+    {
+        static const QStringList cameraStateNames = {
+            "Idle", "Capturing"
+        };
 
-    settingsUI()->cameraStateLabel->setText(
-        (m_lastAlpacaCameraState >= 0 && m_lastAlpacaCameraState < cameraStateNames.size())
+        cameraStateText = (m_lastAlpacaCameraState >= 0 && m_lastAlpacaCameraState < cameraStateNames.size())
             ? cameraStateNames[m_lastAlpacaCameraState]
-            : (m_lastAlpacaCameraState >= 0 ? QString::number(m_lastAlpacaCameraState) : "-"));
+            : (m_lastAlpacaCameraState >= 0 ? QString::number(m_lastAlpacaCameraState) : "-");
+    }
+    else
+    {
+        static const QStringList cameraStateNames = {
+            "Idle", "Waiting", "Exposing", "Reading", "Download", "Error"
+        };
+
+        cameraStateText = (m_lastAlpacaCameraState >= 0 && m_lastAlpacaCameraState < cameraStateNames.size())
+            ? cameraStateNames[m_lastAlpacaCameraState]
+            : (m_lastAlpacaCameraState >= 0 ? QString::number(m_lastAlpacaCameraState) : "-");
+    }
+
+    settingsUI()->cameraStateLabel->setText(cameraStateText);
     settingsUI()->captureTimeLabel->setText(
         m_lastAlpacaCaptureTimeMs >= 0 ? QString::number(m_lastAlpacaCaptureTimeMs) : "-");
     settingsUI()->ccdTempLabel->setText(
@@ -2565,6 +2580,23 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
     m_exposureStepMs = m_exposureMinimumMs;
     m_settings.m_exposureTimeMs = qBound(m_exposureMinimumMs, m_settings.m_exposureTimeMs, m_exposureMaximumMs);
     updateExposureControls();
+
+    settingsUI()->alpacaNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
+    settingsUI()->alpacaDescriptionLabel->setText(QStringLiteral("ASI Camera"));
+    settingsUI()->sensorNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
+    settingsUI()->sensorTypeLabel->setText(info.isColor() ? QStringLiteral("Colour") : QStringLiteral("Monochrome"));
+
+    if (info.getPixelSizeUm() > 0.0) {
+        settingsUI()->pixelSizeLabel->setText(QString("%1 × %1").arg(info.getPixelSizeUm(), 0, 'f', 2));
+    } else {
+        settingsUI()->pixelSizeLabel->setText("-");
+    }
+
+    if (info.getCameraSizeX() > 0 || info.getCameraSizeY() > 0) {
+        settingsUI()->cameraSizeLabel->setText(QString("%1 × %2").arg(info.getCameraSizeX()).arg(info.getCameraSizeY()));
+    } else {
+        settingsUI()->cameraSizeLabel->setText("-");
+    }
 
     updateAlpacaVisibility();
     blockApplySettings(false);

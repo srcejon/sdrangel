@@ -2869,7 +2869,7 @@ QImage CameraWorker::asiFrameToImage() const
     if (m_asiImageType == ASI_IMG_RGB24)
     {
         QImage image(m_asiFrameBuffer.constData(), m_asiFrameWidth, m_asiFrameHeight, m_asiFrameWidth * 3, QImage::Format_RGB888);
-        return image.copy();
+        return image.rgbSwapped();
     }
 
     if (m_asiImageType == ASI_IMG_Y8 || (!m_asiColorCamera && m_asiImageType == ASI_IMG_RAW8))
@@ -2901,20 +2901,20 @@ QImage CameraWorker::asiFrameToImage() const
         return image;
     }
 
-    int cvCode = cv::COLOR_BayerRG2RGB;
+    int cvCode = cv::COLOR_BayerRG2BGR;
     switch (m_asiBayerPattern)
     {
-    case ASI_BAYER_BG: cvCode = cv::COLOR_BayerBG2RGB; break;
-    case ASI_BAYER_GR: cvCode = cv::COLOR_BayerGR2RGB; break;
-    case ASI_BAYER_GB: cvCode = cv::COLOR_BayerGB2RGB; break;
+    case ASI_BAYER_BG: cvCode = cv::COLOR_BayerBG2BGR; break;
+    case ASI_BAYER_GR: cvCode = cv::COLOR_BayerGR2BGR; break;
+    case ASI_BAYER_GB: cvCode = cv::COLOR_BayerGB2BGR; break;
     case ASI_BAYER_RG:
-    default: cvCode = cv::COLOR_BayerRG2RGB; break;
+    default: cvCode = cv::COLOR_BayerRG2BGR; break;
     }
 
     cv::Mat rgbMat;
     cv::cvtColor(rawMat, rgbMat, cvCode);
     QImage image(rgbMat.data, rgbMat.cols, rgbMat.rows, static_cast<int>(rgbMat.step), QImage::Format_RGB888);
-    return image.copy();
+    return image.rgbSwapped();
 }
 
 void CameraWorker::asiCaptureTick()

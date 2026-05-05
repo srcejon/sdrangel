@@ -238,14 +238,13 @@ private:
     void updatePostProcessWhiteBalanceControls();
     void setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description,
                            const QString& alpacaHost = QString(), quint16 alpacaPort = 0);
-    int findCameraComboIndex(const QString& protocol, const QString& cameraId, const QString& description,
+    int findCameraComboIndex(const QString& protocol, const QString& cameraId,
                              const QString& alpacaHost = QString(), quint16 alpacaPort = 0) const;
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
     bool chooseVideoFileCameraFile(int comboIndex, const QString& previousCameraProtocol = QString(),
                                    const QString& previousCameraId = QString(),
-                                   const QString& previousCameraDescription = QString(),
                                    const QString& previousAlpacaHost = QString(),
                                    quint16 previousAlpacaPort = 0);
     static CameraGUI::FrameRateOptions makeFrameRateOptions(const QSet<int>& fpsValues);

@@ -269,7 +269,6 @@ bool CameraGUI::handleMessage(const Message& message)
         int index = findCameraComboIndex(
             m_settings.m_cameraProtocol,
             m_settings.m_cameraId,
-            m_settings.m_cameraDescription,
             m_settings.m_alpacaHost,
             m_settings.m_alpacaPort);
         if (index < 0 && ui->cameraCombo->count() > 0) {
@@ -293,8 +292,9 @@ bool CameraGUI::handleMessage(const Message& message)
             && ((selectedCamera.m_protocol != m_settings.m_cameraProtocol)
                 || (selectedCamera.m_id != m_settings.m_cameraId)
                 || (selectedCamera.m_description != m_settings.m_cameraDescription)
-                || (selectedCamera.m_host != m_settings.m_alpacaHost)
-                || (selectedCamera.m_port != m_settings.m_alpacaPort));
+                || ((selectedCamera.m_protocol == QLatin1String("alpaca"))
+                    && ((selectedCamera.m_host != m_settings.m_alpacaHost)
+                        || (selectedCamera.m_port != m_settings.m_alpacaPort))));
 
         if (selectedCameraDiffers)
         {
@@ -653,21 +653,22 @@ void CameraGUI::setSelectedCamera(const QString& protocol, const QString& camera
         m_settings.m_videoFileCameraPath = cameraId;
     }
 
-    if (protocol == QLatin1String("alpaca") && !alpacaHost.isEmpty())
-    {
+    if (protocol == QLatin1String("alpaca")) {
         m_settings.m_alpacaHost = alpacaHost;
         m_settings.m_alpacaPort = alpacaPort;
+    } else {
+        m_settings.m_alpacaHost.clear();
+        m_settings.m_alpacaPort = 0;
     }
 }
 
-int CameraGUI::findCameraComboIndex(const QString& protocol, const QString& cameraId, const QString& description,
+int CameraGUI::findCameraComboIndex(const QString& protocol, const QString& cameraId,
     const QString& alpacaHost, quint16 alpacaPort) const
 {
     for (int i = 0; i < ui->cameraCombo->count(); ++i)
     {
         if (ui->cameraCombo->itemData(i, CameraProtocolRole).toString() != protocol
-            || ui->cameraCombo->itemData(i, CameraIdRole).toString() != cameraId
-            || ui->cameraCombo->itemData(i, CameraDescriptionRole).toString() != description)
+            || ui->cameraCombo->itemData(i, CameraIdRole).toString() != cameraId)
         {
             continue;
         }
@@ -690,7 +691,7 @@ int CameraGUI::findCameraComboIndex(const QString& protocol, const QString& came
 }
 
 bool CameraGUI::chooseVideoFileCameraFile(int comboIndex, const QString& previousCameraProtocol,
-    const QString& previousCameraId, const QString& previousCameraDescription,
+    const QString& previousCameraId,
     const QString& previousAlpacaHost, quint16 previousAlpacaPort)
 {
     const QString filePath = QFileDialog::getOpenFileName(
@@ -704,7 +705,6 @@ bool CameraGUI::chooseVideoFileCameraFile(int comboIndex, const QString& previou
         const int previousIndex = findCameraComboIndex(
             previousCameraProtocol,
             previousCameraId,
-            previousCameraDescription,
             previousAlpacaHost,
             previousAlpacaPort);
         if (previousIndex >= 0)
@@ -756,7 +756,6 @@ void CameraGUI::displaySettings()
     const int cameraIndex = findCameraComboIndex(
         m_settings.m_cameraProtocol,
         m_settings.m_cameraId,
-        m_settings.m_cameraDescription,
         m_settings.m_alpacaHost,
         m_settings.m_alpacaPort);
     if (cameraIndex >= 0) {
@@ -2707,7 +2706,6 @@ void CameraGUI::on_browseVideoFileButton_clicked()
             index,
             m_settings.m_cameraProtocol,
             m_settings.m_cameraId,
-            m_settings.m_cameraDescription,
             m_settings.m_alpacaHost,
             m_settings.m_alpacaPort))
     {
@@ -2788,7 +2786,6 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
         if (!chooseVideoFileCameraFile(index,
                 previousCameraProtocol,
                 previousCameraId,
-                previousCameraDescription,
                 previousAlpacaHost,
                 previousAlpacaPort))
         {

@@ -2712,6 +2712,12 @@ bool CameraWorker::asiOpenCamera()
         return false;
     }
 
+    ASI_CAMERA_INFO cameraInfo {};
+    const bool hasCameraInfo = asiGetCameraInfoById(cameraId, cameraInfo);
+    if (hasCameraInfo) {
+        m_asiTriggerCamera = cameraInfo.IsTriggerCam == ASI_TRUE;
+    }
+
     if (m_asiTriggerCamera)
     {
         const ASI_ERROR_CODE modeError = ASISetCameraMode(cameraId, ASI_MODE_NORMAL);

@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <QColor>
 #include <QDataStream>
 #include <QIODevice>
@@ -161,6 +162,10 @@ void CameraSettings::resetToDefaults()
     m_cameraGain = 100;
     m_cameraOffset = 1;
     m_cameraReadoutMode = 0;
+    m_asiCoolerOn = -1;
+    m_asiTargetTemp = std::numeric_limits<int>::min();
+    m_asiUsbBandwidth = -1;
+    m_asiHighSpeedMode = -1;
     m_saveImage = false;
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
@@ -373,6 +378,10 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(118, m_reverseAPIPort);
     s.writeU32(119, m_reverseAPIFeatureSetIndex);
     s.writeU32(120, m_reverseAPIFeatureIndex);
+    s.writeS32(121, m_asiCoolerOn);
+    s.writeS32(122, m_asiTargetTemp);
+    s.writeS32(123, m_asiUsbBandwidth);
+    s.writeS32(124, m_asiHighSpeedMode);
 
     return s.final();
 }
@@ -605,6 +614,13 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_reverseAPIFeatureSetIndex = utmp > 99 ? 99 : utmp;
         d.readU32(120, &utmp, 0);
         m_reverseAPIFeatureIndex = utmp > 99 ? 99 : utmp;
+        d.readS32(121, &m_asiCoolerOn, -1);
+        d.readS32(122, &m_asiTargetTemp, std::numeric_limits<int>::min());
+        d.readS32(123, &m_asiUsbBandwidth, -1);
+        d.readS32(124, &m_asiHighSpeedMode, -1);
+        m_asiCoolerOn = qBound(-1, m_asiCoolerOn, 1);
+        m_asiUsbBandwidth = std::max(-1, m_asiUsbBandwidth);
+        m_asiHighSpeedMode = qBound(-1, m_asiHighSpeedMode, 1);
 
         return true;
     }
@@ -744,6 +760,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("cameraReadoutMode") || settingsKeys.contains("alpacaReadoutMode")) {
         m_cameraReadoutMode = std::max(0, settings.m_cameraReadoutMode);
+    }
+    if (settingsKeys.contains("asiCoolerOn")) {
+        m_asiCoolerOn = qBound(-1, settings.m_asiCoolerOn, 1);
+    }
+    if (settingsKeys.contains("asiTargetTemp")) {
+        m_asiTargetTemp = settings.m_asiTargetTemp;
+    }
+    if (settingsKeys.contains("asiUsbBandwidth")) {
+        m_asiUsbBandwidth = std::max(-1, settings.m_asiUsbBandwidth);
+    }
+    if (settingsKeys.contains("asiHighSpeedMode")) {
+        m_asiHighSpeedMode = qBound(-1, settings.m_asiHighSpeedMode, 1);
     }
     if (settingsKeys.contains("saveImage")) {
         m_saveImage = settings.m_saveImage;
@@ -1083,6 +1111,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("cameraReadoutMode") || settingsKeys.contains("alpacaReadoutMode") || force) {
         ostr << " m_cameraReadoutMode: " << m_cameraReadoutMode;
+    }
+    if (settingsKeys.contains("asiCoolerOn") || force) {
+        ostr << " m_asiCoolerOn: " << m_asiCoolerOn;
+    }
+    if (settingsKeys.contains("asiTargetTemp") || force) {
+        ostr << " m_asiTargetTemp: " << m_asiTargetTemp;
+    }
+    if (settingsKeys.contains("asiUsbBandwidth") || force) {
+        ostr << " m_asiUsbBandwidth: " << m_asiUsbBandwidth;
+    }
+    if (settingsKeys.contains("asiHighSpeedMode") || force) {
+        ostr << " m_asiHighSpeedMode: " << m_asiHighSpeedMode;
     }
     if (settingsKeys.contains("saveImage") || force) {
         ostr << " m_saveImage: " << m_saveImage;

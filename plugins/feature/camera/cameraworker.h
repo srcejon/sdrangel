@@ -303,14 +303,33 @@ MESSAGE_CLASS_DECLARATION
         bool isColor() const { return m_isColor; }
         double getExposureMinMs() const { return m_exposureMinMs; }
         double getExposureMaxMs() const { return m_exposureMaxMs; }
+        bool isCoolerSupported() const { return m_coolerSupported; }
+        bool isCoolerOn() const { return m_coolerOn; }
+        bool isTargetTempSupported() const { return m_targetTempSupported; }
+        int getTargetTempMin() const { return m_targetTempMin; }
+        int getTargetTempMax() const { return m_targetTempMax; }
+        int getTargetTemp() const { return m_targetTemp; }
+        bool isUsbBandwidthSupported() const { return m_usbBandwidthSupported; }
+        int getUsbBandwidthMin() const { return m_usbBandwidthMin; }
+        int getUsbBandwidthMax() const { return m_usbBandwidthMax; }
+        int getUsbBandwidth() const { return m_usbBandwidth; }
+        bool isHighSpeedModeSupported() const { return m_highSpeedModeSupported; }
+        bool isHighSpeedMode() const { return m_highSpeedMode; }
 
         static MsgReportAsiCameraInfo* create(const QString& name, int maxBinX, int maxBinY,
             int gainMin, int gainMax, int offsetMin, int offsetMax,
             int cameraSizeX, int cameraSizeY, double pixelSizeUm, int bitDepth, bool isColor,
-            double exposureMinMs, double exposureMaxMs)
+            double exposureMinMs, double exposureMaxMs,
+            bool coolerSupported, bool coolerOn,
+            bool targetTempSupported, int targetTempMin, int targetTempMax, int targetTemp,
+            bool usbBandwidthSupported, int usbBandwidthMin, int usbBandwidthMax, int usbBandwidth,
+            bool highSpeedModeSupported, bool highSpeedMode)
         {
             return new MsgReportAsiCameraInfo(name, maxBinX, maxBinY, gainMin, gainMax, offsetMin, offsetMax,
-                cameraSizeX, cameraSizeY, pixelSizeUm, bitDepth, isColor, exposureMinMs, exposureMaxMs);
+                cameraSizeX, cameraSizeY, pixelSizeUm, bitDepth, isColor, exposureMinMs, exposureMaxMs,
+                coolerSupported, coolerOn, targetTempSupported, targetTempMin, targetTempMax, targetTemp,
+                usbBandwidthSupported, usbBandwidthMin, usbBandwidthMax, usbBandwidth,
+                highSpeedModeSupported, highSpeedMode);
         }
 
     private:
@@ -328,11 +347,27 @@ MESSAGE_CLASS_DECLARATION
         bool m_isColor;
         double m_exposureMinMs;
         double m_exposureMaxMs;
+        bool m_coolerSupported;
+        bool m_coolerOn;
+        bool m_targetTempSupported;
+        int m_targetTempMin;
+        int m_targetTempMax;
+        int m_targetTemp;
+        bool m_usbBandwidthSupported;
+        int m_usbBandwidthMin;
+        int m_usbBandwidthMax;
+        int m_usbBandwidth;
+        bool m_highSpeedModeSupported;
+        bool m_highSpeedMode;
 
         MsgReportAsiCameraInfo(const QString& name, int maxBinX, int maxBinY,
             int gainMin, int gainMax, int offsetMin, int offsetMax,
             int cameraSizeX, int cameraSizeY, double pixelSizeUm, int bitDepth, bool isColor,
-            double exposureMinMs, double exposureMaxMs) :
+            double exposureMinMs, double exposureMaxMs,
+            bool coolerSupported, bool coolerOn,
+            bool targetTempSupported, int targetTempMin, int targetTempMax, int targetTemp,
+            bool usbBandwidthSupported, int usbBandwidthMin, int usbBandwidthMax, int usbBandwidth,
+            bool highSpeedModeSupported, bool highSpeedMode) :
             Message(),
             m_name(name),
             m_maxBinX(maxBinX),
@@ -347,7 +382,19 @@ MESSAGE_CLASS_DECLARATION
             m_bitDepth(bitDepth),
             m_isColor(isColor),
             m_exposureMinMs(exposureMinMs),
-            m_exposureMaxMs(exposureMaxMs)
+            m_exposureMaxMs(exposureMaxMs),
+            m_coolerSupported(coolerSupported),
+            m_coolerOn(coolerOn),
+            m_targetTempSupported(targetTempSupported),
+            m_targetTempMin(targetTempMin),
+            m_targetTempMax(targetTempMax),
+            m_targetTemp(targetTemp),
+            m_usbBandwidthSupported(usbBandwidthSupported),
+            m_usbBandwidthMin(usbBandwidthMin),
+            m_usbBandwidthMax(usbBandwidthMax),
+            m_usbBandwidth(usbBandwidth),
+            m_highSpeedModeSupported(highSpeedModeSupported),
+            m_highSpeedMode(highSpeedMode)
         {}
     };
 

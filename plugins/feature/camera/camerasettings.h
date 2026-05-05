@@ -99,6 +99,10 @@ struct CameraSettings
     int m_cameraGain;         // index into named gains list, or numeric value; -1 = do not set
     int m_cameraOffset;       // index into named offsets list, or numeric value; -1 = do not set
     int m_cameraReadoutMode;  // index into readoutmodes list
+    int m_asiCoolerOn;        // -1 = do not set, 0 = off, 1 = on
+    int m_asiTargetTemp;      // target temperature in Celsius; sentinel means do not set
+    int m_asiUsbBandwidth;    // USB bandwidth overload setting; -1 = do not set
+    int m_asiHighSpeedMode;   // -1 = do not set, 0 = off, 1 = on
     bool m_saveImage;
     QString m_imageFileName;
     bool m_saveVideo;

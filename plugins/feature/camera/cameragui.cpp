@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <QCheckBox>
 #include <QColorDialog>
@@ -516,6 +517,10 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_exposureMinimumMs(1.0),
     m_exposureMaximumMs(60000.0),
     m_exposureStepMs(1.0),
+    m_asiCoolerSupported(false),
+    m_asiTargetTempSupported(false),
+    m_asiUsbBandwidthSupported(false),
+    m_asiHighSpeedModeSupported(false),
     m_imageScene(nullptr),
     m_imagePixmapItem(nullptr),
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -832,6 +837,11 @@ void CameraGUI::displaySettings()
     }
 
     settingsUI()->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_cameraReadoutMode);
+    settingsUI()->asiCoolerOnCheck->setChecked(m_settings.m_asiCoolerOn > 0);
+    settingsUI()->asiTargetTempSpin->setValue(
+        m_settings.m_asiTargetTemp == std::numeric_limits<int>::min() ? 0 : m_settings.m_asiTargetTemp);
+    settingsUI()->asiUsbBandwidthSpin->setValue(std::max(0, m_settings.m_asiUsbBandwidth));
+    settingsUI()->asiHighSpeedModeCheck->setChecked(m_settings.m_asiHighSpeedMode > 0);
     ui->saveImageCheck->setChecked(m_settings.m_saveImage);
     settingsUI()->imagePathEdit->setText(m_settings.m_imageFileName);
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
@@ -2338,6 +2348,14 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaOffsetSpin->setVisible(sharedHardwareCamera && (!alpaca || !m_alpacaHasNamedOffsets));
     settingsUI()->alpacaReadoutModeLabel->setVisible(alpaca);
     settingsUI()->alpacaReadoutModeCombo->setVisible(alpaca);
+    settingsUI()->asiCoolerOnLabel->setVisible(asi && m_asiCoolerSupported);
+    settingsUI()->asiCoolerOnCheck->setVisible(asi && m_asiCoolerSupported);
+    settingsUI()->asiTargetTempLabel->setVisible(asi && m_asiTargetTempSupported);
+    settingsUI()->asiTargetTempSpin->setVisible(asi && m_asiTargetTempSupported);
+    settingsUI()->asiUsbBandwidthLabel->setVisible(asi && m_asiUsbBandwidthSupported);
+    settingsUI()->asiUsbBandwidthSpin->setVisible(asi && m_asiUsbBandwidthSupported);
+    settingsUI()->asiHighSpeedModeLabel->setVisible(asi && m_asiHighSpeedModeSupported);
+    settingsUI()->asiHighSpeedModeCheck->setVisible(asi && m_asiHighSpeedModeSupported);
     settingsUI()->alpacaFocusPositionLabel->setVisible(alpaca);
     settingsUI()->alpacaFocusPositionSpin->setVisible(alpaca);
     settingsUI()->alpacaFocusStepSizeLabel->setVisible(alpaca);
@@ -2552,6 +2570,10 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
 
     m_alpacaHasNamedGains = false;
     m_alpacaHasNamedOffsets = false;
+    m_asiCoolerSupported = info.isCoolerSupported();
+    m_asiTargetTempSupported = info.isTargetTempSupported();
+    m_asiUsbBandwidthSupported = info.isUsbBandwidthSupported();
+    m_asiHighSpeedModeSupported = info.isHighSpeedModeSupported();
     m_alpacaCameraSizeX = std::max(0, info.getCameraSizeX());
     m_alpacaCameraSizeY = std::max(0, info.getCameraSizeY());
 
@@ -2580,6 +2602,36 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
     m_exposureStepMs = m_exposureMinimumMs;
     m_settings.m_exposureTimeMs = qBound(m_exposureMinimumMs, m_settings.m_exposureTimeMs, m_exposureMaximumMs);
     updateExposureControls();
+
+    if (info.isCoolerSupported() && (m_settings.m_asiCoolerOn < 0)) {
+        m_settings.m_asiCoolerOn = info.isCoolerOn() ? 1 : 0;
+    }
+    settingsUI()->asiCoolerOnCheck->setChecked(m_settings.m_asiCoolerOn > 0);
+
+    settingsUI()->asiTargetTempSpin->setMinimum(info.getTargetTempMin());
+    settingsUI()->asiTargetTempSpin->setMaximum(std::max(info.getTargetTempMin(), info.getTargetTempMax()));
+    if (info.isTargetTempSupported() && (m_settings.m_asiTargetTemp == std::numeric_limits<int>::min())) {
+        m_settings.m_asiTargetTemp = info.getTargetTemp();
+    }
+    settingsUI()->asiTargetTempSpin->setValue(qBound(
+        info.getTargetTempMin(),
+        m_settings.m_asiTargetTemp == std::numeric_limits<int>::min() ? info.getTargetTemp() : m_settings.m_asiTargetTemp,
+        std::max(info.getTargetTempMin(), info.getTargetTempMax())));
+
+    settingsUI()->asiUsbBandwidthSpin->setMinimum(info.getUsbBandwidthMin());
+    settingsUI()->asiUsbBandwidthSpin->setMaximum(std::max(info.getUsbBandwidthMin(), info.getUsbBandwidthMax()));
+    if (info.isUsbBandwidthSupported() && (m_settings.m_asiUsbBandwidth < 0)) {
+        m_settings.m_asiUsbBandwidth = info.getUsbBandwidth();
+    }
+    settingsUI()->asiUsbBandwidthSpin->setValue(qBound(
+        info.getUsbBandwidthMin(),
+        m_settings.m_asiUsbBandwidth < 0 ? info.getUsbBandwidth() : m_settings.m_asiUsbBandwidth,
+        std::max(info.getUsbBandwidthMin(), info.getUsbBandwidthMax())));
+
+    if (info.isHighSpeedModeSupported() && (m_settings.m_asiHighSpeedMode < 0)) {
+        m_settings.m_asiHighSpeedMode = info.isHighSpeedMode() ? 1 : 0;
+    }
+    settingsUI()->asiHighSpeedModeCheck->setChecked(m_settings.m_asiHighSpeedMode > 0);
 
     settingsUI()->alpacaNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
     settingsUI()->alpacaDescriptionLabel->setText(QStringLiteral("ASI Camera"));
@@ -3114,6 +3166,30 @@ void CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_cameraReadoutMode = index;
     applySetting("cameraReadoutMode");
+}
+
+void CameraGUI::on_asiCoolerOnCheck_toggled(bool checked)
+{
+    m_settings.m_asiCoolerOn = checked ? 1 : 0;
+    applySetting("asiCoolerOn");
+}
+
+void CameraGUI::on_asiTargetTempSpin_valueChanged(int value)
+{
+    m_settings.m_asiTargetTemp = value;
+    applySetting("asiTargetTemp");
+}
+
+void CameraGUI::on_asiUsbBandwidthSpin_valueChanged(int value)
+{
+    m_settings.m_asiUsbBandwidth = value;
+    applySetting("asiUsbBandwidth");
+}
+
+void CameraGUI::on_asiHighSpeedModeCheck_toggled(bool checked)
+{
+    m_settings.m_asiHighSpeedMode = checked ? 1 : 0;
+    applySetting("asiHighSpeedMode");
 }
 
 void CameraGUI::on_saveImageCheck_toggled(bool checked)

@@ -138,6 +138,18 @@ bool asiGetControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CON
     return false;
 }
 
+bool asiGetControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& value, ASI_BOOL& isAuto)
+{
+    const ASI_ERROR_CODE error = ASIGetControlValue(cameraId, controlType, &value, &isAuto);
+
+    if (error != ASI_SUCCESS) {
+        qDebug() << "CameraWorker: ASIGetControlValue failed:" << error << asiErrorCodeToString(error)
+                 << "controlType" << static_cast<int>(controlType);
+    }
+
+    return error == ASI_SUCCESS;
+}
+
 bool asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageType)
 {
     for (ASI_IMG_TYPE candidate : cameraInfo.SupportedVideoFormat)
@@ -684,6 +696,10 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("cameraStartY")
         || settingsKeys.contains("cameraGain")
         || settingsKeys.contains("cameraOffset")
+        || settingsKeys.contains("asiCoolerOn")
+        || settingsKeys.contains("asiTargetTemp")
+        || settingsKeys.contains("asiUsbBandwidth")
+        || settingsKeys.contains("asiHighSpeedMode")
         || settingsKeys.contains("alpacaHost")
         || settingsKeys.contains("alpacaPort");
 
@@ -793,6 +809,10 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
             || settingsKeys.contains("cameraStartY")
             || settingsKeys.contains("cameraGain")
             || settingsKeys.contains("cameraOffset")
+            || settingsKeys.contains("asiCoolerOn")
+            || settingsKeys.contains("asiTargetTemp")
+            || settingsKeys.contains("asiUsbBandwidth")
+            || settingsKeys.contains("asiHighSpeedMode")
             || settingsKeys.contains("exposureTimeMs")))
     {
         invalidateAsiSettings();
@@ -2765,9 +2785,26 @@ void CameraWorker::asiQueryCameraCapabilities()
     ASI_CONTROL_CAPS gainRange {};
     ASI_CONTROL_CAPS offsetRange {};
     ASI_CONTROL_CAPS exposureRange {};
+    ASI_CONTROL_CAPS coolerOnCaps {};
+    ASI_CONTROL_CAPS targetTempCaps {};
+    ASI_CONTROL_CAPS usbBandwidthCaps {};
+    ASI_CONTROL_CAPS highSpeedModeCaps {};
     const bool hasGainRange = asiGetControlCapsByType(cameraId, ASI_GAIN, gainRange);
     const bool hasOffsetRange = asiGetControlCapsByType(cameraId, ASI_OFFSET, offsetRange);
     const bool hasExposureRange = asiGetControlCapsByType(cameraId, ASI_EXPOSURE, exposureRange);
+    const bool hasCoolerOn = asiGetControlCapsByType(cameraId, ASI_COOLER_ON, coolerOnCaps);
+    const bool hasTargetTemp = asiGetControlCapsByType(cameraId, ASI_TARGET_TEMP, targetTempCaps);
+    const bool hasUsbBandwidth = asiGetControlCapsByType(cameraId, ASI_BANDWIDTHOVERLOAD, usbBandwidthCaps);
+    const bool hasHighSpeedMode = asiGetControlCapsByType(cameraId, ASI_HIGH_SPEED_MODE, highSpeedModeCaps);
+    long coolerOnValue = 0;
+    long targetTempValue = 0;
+    long usbBandwidthValue = 0;
+    long highSpeedModeValue = 0;
+    ASI_BOOL isAuto = ASI_FALSE;
+    const bool hasCoolerOnValue = hasCoolerOn && asiGetControlValueByType(cameraId, ASI_COOLER_ON, coolerOnValue, isAuto);
+    const bool hasTargetTempValue = hasTargetTemp && asiGetControlValueByType(cameraId, ASI_TARGET_TEMP, targetTempValue, isAuto);
+    const bool hasUsbBandwidthValue = hasUsbBandwidth && asiGetControlValueByType(cameraId, ASI_BANDWIDTHOVERLOAD, usbBandwidthValue, isAuto);
+    const bool hasHighSpeedModeValue = hasHighSpeedMode && asiGetControlValueByType(cameraId, ASI_HIGH_SPEED_MODE, highSpeedModeValue, isAuto);
 
     m_asiCameraSizeX = static_cast<int>(cameraInfo.MaxWidth);
     m_asiCameraSizeY = static_cast<int>(cameraInfo.MaxHeight);
@@ -2816,7 +2853,19 @@ void CameraWorker::asiQueryCameraCapabilities()
             m_asiBitDepth,
             m_asiColorCamera,
             m_asiExposureMinMs,
-            m_asiExposureMaxMs));
+            m_asiExposureMaxMs,
+            hasCoolerOn && coolerOnCaps.IsWritable == ASI_TRUE,
+            hasCoolerOnValue ? (coolerOnValue != 0) : false,
+            hasTargetTemp && targetTempCaps.IsWritable == ASI_TRUE,
+            hasTargetTemp ? static_cast<int>(targetTempCaps.MinValue) : 0,
+            hasTargetTemp ? static_cast<int>(targetTempCaps.MaxValue) : 0,
+            hasTargetTempValue ? static_cast<int>(targetTempValue) : 0,
+            hasUsbBandwidth && usbBandwidthCaps.IsWritable == ASI_TRUE,
+            hasUsbBandwidth ? static_cast<int>(usbBandwidthCaps.MinValue) : 0,
+            hasUsbBandwidth ? static_cast<int>(usbBandwidthCaps.MaxValue) : 0,
+            hasUsbBandwidthValue ? static_cast<int>(usbBandwidthValue) : 0,
+            hasHighSpeedMode && highSpeedModeCaps.IsWritable == ASI_TRUE,
+            hasHighSpeedModeValue ? (highSpeedModeValue != 0) : false));
     }
 
     asiPollStatus();
@@ -2866,6 +2915,18 @@ bool CameraWorker::asiApplyCameraSettings()
         std::max(0L, static_cast<long>(m_settings.m_cameraGain)), ASI_FALSE);
     const ASI_ERROR_CODE offsetError = ASISetControlValue(cameraId, ASI_OFFSET,
         std::max(0L, static_cast<long>(m_settings.m_cameraOffset)), ASI_FALSE);
+    const ASI_ERROR_CODE coolerOnError = (m_settings.m_asiCoolerOn >= 0)
+        ? ASISetControlValue(cameraId, ASI_COOLER_ON, m_settings.m_asiCoolerOn != 0 ? 1L : 0L, ASI_FALSE)
+        : ASI_SUCCESS;
+    const ASI_ERROR_CODE targetTempError = (m_settings.m_asiTargetTemp != std::numeric_limits<int>::min())
+        ? ASISetControlValue(cameraId, ASI_TARGET_TEMP, static_cast<long>(m_settings.m_asiTargetTemp), ASI_FALSE)
+        : ASI_SUCCESS;
+    const ASI_ERROR_CODE usbBandwidthError = (m_settings.m_asiUsbBandwidth >= 0)
+        ? ASISetControlValue(cameraId, ASI_BANDWIDTHOVERLOAD, static_cast<long>(m_settings.m_asiUsbBandwidth), ASI_FALSE)
+        : ASI_SUCCESS;
+    const ASI_ERROR_CODE highSpeedModeError = (m_settings.m_asiHighSpeedMode >= 0)
+        ? ASISetControlValue(cameraId, ASI_HIGH_SPEED_MODE, m_settings.m_asiHighSpeedMode != 0 ? 1L : 0L, ASI_FALSE)
+        : ASI_SUCCESS;
 
     if (exposureError != ASI_SUCCESS) {
         setLastAsiError(exposureError, asiErrorCodeToString(exposureError));
@@ -2882,6 +2943,26 @@ bool CameraWorker::asiApplyCameraSettings()
     if (offsetError != ASI_SUCCESS) {
         setLastAsiError(offsetError, asiErrorCodeToString(offsetError));
         qDebug() << "CameraWorker: ASISetControlValue(OFFSET) failed:" << offsetError << asiErrorCodeToString(offsetError);
+        return false;
+    }
+    if (coolerOnError != ASI_SUCCESS) {
+        setLastAsiError(coolerOnError, asiErrorCodeToString(coolerOnError));
+        qDebug() << "CameraWorker: ASISetControlValue(COOLER_ON) failed:" << coolerOnError << asiErrorCodeToString(coolerOnError);
+        return false;
+    }
+    if (targetTempError != ASI_SUCCESS) {
+        setLastAsiError(targetTempError, asiErrorCodeToString(targetTempError));
+        qDebug() << "CameraWorker: ASISetControlValue(TARGET_TEMP) failed:" << targetTempError << asiErrorCodeToString(targetTempError);
+        return false;
+    }
+    if (usbBandwidthError != ASI_SUCCESS) {
+        setLastAsiError(usbBandwidthError, asiErrorCodeToString(usbBandwidthError));
+        qDebug() << "CameraWorker: ASISetControlValue(BANDWIDTHOVERLOAD) failed:" << usbBandwidthError << asiErrorCodeToString(usbBandwidthError);
+        return false;
+    }
+    if (highSpeedModeError != ASI_SUCCESS) {
+        setLastAsiError(highSpeedModeError, asiErrorCodeToString(highSpeedModeError));
+        qDebug() << "CameraWorker: ASISetControlValue(HIGH_SPEED_MODE) failed:" << highSpeedModeError << asiErrorCodeToString(highSpeedModeError);
         return false;
     }
 

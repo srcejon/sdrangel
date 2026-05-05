@@ -171,6 +171,10 @@ private:
     double m_exposureMinimumMs;
     double m_exposureMaximumMs;
     double m_exposureStepMs;
+    bool m_asiCoolerSupported;
+    bool m_asiTargetTempSupported;
+    bool m_asiUsbBandwidthSupported;
+    bool m_asiHighSpeedModeSupported;
     QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
     QList<CameraObjectDeviceSettingsGUI *> m_actionDeviceSettingsGUIs;
 
@@ -300,6 +304,10 @@ private slots:
     void on_alpacaOffsetSlider_valueChanged(int value);
     void on_alpacaOffsetSpin_valueChanged(int value);
     void on_alpacaReadoutModeCombo_currentIndexChanged(int index);
+    void on_asiCoolerOnCheck_toggled(bool checked);
+    void on_asiTargetTempSpin_valueChanged(int value);
+    void on_asiUsbBandwidthSpin_valueChanged(int value);
+    void on_asiHighSpeedModeCheck_toggled(bool checked);
     void on_saveImageCheck_toggled(bool checked);
     void on_imagePathEdit_editingFinished();
     void on_imagePathButton_clicked();

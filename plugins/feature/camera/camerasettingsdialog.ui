@@ -582,27 +582,86 @@
           </widget>
          </item>
          <item row="18" column="0">
+          <widget class="QLabel" name="asiCoolerOnLabel">
+           <property name="text">
+            <string>Cooler</string>
+           </property>
+          </widget>
+         </item>
+         <item row="18" column="1">
+          <widget class="QCheckBox" name="asiCoolerOnCheck">
+           <property name="text">
+            <string>Enabled</string>
+           </property>
+          </widget>
+         </item>
+         <item row="19" column="0">
+          <widget class="QLabel" name="asiTargetTempLabel">
+           <property name="text">
+            <string>Target temp</string>
+           </property>
+          </widget>
+         </item>
+         <item row="19" column="1">
+          <widget class="QSpinBox" name="asiTargetTempSpin">
+           <property name="minimum">
+            <number>-50</number>
+           </property>
+           <property name="maximum">
+            <number>50</number>
+           </property>
+          </widget>
+         </item>
+         <item row="20" column="0">
+          <widget class="QLabel" name="asiUsbBandwidthLabel">
+           <property name="text">
+            <string>USB bandwidth</string>
+           </property>
+          </widget>
+         </item>
+         <item row="20" column="1">
+          <widget class="QSpinBox" name="asiUsbBandwidthSpin">
+           <property name="maximum">
+            <number>1000</number>
+           </property>
+          </widget>
+         </item>
+         <item row="21" column="0">
+          <widget class="QLabel" name="asiHighSpeedModeLabel">
+           <property name="text">
+            <string>High speed mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="21" column="1">
+          <widget class="QCheckBox" name="asiHighSpeedModeCheck">
+           <property name="text">
+            <string>Enabled</string>
+           </property>
+          </widget>
+         </item>
+         <item row="22" column="0">
           <widget class="QLabel" name="alpacaFocusPositionLabel">
            <property name="text">
             <string>Focus position</string>
            </property>
           </widget>
          </item>
-         <item row="18" column="1">
+         <item row="22" column="1">
           <widget class="QSpinBox" name="alpacaFocusPositionSpin">
            <property name="maximum">
             <number>1000000</number>
            </property>
           </widget>
          </item>
-         <item row="19" column="0">
+         <item row="23" column="0">
           <widget class="QLabel" name="alpacaFocusStepSizeLabel">
            <property name="text">
             <string>Focus step size</string>
            </property>
           </widget>
          </item>
-         <item row="19" column="1">
+         <item row="23" column="1">
           <widget class="QSpinBox" name="alpacaFocusStepSizeSpin">
            <property name="minimum">
             <number>1</number>
@@ -612,14 +671,14 @@
            </property>
           </widget>
          </item>
-         <item row="20" column="0">
+         <item row="24" column="0">
           <widget class="QLabel" name="alpacaFilterWheelPositionLabel">
            <property name="text">
             <string>Filter</string>
            </property>
           </widget>
          </item>
-         <item row="20" column="1">
+         <item row="24" column="1">
           <widget class="QComboBox" name="alpacaFilterWheelPositionCombo">
            <property name="toolTip">
             <string>Filter wheel position using the Alpaca names list</string>

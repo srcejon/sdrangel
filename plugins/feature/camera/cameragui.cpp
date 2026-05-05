@@ -2692,6 +2692,7 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     const QString previousAlpacaHost = m_settings.m_alpacaHost;
     const quint16 previousAlpacaPort = m_settings.m_alpacaPort;
     const bool wasAlpaca = m_settings.isAlpacaCamera();
+    const bool wasAsi = m_settings.isAsiCamera();
     const QString protocol = ui->cameraCombo->itemData(index, CameraProtocolRole).toString();
     QString cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
     QString description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
@@ -2715,6 +2716,19 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     }
 
     setSelectedCamera(protocol, cameraId, description, alpacaHost, alpacaPort);
+
+    const bool switchedBetweenAsiAndAlpaca =
+        (wasAsi && m_settings.isAlpacaCamera()) || (wasAlpaca && m_settings.isAsiCamera());
+
+    if (switchedBetweenAsiAndAlpaca)
+    {
+        m_settings.m_cameraStartX = 0;
+        m_settings.m_cameraStartY = 0;
+        m_settings.m_cameraNumX = 0;
+        m_settings.m_cameraNumY = 0;
+        m_alpacaCameraSizeX = 0;
+        m_alpacaCameraSizeY = 0;
+    }
 
     if (wasAlpaca != m_settings.isAlpacaCamera()) {
         m_lastAlpacaCameraState = -1;
@@ -2744,7 +2758,16 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
         settingsKeys.append("alpacaHost");
         settingsKeys.append("alpacaPort");
     }
+    if (switchedBetweenAsiAndAlpaca) {
+        settingsKeys.append("cameraStartX");
+        settingsKeys.append("cameraStartY");
+        settingsKeys.append("cameraNumX");
+        settingsKeys.append("cameraNumY");
+    }
     updateAlpacaVisibility();
+    if (switchedBetweenAsiAndAlpaca) {
+        updateAlpacaSubframeControls();
+    }
     updateEnabledControls();
     updateVideoFileControls();
     applySettings(settingsKeys);

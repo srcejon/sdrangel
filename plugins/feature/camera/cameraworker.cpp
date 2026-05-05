@@ -55,6 +55,7 @@
 #include "maincore.h"
 #include "dsp/dspengine.h"
 #include "audio/audiodevicemanager.h"
+#include "camerafinder.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
 
@@ -369,6 +370,7 @@ CameraWorker::CameraWorker() :
     m_capturingAudio(false),
     m_captureTimer(this),
     m_networkManager(nullptr),
+    m_cameraFinder(new CameraFinder(this)),
     m_alpacaFrameRequestPending(false),
     m_alpacaClientId(QRandomGenerator::global()->bounded(quint32(1), quint32(std::numeric_limits<quint32>::max()))),
     m_alpacaClientTransactionId(1),
@@ -442,8 +444,6 @@ CameraWorker::CameraWorker() :
     m_captureAudioFifo.setSize(audioFifoFrames);
     m_outputAudioFifo.setSize(audioFifoFrames);
     m_audioTransferBuffer.resize(audioFifoFrames * bytesPerSampleFrame);
-
-
 }
 
 CameraWorker::~CameraWorker()
@@ -488,6 +488,15 @@ void CameraWorker::startWork()
 
     // Handle any messages already on the queue
     handleInputMessages();
+}
+
+void CameraWorker::setMessageQueueToGUI(MessageQueue *messageQueue)
+{
+    m_msgQueueToGUI = messageQueue;
+
+    if (m_cameraFinder) {
+        m_cameraFinder->setMessageQueueToGUI(messageQueue);
+    }
 }
 
 void CameraWorker::stopWork()
@@ -625,6 +634,14 @@ bool CameraWorker::handleMessage(const Message& cmd)
 
         return true;
     }
+    else if (MsgRefreshCameraList::match(cmd))
+    {
+        if (m_cameraFinder) {
+            m_cameraFinder->reportCameraList(m_settings);
+        }
+
+        return true;
+    }
     else if (MainCore::MsgImage::match(cmd))
     {
         MainCore::MsgImage& imgMsg = (MainCore::MsgImage&) cmd;
@@ -669,6 +686,15 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
+    }
+
+    if ((force
+            || settingsKeys.contains("alpacaDiscoveryEnabled")
+            || settingsKeys.contains("alpacaHost")
+            || settingsKeys.contains("alpacaPort"))
+        && m_cameraFinder)
+    {
+        m_cameraFinder->reportCameraList(m_settings);
     }
 
     if (recapture && m_capturing)

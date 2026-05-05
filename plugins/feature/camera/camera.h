@@ -28,7 +28,6 @@
 #include "cameraworker.h"
 
 class WebAPIAdapterInterface;
-class CameraFinder;
 
 namespace SWGSDRangel {
     class SWGDeviceState;
@@ -156,7 +155,6 @@ private:
     CameraWorker *m_worker;
     QThread *m_postProcessorThread;
     CameraPostProcessor *m_postProcessor;
-    CameraFinder *m_cameraFinder;
     CameraSettings m_settings;
 
     void start();

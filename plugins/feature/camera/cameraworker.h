@@ -47,6 +47,7 @@ class QNetworkAccessManager;
 class QNetworkReply;
 class QUrl;
 class CameraPostProcessor;
+class CameraFinder;
 
 class CameraWorker : public QObject
 {
@@ -416,7 +417,7 @@ MESSAGE_CLASS_DECLARATION
     void startWork();
     void stopWork();
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
-    void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setMessageQueueToGUI(MessageQueue *messageQueue);
     void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
 
 private:
@@ -431,6 +432,7 @@ private:
     bool m_capturingAudio;
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
+    CameraFinder *m_cameraFinder;
     bool m_alpacaFrameRequestPending;
     quint32 m_alpacaClientId;
     quint32 m_alpacaClientTransactionId;

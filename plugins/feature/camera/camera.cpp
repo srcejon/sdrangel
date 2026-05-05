@@ -30,7 +30,6 @@
 #include "settings/serializable.h"
 
 #include "camera.h"
-#include "camerafinder.h"
 #include "cameraworker.h"
 
 MESSAGE_CLASS_DEFINITION(Camera::MsgConfigureCamera, Message)
@@ -45,13 +44,11 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_workerThread(new QThread()),
     m_worker(new CameraWorker()),
     m_postProcessorThread(new QThread()),
-    m_postProcessor(new CameraPostProcessor()),
-    m_cameraFinder(new CameraFinder(this))
+    m_postProcessor(new CameraPostProcessor())
 {
     setObjectName(m_featureId);
     m_state = StIdle;
     m_errorMessage = "Camera error";
-    m_cameraFinder->setMessageQueueToGUI(getMessageQueueToGUI());
 
     // The worker needs to run continuously, to be able to query camera capabilities.
     m_worker->moveToThread(m_workerThread);
@@ -143,9 +140,6 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
     if (m_postProcessor) {
         m_postProcessor->setMessageQueueToGUI(queue);
     }
-    if (m_cameraFinder) {
-        m_cameraFinder->setMessageQueueToGUI(queue);
-    }
 }
 
 bool Camera::handleMessage(const Message& cmd)
@@ -170,8 +164,8 @@ bool Camera::handleMessage(const Message& cmd)
     }
     else if (MsgRefreshCameraList::match(cmd))
     {
-        if (m_cameraFinder) {
-            m_cameraFinder->reportCameraList(m_settings);
+        if (m_worker) {
+            m_worker->getInputMessageQueue()->push(CameraWorker::MsgRefreshCameraList::create());
         }
 
         return true;
@@ -217,10 +211,6 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
-    }
-
-    if ((settingsKeys.contains("alpacaDiscoveryEnabled") || settingsKeys.contains("alpacaHost") || settingsKeys.contains("alpacaPort") || force) && m_cameraFinder) {
-        m_cameraFinder->reportCameraList(m_settings);
     }
 }
 

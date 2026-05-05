@@ -36,7 +36,7 @@
 #endif
 
 #ifdef ASICAMERA_FOUND
-#include <asicamera2api.h>
+#include <ASICamera2.h>
 #endif
 
 #include "util/messagequeue.h"
@@ -130,14 +130,20 @@ QList<CameraInfo> CameraFinder::listQtCameras()
 QList<CameraInfo> CameraFinder::listAsiCameras()
 {
     QList<CameraInfo> asiCameras;
-    const QVector<AsiCamera2::CameraInfo> cameras = AsiCamera2::Api::instance().enumerateCameras();
+    const int cameraCount = ASIGetNumOfConnectedCameras();
 
-    for (const AsiCamera2::CameraInfo& camera : cameras)
+    for (int index = 0; index < cameraCount; ++index)
     {
+        ASI_CAMERA_INFO camera {};
+
+        if (ASIGetCameraProperty(&camera, index) != ASI_SUCCESS) {
+            continue;
+        }
+
         asiCameras.append({
             QStringLiteral("asi"),
-            QString::number(camera.m_cameraId),
-            camera.m_name,
+            QString::number(camera.CameraID),
+            QString::fromUtf8(camera.Name),
             {},
             0
         });

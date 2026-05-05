@@ -49,7 +49,7 @@
 #endif
 
 #ifdef ASICAMERA_FOUND
-#include <asicamera2api.h>
+#include <ASICamera2.h>
 #endif
 
 #include "maincore.h"
@@ -60,6 +60,54 @@
 
 
 namespace {
+
+#ifdef ASICAMERA_FOUND
+
+bool asiGetCameraInfoById(int cameraId, ASI_CAMERA_INFO& cameraInfo)
+{
+    return ASIGetCameraPropertyByID(cameraId, &cameraInfo) == ASI_SUCCESS;
+}
+
+bool asiGetControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS& controlCaps)
+{
+    int numControls = 0;
+
+    if (ASIGetNumOfControls(cameraId, &numControls) != ASI_SUCCESS) {
+        return false;
+    }
+
+    for (int controlIndex = 0; controlIndex < numControls; ++controlIndex)
+    {
+        ASI_CONTROL_CAPS candidate {};
+
+        if ((ASIGetControlCaps(cameraId, controlIndex, &candidate) == ASI_SUCCESS)
+            && (candidate.ControlType == controlType))
+        {
+            controlCaps = candidate;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageType)
+{
+    for (ASI_IMG_TYPE candidate : cameraInfo.SupportedVideoFormat)
+    {
+        if (candidate == ASI_IMG_END) {
+            break;
+        }
+
+        if (candidate == imageType) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+#endif
 
 QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height)
 {
@@ -314,10 +362,10 @@ CameraWorker::CameraWorker() :
     m_asiCameraSizeY(0),
     m_asiMaxBinX(1),
     m_asiMaxBinY(1),
-    m_asiBayerPattern(AsiCamera2::BayerRG),
+    m_asiBayerPattern(ASI_BAYER_RG),
     m_asiColorCamera(false),
     m_asiBitDepth(8),
-    m_asiImageType(AsiCamera2::ImageTypeY8),
+    m_asiImageType(ASI_IMG_Y8),
     m_asiPixelSizeUm(0.0),
     m_asiExposureMinMs(0.001),
     m_asiExposureMaxMs(60000.0),
@@ -762,7 +810,7 @@ void CameraWorker::stopCapture()
 
     if (m_asiVideoCaptureStarted)
     {
-        AsiCamera2::Api::instance().stopVideoCapture(m_settings.cameraIdInt());
+        ASIStopVideoCapture(m_settings.cameraIdInt());
         m_asiVideoCaptureStarted = false;
     }
 
@@ -2523,20 +2571,19 @@ bool CameraWorker::asiOpenCamera()
         return true;
     }
 
-    AsiCamera2::Api& api = AsiCamera2::Api::instance();
     const int cameraId = m_settings.cameraIdInt();
 
-    if ((cameraId < 0) || !api.isAvailable()) {
+    if (cameraId < 0) {
         return false;
     }
 
-    if (!api.openCamera(cameraId)) {
+    if (ASIOpenCamera(cameraId) != ASI_SUCCESS) {
         return false;
     }
 
-    if (!api.initCamera(cameraId))
+    if (ASIInitCamera(cameraId) != ASI_SUCCESS)
     {
-        api.closeCamera(cameraId);
+        ASICloseCamera(cameraId);
         return false;
     }
 
@@ -2550,13 +2597,13 @@ void CameraWorker::asiCloseCamera()
 
     if (m_asiVideoCaptureStarted && (cameraId >= 0))
     {
-        AsiCamera2::Api::instance().stopVideoCapture(cameraId);
+        ASIStopVideoCapture(cameraId);
         m_asiVideoCaptureStarted = false;
     }
 
     if (m_asiCameraOpen && (cameraId >= 0))
     {
-        AsiCamera2::Api::instance().closeCamera(cameraId);
+        ASICloseCamera(cameraId);
         m_asiCameraOpen = false;
     }
 }
@@ -2569,58 +2616,60 @@ void CameraWorker::asiQueryCameraCapabilities()
 
     asiCloseCamera();
 
-    AsiCamera2::Api& api = AsiCamera2::Api::instance();
-    AsiCamera2::CameraInfo cameraInfo;
+    ASI_CAMERA_INFO cameraInfo {};
     const int cameraId = m_settings.cameraIdInt();
 
-    if ((cameraId < 0) || !api.getCameraInfo(cameraId, cameraInfo) || !asiOpenCamera()) {
+    if ((cameraId < 0) || !asiGetCameraInfoById(cameraId, cameraInfo) || !asiOpenCamera()) {
         return;
     }
 
-    AsiCamera2::ControlRange gainRange;
-    AsiCamera2::ControlRange offsetRange;
-    AsiCamera2::ControlRange exposureRange;
-    api.getControlRange(cameraId, AsiCamera2::ControlGain, gainRange);
-    api.getControlRange(cameraId, AsiCamera2::ControlOffset, offsetRange);
-    api.getControlRange(cameraId, AsiCamera2::ControlExposure, exposureRange);
+    ASI_CONTROL_CAPS gainRange {};
+    ASI_CONTROL_CAPS offsetRange {};
+    ASI_CONTROL_CAPS exposureRange {};
+    const bool hasGainRange = asiGetControlCapsByType(cameraId, ASI_GAIN, gainRange);
+    const bool hasOffsetRange = asiGetControlCapsByType(cameraId, ASI_OFFSET, offsetRange);
+    const bool hasExposureRange = asiGetControlCapsByType(cameraId, ASI_EXPOSURE, exposureRange);
 
-    m_asiCameraSizeX = cameraInfo.m_maxWidth;
-    m_asiCameraSizeY = cameraInfo.m_maxHeight;
+    m_asiCameraSizeX = static_cast<int>(cameraInfo.MaxWidth);
+    m_asiCameraSizeY = static_cast<int>(cameraInfo.MaxHeight);
     m_asiMaxBinX = 1;
     m_asiMaxBinY = 1;
-    for (int bin : cameraInfo.m_supportedBins)
+    for (int bin : cameraInfo.SupportedBins)
     {
+        if (bin <= 0) {
+            break;
+        }
+
         m_asiMaxBinX = std::max(m_asiMaxBinX, bin);
         m_asiMaxBinY = std::max(m_asiMaxBinY, bin);
     }
-    m_asiBayerPattern = cameraInfo.m_bayerPattern;
-    m_asiColorCamera = cameraInfo.m_isColor;
-    m_asiBitDepth = cameraInfo.m_bitDepth;
-    m_asiPixelSizeUm = cameraInfo.m_pixelSizeUm;
-    m_asiExposureMinMs = exposureRange.m_available ? std::max(0.001, exposureRange.m_minValue / 1000.0) : 0.001;
-    m_asiExposureMaxMs = exposureRange.m_available ? std::max(m_asiExposureMinMs, exposureRange.m_maxValue / 1000.0) : 60000.0;
+    m_asiBayerPattern = cameraInfo.BayerPattern;
+    m_asiColorCamera = cameraInfo.IsColorCam == ASI_TRUE;
+    m_asiBitDepth = cameraInfo.BitDepth;
+    m_asiPixelSizeUm = cameraInfo.PixelSize;
+    m_asiExposureMinMs = hasExposureRange ? std::max(0.001, exposureRange.MinValue / 1000.0) : 0.001;
+    m_asiExposureMaxMs = hasExposureRange ? std::max(m_asiExposureMinMs, exposureRange.MaxValue / 1000.0) : 60000.0;
 
-    if (cameraInfo.m_isColor
-        && cameraInfo.m_supportedImageTypes.contains(AsiCamera2::ImageTypeRgb24)) {
-        m_asiImageType = AsiCamera2::ImageTypeRgb24;
-    } else if (cameraInfo.m_supportedImageTypes.contains(AsiCamera2::ImageTypeRaw8)) {
-        m_asiImageType = AsiCamera2::ImageTypeRaw8;
-    } else if (cameraInfo.m_supportedImageTypes.contains(AsiCamera2::ImageTypeY8)) {
-        m_asiImageType = AsiCamera2::ImageTypeY8;
-    } else if (cameraInfo.m_supportedImageTypes.contains(AsiCamera2::ImageTypeRaw16)) {
-        m_asiImageType = AsiCamera2::ImageTypeRaw16;
+    if (m_asiColorCamera && asiSupportsImageType(cameraInfo, ASI_IMG_RGB24)) {
+        m_asiImageType = ASI_IMG_RGB24;
+    } else if (asiSupportsImageType(cameraInfo, ASI_IMG_RAW8)) {
+        m_asiImageType = ASI_IMG_RAW8;
+    } else if (asiSupportsImageType(cameraInfo, ASI_IMG_Y8)) {
+        m_asiImageType = ASI_IMG_Y8;
+    } else if (asiSupportsImageType(cameraInfo, ASI_IMG_RAW16)) {
+        m_asiImageType = ASI_IMG_RAW16;
     }
 
     if (m_msgQueueToGUI)
     {
         m_msgQueueToGUI->push(MsgReportAsiCameraInfo::create(
-            cameraInfo.m_name,
+            QString::fromUtf8(cameraInfo.Name),
             m_asiMaxBinX,
             m_asiMaxBinY,
-            gainRange.m_available ? static_cast<int>(gainRange.m_minValue) : 0,
-            gainRange.m_available ? static_cast<int>(gainRange.m_maxValue) : 100,
-            offsetRange.m_available ? static_cast<int>(offsetRange.m_minValue) : 0,
-            offsetRange.m_available ? static_cast<int>(offsetRange.m_maxValue) : 100,
+            hasGainRange ? static_cast<int>(gainRange.MinValue) : 0,
+            hasGainRange ? static_cast<int>(gainRange.MaxValue) : 100,
+            hasOffsetRange ? static_cast<int>(offsetRange.MinValue) : 0,
+            hasOffsetRange ? static_cast<int>(offsetRange.MaxValue) : 100,
             m_asiCameraSizeX,
             m_asiCameraSizeY,
             m_asiPixelSizeUm,
@@ -2641,7 +2690,6 @@ bool CameraWorker::asiApplyCameraSettings()
         return false;
     }
 
-    AsiCamera2::Api& api = AsiCamera2::Api::instance();
     const int cameraId = m_settings.cameraIdInt();
     const int bin = std::max(1, std::min(m_settings.m_cameraBinX, m_settings.m_cameraBinY));
     const int maxWidth = std::max(16, m_asiCameraSizeX / std::max(1, bin));
@@ -2655,14 +2703,14 @@ bool CameraWorker::asiApplyCameraSettings()
         ? std::max(16, maxHeight - startY)
         : qBound(16, m_settings.m_cameraNumY, std::max(16, maxHeight - startY));
 
-    api.setStartPos(cameraId, startX, startY);
-    if (!api.setRoiFormat(cameraId, width, height, bin, static_cast<AsiCamera2::ImageType>(m_asiImageType))) {
+    ASISetStartPos(cameraId, startX, startY);
+    if (ASISetROIFormat(cameraId, width, height, bin, static_cast<ASI_IMG_TYPE>(m_asiImageType)) != ASI_SUCCESS) {
         return false;
     }
 
-    api.setControlValue(cameraId, AsiCamera2::ControlExposure, std::max(1L, static_cast<long>(std::llround(m_settings.m_exposureTimeMs * 1000.0))));
-    api.setControlValue(cameraId, AsiCamera2::ControlGain, std::max(0, m_settings.m_cameraGain));
-    api.setControlValue(cameraId, AsiCamera2::ControlOffset, std::max(0, m_settings.m_cameraOffset));
+    ASISetControlValue(cameraId, ASI_EXPOSURE, std::max(1L, static_cast<long>(std::llround(m_settings.m_exposureTimeMs * 1000.0))), ASI_FALSE);
+    ASISetControlValue(cameraId, ASI_GAIN, std::max(0L, static_cast<long>(m_settings.m_cameraGain)), ASI_FALSE);
+    ASISetControlValue(cameraId, ASI_OFFSET, std::max(0L, static_cast<long>(m_settings.m_cameraOffset)), ASI_FALSE);
 
     m_asiFrameWidth = width;
     m_asiFrameHeight = height;
@@ -2670,10 +2718,10 @@ bool CameraWorker::asiApplyCameraSettings()
     int bytesPerPixel = 1;
     switch (m_asiImageType)
     {
-    case AsiCamera2::ImageTypeRgb24:
+    case ASI_IMG_RGB24:
         bytesPerPixel = 3;
         break;
-    case AsiCamera2::ImageTypeRaw16:
+    case ASI_IMG_RAW16:
         bytesPerPixel = 2;
         break;
     default:
@@ -2691,13 +2739,13 @@ QImage CameraWorker::asiFrameToImage() const
         return createPlaceholderFrame();
     }
 
-    if (m_asiImageType == AsiCamera2::ImageTypeRgb24)
+    if (m_asiImageType == ASI_IMG_RGB24)
     {
         QImage image(m_asiFrameBuffer.constData(), m_asiFrameWidth, m_asiFrameHeight, m_asiFrameWidth * 3, QImage::Format_RGB888);
         return image.copy();
     }
 
-    if (m_asiImageType == AsiCamera2::ImageTypeY8 || (!m_asiColorCamera && m_asiImageType == AsiCamera2::ImageTypeRaw8))
+    if (m_asiImageType == ASI_IMG_Y8 || (!m_asiColorCamera && m_asiImageType == ASI_IMG_RAW8))
     {
         QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_Grayscale8);
         for (int y = 0; y < m_asiFrameHeight; ++y) {
@@ -2707,7 +2755,7 @@ QImage CameraWorker::asiFrameToImage() const
     }
 
     cv::Mat rawMat;
-    if (m_asiImageType == AsiCamera2::ImageTypeRaw16)
+    if (m_asiImageType == ASI_IMG_RAW16)
     {
         cv::Mat raw16(m_asiFrameHeight, m_asiFrameWidth, CV_16UC1, const_cast<uchar*>(m_asiFrameBuffer.constData()));
         raw16.convertTo(rawMat, CV_8UC1, 1.0 / 256.0);
@@ -2729,10 +2777,10 @@ QImage CameraWorker::asiFrameToImage() const
     int cvCode = cv::COLOR_BayerRG2RGB;
     switch (m_asiBayerPattern)
     {
-    case AsiCamera2::BayerBG: cvCode = cv::COLOR_BayerBG2RGB; break;
-    case AsiCamera2::BayerGR: cvCode = cv::COLOR_BayerGR2RGB; break;
-    case AsiCamera2::BayerGB: cvCode = cv::COLOR_BayerGB2RGB; break;
-    case AsiCamera2::BayerRG:
+    case ASI_BAYER_BG: cvCode = cv::COLOR_BayerBG2RGB; break;
+    case ASI_BAYER_GR: cvCode = cv::COLOR_BayerGR2RGB; break;
+    case ASI_BAYER_GB: cvCode = cv::COLOR_BayerGB2RGB; break;
+    case ASI_BAYER_RG:
     default: cvCode = cv::COLOR_BayerRG2RGB; break;
     }
 
@@ -2752,18 +2800,17 @@ void CameraWorker::asiCaptureTick()
         return;
     }
 
-    AsiCamera2::Api& api = AsiCamera2::Api::instance();
     const int cameraId = m_settings.cameraIdInt();
 
     if (!m_asiVideoCaptureStarted)
     {
-        if (!api.startVideoCapture(cameraId)) {
+        if (ASIStartVideoCapture(cameraId) != ASI_SUCCESS) {
             return;
         }
         m_asiVideoCaptureStarted = true;
     }
 
-    if (api.getVideoData(cameraId, m_asiFrameBuffer.data(), m_asiFrameBuffer.size(), std::max(10, static_cast<int>(std::ceil(m_settings.m_exposureTimeMs)))))
+    if (ASIGetVideoData(cameraId, m_asiFrameBuffer.data(), m_asiFrameBuffer.size(), std::max(10, static_cast<int>(std::ceil(m_settings.m_exposureTimeMs)))) == ASI_SUCCESS)
     {
         if (m_postProcessorInputMessageQueue) {
             m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(asiFrameToImage()));

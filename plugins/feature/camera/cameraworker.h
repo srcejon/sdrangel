@@ -472,6 +472,8 @@ private:
 #ifdef ASICAMERA_FOUND
     bool m_asiCameraOpen;
     bool m_asiVideoCaptureStarted;
+    bool m_asiSettingsApplied;
+    bool m_asiTriggerCamera;
     int m_asiCameraSizeX;
     int m_asiCameraSizeY;
     int m_asiMaxBinX;
@@ -539,6 +541,7 @@ private:
     bool asiApplyCameraSettings();
     void asiCaptureTick();
     QImage asiFrameToImage() const;
+    void invalidateAsiSettings();
 #endif
 
 private slots:

@@ -2376,7 +2376,7 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaFilterWheelCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaFilterWheelPositionLabel->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaFilterWheelPositionCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
-    settingsUI()->alpacaStatusGroup->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraStatusGroup->setVisible(sharedHardwareCamera);
     ui->audioMute->setVisible(qtCamera);
 
     // Qt-camera-only controls
@@ -3654,7 +3654,7 @@ void CameraGUI::updateEnabledControls()
     settingsUI()->focusDistSpin->setEnabled(manualFocus);
 #endif
 
-    settingsUI()->alpacaStatusGroup->setVisible(m_settings.isAlpacaCamera());
+    settingsUI()->cameraStatusGroup->setVisible(m_settings.isAlpacaCamera() || m_settings.isAsiCamera());
 
     if (m_settings.isAlpacaCamera())
     {

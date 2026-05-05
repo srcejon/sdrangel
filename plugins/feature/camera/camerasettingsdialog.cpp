@@ -110,10 +110,10 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     m_tempSeries->attachAxis(m_tempAxisX);
     m_tempSeries->attachAxis(m_tempAxisY);
 
-    auto* chartView = new QChartView(m_tempChart, ui->alpacaTempChartContainer);
+    auto* chartView = new QChartView(m_tempChart, ui->cameraTempChartContainer);
     chartView->setRenderHint(QPainter::Antialiasing);
 
-    auto* layout = new QVBoxLayout(ui->alpacaTempChartContainer);
+    auto* layout = new QVBoxLayout(ui->cameraTempChartContainer);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(chartView);
 

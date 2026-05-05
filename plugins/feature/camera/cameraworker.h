@@ -43,9 +43,14 @@
 #include "camerainfo.h"
 #include "camerasettings.h"
 
+#ifdef ASICAMERA_FOUND
+#include <ASICamera2.h>
+#endif
+
 class QNetworkAccessManager;
 class QNetworkReply;
 class QUrl;
+class AudioDeviceManager;
 class CameraPostProcessor;
 class CameraFinder;
 
@@ -563,6 +568,13 @@ private:
     QImage parseAlpacaImageArray(const QByteArray& payload) const;
     QImage parseAlpacaImageBytes(const QByteArray& payload) const;
     QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const;
+    static QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height);
+    static QString normalizeAudioMatchName(QString text);
+    static int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName);
+    static void alignQtCameraAudioInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    static int findQtCameraAudioInputIndex(const CameraSettings& settings);
+#endif
 
     static const int m_alpacaStatusPollIntervalMs = 2000;
     static const int m_alpacaImageReadyPollIntervalMs = 100;
@@ -589,6 +601,11 @@ private:
     void resetAlpacaFocuserConnectionState();
     void resetAlpacaFilterWheelConnectionState();
 #ifdef ASICAMERA_FOUND
+    static QString asiErrorCodeToString(ASI_ERROR_CODE errorCode);
+    static bool asiGetCameraInfoById(int cameraId, ASI_CAMERA_INFO& cameraInfo);
+    static bool asiGetControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS& controlCaps);
+    static bool asiGetControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& value, ASI_BOOL& isAuto);
+    static bool asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageType);
     void asiQueryCameraCapabilities();
     bool asiOpenCamera();
     void asiCloseCamera();

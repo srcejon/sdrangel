@@ -59,12 +59,9 @@
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
 
-
-namespace {
-
 #ifdef ASICAMERA_FOUND
 
-QString asiErrorCodeToString(ASI_ERROR_CODE errorCode)
+QString CameraWorker::asiErrorCodeToString(ASI_ERROR_CODE errorCode)
 {
     switch (errorCode)
     {
@@ -95,7 +92,7 @@ QString asiErrorCodeToString(ASI_ERROR_CODE errorCode)
     }
 }
 
-bool asiGetCameraInfoById(int cameraId, ASI_CAMERA_INFO& cameraInfo)
+bool CameraWorker::asiGetCameraInfoById(int cameraId, ASI_CAMERA_INFO& cameraInfo)
 {
     const ASI_ERROR_CODE error = ASIGetCameraPropertyByID(cameraId, &cameraInfo);
 
@@ -106,7 +103,7 @@ bool asiGetCameraInfoById(int cameraId, ASI_CAMERA_INFO& cameraInfo)
     return error == ASI_SUCCESS;
 }
 
-bool asiGetControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS& controlCaps)
+bool CameraWorker::asiGetControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS& controlCaps)
 {
     int numControls = 0;
     const ASI_ERROR_CODE numControlsError = ASIGetNumOfControls(cameraId, &numControls);
@@ -138,7 +135,7 @@ bool asiGetControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CON
     return false;
 }
 
-bool asiGetControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& value, ASI_BOOL& isAuto)
+bool CameraWorker::asiGetControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& value, ASI_BOOL& isAuto)
 {
     const ASI_ERROR_CODE error = ASIGetControlValue(cameraId, controlType, &value, &isAuto);
 
@@ -150,7 +147,7 @@ bool asiGetControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& 
     return error == ASI_SUCCESS;
 }
 
-bool asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageType)
+bool CameraWorker::asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageType)
 {
     for (ASI_IMG_TYPE candidate : cameraInfo.SupportedVideoFormat)
     {
@@ -168,7 +165,7 @@ bool asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageT
 
 #endif
 
-QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height)
+QImage CameraWorker::renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height)
 {
     int minValue = std::numeric_limits<int>::max();
     int maxValue = std::numeric_limits<int>::min();
@@ -196,7 +193,7 @@ QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int heigh
     return image;
 }
 
-QString normalizeAudioMatchName(QString text)
+QString CameraWorker::normalizeAudioMatchName(QString text)
 {
     text = text.toLower();
 
@@ -228,7 +225,7 @@ QString normalizeAudioMatchName(QString text)
     return tokens.join(QLatin1Char(' '));
 }
 
-int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName)
+int CameraWorker::scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName)
 {
     if (cameraName.isEmpty() || audioName.isEmpty()) {
         return -1;
@@ -272,7 +269,7 @@ int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName)
     return score;
 }
 
-void alignQtCameraAudioInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex)
+void CameraWorker::alignQtCameraAudioInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex)
 {
     if ((audioDeviceManager == nullptr) || (inputDeviceIndex < 0)) {
         return;
@@ -316,7 +313,7 @@ void alignQtCameraAudioInputRate(AudioDeviceManager *audioDeviceManager, int inp
 }
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-int findQtCameraAudioInputIndex(const CameraSettings& settings)
+int CameraWorker::findQtCameraAudioInputIndex(const CameraSettings& settings)
 {
     if (!settings.isQtCamera()) {
         return -1;
@@ -360,8 +357,6 @@ int findQtCameraAudioInputIndex(const CameraSettings& settings)
     return bestScore >= 150 ? bestIndex : -1;
 }
 #endif
-
-} // namespace
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)

@@ -853,11 +853,11 @@
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="alpacaStatusGroup">
+        <widget class="QGroupBox" name="cameraStatusGroup">
          <property name="title">
           <string>Camera Status</string>
          </property>
-         <layout class="QVBoxLayout" name="alpacaStatusGroupLayout">
+         <layout class="QVBoxLayout" name="cameraStatusGroupLayout">
           <property name="spacing">
            <number>7</number>
           </property>
@@ -1045,7 +1045,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QWidget" name="alpacaTempChartContainer" native="true">
+           <widget class="QWidget" name="cameraTempChartContainer" native="true">
             <property name="minimumSize">
              <size>
               <width>0</width>

@@ -212,7 +212,7 @@ private:
     void populateAlpacaAccessoryCombos();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo& info);
-    void updateAlpacaStatusDisplay();
+    void updateCameraStatusDisplay();
     void updateAlpacaSubframeControls();
     void updateImageWidget();
     void updateEnabledControls();
@@ -238,6 +238,12 @@ private:
     void updatePostProcessWhiteBalanceControls();
     void setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description,
                            const QString& alpacaHost = QString(), quint16 alpacaPort = 0);
+    CameraInfo comboCameraInfo(int index) const;
+    CameraInfo selectedCameraFromSettings() const;
+    static bool sameCameraIdentity(const CameraInfo& lhs, const CameraInfo& rhs);
+    static bool isSameHardwareCameraBackend(const CameraInfo& lhs, const CameraInfo& rhs);
+    QStringList cameraSelectionSettingsKeys(const CameraInfo& cameraInfo) const;
+    void resetCameraStatus();
     int findCameraComboIndex(const QString& protocol, const QString& cameraId,
                              const QString& alpacaHost = QString(), quint16 alpacaPort = 0) const;
     void applyYoloPathSetting(const QString& settingKey, const QString& path);

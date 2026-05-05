@@ -115,11 +115,7 @@ bool CameraGUI::deserialize(const QByteArray& data)
 
 bool CameraGUI::handleMessage(const Message& message)
 {
-    const bool wasAlpaca = m_settings.isAlpacaCamera();
-    const QString previousCameraProtocol = m_settings.m_cameraProtocol;
-    const QString previousCameraId = m_settings.m_cameraId;
-    const QString previousAlpacaHost = m_settings.m_alpacaHost;
-    const quint16 previousAlpacaPort = m_settings.m_alpacaPort;
+    const CameraInfo previousCamera = selectedCameraFromSettings();
 
     if (Camera::MsgConfigureCamera::match(message))
     {
@@ -131,18 +127,8 @@ bool CameraGUI::handleMessage(const Message& message)
             m_settings.applySettings(cfg.getSettingsKeys(), cfg.getSettings());
         }
 
-        if ((previousCameraProtocol != m_settings.m_cameraProtocol)
-            || (previousCameraId != m_settings.m_cameraId)
-            || (wasAlpaca != m_settings.isAlpacaCamera())
-            || (previousAlpacaHost != m_settings.m_alpacaHost)
-            || (previousAlpacaPort != m_settings.m_alpacaPort))
-        {
-            m_lastAlpacaCameraState = -1;
-            m_lastAlpacaCaptureTimeMs = -1;
-            m_lastAlpacaCcdTemperatureValid = false;
-            m_lastAlpacaErrorNumber = 0;
-            m_lastAlpacaErrorMessage.clear();
-            m_settingsDialog->clearAlpacaStatus();
+        if (!sameCameraIdentity(previousCamera, selectedCameraFromSettings())) {
+            resetCameraStatus();
         }
 
         // Web API may supply cameraDescription without cameraProtocol/cameraId.
@@ -153,33 +139,29 @@ bool CameraGUI::handleMessage(const Message& message)
             && !cfg.getSettingsKeys().contains("cameraProtocol")
             && !cfg.getSettingsKeys().contains("cameraId"))
         {
+            int matchedIndex = -1;
             for (int i = 0; i < ui->cameraCombo->count(); ++i)
             {
                 if (ui->cameraCombo->itemData(i, CameraDescriptionRole).toString()
                         == m_settings.m_cameraDescription)
                 {
-                    const QString protocol = ui->cameraCombo->itemData(i, CameraProtocolRole).toString();
-                    const QString id       = ui->cameraCombo->itemData(i, CameraIdRole).toString();
-                    const QString host     = ui->cameraCombo->itemData(i, CameraAlpacaHostRole).toString();
-                    const quint16 port     = static_cast<quint16>(
-                        ui->cameraCombo->itemData(i, CameraAlpacaPortRole).toUInt());
-
-                    if (protocol != m_settings.m_cameraProtocol
-                        || id     != m_settings.m_cameraId)
-                    {
-                        setSelectedCamera(protocol, id, m_settings.m_cameraDescription, host, port);
-
-                        QStringList resolvedKeys {"cameraProtocol", "cameraId", "cameraDescription"};
-                        if (protocol == QLatin1String("file")) {
-                            resolvedKeys.append("videoFileCameraPath");
-                        }
-                        if (!host.isEmpty()) {
-                            resolvedKeys.append("alpacaHost");
-                            resolvedKeys.append("alpacaPort");
-                        }
-                        applySettings(resolvedKeys);
+                    if (matchedIndex >= 0) {
+                        matchedIndex = -1;
+                        break;
                     }
-                    break;
+
+                    matchedIndex = i;
+                }
+            }
+
+            if (matchedIndex >= 0)
+            {
+                const CameraInfo resolvedCamera = comboCameraInfo(matchedIndex);
+                if (!sameCameraIdentity(resolvedCamera, selectedCameraFromSettings()))
+                {
+                    setSelectedCamera(resolvedCamera.m_protocol, resolvedCamera.m_id,
+                        resolvedCamera.m_description, resolvedCamera.m_host, resolvedCamera.m_port);
+                    applySettings(cameraSelectionSettingsKeys(resolvedCamera));
                 }
             }
         }
@@ -197,18 +179,8 @@ bool CameraGUI::handleMessage(const Message& message)
     {
         const Camera::MsgStartStop& cfg = (Camera::MsgStartStop&) message;
 
-        if ((previousCameraProtocol != m_settings.m_cameraProtocol)
-            || (previousCameraId != m_settings.m_cameraId)
-            || (wasAlpaca != m_settings.isAlpacaCamera())
-            || (previousAlpacaHost != m_settings.m_alpacaHost)
-            || (previousAlpacaPort != m_settings.m_alpacaPort))
-        {
-            m_lastAlpacaCameraState = -1;
-            m_lastAlpacaCaptureTimeMs = -1;
-            m_lastAlpacaCcdTemperatureValid = false;
-            m_lastAlpacaErrorNumber = 0;
-            m_lastAlpacaErrorMessage.clear();
-            m_settingsDialog->clearAlpacaStatus();
+        if (!sameCameraIdentity(previousCamera, selectedCameraFromSettings())) {
+            resetCameraStatus();
         }
 
         if (cfg.getStartStop())
@@ -278,36 +250,19 @@ bool CameraGUI::handleMessage(const Message& message)
         if (index >= 0)
         {
             ui->cameraCombo->setCurrentIndex(index);
-            selectedCamera.m_protocol = ui->cameraCombo->itemData(index, CameraProtocolRole).toString();
-            selectedCamera.m_id = ui->cameraCombo->itemData(index, CameraIdRole).toString();
-            selectedCamera.m_description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
-            selectedCamera.m_host = ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString();
-            selectedCamera.m_port = static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt());
+            selectedCamera = comboCameraInfo(index);
         }
 
         ui->cameraCombo->blockSignals(false);
 
         const bool selectedCameraDiffers =
-            !selectedCamera.m_id.isEmpty()
-            && ((selectedCamera.m_protocol != m_settings.m_cameraProtocol)
-                || (selectedCamera.m_id != m_settings.m_cameraId)
-                || (selectedCamera.m_description != m_settings.m_cameraDescription)
-                || ((selectedCamera.m_protocol == QLatin1String("alpaca"))
-                    && ((selectedCamera.m_host != m_settings.m_alpacaHost)
-                        || (selectedCamera.m_port != m_settings.m_alpacaPort))));
+            !selectedCamera.m_id.isEmpty() && !sameCameraIdentity(selectedCamera, selectedCameraFromSettings());
 
         if (selectedCameraDiffers)
         {
             setSelectedCamera(selectedCamera.m_protocol, selectedCamera.m_id, selectedCamera.m_description,
                 selectedCamera.m_host, selectedCamera.m_port);
-            QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
-            if (selectedCamera.m_protocol == QLatin1String("file")) {
-                settingsKeys.append("videoFileCameraPath");
-            }
-            if (!selectedCamera.m_host.isEmpty()) {
-                settingsKeys.append("alpacaHost");
-                settingsKeys.append("alpacaPort");
-            }
+            QStringList settingsKeys = cameraSelectionSettingsKeys(selectedCamera);
             updateAlpacaVisibility();
             updateEnabledControls();
             applySettings(settingsKeys);
@@ -448,7 +403,7 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastAlpacaCcdTemperatureValid = status.isCcdTemperatureValid();
         m_lastAlpacaErrorNumber = status.getLastErrorNumber();
         m_lastAlpacaErrorMessage = status.getLastErrorMessage();
-        updateAlpacaStatusDisplay();
+        updateCameraStatusDisplay();
 
         if (status.isCcdTemperatureValid()) {
             m_settingsDialog->appendTemperatureSample(QDateTime::currentDateTime(), status.getCcdTemperature());
@@ -660,6 +615,81 @@ void CameraGUI::setSelectedCamera(const QString& protocol, const QString& camera
         m_settings.m_alpacaHost.clear();
         m_settings.m_alpacaPort = 0;
     }
+}
+
+CameraInfo CameraGUI::comboCameraInfo(int index) const
+{
+    CameraInfo cameraInfo;
+
+    if ((index < 0) || (index >= ui->cameraCombo->count())) {
+        return cameraInfo;
+    }
+
+    cameraInfo.m_protocol = ui->cameraCombo->itemData(index, CameraProtocolRole).toString();
+    cameraInfo.m_id = ui->cameraCombo->itemData(index, CameraIdRole).toString();
+    cameraInfo.m_description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
+    cameraInfo.m_host = ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString();
+    cameraInfo.m_port = static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt());
+    return cameraInfo;
+}
+
+CameraInfo CameraGUI::selectedCameraFromSettings() const
+{
+    CameraInfo cameraInfo;
+    cameraInfo.m_protocol = m_settings.m_cameraProtocol;
+    cameraInfo.m_id = m_settings.m_cameraId;
+    cameraInfo.m_description = m_settings.m_cameraDescription;
+    cameraInfo.m_host = m_settings.m_alpacaHost;
+    cameraInfo.m_port = m_settings.m_alpacaPort;
+    return cameraInfo;
+}
+
+bool CameraGUI::sameCameraIdentity(const CameraInfo& lhs, const CameraInfo& rhs)
+{
+    if ((lhs.m_protocol != rhs.m_protocol) || (lhs.m_id != rhs.m_id)) {
+        return false;
+    }
+
+    if (lhs.m_protocol == QLatin1String("alpaca")) {
+        return (lhs.m_host == rhs.m_host) && (lhs.m_port == rhs.m_port);
+    }
+
+    return true;
+}
+
+bool CameraGUI::isSameHardwareCameraBackend(const CameraInfo& lhs, const CameraInfo& rhs)
+{
+    const auto isSharedHardwareCamera = [](const QString& protocol) {
+        return (protocol == QLatin1String("alpaca")) || (protocol == QLatin1String("asi"));
+    };
+
+    return isSharedHardwareCamera(lhs.m_protocol) && (lhs.m_protocol == rhs.m_protocol);
+}
+
+QStringList CameraGUI::cameraSelectionSettingsKeys(const CameraInfo& cameraInfo) const
+{
+    QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
+
+    if (cameraInfo.m_protocol == QLatin1String("file")) {
+        settingsKeys.append("videoFileCameraPath");
+    }
+
+    if (cameraInfo.m_protocol == QLatin1String("alpaca")) {
+        settingsKeys.append("alpacaHost");
+        settingsKeys.append("alpacaPort");
+    }
+
+    return settingsKeys;
+}
+
+void CameraGUI::resetCameraStatus()
+{
+    m_lastAlpacaCameraState = -1;
+    m_lastAlpacaCaptureTimeMs = -1;
+    m_lastAlpacaCcdTemperatureValid = false;
+    m_lastAlpacaErrorNumber = 0;
+    m_lastAlpacaErrorMessage.clear();
+    m_settingsDialog->clearCameraStatus();
 }
 
 int CameraGUI::findCameraComboIndex(const QString& protocol, const QString& cameraId,
@@ -958,7 +988,7 @@ void CameraGUI::displaySettings()
 
     settingsUI()->zoomSpin->setValue(m_settings.m_zoomFactor);
     updateAlpacaVisibility();
-    updateAlpacaStatusDisplay();
+    updateCameraStatusDisplay();
     updateEnabledControls();
     applyVideoPath();
     applyImagePath();
@@ -2404,10 +2434,10 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->focusDistSpin->setVisible(false);
 #endif
 
-    updateAlpacaStatusDisplay();
+    updateCameraStatusDisplay();
 }
 
-void CameraGUI::updateAlpacaStatusDisplay()
+void CameraGUI::updateCameraStatusDisplay()
 {
     if (!m_settingsDialog || (!m_settings.isAlpacaCamera() && !m_settings.isAsiCamera())) {
         return;
@@ -2768,35 +2798,27 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
         return;
     }
 
-    const QString previousCameraProtocol = m_settings.m_cameraProtocol;
-    const QString previousCameraId = m_settings.m_cameraId;
-    const QString previousCameraDescription = m_settings.m_cameraDescription;
-    const QString previousAlpacaHost = m_settings.m_alpacaHost;
-    const quint16 previousAlpacaPort = m_settings.m_alpacaPort;
-    const bool wasAlpaca = m_settings.isAlpacaCamera();
-    const bool wasAsi = m_settings.isAsiCamera();
-    const QString protocol = ui->cameraCombo->itemData(index, CameraProtocolRole).toString();
-    QString cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
-    QString description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
-    const QString alpacaHost = ui->cameraCombo->itemData(index, CameraAlpacaHostRole).toString();
-    const quint16 alpacaPort = static_cast<quint16>(ui->cameraCombo->itemData(index, CameraAlpacaPortRole).toUInt());
+    const CameraInfo previousCamera = selectedCameraFromSettings();
+    CameraInfo selectedCamera = comboCameraInfo(index);
+    const bool wasAlpaca = previousCamera.m_protocol == QLatin1String("alpaca");
+    const bool wasAsi = previousCamera.m_protocol == QLatin1String("asi");
 
-    if ((protocol == QLatin1String("file")) && cameraId.isEmpty())
+    if ((selectedCamera.m_protocol == QLatin1String("file")) && selectedCamera.m_id.isEmpty())
     {
         if (!chooseVideoFileCameraFile(index,
-                previousCameraProtocol,
-                previousCameraId,
-                previousAlpacaHost,
-                previousAlpacaPort))
+                previousCamera.m_protocol,
+                previousCamera.m_id,
+                previousCamera.m_host,
+                previousCamera.m_port))
         {
             return;
         }
 
-        cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
-        description = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
+        selectedCamera = comboCameraInfo(index);
     }
 
-    setSelectedCamera(protocol, cameraId, description, alpacaHost, alpacaPort);
+    setSelectedCamera(selectedCamera.m_protocol, selectedCamera.m_id, selectedCamera.m_description,
+        selectedCamera.m_host, selectedCamera.m_port);
 
     const bool switchedBetweenAsiAndAlpaca =
         (wasAsi && m_settings.isAlpacaCamera()) || (wasAlpaca && m_settings.isAsiCamera());
@@ -2811,11 +2833,8 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
         m_alpacaCameraSizeY = 0;
     }
 
-    if (wasAlpaca != m_settings.isAlpacaCamera()) {
-        m_lastAlpacaCameraState = -1;
-        m_lastAlpacaCaptureTimeMs = -1;
-        m_lastAlpacaCcdTemperatureValid = false;
-        m_settingsDialog->clearAlpacaStatus();
+    if (!isSameHardwareCameraBackend(previousCamera, selectedCameraFromSettings())) {
+        resetCameraStatus();
     }
     if (m_settings.isAlpacaCamera() && (m_settings.m_captureMode != CameraSettings::CaptureModeInterval))
     {
@@ -2831,14 +2850,7 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     {
         probeQtCameraCapabilities();
     }
-    QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
-    if (m_settings.isFileCamera()) {
-        settingsKeys.append("videoFileCameraPath");
-    }
-    if (m_settings.isAlpacaCamera()) {
-        settingsKeys.append("alpacaHost");
-        settingsKeys.append("alpacaPort");
-    }
+    QStringList settingsKeys = cameraSelectionSettingsKeys(selectedCamera);
     if (switchedBetweenAsiAndAlpaca) {
         settingsKeys.append("cameraStartX");
         settingsKeys.append("cameraStartY");

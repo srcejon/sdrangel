@@ -39,7 +39,7 @@ public:
 
     Ui::CameraSettingsDialog *getUI() const { return ui; }
     void appendTemperatureSample(const QDateTime& timestamp, double temperatureC);
-    void clearAlpacaStatus();
+    void clearCameraStatus();
 
 private:
     Ui::CameraSettingsDialog *ui;

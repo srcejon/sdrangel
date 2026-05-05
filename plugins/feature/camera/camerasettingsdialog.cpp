@@ -117,7 +117,7 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(chartView);
 
-    clearAlpacaStatus();
+    clearCameraStatus();
 }
 
 CameraSettingsDialog::~CameraSettingsDialog()
@@ -135,7 +135,7 @@ void CameraSettingsDialog::appendTemperatureSample(const QDateTime& timestamp, d
     updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
 }
 
-void CameraSettingsDialog::clearAlpacaStatus()
+void CameraSettingsDialog::clearCameraStatus()
 {
     ui->cameraStateLabel->setText("-");
     ui->captureTimeLabel->setText("-");

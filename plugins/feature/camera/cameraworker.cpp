@@ -355,7 +355,9 @@ CameraWorker::CameraWorker() :
     m_lastAlpacaReadoutMode(0),
     m_statusTimer(this),
     m_lastAlpacaCaptureTimeMs(-1),
-    m_spectrumPipeSource(nullptr),
+    m_spectrumPipeSource(nullptr)
+#ifdef ASICAMERA_FOUND
+    ,
     m_asiCameraOpen(false),
     m_asiVideoCaptureStarted(false),
     m_asiCameraSizeX(0),
@@ -372,6 +374,7 @@ CameraWorker::CameraWorker() :
     m_asiFrameWidth(0),
     m_asiFrameHeight(0),
     m_asiFrameBuffer()
+#endif
 {
     QObject::connect(
         &m_availableDeviceHandler,
@@ -461,7 +464,9 @@ void CameraWorker::stopWork()
         alpacaSetFilterWheelConnected(false);
     }
 
+#ifdef ASICAMERA_FOUND
     asiCloseCamera();
+#endif
 
     m_statusTimer.stop();
 }
@@ -696,6 +701,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         }
     }
 
+#ifdef ASICAMERA_FOUND
     if (m_settings.isAsiCamera()
         && (force
             || settingsKeys.contains("cameraProtocol")
@@ -716,6 +722,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     {
         asiCloseCamera();
     }
+#endif
 
     // Resolve the device object pointer when spectrumDevice setting changes
     if (force || settingsKeys.contains("spectrumDevice"))
@@ -776,6 +783,7 @@ void CameraWorker::startCapture()
             alpacaBootstrap();
         }
     }
+#ifdef ASICAMERA_FOUND
     else if (m_settings.isAsiCamera())
     {
         m_captureTimer.start(m_settings.isIntervalCaptureMode()
@@ -783,6 +791,7 @@ void CameraWorker::startCapture()
             : std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond)))));
         asiCaptureTick();
     }
+#endif
     else if (m_settings.isQtCamera())
     {
         // Qt camera capture is mainly managed by CameraGUI on the main thread. We just do audio
@@ -808,11 +817,13 @@ void CameraWorker::stopCapture()
     m_captureTimer.stop();
     m_alpacaCaptureTimer.invalidate();
 
+#ifdef ASICAMERA_FOUND
     if (m_asiVideoCaptureStarted)
     {
         ASIStopVideoCapture(m_settings.cameraIdInt());
         m_asiVideoCaptureStarted = false;
     }
+#endif
 
     if (m_capturingAudio)
     {
@@ -831,11 +842,13 @@ void CameraWorker::captureTick()
         return;
     }
 
+#ifdef ASICAMERA_FOUND
     if (m_settings.isAsiCamera())
     {
         asiCaptureTick();
         return;
     }
+#endif
 
     if (!m_networkManager || m_alpacaFrameRequestPending) {
         return;

@@ -236,6 +236,14 @@ elseif(WIN32 OR MINGW)
     )
   endforeach(libsigmf_dll)
 
+  file(GLOB ASICAMERA_DLLS "${ASICAMERA_DLL_DIR}/ASICamera2*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+  foreach(asicamera_dll ${ASICAMERA_DLLS})
+    get_filename_component(asicamera_dll_name "${asicamera_dll}"  NAME)
+    add_custom_target(copy_asicamera_${asicamera_dll_name} ALL
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${asicamera_dll}" "${SDRANGEL_BINARY_BIN_DIR}/"
+    )
+  endforeach(asicamera_dll)
+
   if(${VKFFT_BACKEND} EQUAL 1)
     find_package(CUDA)
     if(CUDA_FOUND)

@@ -3,7 +3,6 @@ project(camera)
 set(camera_SOURCES
     camera.cpp
     camerapostprocessor.cpp
-    asicamera2api.cpp
     camerafinder.cpp
     camerasettings.cpp
     cameraplugin.cpp
@@ -14,7 +13,6 @@ set(camera_SOURCES
 set(camera_HEADERS
     camera.h
     camerapostprocessor.h
-    asicamera2api.h
     camerafinder.h
     camerasettings.h
     cameraplugin.h
@@ -25,6 +23,7 @@ set(camera_HEADERS
 include_directories(
     ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client
     ${OpenCV_INCLUDE_DIRS}
+    ${ASICAMERA_INCLUDE_DIR}
 )
 
 if(NOT SERVER_MODE)
@@ -68,6 +67,10 @@ else()
     target_sources(${TARGET_NAME} PRIVATE ${camera_SOURCES})
 endif()
 
+if(ASICAMERA_FOUND)
+    add_compile_definitions(ASICAMERA_FOUND)
+endif()
+
 if(NOT BUILD_SHARED_LIBS)
     set_property(GLOBAL APPEND PROPERTY STATIC_PLUGINS_PROPERTY ${TARGET_NAME})
 endif()
@@ -79,6 +82,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     Qt::Multimedia
     ${TARGET_LIB}
     ${OpenCV_LIBS}
+    ${ASICAMERA_LIBRARIES}
     sdrbase
     ${TARGET_LIB_GUI}
 )

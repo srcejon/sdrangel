@@ -48,12 +48,16 @@
 #include <QSet>
 #endif
 
+#ifdef ASICAMERA_FOUND
+#include <asicamera2api.h>
+#endif
+
 #include "maincore.h"
 #include "dsp/dspengine.h"
 #include "audio/audiodevicemanager.h"
-#include "asicamera2api.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
+
 
 namespace {
 
@@ -2511,6 +2515,8 @@ QImage CameraWorker::createPlaceholderFrame() const
     return image;
 }
 
+#ifdef ASICAMERA_FOUND
+
 bool CameraWorker::asiOpenCamera()
 {
     if (m_asiCameraOpen) {
@@ -2765,6 +2771,7 @@ void CameraWorker::asiCaptureTick()
     }
 }
 
+#endif
 
 void CameraWorker::onCaptureAudioDataReady()
 {

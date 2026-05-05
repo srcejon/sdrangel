@@ -35,8 +35,11 @@
 #include <QCameraInfo>
 #endif
 
+#ifdef ASICAMERA_FOUND
+#include <asicamera2api.h>
+#endif
+
 #include "util/messagequeue.h"
-#include "asicamera2api.h"
 #include "camerafinder.h"
 #include "cameraworker.h"
 
@@ -64,7 +67,9 @@ void CameraFinder::reportCameraList(const CameraSettings& settings)
 {
     m_settings = settings;
     m_currentCameras = listQtCameras();
+#ifdef ASICAMERA_FOUND
     m_currentCameras.append(listAsiCameras());
+#endif
     m_currentFocusers.clear();
     m_currentFilterWheels.clear();
     m_discoveredEndpointKeys.clear();
@@ -121,6 +126,7 @@ QList<CameraInfo> CameraFinder::listQtCameras()
     return qtCameras;
 }
 
+#ifdef ASICAMERA_FOUND
 QList<CameraInfo> CameraFinder::listAsiCameras()
 {
     QList<CameraInfo> asiCameras;
@@ -139,6 +145,7 @@ QList<CameraInfo> CameraFinder::listAsiCameras()
 
     return asiCameras;
 }
+#endif
 
 QList<AlpacaDeviceInfo> CameraFinder::parseAlpacaDeviceList(const QByteArray& payload, const QString& deviceType, const QString& host, quint16 port)
 {

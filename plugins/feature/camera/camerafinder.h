@@ -64,7 +64,9 @@ private:
     static const QByteArray m_alpacaDiscoveryMessage;
 
     static QList<CameraInfo> listQtCameras();
+#ifdef ASICAMERA_FOUND
     static QList<CameraInfo> listAsiCameras();
+#endif
     static QList<AlpacaDeviceInfo> parseAlpacaDeviceList(const QByteArray& payload, const QString& deviceType, const QString& host, quint16 port);
     static QString buildAlpacaBaseUrl(const CameraSettings& settings);
     static QString buildAlpacaBaseUrl(const QString& host, quint16 port);

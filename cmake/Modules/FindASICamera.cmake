@@ -1,0 +1,26 @@
+IF(NOT ASICAMERA_FOUND)
+    FIND_PATH(
+        ASICAMERA_INCLUDE_DIR
+        NAMES ASICamera2.h
+        HINTS ${ASICAMERA_DIR}/include
+        PATHS /usr/local/include
+              /usr/include
+    )
+
+    FIND_LIBRARY(
+        ASICAMERA_LIBRARIES
+        NAMES ASICamera2
+        HINTS ${ASICAMERA_DIR}/lib
+        PATHS /usr/local/lib
+              /usr/lib
+              /usr/lib64
+    )
+
+    message(STATUS "ASICamera LIBRARIES " ${ASICAMERA_LIBRARIES})
+    message(STATUS "ASICamera INCLUDE DIRS " ${ASICAMERA_INCLUDE_DIR})
+
+    INCLUDE(FindPackageHandleStandardArgs)
+    FIND_PACKAGE_HANDLE_STANDARD_ARGS(ASICAMERA DEFAULT_MSG ASICAMERA_LIBRARIES ASICAMERA_INCLUDE_DIR)
+    MARK_AS_ADVANCED(ASICAMERA_LIBRARIES ASICAMERA_INCLUDE_DIR)
+
+ENDIF(NOT ASICAMERA_FOUND)

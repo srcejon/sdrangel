@@ -469,6 +469,7 @@ private:
     QElapsedTimer m_alpacaCaptureTimer;
     qint64 m_lastAlpacaCaptureTimeMs;
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
+#ifdef ASICAMERA_FOUND
     bool m_asiCameraOpen;
     bool m_asiVideoCaptureStarted;
     int m_asiCameraSizeX;
@@ -485,6 +486,7 @@ private:
     int m_asiFrameWidth;
     int m_asiFrameHeight;
     QVector<uchar> m_asiFrameBuffer;
+#endif
 
     // Audio pass-through (Qt camera only)
     AudioFifo m_captureAudioFifo;  ///< Receives captured microphone samples from AudioDeviceManager
@@ -530,12 +532,14 @@ private:
     void resetAlpacaConnectionState();
     void resetAlpacaFocuserConnectionState();
     void resetAlpacaFilterWheelConnectionState();
+#ifdef ASICAMERA_FOUND
     void asiQueryCameraCapabilities();
     bool asiOpenCamera();
     void asiCloseCamera();
     bool asiApplyCameraSettings();
     void asiCaptureTick();
     QImage asiFrameToImage() const;
+#endif
 
 private slots:
     void handleInputMessages();

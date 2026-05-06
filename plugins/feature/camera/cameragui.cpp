@@ -2434,56 +2434,16 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->focusDistSpin->setVisible(false);
 #endif
 
-    if (alpaca)
+    if (alpaca || asi)
     {
-        settingsUI()->zoomLabel->setEnabled(false);
-        settingsUI()->zoomSpin->setEnabled(false);
         settingsUI()->exposureLabel->setEnabled(true);
         settingsUI()->exposureSlider->setEnabled(true);
         settingsUI()->exposureSpin->setEnabled(true);
         settingsUI()->exposureUnitsCombo->setEnabled(true);
-        settingsUI()->isoLabel->setEnabled(false);
-        settingsUI()->isoSpin->setEnabled(false);
-        settingsUI()->exposureCompLabel->setEnabled(false);
-        settingsUI()->exposureCompSpin->setEnabled(false);
-        settingsUI()->whiteBalanceLabel->setEnabled(false);
-        settingsUI()->whiteBalanceCombo->setEnabled(false);
-        settingsUI()->focusDistLabel->setEnabled(false);
-        settingsUI()->focusDistSpin->setEnabled(false);
-    }
-    else if (asi)
-    {
-        settingsUI()->zoomLabel->setEnabled(false);
-        settingsUI()->zoomSpin->setEnabled(false);
-        settingsUI()->exposureLabel->setEnabled(true);
-        settingsUI()->exposureSlider->setEnabled(true);
-        settingsUI()->exposureSpin->setEnabled(true);
-        settingsUI()->exposureUnitsCombo->setEnabled(true);
-        settingsUI()->isoLabel->setEnabled(false);
-        settingsUI()->isoSpin->setEnabled(false);
-        settingsUI()->exposureCompLabel->setEnabled(false);
-        settingsUI()->exposureCompSpin->setEnabled(false);
-        settingsUI()->whiteBalanceLabel->setEnabled(false);
-        settingsUI()->whiteBalanceCombo->setEnabled(false);
-        settingsUI()->focusDistLabel->setEnabled(false);
-        settingsUI()->focusDistSpin->setEnabled(false);
     }
     else if (fileCamera)
     {
-        settingsUI()->zoomLabel->setEnabled(false);
-        settingsUI()->zoomSpin->setEnabled(false);
-        settingsUI()->exposureLabel->setEnabled(false);
-        settingsUI()->exposureSlider->setEnabled(false);
-        settingsUI()->exposureSpin->setEnabled(false);
-        settingsUI()->exposureUnitsCombo->setEnabled(false);
-        settingsUI()->isoLabel->setEnabled(false);
-        settingsUI()->isoSpin->setEnabled(false);
-        settingsUI()->exposureCompLabel->setEnabled(false);
-        settingsUI()->exposureCompSpin->setEnabled(false);
-        settingsUI()->whiteBalanceLabel->setEnabled(false);
-        settingsUI()->whiteBalanceCombo->setEnabled(false);
-        settingsUI()->focusDistLabel->setEnabled(false);
-        settingsUI()->focusDistSpin->setEnabled(false);
+        // No extra enabled-state updates needed here: the Qt-only controls above are hidden.
     }
     else
     {

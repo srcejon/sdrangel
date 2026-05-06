@@ -610,6 +610,8 @@ private:
     bool asiOpenCamera();
     void asiCloseCamera();
     bool asiApplyCameraSettings();
+    void asiCaptureExposureFrame();
+    void asiCaptureVideoFrame();
     void asiPollStatus();
     void asiCaptureTick();
     QImage asiFrameToImage() const;

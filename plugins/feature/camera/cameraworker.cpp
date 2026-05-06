@@ -31,6 +31,7 @@
 #include <QNetworkRequest>
 #include <QRandomGenerator>
 #include <QSharedPointer>
+#include <QThread>
 #include <QtEndian>
 #include <QUrl>
 #include <QUrlQuery>
@@ -917,8 +918,22 @@ void CameraWorker::stopCapture()
 #ifdef ASICAMERA_FOUND
     if (m_asiVideoCaptureStarted)
     {
-        ASIStopVideoCapture(m_settings.cameraIdInt());
+        const ASI_ERROR_CODE stopVideoError = ASIStopVideoCapture(m_settings.cameraIdInt());
+        if (stopVideoError != ASI_SUCCESS) {
+            qDebug() << "CameraWorker: ASIStopVideoCapture failed:" << stopVideoError << asiErrorCodeToString(stopVideoError);
+        }
         m_asiVideoCaptureStarted = false;
+    }
+
+    if (m_settings.isAsiCamera() && m_settings.isIntervalCaptureMode() && m_asiCameraOpen)
+    {
+        const ASI_ERROR_CODE stopExposureError = ASIStopExposure(m_settings.cameraIdInt());
+        if ((stopExposureError != ASI_SUCCESS)
+            && (stopExposureError != ASI_ERROR_GENERAL_ERROR)
+            && (stopExposureError != ASI_ERROR_INVALID_MODE))
+        {
+            qDebug() << "CameraWorker: ASIStopExposure failed:" << stopExposureError << asiErrorCodeToString(stopExposureError);
+        }
     }
     m_asiSettingsApplied = false;
 #endif
@@ -3047,16 +3062,88 @@ QImage CameraWorker::asiFrameToImage() const
     return image.rgbSwapped();
 }
 
-void CameraWorker::asiCaptureTick()
+void CameraWorker::asiCaptureExposureFrame()
 {
-    if (!m_capturing) {
+    const int cameraId = m_settings.cameraIdInt();
+
+    if (m_asiVideoCaptureStarted)
+    {
+        const ASI_ERROR_CODE stopVideoError = ASIStopVideoCapture(cameraId);
+        if (stopVideoError != ASI_SUCCESS)
+        {
+            setLastAsiError(stopVideoError, asiErrorCodeToString(stopVideoError));
+            qDebug() << "CameraWorker: ASIStopVideoCapture failed before exposure:" << stopVideoError << asiErrorCodeToString(stopVideoError);
+            return;
+        }
+
+        m_asiVideoCaptureStarted = false;
+    }
+
+    const ASI_ERROR_CODE startExposureError = ASIStartExposure(cameraId, ASI_FALSE);
+    if (startExposureError != ASI_SUCCESS)
+    {
+        setLastAsiError(startExposureError, asiErrorCodeToString(startExposureError));
+        qDebug() << "CameraWorker: ASIStartExposure failed:" << startExposureError << asiErrorCodeToString(startExposureError);
         return;
     }
 
-    if (!m_asiSettingsApplied && !asiApplyCameraSettings()) {
+    setLastAsiError(ASI_SUCCESS, QString());
+    QElapsedTimer captureTimer;
+    captureTimer.start();
+
+    const qint64 timeoutMs = std::max<qint64>(1000, static_cast<qint64>(std::ceil(m_settings.m_exposureTimeMs)) + 5000);
+    ASI_EXPOSURE_STATUS exposureStatus = ASI_EXP_IDLE;
+
+    while (captureTimer.elapsed() <= timeoutMs)
+    {
+        const ASI_ERROR_CODE statusError = ASIGetExpStatus(cameraId, &exposureStatus);
+        if (statusError != ASI_SUCCESS)
+        {
+            setLastAsiError(statusError, asiErrorCodeToString(statusError));
+            qDebug() << "CameraWorker: ASIGetExpStatus failed:" << statusError << asiErrorCodeToString(statusError);
+            return;
+        }
+
+        if (exposureStatus == ASI_EXP_SUCCESS) {
+            break;
+        }
+
+        if (exposureStatus == ASI_EXP_FAILED)
+        {
+            setLastAsiError(ASI_ERROR_GENERAL_ERROR, QStringLiteral("Exposure failed"));
+            qDebug() << "CameraWorker: ASI exposure failed";
+            return;
+        }
+
+        QThread::msleep(50);
+    }
+
+    if (exposureStatus != ASI_EXP_SUCCESS)
+    {
+        setLastAsiError(ASI_ERROR_TIMEOUT, asiErrorCodeToString(ASI_ERROR_TIMEOUT));
+        qDebug() << "CameraWorker: ASI exposure timed out after" << timeoutMs << "ms";
         return;
     }
 
+    const ASI_ERROR_CODE dataError = ASIGetDataAfterExp(cameraId, m_asiFrameBuffer.data(), m_asiFrameBuffer.size());
+    if (dataError != ASI_SUCCESS)
+    {
+        setLastAsiError(dataError, asiErrorCodeToString(dataError));
+        qDebug() << "CameraWorker: ASIGetDataAfterExp failed:" << dataError << asiErrorCodeToString(dataError)
+                 << "bufferSize" << m_asiFrameBuffer.size()
+                 << "width" << m_asiFrameWidth << "height" << m_asiFrameHeight;
+        return;
+    }
+
+    setLastAsiError(ASI_SUCCESS, QString());
+    m_lastAsiCaptureTimeMs = captureTimer.elapsed();
+    if (m_postProcessorInputMessageQueue) {
+        m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(asiFrameToImage()));
+    }
+}
+
+void CameraWorker::asiCaptureVideoFrame()
+{
     const int cameraId = m_settings.cameraIdInt();
 
     if (!m_asiVideoCaptureStarted)
@@ -3089,6 +3176,23 @@ void CameraWorker::asiCaptureTick()
         qDebug() << "CameraWorker: ASIGetVideoData failed:" << getVideoError << asiErrorCodeToString(getVideoError)
                  << "waitMs" << waitMs << "bufferSize" << m_asiFrameBuffer.size()
                  << "width" << m_asiFrameWidth << "height" << m_asiFrameHeight;
+    }
+}
+
+void CameraWorker::asiCaptureTick()
+{
+    if (!m_capturing) {
+        return;
+    }
+
+    if (!m_asiSettingsApplied && !asiApplyCameraSettings()) {
+        return;
+    }
+
+    if (m_settings.isIntervalCaptureMode()) {
+        asiCaptureExposureFrame();
+    } else {
+        asiCaptureVideoFrame();
     }
 }
 

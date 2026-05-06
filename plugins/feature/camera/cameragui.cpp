@@ -263,7 +263,7 @@ bool CameraGUI::handleMessage(const Message& message)
             setSelectedCamera(selectedCamera.m_protocol, selectedCamera.m_id, selectedCamera.m_description,
                 selectedCamera.m_host, selectedCamera.m_port);
             QStringList settingsKeys = cameraSelectionSettingsKeys(selectedCamera);
-            updateAlpacaVisibility();
+            updateCameraSettingsVisibility();
             updateEnabledControls();
             applySettings(settingsKeys);
         }
@@ -391,7 +391,7 @@ bool CameraGUI::handleMessage(const Message& message)
                 qBound(0, m_settings.m_alpacaFilterWheelPosition, settingsUI()->alpacaFilterWheelPositionCombo->count() - 1));
         }
 
-        updateAlpacaVisibility();
+        updateCameraSettingsVisibility();
         return true;
     }
     else if (CameraWorker::MsgReportAlpacaStatus::match(message))
@@ -844,25 +844,25 @@ void CameraGUI::displaySettings()
         settingsUI()->alpacaFilterWheelPositionCombo->setCurrentIndex(
             qBound(0, m_settings.m_alpacaFilterWheelPosition, settingsUI()->alpacaFilterWheelPositionCombo->count() - 1));
     }
-    settingsUI()->alpacaBinXSpin->setValue(m_settings.m_cameraBinX);
-    settingsUI()->alpacaBinYSpin->setValue(m_settings.m_cameraBinY);
-    settingsUI()->alpacaNumXSpin->setValue(m_settings.m_cameraNumX);
-    settingsUI()->alpacaNumYSpin->setValue(m_settings.m_cameraNumY);
-    settingsUI()->alpacaStartXSpin->setValue(m_settings.m_cameraStartX);
-    settingsUI()->alpacaStartYSpin->setValue(m_settings.m_cameraStartY);
+    settingsUI()->cameraBinXSpin->setValue(m_settings.m_cameraBinX);
+    settingsUI()->cameraBinYSpin->setValue(m_settings.m_cameraBinY);
+    settingsUI()->cameraNumXSpin->setValue(m_settings.m_cameraNumX);
+    settingsUI()->cameraNumYSpin->setValue(m_settings.m_cameraNumY);
+    settingsUI()->cameraStartXSpin->setValue(m_settings.m_cameraStartX);
+    settingsUI()->cameraStartYSpin->setValue(m_settings.m_cameraStartY);
 
     if (m_alpacaHasNamedGains) {
-        settingsUI()->alpacaGainCombo->setCurrentIndex(m_settings.m_cameraGain >= 0 ? m_settings.m_cameraGain : 0);
+        settingsUI()->cameraGainCombo->setCurrentIndex(m_settings.m_cameraGain >= 0 ? m_settings.m_cameraGain : 0);
     } else {
-        settingsUI()->alpacaGainSpin->setValue(m_settings.m_cameraGain >= 0 ? m_settings.m_cameraGain : 0);
-        settingsUI()->alpacaGainSlider->setValue(m_settings.m_cameraGain >= 0 ? m_settings.m_cameraGain : 0);
+        settingsUI()->cameraGainSpin->setValue(m_settings.m_cameraGain >= 0 ? m_settings.m_cameraGain : 0);
+        settingsUI()->cameraGainSlider->setValue(m_settings.m_cameraGain >= 0 ? m_settings.m_cameraGain : 0);
     }
 
     if (m_alpacaHasNamedOffsets) {
-        settingsUI()->alpacaOffsetCombo->setCurrentIndex(m_settings.m_cameraOffset >= 0 ? m_settings.m_cameraOffset : 0);
+        settingsUI()->cameraOffsetCombo->setCurrentIndex(m_settings.m_cameraOffset >= 0 ? m_settings.m_cameraOffset : 0);
     } else {
-        settingsUI()->alpacaOffsetSpin->setValue(m_settings.m_cameraOffset >= 0 ? m_settings.m_cameraOffset : 0);
-        settingsUI()->alpacaOffsetSlider->setValue(m_settings.m_cameraOffset >= 0 ? m_settings.m_cameraOffset : 0);
+        settingsUI()->cameraOffsetSpin->setValue(m_settings.m_cameraOffset >= 0 ? m_settings.m_cameraOffset : 0);
+        settingsUI()->cameraOffsetSlider->setValue(m_settings.m_cameraOffset >= 0 ? m_settings.m_cameraOffset : 0);
     }
 
     settingsUI()->alpacaReadoutModeCombo->setCurrentIndex(m_settings.m_cameraReadoutMode);
@@ -987,7 +987,7 @@ void CameraGUI::displaySettings()
 #endif
 
     settingsUI()->zoomSpin->setValue(m_settings.m_zoomFactor);
-    updateAlpacaVisibility();
+    updateCameraSettingsVisibility();
     updateCameraStatusDisplay();
     updateEnabledControls();
     applyVideoPath();
@@ -1170,18 +1170,18 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->alpacaFilterWheelHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaFilterWheelHostEdit_editingFinished);
     QObject::connect(settingsUI()->alpacaFilterWheelPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFilterWheelPortSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaFilterWheelPositionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaFilterWheelPositionCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->alpacaBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinXSpin_valueChanged);
-    QObject::connect(settingsUI()->alpacaBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaBinYSpin_valueChanged);
-    QObject::connect(settingsUI()->alpacaNumXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaNumXSpin_valueChanged);
-    QObject::connect(settingsUI()->alpacaNumYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaNumYSpin_valueChanged);
-    QObject::connect(settingsUI()->alpacaStartXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaStartXSpin_valueChanged);
-    QObject::connect(settingsUI()->alpacaStartYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaStartYSpin_valueChanged);
-    QObject::connect(settingsUI()->alpacaGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaGainCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->alpacaGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_alpacaGainSlider_valueChanged);
-    QObject::connect(settingsUI()->alpacaGainSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaGainSpin_valueChanged);
-    QObject::connect(settingsUI()->alpacaOffsetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaOffsetCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->alpacaOffsetSlider, &QSlider::valueChanged, this, &CameraGUI::on_alpacaOffsetSlider_valueChanged);
-    QObject::connect(settingsUI()->alpacaOffsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaOffsetSpin_valueChanged);
+    QObject::connect(settingsUI()->cameraBinXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cameraBinXSpin_valueChanged);
+    QObject::connect(settingsUI()->cameraBinYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cameraBinYSpin_valueChanged);
+    QObject::connect(settingsUI()->cameraNumXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cameraNumXSpin_valueChanged);
+    QObject::connect(settingsUI()->cameraNumYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cameraNumYSpin_valueChanged);
+    QObject::connect(settingsUI()->cameraStartXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cameraStartXSpin_valueChanged);
+    QObject::connect(settingsUI()->cameraStartYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cameraStartYSpin_valueChanged);
+    QObject::connect(settingsUI()->cameraGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cameraGainCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->cameraGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_cameraGainSlider_valueChanged);
+    QObject::connect(settingsUI()->cameraGainSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cameraGainSpin_valueChanged);
+    QObject::connect(settingsUI()->cameraOffsetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cameraOffsetCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->cameraOffsetSlider, &QSlider::valueChanged, this, &CameraGUI::on_cameraOffsetSlider_valueChanged);
+    QObject::connect(settingsUI()->cameraOffsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cameraOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaReadoutModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged);
     QObject::connect(ui->saveImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveImageCheck_toggled);
     QObject::connect(settingsUI()->imagePathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_imagePathEdit_editingFinished);
@@ -2337,7 +2337,7 @@ void CameraGUI::triggerQtStillCapture()
 #endif
 }
 
-void CameraGUI::updateAlpacaVisibility()
+void CameraGUI::updateCameraSettingsVisibility()
 {
     const bool alpaca = m_settings.isAlpacaCamera();
     const bool asi = m_settings.isAsiCamera();
@@ -2356,26 +2356,26 @@ void CameraGUI::updateAlpacaVisibility()
     }
     settingsUI()->isoLabel->setVisible(qtCamera);
     settingsUI()->isoSpin->setVisible(qtCamera);
-    settingsUI()->alpacaBinXLabel->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaBinXSpin->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaBinYLabel->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaBinYSpin->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaNumXLabel->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaNumXSpin->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaNumYLabel->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaNumYSpin->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaStartXLabel->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaStartXSpin->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaStartYLabel->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaStartYSpin->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaGainLabel->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaGainCombo->setVisible(alpaca && m_alpacaHasNamedGains);
-    settingsUI()->alpacaGainSlider->setVisible(sharedHardwareCamera && (!alpaca || !m_alpacaHasNamedGains));
-    settingsUI()->alpacaGainSpin->setVisible(sharedHardwareCamera && (!alpaca || !m_alpacaHasNamedGains));
-    settingsUI()->alpacaOffsetLabel->setVisible(sharedHardwareCamera);
-    settingsUI()->alpacaOffsetCombo->setVisible(alpaca && m_alpacaHasNamedOffsets);
-    settingsUI()->alpacaOffsetSlider->setVisible(sharedHardwareCamera && (!alpaca || !m_alpacaHasNamedOffsets));
-    settingsUI()->alpacaOffsetSpin->setVisible(sharedHardwareCamera && (!alpaca || !m_alpacaHasNamedOffsets));
+    settingsUI()->cameraBinXLabel->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraBinXSpin->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraBinYLabel->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraBinYSpin->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraNumXLabel->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraNumXSpin->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraNumYLabel->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraNumYSpin->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraStartXLabel->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraStartXSpin->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraStartYLabel->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraStartYSpin->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraGainLabel->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraGainCombo->setVisible(alpaca && m_alpacaHasNamedGains);
+    settingsUI()->cameraGainSlider->setVisible(sharedHardwareCamera && (!alpaca || !m_alpacaHasNamedGains));
+    settingsUI()->cameraGainSpin->setVisible(sharedHardwareCamera && (!alpaca || !m_alpacaHasNamedGains));
+    settingsUI()->cameraOffsetLabel->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraOffsetCombo->setVisible(alpaca && m_alpacaHasNamedOffsets);
+    settingsUI()->cameraOffsetSlider->setVisible(sharedHardwareCamera && (!alpaca || !m_alpacaHasNamedOffsets));
+    settingsUI()->cameraOffsetSpin->setVisible(sharedHardwareCamera && (!alpaca || !m_alpacaHasNamedOffsets));
     settingsUI()->alpacaReadoutModeLabel->setVisible(alpaca);
     settingsUI()->alpacaReadoutModeCombo->setVisible(alpaca);
     settingsUI()->asiCoolerOnLabel->setVisible(asi && m_asiCoolerSupported);
@@ -2406,7 +2406,8 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaFilterWheelCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaFilterWheelPositionLabel->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaFilterWheelPositionCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
-    settingsUI()->cameraTab->setVisible(sharedHardwareCamera);
+
+    settingsUI()->tabWidget->setTabEnabled(1, sharedHardwareCamera);
     ui->audioMute->setVisible(qtCamera);
 
     // Qt-camera-only controls
@@ -2486,37 +2487,37 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     const double exposureResolutionMs = std::max(0.000001, info.getExposureResolutionMs());
 
     // Bin X
-    settingsUI()->alpacaBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
-    settingsUI()->alpacaBinXSpin->setValue(qBound(1, m_settings.m_cameraBinX, info.getMaxBinX()));
+    settingsUI()->cameraBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
+    settingsUI()->cameraBinXSpin->setValue(qBound(1, m_settings.m_cameraBinX, info.getMaxBinX()));
 
     // Bin Y
-    settingsUI()->alpacaBinYSpin->setMaximum(std::max(1, info.getMaxBinY()));
-    settingsUI()->alpacaBinYSpin->setValue(qBound(1, m_settings.m_cameraBinY, info.getMaxBinY()));
+    settingsUI()->cameraBinYSpin->setMaximum(std::max(1, info.getMaxBinY()));
+    settingsUI()->cameraBinYSpin->setValue(qBound(1, m_settings.m_cameraBinY, info.getMaxBinY()));
     m_alpacaCameraSizeX = std::max(0, info.getCameraSizeX());
     m_alpacaCameraSizeY = std::max(0, info.getCameraSizeY());
-    updateAlpacaSubframeControls();
+    updateCameraSubframeControls();
 
     // Gain
     m_alpacaHasNamedGains = !info.getGains().isEmpty();
     if (m_alpacaHasNamedGains)
     {
-        settingsUI()->alpacaGainCombo->blockSignals(true);
-        settingsUI()->alpacaGainCombo->clear();
-        settingsUI()->alpacaGainCombo->addItems(info.getGains());
+        settingsUI()->cameraGainCombo->blockSignals(true);
+        settingsUI()->cameraGainCombo->clear();
+        settingsUI()->cameraGainCombo->addItems(info.getGains());
         const int gainIdx = (m_settings.m_cameraGain >= 0 && m_settings.m_cameraGain < info.getGains().size())
             ? m_settings.m_cameraGain : 0;
-        settingsUI()->alpacaGainCombo->setCurrentIndex(gainIdx);
-        settingsUI()->alpacaGainCombo->blockSignals(false);
+        settingsUI()->cameraGainCombo->setCurrentIndex(gainIdx);
+        settingsUI()->cameraGainCombo->blockSignals(false);
     }
     else
     {
-        settingsUI()->alpacaGainSpin->setMinimum(info.getGainMin());
-        settingsUI()->alpacaGainSlider->setMinimum(info.getGainMin());
-        settingsUI()->alpacaGainSpin->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
-        settingsUI()->alpacaGainSlider->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
+        settingsUI()->cameraGainSpin->setMinimum(info.getGainMin());
+        settingsUI()->cameraGainSlider->setMinimum(info.getGainMin());
+        settingsUI()->cameraGainSpin->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
+        settingsUI()->cameraGainSlider->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
         const int gainVal = (m_settings.m_cameraGain >= 0) ? m_settings.m_cameraGain : info.getGainMin();
-        settingsUI()->alpacaGainSpin->setValue(qBound(info.getGainMin(), gainVal, info.getGainMax()));
-        settingsUI()->alpacaGainSlider->setValue(qBound(info.getGainMin(), gainVal, info.getGainMax()));
+        settingsUI()->cameraGainSpin->setValue(qBound(info.getGainMin(), gainVal, info.getGainMax()));
+        settingsUI()->cameraGainSlider->setValue(qBound(info.getGainMin(), gainVal, info.getGainMax()));
     }
 
     // Readout mode
@@ -2532,23 +2533,23 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     m_alpacaHasNamedOffsets = !info.getOffsets().isEmpty();
     if (m_alpacaHasNamedOffsets)
     {
-        settingsUI()->alpacaOffsetCombo->blockSignals(true);
-        settingsUI()->alpacaOffsetCombo->clear();
-        settingsUI()->alpacaOffsetCombo->addItems(info.getOffsets());
+        settingsUI()->cameraOffsetCombo->blockSignals(true);
+        settingsUI()->cameraOffsetCombo->clear();
+        settingsUI()->cameraOffsetCombo->addItems(info.getOffsets());
         const int offsetIdx = (m_settings.m_cameraOffset >= 0 && m_settings.m_cameraOffset < info.getOffsets().size())
             ? m_settings.m_cameraOffset : 0;
-        settingsUI()->alpacaOffsetCombo->setCurrentIndex(offsetIdx);
-        settingsUI()->alpacaOffsetCombo->blockSignals(false);
+        settingsUI()->cameraOffsetCombo->setCurrentIndex(offsetIdx);
+        settingsUI()->cameraOffsetCombo->blockSignals(false);
     }
     else
     {
-        settingsUI()->alpacaOffsetSpin->setMinimum(info.getOffsetMin());
-        settingsUI()->alpacaOffsetSlider->setMinimum(info.getOffsetMin());
-        settingsUI()->alpacaOffsetSpin->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
-        settingsUI()->alpacaOffsetSlider->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
+        settingsUI()->cameraOffsetSpin->setMinimum(info.getOffsetMin());
+        settingsUI()->cameraOffsetSlider->setMinimum(info.getOffsetMin());
+        settingsUI()->cameraOffsetSpin->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
+        settingsUI()->cameraOffsetSlider->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
         const int offsetVal = (m_settings.m_cameraOffset >= 0) ? m_settings.m_cameraOffset : info.getOffsetMin();
-        settingsUI()->alpacaOffsetSpin->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
-        settingsUI()->alpacaOffsetSlider->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
+        settingsUI()->cameraOffsetSpin->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
+        settingsUI()->cameraOffsetSlider->setValue(qBound(info.getOffsetMin(), offsetVal, info.getOffsetMax()));
     }
 
     m_exposureMinimumMs = exposureMinMs;
@@ -2590,7 +2591,7 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
         settingsUI()->ccdTempLabel->setText("-");
     }
 
-    updateAlpacaVisibility();
+    updateCameraSettingsVisibility();
     blockApplySettings(false);
 }
 
@@ -2607,25 +2608,25 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
     m_alpacaCameraSizeX = std::max(0, info.getCameraSizeX());
     m_alpacaCameraSizeY = std::max(0, info.getCameraSizeY());
 
-    settingsUI()->alpacaBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
-    settingsUI()->alpacaBinXSpin->setValue(qBound(1, m_settings.m_cameraBinX, info.getMaxBinX()));
-    settingsUI()->alpacaBinYSpin->setMaximum(std::max(1, info.getMaxBinY()));
-    settingsUI()->alpacaBinYSpin->setValue(qBound(1, m_settings.m_cameraBinY, info.getMaxBinY()));
-    updateAlpacaSubframeControls();
+    settingsUI()->cameraBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
+    settingsUI()->cameraBinXSpin->setValue(qBound(1, m_settings.m_cameraBinX, info.getMaxBinX()));
+    settingsUI()->cameraBinYSpin->setMaximum(std::max(1, info.getMaxBinY()));
+    settingsUI()->cameraBinYSpin->setValue(qBound(1, m_settings.m_cameraBinY, info.getMaxBinY()));
+    updateCameraSubframeControls();
 
-    settingsUI()->alpacaGainSpin->setMinimum(info.getGainMin());
-    settingsUI()->alpacaGainSlider->setMinimum(info.getGainMin());
-    settingsUI()->alpacaGainSpin->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
-    settingsUI()->alpacaGainSlider->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
-    settingsUI()->alpacaGainSpin->setValue(qBound(info.getGainMin(), std::max(info.getGainMin(), m_settings.m_cameraGain), info.getGainMax()));
-    settingsUI()->alpacaGainSlider->setValue(settingsUI()->alpacaGainSpin->value());
+    settingsUI()->cameraGainSpin->setMinimum(info.getGainMin());
+    settingsUI()->cameraGainSlider->setMinimum(info.getGainMin());
+    settingsUI()->cameraGainSpin->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
+    settingsUI()->cameraGainSlider->setMaximum(std::max(info.getGainMin(), info.getGainMax()));
+    settingsUI()->cameraGainSpin->setValue(qBound(info.getGainMin(), std::max(info.getGainMin(), m_settings.m_cameraGain), info.getGainMax()));
+    settingsUI()->cameraGainSlider->setValue(settingsUI()->cameraGainSpin->value());
 
-    settingsUI()->alpacaOffsetSpin->setMinimum(info.getOffsetMin());
-    settingsUI()->alpacaOffsetSlider->setMinimum(info.getOffsetMin());
-    settingsUI()->alpacaOffsetSpin->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
-    settingsUI()->alpacaOffsetSlider->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
-    settingsUI()->alpacaOffsetSpin->setValue(qBound(info.getOffsetMin(), std::max(info.getOffsetMin(), m_settings.m_cameraOffset), info.getOffsetMax()));
-    settingsUI()->alpacaOffsetSlider->setValue(settingsUI()->alpacaOffsetSpin->value());
+    settingsUI()->cameraOffsetSpin->setMinimum(info.getOffsetMin());
+    settingsUI()->cameraOffsetSlider->setMinimum(info.getOffsetMin());
+    settingsUI()->cameraOffsetSpin->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
+    settingsUI()->cameraOffsetSlider->setMaximum(std::max(info.getOffsetMin(), info.getOffsetMax()));
+    settingsUI()->cameraOffsetSpin->setValue(qBound(info.getOffsetMin(), std::max(info.getOffsetMin(), m_settings.m_cameraOffset), info.getOffsetMax()));
+    settingsUI()->cameraOffsetSlider->setValue(settingsUI()->cameraOffsetSpin->value());
 
     m_exposureMinimumMs = std::max(0.001, info.getExposureMinMs());
     m_exposureMaximumMs = std::max(m_exposureMinimumMs, info.getExposureMaxMs());
@@ -2680,11 +2681,11 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
         settingsUI()->cameraSizeLabel->setText("-");
     }
 
-    updateAlpacaVisibility();
+    updateCameraSettingsVisibility();
     blockApplySettings(false);
 }
 
-void CameraGUI::updateAlpacaSubframeControls()
+void CameraGUI::updateCameraSubframeControls()
 {
     const int maxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_settings.m_cameraBinX));
     const int maxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_settings.m_cameraBinY));
@@ -2700,16 +2701,16 @@ void CameraGUI::updateAlpacaSubframeControls()
     m_settings.m_cameraNumX = numX;
     m_settings.m_cameraNumY = numY;
 
-    settingsUI()->alpacaNumXSpin->setMinimum(0);
-    settingsUI()->alpacaNumYSpin->setMinimum(0);
-    settingsUI()->alpacaStartXSpin->setMaximum(maxSubframeX - 1);
-    settingsUI()->alpacaStartYSpin->setMaximum(maxSubframeY - 1);
-    settingsUI()->alpacaStartXSpin->setValue(startX);
-    settingsUI()->alpacaStartYSpin->setValue(startY);
-    settingsUI()->alpacaNumXSpin->setMaximum(maxNumX);
-    settingsUI()->alpacaNumYSpin->setMaximum(maxNumY);
-    settingsUI()->alpacaNumXSpin->setValue(numX);
-    settingsUI()->alpacaNumYSpin->setValue(numY);
+    settingsUI()->cameraNumXSpin->setMinimum(0);
+    settingsUI()->cameraNumYSpin->setMinimum(0);
+    settingsUI()->cameraStartXSpin->setMaximum(maxSubframeX - 1);
+    settingsUI()->cameraStartYSpin->setMaximum(maxSubframeY - 1);
+    settingsUI()->cameraStartXSpin->setValue(startX);
+    settingsUI()->cameraStartYSpin->setValue(startY);
+    settingsUI()->cameraNumXSpin->setMaximum(maxNumX);
+    settingsUI()->cameraNumYSpin->setMaximum(maxNumY);
+    settingsUI()->cameraNumXSpin->setValue(numX);
+    settingsUI()->cameraNumYSpin->setValue(numY);
 }
 
 void CameraGUI::on_startStop_clicked(bool checked)
@@ -2858,9 +2859,9 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
         settingsKeys.append("cameraNumX");
         settingsKeys.append("cameraNumY");
     }
-    updateAlpacaVisibility();
+    updateCameraSettingsVisibility();
     if (switchedBetweenAsiAndAlpaca) {
-        updateAlpacaSubframeControls();
+        updateCameraSubframeControls();
     }
     updateEnabledControls();
     updateVideoFileControls();
@@ -2997,7 +2998,7 @@ void CameraGUI::on_alpacaPortSpin_valueChanged(int value)
 void CameraGUI::on_alpacaFocuserEnabledCheck_toggled(bool checked)
 {
     m_settings.m_alpacaFocuserEnabled = checked;
-    updateAlpacaVisibility();
+    updateCameraSettingsVisibility();
     applySetting("alpacaFocuserEnabled");
 }
 
@@ -3042,7 +3043,7 @@ void CameraGUI::on_alpacaFocusStepSizeSpin_valueChanged(int value)
 void CameraGUI::on_alpacaFilterWheelEnabledCheck_toggled(bool checked)
 {
     m_settings.m_alpacaFilterWheelEnabled = checked;
-    updateAlpacaVisibility();
+    updateCameraSettingsVisibility();
     applySetting("alpacaFilterWheelEnabled");
 }
 
@@ -3082,92 +3083,92 @@ void CameraGUI::on_alpacaFilterWheelPositionCombo_currentIndexChanged(int index)
     applySetting("alpacaFilterWheelPosition");
 }
 
-void CameraGUI::on_alpacaBinXSpin_valueChanged(int value)
+void CameraGUI::on_cameraBinXSpin_valueChanged(int value)
 {
     m_settings.m_cameraBinX = value;
-    updateAlpacaSubframeControls();
+    updateCameraSubframeControls();
     applySettings({"cameraBinX", "cameraNumX", "cameraStartX"});
 }
 
-void CameraGUI::on_alpacaBinYSpin_valueChanged(int value)
+void CameraGUI::on_cameraBinYSpin_valueChanged(int value)
 {
     m_settings.m_cameraBinY = value;
-    updateAlpacaSubframeControls();
+    updateCameraSubframeControls();
     applySettings({"cameraBinY", "cameraNumY", "cameraStartY"});
 }
 
-void CameraGUI::on_alpacaNumXSpin_valueChanged(int value)
+void CameraGUI::on_cameraNumXSpin_valueChanged(int value)
 {
     m_settings.m_cameraNumX = value;
-    updateAlpacaSubframeControls();
+    updateCameraSubframeControls();
     applySettings({"cameraNumX", "cameraStartX"});
 }
 
-void CameraGUI::on_alpacaNumYSpin_valueChanged(int value)
+void CameraGUI::on_cameraNumYSpin_valueChanged(int value)
 {
     m_settings.m_cameraNumY = value;
-    updateAlpacaSubframeControls();
+    updateCameraSubframeControls();
     applySettings({"cameraNumY", "cameraStartY"});
 }
 
-void CameraGUI::on_alpacaStartXSpin_valueChanged(int value)
+void CameraGUI::on_cameraStartXSpin_valueChanged(int value)
 {
     m_settings.m_cameraStartX = value;
-    updateAlpacaSubframeControls();
+    updateCameraSubframeControls();
     applySettings({"cameraStartX", "cameraNumX"});
 }
 
-void CameraGUI::on_alpacaStartYSpin_valueChanged(int value)
+void CameraGUI::on_cameraStartYSpin_valueChanged(int value)
 {
     m_settings.m_cameraStartY = value;
-    updateAlpacaSubframeControls();
+    updateCameraSubframeControls();
     applySettings({"cameraStartY", "cameraNumY"});
 }
 
-void CameraGUI::on_alpacaGainCombo_currentIndexChanged(int index)
+void CameraGUI::on_cameraGainCombo_currentIndexChanged(int index)
 {
     m_settings.m_cameraGain = index;
     applySetting("cameraGain");
 }
 
-void CameraGUI::on_alpacaGainSlider_valueChanged(int value)
+void CameraGUI::on_cameraGainSlider_valueChanged(int value)
 {
-    settingsUI()->alpacaGainSpin->blockSignals(true);
-    settingsUI()->alpacaGainSpin->setValue(value);
-    settingsUI()->alpacaGainSpin->blockSignals(false);
+    settingsUI()->cameraGainSpin->blockSignals(true);
+    settingsUI()->cameraGainSpin->setValue(value);
+    settingsUI()->cameraGainSpin->blockSignals(false);
     m_settings.m_cameraGain = value;
     applySetting("cameraGain");
 }
 
-void CameraGUI::on_alpacaGainSpin_valueChanged(int value)
+void CameraGUI::on_cameraGainSpin_valueChanged(int value)
 {
-    settingsUI()->alpacaGainSlider->blockSignals(true);
-    settingsUI()->alpacaGainSlider->setValue(value);
-    settingsUI()->alpacaGainSlider->blockSignals(false);
+    settingsUI()->cameraGainSlider->blockSignals(true);
+    settingsUI()->cameraGainSlider->setValue(value);
+    settingsUI()->cameraGainSlider->blockSignals(false);
     m_settings.m_cameraGain = value;
     applySetting("cameraGain");
 }
 
-void CameraGUI::on_alpacaOffsetCombo_currentIndexChanged(int index)
+void CameraGUI::on_cameraOffsetCombo_currentIndexChanged(int index)
 {
     m_settings.m_cameraOffset = index;
     applySetting("cameraOffset");
 }
 
-void CameraGUI::on_alpacaOffsetSlider_valueChanged(int value)
+void CameraGUI::on_cameraOffsetSlider_valueChanged(int value)
 {
-    settingsUI()->alpacaOffsetSpin->blockSignals(true);
-    settingsUI()->alpacaOffsetSpin->setValue(value);
-    settingsUI()->alpacaOffsetSpin->blockSignals(false);
+    settingsUI()->cameraOffsetSpin->blockSignals(true);
+    settingsUI()->cameraOffsetSpin->setValue(value);
+    settingsUI()->cameraOffsetSpin->blockSignals(false);
     m_settings.m_cameraOffset = value;
     applySetting("cameraOffset");
 }
 
-void CameraGUI::on_alpacaOffsetSpin_valueChanged(int value)
+void CameraGUI::on_cameraOffsetSpin_valueChanged(int value)
 {
-    settingsUI()->alpacaOffsetSlider->blockSignals(true);
-    settingsUI()->alpacaOffsetSlider->setValue(value);
-    settingsUI()->alpacaOffsetSlider->blockSignals(false);
+    settingsUI()->cameraOffsetSlider->blockSignals(true);
+    settingsUI()->cameraOffsetSlider->setValue(value);
+    settingsUI()->cameraOffsetSlider->blockSignals(false);
     m_settings.m_cameraOffset = value;
     applySetting("cameraOffset");
 }
@@ -3663,8 +3664,6 @@ void CameraGUI::updateEnabledControls()
     settingsUI()->focusDistLabel->setEnabled(manualFocus);
     settingsUI()->focusDistSpin->setEnabled(manualFocus);
 #endif
-
-    settingsUI()->cameraTab->setVisible(m_settings.isAlpacaCamera() || m_settings.isAsiCamera());
 
     if (m_settings.isAlpacaCamera())
     {

@@ -264,7 +264,6 @@ bool CameraGUI::handleMessage(const Message& message)
                 selectedCamera.m_host, selectedCamera.m_port);
             QStringList settingsKeys = cameraSelectionSettingsKeys(selectedCamera);
             updateCameraSettingsVisibility();
-            updateEnabledControls();
             applySettings(settingsKeys);
         }
         else if ((selectedCamera.m_protocol == QLatin1String("qt")) && !ui->startStop->isChecked())
@@ -272,7 +271,7 @@ bool CameraGUI::handleMessage(const Message& message)
             setSelectedCamera(selectedCamera.m_protocol, selectedCamera.m_id, selectedCamera.m_description,
                 selectedCamera.m_host, selectedCamera.m_port);
             probeQtCameraCapabilities();
-            updateEnabledControls();
+            updateCameraSettingsVisibility();
         }
 
         return true;
@@ -989,7 +988,6 @@ void CameraGUI::displaySettings()
     settingsUI()->zoomSpin->setValue(m_settings.m_zoomFactor);
     updateCameraSettingsVisibility();
     updateCameraStatusDisplay();
-    updateEnabledControls();
     applyVideoPath();
     applyImagePath();
 }
@@ -1853,7 +1851,7 @@ void CameraGUI::setupQtCapture()
         m_qtIsoSensitivitySupported = false;
         m_qtWhiteBalanceModeSupported = false;
         m_qtExposureCompensationSupported = false;
-        updateEnabledControls();
+        updateCameraSettingsVisibility();
         return;
     }
 
@@ -2436,6 +2434,79 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->focusDistSpin->setVisible(false);
 #endif
 
+    if (alpaca)
+    {
+        settingsUI()->zoomLabel->setEnabled(false);
+        settingsUI()->zoomSpin->setEnabled(false);
+        settingsUI()->exposureLabel->setEnabled(true);
+        settingsUI()->exposureSlider->setEnabled(true);
+        settingsUI()->exposureSpin->setEnabled(true);
+        settingsUI()->exposureUnitsCombo->setEnabled(true);
+        settingsUI()->isoLabel->setEnabled(false);
+        settingsUI()->isoSpin->setEnabled(false);
+        settingsUI()->exposureCompLabel->setEnabled(false);
+        settingsUI()->exposureCompSpin->setEnabled(false);
+        settingsUI()->whiteBalanceLabel->setEnabled(false);
+        settingsUI()->whiteBalanceCombo->setEnabled(false);
+        settingsUI()->focusDistLabel->setEnabled(false);
+        settingsUI()->focusDistSpin->setEnabled(false);
+    }
+    else if (asi)
+    {
+        settingsUI()->zoomLabel->setEnabled(false);
+        settingsUI()->zoomSpin->setEnabled(false);
+        settingsUI()->exposureLabel->setEnabled(true);
+        settingsUI()->exposureSlider->setEnabled(true);
+        settingsUI()->exposureSpin->setEnabled(true);
+        settingsUI()->exposureUnitsCombo->setEnabled(true);
+        settingsUI()->isoLabel->setEnabled(false);
+        settingsUI()->isoSpin->setEnabled(false);
+        settingsUI()->exposureCompLabel->setEnabled(false);
+        settingsUI()->exposureCompSpin->setEnabled(false);
+        settingsUI()->whiteBalanceLabel->setEnabled(false);
+        settingsUI()->whiteBalanceCombo->setEnabled(false);
+        settingsUI()->focusDistLabel->setEnabled(false);
+        settingsUI()->focusDistSpin->setEnabled(false);
+    }
+    else if (fileCamera)
+    {
+        settingsUI()->zoomLabel->setEnabled(false);
+        settingsUI()->zoomSpin->setEnabled(false);
+        settingsUI()->exposureLabel->setEnabled(false);
+        settingsUI()->exposureSlider->setEnabled(false);
+        settingsUI()->exposureSpin->setEnabled(false);
+        settingsUI()->exposureUnitsCombo->setEnabled(false);
+        settingsUI()->isoLabel->setEnabled(false);
+        settingsUI()->isoSpin->setEnabled(false);
+        settingsUI()->exposureCompLabel->setEnabled(false);
+        settingsUI()->exposureCompSpin->setEnabled(false);
+        settingsUI()->whiteBalanceLabel->setEnabled(false);
+        settingsUI()->whiteBalanceCombo->setEnabled(false);
+        settingsUI()->focusDistLabel->setEnabled(false);
+        settingsUI()->focusDistSpin->setEnabled(false);
+    }
+    else
+    {
+        settingsUI()->zoomLabel->setEnabled(m_qtZoomSupported);
+        settingsUI()->zoomSpin->setEnabled(m_qtZoomSupported);
+        settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
+        settingsUI()->exposureSlider->setEnabled(m_qtManualExposureSupported);
+        settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
+        settingsUI()->exposureUnitsCombo->setEnabled(m_qtManualExposureSupported);
+        settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
+        settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
+        settingsUI()->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
+        settingsUI()->whiteBalanceCombo->setEnabled(m_qtWhiteBalanceModeSupported);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        settingsUI()->exposureCompLabel->setEnabled(m_qtExposureCompensationSupported);
+        settingsUI()->exposureCompSpin->setEnabled(m_qtExposureCompensationSupported);
+        const bool manualFocus = (m_settings.m_focusMode == static_cast<int>(QCamera::FocusModeManual));
+        settingsUI()->focusDistLabel->setEnabled(manualFocus);
+        settingsUI()->focusDistSpin->setEnabled(manualFocus);
+#endif
+    }
+
+    updateVideoFileControls();
     updateCameraStatusDisplay();
 }
 
@@ -2863,8 +2934,6 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     if (switchedBetweenAsiAndAlpaca) {
         updateCameraSubframeControls();
     }
-    updateEnabledControls();
-    updateVideoFileControls();
     applySettings(settingsKeys);
 }
 
@@ -3657,91 +3726,6 @@ void CameraGUI::updateColorButton(QToolButton* btn, const QColor& color)
     btn->setStyleSheet(QString());
 }
 
-void CameraGUI::updateEnabledControls()
-{
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    const bool manualFocus = (m_settings.m_focusMode == static_cast<int>(QCamera::FocusModeManual));
-    settingsUI()->focusDistLabel->setEnabled(manualFocus);
-    settingsUI()->focusDistSpin->setEnabled(manualFocus);
-#endif
-
-    if (m_settings.isAlpacaCamera())
-    {
-        settingsUI()->exposureLabel->setEnabled(true);
-        settingsUI()->exposureSlider->setEnabled(true);
-        settingsUI()->exposureSpin->setEnabled(true);
-        settingsUI()->exposureUnitsCombo->setEnabled(true);
-    }
-    else if (m_settings.isAsiCamera())
-    {
-        settingsUI()->zoomLabel->setEnabled(false);
-        settingsUI()->zoomSpin->setEnabled(false);
-        settingsUI()->exposureLabel->setEnabled(true);
-        settingsUI()->exposureSlider->setEnabled(true);
-        settingsUI()->exposureSpin->setEnabled(true);
-        settingsUI()->exposureUnitsCombo->setEnabled(true);
-        settingsUI()->isoLabel->setEnabled(false);
-        settingsUI()->isoSpin->setEnabled(false);
-        settingsUI()->exposureCompLabel->setEnabled(false);
-        settingsUI()->exposureCompSpin->setEnabled(false);
-        settingsUI()->whiteBalanceLabel->setEnabled(false);
-        settingsUI()->whiteBalanceCombo->setEnabled(false);
-        settingsUI()->focusDistLabel->setEnabled(false);
-        settingsUI()->focusDistSpin->setEnabled(false);
-    }
-    else if (m_settings.isFileCamera())
-    {
-        settingsUI()->zoomLabel->setEnabled(false);
-        settingsUI()->zoomSpin->setEnabled(false);
-        settingsUI()->exposureLabel->setEnabled(false);
-        settingsUI()->exposureSlider->setEnabled(false);
-        settingsUI()->exposureSpin->setEnabled(false);
-        settingsUI()->exposureUnitsCombo->setEnabled(false);
-        settingsUI()->isoLabel->setEnabled(false);
-        settingsUI()->isoSpin->setEnabled(false);
-        settingsUI()->exposureCompLabel->setEnabled(false);
-        settingsUI()->exposureCompSpin->setEnabled(false);
-        settingsUI()->whiteBalanceLabel->setEnabled(false);
-        settingsUI()->whiteBalanceCombo->setEnabled(false);
-        settingsUI()->focusDistLabel->setEnabled(false);
-        settingsUI()->focusDistSpin->setEnabled(false);
-    }
-    else
-    {
-        // Zoom and exposure control enabled states are set inside setupQtCapture;
-        // re-apply them here so other updateEnabledControls callers don't accidentally re-enable them.
-        if (!m_qtZoomSupported)
-        {
-            settingsUI()->zoomLabel->setEnabled(false);
-            settingsUI()->zoomSpin->setEnabled(false);
-        }
-        if (!m_qtManualExposureSupported)
-        {
-            settingsUI()->exposureLabel->setEnabled(false);
-            settingsUI()->exposureSlider->setEnabled(false);
-            settingsUI()->exposureSpin->setEnabled(false);
-            settingsUI()->exposureUnitsCombo->setEnabled(false);
-        }
-        if (!m_qtIsoSensitivitySupported)
-        {
-            settingsUI()->isoLabel->setEnabled(false);
-            settingsUI()->isoSpin->setEnabled(false);
-        }
-        if (!m_qtExposureCompensationSupported)
-        {
-            settingsUI()->exposureCompLabel->setEnabled(false);
-            settingsUI()->exposureCompSpin->setEnabled(false);
-        }
-        if (!m_qtWhiteBalanceModeSupported)
-        {
-            settingsUI()->whiteBalanceLabel->setEnabled(false);
-            settingsUI()->whiteBalanceCombo->setEnabled(false);
-        }
-    }
-
-    updateVideoFileControls();
-}
-
 void CameraGUI::on_overlayFontCombo_currentFontChanged(const QFont& font)
 {
     m_settings.m_overlayFontFamily = font.family();
@@ -4170,7 +4154,7 @@ void CameraGUI::on_exposureCompSpin_valueChanged(double value)
 void CameraGUI::on_focusModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_focusMode = settingsUI()->focusModeCombo->itemData(index).toInt();
-    updateEnabledControls();
+    updateCameraSettingsVisibility();
     applySetting("focusMode");
 }
 

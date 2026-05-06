@@ -215,7 +215,6 @@ private:
     void updateCameraStatusDisplay();
     void updateCameraSubframeControls();
     void updateImageWidget();
-    void updateEnabledControls();
     void updateCaptureModeControls();
     void updateExposureControls();
     void updateVideoFileControls();

@@ -106,6 +106,7 @@ bool CameraGUI::deserialize(const QByteArray& data)
         m_feature->setWorkspaceIndex(m_settings.m_workspaceIndex);
         displaySettings();
         applyAllSettings();
+        updateHardware();
         m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
         return true;
     }

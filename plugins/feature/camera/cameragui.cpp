@@ -2405,6 +2405,7 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->alpacaFilterWheelPositionLabel->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaFilterWheelPositionCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
 
+    settingsUI()->tabWidget->setTabEnabled(0, !fileCamera);
     settingsUI()->tabWidget->setTabEnabled(1, sharedHardwareCamera);
     ui->audioMute->setVisible(qtCamera);
 

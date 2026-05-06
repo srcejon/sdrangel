@@ -610,9 +610,6 @@ void CameraGUI::setSelectedCamera(const QString& protocol, const QString& camera
     if (protocol == QLatin1String("alpaca")) {
         m_settings.m_alpacaHost = alpacaHost;
         m_settings.m_alpacaPort = alpacaPort;
-    } else {
-        m_settings.m_alpacaHost.clear();
-        m_settings.m_alpacaPort = 0;
     }
 }
 
@@ -638,8 +635,13 @@ CameraInfo CameraGUI::selectedCameraFromSettings() const
     cameraInfo.m_protocol = m_settings.m_cameraProtocol;
     cameraInfo.m_id = m_settings.m_cameraId;
     cameraInfo.m_description = m_settings.m_cameraDescription;
-    cameraInfo.m_host = m_settings.m_alpacaHost;
-    cameraInfo.m_port = m_settings.m_alpacaPort;
+
+    if (m_settings.isAlpacaCamera())
+    {
+        cameraInfo.m_host = m_settings.m_alpacaHost;
+        cameraInfo.m_port = m_settings.m_alpacaPort;
+    }
+
     return cameraInfo;
 }
 

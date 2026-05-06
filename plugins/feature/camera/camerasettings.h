@@ -25,7 +25,6 @@
 #include <QList>
 #include <QString>
 #include <QStringList>
-#include <sstream>
 
 class Serializable;
 

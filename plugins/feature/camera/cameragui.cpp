@@ -552,8 +552,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     settingsUI()->fpsLabel->addItem(tr("Frame Rate"), CameraSettings::CaptureModeFrameRate);
     settingsUI()->fpsLabel->addItem(tr("Interval"), CameraSettings::CaptureModeInterval);
-    settingsUI()->intervalUnitsCombo->addItem(tr("Seconds"), CameraSettings::CaptureIntervalSeconds);
-    settingsUI()->intervalUnitsCombo->addItem(tr("Minutes"), CameraSettings::CaptureIntervalMinutes);
+    settingsUI()->intervalUnitsCombo->addItem(tr("s"), CameraSettings::CaptureIntervalSeconds);
+    settingsUI()->intervalUnitsCombo->addItem(tr("min"), CameraSettings::CaptureIntervalMinutes);
     settingsUI()->exposureUnitsCombo->addItem(tr("us"), 0.001);
     settingsUI()->exposureUnitsCombo->addItem(tr("ms"), 1.0);
     settingsUI()->exposureUnitsCombo->addItem(tr("s"), 1000.0);
@@ -1453,6 +1453,7 @@ void CameraGUI::updateFrameRateControlForResolution(const QString& resolutionTex
 void CameraGUI::updateCaptureModeControls()
 {
     const bool intervalMode = m_settings.isAlpacaCamera() || m_settings.isIntervalCaptureMode();
+    settingsUI()->intervalUnitsCombo->setVisible(intervalMode);
     settingsUI()->captureValueStack->setCurrentWidget(intervalMode ? settingsUI()->intervalPage : settingsUI()->frameRatePage);
 }
 
@@ -2405,7 +2406,7 @@ void CameraGUI::updateAlpacaVisibility()
     settingsUI()->alpacaFilterWheelCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaFilterWheelPositionLabel->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
     settingsUI()->alpacaFilterWheelPositionCombo->setEnabled(m_settings.m_alpacaFilterWheelEnabled && filterWheelAvailable);
-    settingsUI()->cameraStatusGroup->setVisible(sharedHardwareCamera);
+    settingsUI()->cameraTab->setVisible(sharedHardwareCamera);
     ui->audioMute->setVisible(qtCamera);
 
     // Qt-camera-only controls
@@ -2557,8 +2558,8 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     updateExposureControls();
 
     // Status labels
-    settingsUI()->alpacaNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
-    settingsUI()->alpacaDescriptionLabel->setText(info.getDescription().isEmpty() ? "-" : info.getDescription());
+    settingsUI()->cameraNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
+    settingsUI()->cameraDescriptionLabel->setText(info.getDescription().isEmpty() ? "-" : info.getDescription());
     settingsUI()->sensorNameLabel->setText(info.getSensorName().isEmpty() ? "-" : info.getSensorName());
 
     static const QStringList sensorTypeNames = {
@@ -2662,8 +2663,8 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
     }
     settingsUI()->asiHighSpeedModeCheck->setChecked(m_settings.m_asiHighSpeedMode > 0);
 
-    settingsUI()->alpacaNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
-    settingsUI()->alpacaDescriptionLabel->setText(QStringLiteral("ASI Camera"));
+    settingsUI()->cameraNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
+    settingsUI()->cameraDescriptionLabel->setText(QStringLiteral("ASI Camera"));
     settingsUI()->sensorNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
     settingsUI()->sensorTypeLabel->setText(info.isColor() ? QStringLiteral("Colour") : QStringLiteral("Monochrome"));
 
@@ -3663,7 +3664,7 @@ void CameraGUI::updateEnabledControls()
     settingsUI()->focusDistSpin->setEnabled(manualFocus);
 #endif
 
-    settingsUI()->cameraStatusGroup->setVisible(m_settings.isAlpacaCamera() || m_settings.isAsiCamera());
+    settingsUI()->cameraTab->setVisible(m_settings.isAlpacaCamera() || m_settings.isAsiCamera());
 
     if (m_settings.isAlpacaCamera())
     {

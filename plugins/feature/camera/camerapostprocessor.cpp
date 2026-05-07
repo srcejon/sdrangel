@@ -37,7 +37,8 @@ MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
 
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
-    m_captureActive(false)
+    m_captureActive(false),
+    m_processingFrame(false)
 {}
 
 CameraPostProcessor::~CameraPostProcessor()
@@ -102,7 +103,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     else if (MsgProcessFrame::match(cmd))
     {
         MsgProcessFrame& frameMsg = (MsgProcessFrame&) cmd;
-        processNewFrame(frameMsg.getFrame());
+        submitFrame(frameMsg.getFrame());
         return true;
     }
     else if (MsgSpectrumFrame::match(cmd))
@@ -129,6 +130,12 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         else if (m_videoWriter.isOpened())
         {
             m_videoWriter.release();
+        }
+
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrame.reset();
+        if (!m_captureActive) {
+            m_processingFrame = false;
         }
 
         return true;
@@ -197,6 +204,61 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
         const QImage processed = applyPostProcessing(m_lastFrame);
         reportFrameToGUI(processed);
+    }
+}
+
+void CameraPostProcessor::submitFrame(const CameraPipelineFramePtr& frame)
+{
+    if (!frame) {
+        return;
+    }
+
+    bool schedule = false;
+    {
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrame = frame;
+        if (!m_processingFrame)
+        {
+            m_processingFrame = true;
+            schedule = true;
+        }
+    }
+
+    if (schedule) {
+        QMetaObject::invokeMethod(this, &CameraPostProcessor::processNextFrame, Qt::QueuedConnection);
+    }
+}
+
+void CameraPostProcessor::processNextFrame()
+{
+    CameraPipelineFramePtr frame;
+
+    {
+        QMutexLocker locker(&m_frameMutex);
+        frame = m_pendingFrame;
+        m_pendingFrame.reset();
+
+        if (!frame)
+        {
+            m_processingFrame = false;
+            return;
+        }
+    }
+
+    processNewFrame(frame);
+
+    bool schedule = false;
+    {
+        QMutexLocker locker(&m_frameMutex);
+        if (m_pendingFrame) {
+            schedule = true;
+        } else {
+            m_processingFrame = false;
+        }
+    }
+
+    if (schedule) {
+        QMetaObject::invokeMethod(this, &CameraPostProcessor::processNextFrame, Qt::QueuedConnection);
     }
 }
 

@@ -32,8 +32,9 @@ MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgCaptureActive, Message)
 
 CameraFrameStacker::CameraFrameStacker() :
-    m_nextStageInputMessageQueue(nullptr),
-    m_captureActive(false)
+    m_nextStage(nullptr),
+    m_captureActive(false),
+    m_processingFrame(false)
 {
 }
 
@@ -66,7 +67,7 @@ bool CameraFrameStacker::handleMessage(const Message& cmd)
     else if (MsgProcessFrame::match(cmd))
     {
         const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
-        processNewFrame(frameMsg.getFrame());
+        submitFrame(frameMsg.getFrame());
         return true;
     }
     else if (MsgCaptureActive::match(cmd))
@@ -75,6 +76,11 @@ bool CameraFrameStacker::handleMessage(const Message& cmd)
         m_captureActive = activeMsg.isActive();
         if (m_captureActive) {
             resetFrameHistoryState();
+        }
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrame.reset();
+        if (!m_captureActive) {
+            m_processingFrame = false;
         }
         return true;
     }
@@ -129,6 +135,61 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
     }
 }
 
+void CameraFrameStacker::submitFrame(const CameraPipelineFramePtr& frame)
+{
+    if (!frame) {
+        return;
+    }
+
+    bool schedule = false;
+    {
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrame = frame;
+        if (!m_processingFrame)
+        {
+            m_processingFrame = true;
+            schedule = true;
+        }
+    }
+
+    if (schedule) {
+        QMetaObject::invokeMethod(this, &CameraFrameStacker::processNextFrame, Qt::QueuedConnection);
+    }
+}
+
+void CameraFrameStacker::processNextFrame()
+{
+    CameraPipelineFramePtr frame;
+
+    {
+        QMutexLocker locker(&m_frameMutex);
+        frame = m_pendingFrame;
+        m_pendingFrame.reset();
+
+        if (!frame)
+        {
+            m_processingFrame = false;
+            return;
+        }
+    }
+
+    processNewFrame(frame);
+
+    bool schedule = false;
+    {
+        QMutexLocker locker(&m_frameMutex);
+        if (m_pendingFrame) {
+            schedule = true;
+        } else {
+            m_processingFrame = false;
+        }
+    }
+
+    if (schedule) {
+        QMetaObject::invokeMethod(this, &CameraFrameStacker::processNextFrame, Qt::QueuedConnection);
+    }
+}
+
 void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
 {
     if (!frame || frame->m_image.isNull()) {
@@ -138,8 +199,8 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     frame->m_image = applyFrameStacking(frame->m_image);
     frame->m_unprocessedImage = frame->m_image;
 
-    if (m_nextStageInputMessageQueue) {
-        m_nextStageInputMessageQueue->push(CameraImageProcessor::MsgProcessFrame::create(frame));
+    if (m_nextStage) {
+        m_nextStage->submitFrame(frame);
     }
 }
 

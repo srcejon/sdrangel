@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERADETECTOR_H_
 
 #include <QObject>
+#include <QMutex>
 #include <deque>
 #include <QHash>
 #include <QSet>
@@ -36,6 +37,8 @@
 #include "util/messagequeue.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
+
+class CameraPostProcessor;
 
 class CameraDetector : public QObject
 {
@@ -112,12 +115,13 @@ public:
 
     void startWork();
     void stopWork();
+    void submitFrame(const CameraPipelineFramePtr& frame);
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
-    void setNextStageInputMessageQueue(MessageQueue *messageQueue) { m_nextStageInputMessageQueue = messageQueue; }
+    void setNextStage(CameraPostProcessor *nextStage) { m_nextStage = nextStage; }
 
 private:
     MessageQueue m_inputMessageQueue;
-    MessageQueue *m_nextStageInputMessageQueue;
+    CameraPostProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
     CameraPipelineFrame m_lastInputFrame;
@@ -135,6 +139,9 @@ private:
 #ifdef QT_TEXTTOSPEECH_FOUND
     QTextToSpeech *m_speech;
 #endif
+    QMutex m_frameMutex;
+    CameraPipelineFramePtr m_pendingFrame;
+    bool m_processingFrame;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
@@ -156,6 +163,7 @@ private:
 
 private slots:
     void handleInputMessages();
+    void processNextFrame();
 };
 
 #endif // INCLUDE_FEATURE_CAMERADETECTOR_H_

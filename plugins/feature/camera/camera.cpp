@@ -64,7 +64,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
     QObject::connect(m_workerThread, &QThread::finished, m_workerThread, &QThread::deleteLater);
     m_worker->setMessageQueueToGUI(getMessageQueueToGUI());
-    m_worker->setFrameAlignerInputMessageQueue(getFrameAlignerInputMessageQueue());
+    m_worker->setFrameAligner(getFrameAligner());
     m_worker->setPostProcessorInputMessageQueue(getPostProcessorInputMessageQueue());
     m_workerThread->start();
     m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(m_settings, QList<QString>(), true));
@@ -73,7 +73,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_frameAlignerThread, &QThread::started, m_frameAligner, &CameraFrameAligner::startWork);
     QObject::connect(m_frameAlignerThread, &QThread::finished, m_frameAligner, &QObject::deleteLater);
     QObject::connect(m_frameAlignerThread, &QThread::finished, m_frameAlignerThread, &QThread::deleteLater);
-    m_frameAligner->setNextStageInputMessageQueue(getFrameStackerInputMessageQueue());
+    m_frameAligner->setNextStage(m_frameStacker);
     m_frameAlignerThread->start();
     m_frameAligner->getInputMessageQueue()->push(CameraFrameAligner::MsgConfigureCameraFrameAligner::create(m_settings, QList<QString>(), true));
 
@@ -81,7 +81,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_frameStackerThread, &QThread::started, m_frameStacker, &CameraFrameStacker::startWork);
     QObject::connect(m_frameStackerThread, &QThread::finished, m_frameStacker, &QObject::deleteLater);
     QObject::connect(m_frameStackerThread, &QThread::finished, m_frameStackerThread, &QThread::deleteLater);
-    m_frameStacker->setNextStageInputMessageQueue(getImageProcessorInputMessageQueue());
+    m_frameStacker->setNextStage(m_imageProcessor);
     m_frameStackerThread->start();
     m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgConfigureCameraFrameStacker::create(m_settings, QList<QString>(), true));
 
@@ -89,7 +89,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_imageProcessorThread, &QThread::started, m_imageProcessor, &CameraImageProcessor::startWork);
     QObject::connect(m_imageProcessorThread, &QThread::finished, m_imageProcessor, &QObject::deleteLater);
     QObject::connect(m_imageProcessorThread, &QThread::finished, m_imageProcessorThread, &QThread::deleteLater);
-    m_imageProcessor->setNextStageInputMessageQueue(getDetectorInputMessageQueue());
+    m_imageProcessor->setNextStage(m_detector);
     m_imageProcessorThread->start();
     m_imageProcessor->getInputMessageQueue()->push(CameraImageProcessor::MsgConfigureCameraImageProcessor::create(m_settings, QList<QString>(), true));
 
@@ -97,7 +97,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_detectorThread, &QThread::started, m_detector, &CameraDetector::startWork);
     QObject::connect(m_detectorThread, &QThread::finished, m_detector, &QObject::deleteLater);
     QObject::connect(m_detectorThread, &QThread::finished, m_detectorThread, &QThread::deleteLater);
-    m_detector->setNextStageInputMessageQueue(getPostProcessorInputMessageQueue());
+    m_detector->setNextStage(m_postProcessor);
     m_detectorThread->start();
     m_detector->getInputMessageQueue()->push(CameraDetector::MsgConfigureCameraDetector::create(m_settings, QList<QString>(), true));
 

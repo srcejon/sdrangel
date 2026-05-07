@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERAFRAMESTACKER_H_
 
 #include <QObject>
+#include <QMutex>
 #include <deque>
 #include <vector>
 
@@ -29,6 +30,8 @@
 #include "util/messagequeue.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
+
+class CameraImageProcessor;
 
 class CameraFrameStacker : public QObject
 {
@@ -105,16 +108,20 @@ public:
 
     void startWork();
     void stopWork();
+    void submitFrame(const CameraPipelineFramePtr& frame);
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
-    void setNextStageInputMessageQueue(MessageQueue *messageQueue) { m_nextStageInputMessageQueue = messageQueue; }
+    void setNextStage(CameraImageProcessor *nextStage) { m_nextStage = nextStage; }
 
 private:
     MessageQueue m_inputMessageQueue;
-    MessageQueue *m_nextStageInputMessageQueue;
+    CameraImageProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
     std::deque<cv::Mat> m_stackFrameHistory;
     cv::Mat m_stackAccumulator;
+    QMutex m_frameMutex;
+    CameraPipelineFramePtr m_pendingFrame;
+    bool m_processingFrame;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
@@ -124,6 +131,7 @@ private:
 
 private slots:
     void handleInputMessages();
+    void processNextFrame();
 };
 
 #endif // INCLUDE_FEATURE_CAMERAFRAMESTACKER_H_

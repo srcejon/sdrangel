@@ -485,13 +485,13 @@ MESSAGE_CLASS_DECLARATION
     void stopWork();
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setMessageQueueToGUI(MessageQueue *messageQueue);
-    void setFrameAlignerInputMessageQueue(MessageQueue *messageQueue) { m_frameAlignerInputMessageQueue = messageQueue; }
+    void setFrameAligner(CameraFrameAligner *frameAligner) { m_frameAligner = frameAligner; }
     void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
 
 private:
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
-    MessageQueue *m_frameAlignerInputMessageQueue;
+    CameraFrameAligner *m_frameAligner;
     MessageQueue *m_postProcessorInputMessageQueue;
     QRecursiveMutex m_mutex;
     CameraSettings m_settings;

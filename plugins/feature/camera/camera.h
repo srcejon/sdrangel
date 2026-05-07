@@ -151,6 +151,7 @@ public:
     static const char* const m_featureId;
 
     MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
+    CameraFrameAligner* getFrameAligner() { return m_frameAligner; }
     MessageQueue* getFrameAlignerInputMessageQueue() { return m_frameAligner ? m_frameAligner->getInputMessageQueue() : nullptr; }
     MessageQueue* getFrameStackerInputMessageQueue() { return m_frameStacker ? m_frameStacker->getInputMessageQueue() : nullptr; }
     MessageQueue* getImageProcessorInputMessageQueue() { return m_imageProcessor ? m_imageProcessor->getInputMessageQueue() : nullptr; }

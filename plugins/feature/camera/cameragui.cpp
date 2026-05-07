@@ -2375,12 +2375,12 @@ void CameraGUI::onQtImageCaptured(int id, const QImage& image)
         return;
     }
 
-    MessageQueue *frameAlignerMQ = m_camera->getFrameAlignerInputMessageQueue();
-    if (frameAlignerMQ) {
+    CameraFrameAligner *frameAligner = m_camera->getFrameAligner();
+    if (frameAligner) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
         frame->m_captureDateTime = QDateTime::currentDateTime();
-        frameAlignerMQ->push(CameraFrameAligner::MsgProcessFrame::create(frame));
+        frameAligner->submitFrame(frame);
     }
 }
 

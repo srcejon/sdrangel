@@ -31,8 +31,9 @@ MESSAGE_CLASS_DEFINITION(CameraFrameAligner::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraFrameAligner::MsgCaptureActive, Message)
 
 CameraFrameAligner::CameraFrameAligner() :
-    m_nextStageInputMessageQueue(nullptr),
-    m_captureActive(false)
+    m_nextStage(nullptr),
+    m_captureActive(false),
+    m_processingFrame(false)
 {
 }
 
@@ -64,7 +65,7 @@ bool CameraFrameAligner::handleMessage(const Message& cmd)
     else if (MsgProcessFrame::match(cmd))
     {
         const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
-        processNewFrame(frameMsg.getFrame());
+        submitFrame(frameMsg.getFrame());
         return true;
     }
     else if (MsgCaptureActive::match(cmd))
@@ -73,6 +74,11 @@ bool CameraFrameAligner::handleMessage(const Message& cmd)
         m_captureActive = activeMsg.isActive();
         if (m_captureActive) {
             resetAlignmentState();
+        }
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrame.reset();
+        if (!m_captureActive) {
+            m_processingFrame = false;
         }
         return true;
     }
@@ -126,6 +132,61 @@ void CameraFrameAligner::applySettings(const CameraSettings& settings, const QLi
     }
 }
 
+void CameraFrameAligner::submitFrame(const CameraPipelineFramePtr& frame)
+{
+    if (!frame) {
+        return;
+    }
+
+    bool schedule = false;
+    {
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrame = frame;
+        if (!m_processingFrame)
+        {
+            m_processingFrame = true;
+            schedule = true;
+        }
+    }
+
+    if (schedule) {
+        QMetaObject::invokeMethod(this, &CameraFrameAligner::processNextFrame, Qt::QueuedConnection);
+    }
+}
+
+void CameraFrameAligner::processNextFrame()
+{
+    CameraPipelineFramePtr frame;
+
+    {
+        QMutexLocker locker(&m_frameMutex);
+        frame = m_pendingFrame;
+        m_pendingFrame.reset();
+
+        if (!frame)
+        {
+            m_processingFrame = false;
+            return;
+        }
+    }
+
+    processNewFrame(frame);
+
+    bool schedule = false;
+    {
+        QMutexLocker locker(&m_frameMutex);
+        if (m_pendingFrame) {
+            schedule = true;
+        } else {
+            m_processingFrame = false;
+        }
+    }
+
+    if (schedule) {
+        QMetaObject::invokeMethod(this, &CameraFrameAligner::processNextFrame, Qt::QueuedConnection);
+    }
+}
+
 void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
 {
     PROFILER_START();
@@ -140,8 +201,8 @@ void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->m_image = applyAlignment(frame->m_image);
     }
 
-    if (m_nextStageInputMessageQueue) {
-        m_nextStageInputMessageQueue->push(CameraFrameStacker::MsgProcessFrame::create(frame));
+    if (m_nextStage) {
+        m_nextStage->submitFrame(frame);
     }
     PROFILER_STOP(__FUNCTION__);
 }

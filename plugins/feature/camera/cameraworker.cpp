@@ -446,7 +446,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
-    m_frameAlignerInputMessageQueue(nullptr),
+    m_frameAligner(nullptr),
     m_postProcessorInputMessageQueue(nullptr),
     m_availableDeviceHandler({}, QStringList{"spectrumview"}),
     m_capturing(false),
@@ -2006,11 +2006,11 @@ void CameraWorker::alpacaFetchImageArray()
             m_alpacaCaptureTimer.invalidate();
         }
 
-        if (m_frameAlignerInputMessageQueue) {
+        if (m_frameAligner) {
             CameraPipelineFramePtr frame(new CameraPipelineFrame);
             frame->m_image = image;
             frame->m_captureDateTime = QDateTime::currentDateTime();
-            m_frameAlignerInputMessageQueue->push(CameraFrameAligner::MsgProcessFrame::create(frame));
+            m_frameAligner->submitFrame(frame);
         }
         reply->deleteLater();
     });
@@ -3320,11 +3320,11 @@ void CameraWorker::asiCaptureExposureFrame()
 
     setLastAsiError(ASI_SUCCESS, QString());
     m_lastAsiCaptureTimeMs = captureTimer.elapsed();
-    if (m_frameAlignerInputMessageQueue) {
+    if (m_frameAligner) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = asiFrameToImage();
         frame->m_captureDateTime = QDateTime::currentDateTime();
-        m_frameAlignerInputMessageQueue->push(CameraFrameAligner::MsgProcessFrame::create(frame));
+        m_frameAligner->submitFrame(frame);
     }
 }
 
@@ -3352,11 +3352,11 @@ void CameraWorker::asiCaptureVideoFrame()
     {
         setLastAsiError(ASI_SUCCESS, QString());
         m_lastAsiCaptureTimeMs = captureTimer.elapsed();
-        if (m_frameAlignerInputMessageQueue) {
+        if (m_frameAligner) {
             CameraPipelineFramePtr frame(new CameraPipelineFrame);
             frame->m_image = asiFrameToImage();
             frame->m_captureDateTime = QDateTime::currentDateTime();
-            m_frameAlignerInputMessageQueue->push(CameraFrameAligner::MsgProcessFrame::create(frame));
+            m_frameAligner->submitFrame(frame);
         }
     }
     else

@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
 
 #include <QObject>
+#include <QMutex>
 #include <QImage>
 #include <QDateTime>
 #include <QTextDocument>
@@ -188,6 +189,7 @@ public:
 
     void startWork();
     void stopWork();
+    void submitFrame(const CameraPipelineFramePtr& frame);
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
 
@@ -200,6 +202,9 @@ private:
     QDateTime m_captureDateTime;
     cv::VideoWriter m_videoWriter;
     QImage m_spectrumViewImage;
+    QMutex m_frameMutex;
+    CameraPipelineFramePtr m_pendingFrame;
+    bool m_processingFrame;
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
@@ -216,6 +221,7 @@ private:
     void reportFrameToGUI(const QImage& image);
 private slots:
     void handleInputMessages();
+    void processNextFrame();
 
 };
 

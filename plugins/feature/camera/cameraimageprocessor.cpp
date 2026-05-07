@@ -29,10 +29,11 @@ MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgCaptureActive, Message)
 
 CameraImageProcessor::CameraImageProcessor() :
-    m_nextStageInputMessageQueue(nullptr),
+    m_nextStage(nullptr),
     m_captureActive(false),
     m_autoWhiteBalanceGains(1.0, 1.0, 1.0),
-    m_autoWhiteBalanceInitialized(false)
+    m_autoWhiteBalanceInitialized(false),
+    m_processingFrame(false)
 {
 }
 
@@ -60,7 +61,7 @@ bool CameraImageProcessor::handleMessage(const Message& cmd)
     else if (MsgProcessFrame::match(cmd))
     {
         const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
-        processNewFrame(frameMsg.getFrame());
+        submitFrame(frameMsg.getFrame());
         return true;
     }
     else if (MsgCaptureActive::match(cmd))
@@ -72,6 +73,11 @@ bool CameraImageProcessor::handleMessage(const Message& cmd)
             m_lastInputFrame = CameraPipelineFrame();
             m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
             m_autoWhiteBalanceInitialized = false;
+        }
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrame.reset();
+        if (!m_captureActive) {
+            m_processingFrame = false;
         }
         return true;
     }
@@ -166,7 +172,62 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
 
     if (imageProcessingChanged && !m_lastInputFrame.m_image.isNull()) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
-        processNewFrame(frame);
+        submitFrame(frame);
+    }
+}
+
+void CameraImageProcessor::submitFrame(const CameraPipelineFramePtr& frame)
+{
+    if (!frame) {
+        return;
+    }
+
+    bool schedule = false;
+    {
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrame = frame;
+        if (!m_processingFrame)
+        {
+            m_processingFrame = true;
+            schedule = true;
+        }
+    }
+
+    if (schedule) {
+        QMetaObject::invokeMethod(this, &CameraImageProcessor::processNextFrame, Qt::QueuedConnection);
+    }
+}
+
+void CameraImageProcessor::processNextFrame()
+{
+    CameraPipelineFramePtr frame;
+
+    {
+        QMutexLocker locker(&m_frameMutex);
+        frame = m_pendingFrame;
+        m_pendingFrame.reset();
+
+        if (!frame)
+        {
+            m_processingFrame = false;
+            return;
+        }
+    }
+
+    processNewFrame(frame);
+
+    bool schedule = false;
+    {
+        QMutexLocker locker(&m_frameMutex);
+        if (m_pendingFrame) {
+            schedule = true;
+        } else {
+            m_processingFrame = false;
+        }
+    }
+
+    if (schedule) {
+        QMetaObject::invokeMethod(this, &CameraImageProcessor::processNextFrame, Qt::QueuedConnection);
     }
 }
 
@@ -183,8 +244,8 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
     frame->m_image = applyImageProcessing(frame->m_image);
 
-    if (m_nextStageInputMessageQueue) {
-        m_nextStageInputMessageQueue->push(CameraDetector::MsgProcessFrame::create(frame));
+    if (m_nextStage) {
+        m_nextStage->submitFrame(frame);
     }
 }
 

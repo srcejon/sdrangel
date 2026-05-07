@@ -42,6 +42,11 @@ struct CameraSettings
         CaptureIntervalMinutes = 1
     };
 
+    enum StackMethod
+    {
+        StackMethodAverage = 0
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -108,6 +113,9 @@ struct CameraSettings
     QString m_videoFileCameraPath;
     QString m_videoFileName;
     bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported
+    bool m_stackEnabled;
+    int m_stackFrameCount;
+    StackMethod m_stackMethod;
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

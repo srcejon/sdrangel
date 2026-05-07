@@ -880,6 +880,9 @@ void CameraGUI::displaySettings()
     settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
     settingsUI()->videoHwAccelerationCheck->setChecked(m_settings.m_videoHwAcceleration);
     settingsUI()->videoPostProcessCombo->setCurrentIndex(static_cast<int>(m_settings.m_videoPostProcess));
+    settingsUI()->stackEnabledCheck->setChecked(m_settings.m_stackEnabled);
+    settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
+    settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
     settingsUI()->postProcessWhiteBalanceModeCombo->setCurrentIndex(m_settings.m_postProcessWhiteBalanceMode);
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(m_settings.m_postProcessWhiteBalanceRedGain);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
@@ -1193,6 +1196,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
     QObject::connect(settingsUI()->videoPostProcessCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_videoPostProcessCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->stackEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
+    QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
+    QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -3299,6 +3305,24 @@ void CameraGUI::on_videoPostProcessCombo_currentIndexChanged(int index)
 {
     m_settings.m_videoPostProcess = static_cast<bool>(index);
     applySetting("videoPostProcess");
+}
+
+void CameraGUI::on_stackEnabledCheck_toggled(bool checked)
+{
+    m_settings.m_stackEnabled = checked;
+    applySetting("stackEnabled");
+}
+
+void CameraGUI::on_stackFrameCountSpin_valueChanged(int value)
+{
+    m_settings.m_stackFrameCount = value;
+    applySetting("stackFrameCount");
+}
+
+void CameraGUI::on_stackMethodCombo_currentIndexChanged(int index)
+{
+    m_settings.m_stackMethod = static_cast<CameraSettings::StackMethod>(index);
+    applySetting("stackMethod");
 }
 
 void CameraGUI::updatePostProcessWhiteBalanceControls()

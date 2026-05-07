@@ -172,6 +172,9 @@ void CameraSettings::resetToDefaults()
     m_videoFileCameraPath.clear();
     m_videoFileName = "camera.mp4";
     m_videoHwAcceleration = true;
+    m_stackEnabled = false;
+    m_stackFrameCount = 4;
+    m_stackMethod = StackMethodAverage;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -271,6 +274,9 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(16, m_saveVideo);
     s.writeString(17, m_videoFileName);
     s.writeBool(18, m_videoHwAcceleration);
+    s.writeBool(125, m_stackEnabled);
+    s.writeS32(126, m_stackFrameCount);
+    s.writeS32(127, m_stackMethod);
 
     if (m_rollupState) {
         s.writeBlob(19, m_rollupState->serialize());
@@ -450,6 +456,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(16, &m_saveVideo, false);
         d.readString(17, &m_videoFileName, "camera.mp4");
         d.readBool(18, &m_videoHwAcceleration, true);
+        d.readBool(125, &m_stackEnabled, false);
+        d.readS32(126, &m_stackFrameCount, 4);
+        d.readS32(127, (qint32 *) &m_stackMethod, (qint32) StackMethodAverage);
         d.readString(115, &m_videoFileCameraPath, "");
 
         if (m_rollupState)
@@ -621,6 +630,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_asiCoolerOn = qBound(-1, m_asiCoolerOn, 1);
         m_asiUsbBandwidth = std::max(-1, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(-1, m_asiHighSpeedMode, 1);
+        m_stackFrameCount = qBound(1, m_stackFrameCount, 256);
+        m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodAverage);
 
         return true;
     }
@@ -790,6 +801,15 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoHwAcceleration")) {
         m_videoHwAcceleration = settings.m_videoHwAcceleration;
+    }
+    if (settingsKeys.contains("stackEnabled")) {
+        m_stackEnabled = settings.m_stackEnabled;
+    }
+    if (settingsKeys.contains("stackFrameCount")) {
+        m_stackFrameCount = qBound(1, settings.m_stackFrameCount, 256);
+    }
+    if (settingsKeys.contains("stackMethod")) {
+        m_stackMethod = qBound(StackMethodAverage, settings.m_stackMethod, StackMethodAverage);
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -1141,6 +1161,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoHwAcceleration") || force) {
         ostr << " m_videoHwAcceleration: " << m_videoHwAcceleration;
+    }
+    if (settingsKeys.contains("stackEnabled") || force) {
+        ostr << " m_stackEnabled: " << m_stackEnabled;
+    }
+    if (settingsKeys.contains("stackFrameCount") || force) {
+        ostr << " m_stackFrameCount: " << m_stackFrameCount;
+    }
+    if (settingsKeys.contains("stackMethod") || force) {
+        ostr << " m_stackMethod: " << m_stackMethod;
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

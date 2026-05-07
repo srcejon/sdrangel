@@ -187,6 +187,8 @@ private:
     bool m_captureActive;
     QImage m_lastRawFrame;
     QImage m_previousRawFrame;
+    std::deque<cv::Mat> m_stackFrameHistory;
+    cv::Mat m_stackAccumulator;
     std::deque<cv::Mat> m_diffMaskHistory;
     QDateTime m_captureDateTime;
     cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
@@ -209,6 +211,8 @@ private:
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const QImage& image);
+    void resetFrameHistoryState();
+    [[nodiscard]] QImage applyFrameStacking(const QImage& input);
     [[nodiscard]] QImage applyPostProcessing(const QImage& input);
     void applyWhiteBalance(cv::Mat& bgrMat);
     void applySaturation(cv::Mat& bgrMat);

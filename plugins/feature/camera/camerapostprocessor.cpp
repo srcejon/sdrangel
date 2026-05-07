@@ -17,6 +17,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cstring>
 
 #include <QDebug>
 #include <QFile>
@@ -390,6 +391,19 @@ void CameraPostProcessor::stopWork()
     }
 }
 
+void CameraPostProcessor::resetFrameHistoryState()
+{
+    m_lastRawFrame = QImage();
+    m_previousRawFrame = QImage();
+    m_stackFrameHistory.clear();
+    m_stackAccumulator.release();
+    m_diffMaskHistory.clear();
+    m_lastMotionBoxes.clear();
+    m_motionPersistenceRemaining = 0;
+    m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
+    m_autoWhiteBalanceInitialized = false;
+}
+
 void CameraPostProcessor::handleInputMessages()
 {
     Message* message;
@@ -447,9 +461,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
 
         if (m_captureActive)
         {
-            m_previousRawFrame = QImage();
-            m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
-            m_autoWhiteBalanceInitialized = false;
+            resetFrameHistoryState();
         }
         else if (m_videoWriter.isOpened())
         {
@@ -476,6 +488,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
+        "stackEnabled", "stackFrameCount", "stackMethod",
         "diffMask", "diffThreshold", "dilationSize", "diffMaskHistoryFrames", "diffMaskCloseSize", "overlayFontFamily", "overlayFontScale",
         "detectionRoiX", "detectionRoiY", "detectionRoiWidth", "detectionRoiHeight",
         "motionDetect", "motionHistory", "motionVarThreshold", "motionDetectShadows", "motionOpenSize", "motionCloseSize", "motionPersistenceFrames",
@@ -487,8 +500,22 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")
+        || settingsKeys.contains("cameraProtocol")
         || settingsKeys.contains("resolutionWidth")
-        || settingsKeys.contains("resolutionHeight");
+        || settingsKeys.contains("resolutionHeight")
+        || settingsKeys.contains("cameraBinX")
+        || settingsKeys.contains("cameraBinY")
+        || settingsKeys.contains("cameraNumX")
+        || settingsKeys.contains("cameraNumY")
+        || settingsKeys.contains("cameraStartX")
+        || settingsKeys.contains("cameraStartY")
+        || settingsKeys.contains("cameraGain")
+        || settingsKeys.contains("cameraOffset")
+        || settingsKeys.contains("cameraReadoutMode")
+        || settingsKeys.contains("exposureTimeMs")
+        || settingsKeys.contains("stackEnabled")
+        || settingsKeys.contains("stackFrameCount")
+        || settingsKeys.contains("stackMethod");
 
     if (force) {
         m_settings = settings;
@@ -496,15 +523,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    if (sourceChanged)
-    {
-        m_lastRawFrame = QImage();
-        m_previousRawFrame = QImage();
-        m_diffMaskHistory.clear();
-        m_lastMotionBoxes.clear();
-        m_motionPersistenceRemaining = 0;
-        m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
-        m_autoWhiteBalanceInitialized = false;
+    if (sourceChanged) {
+        resetFrameHistoryState();
     }
 
     if (force
@@ -616,10 +636,11 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
     }
 
     m_captureDateTime = QDateTime::currentDateTime();
-    const QImage processed = applyPostProcessing(image);
+    const QImage stacked = applyFrameStacking(image);
+    const QImage processed = applyPostProcessing(stacked);
 
     m_previousRawFrame = m_lastRawFrame;
-    m_lastRawFrame = image;
+    m_lastRawFrame = stacked;
 
     reportFrameToGUI(processed);
 
@@ -628,7 +649,7 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
         QFileInfo fileInfo(m_settings.m_imageFileName);
         QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
         qDebug() << "CameraPostProcessor: Saving image to" << filename;
-        const QImage& frameToSave = m_settings.m_videoPostProcess ? processed : image;
+        const QImage& frameToSave = m_settings.m_videoPostProcess ? processed : stacked;
         frameToSave.save(filename);
     }
 
@@ -639,7 +660,7 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
             QFileInfo fileInfo(m_settings.m_videoFileName);
             QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
 
-            const QImage& frameForSize = m_settings.m_videoPostProcess ? processed : image;
+            const QImage& frameForSize = m_settings.m_videoPostProcess ? processed : stacked;
             const int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1'); // avc1 gets NVENC h/w accelerated with FFmpeg, whereas mp4v doesn't.
             const std::vector<int> params = {
                 cv::VIDEOWRITER_PROP_HW_ACCELERATION,
@@ -660,7 +681,7 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
 
         if (m_videoWriter.isOpened())
         {
-            const QImage& frameToWrite = m_settings.m_videoPostProcess ? processed : image;
+            const QImage& frameToWrite = m_settings.m_videoPostProcess ? processed : stacked;
             const QImage rgb = frameToWrite.convertToFormat(QImage::Format_RGB888);
             cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
                         const_cast<uchar*>(rgb.bits()),
@@ -670,6 +691,57 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
             m_videoWriter.write(bgrMat);
         }
     }
+}
+
+QImage CameraPostProcessor::applyFrameStacking(const QImage& input)
+{
+    if (!m_settings.m_stackEnabled || (m_settings.m_stackFrameCount <= 1)) {
+        return input;
+    }
+
+    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
+    cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
+                   const_cast<uchar*>(rgb.bits()),
+                   static_cast<size_t>(rgb.bytesPerLine()));
+    cv::Mat rgbMatCopy = rgbMat.clone();
+
+    if (m_stackFrameHistory.empty()
+        || m_stackFrameHistory.front().size() != rgbMatCopy.size()
+        || m_stackFrameHistory.front().type() != rgbMatCopy.type())
+    {
+        m_stackFrameHistory.clear();
+        m_stackAccumulator.release();
+    }
+
+    if (m_stackAccumulator.empty()) {
+        m_stackAccumulator = cv::Mat::zeros(rgbMatCopy.size(), CV_32FC3);
+    }
+
+    cv::Mat floatFrame;
+    rgbMatCopy.convertTo(floatFrame, CV_32FC3);
+    m_stackAccumulator += floatFrame;
+    m_stackFrameHistory.push_back(rgbMatCopy);
+
+    const int maxFrames = qBound(1, m_settings.m_stackFrameCount, 256);
+    while (static_cast<int>(m_stackFrameHistory.size()) > maxFrames)
+    {
+        cv::Mat oldestFloatFrame;
+        m_stackFrameHistory.front().convertTo(oldestFloatFrame, CV_32FC3);
+        m_stackAccumulator -= oldestFloatFrame;
+        m_stackFrameHistory.pop_front();
+    }
+
+    cv::Mat averagedFloat;
+    m_stackAccumulator.convertTo(averagedFloat, CV_32FC3, 1.0 / static_cast<double>(m_stackFrameHistory.size()));
+    cv::Mat averaged8u;
+    averagedFloat.convertTo(averaged8u, CV_8UC3);
+
+    QImage stackedImage(averaged8u.cols, averaged8u.rows, QImage::Format_RGB888);
+    for (int row = 0; row < averaged8u.rows; ++row) {
+        std::memcpy(stackedImage.scanLine(row), averaged8u.ptr(row), static_cast<size_t>(averaged8u.cols * 3));
+    }
+
+    return stackedImage;
 }
 
 void CameraPostProcessor::reportFrameToGUI(const QImage& image)

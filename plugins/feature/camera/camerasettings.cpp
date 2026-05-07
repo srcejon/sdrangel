@@ -276,10 +276,10 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(16, m_saveVideo);
     s.writeString(17, m_videoFileName);
     s.writeBool(18, m_videoHwAcceleration);
-    s.writeBool(125, m_stackEnabled);
-    s.writeS32(126, m_stackFrameCount);
-    s.writeS32(127, m_stackMethod);
-    s.writeS32(128, m_stackAlignmentMethod);
+    s.writeBool(130, m_stackEnabled);
+    s.writeS32(131, m_stackFrameCount);
+    s.writeS32(132, m_stackMethod);
+    s.writeS32(133, m_stackAlignmentMethod);
 
     if (m_rollupState) {
         s.writeBlob(19, m_rollupState->serialize());
@@ -391,7 +391,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(122, m_asiTargetTemp);
     s.writeS32(123, m_asiUsbBandwidth);
     s.writeS32(124, m_asiHighSpeedMode);
-    s.writeS32(128, m_asiColorImageType);
+    s.writeS32(125, m_asiColorImageType);
 
     return s.final();
 }
@@ -460,11 +460,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(16, &m_saveVideo, false);
         d.readString(17, &m_videoFileName, "camera.mp4");
         d.readBool(18, &m_videoHwAcceleration, true);
-        d.readBool(125, &m_stackEnabled, false);
-        d.readS32(126, &m_stackFrameCount, 4);
-        d.readS32(127, (qint32 *) &m_stackMethod, (qint32) StackMethodAverage);
-        d.readS32(128, (qint32 *) &m_stackAlignmentMethod, (qint32) StackAlignmentNone);
-        d.readString(115, &m_videoFileCameraPath, "");
+        d.readBool(130, &m_stackEnabled, false);
+        d.readS32(131, &m_stackFrameCount, 4);
+        d.readS32(132, (qint32 *) &m_stackMethod, (qint32) StackMethodAverage);
+        d.readS32(132, (qint32 *) &m_stackAlignmentMethod, (qint32) StackAlignmentNone);
 
         if (m_rollupState)
         {
@@ -615,6 +614,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(99, &m_zoomFactor, 1.0);
         m_zoomFactor = std::max(1.0, m_zoomFactor);
 
+        d.readString(115, &m_videoFileCameraPath, "");
+
         d.readBool(116, &m_useReverseAPI);
         d.readString(117, &m_reverseAPIAddress);
         d.readU32(118, &utmp, 0);
@@ -632,7 +633,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(122, &m_asiTargetTemp, std::numeric_limits<int>::min());
         d.readS32(123, &m_asiUsbBandwidth, -1);
         d.readS32(124, &m_asiHighSpeedMode, -1);
-        d.readS32(128, (qint32 *) &m_asiColorImageType, (qint32) AsiColorImageTypeRgb24);
+        d.readS32(125, (qint32 *) &m_asiColorImageType, (qint32) AsiColorImageTypeRgb24);
         m_asiCoolerOn = qBound(-1, m_asiCoolerOn, 1);
         m_asiUsbBandwidth = std::max(-1, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(-1, m_asiHighSpeedMode, 1);

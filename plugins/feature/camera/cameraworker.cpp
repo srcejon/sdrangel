@@ -23,6 +23,7 @@
 #include <limits>
 
 #include <QDebug>
+#include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -57,6 +58,7 @@
 #include "dsp/dspengine.h"
 #include "audio/audiodevicemanager.h"
 #include "camerafinder.h"
+#include "cameraframestacker.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
 
@@ -444,6 +446,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
+    m_frameStackerInputMessageQueue(nullptr),
     m_postProcessorInputMessageQueue(nullptr),
     m_availableDeviceHandler({}, QStringList{"spectrumview"}),
     m_capturing(false),
@@ -2003,8 +2006,11 @@ void CameraWorker::alpacaFetchImageArray()
             m_alpacaCaptureTimer.invalidate();
         }
 
-        if (m_postProcessorInputMessageQueue) {
-            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(image));
+        if (m_frameStackerInputMessageQueue) {
+            CameraPipelineFrame frame;
+            frame.m_image = image;
+            frame.m_captureDateTime = QDateTime::currentDateTime();
+            m_frameStackerInputMessageQueue->push(CameraFrameStacker::MsgProcessFrame::create(frame));
         }
         reply->deleteLater();
     });
@@ -3314,8 +3320,11 @@ void CameraWorker::asiCaptureExposureFrame()
 
     setLastAsiError(ASI_SUCCESS, QString());
     m_lastAsiCaptureTimeMs = captureTimer.elapsed();
-    if (m_postProcessorInputMessageQueue) {
-        m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(asiFrameToImage()));
+    if (m_frameStackerInputMessageQueue) {
+        CameraPipelineFrame frame;
+        frame.m_image = asiFrameToImage();
+        frame.m_captureDateTime = QDateTime::currentDateTime();
+        m_frameStackerInputMessageQueue->push(CameraFrameStacker::MsgProcessFrame::create(frame));
     }
 }
 
@@ -3343,8 +3352,11 @@ void CameraWorker::asiCaptureVideoFrame()
     {
         setLastAsiError(ASI_SUCCESS, QString());
         m_lastAsiCaptureTimeMs = captureTimer.elapsed();
-        if (m_postProcessorInputMessageQueue) {
-            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(asiFrameToImage()));
+        if (m_frameStackerInputMessageQueue) {
+            CameraPipelineFrame frame;
+            frame.m_image = asiFrameToImage();
+            frame.m_captureDateTime = QDateTime::currentDateTime();
+            m_frameStackerInputMessageQueue->push(CameraFrameStacker::MsgProcessFrame::create(frame));
         }
     }
     else

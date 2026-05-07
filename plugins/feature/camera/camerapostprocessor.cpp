@@ -365,9 +365,7 @@ CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_captureActive(false),
     m_motionPersistenceRemaining(0),
-    m_yoloInputSize(640, 640),
-    m_autoWhiteBalanceGains(1.0, 1.0, 1.0),
-    m_autoWhiteBalanceInitialized(false)
+    m_yoloInputSize(640, 640)
 #ifdef QT_TEXTTOSPEECH_FOUND
     , m_speech(new QTextToSpeech(this))
 #endif
@@ -392,19 +390,6 @@ void CameraPostProcessor::stopWork()
     if (m_videoWriter.isOpened()) {
         m_videoWriter.release();
     }
-}
-
-void CameraPostProcessor::resetFrameHistoryState()
-{
-    m_lastRawFrame = QImage();
-    m_previousRawFrame = QImage();
-    m_stackFrameHistory.clear();
-    m_stackAccumulator.release();
-    m_diffMaskHistory.clear();
-    m_lastMotionBoxes.clear();
-    m_motionPersistenceRemaining = 0;
-    m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
-    m_autoWhiteBalanceInitialized = false;
 }
 
 void CameraPostProcessor::handleInputMessages()
@@ -448,7 +433,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     else if (MsgProcessFrame::match(cmd))
     {
         MsgProcessFrame& frameMsg = (MsgProcessFrame&) cmd;
-        processNewFrame(frameMsg.getImage());
+        processNewFrame(frameMsg.getFrame());
         return true;
     }
     else if (MsgSpectrumFrame::match(cmd))
@@ -464,7 +449,11 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
 
         if (m_captureActive)
         {
-            resetFrameHistoryState();
+            m_lastFrame = CameraPipelineFrame();
+            m_previousFrame = CameraPipelineFrame();
+            m_diffMaskHistory.clear();
+            m_lastMotionBoxes.clear();
+            m_motionPersistenceRemaining = 0;
         }
         else if (m_videoWriter.isOpened())
         {
@@ -482,16 +471,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     qDebug() << "CameraPostProcessor::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
     static const QStringList kPostProcessingKeys = {
-        "postProcessWhiteBalanceMode",
-        "postProcessWhiteBalanceRedGain",
-        "postProcessWhiteBalanceGreenGain",
-        "postProcessWhiteBalanceBlueGain",
-        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "sobelEdge", "flipX", "flipY",
-        "brightness", "contrast", "invertColors", "overlayDateTime", "dateTimeColor",
+        "overlayDateTime", "dateTimeColor",
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
-        "stackEnabled", "stackFrameCount", "stackMethod",
         "diffMask", "diffThreshold", "dilationSize", "diffMaskHistoryFrames", "diffMaskCloseSize", "overlayFontFamily", "overlayFontScale",
         "detectionRoiX", "detectionRoiY", "detectionRoiWidth", "detectionRoiHeight",
         "motionDetect", "motionHistory", "motionVarThreshold", "motionDetectShadows", "motionOpenSize", "motionCloseSize", "motionPersistenceFrames",
@@ -528,17 +511,11 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     }
 
     if (sourceChanged) {
-        resetFrameHistoryState();
-    }
-
-    if (force
-        || settingsKeys.contains("postProcessWhiteBalanceMode")
-        || settingsKeys.contains("postProcessWhiteBalanceRedGain")
-        || settingsKeys.contains("postProcessWhiteBalanceGreenGain")
-        || settingsKeys.contains("postProcessWhiteBalanceBlueGain"))
-    {
-        m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
-        m_autoWhiteBalanceInitialized = false;
+        m_lastFrame = CameraPipelineFrame();
+        m_previousFrame = CameraPipelineFrame();
+        m_diffMaskHistory.clear();
+        m_lastMotionBoxes.clear();
+        m_motionPersistenceRemaining = 0;
     }
 
     if (force
@@ -561,7 +538,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
         || settingsKeys.contains("detectionRoiHeight")) {
-        m_previousRawFrame = QImage();
+        m_previousFrame = CameraPipelineFrame();
     }
 
     if (force
@@ -627,24 +604,25 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         }
     }
 
-    if (postProcessChanged && !m_lastRawFrame.isNull()) {
-        const QImage processed = applyPostProcessing(m_lastRawFrame);
+    if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
+        const QImage processed = applyPostProcessing(m_lastFrame.m_image);
         reportFrameToGUI(processed);
     }
 }
 
-void CameraPostProcessor::processNewFrame(const QImage& image)
+void CameraPostProcessor::processNewFrame(const CameraPipelineFrame& frame)
 {
-    if (image.isNull()) {
+    if (frame.m_image.isNull()) {
         return;
     }
 
-    m_captureDateTime = QDateTime::currentDateTime();
-    const QImage stacked = applyFrameStacking(image);
-    const QImage processed = applyPostProcessing(stacked);
+    m_captureDateTime = frame.m_captureDateTime.isValid() ? frame.m_captureDateTime : QDateTime::currentDateTime();
+    const QImage& pipelineImage = frame.m_image;
+    const QImage& unprocessedImage = frame.m_unprocessedImage.isNull() ? frame.m_image : frame.m_unprocessedImage;
+    const QImage processed = applyPostProcessing(pipelineImage);
 
-    m_previousRawFrame = m_lastRawFrame;
-    m_lastRawFrame = stacked;
+    m_previousFrame = m_lastFrame;
+    m_lastFrame = frame;
 
     reportFrameToGUI(processed);
 
@@ -653,7 +631,7 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
         QFileInfo fileInfo(m_settings.m_imageFileName);
         QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
         qDebug() << "CameraPostProcessor: Saving image to" << filename;
-        const QImage& frameToSave = m_settings.m_videoPostProcess ? processed : stacked;
+        const QImage& frameToSave = m_settings.m_videoPostProcess ? processed : unprocessedImage;
         frameToSave.save(filename);
     }
 
@@ -664,8 +642,8 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
             QFileInfo fileInfo(m_settings.m_videoFileName);
             QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
 
-            const QImage& frameForSize = m_settings.m_videoPostProcess ? processed : stacked;
-            const int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1'); // avc1 gets NVENC h/w accelerated with FFmpeg, whereas mp4v doesn't.
+            const QImage& frameForSize = m_settings.m_videoPostProcess ? processed : unprocessedImage;
+            const int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1');
             const std::vector<int> params = {
                 cv::VIDEOWRITER_PROP_HW_ACCELERATION,
                 m_settings.m_videoHwAcceleration ? cv::VIDEO_ACCELERATION_ANY : cv::VIDEO_ACCELERATION_NONE
@@ -685,7 +663,7 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
 
         if (m_videoWriter.isOpened())
         {
-            const QImage& frameToWrite = m_settings.m_videoPostProcess ? processed : stacked;
+            const QImage& frameToWrite = m_settings.m_videoPostProcess ? processed : unprocessedImage;
             const QImage rgb = frameToWrite.convertToFormat(QImage::Format_RGB888);
             cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
                         const_cast<uchar*>(rgb.bits()),
@@ -697,571 +675,11 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
     }
 }
 
-QImage CameraPostProcessor::applyFrameStacking(const QImage& input)
-{
-    PROFILER_START();
-    const bool highBitDepthInput = (input.format() == QImage::Format_RGBA64) || (input.format() == QImage::Format_RGBX64);
-
-    auto convertToRgb888 = [](const QImage& source) -> QImage {
-        if ((source.format() != QImage::Format_RGBA64) && (source.format() != QImage::Format_RGBX64)) {
-            return source.convertToFormat(QImage::Format_RGB888);
-        }
-
-        QImage rgb8(source.width(), source.height(), QImage::Format_RGB888);
-        for (int y = 0; y < source.height(); ++y)
-        {
-            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(source.constScanLine(y));
-            uchar *outputLine = rgb8.scanLine(y);
-
-            for (int x = 0; x < source.width(); ++x)
-            {
-                outputLine[x * 3 + 0] = static_cast<uchar>(std::lround((inputLine[x].red() * 255.0) / 65535.0));
-                outputLine[x * 3 + 1] = static_cast<uchar>(std::lround((inputLine[x].green() * 255.0) / 65535.0));
-                outputLine[x * 3 + 2] = static_cast<uchar>(std::lround((inputLine[x].blue() * 255.0) / 65535.0));
-            }
-        }
-
-        return rgb8;
-    };
-
-    if (!m_settings.m_stackEnabled || (m_settings.m_stackFrameCount <= 1)) {
-        return highBitDepthInput ? convertToRgb888(input) : input;
-    }
-
-    cv::Mat frameMat;
-    if (highBitDepthInput)
-    {
-        frameMat = cv::Mat(input.height(), input.width(), CV_16UC3);
-        for (int y = 0; y < input.height(); ++y)
-        {
-            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(input.constScanLine(y));
-            cv::Vec<uint16_t, 3> *outputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
-
-            for (int x = 0; x < input.width(); ++x)
-            {
-                outputLine[x][0] = inputLine[x].red();
-                outputLine[x][1] = inputLine[x].green();
-                outputLine[x][2] = inputLine[x].blue();
-            }
-        }
-    }
-    else
-    {
-        const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
-        cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
-                       const_cast<uchar*>(rgb.bits()),
-                       static_cast<size_t>(rgb.bytesPerLine()));
-        frameMat = rgbMat.clone();
-    }
-
-    cv::Mat alignedFrameMat = alignStackFrame(frameMat);
-
-    if (m_stackFrameHistory.empty()
-        || m_stackFrameHistory.front().size() != alignedFrameMat.size()
-        || m_stackFrameHistory.front().type() != alignedFrameMat.type())
-    {
-        m_stackFrameHistory.clear();
-        m_stackAccumulator.release();
-    }
-
-    m_stackFrameHistory.push_back(alignedFrameMat.clone());
-
-    const int maxFrames = qBound(1, m_settings.m_stackFrameCount, 256);
-    while (static_cast<int>(m_stackFrameHistory.size()) > maxFrames)
-    {
-        if (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
-        {
-            cv::Mat oldestFloatFrame;
-            m_stackFrameHistory.front().convertTo(oldestFloatFrame, CV_32FC3);
-            m_stackAccumulator -= oldestFloatFrame;
-        }
-        m_stackFrameHistory.pop_front();
-    }
-
-    const double scaleTo8Bit = highBitDepthInput ? (255.0 / 65535.0) : 1.0;
-
-    if (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
-    {
-        if (m_stackAccumulator.empty()) {
-            m_stackAccumulator = cv::Mat::zeros(alignedFrameMat.size(), CV_32FC3);
-        }
-
-        cv::Mat floatFrame;
-        alignedFrameMat.convertTo(floatFrame, CV_32FC3);
-        m_stackAccumulator += floatFrame;
-
-        cv::Mat averagedFloat;
-        m_stackAccumulator.convertTo(averagedFloat, CV_32FC3, 1.0 / static_cast<double>(m_stackFrameHistory.size()));
-        cv::Mat averaged8u;
-        averagedFloat.convertTo(averaged8u, CV_8UC3, scaleTo8Bit);
-
-        QImage stackedImage(averaged8u.cols, averaged8u.rows, QImage::Format_RGB888);
-        for (int row = 0; row < averaged8u.rows; ++row) {
-            std::memcpy(stackedImage.scanLine(row), averaged8u.ptr(row), static_cast<size_t>(averaged8u.cols * 3));
-        }
-
-        PROFILER_STOP(__FUNCTION__);
-        return stackedImage;
-    }
-
-    m_stackAccumulator.release();
-
-    QImage stackedImage(alignedFrameMat.cols, alignedFrameMat.rows, QImage::Format_RGB888);
-    const size_t frameCount = m_stackFrameHistory.size();
-    constexpr double sigmaThreshold = 2.0;
-
-    std::vector<int> channelSamples[3];
-    for (std::vector<int>& samples : channelSamples) {
-        samples.reserve(frameCount);
-    }
-
-    for (int row = 0; row < alignedFrameMat.rows; ++row)
-    {
-        uchar *output = stackedImage.scanLine(row);
-
-        for (int col = 0; col < alignedFrameMat.cols; ++col)
-        {
-            for (std::vector<int>& samples : channelSamples) {
-                samples.clear();
-            }
-
-            for (const cv::Mat& frame : m_stackFrameHistory)
-            {
-                if (highBitDepthInput)
-                {
-                    const cv::Vec<uint16_t, 3>& pixel = frame.at<cv::Vec<uint16_t, 3>>(row, col);
-                    channelSamples[0].push_back(pixel[0]);
-                    channelSamples[1].push_back(pixel[1]);
-                    channelSamples[2].push_back(pixel[2]);
-                }
-                else
-                {
-                    const cv::Vec3b& pixel = frame.at<cv::Vec3b>(row, col);
-                    channelSamples[0].push_back(pixel[0]);
-                    channelSamples[1].push_back(pixel[1]);
-                    channelSamples[2].push_back(pixel[2]);
-                }
-            }
-
-            for (int channel = 0; channel < 3; ++channel)
-            {
-                int channelValue = 0;
-
-                if (m_settings.m_stackMethod == CameraSettings::StackMethodMedian)
-                {
-                    std::vector<int>& samples = channelSamples[channel];
-                    const size_t medianIndex = samples.size() / 2;
-                    std::nth_element(samples.begin(), samples.begin() + static_cast<std::ptrdiff_t>(medianIndex), samples.end());
-                    channelValue = samples[medianIndex];
-                }
-                else
-                {
-                    const std::vector<int>& samples = channelSamples[channel];
-                    double sum = 0.0;
-                    double sumSquares = 0.0;
-
-                    for (int sample : samples)
-                    {
-                        sum += sample;
-                        sumSquares += static_cast<double>(sample) * sample;
-                    }
-
-                    const double mean = sum / static_cast<double>(samples.size());
-                    const double variance = std::max(0.0, (sumSquares / static_cast<double>(samples.size())) - (mean * mean));
-                    const double sigma = std::sqrt(variance);
-                    const double minValue = mean - sigmaThreshold * sigma;
-                    const double maxValue = mean + sigmaThreshold * sigma;
-
-                    double clippedSum = 0.0;
-                    int clippedCount = 0;
-                    for (int sample : samples)
-                    {
-                        if ((sample >= minValue) && (sample <= maxValue))
-                        {
-                            clippedSum += sample;
-                            ++clippedCount;
-                        }
-                    }
-
-                    channelValue = clippedCount > 0
-                        ? static_cast<int>(std::lround(clippedSum / static_cast<double>(clippedCount)))
-                        : static_cast<int>(std::lround(mean));
-                }
-
-                const int outputValue = highBitDepthInput
-                    ? static_cast<int>(std::lround((channelValue * 255.0) / 65535.0))
-                    : channelValue;
-                output[col * 3 + channel] = static_cast<uchar>(qBound(0, outputValue, 255));
-            }
-        }
-    }
-    PROFILER_STOP(__FUNCTION__);
-    return stackedImage;
-}
-
-cv::Mat CameraPostProcessor::alignStackFrame(const cv::Mat& frameMat) const
-{
-    if (m_stackFrameHistory.empty()) {
-        return frameMat.clone();
-    }
-
-    const cv::Mat& referenceFrame = m_stackFrameHistory.front();
-    if (referenceFrame.size() != frameMat.size() || referenceFrame.type() != frameMat.type()) {
-        return frameMat.clone();
-    }
-
-    switch (m_settings.m_stackAlignmentMethod)
-    {
-    case CameraSettings::StackAlignmentPhaseCorrelation:
-        return alignWithPhaseCorrelation(referenceFrame, frameMat);
-    case CameraSettings::StackAlignmentStarCentroidMatching:
-        return alignWithStarCentroids(referenceFrame, frameMat);
-    case CameraSettings::StackAlignmentNone:
-    default:
-        return frameMat.clone();
-    }
-}
-
-cv::Mat CameraPostProcessor::frameToAlignmentGray(const cv::Mat& frameMat) const
-{
-    cv::Mat gray;
-    if (frameMat.channels() == 1)
-    {
-        gray = frameMat;
-    }
-    else
-    {
-        cv::cvtColor(frameMat, gray, cv::COLOR_RGB2GRAY);
-    }
-
-    if (gray.depth() == CV_8U) {
-        return gray;
-    }
-
-    cv::Mat gray8;
-    if (gray.depth() == CV_16U) {
-        gray.convertTo(gray8, CV_8U, 255.0 / 65535.0);
-    } else {
-        gray.convertTo(gray8, CV_8U);
-    }
-
-    return gray8;
-}
-
-cv::Mat CameraPostProcessor::warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform) const
-{
-    if (transform.empty()) {
-        return frameMat.clone();
-    }
-
-    cv::Mat aligned;
-    cv::warpAffine(frameMat, aligned, transform, frameMat.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT);
-    return aligned;
-}
-
-cv::Mat CameraPostProcessor::alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const
-{
-    const cv::Mat referenceGray = frameToAlignmentGray(referenceFrame);
-    const cv::Mat targetGray = frameToAlignmentGray(targetFrame);
-
-    cv::Mat referenceFloat;
-    cv::Mat targetFloat;
-    referenceGray.convertTo(referenceFloat, CV_32F);
-    targetGray.convertTo(targetFloat, CV_32F);
-
-    const cv::Point2d shift = cv::phaseCorrelate(targetFloat, referenceFloat);
-    cv::Mat transform = (cv::Mat_<double>(2, 3) << 1.0, 0.0, shift.x, 0.0, 1.0, shift.y);
-    return warpFrameAffine(targetFrame, transform);
-}
-
-std::vector<cv::Point2f> CameraPostProcessor::detectStarCentroids(const cv::Mat& grayFrame) const
-{
-    std::vector<cv::Point2f> stars;
-    if (grayFrame.empty()) {
-        return stars;
-    }
-
-    cv::Mat blurred;
-    cv::GaussianBlur(grayFrame, blurred, cv::Size(0, 0), 1.2);
-
-    cv::Scalar mean;
-    cv::Scalar stddev;
-    cv::meanStdDev(blurred, mean, stddev);
-
-    double maxValue = 0.0;
-    cv::minMaxLoc(blurred, nullptr, &maxValue);
-    const double thresholdValue = std::max(mean[0] + (2.5 * stddev[0]), maxValue * 0.55);
-    if (thresholdValue <= 0.0) {
-        return stars;
-    }
-
-    cv::Mat binary;
-    cv::threshold(blurred, binary, thresholdValue, 255, cv::THRESH_BINARY);
-
-    cv::Mat labels;
-    cv::Mat stats;
-    cv::Mat centroids;
-    const int componentCount = cv::connectedComponentsWithStats(binary, labels, stats, centroids, 8, CV_32S);
-
-    struct StarCandidate {
-        cv::Point2f centroid;
-        double brightness;
-    };
-
-    std::vector<StarCandidate> candidates;
-    for (int component = 1; component < componentCount; ++component)
-    {
-        const int area = stats.at<int>(component, cv::CC_STAT_AREA);
-        if (area < 1 || area > 200) {
-            continue;
-        }
-
-        const int left = stats.at<int>(component, cv::CC_STAT_LEFT);
-        const int top = stats.at<int>(component, cv::CC_STAT_TOP);
-        const int width = stats.at<int>(component, cv::CC_STAT_WIDTH);
-        const int height = stats.at<int>(component, cv::CC_STAT_HEIGHT);
-        const cv::Rect roi(left, top, width, height);
-
-        cv::Mat componentMask = (labels(roi) == component);
-        const double brightness = cv::mean(blurred(roi), componentMask)[0] * area;
-        candidates.push_back({
-            cv::Point2f(static_cast<float>(centroids.at<double>(component, 0)),
-                        static_cast<float>(centroids.at<double>(component, 1))),
-            brightness
-        });
-    }
-
-    std::sort(candidates.begin(), candidates.end(),
-        [](const StarCandidate& lhs, const StarCandidate& rhs) { return lhs.brightness > rhs.brightness; });
-
-    const size_t maxStars = std::min<size_t>(candidates.size(), 64);
-    stars.reserve(maxStars);
-    for (size_t i = 0; i < maxStars; ++i) {
-        stars.push_back(candidates[i].centroid);
-    }
-
-    return stars;
-}
-
-cv::Mat CameraPostProcessor::alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const
-{
-    const cv::Mat referenceGray = frameToAlignmentGray(referenceFrame);
-    const cv::Mat targetGray = frameToAlignmentGray(targetFrame);
-
-    const std::vector<cv::Point2f> referenceStars = detectStarCentroids(referenceGray);
-    const std::vector<cv::Point2f> targetStars = detectStarCentroids(targetGray);
-    if (referenceStars.size() < 2 || targetStars.size() < 2) {
-        return alignWithPhaseCorrelation(referenceFrame, targetFrame);
-    }
-
-    cv::Mat referenceFloat;
-    cv::Mat targetFloat;
-    referenceGray.convertTo(referenceFloat, CV_32F);
-    targetGray.convertTo(targetFloat, CV_32F);
-    const cv::Point2d shift = cv::phaseCorrelate(targetFloat, referenceFloat);
-
-    std::vector<cv::Point2f> matchedTargetPoints;
-    std::vector<cv::Point2f> matchedReferencePoints;
-    std::vector<bool> targetUsed(targetStars.size(), false);
-    constexpr float maxMatchDistance = 12.0f;
-
-    for (const cv::Point2f& referenceStar : referenceStars)
-    {
-        int bestIndex = -1;
-        float bestDistance = maxMatchDistance;
-
-        for (size_t i = 0; i < targetStars.size(); ++i)
-        {
-            if (targetUsed[i]) {
-                continue;
-            }
-
-            const cv::Point2f shiftedTarget(targetStars[i].x + static_cast<float>(shift.x),
-                                            targetStars[i].y + static_cast<float>(shift.y));
-            const float dx = shiftedTarget.x - referenceStar.x;
-            const float dy = shiftedTarget.y - referenceStar.y;
-            const float distance = std::sqrt((dx * dx) + (dy * dy));
-
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                bestIndex = static_cast<int>(i);
-            }
-        }
-
-        if (bestIndex >= 0)
-        {
-            targetUsed[bestIndex] = true;
-            matchedTargetPoints.push_back(targetStars[bestIndex]);
-            matchedReferencePoints.push_back(referenceStar);
-        }
-    }
-
-    if (matchedTargetPoints.size() < 2) {
-        return alignWithPhaseCorrelation(referenceFrame, targetFrame);
-    }
-
-    cv::Mat inliers;
-    cv::Mat transform = cv::estimateAffinePartial2D(
-        matchedTargetPoints, matchedReferencePoints, inliers, cv::RANSAC, 3.0);
-
-    if (transform.empty()) {
-        return alignWithPhaseCorrelation(referenceFrame, targetFrame);
-    }
-
-    return warpFrameAffine(targetFrame, transform);
-}
-
 void CameraPostProcessor::reportFrameToGUI(const QImage& image)
 {
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportFrame::create(image));
     }
-}
-
-void CameraPostProcessor::applyWhiteBalance(cv::Mat& bgrMat)
-{
-    PROFILER_START();
-    cv::Vec3d gains(
-        m_settings.m_postProcessWhiteBalanceBlueGain,
-        m_settings.m_postProcessWhiteBalanceGreenGain,
-        m_settings.m_postProcessWhiteBalanceRedGain);
-
-    if (m_settings.m_postProcessWhiteBalanceMode == 1)
-    {
-        const cv::Scalar means = cv::mean(bgrMat);
-        const double blueMean = std::max(1.0, means[0]);
-        const double greenMean = std::max(1.0, means[1]);
-        const double redMean = std::max(1.0, means[2]);
-        const double targetMean = (blueMean + greenMean + redMean) / 3.0;
-
-        cv::Vec3d targetGains(
-            qBound(0.25, targetMean / blueMean, 4.0),
-            qBound(0.25, targetMean / greenMean, 4.0),
-            qBound(0.25, targetMean / redMean, 4.0));
-
-        if (!m_autoWhiteBalanceInitialized)
-        {
-            m_autoWhiteBalanceGains = targetGains;
-            m_autoWhiteBalanceInitialized = true;
-        }
-        else
-        {
-            static constexpr double kAutoWhiteBalanceSmoothing = 0.2;
-            m_autoWhiteBalanceGains =
-                (1.0 - kAutoWhiteBalanceSmoothing) * m_autoWhiteBalanceGains
-                + kAutoWhiteBalanceSmoothing * targetGains;
-        }
-
-        gains = m_autoWhiteBalanceGains;
-    }
-
-    std::vector<cv::Mat> channels;
-    cv::split(bgrMat, channels);
-    channels[0].convertTo(channels[0], -1, gains[0], 0.0);
-    channels[1].convertTo(channels[1], -1, gains[1], 0.0);
-    channels[2].convertTo(channels[2], -1, gains[2], 0.0);
-    cv::merge(channels, bgrMat);
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applySaturation(cv::Mat& bgrMat)
-{
-    PROFILER_START();
-    cv::Mat hsvMat;
-    cv::cvtColor(bgrMat, hsvMat, cv::COLOR_BGR2HSV);
-    std::vector<cv::Mat> hsvChannels;
-    cv::split(hsvMat, hsvChannels);
-    hsvChannels[1].convertTo(hsvChannels[1], -1, m_settings.m_saturation, 0.0);
-    cv::merge(hsvChannels, hsvMat);
-    cv::cvtColor(hsvMat, bgrMat, cv::COLOR_HSV2BGR);
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applyGamma(cv::Mat& bgrMat) const
-{
-    PROFILER_START();
-    cv::Mat lut(1, 256, CV_8U);
-    uchar* lutData = lut.ptr<uchar>();
-    for (int i = 0; i < 256; ++i) {
-        lutData[i] = static_cast<uchar>(qBound(0, static_cast<int>(std::pow(i / 255.0, m_settings.m_gamma) * 255.0 + 0.5), 255));
-    }
-    cv::LUT(bgrMat, lut, bgrMat);
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applyGaussianBlur(cv::Mat& bgrMat) const
-{
-    PROFILER_START();
-    const int kernelSize = 2 * m_settings.m_gaussianBlur + 1;
-    cv::GaussianBlur(bgrMat, bgrMat, cv::Size(kernelSize, kernelSize), 0.0);
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applyMedianBlur(cv::Mat& bgrMat) const
-{
-    PROFILER_START();
-    const int kernelSize = 2 * m_settings.m_medianBlur + 1;
-    cv::medianBlur(bgrMat, bgrMat, kernelSize);
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applySharpen(cv::Mat& bgrMat) const
-{
-    PROFILER_START();
-    cv::Mat blurred;
-    cv::GaussianBlur(bgrMat, blurred, cv::Size(0, 0), 1.0);
-    cv::addWeighted(bgrMat, 1.0 + m_settings.m_sharpen, blurred, -m_settings.m_sharpen, 0.0, bgrMat);
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applySobelEdge(cv::Mat& bgrMat) const
-{
-    PROFILER_START();
-    cv::Mat grayMat;
-    cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
-
-    cv::Mat gradX;
-    cv::Mat gradY;
-    cv::Sobel(grayMat, gradX, CV_16S, 1, 0, 3);
-    cv::Sobel(grayMat, gradY, CV_16S, 0, 1, 3);
-
-    cv::Mat absGradX;
-    cv::Mat absGradY;
-    cv::convertScaleAbs(gradX, absGradX);
-    cv::convertScaleAbs(gradY, absGradY);
-
-    cv::Mat edgesGray;
-    cv::addWeighted(absGradX, 0.5, absGradY, 0.5, 0.0, edgesGray);
-
-    cv::Mat edgesBgr;
-    cv::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
-    cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrMat);
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applyFlip(cv::Mat& bgrMat) const
-{
-    PROFILER_START();
-    const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
-    cv::flip(bgrMat, bgrMat, flipCode);
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applyBrightnessContrast(cv::Mat& bgrMat) const
-{
-    PROFILER_START();
-    cv::Mat adjusted;
-    cv::convertScaleAbs(bgrMat, adjusted, m_settings.m_contrast, m_settings.m_brightness);
-    bgrMat = adjusted;
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applyInvertColors(cv::Mat& bgrMat) const
-{
-    PROFILER_START();
-    cv::bitwise_not(bgrMat, bgrMat);
-    PROFILER_STOP(__FUNCTION__);
 }
 
 cv::Rect CameraPostProcessor::resolveDetectionRoi(const cv::Size& frameSize) const
@@ -1282,7 +700,7 @@ cv::Rect CameraPostProcessor::resolveDetectionRoi(const cv::Size& frameSize) con
 void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi)
 {
     PROFILER_START();
-    const QImage prevRgb = m_previousRawFrame.convertToFormat(QImage::Format_RGB888);
+    const QImage prevRgb = m_previousFrame.m_image.convertToFormat(QImage::Format_RGB888);
     cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
                     const_cast<uchar*>(prevRgb.bits()),
                     static_cast<size_t>(prevRgb.bytesPerLine()));
@@ -1519,31 +937,12 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
     PROFILER_START();
 
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
-    const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
-    const bool needsSaturation = std::abs(m_settings.m_saturation - 1.0) > 1e-4;
-    const bool needsGamma = std::abs(m_settings.m_gamma - 1.0) > 1e-4;
-    const bool needsGaussianBlur = m_settings.m_gaussianBlur > 0;
-    const bool needsMedianBlur = m_settings.m_medianBlur > 0;
-    const bool needsSharpen = m_settings.m_sharpen > 1e-4;
-    const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
-    const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
-    const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     QTextDocument overlayTextDocument;
     overlayTextDocument.setHtml(m_settings.m_overlayTextString);
     const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
-    const bool needsAny = needsWhiteBalance
-        || needsSaturation
-        || needsGamma
-        || needsGaussianBlur
-        || needsMedianBlur
-        || needsSharpen
-        || needsSobelEdge
-        || needsFlip
-        || needsBrightContrast
-        || m_settings.m_invertColors
-        || m_settings.m_overlayDateTime
+    const bool needsAny = m_settings.m_overlayDateTime
         || needsTextOverlay
-        || (m_settings.m_diffMask && !m_previousRawFrame.isNull())
+        || (m_settings.m_diffMask && !m_previousFrame.m_image.isNull())
         || m_settings.m_motionDetect
         || (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty())
         || needsSpectrumOverlay;
@@ -1560,19 +959,9 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
     const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
 
-    if (needsWhiteBalance) { applyWhiteBalance(bgrMat); }
-    if (needsSaturation) { applySaturation(bgrMat); }
-    if (needsGamma) { applyGamma(bgrMat); }
-    if (needsGaussianBlur) { applyGaussianBlur(bgrMat); }
-    if (needsMedianBlur) { applyMedianBlur(bgrMat); }
-    if (needsSharpen) { applySharpen(bgrMat); }
-    if (needsSobelEdge) { applySobelEdge(bgrMat); }
-    if (needsFlip) { applyFlip(bgrMat); }
-    if (needsBrightContrast) { applyBrightnessContrast(bgrMat); }
-    if (m_settings.m_invertColors) { applyInvertColors(bgrMat); }
-    if (m_settings.m_diffMask && !m_previousRawFrame.isNull()
-        && m_previousRawFrame.width() == input.width()
-        && m_previousRawFrame.height() == input.height()) {
+    if (m_settings.m_diffMask && !m_previousFrame.m_image.isNull()
+        && m_previousFrame.m_image.width() == input.width()
+        && m_previousFrame.m_image.height() == input.height()) {
         applyDiffMask(bgrMat, detectionRoi);
     }
     if (m_settings.m_motionDetect) { applyMotionDetection(bgrMat, detectionRoi); }

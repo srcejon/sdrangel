@@ -29,7 +29,6 @@
 #include <QTextDocument>
 
 #include <opencv2/core/core.hpp>
-#include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/video/background_segm.hpp>
 #include <opencv2/videoio.hpp>
@@ -41,6 +40,7 @@
 
 #include "util/message.h"
 #include "util/messagequeue.h"
+#include "camerapipelineframe.h"
 #include "camerasettings.h"
 
 class CameraPostProcessor : public QObject
@@ -77,19 +77,19 @@ public:
         MESSAGE_CLASS_DECLARATION
 
     public:
-        const QImage& getImage() const { return m_image; }
+        const CameraPipelineFrame& getFrame() const { return m_frame; }
 
-        static MsgProcessFrame* create(const QImage& image)
+        static MsgProcessFrame* create(const CameraPipelineFrame& frame)
         {
-            return new MsgProcessFrame(image);
+            return new MsgProcessFrame(frame);
         }
 
     private:
-        QImage m_image;
+        CameraPipelineFrame m_frame;
 
-        MsgProcessFrame(const QImage& image) :
+        MsgProcessFrame(const CameraPipelineFrame& frame) :
             Message(),
-            m_image(image)
+            m_frame(frame)
         { }
     };
 
@@ -186,10 +186,8 @@ private:
     MessageQueue *m_msgQueueToGUI;
     CameraSettings m_settings;
     bool m_captureActive;
-    QImage m_lastRawFrame;
-    QImage m_previousRawFrame;
-    std::deque<cv::Mat> m_stackFrameHistory;
-    cv::Mat m_stackAccumulator;
+    CameraPipelineFrame m_lastFrame;
+    CameraPipelineFrame m_previousFrame;
     std::deque<cv::Mat> m_diffMaskHistory;
     QDateTime m_captureDateTime;
     cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
@@ -204,33 +202,13 @@ private:
     QHash<QString, QDateTime> m_pendingDisappearDeadlines;
     cv::VideoWriter m_videoWriter;
     QImage m_spectrumViewImage;
-    cv::Vec3d m_autoWhiteBalanceGains;
-    bool m_autoWhiteBalanceInitialized;
 #ifdef QT_TEXTTOSPEECH_FOUND
     QTextToSpeech *m_speech;
 #endif
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
-    void processNewFrame(const QImage& image);
-    void resetFrameHistoryState();
-    [[nodiscard]] QImage applyFrameStacking(const QImage& input);
-    [[nodiscard]] cv::Mat alignStackFrame(const cv::Mat& frameMat) const;
-    [[nodiscard]] cv::Mat alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const;
-    [[nodiscard]] cv::Mat alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const;
-    [[nodiscard]] cv::Mat warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform) const;
-    [[nodiscard]] cv::Mat frameToAlignmentGray(const cv::Mat& frameMat) const;
-    [[nodiscard]] std::vector<cv::Point2f> detectStarCentroids(const cv::Mat& grayFrame) const;
+    void processNewFrame(const CameraPipelineFrame& frame);
     [[nodiscard]] QImage applyPostProcessing(const QImage& input);
-    void applyWhiteBalance(cv::Mat& bgrMat);
-    void applySaturation(cv::Mat& bgrMat);
-    void applyGamma(cv::Mat& bgrMat) const;
-    void applyGaussianBlur(cv::Mat& bgrMat) const;
-    void applyMedianBlur(cv::Mat& bgrMat) const;
-    void applySharpen(cv::Mat& bgrMat) const;
-    void applySobelEdge(cv::Mat& bgrMat) const;
-    void applyFlip(cv::Mat& bgrMat) const;
-    void applyBrightnessContrast(cv::Mat& bgrMat) const;
-    void applyInvertColors(cv::Mat& bgrMat) const;
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi);
     void applyMotionDetection(cv::Mat& bgrMat, const cv::Rect& roi);

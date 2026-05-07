@@ -41,6 +41,7 @@
 #include "audio/audiofifo.h"
 #include "availabledevicehandler.h"
 #include "camerainfo.h"
+#include "camerapipelineframe.h"
 #include "camerasettings.h"
 
 #ifdef ASICAMERA_FOUND
@@ -52,6 +53,7 @@ class QNetworkReply;
 class QUrl;
 class AudioDeviceManager;
 class CameraPostProcessor;
+class CameraFrameStacker;
 class CameraFinder;
 
 class CameraWorker : public QObject
@@ -483,11 +485,13 @@ MESSAGE_CLASS_DECLARATION
     void stopWork();
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setMessageQueueToGUI(MessageQueue *messageQueue);
+    void setFrameStackerInputMessageQueue(MessageQueue *messageQueue) { m_frameStackerInputMessageQueue = messageQueue; }
     void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
 
 private:
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_frameStackerInputMessageQueue;
     MessageQueue *m_postProcessorInputMessageQueue;
     QRecursiveMutex m_mutex;
     CameraSettings m_settings;

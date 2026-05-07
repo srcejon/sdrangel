@@ -24,6 +24,8 @@
 #include "feature/feature.h"
 #include "util/message.h"
 #include "camerasettings.h"
+#include "cameraframestacker.h"
+#include "cameraimageprocessor.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
 
@@ -147,12 +149,18 @@ public:
     static const char* const m_featureId;
 
     MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
+    MessageQueue* getFrameStackerInputMessageQueue() { return m_frameStacker ? m_frameStacker->getInputMessageQueue() : nullptr; }
+    MessageQueue* getImageProcessorInputMessageQueue() { return m_imageProcessor ? m_imageProcessor->getInputMessageQueue() : nullptr; }
     MessageQueue* getPostProcessorInputMessageQueue() { return m_postProcessor ? m_postProcessor->getInputMessageQueue() : nullptr; }
     void setMessageQueueToGUI(MessageQueue *queue) override;
 
 private:
     QThread *m_workerThread;
     CameraWorker *m_worker;
+    QThread *m_frameStackerThread;
+    CameraFrameStacker *m_frameStacker;
+    QThread *m_imageProcessorThread;
+    CameraImageProcessor *m_imageProcessor;
     QThread *m_postProcessorThread;
     CameraPostProcessor *m_postProcessor;
     CameraSettings m_settings;

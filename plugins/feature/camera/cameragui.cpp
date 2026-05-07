@@ -72,6 +72,7 @@
 
 #include "ui_cameragui.h"
 #include "camera.h"
+#include "cameraframestacker.h"
 #include "camerahistogramdialog.h"
 #include "camerasettingsdialog.h"
 #include "cameraworker.h"
@@ -2374,9 +2375,12 @@ void CameraGUI::onQtImageCaptured(int id, const QImage& image)
         return;
     }
 
-    MessageQueue *postProcessorMQ = m_camera->getPostProcessorInputMessageQueue();
-    if (postProcessorMQ) {
-        postProcessorMQ->push(CameraPostProcessor::MsgProcessFrame::create(image));
+    MessageQueue *frameStackerMQ = m_camera->getFrameStackerInputMessageQueue();
+    if (frameStackerMQ) {
+        CameraPipelineFrame frame;
+        frame.m_image = image;
+        frame.m_captureDateTime = QDateTime::currentDateTime();
+        frameStackerMQ->push(CameraFrameStacker::MsgProcessFrame::create(frame));
     }
 }
 

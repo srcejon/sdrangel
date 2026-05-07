@@ -400,6 +400,7 @@ bool CameraGUI::handleMessage(const Message& message)
         const CameraWorker::MsgReportAlpacaStatus& status = (CameraWorker::MsgReportAlpacaStatus&) message;
         m_lastAlpacaCameraState = status.getCameraState();
         m_lastAlpacaCaptureTimeMs = status.getCaptureTimeMs();
+        m_lastAlpacaReceiveImageFormat = status.getReceiveImageFormat();
         m_lastAlpacaCcdTemperature = status.getCcdTemperature();
         m_lastAlpacaCcdTemperatureValid = status.isCcdTemperatureValid();
         m_lastAlpacaErrorNumber = status.getLastErrorNumber();
@@ -459,6 +460,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_alpacaHasNamedOffsets(false),
     m_lastAlpacaCameraState(-1),
     m_lastAlpacaCaptureTimeMs(-1),
+    m_lastAlpacaReceiveImageFormat(),
     m_lastAlpacaCcdTemperature(0.0),
     m_lastAlpacaCcdTemperatureValid(false),
     m_lastAlpacaErrorNumber(0),
@@ -692,6 +694,7 @@ void CameraGUI::resetCameraStatus()
 {
     m_lastAlpacaCameraState = -1;
     m_lastAlpacaCaptureTimeMs = -1;
+    m_lastAlpacaReceiveImageFormat.clear();
     m_lastAlpacaCcdTemperatureValid = false;
     m_lastAlpacaErrorNumber = 0;
     m_lastAlpacaErrorMessage.clear();
@@ -2561,6 +2564,8 @@ void CameraGUI::updateCameraStatusDisplay()
     settingsUI()->cameraStateLabel->setText(cameraStateText);
     settingsUI()->captureTimeLabel->setText(
         m_lastAlpacaCaptureTimeMs >= 0 ? QString::number(m_lastAlpacaCaptureTimeMs) : "-");
+    settingsUI()->receiveImageFormatLabel->setText(
+        m_lastAlpacaReceiveImageFormat.isEmpty() ? "-" : m_lastAlpacaReceiveImageFormat);
     settingsUI()->ccdTempLabel->setText(
         m_lastAlpacaCcdTemperatureValid ? QString::number(m_lastAlpacaCcdTemperature, 'f', 1) : "-");
     settingsUI()->alpacaErrorCodeLabel->setText(QString::number(m_lastAlpacaErrorNumber));

@@ -441,14 +441,16 @@ MESSAGE_CLASS_DECLARATION
         double getCcdTemperature() const { return m_ccdTemperature; }
         bool isCcdTemperatureValid() const { return m_ccdTemperatureValid; }
         qint64 getCaptureTimeMs() const { return m_captureTimeMs; }
+        const QString& getReceiveImageFormat() const { return m_receiveImageFormat; }
         int getLastErrorNumber() const { return m_lastErrorNumber; }
         const QString& getLastErrorMessage() const { return m_lastErrorMessage; }
 
         static MsgReportAlpacaStatus* create(int cameraState, double ccdTemperature, bool ccdTemperatureValid, qint64 captureTimeMs,
-                                             int lastErrorNumber, const QString& lastErrorMessage)
+                                              const QString& receiveImageFormat,
+                                              int lastErrorNumber, const QString& lastErrorMessage)
         {
             return new MsgReportAlpacaStatus(cameraState, ccdTemperature, ccdTemperatureValid, captureTimeMs,
-                lastErrorNumber, lastErrorMessage);
+                 receiveImageFormat, lastErrorNumber, lastErrorMessage);
         }
 
     private:
@@ -456,16 +458,19 @@ MESSAGE_CLASS_DECLARATION
         double m_ccdTemperature;
         bool m_ccdTemperatureValid;
         qint64 m_captureTimeMs;
+        QString m_receiveImageFormat;
         int m_lastErrorNumber;
         QString m_lastErrorMessage;
 
         MsgReportAlpacaStatus(int cameraState, double ccdTemperature, bool ccdTemperatureValid, qint64 captureTimeMs,
-                              int lastErrorNumber, const QString& lastErrorMessage) :
+                               const QString& receiveImageFormat,
+                               int lastErrorNumber, const QString& lastErrorMessage) :
             Message(),
             m_cameraState(cameraState),
             m_ccdTemperature(ccdTemperature),
             m_ccdTemperatureValid(ccdTemperatureValid),
             m_captureTimeMs(captureTimeMs),
+            m_receiveImageFormat(receiveImageFormat),
             m_lastErrorNumber(lastErrorNumber),
             m_lastErrorMessage(lastErrorMessage)
         { }
@@ -504,6 +509,7 @@ private:
     bool m_alpacaImageBytesSupported; // true = try ImageBytes binary protocol; false = use JSON
     int m_lastAlpacaErrorNumber;
     QString m_lastAlpacaErrorMessage;
+    QString m_lastAlpacaReceiveImageFormat;
     bool m_alpacaConnected;
     bool m_alpacaConnectionPending;
     QVector<std::function<void()>> m_alpacaPendingConnectedContinuations;
@@ -575,8 +581,8 @@ private:
     void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
     void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray());
     QString transportError(QNetworkReply *reply) const;
-    QImage parseAlpacaImageArray(const QByteArray& payload) const;
-    QImage parseAlpacaImageBytes(const QByteArray& payload) const;
+    QImage parseAlpacaImageArray(const QByteArray& payload, QString *receiveImageFormat = nullptr) const;
+    QImage parseAlpacaImageBytes(const QByteArray& payload, QString *receiveImageFormat = nullptr) const;
     QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit) const;
     static QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit);
     static QString normalizeAudioMatchName(QString text);

@@ -152,6 +152,7 @@ private:
     QList<AlpacaDeviceInfo> m_discoveredAlpacaFilterWheels;
     int m_lastAlpacaCameraState;
     qint64 m_lastAlpacaCaptureTimeMs;
+    QString m_lastAlpacaReceiveImageFormat;
     double m_lastAlpacaCcdTemperature;
     bool m_lastAlpacaCcdTemperatureValid;
     int m_lastAlpacaErrorNumber;

@@ -462,6 +462,7 @@ CameraWorker::CameraWorker() :
     m_alpacaImageBytesSupported(true),
     m_lastAlpacaErrorNumber(0),
     m_lastAlpacaErrorMessage(),
+    m_lastAlpacaReceiveImageFormat(),
     m_alpacaConnected(false),
     m_alpacaConnectionPending(false),
     m_alpacaFocuserConnected(false),
@@ -1977,21 +1978,24 @@ void CameraWorker::alpacaFetchImageArray()
         }
 
         QImage image = createPlaceholderFrame();
+        QString receiveImageFormat;
 
         if (reply->error() == QNetworkReply::NoError) {
             const QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
             if (contentType.contains(QLatin1String("application/imagebytes"), Qt::CaseInsensitive)) {
                 m_alpacaImageBytesSupported = true;
-                image = parseAlpacaImageBytes(data);
+                image = parseAlpacaImageBytes(data, &receiveImageFormat);
             } else {
                 // Server returned JSON — either it doesn't support ImageBytes or we didn't request it
                 if (m_alpacaImageBytesSupported) {
                     qDebug() << "CameraWorker::alpacaFetchImageArray: server returned JSON; disabling ImageBytes for this camera";
                     m_alpacaImageBytesSupported = false;
                 }
-                image = parseAlpacaImageArray(data);
+                image = parseAlpacaImageArray(data, &receiveImageFormat);
             }
         }
+
+        m_lastAlpacaReceiveImageFormat = receiveImageFormat;
 
         if (m_alpacaCaptureTimer.isValid())
         {
@@ -2228,6 +2232,7 @@ void CameraWorker::alpacaPollStatus()
                 status->ccdTemperature,
                 status->ccdTemperatureValid,
                 m_lastAlpacaCaptureTimeMs,
+                m_lastAlpacaReceiveImageFormat,
                 m_lastAlpacaErrorNumber,
                 m_lastAlpacaErrorMessage));
         }
@@ -2375,7 +2380,7 @@ QString CameraWorker::transportError(QNetworkReply *reply) const
     }
 }
 
-QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
+QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload, QString *receiveImageFormat) const
 {
     const QJsonDocument doc = QJsonDocument::fromJson(payload);
     if (!doc.isObject()) {
@@ -2424,6 +2429,10 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             }
         }
         const bool use16Bit = (minVal < 0) || (maxVal > 255);
+        if (receiveImageFormat) {
+            *receiveImageFormat = QStringLiteral("ImageArray rank2 %1")
+                .arg(use16Bit ? QStringLiteral("16-bit") : QStringLiteral("8-bit"));
+        }
 
         QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
@@ -2469,6 +2478,10 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
         }
         const int range3 = maxVal - minVal;
         const bool use16Bit = (minVal < 0) || (maxVal > 255);
+        if (receiveImageFormat) {
+            *receiveImageFormat = QStringLiteral("ImageArray rank3 %1")
+                .arg(use16Bit ? QStringLiteral("16-bit") : QStringLiteral("8-bit"));
+        }
         const double scale = (range3 > 0) ? ((use16Bit ? 65535.0 : 255.0) / range3) : 0.0;
         const int uniformGray3 = (range3 == 0) ? (minVal > 0 ? (use16Bit ? 32768 : 128) : 0) : 0;
 
@@ -2604,7 +2617,7 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
 //
 // Pixel data is column-major within each rank-2 plane: pixel[x][y] at index (x*height + y)
 // For rank 3: pixel[plane][x][y] at index (plane*width*height + x*height + y)
-QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
+QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload, QString *receiveImageFormat) const
 {
     static constexpr int    kHeaderSize         = 44;
     // ASCOM ImageArrayElementTypes enum values
@@ -2657,10 +2670,22 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
         case kElementTypeSingle: elementSize = 4; break;
         case kElementTypeByte:   elementSize = 1; break;
         case kElementTypeUInt16: elementSize = 2; break;
-        default:
+      default:
             qDebug() << "CameraWorker::parseAlpacaImageBytes: unknown TransmissionElementType" << transmissionType;
             return createPlaceholderFrame();
     }
+
+    auto elementTypeName = [](qint32 elementType) -> QString {
+        switch (elementType) {
+        case kElementTypeInt16: return QStringLiteral("Int16");
+        case kElementTypeInt32: return QStringLiteral("Int32");
+        case kElementTypeDouble: return QStringLiteral("Double");
+        case kElementTypeSingle: return QStringLiteral("Single");
+        case kElementTypeByte: return QStringLiteral("Byte");
+        case kElementTypeUInt16: return QStringLiteral("UInt16");
+        default: return QStringLiteral("Unknown");
+        }
+    };
 
     const char*   pixels         = payload.constData() + dataStart;
     const qsizetype pixelDataLen = payload.size() - dataStart;
@@ -2728,6 +2753,12 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
                            || (transmissionType == kElementTypeUInt16)
                            || (minVal < 0.0)
                            || (maxVal > 255.0);
+        if (receiveImageFormat) {
+            *receiveImageFormat = QStringLiteral("ImageBytes rank2 %1/%2%3")
+                .arg(elementTypeName(imageElementType),
+                     elementTypeName(transmissionType),
+                     use16Bit ? QStringLiteral(" 16-bit") : QString());
+        }
 
         QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
@@ -2776,6 +2807,12 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
                            || (transmissionType == kElementTypeUInt16)
                            || (minVal < 0.0)
                            || (maxVal > 255.0);
+        if (receiveImageFormat) {
+            *receiveImageFormat = QStringLiteral("ImageBytes rank3 %1/%2%3")
+                .arg(elementTypeName(imageElementType),
+                     elementTypeName(transmissionType),
+                     use16Bit ? QStringLiteral(" 16-bit") : QString());
+        }
         const double scale = (range3 > 0.0) ? ((use16Bit ? 65535.0 : 255.0) / range3) : 0.0;
         const int uniformGray3 = (range3 == 0.0) ? (minVal > 0.0 ? (use16Bit ? 32768 : 128) : 0) : 0;
 
@@ -3380,6 +3417,10 @@ void CameraWorker::asiPollStatus()
             m_lastAsiCcdTemperature,
             temperatureValid,
             m_lastAsiCaptureTimeMs,
+            m_asiImageType == ASI_IMG_RGB24 ? QStringLiteral("RGB24")
+                : m_asiImageType == ASI_IMG_RAW16 ? QStringLiteral("RAW16")
+                : m_asiImageType == ASI_IMG_RAW8 ? QStringLiteral("RAW8")
+                : QStringLiteral("Y8"),
             m_lastAsiErrorNumber,
             m_lastAsiErrorMessage));
     }

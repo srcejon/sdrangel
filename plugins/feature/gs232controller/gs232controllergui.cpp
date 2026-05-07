@@ -27,6 +27,7 @@
 #include "feature/featureuiset.h"
 #include "gui/basicfeaturesettingsdialog.h"
 #include "gui/dialogpositioner.h"
+#include "gui/crightclickenabler.h"
 #include "util/astronomy.h"
 
 #include "ui_gs232controllergui.h"
@@ -183,22 +184,22 @@ bool GS232ControllerGUI::handleMessage(const Message& message)
         m_dfmStatusDialog.displayStatus(report.getDFMStatus());
         return true;
     }
-    else if (AlpacaProtocol::MsgReportParkState::match(message))
+    else if (ControllerProtocol::MsgReportParkState::match(message))
     {
-        AlpacaProtocol::MsgReportParkState& report = (AlpacaProtocol::MsgReportParkState&) message;
-        m_alpacaCanPark = report.canPark();
-        m_alpacaAtPark = report.atPark();
-        m_alpacaParkStateValid = report.parkValid();
-        m_alpacaCanFindHome = report.canFindHome();
-        m_alpacaAtHome = report.atHome();
-        m_alpacaHomeStateValid = report.homeValid();
-        updateAlpacaParkControls();
+        ControllerProtocol::MsgReportParkState& report = (ControllerProtocol::MsgReportParkState&) message;
+        m_canPark = report.canPark();
+        m_atPark = report.atPark();
+        m_parkStateValid = report.parkValid();
+        m_canFindHome = report.canFindHome();
+        m_atHome = report.atHome();
+        m_homeStateValid = report.homeValid();
+        updateParkAndHomeControls();
         return true;
     }
-    else if (AlpacaProtocol::MsgReportSiteMismatch::match(message))
+    else if (ControllerProtocol::MsgReportPositionMismatch::match(message))
     {
-        AlpacaProtocol::MsgReportSiteMismatch& report = (AlpacaProtocol::MsgReportSiteMismatch&) message;
-        handleAlpacaSiteMismatch(report);
+        ControllerProtocol::MsgReportPositionMismatch& report = (ControllerProtocol::MsgReportPositionMismatch&) message;
+        handlePositionMismatch(report);
         return true;
     }
 
@@ -234,12 +235,12 @@ GS232ControllerGUI::GS232ControllerGUI(PluginAPI* pluginAPI, FeatureUISet *featu
     m_doApplySettings(true),
     m_lastFeatureState(0),
     m_lastOnTarget(false),
-    m_alpacaCanPark(false),
-    m_alpacaAtPark(false),
-    m_alpacaParkStateValid(false),
-    m_alpacaCanFindHome(false),
-    m_alpacaAtHome(false),
-    m_alpacaHomeStateValid(false),
+    m_canPark(false),
+    m_atPark(false),
+    m_parkStateValid(false),
+    m_canFindHome(false),
+    m_atHome(false),
+    m_homeStateValid(false),
     m_dfmStatusDialog(),
     m_inputController(nullptr),
     m_inputCoord1(0.0),
@@ -281,6 +282,10 @@ GS232ControllerGUI::GS232ControllerGUI(PluginAPI* pluginAPI, FeatureUISet *featu
     updateInputControllerList();
     connect(InputControllerManager::instance(), &InputControllerManager::controllersChanged, this, &GS232ControllerGUI::updateInputControllerList);
     connect(&m_inputTimer, &QTimer::timeout, this, &GS232ControllerGUI::checkInputController);
+
+    CRightClickEnabler *useMyPositionClickEnabler = new CRightClickEnabler(ui->useMyPosition);
+    connect(useMyPositionClickEnabler, &CRightClickEnabler::rightClick, this, &GS232ControllerGUI::useMyPosition_rightClicked);
+
 
     displaySettings();
     applyAllSettings();
@@ -518,6 +523,10 @@ void GS232ControllerGUI::displaySettings()
     ui->enableTargetControl->setChecked(m_settings.m_targetControlEnabled);
     ui->enableOffsetControl->setChecked(m_settings.m_offsetControlEnabled);
     ui->lineEnding->setCurrentIndex((int) m_settings.m_lineEnding);
+    ui->latitude->setValue(m_settings.m_latitude);
+    ui->longitude->setValue(m_settings.m_longitude);
+    ui->altitude->setValue(m_settings.m_altitude);
+    ui->useMyPosition->setChecked(m_settings.m_positionSync);
     ui->dfmTrack->setChecked(m_settings.m_dfmTrackOn);
     ui->dfmLubePumps->setChecked(m_settings.m_dfmLubePumpsOn);
     ui->dfmBrakes->setChecked(m_settings.m_dfmBrakesOn);
@@ -525,6 +534,7 @@ void GS232ControllerGUI::displaySettings()
     getRollupContents()->restoreState(m_rollupState);
     updateConnectionWidgets();
     blockApplySettings(false);
+    applyPositionSync();
 }
 
 void GS232ControllerGUI::updateConnectionWidgets()
@@ -696,10 +706,9 @@ void GS232ControllerGUI::setProtocol(GS232ControllerSettings::Protocol protocol)
     ui->dfmShowStatus->setVisible(dfm);
 
     bool alpaca = protocol == GS232ControllerSettings::ALPACA;
-    ui->alpacaLine->setVisible(alpaca);
-    ui->alpacaPark->setVisible(alpaca);
-    ui->alpacaHome->setVisible(alpaca);
-    updateAlpacaParkControls();
+    ui->park->setVisible(alpaca);
+    ui->home->setVisible(alpaca);
+    updateParkAndHomeControls();
 
     updateConnectionWidgets();
 
@@ -727,70 +736,90 @@ void GS232ControllerGUI::setPrecision()
     ui->elevationOffset->setSingleStep(step);
 }
 
-void GS232ControllerGUI::updateAlpacaParkControls()
+void GS232ControllerGUI::updateParkAndHomeControls()
 {
     const bool alpaca = m_settings.m_protocol == GS232ControllerSettings::ALPACA;
 
-    bool oldParkState = ui->alpacaPark->blockSignals(true);
-    ui->alpacaPark->setChecked(alpaca && m_alpacaParkStateValid && m_alpacaAtPark);
-    ui->alpacaPark->blockSignals(oldParkState);
-    ui->alpacaPark->setEnabled(alpaca && m_alpacaParkStateValid && (m_alpacaAtPark || m_alpacaCanPark));
+    bool oldParkState = ui->park->blockSignals(true);
+    ui->park->setChecked(alpaca && m_parkStateValid && m_atPark);
+    ui->park->blockSignals(oldParkState);
+    ui->park->setEnabled(alpaca && m_parkStateValid && (m_atPark || m_canPark));
 
-    bool oldHomeState = ui->alpacaHome->blockSignals(true);
-    ui->alpacaHome->setChecked(alpaca && m_alpacaHomeStateValid && m_alpacaAtHome);
-    ui->alpacaHome->blockSignals(oldHomeState);
-    ui->alpacaHome->setEnabled(alpaca && m_alpacaCanFindHome);
+    bool oldHomeState = ui->home->blockSignals(true);
+    ui->home->setChecked(alpaca && m_homeStateValid && m_atHome);
+    ui->home->blockSignals(oldHomeState);
+    ui->home->setEnabled(alpaca && m_homeStateValid && (m_atHome || m_canFindHome));
 }
 
-void GS232ControllerGUI::handleAlpacaSiteMismatch(const AlpacaProtocol::MsgReportSiteMismatch& report)
+void GS232ControllerGUI::handlePositionMismatch(const ControllerProtocol::MsgReportPositionMismatch& report)
 {
-    const QString telescopeUtc = report.telescopeUtcDate().toUTC().toString(Qt::ISODateWithMs);
+    QMessageBox msgBox(this);
+    msgBox.setIcon(QMessageBox::Question);
+    msgBox.setWindowTitle(tr("Position mismatch"));
+    msgBox.setText(tr("The rotator position differs from the current settings."));
+    msgBox.setInformativeText(QString(
+        "Rotator:\n"
+        "  Latitude: %1\n"
+        "  Longitude: %2\n"
+        "  Elevation: %3 m\n"
+        "Settings:\n"
+        "  Latitude: %4\n"
+        "  Longitude: %5\n"
+        "  Elevation: %6 m\n")
+        .arg(report.rotatorLatitude(), 0, 'f', 6)
+        .arg(report.rotatorLongitude(), 0, 'f', 6)
+        .arg(report.rotatorElevation(), 0, 'f', 1)
+        .arg(report.localLatitude(), 0, 'f', 6)
+        .arg(report.localLongitude(), 0, 'f', 6)
+        .arg(report.localElevation(), 0, 'f', 1));
+
+    QPushButton *updaterotator = msgBox.addButton(tr("Update rotator"), QMessageBox::ActionRole);
+    QPushButton *updateSettings = msgBox.addButton(tr("Update settings"), QMessageBox::ActionRole);
+    msgBox.addButton(tr("No change"), QMessageBox::RejectRole);
+    msgBox.setDefaultButton(updaterotator);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == updaterotator)
+    {
+        m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgSetPosition::create(
+            report.localLatitude(),
+            report.localLongitude(),
+            report.localElevation()));
+    }
+    else if (msgBox.clickedButton() == updateSettings)
+    {
+        ui->latitude->setValue(report.rotatorLatitude());
+        ui->longitude->setValue(report.rotatorLongitude());
+        ui->altitude->setValue(report.rotatorElevation());
+    }
+}
+
+void GS232ControllerGUI::handleDateTimeMismatch(const ControllerProtocol::MsgReportDateTimeMismatch& report)
+{
+    const QString rotatorUtc = report.rotatorUtcDate().toUTC().toString(Qt::ISODateWithMs);
     const QString localUtc = report.localUtcDate().toUTC().toString(Qt::ISODateWithMs);
 
     QMessageBox msgBox(this);
     msgBox.setIcon(QMessageBox::Question);
-    msgBox.setWindowTitle(tr("Alpaca telescope site mismatch"));
-    msgBox.setText(tr("The Alpaca telescope site or clock differs from SDRangel."));
+    msgBox.setWindowTitle(tr("Date & time mismatch"));
+    msgBox.setText(tr("The rotator date & time differs from the local system clock."));
     msgBox.setInformativeText(QString(
-        "Telescope:\n"
-        "  Latitude: %1\n"
-        "  Longitude: %2\n"
-        "  Elevation: %3 m\n"
-        "  UTC date: %4\n\n"
-        "SDRangel:\n"
-        "  Latitude: %5\n"
-        "  Longitude: %6\n"
-        "  Elevation: %7 m\n"
-        "  UTC date: %8\n\n"
-        "Updating SDRangel changes the station position. The system clock is not changed.")
-        .arg(report.telescopeLatitude(), 0, 'f', 6)
-        .arg(report.telescopeLongitude(), 0, 'f', 6)
-        .arg(report.telescopeElevation(), 0, 'f', 1)
-        .arg(telescopeUtc)
-        .arg(report.localLatitude(), 0, 'f', 6)
-        .arg(report.localLongitude(), 0, 'f', 6)
-        .arg(report.localElevation(), 0, 'f', 1)
+        "Rotator:\n"
+        "  UTC date: %1\n\n"
+        "Local:\n"
+        "  UTC date: %2\n\n")
+        .arg(rotatorUtc)
         .arg(localUtc));
 
-    QPushButton *updateTelescope = msgBox.addButton(tr("Update Telescope"), QMessageBox::ActionRole);
-    QPushButton *updateSDRangel = msgBox.addButton(tr("Update SDRangel"), QMessageBox::ActionRole);
-    msgBox.addButton(tr("No Change"), QMessageBox::RejectRole);
-    msgBox.setDefaultButton(updateTelescope);
+    QPushButton *updaterotator = msgBox.addButton(tr("Update rotator"), QMessageBox::ActionRole);
+    msgBox.addButton(tr("No change"), QMessageBox::RejectRole);
+    msgBox.setDefaultButton(updaterotator);
     msgBox.exec();
 
-    if (msgBox.clickedButton() == updateTelescope)
+    if (msgBox.clickedButton() == updaterotator)
     {
-        m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgSetSite::create(
-            report.localLatitude(),
-            report.localLongitude(),
-            report.localElevation(),
+        m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgSetDateTime::create(
             QDateTime::currentDateTimeUtc()));
-    }
-    else if (msgBox.clickedButton() == updateSDRangel)
-    {
-        MainCore::instance()->getMutableSettings().setLatitude((float) report.telescopeLatitude());
-        MainCore::instance()->getMutableSettings().setLongitude((float) report.telescopeLongitude());
-        MainCore::instance()->getMutableSettings().setAltitude((float) report.telescopeElevation());
     }
 }
 
@@ -982,6 +1011,78 @@ void GS232ControllerGUI::on_lineEnding_currentIndexChanged(int index)
     applySetting("lineEnding");
 }
 
+void GS232ControllerGUI::on_latitude_valueChanged(double value)
+{
+    m_settings.m_latitude = (float) value;
+    applySetting("latitude");
+}
+
+void GS232ControllerGUI::on_longitude_valueChanged(double value)
+{
+    m_settings.m_longitude = (float) value;
+    applySetting("longitude");
+}
+
+void GS232ControllerGUI::on_altitude_valueChanged(double value)
+{
+    m_settings.m_altitude = (float) value;
+    applySetting("altitude");
+}
+
+void GS232ControllerGUI::on_useMyPosition_clicked(bool checked)
+{
+    (void) checked;
+
+    ui->latitude->setValue(MainCore::instance()->getSettings().getLatitude());
+    ui->longitude->setValue(MainCore::instance()->getSettings().getLongitude());
+    ui->altitude->setValue(MainCore::instance()->getSettings().getAltitude());
+}
+
+void GS232ControllerGUI::useMyPosition_rightClicked(const QPoint& p)
+{
+    (void) p;
+
+    m_settings.m_positionSync = !m_settings.m_positionSync;
+    applySetting("positionSync");
+    applyPositionSync();
+}
+
+void GS232ControllerGUI::applyPositionSync()
+{
+    if (m_settings.m_positionSync) {
+        ui->useMyPosition->setStyleSheet(QString("QToolButton{ background-color: %1; }").arg(palette().highlight().color().darker(150).name()));
+    } else {
+        ui->useMyPosition->setStyleSheet(QString("QToolButton{ background-color: %1; }").arg(palette().button().color().name()));
+    }
+
+    ui->latitude->setReadOnly(m_settings.m_positionSync);
+    ui->longitude->setReadOnly(m_settings.m_positionSync);
+    ui->altitude->setReadOnly(m_settings.m_positionSync);
+    if (m_settings.m_positionSync)
+    {
+        on_useMyPosition_clicked(true);
+        connect(&MainCore::instance()->getSettings(), &MainSettings::preferenceChanged, this, &GS232ControllerGUI::preferenceChanged);
+    }
+    else
+    {
+        disconnect(&MainCore::instance()->getSettings(), &MainSettings::preferenceChanged, this, &GS232ControllerGUI::preferenceChanged);
+    }
+}
+
+void GS232ControllerGUI::preferenceChanged(int elementType)
+{
+    Preferences::ElementType pref = (Preferences::ElementType)elementType;
+    if (pref == Preferences::Latitude) {
+        ui->latitude->setValue(MainCore::instance()->getSettings().getLatitude());
+    }
+    if (pref == Preferences::Longitude) {
+        ui->longitude->setValue(MainCore::instance()->getSettings().getLongitude());
+    }
+    if (pref == Preferences::Altitude) {
+        ui->altitude->setValue(MainCore::instance()->getSettings().getAltitude());
+    }
+}
+
 void GS232ControllerGUI::on_dfmTrack_clicked(bool checked)
 {
     m_settings.m_dfmTrackOn = checked;
@@ -1013,7 +1114,7 @@ void GS232ControllerGUI::on_dfmShowStatus_clicked()
     m_dfmStatusDialog.activateWindow();
 }
 
-void GS232ControllerGUI::on_alpacaPark_toggled(bool checked)
+void GS232ControllerGUI::on_park_toggled(bool checked)
 {
     if (checked) {
         m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgPark::create());
@@ -1022,12 +1123,12 @@ void GS232ControllerGUI::on_alpacaPark_toggled(bool checked)
     }
 }
 
-void GS232ControllerGUI::on_alpacaHome_clicked(bool checked)
+void GS232ControllerGUI::on_home_clicked(bool checked)
 {
     if (checked) {
         m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgHome::create());
     } else {
-        updateAlpacaParkControls();
+        updateParkAndHomeControls();
     }
 }
 
@@ -1107,7 +1208,6 @@ void GS232ControllerGUI::applyAllSettings()
     applySettings(QStringList(), true);
 }
 
-
 void GS232ControllerGUI::makeUIConnections()
 {
     QObject::connect(ui->startStop, &ButtonSwitch::toggled, this, &GS232ControllerGUI::on_startStop_toggled);
@@ -1136,11 +1236,15 @@ void GS232ControllerGUI::makeUIConnections()
     QObject::connect(ui->enableTargetControl, &QToolButton::clicked, this, &GS232ControllerGUI::on_enableTargetControl_clicked);
     QObject::connect(ui->enableOffsetControl, &QToolButton::clicked, this, &GS232ControllerGUI::on_enableOffsetControl_clicked);
     QObject::connect(ui->lineEnding, qOverload<int>(&QComboBox::currentIndexChanged), this, &GS232ControllerGUI::on_lineEnding_currentIndexChanged);
+    QObject::connect(ui->latitude, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &GS232ControllerGUI::on_latitude_valueChanged);
+    QObject::connect(ui->longitude, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &GS232ControllerGUI::on_longitude_valueChanged);
+    QObject::connect(ui->altitude, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &GS232ControllerGUI::on_altitude_valueChanged);
+    QObject::connect(ui->useMyPosition, &ButtonSwitch::clicked, this, &GS232ControllerGUI::on_useMyPosition_clicked);
     QObject::connect(ui->dfmTrack, &QToolButton::toggled, this, &GS232ControllerGUI::on_dfmTrack_clicked);
     QObject::connect(ui->dfmLubePumps, &QToolButton::toggled, this, &GS232ControllerGUI::on_dfmLubePumps_clicked);
     QObject::connect(ui->dfmBrakes, &QToolButton::toggled, this, &GS232ControllerGUI::on_dfmBrakes_clicked);
     QObject::connect(ui->dfmDrives, &QToolButton::toggled, this, &GS232ControllerGUI::on_dfmDrives_clicked);
     QObject::connect(ui->dfmShowStatus, &QToolButton::clicked, this, &GS232ControllerGUI::on_dfmShowStatus_clicked);
-    QObject::connect(ui->alpacaPark, &ButtonSwitch::toggled, this, &GS232ControllerGUI::on_alpacaPark_toggled);
-    QObject::connect(ui->alpacaHome, &ButtonSwitch::clicked, this, &GS232ControllerGUI::on_alpacaHome_clicked);
+    QObject::connect(ui->park, &ButtonSwitch::toggled, this, &GS232ControllerGUI::on_park_toggled);
+    QObject::connect(ui->home, &ButtonSwitch::clicked, this, &GS232ControllerGUI::on_home_clicked);
 }

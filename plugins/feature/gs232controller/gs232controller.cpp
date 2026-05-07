@@ -46,7 +46,8 @@ MESSAGE_CLASS_DEFINITION(GS232Controller::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgPark, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgUnpark, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgHome, Message)
-MESSAGE_CLASS_DEFINITION(GS232Controller::MsgSetSite, Message)
+MESSAGE_CLASS_DEFINITION(GS232Controller::MsgSetPosition, Message)
+MESSAGE_CLASS_DEFINITION(GS232Controller::MsgSetDateTime, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgReportWorker, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgReportAvailableChannelOrFeatures, Message)
 MESSAGE_CLASS_DEFINITION(GS232Controller::MsgScanAvailableChannelOrFeatures, Message)
@@ -180,29 +181,37 @@ bool GS232Controller::handleMessage(const Message& cmd)
     else if (MsgPark::match(cmd))
     {
         if (m_worker) {
-            m_worker->getInputMessageQueue()->push(GS232ControllerWorker::MsgPark::create());
+            m_worker->getInputMessageQueue()->push(GS232Controller::MsgPark::create());
         }
         return true;
     }
     else if (MsgUnpark::match(cmd))
     {
         if (m_worker) {
-            m_worker->getInputMessageQueue()->push(GS232ControllerWorker::MsgUnpark::create());
+            m_worker->getInputMessageQueue()->push(GS232Controller::MsgUnpark::create());
         }
         return true;
     }
     else if (MsgHome::match(cmd))
     {
         if (m_worker) {
-            m_worker->getInputMessageQueue()->push(GS232ControllerWorker::MsgHome::create());
+            m_worker->getInputMessageQueue()->push(GS232Controller::MsgHome::create());
         }
         return true;
     }
-    else if (MsgSetSite::match(cmd))
+    else if (MsgSetPosition::match(cmd))
     {
-        MsgSetSite& cfg = (MsgSetSite&) cmd;
+        MsgSetPosition& cfg = (MsgSetPosition&) cmd;
         if (m_worker) {
-            m_worker->getInputMessageQueue()->push(GS232ControllerWorker::MsgSetSite::create(cfg.latitude(), cfg.longitude(), cfg.elevation(), cfg.utcDate()));
+            m_worker->getInputMessageQueue()->push(GS232Controller::MsgSetPosition::create(cfg.latitude(), cfg.longitude(), cfg.elevation()));
+        }
+        return true;
+    }
+    else if (MsgSetDateTime::match(cmd))
+    {
+        MsgSetDateTime& cfg = (MsgSetDateTime&) cmd;
+        if (m_worker) {
+            m_worker->getInputMessageQueue()->push(GS232Controller::MsgSetDateTime::create(cfg.utcDate()));
         }
         return true;
     }
@@ -273,21 +282,21 @@ bool GS232Controller::handleMessage(const Message& cmd)
         }
         return true;
     }
-    else if (AlpacaProtocol::MsgReportParkState::match(cmd))
+    else if (ControllerProtocol::MsgReportParkState::match(cmd))
     {
         if (getMessageQueueToGUI())
         {
-            AlpacaProtocol::MsgReportParkState& report = (AlpacaProtocol::MsgReportParkState&) cmd;
-            getMessageQueueToGUI()->push(new AlpacaProtocol::MsgReportParkState(report));
+            ControllerProtocol::MsgReportParkState& report = (ControllerProtocol::MsgReportParkState&) cmd;
+            getMessageQueueToGUI()->push(new ControllerProtocol::MsgReportParkState(report));
         }
         return true;
     }
-    else if (AlpacaProtocol::MsgReportSiteMismatch::match(cmd))
+    else if (ControllerProtocol::MsgReportPositionMismatch::match(cmd))
     {
         if (getMessageQueueToGUI())
         {
-            AlpacaProtocol::MsgReportSiteMismatch& report = (AlpacaProtocol::MsgReportSiteMismatch&) cmd;
-            getMessageQueueToGUI()->push(new AlpacaProtocol::MsgReportSiteMismatch(report));
+            ControllerProtocol::MsgReportPositionMismatch& report = (ControllerProtocol::MsgReportPositionMismatch&) cmd;
+            getMessageQueueToGUI()->push(new ControllerProtocol::MsgReportPositionMismatch(report));
         }
         return true;
     }

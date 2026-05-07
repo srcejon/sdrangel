@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
 // Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Some code by AI                                                               //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -26,7 +27,6 @@
 #include <QUrl>
 #include <QUrlQuery>
 
-#include "util/message.h"
 #include "controllerprotocol.h"
 
 class QJsonObject;
@@ -37,108 +37,6 @@ class AlpacaProtocol : public QObject, public ControllerProtocol
 {
     Q_OBJECT
 public:
-    class MsgReportParkState : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        bool canPark() const { return m_canPark; }
-        bool atPark() const { return m_atPark; }
-        bool parkValid() const { return m_parkValid; }
-        bool canFindHome() const { return m_canFindHome; }
-        bool atHome() const { return m_atHome; }
-        bool homeValid() const { return m_homeValid; }
-        bool valid() const { return m_parkValid; }
-
-        static MsgReportParkState* create(bool canPark, bool atPark, bool parkValid, bool canFindHome, bool atHome, bool homeValid)
-        {
-            return new MsgReportParkState(canPark, atPark, parkValid, canFindHome, atHome, homeValid);
-        }
-
-    private:
-        bool m_canPark;
-        bool m_atPark;
-        bool m_parkValid;
-        bool m_canFindHome;
-        bool m_atHome;
-        bool m_homeValid;
-
-        MsgReportParkState(bool canPark, bool atPark, bool parkValid, bool canFindHome, bool atHome, bool homeValid) :
-            Message(),
-            m_canPark(canPark),
-            m_atPark(atPark),
-            m_parkValid(parkValid),
-            m_canFindHome(canFindHome),
-            m_atHome(atHome),
-            m_homeValid(homeValid)
-        {
-        }
-    };
-
-    class MsgReportSiteMismatch : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        double telescopeLatitude() const { return m_telescopeLatitude; }
-        double telescopeLongitude() const { return m_telescopeLongitude; }
-        double telescopeElevation() const { return m_telescopeElevation; }
-        QDateTime telescopeUtcDate() const { return m_telescopeUtcDate; }
-        double localLatitude() const { return m_localLatitude; }
-        double localLongitude() const { return m_localLongitude; }
-        double localElevation() const { return m_localElevation; }
-        QDateTime localUtcDate() const { return m_localUtcDate; }
-
-        static MsgReportSiteMismatch* create(
-            double telescopeLatitude,
-            double telescopeLongitude,
-            double telescopeElevation,
-            const QDateTime& telescopeUtcDate,
-            double localLatitude,
-            double localLongitude,
-            double localElevation,
-            const QDateTime& localUtcDate)
-        {
-            return new MsgReportSiteMismatch(
-                telescopeLatitude,
-                telescopeLongitude,
-                telescopeElevation,
-                telescopeUtcDate,
-                localLatitude,
-                localLongitude,
-                localElevation,
-                localUtcDate);
-        }
-
-    private:
-        double m_telescopeLatitude;
-        double m_telescopeLongitude;
-        double m_telescopeElevation;
-        QDateTime m_telescopeUtcDate;
-        double m_localLatitude;
-        double m_localLongitude;
-        double m_localElevation;
-        QDateTime m_localUtcDate;
-
-        MsgReportSiteMismatch(
-            double telescopeLatitude,
-            double telescopeLongitude,
-            double telescopeElevation,
-            const QDateTime& telescopeUtcDate,
-            double localLatitude,
-            double localLongitude,
-            double localElevation,
-            const QDateTime& localUtcDate) :
-            Message(),
-            m_telescopeLatitude(telescopeLatitude),
-            m_telescopeLongitude(telescopeLongitude),
-            m_telescopeElevation(telescopeElevation),
-            m_telescopeUtcDate(telescopeUtcDate),
-            m_localLatitude(localLatitude),
-            m_localLongitude(localLongitude),
-            m_localElevation(localElevation),
-            m_localUtcDate(localUtcDate)
-        {
-        }
-    };
 
     AlpacaProtocol();
     ~AlpacaProtocol();
@@ -150,7 +48,8 @@ public:
     void park() override;
     void unpark() override;
     void home() override;
-    void setSite(double latitude, double longitude, double elevation, const QDateTime& utcDate) override;
+    void setPosition(double latitude, double longitude, double elevation) override;
+    void setDateTime(const QDateTime& utcDate) override;
     void applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force) override;
 
 private:

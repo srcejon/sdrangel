@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
 // Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Some code by AI                                                               //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -33,9 +34,6 @@
 #include "util/astronomy.h"
 
 #include "alpacaprotocol.h"
-
-MESSAGE_CLASS_DEFINITION(AlpacaProtocol::MsgReportParkState, Message)
-MESSAGE_CLASS_DEFINITION(AlpacaProtocol::MsgReportSiteMismatch, Message)
 
 namespace
 {
@@ -155,15 +153,22 @@ void AlpacaProtocol::home()
     });
 }
 
-void AlpacaProtocol::setSite(double latitude, double longitude, double elevation, const QDateTime& utcDate)
+void AlpacaProtocol::setPosition(double latitude, double longitude, double elevation)
 {
-    runWhenConnected([this, latitude, longitude, elevation, utcDate]() {
+    runWhenConnected([this, latitude, longitude, elevation]() {
         setSiteProperty("sitelatitude", "SiteLatitude", QString::number(latitude, 'f', kAlpacaCoordinatePrecision), "Telescope sitelatitude");
         setSiteProperty("sitelongitude", "SiteLongitude", QString::number(longitude, 'f', kAlpacaCoordinatePrecision), "Telescope sitelongitude");
         setSiteProperty("siteelevation", "SiteElevation", QString::number(elevation, 'f', 2), "Telescope siteelevation");
-        setSiteProperty("utcdate", "UTCDate", utcDate.toUTC().toString(Qt::ISODateWithMs), "Telescope utcdate");
         m_siteStateChecked = false;
     });
+}
+
+void AlpacaProtocol::setDateTime(const QDateTime& utcDate)
+{
+    runWhenConnected([this, utcDate]() {
+        setSiteProperty("utcdate", "UTCDate", utcDate.toUTC().toString(Qt::ISODateWithMs), "Telescope utcdate");
+        m_siteStateChecked = false;
+        });
 }
 
 void AlpacaProtocol::applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force)
@@ -460,6 +465,8 @@ void AlpacaProtocol::queryCapabilities(const std::function<void(bool)>& continua
         m_canPark = info->canPark;
         m_canFindHome = info->canFindHomeValid && info->canFindHome;
         m_capabilitiesReady = true;
+
+        // Check latitude/longitude from scope matches SDRangel's position, otherwise Alt/Az to RA/Dec calculations will be wrong.
         querySiteState();
 
         qDebug() << "AlpacaProtocol::queryCapabilities"
@@ -516,31 +523,35 @@ void AlpacaProtocol::querySiteState()
             return;
         }
 
-        if (!info->latitudeValid || !info->longitudeValid || !info->elevationValid || !info->utcDateValid) {
-            qDebug() << "AlpacaProtocol::querySiteState - failed to query complete Alpaca site state";
+        // Not all drivers support elevation
+        if (!info->latitudeValid || !info->longitudeValid)
+        {
+            qDebug() << "AlpacaProtocol::querySiteState - failed to get rotator position";
             return;
         }
 
-        const double localLatitude = MainCore::instance()->getSettings().getLatitude();
-        const double localLongitude = MainCore::instance()->getSettings().getLongitude();
-        const double localElevation = MainCore::instance()->getSettings().getAltitude();
         const QDateTime localUtcDate = QDateTime::currentDateTimeUtc();
 
-        const bool latitudeMismatch = std::abs(info->latitude - localLatitude) > 0.001;
-        const bool longitudeMismatch = std::abs(info->longitude - localLongitude) > 0.001;
-        const bool elevationMismatch = std::abs(info->elevation - localElevation) > 10.0;
-        const bool timeMismatch = std::abs(info->utcDate.secsTo(localUtcDate)) > 60;
+        const bool latitudeMismatch = std::abs(info->latitude - m_settings.m_latitude) > 0.001; // ~111 metres
+        const bool longitudeMismatch = std::abs(info->longitude - m_settings.m_longitude) > 0.001;
+        const bool elevationMismatch = info->elevationValid && (std::abs(info->elevation - m_settings.m_altitude) > 10.0);
+        const bool timeMismatch = info->utcDateValid && std::abs(info->utcDate.secsTo(localUtcDate)) > 60;
 
-        if (latitudeMismatch || longitudeMismatch || elevationMismatch || timeMismatch)
+        if (latitudeMismatch || longitudeMismatch || elevationMismatch)
         {
-            sendMessage(MsgReportSiteMismatch::create(
+            sendMessage(MsgReportPositionMismatch::create(
                 info->latitude,
                 info->longitude,
                 info->elevation,
+                info->elevationValid,
+                m_settings.m_latitude,
+                m_settings.m_longitude,
+                m_settings.m_altitude));
+        }
+        if (timeMismatch)
+        {
+            sendMessage(MsgReportDateTimeMismatch::create(
                 info->utcDate,
-                localLatitude,
-                localLongitude,
-                localElevation,
                 localUtcDate));
         }
     };
@@ -565,7 +576,7 @@ void AlpacaProtocol::querySiteState()
 
     getDoubleProperty("sitelatitude", &info->latitude, &info->latitudeValid);
     getDoubleProperty("sitelongitude", &info->longitude, &info->longitudeValid);
-    getDoubleProperty("siteelevation", &info->elevation, &info->elevationValid);
+    getDoubleProperty("siteelevation", &info->elevation, &info->elevationValid); // Not supported by all drivers
 
     QUrl url = deviceUrl("utcdate");
     url.setQuery(transactionQuery());

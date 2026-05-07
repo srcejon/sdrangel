@@ -28,6 +28,10 @@
 #include "dfmprotocol.h"
 #include "alpacaprotocol.h"
 
+MESSAGE_CLASS_DEFINITION(ControllerProtocol::MsgReportParkState, Message)
+MESSAGE_CLASS_DEFINITION(ControllerProtocol::MsgReportPositionMismatch, Message)
+MESSAGE_CLASS_DEFINITION(ControllerProtocol::MsgReportDateTimeMismatch, Message)
+
 ControllerProtocol::ControllerProtocol() :
     m_device(nullptr),
     m_lastAzimuth(-1.0f),

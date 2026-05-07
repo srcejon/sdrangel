@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>360</width>
-    <height>378</height>
+    <height>409</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -202,16 +202,27 @@
     </item>
     <item>
      <layout class="QGridLayout" name="gridLayout">
-      <item row="0" column="1" colspan="2">
-       <widget class="QComboBox" name="sources">
-        <property name="minimumSize">
-         <size>
-          <width>150</width>
-          <height>0</height>
-         </size>
-        </property>
+      <item row="0" column="4">
+       <widget class="ButtonSwitch" name="park">
         <property name="toolTip">
-         <string>Target to track</string>
+         <string>Park or unpark the rotator</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="gs232controllericons.qrc">
+          <normaloff>:/gs232controller/icons/park.png</normaloff>:/gs232controller/icons/park.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QLineEdit" name="targetName">
+        <property name="toolTip">
+         <string>Name of the target being tracked as indicated by the source channel / feature</string>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -225,13 +236,48 @@
         </property>
        </widget>
       </item>
-      <item row="0" column="3">
-       <widget class="QLineEdit" name="targetName">
-        <property name="toolTip">
-         <string>Name of the target being tracked as indicated by the source channel / feature</string>
+      <item row="0" column="1" colspan="2">
+       <widget class="QComboBox" name="sources">
+        <property name="minimumSize">
+         <size>
+          <width>150</width>
+          <height>0</height>
+         </size>
         </property>
-        <property name="readOnly">
-         <bool>true</bool>
+        <property name="toolTip">
+         <string>Target to track</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="5">
+       <widget class="ButtonSwitch" name="home">
+        <property name="toolTip">
+         <string>Find the rotator home position</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="gs232controllericons.qrc">
+          <normaloff>:/gs232controller/icons/home.png</normaloff>:/gs232controller/icons/home.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="6">
+       <widget class="QToolButton" name="useMyPosition">
+        <property name="toolTip">
+         <string>Left click to update rotator position from My Position.
+Right click to continually update rotator position with My Position (E.g. track GPS)</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/import.png</normaloff>:/import.png</iconset>
+        </property>
+        <property name="checkable">
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -298,67 +344,15 @@
       </item>
      </layout>
     </item>
-    <item>
-     <widget class="Line" name="alpacaLine">
-      <property name="orientation">
-       <enum>Qt::Orientation::Horizontal</enum>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="alpacaLayout">
-      <item>
-       <widget class="ButtonSwitch" name="alpacaPark">
-        <property name="toolTip">
-         <string>Park or unpark the Alpaca telescope mount</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="gs232controllericons.qrc">
-          <normaloff>:/gs232controller/icons/park.png</normaloff>:/gs232controller/icons/park.png</iconset>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="ButtonSwitch" name="alpacaHome">
-        <property name="toolTip">
-         <string>Find the Alpaca telescope home position</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="gs232controllericons.qrc">
-          <normaloff>:/gs232controller/icons/home.png</normaloff>:/gs232controller/icons/home.png</iconset>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <spacer name="alpacaSpacer">
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-     </layout>
-    </item>
    </layout>
   </widget>
   <widget class="QWidget" name="settingsContainer" native="true">
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>140</y>
+     <y>120</y>
      <width>341</width>
-     <height>201</height>
+     <height>271</height>
     </rect>
    </property>
    <property name="windowTitle">
@@ -382,10 +376,56 @@
     </property>
     <item>
      <layout class="QGridLayout" name="settingsGridLayout">
-      <item row="1" column="2">
-       <widget class="QLabel" name="baudRateLabel">
+      <item row="7" column="3">
+       <widget class="QComboBox" name="lineEnding">
+        <property name="toolTip">
+         <string>Character sequence to transmit at end of line</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>CR/LF</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>CR</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>LF</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="5" column="3">
+       <widget class="QSpinBox" name="elevationMax">
+        <property name="maximum">
+         <number>180</number>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="elevationMinLabel">
         <property name="text">
-         <string>Baud rate</string>
+         <string>Elevation min</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <widget class="QDoubleSpinBox" name="tolerance">
+        <property name="toolTip">
+         <string>Tolerance in degrees</string>
+        </property>
+        <property name="decimals">
+         <number>0</number>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QLabel" name="connectionLabel">
+        <property name="text">
+         <string>Connection</string>
         </property>
        </widget>
       </item>
@@ -399,53 +439,40 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="2">
-       <widget class="QLabel" name="elevationOffsetLabel">
-        <property name="text">
-         <string>Elevation offset</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="2">
-       <widget class="QLabel" name="azimuthMaxLabel">
-        <property name="text">
-         <string>Azimuth max</string>
-        </property>
-       </widget>
-      </item>
-      <item row="7" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Coordinates</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="azimuthMinLabel">
-        <property name="text">
-         <string>Azimuth min</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="3">
-       <widget class="QSpinBox" name="elevationMax">
-        <property name="maximum">
-         <number>180</number>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="2">
-       <widget class="QLabel" name="elevationMaxLabel">
-        <property name="text">
-         <string>Elevation max</string>
-        </property>
-       </widget>
-      </item>
       <item row="3" column="0">
        <widget class="QLabel" name="azimuthOffsetLabel">
         <property name="text">
          <string>Azimuth offset</string>
         </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QSpinBox" name="elevationMin">
+        <property name="maximum">
+         <number>180</number>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <widget class="QComboBox" name="coordinates">
+        <property name="toolTip">
+         <string>Coordinate system</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>Az/El</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>X/Y 85'</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>X/Y 30'</string>
+         </property>
+        </item>
        </widget>
       </item>
       <item row="0" column="1">
@@ -480,43 +507,24 @@
         </item>
        </widget>
       </item>
-      <item row="2" column="2">
-       <widget class="QLabel" name="portLabel">
+      <item row="8" column="3">
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QToolButton" name="inputConfigure">
+          <property name="toolTip">
+           <string>Configure input</string>
+          </property>
+          <property name="text">
+           <string>Config...</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="8" column="0">
+       <widget class="QLabel" name="inputControllerLabel">
         <property name="text">
-         <string>Port</string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="3">
-       <widget class="QSpinBox" name="precision">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="toolTip">
-         <string>Precision (number of decimal places) of azimuth, elevation and tolerance values</string>
-        </property>
-        <property name="statusTip">
-         <string/>
-        </property>
-        <property name="maximum">
-         <number>5</number>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="3">
-       <widget class="QSpinBox" name="port">
-        <property name="toolTip">
-         <string>TCP port number to connect to</string>
-        </property>
-        <property name="maximum">
-         <number>65535</number>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="3">
-       <widget class="QSpinBox" name="azimuthMax">
-        <property name="maximum">
-         <number>450</number>
+         <string>Input Control</string>
         </property>
        </widget>
       </item>
@@ -580,37 +588,17 @@
         </item>
        </widget>
       </item>
-      <item row="0" column="2">
-       <widget class="QLabel" name="connectionLabel">
+      <item row="7" column="0">
+       <widget class="QLabel" name="coordinatesLabel">
         <property name="text">
-         <string>Connection</string>
+         <string>Coordinates</string>
         </property>
        </widget>
       </item>
-      <item row="0" column="3">
-       <widget class="QComboBox" name="connection">
-        <property name="toolTip">
-         <string>The type of connection to use to the rotator</string>
-        </property>
-        <item>
-         <property name="text">
-          <string>Serial</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>TCP</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QComboBox" name="serialPort">
-        <property name="toolTip">
-         <string>Name of serial port to use to connect to the rotator</string>
-        </property>
-        <property name="editable">
-         <bool>true</bool>
+      <item row="9" column="0">
+       <widget class="QLabel" name="latitudeLabel">
+        <property name="text">
+         <string>Latitude</string>
         </property>
        </widget>
       </item>
@@ -621,110 +609,19 @@
         </property>
        </widget>
       </item>
-      <item row="5" column="1">
-       <widget class="QSpinBox" name="elevationMin">
-        <property name="maximum">
-         <number>180</number>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QLineEdit" name="host">
-        <property name="toolTip">
-         <string>Hostname / IP address of computer to connect to</string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="2">
-       <widget class="QLabel" name="precisionLabel">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
+      <item row="7" column="2">
+       <widget class="QLabel" name="lineEndingLabel">
         <property name="text">
-         <string>Precision</string>
+         <string>Line ending</string>
         </property>
        </widget>
       </item>
-      <item row="0" column="0">
-       <widget class="QLabel" name="protocolLabel">
+      <item row="2" column="2">
+       <widget class="QLabel" name="portLabel">
         <property name="text">
-         <string>Protocol</string>
+         <string>Port</string>
         </property>
        </widget>
-      </item>
-      <item row="5" column="0">
-       <widget class="QLabel" name="elevationMinLabel">
-        <property name="text">
-         <string>Elevation min</string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="1">
-       <widget class="QDoubleSpinBox" name="tolerance">
-        <property name="toolTip">
-         <string>Tolerance in degrees</string>
-        </property>
-        <property name="decimals">
-         <number>0</number>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="serialPortLabel">
-        <property name="text">
-         <string>Serial Port</string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="0">
-       <widget class="QLabel" name="toleranceLabel">
-        <property name="text">
-         <string>Tolerance</string>
-        </property>
-       </widget>
-      </item>
-      <item row="7" column="1">
-       <widget class="QComboBox" name="coordinates">
-        <property name="toolTip">
-         <string>Coordinate system</string>
-        </property>
-        <item>
-         <property name="text">
-          <string>Az/El</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>X/Y 85'</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>X/Y 30'</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-      <item row="8" column="0">
-       <widget class="QLabel" name="inputControllerLabel">
-        <property name="text">
-         <string>Input Control</string>
-        </property>
-       </widget>
-      </item>
-      <item row="8" column="3">
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <item>
-         <widget class="QToolButton" name="inputConfigure">
-          <property name="toolTip">
-           <string>Configure input</string>
-          </property>
-          <property name="text">
-           <string>Config...</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
       </item>
       <item row="3" column="1">
        <widget class="QDoubleSpinBox" name="azimuthOffset">
@@ -742,19 +639,17 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="3">
-       <widget class="QDoubleSpinBox" name="elevationOffset">
+      <item row="2" column="1">
+       <widget class="QLineEdit" name="host">
         <property name="toolTip">
-         <string>Specify an offset angle in degrees that will be added to the target elevation to correct for misalignment</string>
+         <string>Hostname / IP address of computer to connect to</string>
         </property>
-        <property name="decimals">
-         <number>0</number>
-        </property>
-        <property name="minimum">
-         <double>-180.000000000000000</double>
-        </property>
-        <property name="maximum">
-         <double>180.000000000000000</double>
+       </widget>
+      </item>
+      <item row="9" column="2">
+       <widget class="QLabel" name="longitudeLabel">
+        <property name="text">
+         <string>Longitude</string>
         </property>
        </widget>
       </item>
@@ -822,32 +717,206 @@
         </item>
        </layout>
       </item>
-      <item row="7" column="3">
-       <widget class="QComboBox" name="lineEnding">
+      <item row="1" column="0">
+       <widget class="QLabel" name="serialPortLabel">
+        <property name="text">
+         <string>Serial Port</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="3">
+       <widget class="QSpinBox" name="azimuthMax">
+        <property name="maximum">
+         <number>450</number>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="2">
+       <widget class="QLabel" name="azimuthMaxLabel">
+        <property name="text">
+         <string>Azimuth max</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QComboBox" name="serialPort">
         <property name="toolTip">
-         <string>Character sequence to transmit at end of line</string>
+         <string>Name of serial port to use to connect to the rotator</string>
+        </property>
+        <property name="editable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="2">
+       <widget class="QLabel" name="precisionLabel">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Precision</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="3">
+       <widget class="QDoubleSpinBox" name="elevationOffset">
+        <property name="toolTip">
+         <string>Specify an offset angle in degrees that will be added to the target elevation to correct for misalignment</string>
+        </property>
+        <property name="decimals">
+         <number>0</number>
+        </property>
+        <property name="minimum">
+         <double>-180.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>180.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="2">
+       <widget class="QLabel" name="elevationOffsetLabel">
+        <property name="text">
+         <string>Elevation offset</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="3">
+       <widget class="QSpinBox" name="port">
+        <property name="toolTip">
+         <string>TCP port number to connect to</string>
+        </property>
+        <property name="maximum">
+         <number>65535</number>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QComboBox" name="connection">
+        <property name="toolTip">
+         <string>The type of connection to use to the rotator</string>
         </property>
         <item>
          <property name="text">
-          <string>CR/LF</string>
+          <string>Serial</string>
          </property>
         </item>
         <item>
          <property name="text">
-          <string>CR</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>LF</string>
+          <string>TCP</string>
          </property>
         </item>
        </widget>
       </item>
-      <item row="7" column="2">
-       <widget class="QLabel" name="lineEndingLabel">
+      <item row="6" column="0">
+       <widget class="QLabel" name="toleranceLabel">
         <property name="text">
-         <string>Line ending</string>
+         <string>Tolerance</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="azimuthMinLabel">
+        <property name="text">
+         <string>Azimuth min</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QLabel" name="baudRateLabel">
+        <property name="text">
+         <string>Baud rate</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="2">
+       <widget class="QLabel" name="elevationMaxLabel">
+        <property name="text">
+         <string>Elevation max</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="3">
+       <widget class="QSpinBox" name="precision">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="toolTip">
+         <string>Precision (number of decimal places) of azimuth, elevation and tolerance values</string>
+        </property>
+        <property name="statusTip">
+         <string/>
+        </property>
+        <property name="maximum">
+         <number>5</number>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="protocolLabel">
+        <property name="text">
+         <string>Protocol</string>
+        </property>
+       </widget>
+      </item>
+      <item row="10" column="0">
+       <widget class="QLabel" name="altitudeLabel">
+        <property name="text">
+         <string>Altitude</string>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="3">
+       <widget class="QDoubleSpinBox" name="longitude">
+        <property name="toolTip">
+         <string>Longitude in decimal degrees (East positive) of rotator location</string>
+        </property>
+        <property name="decimals">
+         <number>6</number>
+        </property>
+        <property name="minimum">
+         <double>-180.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>180.000000000000000</double>
+        </property>
+        <property name="value">
+         <double>-180.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="1">
+       <widget class="QDoubleSpinBox" name="latitude">
+        <property name="toolTip">
+         <string>Latitude in decimal degrees (North positive) of rotator location</string>
+        </property>
+        <property name="decimals">
+         <number>6</number>
+        </property>
+        <property name="minimum">
+         <double>-90.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>90.000000000000000</double>
+        </property>
+        <property name="value">
+         <double>-90.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="10" column="1">
+       <widget class="QDoubleSpinBox" name="altitude">
+        <property name="toolTip">
+         <string>Altitude in metres of rotator location</string>
+        </property>
+        <property name="decimals">
+         <number>1</number>
+        </property>
+        <property name="minimum">
+         <double>-500.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>10000.000000000000000</double>
         </property>
        </widget>
       </item>
@@ -900,8 +969,6 @@
   <tabstop>dfmBrakes</tabstop>
   <tabstop>dfmDrives</tabstop>
   <tabstop>dfmShowStatus</tabstop>
-  <tabstop>alpacaPark</tabstop>
-  <tabstop>alpacaHome</tabstop>
  </tabstops>
  <resources>
   <include location="../../../sdrgui/resources/res.qrc"/>

@@ -56,6 +56,11 @@ struct GS232ControllerSettings
     bool m_highSensitivity;
     enum LineEnding { CRLF, CR, LF } m_lineEnding; // GS232 only
 
+    float m_latitude;   // Of rotator, in degrees
+    float m_longitude;  // Of rotator, in degrees
+    float m_altitude;   // Of rotator, in meters
+    bool m_positionSync;// Continually sync rotator position with My Position
+
     bool m_dfmTrackOn;
     bool m_dfmLubePumpsOn;
     bool m_dfmBrakesOn;

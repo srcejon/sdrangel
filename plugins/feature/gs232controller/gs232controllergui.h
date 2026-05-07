@@ -70,12 +70,12 @@ private:
     QTimer m_statusTimer;
     int m_lastFeatureState;
     bool m_lastOnTarget;
-    bool m_alpacaCanPark;
-    bool m_alpacaAtPark;
-    bool m_alpacaParkStateValid;
-    bool m_alpacaCanFindHome;
-    bool m_alpacaAtHome;
-    bool m_alpacaHomeStateValid;
+    bool m_canPark;
+    bool m_atPark;
+    bool m_parkStateValid;
+    bool m_canFindHome;
+    bool m_atHome;
+    bool m_homeStateValid;
 
     DFMStatusDialog m_dfmStatusDialog;
 
@@ -102,13 +102,15 @@ private:
     void updatePipeList(const AvailableChannelOrFeatureList& sources, const QStringList& renameFrom, const QStringList& renameTo);
     void updateSerialPortList();
     void updateSerialPortList(const QStringList& serialPorts);
-    void updateAlpacaParkControls();
-    void handleAlpacaSiteMismatch(const AlpacaProtocol::MsgReportSiteMismatch& report);
+    void updateParkAndHomeControls();
+    void handlePositionMismatch(const ControllerProtocol::MsgReportPositionMismatch& report);
+    void handleDateTimeMismatch(const ControllerProtocol::MsgReportDateTimeMismatch& report);
     bool handleMessage(const Message& message);
     void makeUIConnections();
     void azElToDisplay(float az, float el, float& coord1, float& coord2) const;
     void displayToAzEl(float coord1, float coord2);
     void updateInputController();
+    void applyPositionSync();
 
 private slots:
     void onMenuDialogCalled(const QPoint &p);
@@ -140,8 +142,8 @@ private slots:
     void on_dfmBrakes_clicked(bool checked=false);
     void on_dfmDrives_clicked(bool checked=false);
     void on_dfmShowStatus_clicked();
-    void on_alpacaPark_toggled(bool checked);
-    void on_alpacaHome_clicked(bool checked);
+    void on_park_toggled(bool checked);
+    void on_home_clicked(bool checked);
     void updateStatus();
     void on_inputController_currentIndexChanged(int index);
     void on_inputConfigure_clicked();
@@ -152,6 +154,13 @@ private slots:
     void checkInputController();
     void buttonChanged(int button, bool released);
     void inputConfigurationComplete();
+    void on_latitude_valueChanged(double value);
+    void on_longitude_valueChanged(double value);
+    void on_altitude_valueChanged(double value);
+    void on_useMyPosition_clicked(bool checked);
+    void useMyPosition_rightClicked(const QPoint& p);
+    void preferenceChanged(int elementType);
+
 };
 
 #endif // INCLUDE_FEATURE_GS232CONTROLLERGUI_H_

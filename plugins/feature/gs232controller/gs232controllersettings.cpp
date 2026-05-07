@@ -22,6 +22,7 @@
 
 #include "util/simpleserializer.h"
 #include "settings/serializable.h"
+#include "maincore.h"
 
 #include "gs232controllersettings.h"
 #include "inputcontrollersettings.h"
@@ -71,6 +72,10 @@ void GS232ControllerSettings::resetToDefaults()
         m_inputControllerSettings.m_deadzone[i] = 10.0f;
     }
     m_lineEnding = CRLF;
+    m_latitude =  MainCore::instance()->getSettings().getLatitude();
+    m_longitude = MainCore::instance()->getSettings().getLongitude();
+    m_altitude = MainCore::instance()->getSettings().getAltitude();
+    m_positionSync = true;
     m_dfmTrackOn = false;
     m_dfmLubePumpsOn = false;
     m_dfmBrakesOn = false;
@@ -131,6 +136,10 @@ QByteArray GS232ControllerSettings::serialize() const
     s.writeBool(38, m_offsetControlEnabled);
     s.writeBool(39, m_highSensitivity);
     s.writeS32(40, m_lineEnding);
+    s.writeFloat(41, m_latitude);
+    s.writeFloat(42, m_longitude);
+    s.writeFloat(43, m_altitude);
+    s.writeBool(44, m_positionSync);
 
     s.writeFloat(50, m_inputControllerSettings.m_lowSensitivity);
     s.writeFloat(51, m_inputControllerSettings.m_highSensitivity);
@@ -210,6 +219,10 @@ bool GS232ControllerSettings::deserialize(const QByteArray& data)
         d.readBool(38, &m_offsetControlEnabled, true);
         d.readBool(39, &m_highSensitivity, true);
         d.readS32(40, (int *) &m_lineEnding, (int) CRLF);
+        d.readFloat(41, &m_latitude, MainCore::instance()->getSettings().getLatitude());
+        d.readFloat(42, &m_longitude, MainCore::instance()->getSettings().getLongitude());
+        d.readFloat(43, &m_altitude, MainCore::instance()->getSettings().getAltitude());
+        d.readBool(44, &m_positionSync, true);
 
         d.readFloat(50, &m_inputControllerSettings.m_lowSensitivity, 5.0f);
         d.readFloat(51, &m_inputControllerSettings.m_highSensitivity, 50.0f);
@@ -317,6 +330,15 @@ void GS232ControllerSettings::applySettings(const QStringList& settingsKeys, con
     }
     if (settingsKeys.contains("lineEnding")) {
         m_lineEnding = settings.m_lineEnding;
+    }
+    if (settingsKeys.contains("latitude")) {
+        m_latitude = settings.m_latitude;
+    }
+    if (settingsKeys.contains("longitude")) {
+        m_longitude = settings.m_longitude;
+    }
+    if (settingsKeys.contains("altitude")) {
+        m_altitude = settings.m_altitude;
     }
     if (settingsKeys.contains("dfmTrackOn")) {
         m_dfmTrackOn = settings.m_dfmTrackOn;
@@ -438,6 +460,15 @@ QString GS232ControllerSettings::getDebugString(const QStringList& settingsKeys,
     }
     if (settingsKeys.contains("lineEnding") || force) {
         ostr << " m_lineEnding: " << m_lineEnding;
+    }
+    if (settingsKeys.contains("latitude") || force) {
+        ostr << " m_latitude: " << m_latitude;
+    }
+    if (settingsKeys.contains("longitude") || force) {
+        ostr << " m_longitude: " << m_longitude;
+    }
+    if (settingsKeys.contains("altitude") || force) {
+        ostr << " m_altitude: " << m_altitude;
     }
     if (settingsKeys.contains("title") || force) {
         ostr << " m_title: " << m_title.toStdString();

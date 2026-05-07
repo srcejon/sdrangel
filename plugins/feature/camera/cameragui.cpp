@@ -2377,9 +2377,9 @@ void CameraGUI::onQtImageCaptured(int id, const QImage& image)
 
     MessageQueue *frameStackerMQ = m_camera->getFrameStackerInputMessageQueue();
     if (frameStackerMQ) {
-        CameraPipelineFrame frame;
-        frame.m_image = image;
-        frame.m_captureDateTime = QDateTime::currentDateTime();
+        CameraPipelineFramePtr frame(new CameraPipelineFrame);
+        frame->m_image = image;
+        frame->m_captureDateTime = QDateTime::currentDateTime();
         frameStackerMQ->push(CameraFrameStacker::MsgProcessFrame::create(frame));
     }
 }

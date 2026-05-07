@@ -67,17 +67,17 @@ public:
         MESSAGE_CLASS_DECLARATION
 
     public:
-        const CameraPipelineFrame& getFrame() const { return m_frame; }
+        const CameraPipelineFramePtr& getFrame() const { return m_frame; }
 
-        static MsgProcessFrame* create(const CameraPipelineFrame& frame)
+        static MsgProcessFrame* create(const CameraPipelineFramePtr& frame)
         {
             return new MsgProcessFrame(frame);
         }
 
     private:
-        CameraPipelineFrame m_frame;
+        CameraPipelineFramePtr m_frame;
 
-        MsgProcessFrame(const CameraPipelineFrame& frame) :
+        MsgProcessFrame(const CameraPipelineFramePtr& frame) :
             Message(),
             m_frame(frame)
         { }
@@ -202,12 +202,14 @@ private:
     QImage m_spectrumViewImage;
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
-    void processNewFrame(const CameraPipelineFrame& frame);
+    void processNewFrame(const CameraPipelineFramePtr& frame);
     [[nodiscard]] QImage applyPostProcessing(const CameraPipelineFrame& frame);
     void applyMotionOverlay(cv::Mat& bgrMat, const QVector<QRect>& motionBoxes) const;
     void applyDetectionOverlay(cv::Mat& bgrMat, const QVector<CameraPipelineDetection>& detections) const;
     void applySpectrumOverlay(cv::Mat& bgrMat) const;
-    [[nodiscard]] QImage convertBgrToRgbImage(cv::Mat& bgrMat) const;
+    [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
+    [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
+    [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
     void applyDateTimeOverlay(QImage& image) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     void setVideoRecordingEnabled(bool enabled);

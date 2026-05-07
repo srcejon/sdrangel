@@ -71,17 +71,17 @@ public:
         MESSAGE_CLASS_DECLARATION
 
     public:
-        const CameraPipelineFrame& getFrame() const { return m_frame; }
+        const CameraPipelineFramePtr& getFrame() const { return m_frame; }
 
-        static MsgProcessFrame* create(const CameraPipelineFrame& frame)
+        static MsgProcessFrame* create(const CameraPipelineFramePtr& frame)
         {
             return new MsgProcessFrame(frame);
         }
 
     private:
-        CameraPipelineFrame m_frame;
+        CameraPipelineFramePtr m_frame;
 
-        MsgProcessFrame(const CameraPipelineFrame& frame) :
+        MsgProcessFrame(const CameraPipelineFramePtr& frame) :
             Message(),
             m_frame(frame)
         { }
@@ -138,7 +138,7 @@ private:
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
-    void processNewFrame(const CameraPipelineFrame& frame);
+    void processNewFrame(const CameraPipelineFramePtr& frame);
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes);
@@ -150,7 +150,9 @@ private:
     void saySpeech(const QString& speech, const QString& className);
     bool shouldRecordVideoForDetectedObjects() const;
     void setVideoRecordingEnabled(bool enabled);
-    [[nodiscard]] QImage convertBgrToRgbImage(cv::Mat& bgrMat) const;
+    [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
+    [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
+    [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
 
 private slots:
     void handleInputMessages();

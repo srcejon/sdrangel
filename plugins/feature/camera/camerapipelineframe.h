@@ -22,6 +22,7 @@
 #include <QDateTime>
 #include <QImage>
 #include <QRect>
+#include <QSharedPointer>
 #include <QString>
 #include <QVector>
 
@@ -40,5 +41,7 @@ struct CameraPipelineFrame
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
 };
+
+using CameraPipelineFramePtr = QSharedPointer<CameraPipelineFrame>;
 
 #endif // INCLUDE_FEATURE_CAMERAPIPELINEFRAME_H_

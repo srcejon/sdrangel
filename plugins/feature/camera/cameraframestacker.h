@@ -65,17 +65,17 @@ public:
         MESSAGE_CLASS_DECLARATION
 
     public:
-        const CameraPipelineFrame& getFrame() const { return m_frame; }
+        const CameraPipelineFramePtr& getFrame() const { return m_frame; }
 
-        static MsgProcessFrame* create(const CameraPipelineFrame& frame)
+        static MsgProcessFrame* create(const CameraPipelineFramePtr& frame)
         {
             return new MsgProcessFrame(frame);
         }
 
     private:
-        CameraPipelineFrame m_frame;
+        CameraPipelineFramePtr m_frame;
 
-        MsgProcessFrame(const CameraPipelineFrame& frame) :
+        MsgProcessFrame(const CameraPipelineFramePtr& frame) :
             Message(),
             m_frame(frame)
         { }
@@ -119,7 +119,7 @@ private:
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
-    void processNewFrame(const CameraPipelineFrame& frame);
+    void processNewFrame(const CameraPipelineFramePtr& frame);
     void resetFrameHistoryState();
     [[nodiscard]] QImage applyFrameStacking(const QImage& input);
     [[nodiscard]] cv::Mat alignStackFrame(const cv::Mat& frameMat) const;

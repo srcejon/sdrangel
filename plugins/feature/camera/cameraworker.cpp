@@ -2007,9 +2007,9 @@ void CameraWorker::alpacaFetchImageArray()
         }
 
         if (m_frameStackerInputMessageQueue) {
-            CameraPipelineFrame frame;
-            frame.m_image = image;
-            frame.m_captureDateTime = QDateTime::currentDateTime();
+            CameraPipelineFramePtr frame(new CameraPipelineFrame);
+            frame->m_image = image;
+            frame->m_captureDateTime = QDateTime::currentDateTime();
             m_frameStackerInputMessageQueue->push(CameraFrameStacker::MsgProcessFrame::create(frame));
         }
         reply->deleteLater();
@@ -3321,9 +3321,9 @@ void CameraWorker::asiCaptureExposureFrame()
     setLastAsiError(ASI_SUCCESS, QString());
     m_lastAsiCaptureTimeMs = captureTimer.elapsed();
     if (m_frameStackerInputMessageQueue) {
-        CameraPipelineFrame frame;
-        frame.m_image = asiFrameToImage();
-        frame.m_captureDateTime = QDateTime::currentDateTime();
+        CameraPipelineFramePtr frame(new CameraPipelineFrame);
+        frame->m_image = asiFrameToImage();
+        frame->m_captureDateTime = QDateTime::currentDateTime();
         m_frameStackerInputMessageQueue->push(CameraFrameStacker::MsgProcessFrame::create(frame));
     }
 }
@@ -3353,9 +3353,9 @@ void CameraWorker::asiCaptureVideoFrame()
         setLastAsiError(ASI_SUCCESS, QString());
         m_lastAsiCaptureTimeMs = captureTimer.elapsed();
         if (m_frameStackerInputMessageQueue) {
-            CameraPipelineFrame frame;
-            frame.m_image = asiFrameToImage();
-            frame.m_captureDateTime = QDateTime::currentDateTime();
+            CameraPipelineFramePtr frame(new CameraPipelineFrame);
+            frame->m_image = asiFrameToImage();
+            frame->m_captureDateTime = QDateTime::currentDateTime();
             m_frameStackerInputMessageQueue->push(CameraFrameStacker::MsgProcessFrame::create(frame));
         }
     }

@@ -549,50 +549,48 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
     }
 }
 
-void CameraDetector::processNewFrame(const CameraPipelineFrame& frame)
+void CameraDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (frame.m_image.isNull()) {
+    if (!frame || frame->m_image.isNull()) {
         return;
     }
 
-    CameraPipelineFrame outputFrame = frame;
-    outputFrame.m_motionBoxes.clear();
-    outputFrame.m_detections.clear();
+    frame->m_motionBoxes.clear();
+    frame->m_detections.clear();
 
-    const QImage rgb = frame.m_image.convertToFormat(QImage::Format_RGB888);
-    cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                const_cast<uchar*>(rgb.bits()),
-                static_cast<size_t>(rgb.bytesPerLine()));
+    QImage convertedRgb;
+    const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
+    cv::Mat mat = wrapRgb888Image(rgb);
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
     const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
 
     if (m_settings.m_diffMask && !m_lastInputFrame.m_image.isNull()
-        && m_lastInputFrame.m_image.width() == frame.m_image.width()
-        && m_lastInputFrame.m_image.height() == frame.m_image.height()) {
+        && m_lastInputFrame.m_image.width() == frame->m_image.width()
+        && m_lastInputFrame.m_image.height() == frame->m_image.height()) {
         applyDiffMask(bgrMat, detectionRoi);
     }
 
     if (m_settings.m_motionDetect) {
-        applyMotionDetection(bgrMat, detectionRoi, outputFrame.m_motionBoxes);
+        applyMotionDetection(bgrMat, detectionRoi, frame->m_motionBoxes);
     }
 
     if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
-        runYoloDetections(bgrMat, detectionRoi, outputFrame.m_detections);
+        runYoloDetections(bgrMat, detectionRoi, frame->m_detections);
     }
 
     QSet<QString> currentDetectedClasses;
-    for (const CameraPipelineDetection& detection : outputFrame.m_detections) {
+    for (const CameraPipelineDetection& detection : frame->m_detections) {
         currentDetectedClasses.insert(detection.m_label);
     }
-    const QDateTime detectionTime = frame.m_captureDateTime.isValid() ? frame.m_captureDateTime : QDateTime::currentDateTime();
+    const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     processObjectDetections(currentDetectedClasses, detectionTime);
 
-    outputFrame.m_image = convertBgrToRgbImage(bgrMat);
-    m_lastInputFrame = frame;
+    frame->m_image = convertBgrToRgbImage(bgrMat);
+    m_lastInputFrame = *frame;
 
     if (m_nextStageInputMessageQueue) {
-        m_nextStageInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(outputFrame));
+        m_nextStageInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(frame));
     }
 }
 
@@ -614,10 +612,9 @@ cv::Rect CameraDetector::resolveDetectionRoi(const cv::Size& frameSize) const
 void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi)
 {
     PROFILER_START();
-    const QImage prevRgb = m_lastInputFrame.m_image.convertToFormat(QImage::Format_RGB888);
-    cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
-                    const_cast<uchar*>(prevRgb.bits()),
-                    static_cast<size_t>(prevRgb.bytesPerLine()));
+    QImage convertedPrevRgb;
+    const QImage& prevRgb = ensureRgb888(m_lastInputFrame.m_image, convertedPrevRgb);
+    cv::Mat prevMat = wrapRgb888Image(prevRgb);
     cv::Mat prevBgr;
     cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
 
@@ -958,14 +955,32 @@ void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& ro
     PROFILER_STOP("YOLO");
 }
 
-QImage CameraDetector::convertBgrToRgbImage(cv::Mat& bgrMat) const
+const QImage& CameraDetector::ensureRgb888(const QImage& image, QImage& convertedImage)
+{
+    if (image.format() == QImage::Format_RGB888) {
+        return image;
+    }
+
+    convertedImage = image.convertToFormat(QImage::Format_RGB888);
+    return convertedImage;
+}
+
+cv::Mat CameraDetector::wrapRgb888Image(const QImage& image)
+{
+    return cv::Mat(image.height(), image.width(), CV_8UC3,
+                   const_cast<uchar*>(image.constBits()),
+                   static_cast<size_t>(image.bytesPerLine()));
+}
+
+QImage CameraDetector::convertBgrToRgbImage(const cv::Mat& bgrMat)
 {
     PROFILER_START();
-    cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);
-    const QImage rawResult(bgrMat.data, bgrMat.cols, bgrMat.rows,
-                           static_cast<qsizetype>(bgrMat.step[0]),
-                           QImage::Format_RGB888);
-    return rawResult.copy();
+    QImage result(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);
+    cv::Mat rgbMat(result.height(), result.width(), CV_8UC3,
+                   result.bits(),
+                   static_cast<size_t>(result.bytesPerLine()));
+    cv::cvtColor(bgrMat, rgbMat, cv::COLOR_BGR2RGB);
+    return result;
 }
 
 void CameraDetector::processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now)

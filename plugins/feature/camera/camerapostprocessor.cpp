@@ -200,18 +200,18 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     }
 }
 
-void CameraPostProcessor::processNewFrame(const CameraPipelineFrame& frame)
+void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (frame.m_image.isNull()) {
+    if (!frame || frame->m_image.isNull()) {
         return;
     }
 
-    m_captureDateTime = frame.m_captureDateTime.isValid() ? frame.m_captureDateTime : QDateTime::currentDateTime();
-    const QImage& pipelineImage = frame.m_image;
-    const QImage& unprocessedImage = frame.m_unprocessedImage.isNull() ? frame.m_image : frame.m_unprocessedImage;
-    const QImage processed = applyPostProcessing(frame);
+    m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
+    const QImage& pipelineImage = frame->m_image;
+    const QImage& unprocessedImage = frame->m_unprocessedImage.isNull() ? frame->m_image : frame->m_unprocessedImage;
+    const QImage processed = applyPostProcessing(*frame);
 
-    m_lastFrame = frame;
+    m_lastFrame = *frame;
 
     reportFrameToGUI(processed);
 
@@ -253,10 +253,9 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFrame& frame)
         if (m_videoWriter.isOpened())
         {
             const QImage& frameToWrite = m_settings.m_videoPostProcess ? processed : unprocessedImage;
-            const QImage rgb = frameToWrite.convertToFormat(QImage::Format_RGB888);
-            cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                        const_cast<uchar*>(rgb.bits()),
-                        static_cast<size_t>(rgb.bytesPerLine()));
+            QImage convertedRgb;
+            const QImage& rgb = ensureRgb888(frameToWrite, convertedRgb);
+            cv::Mat mat = wrapRgb888Image(rgb);
             cv::Mat bgrMat;
             cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
             m_videoWriter.write(bgrMat);
@@ -368,14 +367,32 @@ void CameraPostProcessor::applySpectrumOverlay(cv::Mat& bgrMat) const
     PROFILER_STOP(__FUNCTION__);
 }
 
-QImage CameraPostProcessor::convertBgrToRgbImage(cv::Mat& bgrMat) const
+const QImage& CameraPostProcessor::ensureRgb888(const QImage& image, QImage& convertedImage)
+{
+    if (image.format() == QImage::Format_RGB888) {
+        return image;
+    }
+
+    convertedImage = image.convertToFormat(QImage::Format_RGB888);
+    return convertedImage;
+}
+
+cv::Mat CameraPostProcessor::wrapRgb888Image(const QImage& image)
+{
+    return cv::Mat(image.height(), image.width(), CV_8UC3,
+                   const_cast<uchar*>(image.constBits()),
+                   static_cast<size_t>(image.bytesPerLine()));
+}
+
+QImage CameraPostProcessor::convertBgrToRgbImage(const cv::Mat& bgrMat)
 {
     PROFILER_START();
-    cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);
-    const QImage rawResult(bgrMat.data, bgrMat.cols, bgrMat.rows,
-                           static_cast<qsizetype>(bgrMat.step[0]),
-                           QImage::Format_RGB888);
-    return rawResult.copy();
+    QImage result(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);
+    cv::Mat rgbMat(result.height(), result.width(), CV_8UC3,
+                   result.bits(),
+                   static_cast<size_t>(result.bytesPerLine()));
+    cv::cvtColor(bgrMat, rgbMat, cv::COLOR_BGR2RGB);
+    return result;
 }
 
 void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const
@@ -445,10 +462,9 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         return input;
     }
 
-    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
-    cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                const_cast<uchar*>(rgb.bits()),
-                static_cast<size_t>(rgb.bytesPerLine()));
+    QImage convertedRgb;
+    const QImage& rgb = ensureRgb888(input, convertedRgb);
+    cv::Mat mat = wrapRgb888Image(rgb);
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 

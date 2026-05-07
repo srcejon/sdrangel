@@ -129,18 +129,17 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
     }
 }
 
-void CameraFrameStacker::processNewFrame(const CameraPipelineFrame& frame)
+void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (frame.m_image.isNull()) {
+    if (!frame || frame->m_image.isNull()) {
         return;
     }
 
-    CameraPipelineFrame outputFrame = frame;
-    outputFrame.m_image = applyFrameStacking(frame.m_image);
-    outputFrame.m_unprocessedImage = outputFrame.m_image;
+    frame->m_image = applyFrameStacking(frame->m_image);
+    frame->m_unprocessedImage = frame->m_image;
 
     if (m_nextStageInputMessageQueue) {
-        m_nextStageInputMessageQueue->push(CameraImageProcessor::MsgProcessFrame::create(outputFrame));
+        m_nextStageInputMessageQueue->push(CameraImageProcessor::MsgProcessFrame::create(frame));
     }
 }
 

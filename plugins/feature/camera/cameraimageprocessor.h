@@ -63,17 +63,17 @@ public:
         MESSAGE_CLASS_DECLARATION
 
     public:
-        const CameraPipelineFrame& getFrame() const { return m_frame; }
+        const CameraPipelineFramePtr& getFrame() const { return m_frame; }
 
-        static MsgProcessFrame* create(const CameraPipelineFrame& frame)
+        static MsgProcessFrame* create(const CameraPipelineFramePtr& frame)
         {
             return new MsgProcessFrame(frame);
         }
 
     private:
-        CameraPipelineFrame m_frame;
+        CameraPipelineFramePtr m_frame;
 
-        MsgProcessFrame(const CameraPipelineFrame& frame) :
+        MsgProcessFrame(const CameraPipelineFramePtr& frame) :
             Message(),
             m_frame(frame)
         { }
@@ -118,7 +118,7 @@ private:
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
-    void processNewFrame(const CameraPipelineFrame& frame);
+    void processNewFrame(const CameraPipelineFramePtr& frame);
     [[nodiscard]] QImage applyImageProcessing(const QImage& input);
     void applyWhiteBalance(cv::Mat& bgrMat);
     void applySaturation(cv::Mat& bgrMat);
@@ -130,7 +130,9 @@ private:
     void applyFlip(cv::Mat& bgrMat) const;
     void applyBrightnessContrast(cv::Mat& bgrMat) const;
     void applyInvertColors(cv::Mat& bgrMat) const;
-    [[nodiscard]] QImage convertBgrToRgbImage(cv::Mat& bgrMat) const;
+    [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
+    [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
+    [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
 
 private slots:
     void handleInputMessages();

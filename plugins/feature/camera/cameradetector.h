@@ -16,36 +16,27 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
-#ifndef INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
-#define INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
+#ifndef INCLUDE_FEATURE_CAMERADETECTOR_H_
+#define INCLUDE_FEATURE_CAMERADETECTOR_H_
 
 #include <QObject>
 #include <deque>
-#include <vector>
-#include <QHash>
-#include <QImage>
-#include <QDateTime>
-#include <QSet>
-#include <QTextDocument>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/videoio.hpp>
-
-#ifdef QT_TEXTTOSPEECH_FOUND
-#include <QTextToSpeech>
-#endif
+#include <opencv2/video/background_segm.hpp>
+#include <opencv2/dnn/dnn.hpp>
 
 #include "util/message.h"
 #include "util/messagequeue.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
-class CameraPostProcessor : public QObject
+class CameraDetector : public QObject
 {
     Q_OBJECT
 public:
-    class MsgConfigureCameraPostProcessor : public Message {
+    class MsgConfigureCameraDetector : public Message {
         MESSAGE_CLASS_DECLARATION
 
     public:
@@ -53,9 +44,9 @@ public:
         const QList<QString>& getSettingsKeys() const { return m_settingsKeys; }
         bool getForce() const { return m_force; }
 
-        static MsgConfigureCameraPostProcessor* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
+        static MsgConfigureCameraDetector* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
         {
-            return new MsgConfigureCameraPostProcessor(settings, settingsKeys, force);
+            return new MsgConfigureCameraDetector(settings, settingsKeys, force);
         }
 
     private:
@@ -63,7 +54,7 @@ public:
         QList<QString> m_settingsKeys;
         bool m_force;
 
-        MsgConfigureCameraPostProcessor(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
+        MsgConfigureCameraDetector(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
             Message(),
             m_settings(settings),
             m_settingsKeys(settingsKeys),
@@ -91,66 +82,6 @@ public:
         { }
     };
 
-    class MsgSpectrumFrame : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const QImage& getImage() const { return m_image; }
-
-        static MsgSpectrumFrame* create(const QImage& image)
-        {
-            return new MsgSpectrumFrame(image);
-        }
-
-    private:
-        QImage m_image;
-
-        MsgSpectrumFrame(const QImage& image) :
-            Message(),
-            m_image(image)
-        { }
-    };
-
-    class MsgReportFrame : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const QImage& getImage() const { return m_image; }
-
-        static MsgReportFrame* create(const QImage& image)
-        {
-            return new MsgReportFrame(image);
-        }
-
-    private:
-        QImage m_image;
-
-        MsgReportFrame(const QImage& image) :
-            Message(),
-            m_image(image)
-        { }
-    };
-
-    class MsgReportSaveVideoState : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        bool getSaveVideo() const { return m_saveVideo; }
-
-        static MsgReportSaveVideoState* create(bool saveVideo)
-        {
-            return new MsgReportSaveVideoState(saveVideo);
-        }
-
-    private:
-        bool m_saveVideo;
-
-        MsgReportSaveVideoState(bool saveVideo) :
-            Message(),
-            m_saveVideo(saveVideo)
-        { }
-    };
-
     class MsgCaptureActive : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -171,49 +102,41 @@ public:
         { }
     };
 
-    CameraPostProcessor();
-    ~CameraPostProcessor();
+    CameraDetector();
+    ~CameraDetector();
 
     void startWork();
     void stopWork();
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
-    void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setNextStageInputMessageQueue(MessageQueue *messageQueue) { m_nextStageInputMessageQueue = messageQueue; }
 
 private:
     MessageQueue m_inputMessageQueue;
-    MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_nextStageInputMessageQueue;
     CameraSettings m_settings;
     bool m_captureActive;
-    CameraPipelineFrame m_lastFrame;
-    QDateTime m_captureDateTime;
-    QSet<QString> m_detectedObjectClasses;
-    QHash<QString, QDateTime> m_pendingDisappearDeadlines;
-    cv::VideoWriter m_videoWriter;
-    QImage m_spectrumViewImage;
-#ifdef QT_TEXTTOSPEECH_FOUND
-    QTextToSpeech *m_speech;
-#endif
+    CameraPipelineFrame m_lastInputFrame;
+    std::deque<cv::Mat> m_diffMaskHistory;
+    cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
+    QVector<QRect> m_lastMotionBoxes;
+    int m_motionPersistenceRemaining;
+    cv::dnn::Net m_yoloNet;
+    cv::Size m_yoloInputSize;
+    QString m_yoloLoadedModelPath;
+    QStringList m_yoloLabels;
+    QString m_yoloLoadedLabelsPath;
+
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFrame& frame);
-    [[nodiscard]] QImage applyPostProcessing(const CameraPipelineFrame& frame);
-    void applyMotionOverlay(cv::Mat& bgrMat, const QVector<QRect>& motionBoxes) const;
-    void applyDetectionOverlay(cv::Mat& bgrMat, const QVector<CameraPipelineDetection>& detections) const;
-    void applySpectrumOverlay(cv::Mat& bgrMat) const;
+    [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
+    void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi);
+    void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes);
+    void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     [[nodiscard]] QImage convertBgrToRgbImage(cv::Mat& bgrMat) const;
-    void applyDateTimeOverlay(QImage& image) const;
-    void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
-    void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
-    void applyObjectDetectedSettings(const QString& className);
-    void applyObjectDisappearedSettings(const QString& className);
-    void executeCommand(const QString& command, const QString& className);
-    void saySpeech(const QString& speech, const QString& className);
-    bool shouldRecordVideoForDetectedObjects() const;
-    void setVideoRecordingEnabled(bool enabled);
-    void reportFrameToGUI(const QImage& image);
+
 private slots:
     void handleInputMessages();
-
 };
 
-#endif // INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
+#endif // INCLUDE_FEATURE_CAMERADETECTOR_H_

@@ -21,12 +21,24 @@
 
 #include <QDateTime>
 #include <QImage>
+#include <QRect>
+#include <QString>
+#include <QVector>
+
+struct CameraPipelineDetection
+{
+    QRect m_box;
+    QString m_label;
+    float m_score;
+};
 
 struct CameraPipelineFrame
 {
     QImage m_image;
     QImage m_unprocessedImage;
     QDateTime m_captureDateTime;
+    QVector<QRect> m_motionBoxes;
+    QVector<CameraPipelineDetection> m_detections;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAPIPELINEFRAME_H_

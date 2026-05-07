@@ -47,6 +47,8 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_frameStacker(new CameraFrameStacker()),
     m_imageProcessorThread(new QThread()),
     m_imageProcessor(new CameraImageProcessor()),
+    m_detectorThread(new QThread()),
+    m_detector(new CameraDetector()),
     m_postProcessorThread(new QThread()),
     m_postProcessor(new CameraPostProcessor())
 {
@@ -77,9 +79,17 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_imageProcessorThread, &QThread::started, m_imageProcessor, &CameraImageProcessor::startWork);
     QObject::connect(m_imageProcessorThread, &QThread::finished, m_imageProcessor, &QObject::deleteLater);
     QObject::connect(m_imageProcessorThread, &QThread::finished, m_imageProcessorThread, &QThread::deleteLater);
-    m_imageProcessor->setNextStageInputMessageQueue(getPostProcessorInputMessageQueue());
+    m_imageProcessor->setNextStageInputMessageQueue(getDetectorInputMessageQueue());
     m_imageProcessorThread->start();
     m_imageProcessor->getInputMessageQueue()->push(CameraImageProcessor::MsgConfigureCameraImageProcessor::create(m_settings, QList<QString>(), true));
+
+    m_detector->moveToThread(m_detectorThread);
+    QObject::connect(m_detectorThread, &QThread::started, m_detector, &CameraDetector::startWork);
+    QObject::connect(m_detectorThread, &QThread::finished, m_detector, &QObject::deleteLater);
+    QObject::connect(m_detectorThread, &QThread::finished, m_detectorThread, &QThread::deleteLater);
+    m_detector->setNextStageInputMessageQueue(getPostProcessorInputMessageQueue());
+    m_detectorThread->start();
+    m_detector->getInputMessageQueue()->push(CameraDetector::MsgConfigureCameraDetector::create(m_settings, QList<QString>(), true));
 
     // The post-processor runs continously, to be able to update the image when post processing settings are changed.
     m_postProcessor->moveToThread(m_postProcessorThread);
@@ -119,6 +129,14 @@ Camera::~Camera()
         m_imageProcessor = nullptr;
     }
 
+    if (m_detectorThread)
+    {
+        m_detectorThread->quit();
+        m_detectorThread->wait();
+        m_detectorThread = nullptr;
+        m_detector = nullptr;
+    }
+
     if (m_postProcessorThread)
     {
         m_postProcessorThread->quit();
@@ -146,6 +164,9 @@ void Camera::start()
     if (m_imageProcessor) {
         m_imageProcessor->getInputMessageQueue()->push(CameraImageProcessor::MsgCaptureActive::create(true));
     }
+    if (m_detector) {
+        m_detector->getInputMessageQueue()->push(CameraDetector::MsgCaptureActive::create(true));
+    }
     if (m_postProcessor) {
         m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(true));
     }
@@ -169,6 +190,9 @@ void Camera::stop()
     if (m_postProcessor) {
         m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(false));
     }
+    if (m_detector) {
+        m_detector->getInputMessageQueue()->push(CameraDetector::MsgCaptureActive::create(false));
+    }
     if (m_imageProcessor) {
         m_imageProcessor->getInputMessageQueue()->push(CameraImageProcessor::MsgCaptureActive::create(false));
     }
@@ -190,6 +214,9 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
         (void) queue;
     }
     if (m_imageProcessor) {
+        (void) queue;
+    }
+    if (m_detector) {
         (void) queue;
     }
     if (m_postProcessor) {
@@ -263,6 +290,9 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
     }
     if (m_imageProcessor) {
         m_imageProcessor->getInputMessageQueue()->push(CameraImageProcessor::MsgConfigureCameraImageProcessor::create(settings, settingsKeys, force));
+    }
+    if (m_detector) {
+        m_detector->getInputMessageQueue()->push(CameraDetector::MsgConfigureCameraDetector::create(settings, settingsKeys, force));
     }
     if (m_postProcessor) {
         m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgConfigureCameraPostProcessor::create(settings, settingsKeys, force));

@@ -21,8 +21,8 @@
 #include <QDebug>
 
 #include "util/profiler.h"
+#include "cameradetector.h"
 #include "cameraimageprocessor.h"
-#include "camerapostprocessor.h"
 
 MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgConfigureCameraImageProcessor, Message)
 MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgProcessFrame, Message)
@@ -184,7 +184,7 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFrame& frame)
     outputFrame.m_image = applyImageProcessing(frame.m_image);
 
     if (m_nextStageInputMessageQueue) {
-        m_nextStageInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(outputFrame));
+        m_nextStageInputMessageQueue->push(CameraDetector::MsgProcessFrame::create(outputFrame));
     }
 }
 

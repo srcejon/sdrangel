@@ -363,9 +363,7 @@ cv::Size readOnnxInputSize(const QString& modelPath)
 
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
-    m_captureActive(false),
-    m_motionPersistenceRemaining(0),
-    m_yoloInputSize(640, 640)
+    m_captureActive(false)
 #ifdef QT_TEXTTOSPEECH_FOUND
     , m_speech(new QTextToSpeech(this))
 #endif
@@ -450,10 +448,6 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         if (m_captureActive)
         {
             m_lastFrame = CameraPipelineFrame();
-            m_previousFrame = CameraPipelineFrame();
-            m_diffMaskHistory.clear();
-            m_lastMotionBoxes.clear();
-            m_motionPersistenceRemaining = 0;
         }
         else if (m_videoWriter.isOpened())
         {
@@ -475,12 +469,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
-        "diffMask", "diffThreshold", "dilationSize", "diffMaskHistoryFrames", "diffMaskCloseSize", "overlayFontFamily", "overlayFontScale",
-        "detectionRoiX", "detectionRoiY", "detectionRoiWidth", "detectionRoiHeight",
-        "motionDetect", "motionHistory", "motionVarThreshold", "motionDetectShadows", "motionOpenSize", "motionCloseSize", "motionPersistenceFrames",
-        "motionBoxColor", "minContourArea",
+        "overlayFontFamily", "overlayFontScale",
+        "motionBoxColor",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
-        "yoloEnabled", "yoloModelPath", "yoloLabelsPath", "yoloConfThreshold", "yoloNmsThreshold", "yoloBoxColor"
+        "yoloBoxColor"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
         [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
@@ -512,81 +504,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 
     if (sourceChanged) {
         m_lastFrame = CameraPipelineFrame();
-        m_previousFrame = CameraPipelineFrame();
-        m_diffMaskHistory.clear();
-        m_lastMotionBoxes.clear();
-        m_motionPersistenceRemaining = 0;
-    }
-
-    if (force
-        || settingsKeys.contains("diffMask")
-        || settingsKeys.contains("diffThreshold")
-        || settingsKeys.contains("dilationSize")
-        || settingsKeys.contains("diffMaskHistoryFrames")
-        || settingsKeys.contains("diffMaskCloseSize")
-        || settingsKeys.contains("detectionRoiX")
-        || settingsKeys.contains("detectionRoiY")
-        || settingsKeys.contains("detectionRoiWidth")
-        || settingsKeys.contains("detectionRoiHeight"))
-    {
-        m_diffMaskHistory.clear();
-    }
-
-    if ((force && !m_settings.m_diffMask)
-        || (settingsKeys.contains("diffMask") && !m_settings.m_diffMask)
-        || settingsKeys.contains("detectionRoiX")
-        || settingsKeys.contains("detectionRoiY")
-        || settingsKeys.contains("detectionRoiWidth")
-        || settingsKeys.contains("detectionRoiHeight")) {
-        m_previousFrame = CameraPipelineFrame();
-    }
-
-    if (force
-        || settingsKeys.contains("motionDetect")
-        || settingsKeys.contains("motionHistory")
-        || settingsKeys.contains("motionVarThreshold")
-        || settingsKeys.contains("motionDetectShadows")
-        || settingsKeys.contains("detectionRoiX")
-        || settingsKeys.contains("detectionRoiY")
-        || settingsKeys.contains("detectionRoiWidth")
-        || settingsKeys.contains("detectionRoiHeight"))
-    {
-        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
-    }
-
-    if (force
-        || settingsKeys.contains("motionDetect")
-        || settingsKeys.contains("motionHistory")
-        || settingsKeys.contains("motionVarThreshold")
-        || settingsKeys.contains("motionDetectShadows")
-        || settingsKeys.contains("motionOpenSize")
-        || settingsKeys.contains("motionCloseSize")
-        || settingsKeys.contains("motionPersistenceFrames")
-        || settingsKeys.contains("minContourArea")
-        || settingsKeys.contains("detectionRoiX")
-        || settingsKeys.contains("detectionRoiY")
-        || settingsKeys.contains("detectionRoiWidth")
-        || settingsKeys.contains("detectionRoiHeight"))
-    {
-        m_lastMotionBoxes.clear();
-        m_motionPersistenceRemaining = 0;
-    }
-
-    if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
-    {
-        m_yoloNet = cv::dnn::Net();
-        m_yoloLoadedModelPath.clear();
-    }
-
-    if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath))
-    {
-        m_yoloLabels.clear();
-        m_yoloLoadedLabelsPath.clear();
     }
 
     if ((force && !m_settings.m_yoloEnabled)
         || settingsKeys.contains("yoloEnabled")
-        || settingsKeys.contains("yoloLabelsPath")
         || settingsKeys.contains("objectDeviceSettings"))
     {
         m_detectedObjectClasses.clear();
@@ -605,7 +526,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     }
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
-        const QImage processed = applyPostProcessing(m_lastFrame.m_image);
+        const QImage processed = applyPostProcessing(m_lastFrame);
         reportFrameToGUI(processed);
     }
 }
@@ -619,9 +540,16 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFrame& frame)
     m_captureDateTime = frame.m_captureDateTime.isValid() ? frame.m_captureDateTime : QDateTime::currentDateTime();
     const QImage& pipelineImage = frame.m_image;
     const QImage& unprocessedImage = frame.m_unprocessedImage.isNull() ? frame.m_image : frame.m_unprocessedImage;
-    const QImage processed = applyPostProcessing(pipelineImage);
+    const QSet<QString> currentDetectedClasses = [&frame]() {
+        QSet<QString> classes;
+        for (const CameraPipelineDetection& detection : frame.m_detections) {
+            classes.insert(detection.m_label);
+        }
+        return classes;
+    }();
+    processObjectDetections(currentDetectedClasses, m_captureDateTime);
+    const QImage processed = applyPostProcessing(frame);
 
-    m_previousFrame = m_lastFrame;
     m_lastFrame = frame;
 
     reportFrameToGUI(processed);
@@ -682,135 +610,40 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image)
     }
 }
 
-cv::Rect CameraPostProcessor::resolveDetectionRoi(const cv::Size& frameSize) const
-{
-    const int frameWidth = std::max(1, frameSize.width);
-    const int frameHeight = std::max(1, frameSize.height);
-    const int x = qBound(0, m_settings.m_detectionRoiX, frameWidth - 1);
-    const int y = qBound(0, m_settings.m_detectionRoiY, frameHeight - 1);
-    const int width = (m_settings.m_detectionRoiWidth <= 0)
-        ? (frameWidth - x)
-        : qBound(1, m_settings.m_detectionRoiWidth, frameWidth - x);
-    const int height = (m_settings.m_detectionRoiHeight <= 0)
-        ? (frameHeight - y)
-        : qBound(1, m_settings.m_detectionRoiHeight, frameHeight - y);
-    return cv::Rect(x, y, width, height);
-}
-
-void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi)
+void CameraPostProcessor::applyMotionOverlay(cv::Mat& bgrMat, const QVector<QRect>& motionBoxes) const
 {
     PROFILER_START();
-    const QImage prevRgb = m_previousFrame.m_image.convertToFormat(QImage::Format_RGB888);
-    cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
-                    const_cast<uchar*>(prevRgb.bits()),
-                    static_cast<size_t>(prevRgb.bytesPerLine()));
-    cv::Mat prevBgr;
-    cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
-
-    cv::Mat gray, prevGray;
-    cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
-    cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
-    cv::Mat diff;
-    cv::absdiff(gray(roi), prevGray(roi), diff);
-    cv::Mat mask;
-    cv::threshold(diff, mask, m_settings.m_diffThreshold, 255, cv::THRESH_BINARY);
-
-    if (m_settings.m_dilationSize > 0)
-    {
-        const int ksize = 2 * m_settings.m_dilationSize + 1;
-        const cv::Mat dilationKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
-        cv::dilate(mask, mask, dilationKernel);
+    const QColor& bc = m_settings.m_motionBoxColor;
+    const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
+    for (const QRect& box : motionBoxes) {
+        cv::Rect cvBox(box.x(), box.y(), box.width(), box.height());
+        cv::rectangle(bgrMat, cvBox, boxColor, 2);
     }
-
-    if (!m_diffMaskHistory.empty() &&
-        (m_diffMaskHistory.front().size() != mask.size() || m_diffMaskHistory.front().type() != mask.type()))
-    {
-        m_diffMaskHistory.clear();
-    }
-
-    m_diffMaskHistory.push_back(mask.clone());
-
-    const size_t historyFrames = static_cast<size_t>(std::max(1, m_settings.m_diffMaskHistoryFrames));
-    while (m_diffMaskHistory.size() > historyFrames) {
-        m_diffMaskHistory.pop_front();
-    }
-
-    cv::Mat combinedMask = m_diffMaskHistory.front().clone();
-    for (size_t i = 1; i < m_diffMaskHistory.size(); ++i) {
-        cv::bitwise_or(combinedMask, m_diffMaskHistory[i], combinedMask);
-    }
-    if (m_settings.m_diffMaskCloseSize > 0) {
-        const int closeKsize = 2 * m_settings.m_diffMaskCloseSize + 1;
-        const cv::Mat closeKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(closeKsize, closeKsize));
-        cv::morphologyEx(combinedMask, combinedMask, cv::MORPH_CLOSE, closeKernel);
-    }
-
-    cv::Mat result = cv::Mat::zeros(bgrMat.size(), bgrMat.type());
-    cv::Mat fullMask = cv::Mat::zeros(bgrMat.rows, bgrMat.cols, combinedMask.type());
-    combinedMask.copyTo(fullMask(roi));
-    cv::bitwise_and(bgrMat, bgrMat, result, fullMask);
-    bgrMat = result;
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyMotionDetection(cv::Mat& bgrMat, const cv::Rect& roi)
+void CameraPostProcessor::applyDetectionOverlay(cv::Mat& bgrMat, const QVector<CameraPipelineDetection>& detections) const
 {
     PROFILER_START();
-    if (!m_bgSubtractor) {
-        m_bgSubtractor = cv::createBackgroundSubtractorMOG2(
-            m_settings.m_motionHistory,
-            m_settings.m_motionVarThreshold,
-            m_settings.m_motionDetectShadows);
-    }
-
-    cv::Mat fgMask;
-    m_bgSubtractor->apply(bgrMat(roi), fgMask);
-    cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
-
-    if (m_settings.m_motionOpenSize > 0)
-    {
-        const int ksize = 2 * m_settings.m_motionOpenSize + 1;
-        const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
-        cv::morphologyEx(fgMask, fgMask, cv::MORPH_OPEN, kernel);
-    }
-
-    if (m_settings.m_motionCloseSize > 0)
-    {
-        const int ksize = 2 * m_settings.m_motionCloseSize + 1;
-        const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
-        cv::morphologyEx(fgMask, fgMask, cv::MORPH_CLOSE, kernel);
-    }
-
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-
-    std::vector<cv::Rect> boxes;
-    boxes.reserve(contours.size());
-    for (const auto& contour : contours)
-    {
-        if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea)) {
-            cv::Rect box = cv::boundingRect(contour);
-            box.x += roi.x;
-            box.y += roi.y;
-            boxes.push_back(box);
-        }
-    }
-
-    if (!boxes.empty()) {
-        m_lastMotionBoxes = boxes;
-        m_motionPersistenceRemaining = m_settings.m_motionPersistenceFrames;
-    } else if ((m_motionPersistenceRemaining > 0) && !m_lastMotionBoxes.empty()) {
-        boxes = m_lastMotionBoxes;
-        --m_motionPersistenceRemaining;
-    } else {
-        m_lastMotionBoxes.clear();
-        m_motionPersistenceRemaining = 0;
-    }
-
-    const QColor& bc = m_settings.m_motionBoxColor;
+    const QColor& bc = m_settings.m_yoloBoxColor;
     const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
-    for (const auto& box : boxes) {
+    const cv::Scalar textBg(0, 0, 0);
+
+    for (const CameraPipelineDetection& detection : detections)
+    {
+        const cv::Rect box(detection.m_box.x(), detection.m_box.y(), detection.m_box.width(), detection.m_box.height());
         cv::rectangle(bgrMat, box, boxColor, 2);
+
+        QString label = detection.m_label + QStringLiteral(" %1%").arg(static_cast<int>(detection.m_score * 100.0f + 0.5f));
+        const std::string labelStd = label.toStdString();
+        int baseLine = 0;
+        const cv::Size textSize = cv::getTextSize(labelStd, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
+        const int labelY = std::max(box.y, textSize.height + 2);
+        cv::rectangle(bgrMat,
+                      cv::Point(box.x, labelY - textSize.height - 2),
+                      cv::Point(box.x + textSize.width, labelY + baseLine),
+                      textBg, cv::FILLED);
+        cv::putText(bgrMat, labelStd, cv::Point(box.x, labelY), cv::FONT_HERSHEY_SIMPLEX, 0.5, boxColor, 1, cv::LINE_AA);
     }
     PROFILER_STOP(__FUNCTION__);
 }
@@ -932,19 +765,19 @@ void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlay
     PROFILER_STOP(__FUNCTION__);
 }
 
-QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
+QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame)
 {
     PROFILER_START();
 
+    const QImage& input = frame.m_image;
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
     QTextDocument overlayTextDocument;
     overlayTextDocument.setHtml(m_settings.m_overlayTextString);
     const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
     const bool needsAny = m_settings.m_overlayDateTime
         || needsTextOverlay
-        || (m_settings.m_diffMask && !m_previousFrame.m_image.isNull())
-        || m_settings.m_motionDetect
-        || (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty())
+        || !frame.m_motionBoxes.isEmpty()
+        || !frame.m_detections.isEmpty()
         || needsSpectrumOverlay;
 
     if (!needsAny) {
@@ -957,19 +790,9 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
                 static_cast<size_t>(rgb.bytesPerLine()));
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-    const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
 
-    if (m_settings.m_diffMask && !m_previousFrame.m_image.isNull()
-        && m_previousFrame.m_image.width() == input.width()
-        && m_previousFrame.m_image.height() == input.height()) {
-        applyDiffMask(bgrMat, detectionRoi);
-    }
-    if (m_settings.m_motionDetect) { applyMotionDetection(bgrMat, detectionRoi); }
-
-    if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
-        runYoloDetections(bgrMat, detectionRoi);
-    }
-
+    if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(bgrMat, frame.m_motionBoxes); }
+    if (!frame.m_detections.isEmpty()) { applyDetectionOverlay(bgrMat, frame.m_detections); }
     if (needsSpectrumOverlay) { applySpectrumOverlay(bgrMat); }
 
     QImage result = convertBgrToRgbImage(bgrMat);
@@ -979,265 +802,6 @@ QImage CameraPostProcessor::applyPostProcessing(const QImage& input)
 
     PROFILER_STOP("CameraPostProcessor::applyPostProcessing");
     return result;
-}
-
-void CameraPostProcessor::runYoloDetections(cv::Mat& bgrMat, const cv::Rect& roi)
-{
-    PROFILER_START();
-
-    const QDateTime detectionTime = m_captureDateTime.isValid() ? m_captureDateTime : QDateTime::currentDateTime();
-
-    if (m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath)
-    {
-        m_yoloLabels.clear();
-        m_yoloLoadedLabelsPath.clear();
-
-        if (!m_settings.m_yoloLabelsPath.isEmpty() && !(m_settings.m_yoloLabelsPath.startsWith("http://") || m_settings.m_yoloLabelsPath.startsWith("https://")))
-        {
-            QFile f(m_settings.m_yoloLabelsPath);
-            if (f.open(QIODevice::ReadOnly | QIODevice::Text))
-            {
-                QTextStream ts(&f);
-                while (!ts.atEnd())
-                {
-                    const QString line = ts.readLine().trimmed();
-                    if (!line.isEmpty()) {
-                        m_yoloLabels.append(line);
-                    }
-                }
-                m_yoloLoadedLabelsPath = m_settings.m_yoloLabelsPath;
-            }
-            else
-            {
-                qWarning() << "CameraPostProcessor::runYoloDetections: cannot open labels file:" << m_settings.m_yoloLabelsPath;
-            }
-        }
-    }
-
-    if (m_yoloLoadedModelPath != m_settings.m_yoloModelPath)
-    {
-        m_yoloNet = cv::dnn::Net();
-        m_yoloInputSize = cv::Size(640, 640);
-        m_yoloLoadedModelPath.clear();
-
-        if (!m_settings.m_yoloModelPath.isEmpty() && !(m_settings.m_yoloModelPath.startsWith("http://") || m_settings.m_yoloModelPath.startsWith("https://")))
-        {
-            try
-            {
-                const QString localFile = m_settings.m_yoloModelPath;
-
-                m_yoloNet = cv::dnn::readNetFromONNX(localFile.toStdString());
-
-                const cv::Size modelInputSize = readOnnxInputSize(localFile);
-
-                if ((modelInputSize.width > 0) && (modelInputSize.height > 0))
-                {
-                    m_yoloInputSize = modelInputSize;
-                }
-                else
-                {
-                    qWarning() << "CameraPostProcessor::runYoloDetections: unable to read model input size, using fallback 640x640 for"
-                                << localFile;
-                }
-
-                m_yoloLoadedModelPath = m_settings.m_yoloModelPath;
-                qDebug() << "CameraPostProcessor::runYoloDetections: loaded model" << localFile
-                            << "with input size" << m_yoloInputSize.width << "x" << m_yoloInputSize.height;
-            }
-            catch (const cv::Exception& e)
-            {
-                qWarning() << "CameraPostProcessor::runYoloDetections: failed to load model:" << e.what();
-                return;
-            }
-        }
-        else
-        {
-            return;
-        }
-    }
-
-    if (m_yoloNet.empty()) {
-        return;
-    }
-
-    // Don't bother with OpenCL
-    // Execution time in ms from Profiler
-    // Model | CPU  | OPENCL_FP16 | CUDA | CUDA_FP16
-    // 26n   | 60   | 270         | 22   |
-    // 26s   | 119  |             | 54   |
-    // 26m   | 267  | 720         | 60   |
-    // 26l   | 370  |             | 70   |
-    // 26x   | 550  | 1482        | 82   |
-    if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
-    {
-        m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-        m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
-    }
-    else if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16)
-    {
-        m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-        m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
-    }
-    else
-    {
-        m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
-        m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-    }
-
-    cv::Mat roiMat = bgrMat(roi);
-    const float scaleX = static_cast<float>(roiMat.cols) / m_yoloInputSize.width;
-    const float scaleY = static_cast<float>(roiMat.rows) / m_yoloInputSize.height;
-
-    cv::Mat blob;
-    cv::dnn::blobFromImage(roiMat, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
-    m_yoloNet.setInput(blob);
-
-    std::vector<cv::Mat> outputs;
-    try
-    {
-        m_yoloNet.forward(outputs, m_yoloNet.getUnconnectedOutLayersNames());
-    }
-    catch (const cv::Exception& e)
-    {
-        qWarning() << "CameraPostProcessor::runYoloDetections: inference failed:" << e.what();
-        return;
-    }
-    m_yoloNet.setInput(blob);
-
-    if (outputs.empty()) {
-        processObjectDetections(QSet<QString>(), detectionTime);
-        return;
-    }
-
-    cv::Mat det = outputs[0];
-    if (det.dims == 3) {
-        det = det.reshape(1, det.size[1]);
-    }
-
-    const float confThresh = static_cast<float>(m_settings.m_yoloConfThreshold);
-    const float nmsThresh = static_cast<float>(m_settings.m_yoloNmsThreshold);
-    std::vector<cv::Rect> boxes;
-    std::vector<float> scores;
-    std::vector<int> classIds;
-    QSet<QString> currentDetectedClasses;
-    const bool isV8Style = (det.rows < det.cols);
-
-    if (isV8Style)
-    {
-        const int numAnchors = det.cols;
-        const int numClasses = det.rows - 4;
-        if (numClasses <= 0) {
-            return;
-        }
-
-        for (int a = 0; a < numAnchors; ++a)
-        {
-            float bestScore = 0.0f;
-            int bestClass = 0;
-            for (int c = 0; c < numClasses; ++c)
-            {
-                const float s = det.at<float>(4 + c, a);
-                if (s > bestScore) {
-                    bestScore = s;
-                    bestClass = c;
-                }
-            }
-            if (bestScore < confThresh) {
-                continue;
-            }
-
-            const float cx = det.at<float>(0, a) * scaleX;
-            const float cy = det.at<float>(1, a) * scaleY;
-            const float w = det.at<float>(2, a) * scaleX;
-            const float h = det.at<float>(3, a) * scaleY;
-
-            boxes.push_back(cv::Rect(
-                roi.x + static_cast<int>(cx - w / 2.0f),
-                roi.y + static_cast<int>(cy - h / 2.0f),
-                static_cast<int>(w),
-                static_cast<int>(h)));
-            scores.push_back(bestScore);
-            classIds.push_back(bestClass);
-        }
-    }
-    else
-    {
-        const int numAnchors = det.rows;
-        const int numClasses = det.cols - 5;
-        if (numClasses < 0) {
-            return;
-        }
-
-        for (int a = 0; a < numAnchors; ++a)
-        {
-            const float objectness = det.at<float>(a, 4);
-            if (objectness < confThresh) {
-                continue;
-            }
-
-            float bestScore = 0.0f;
-            int bestClass = 0;
-            for (int c = 0; c < numClasses; ++c)
-            {
-                const float s = objectness * det.at<float>(a, 5 + c);
-                if (s > bestScore) {
-                    bestScore = s;
-                    bestClass = c;
-                }
-            }
-            if (bestScore < confThresh) {
-                continue;
-            }
-
-            const float cx = det.at<float>(a, 0) * scaleX;
-            const float cy = det.at<float>(a, 1) * scaleY;
-            const float w = det.at<float>(a, 2) * scaleX;
-            const float h = det.at<float>(a, 3) * scaleY;
-
-            boxes.push_back(cv::Rect(
-                roi.x + static_cast<int>(cx - w / 2.0f),
-                roi.y + static_cast<int>(cy - h / 2.0f),
-                static_cast<int>(w),
-                static_cast<int>(h)));
-            scores.push_back(bestScore);
-            classIds.push_back(bestClass);
-        }
-    }
-
-    std::vector<int> indices;
-    cv::dnn::NMSBoxes(boxes, scores, confThresh, nmsThresh, indices);
-
-    const QColor& bc = m_settings.m_yoloBoxColor;
-    const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
-    const cv::Scalar textBg(0, 0, 0);
-
-    for (int idx : indices)
-    {
-        const cv::Rect& box = boxes[idx];
-        cv::rectangle(bgrMat, box, boxColor, 2);
-
-        QString label;
-        if (!m_yoloLabels.isEmpty() && classIds[idx] < m_yoloLabels.size()) {
-            label = m_yoloLabels[classIds[idx]];
-        } else {
-            label = QStringLiteral("cls%1").arg(classIds[idx]);
-        }
-        currentDetectedClasses.insert(label);
-        label += QStringLiteral(" %1%").arg(static_cast<int>(scores[idx] * 100.0f + 0.5f));
-
-        const std::string labelStd = label.toStdString();
-        int baseLine = 0;
-        const cv::Size textSize = cv::getTextSize(labelStd, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-        const int labelY = std::max(box.y, textSize.height + 2);
-        cv::rectangle(bgrMat,
-                      cv::Point(box.x, labelY - textSize.height - 2),
-                      cv::Point(box.x + textSize.width, labelY + baseLine),
-                      textBg, cv::FILLED);
-        cv::putText(bgrMat, labelStd, cv::Point(box.x, labelY), cv::FONT_HERSHEY_SIMPLEX, 0.5, boxColor, 1, cv::LINE_AA);
-    }
-
-    PROFILER_STOP("YOLO");
-    processObjectDetections(currentDetectedClasses, detectionTime);
 }
 
 void CameraPostProcessor::processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now)

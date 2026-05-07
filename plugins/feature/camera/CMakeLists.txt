@@ -2,6 +2,7 @@ project(camera)
 
 set(camera_SOURCES
     camera.cpp
+    cameradetector.cpp
     cameraframestacker.cpp
     cameraimageprocessor.cpp
     camerapostprocessor.cpp
@@ -14,6 +15,7 @@ set(camera_SOURCES
 
 set(camera_HEADERS
     camera.h
+    cameradetector.h
     cameraframestacker.h
     cameraimageprocessor.h
     camerapipelineframe.h

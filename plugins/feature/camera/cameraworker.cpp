@@ -3103,14 +3103,11 @@ QImage CameraWorker::asiFrameToImage() const
         for (int y = 0; y < m_asiFrameHeight; ++y)
         {
             const cv::Vec<uint16_t, 3> *inputLine = bgr16Mat.ptr<cv::Vec<uint16_t, 3>>(y);
-            quint16 *outputLine = reinterpret_cast<quint16*>(image.scanLine(y));
+            QRgba64 *outputLine = reinterpret_cast<QRgba64*>(image.scanLine(y));
 
             for (int x = 0; x < m_asiFrameWidth; ++x)
             {
-                outputLine[x * 4 + 0] = inputLine[x][2];
-                outputLine[x * 4 + 1] = inputLine[x][1];
-                outputLine[x * 4 + 2] = inputLine[x][0];
-                outputLine[x * 4 + 3] = 65535;
+                outputLine[x] = qRgba64(inputLine[x][2], inputLine[x][1], inputLine[x][0], 65535);
             }
         }
 

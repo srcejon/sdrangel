@@ -708,14 +708,14 @@ QImage CameraPostProcessor::applyFrameStacking(const QImage& input)
         QImage rgb8(source.width(), source.height(), QImage::Format_RGB888);
         for (int y = 0; y < source.height(); ++y)
         {
-            const quint16 *inputLine = reinterpret_cast<const quint16*>(source.constScanLine(y));
+            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(source.constScanLine(y));
             uchar *outputLine = rgb8.scanLine(y);
 
             for (int x = 0; x < source.width(); ++x)
             {
-                outputLine[x * 3 + 0] = static_cast<uchar>(std::lround((inputLine[x * 4 + 0] * 255.0) / 65535.0));
-                outputLine[x * 3 + 1] = static_cast<uchar>(std::lround((inputLine[x * 4 + 1] * 255.0) / 65535.0));
-                outputLine[x * 3 + 2] = static_cast<uchar>(std::lround((inputLine[x * 4 + 2] * 255.0) / 65535.0));
+                outputLine[x * 3 + 0] = static_cast<uchar>(std::lround((inputLine[x].red() * 255.0) / 65535.0));
+                outputLine[x * 3 + 1] = static_cast<uchar>(std::lround((inputLine[x].green() * 255.0) / 65535.0));
+                outputLine[x * 3 + 2] = static_cast<uchar>(std::lround((inputLine[x].blue() * 255.0) / 65535.0));
             }
         }
 
@@ -732,14 +732,14 @@ QImage CameraPostProcessor::applyFrameStacking(const QImage& input)
         frameMat = cv::Mat(input.height(), input.width(), CV_16UC3);
         for (int y = 0; y < input.height(); ++y)
         {
-            const quint16 *inputLine = reinterpret_cast<const quint16*>(input.constScanLine(y));
+            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(input.constScanLine(y));
             cv::Vec<uint16_t, 3> *outputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
 
             for (int x = 0; x < input.width(); ++x)
             {
-                outputLine[x][0] = inputLine[x * 4 + 0];
-                outputLine[x][1] = inputLine[x * 4 + 1];
-                outputLine[x][2] = inputLine[x * 4 + 2];
+                outputLine[x][0] = inputLine[x].red();
+                outputLine[x][1] = inputLine[x].green();
+                outputLine[x][2] = inputLine[x].blue();
             }
         }
     }

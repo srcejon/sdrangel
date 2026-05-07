@@ -138,7 +138,7 @@
          <iconset resource="cameraicons.qrc">
           <normaloff>:/camera/icons/media_previous.png</normaloff>:/camera/icons/media_previous.png</iconset>
         </property>
-        </widget>
+       </widget>
       </item>
       <item>
        <widget class="ButtonSwitch" name="playPauseVideo">
@@ -178,16 +178,16 @@
          <string>Playback rate for file camera video playback</string>
         </property>
         <property name="decimals">
-         <number>2</number>
+         <number>1</number>
         </property>
         <property name="minimum">
-         <double>0.010000000000000</double>
+         <double>0.100000000000000</double>
         </property>
         <property name="maximum">
-         <double>4.000000000000000</double>
+         <double>10.000000000000000</double>
         </property>
         <property name="singleStep">
-         <double>0.050000000000000</double>
+         <double>0.100000000000000</double>
         </property>
         <property name="value">
          <double>1.000000000000000</double>

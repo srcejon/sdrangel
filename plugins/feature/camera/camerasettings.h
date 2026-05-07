@@ -49,6 +49,13 @@ struct CameraSettings
         StackMethodSigmaClippedAverage
     };
 
+    enum StackAlignmentMethod
+    {
+        StackAlignmentNone = 0,
+        StackAlignmentPhaseCorrelation,
+        StackAlignmentStarCentroidMatching
+    };
+
     enum AsiColorImageType
     {
         AsiColorImageTypeRgb24 = 0,
@@ -125,6 +132,7 @@ struct CameraSettings
     bool m_stackEnabled;
     int m_stackFrameCount;
     StackMethod m_stackMethod;
+    StackAlignmentMethod m_stackAlignmentMethod;
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

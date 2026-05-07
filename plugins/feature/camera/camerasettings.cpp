@@ -176,6 +176,7 @@ void CameraSettings::resetToDefaults()
     m_stackEnabled = false;
     m_stackFrameCount = 4;
     m_stackMethod = StackMethodAverage;
+    m_stackAlignmentMethod = StackAlignmentNone;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -278,6 +279,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(125, m_stackEnabled);
     s.writeS32(126, m_stackFrameCount);
     s.writeS32(127, m_stackMethod);
+    s.writeS32(128, m_stackAlignmentMethod);
 
     if (m_rollupState) {
         s.writeBlob(19, m_rollupState->serialize());
@@ -461,6 +463,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(125, &m_stackEnabled, false);
         d.readS32(126, &m_stackFrameCount, 4);
         d.readS32(127, (qint32 *) &m_stackMethod, (qint32) StackMethodAverage);
+        d.readS32(128, (qint32 *) &m_stackAlignmentMethod, (qint32) StackAlignmentNone);
         d.readString(115, &m_videoFileCameraPath, "");
 
         if (m_rollupState)
@@ -636,6 +639,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_asiColorImageType = qBound(AsiColorImageTypeRgb24, m_asiColorImageType, AsiColorImageTypeRaw16);
         m_stackFrameCount = qBound(1, m_stackFrameCount, 256);
         m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodSigmaClippedAverage);
+        m_stackAlignmentMethod = qBound(StackAlignmentNone, m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
 
         return true;
     }
@@ -817,6 +821,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("stackMethod")) {
         m_stackMethod = qBound(StackMethodAverage, settings.m_stackMethod, StackMethodSigmaClippedAverage);
+    }
+    if (settingsKeys.contains("stackAlignmentMethod")) {
+        m_stackAlignmentMethod = qBound(StackAlignmentNone, settings.m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -1180,6 +1187,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("stackMethod") || force) {
         ostr << " m_stackMethod: " << m_stackMethod;
+    }
+    if (settingsKeys.contains("stackAlignmentMethod") || force) {
+        ostr << " m_stackAlignmentMethod: " << m_stackAlignmentMethod;
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

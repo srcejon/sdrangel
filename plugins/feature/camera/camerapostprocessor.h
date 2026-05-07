@@ -29,6 +29,7 @@
 #include <QTextDocument>
 
 #include <opencv2/core/core.hpp>
+#include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/video/background_segm.hpp>
 #include <opencv2/videoio.hpp>
@@ -213,6 +214,12 @@ private:
     void processNewFrame(const QImage& image);
     void resetFrameHistoryState();
     [[nodiscard]] QImage applyFrameStacking(const QImage& input);
+    [[nodiscard]] cv::Mat alignStackFrame(const cv::Mat& frameMat) const;
+    [[nodiscard]] cv::Mat alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const;
+    [[nodiscard]] cv::Mat alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const;
+    [[nodiscard]] cv::Mat warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform) const;
+    [[nodiscard]] cv::Mat frameToAlignmentGray(const cv::Mat& frameMat) const;
+    [[nodiscard]] std::vector<cv::Point2f> detectStarCentroids(const cv::Mat& grayFrame) const;
     [[nodiscard]] QImage applyPostProcessing(const QImage& input);
     void applyWhiteBalance(cv::Mat& bgrMat);
     void applySaturation(cv::Mat& bgrMat);

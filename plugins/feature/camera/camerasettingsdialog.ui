@@ -1824,11 +1824,11 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="stackMethodCombo">
-            <property name="toolTip">
-             <string>Stacking method used to combine frames</string>
-            </property>
+            <item row="2" column="1">
+             <widget class="QComboBox" name="stackMethodCombo">
+              <property name="toolTip">
+               <string>Stacking method used to combine frames</string>
+              </property>
              <item>
               <property name="text">
                <string>Average</string>
@@ -1843,11 +1843,40 @@
               <property name="text">
                <string>Sigma clipped average</string>
               </property>
-             </item>
-            </widget>
-           </item>
-         </layout>
-        </widget>
+              </item>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="stackAlignmentLabel">
+              <property name="text">
+               <string>Alignment</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QComboBox" name="stackAlignmentCombo">
+              <property name="toolTip">
+               <string>Optional frame alignment before stacking. Phase correlation handles translation; star centroid matching can also compensate small rotation/scale drift.</string>
+              </property>
+              <item>
+               <property name="text">
+                <string>None</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Phase correlation</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Star centroid matching</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+           </layout>
+          </widget>
        </item>
        <item>
         <spacer name="verticalSpacerStacking">

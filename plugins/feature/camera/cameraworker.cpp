@@ -207,7 +207,7 @@ ASI_IMG_TYPE CameraWorker::asiSelectImageType(const ASI_CAMERA_INFO& cameraInfo)
 
 #endif
 
-QImage CameraWorker::renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height)
+QImage CameraWorker::renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit)
 {
     int minValue = std::numeric_limits<int>::max();
     int maxValue = std::numeric_limits<int>::min();
@@ -220,8 +220,22 @@ QImage CameraWorker::renderGrayscaleRaw(const QVector<QVector<int>>& raw, int wi
     }
 
     const int range = maxValue - minValue;
-    const int uniformGray = (range == 0) ? (minValue > 0 ? 128 : 0) : 0;
+    if (use16Bit)
+    {
+        const int uniformGray = (range == 0) ? (minValue > 0 ? 32768 : 0) : 0;
+        QImage image(width, height, QImage::Format_RGBA64);
+        for (int x = 0; x < width; ++x) {
+            for (int y = 0; y < height; ++y) {
+                const int value = (range > 0)
+                    ? qBound(0, static_cast<int>(((raw[x][y] - minValue) * 65535.0) / range), 65535)
+                    : uniformGray;
+                reinterpret_cast<QRgba64*>(image.scanLine(y))[x] = qRgba64(value, value, value, 65535);
+            }
+        }
+        return image;
+    }
 
+    const int uniformGray = (range == 0) ? (minValue > 0 ? 128 : 0) : 0;
     QImage image(width, height, QImage::Format_Grayscale8);
     for (int x = 0; x < width; ++x) {
         for (int y = 0; y < height; ++y) {
@@ -2382,7 +2396,7 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             return createPlaceholderFrame();
         }
 
-        // First pass: find minimum and maximum pixel values for black-level correction and linear scaling to 8-bit
+        // First pass: find minimum and maximum pixel values for black-level correction and scaling.
         int minVal = std::numeric_limits<int>::max();
         int maxVal = std::numeric_limits<int>::min();
         for (const QJsonValue& col : value) {
@@ -2392,23 +2406,19 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
                 if (v > maxVal) { maxVal = v; }
             }
         }
-        const int range = maxVal - minVal;
-        const double scale = (range > 0) ? (255.0 / range) : 0.0;
-        const int uniformGray = (range == 0) ? (minVal > 0 ? 128 : 0) : 0;
+        const bool use16Bit = (minVal < 0) || (maxVal > 255);
 
         QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
             const QJsonArray col = value[x].toArray();
             for (int y = 0; y < height; ++y) {
-                raw[x][y] = (range > 0)
-                    ? qBound(0, static_cast<int>((col[y].toInt(0) - minVal) * scale), 255)
-                    : uniformGray;
+                raw[x][y] = col[y].toInt(0);
             }
         }
 
         // Bayer demosaicing for sensorType 2 (RGGB), 3 (CMYG), 4 (CMYG2), 5 (LRGB)
         // sensorType 0 = Monochrome, 1 = Colour (handled by rank 3 normally)
-        return renderRawPixelArray(raw, width, height);
+        return renderRawPixelArray(raw, width, height, use16Bit);
     }
     else if (rank == 3)
     {
@@ -2428,6 +2438,7 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             return createPlaceholderFrame();
         }
 
+        // First pass: find minimum and maximum pixel values for black-level correction and scaling.
         int minVal = std::numeric_limits<int>::max();
         int maxVal = std::numeric_limits<int>::min();
         for (const QJsonArray* plane : {&planeR, &planeG, &planeB}) {
@@ -2440,19 +2451,26 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
             }
         }
         const int range3 = maxVal - minVal;
-        const double scale = (range3 > 0) ? (255.0 / range3) : 0.0;
-        const int uniformGray3 = (range3 == 0) ? (minVal > 0 ? 128 : 0) : 0;
+        const bool use16Bit = (minVal < 0) || (maxVal > 255);
+        const double scale = (range3 > 0) ? ((use16Bit ? 65535.0 : 255.0) / range3) : 0.0;
+        const int uniformGray3 = (range3 == 0) ? (minVal > 0 ? (use16Bit ? 32768 : 128) : 0) : 0;
 
-        QImage image(width, height, QImage::Format_RGB32);
+        QImage image(width, height, use16Bit ? QImage::Format_RGBA64 : QImage::Format_RGB32);
         for (int x = 0; x < width; ++x) {
             const QJsonArray colR = planeR[x].toArray();
             const QJsonArray colG = planeG[x].toArray();
             const QJsonArray colB = planeB[x].toArray();
             for (int y = 0; y < height; ++y) {
-                const int r = (range3 > 0) ? qBound(0, static_cast<int>((colR[y].toInt(0) - minVal) * scale), 255) : uniformGray3;
-                const int g = (range3 > 0) ? qBound(0, static_cast<int>((colG[y].toInt(0) - minVal) * scale), 255) : uniformGray3;
-                const int b = (range3 > 0) ? qBound(0, static_cast<int>((colB[y].toInt(0) - minVal) * scale), 255) : uniformGray3;
-                reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
+                const int maxComponent = use16Bit ? 65535 : 255;
+                const int r = (range3 > 0) ? qBound(0, static_cast<int>((colR[y].toInt(0) - minVal) * scale), maxComponent) : uniformGray3;
+                const int g = (range3 > 0) ? qBound(0, static_cast<int>((colG[y].toInt(0) - minVal) * scale), maxComponent) : uniformGray3;
+                const int b = (range3 > 0) ? qBound(0, static_cast<int>((colB[y].toInt(0) - minVal) * scale), maxComponent) : uniformGray3;
+
+                if (use16Bit) {
+                    reinterpret_cast<QRgba64*>(image.scanLine(y))[x] = qRgba64(r, g, b, 65535);
+                } else {
+                    reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
+                }
             }
         }
         return image;
@@ -2461,8 +2479,20 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload) const
     return createPlaceholderFrame();
 }
 
-QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const
+QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit) const
 {
+    int minValue = std::numeric_limits<int>::max();
+    int maxValue = std::numeric_limits<int>::min();
+
+    for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+            minValue = std::min(minValue, raw[x][y]);
+            maxValue = std::max(maxValue, raw[x][y]);
+        }
+    }
+
+    const int range = maxValue - minValue;
+
     // Bayer demosaicing for sensorType 2 (RGGB).
     // RGGB pattern shifted by BayerOffsetX/Y:
     //   (even x, even y) = R
@@ -2473,8 +2503,18 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
     // as those require colour-matrix transforms beyond the scope here.
     if (m_alpacaSensorType == 2)
     {
-        QImage image(width, height, QImage::Format_RGB32);
-        auto clamp = [](int v) { return qBound(0, v, 255); };
+        QImage image(width, height, use16Bit ? QImage::Format_RGBA64 : QImage::Format_RGB32);
+        auto scaleValue = [minValue, range, use16Bit](int v) {
+            if (range <= 0) {
+                return use16Bit ? (minValue > 0 ? 32768 : 0) : (minValue > 0 ? 128 : 0);
+            }
+
+            if (use16Bit) {
+                return qBound(0, static_cast<int>(((v - minValue) * 65535.0) / range), 65535);
+            }
+
+            return qBound(0, static_cast<int>(((v - minValue) * 255.0) / range), 255);
+        };
         auto safe  = [&raw, width, height](int x, int y) -> int {
             return raw[qBound(0, x, width-1)][qBound(0, y, height-1)];
         };
@@ -2490,32 +2530,41 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
                 if ((shiftedX == 0) && (shiftedY == 0)) {
                     // R site
                     r = raw[x][y];
-                    g = clamp((safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4);
-                    b = clamp((safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4);
+                    g = (safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4;
+                    b = (safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4;
                 } else if ((shiftedX == 1) && (shiftedY == 0)) {
                     // G1 site (R row)
-                    r = clamp((safe(x-1,y) + safe(x+1,y)) / 2);
+                    r = (safe(x-1,y) + safe(x+1,y)) / 2;
                     g = raw[x][y];
-                    b = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
+                    b = (safe(x,y-1) + safe(x,y+1)) / 2;
                 } else if ((shiftedX == 0) && (shiftedY == 1)) {
                     // G2 site (B row)
-                    r = clamp((safe(x,y-1) + safe(x,y+1)) / 2);
+                    r = (safe(x,y-1) + safe(x,y+1)) / 2;
                     g = raw[x][y];
-                    b = clamp((safe(x-1,y) + safe(x+1,y)) / 2);
+                    b = (safe(x-1,y) + safe(x+1,y)) / 2;
                 } else {
                     // B site
                     b = raw[x][y];
-                    g = clamp((safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4);
-                    r = clamp((safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4);
+                    g = (safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4;
+                    r = (safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4;
                 }
-                reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
+
+                const int scaledR = scaleValue(r);
+                const int scaledG = scaleValue(g);
+                const int scaledB = scaleValue(b);
+
+                if (use16Bit) {
+                    reinterpret_cast<QRgba64*>(image.scanLine(y))[x] = qRgba64(scaledR, scaledG, scaledB, 65535);
+                } else {
+                    reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(scaledR, scaledG, scaledB);
+                }
             }
         }
         return image;
     }
 
     // Monochrome (sensorType 0 or 1 returning rank 2, or unsupported Bayer types 3-5)
-    return renderGrayscaleRaw(raw, width, height);
+    return renderGrayscaleRaw(raw, width, height, use16Bit);
 }
 
 // Alpaca ImageBytes binary format (ASCOM Alpaca spec):
@@ -2561,7 +2610,7 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
     // clientTransactionID        = qFromLittleEndian<qint32>(hdr + 8);  // informational
     // serverTransactionID        = qFromLittleEndian<qint32>(hdr + 12); // informational
     const qint32 dataStart        = qFromLittleEndian<qint32>(hdr + 16);
-    // imageElementType           = qFromLittleEndian<qint32>(hdr + 20); // original ADU type
+    const qint32 imageElementType = qFromLittleEndian<qint32>(hdr + 20);
     const qint32 transmissionType = qFromLittleEndian<qint32>(hdr + 24);
     const qint32 rank             = qFromLittleEndian<qint32>(hdr + 28);
     const qint32 dim1             = qFromLittleEndian<qint32>(hdr + 32);
@@ -2656,21 +2705,22 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
                 if (v > maxVal) { maxVal = v; }
             }
         }
-        const double range = maxVal - minVal;
-        const double scale = (range > 0.0) ? (255.0 / range) : 0.0;
-        const int uniformGray = (range == 0.0) ? (minVal > 0.0 ? 128 : 0) : 0;
+        const bool use16Bit = (imageElementType == kElementTypeInt16)
+                           || (imageElementType == kElementTypeUInt16)
+                           || (transmissionType == kElementTypeInt16)
+                           || (transmissionType == kElementTypeUInt16)
+                           || (minVal < 0.0)
+                           || (maxVal > 255.0);
 
         QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
                 const double v = readPixelAsDouble(static_cast<qsizetype>(x * height + y) * elementSize);
-                raw[x][y] = (range > 0.0)
-                    ? qBound(0, static_cast<int>((v - minVal) * scale), 255)
-                    : uniformGray;
+                raw[x][y] = qRound(v);
             }
         }
 
-        return renderRawPixelArray(raw, width, height);
+        return renderRawPixelArray(raw, width, height, use16Bit);
     }
     else if (rank == 3)
     {
@@ -2703,22 +2753,34 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload) const
             }
         }
         const double range3 = maxVal - minVal;
-        const double scale = (range3 > 0.0) ? (255.0 / range3) : 0.0;
-        const int uniformGray3 = (range3 == 0.0) ? (minVal > 0.0 ? 128 : 0) : 0;
+        const bool use16Bit = (imageElementType == kElementTypeInt16)
+                           || (imageElementType == kElementTypeUInt16)
+                           || (transmissionType == kElementTypeInt16)
+                           || (transmissionType == kElementTypeUInt16)
+                           || (minVal < 0.0)
+                           || (maxVal > 255.0);
+        const double scale = (range3 > 0.0) ? ((use16Bit ? 65535.0 : 255.0) / range3) : 0.0;
+        const int uniformGray3 = (range3 == 0.0) ? (minVal > 0.0 ? (use16Bit ? 32768 : 128) : 0) : 0;
 
-        QImage image(width, height, QImage::Format_RGB32);
+        QImage image(width, height, use16Bit ? QImage::Format_RGBA64 : QImage::Format_RGB32);
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
+                const int maxComponent = use16Bit ? 65535 : 255;
                 const int r = (range3 > 0.0)
-                    ? qBound(0, static_cast<int>((pixelAt(0, x, y) - minVal) * scale), 255)
+                    ? qBound(0, static_cast<int>((pixelAt(0, x, y) - minVal) * scale), maxComponent)
                     : uniformGray3;
                 const int g = (range3 > 0.0)
-                    ? qBound(0, static_cast<int>((pixelAt(1, x, y) - minVal) * scale), 255)
+                    ? qBound(0, static_cast<int>((pixelAt(1, x, y) - minVal) * scale), maxComponent)
                     : uniformGray3;
                 const int b = (range3 > 0.0)
-                    ? qBound(0, static_cast<int>((pixelAt(2, x, y) - minVal) * scale), 255)
+                    ? qBound(0, static_cast<int>((pixelAt(2, x, y) - minVal) * scale), maxComponent)
                     : uniformGray3;
-                reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
+
+                if (use16Bit) {
+                    reinterpret_cast<QRgba64*>(image.scanLine(y))[x] = qRgba64(r, g, b, 65535);
+                } else {
+                    reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(r, g, b);
+                }
             }
         }
         return image;

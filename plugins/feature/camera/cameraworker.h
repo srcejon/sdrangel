@@ -577,8 +577,8 @@ private:
     QString transportError(QNetworkReply *reply) const;
     QImage parseAlpacaImageArray(const QByteArray& payload) const;
     QImage parseAlpacaImageBytes(const QByteArray& payload) const;
-    QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height) const;
-    static QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height);
+    QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit) const;
+    static QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit);
     static QString normalizeAudioMatchName(QString text);
     static int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName);
     static void alignQtCameraAudioInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex);

@@ -17,30 +17,13 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
-#include <array>
-#include <cmath>
-#include <cstring>
-#include <vector>
 
 #include <QDebug>
-#include <QFile>
 #include <QFileInfo>
 #include <QFont>
 #include <QFontMetrics>
-#include <QMutableHashIterator>
 #include <QPainter>
-#include <QProcess>
-#include <QSharedPointer>
 #include <QTextDocument>
-#include <QTextStream>
-#include <QTimer>
-#include <QVector>
-
-#include "maincore.h"
-#include "channel/channelwebapiutils.h"
-#include "device/deviceset.h"
-#include "settings/mainsettings.h"
-#include "settings/preset.h"
 #include "util/profiler.h"
 #include "camerapostprocessor.h"
 
@@ -49,324 +32,12 @@ MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveVideoState, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSetVideoRecordingEnabled, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
-
-namespace {
-
-QString substituteObjectClass(QString text, const QString& className)
-{
-    text.replace(QStringLiteral("${class}"), className);
-    return text;
-}
-
-class ProtoReader
-{
-public:
-    ProtoReader(const uchar *data, int size) :
-        m_data(data),
-        m_size(size),
-        m_pos(0)
-    {}
-
-    bool atEnd() const { return m_pos >= m_size; }
-
-    bool readVarint(quint64& value)
-    {
-        value = 0;
-        int shift = 0;
-
-        while (m_pos < m_size && shift < 64)
-        {
-            const quint8 byte = m_data[m_pos++];
-            value |= static_cast<quint64>(byte & 0x7f) << shift;
-
-            if ((byte & 0x80) == 0) {
-                return true;
-            }
-
-            shift += 7;
-        }
-
-        return false;
-    }
-
-    bool readSubMessage(ProtoReader& subMessage)
-    {
-        quint64 length = 0;
-
-        if (!readVarint(length) || (length > static_cast<quint64>(m_size - m_pos))) {
-            return false;
-        }
-
-        subMessage = ProtoReader(m_data + m_pos, static_cast<int>(length));
-        m_pos += static_cast<int>(length);
-        return true;
-    }
-
-    bool skipField(int wireType)
-    {
-        switch (wireType)
-        {
-        case 0:
-        {
-            quint64 value = 0;
-            return readVarint(value);
-        }
-        case 1:
-            return skipBytes(8);
-        case 2:
-        {
-            quint64 length = 0;
-            return readVarint(length) && skipBytes(static_cast<int>(length));
-        }
-        case 5:
-            return skipBytes(4);
-        default:
-            return false;
-        }
-    }
-
-private:
-    bool skipBytes(int count)
-    {
-        if ((count < 0) || (count > (m_size - m_pos))) {
-            return false;
-        }
-
-        m_pos += count;
-        return true;
-    }
-
-    const uchar *m_data;
-    int m_size;
-    int m_pos;
-};
-
-bool parseOnnxTensorShape(ProtoReader& reader, QVector<int>& dims)
-{
-    while (!reader.atEnd())
-    {
-        quint64 tag = 0;
-
-        if (!reader.readVarint(tag)) {
-            return false;
-        }
-
-        const int fieldNumber = static_cast<int>(tag >> 3);
-        const int wireType = static_cast<int>(tag & 0x7);
-
-        if ((fieldNumber == 1) && (wireType == 2))
-        {
-            ProtoReader dimReader(nullptr, 0);
-
-            if (!reader.readSubMessage(dimReader)) {
-                return false;
-            }
-
-            int dimValue = 0;
-            bool hasDimValue = false;
-
-            while (!dimReader.atEnd())
-            {
-                quint64 dimTag = 0;
-
-                if (!dimReader.readVarint(dimTag)) {
-                    return false;
-                }
-
-                const int dimFieldNumber = static_cast<int>(dimTag >> 3);
-                const int dimWireType = static_cast<int>(dimTag & 0x7);
-
-                if ((dimFieldNumber == 1) && (dimWireType == 0))
-                {
-                    quint64 value = 0;
-
-                    if (!dimReader.readVarint(value)) {
-                        return false;
-                    }
-
-                    dimValue = static_cast<int>(value);
-                    hasDimValue = true;
-                }
-                else if (!dimReader.skipField(dimWireType))
-                {
-                    return false;
-                }
-            }
-
-            dims.append(hasDimValue ? dimValue : 0);
-        }
-        else if (!reader.skipField(wireType))
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool parseOnnxTensorType(ProtoReader& reader, QVector<int>& dims)
-{
-    while (!reader.atEnd())
-    {
-        quint64 tag = 0;
-
-        if (!reader.readVarint(tag)) {
-            return false;
-        }
-
-        const int fieldNumber = static_cast<int>(tag >> 3);
-        const int wireType = static_cast<int>(tag & 0x7);
-
-        if ((fieldNumber == 2) && (wireType == 2))
-        {
-            ProtoReader shapeReader(nullptr, 0);
-            return reader.readSubMessage(shapeReader) && parseOnnxTensorShape(shapeReader, dims);
-        }
-
-        if (!reader.skipField(wireType)) {
-            return false;
-        }
-    }
-
-    return false;
-}
-
-bool parseOnnxValueInfo(ProtoReader& reader, QVector<int>& dims)
-{
-    while (!reader.atEnd())
-    {
-        quint64 tag = 0;
-
-        if (!reader.readVarint(tag)) {
-            return false;
-        }
-
-        const int fieldNumber = static_cast<int>(tag >> 3);
-        const int wireType = static_cast<int>(tag & 0x7);
-
-        if ((fieldNumber == 2) && (wireType == 2))
-        {
-            ProtoReader typeReader(nullptr, 0);
-
-            if (!reader.readSubMessage(typeReader)) {
-                return false;
-            }
-
-            while (!typeReader.atEnd())
-            {
-                quint64 typeTag = 0;
-
-                if (!typeReader.readVarint(typeTag)) {
-                    return false;
-                }
-
-                const int typeFieldNumber = static_cast<int>(typeTag >> 3);
-                const int typeWireType = static_cast<int>(typeTag & 0x7);
-
-                if ((typeFieldNumber == 1) && (typeWireType == 2))
-                {
-                    ProtoReader tensorTypeReader(nullptr, 0);
-                    return typeReader.readSubMessage(tensorTypeReader) && parseOnnxTensorType(tensorTypeReader, dims);
-                }
-
-                if (!typeReader.skipField(typeWireType)) {
-                    return false;
-                }
-            }
-        }
-        else if (!reader.skipField(wireType))
-        {
-            return false;
-        }
-    }
-
-    return false;
-}
-
-cv::Size readOnnxInputSize(const QString& modelPath)
-{
-    QFile modelFile(modelPath);
-
-    if (!modelFile.open(QIODevice::ReadOnly)) {
-        return cv::Size();
-    }
-
-    const QByteArray modelData = modelFile.readAll();
-    ProtoReader modelReader(reinterpret_cast<const uchar *>(modelData.constData()), modelData.size());
-
-    while (!modelReader.atEnd())
-    {
-        quint64 tag = 0;
-
-        if (!modelReader.readVarint(tag)) {
-            break;
-        }
-
-        const int fieldNumber = static_cast<int>(tag >> 3);
-        const int wireType = static_cast<int>(tag & 0x7);
-
-        if ((fieldNumber == 7) && (wireType == 2))
-        {
-            ProtoReader graphReader(nullptr, 0);
-
-            if (!modelReader.readSubMessage(graphReader)) {
-                break;
-            }
-
-            while (!graphReader.atEnd())
-            {
-                quint64 graphTag = 0;
-
-                if (!graphReader.readVarint(graphTag)) {
-                    return cv::Size();
-                }
-
-                const int graphFieldNumber = static_cast<int>(graphTag >> 3);
-                const int graphWireType = static_cast<int>(graphTag & 0x7);
-
-                if ((graphFieldNumber == 11) && (graphWireType == 2))
-                {
-                    ProtoReader inputReader(nullptr, 0);
-                    QVector<int> dims;
-
-                    if (!graphReader.readSubMessage(inputReader) || !parseOnnxValueInfo(inputReader, dims)) {
-                        continue;
-                    }
-
-                    if (dims.size() >= 4)
-                    {
-                        const int width = dims.at(dims.size() - 1);
-                        const int height = dims.at(dims.size() - 2);
-
-                        if ((width > 0) && (height > 0)) {
-                            return cv::Size(width, height);
-                        }
-                    }
-                }
-                else if (!graphReader.skipField(graphWireType))
-                {
-                    return cv::Size();
-                }
-            }
-        }
-        else if (!modelReader.skipField(wireType))
-        {
-            break;
-        }
-    }
-
-    return cv::Size();
-}
-
-}
 
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_captureActive(false)
-#ifdef QT_TEXTTOSPEECH_FOUND
-    , m_speech(new QTextToSpeech(this))
-#endif
 {}
 
 CameraPostProcessor::~CameraPostProcessor()
@@ -440,6 +111,12 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         m_spectrumViewImage = frameMsg.getImage();
         return true;
     }
+    else if (MsgSetVideoRecordingEnabled::match(cmd))
+    {
+        MsgSetVideoRecordingEnabled& enabledMsg = (MsgSetVideoRecordingEnabled&) cmd;
+        setVideoRecordingEnabled(enabledMsg.getEnabled());
+        return true;
+    }
     else if (MsgCaptureActive::match(cmd))
     {
         MsgCaptureActive& activeMsg = (MsgCaptureActive&) cmd;
@@ -506,14 +183,6 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_lastFrame = CameraPipelineFrame();
     }
 
-    if ((force && !m_settings.m_yoloEnabled)
-        || settingsKeys.contains("yoloEnabled")
-        || settingsKeys.contains("objectDeviceSettings"))
-    {
-        m_detectedObjectClasses.clear();
-        m_pendingDisappearDeadlines.clear();
-    }
-
     if (force || settingsKeys.contains("spectrumDevice")) {
         m_spectrumViewImage = QImage();
     }
@@ -540,14 +209,6 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFrame& frame)
     m_captureDateTime = frame.m_captureDateTime.isValid() ? frame.m_captureDateTime : QDateTime::currentDateTime();
     const QImage& pipelineImage = frame.m_image;
     const QImage& unprocessedImage = frame.m_unprocessedImage.isNull() ? frame.m_image : frame.m_unprocessedImage;
-    const QSet<QString> currentDetectedClasses = [&frame]() {
-        QSet<QString> classes;
-        for (const CameraPipelineDetection& detection : frame.m_detections) {
-            classes.insert(detection.m_label);
-        }
-        return classes;
-    }();
-    processObjectDetections(currentDetectedClasses, m_captureDateTime);
     const QImage processed = applyPostProcessing(frame);
 
     m_lastFrame = frame;
@@ -804,65 +465,6 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     return result;
 }
 
-void CameraPostProcessor::processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now)
-{
-    for (const QString& className : currentDetectedClasses)
-    {
-        m_pendingDisappearDeadlines.remove(className);
-
-        if (!m_detectedObjectClasses.contains(className))
-        {
-            m_detectedObjectClasses.insert(className);
-            applyObjectDetectedSettings(className);
-        }
-    }
-
-    for (const QString& className : m_detectedObjectClasses)
-    {
-        if (!currentDetectedClasses.contains(className) && !m_pendingDisappearDeadlines.contains(className)) {
-            m_pendingDisappearDeadlines.insert(className, now.addMSecs(static_cast<qint64>(m_settings.m_yoloDisappearDebounce * 1000.0)));
-        }
-    }
-
-    QMutableHashIterator<QString, QDateTime> it(m_pendingDisappearDeadlines);
-    while (it.hasNext())
-    {
-        it.next();
-
-        if (currentDetectedClasses.contains(it.key())) {
-            it.remove();
-            continue;
-        }
-
-        if (it.value() <= now)
-        {
-            m_detectedObjectClasses.remove(it.key());
-            applyObjectDisappearedSettings(it.key());
-            it.remove();
-        }
-    }
-}
-
-bool CameraPostProcessor::shouldRecordVideoForDetectedObjects() const
-{
-    for (const QString& className : m_detectedObjectClasses)
-    {
-        QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
-        if (deviceSettingsList == nullptr) {
-            continue;
-        }
-
-        for (CameraSettings::ObjectDeviceSettings *devSettings : *deviceSettingsList)
-        {
-            if (devSettings && devSettings->m_recordVideo) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 void CameraPostProcessor::setVideoRecordingEnabled(bool enabled)
 {
     if (m_settings.m_saveVideo == enabled) {
@@ -877,180 +479,5 @@ void CameraPostProcessor::setVideoRecordingEnabled(bool enabled)
 
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportSaveVideoState::create(enabled));
-    }
-}
-
-void CameraPostProcessor::executeCommand(const QString& command, const QString& className)
-{
-    if (command.isEmpty()) {
-        return;
-    }
-
-#if QT_CONFIG(process)
-    const QString cmd = substituteObjectClass(command, className);
-    QStringList allArgs = QProcess::splitCommand(cmd);
-
-    if (allArgs.isEmpty()) {
-        return;
-    }
-
-    qDebug() << "CameraPostProcessor::executeCommand: Executing:" << allArgs;
-    const QString program = allArgs.takeFirst();
-    QProcess::startDetached(program, allArgs);
-#else
-    qWarning() << "CameraPostProcessor::executeCommand: QProcess not supported. Can't run:" << command;
-    (void) className;
-#endif
-}
-
-void CameraPostProcessor::saySpeech(const QString& speech, const QString& className)
-{
-    if (speech.isEmpty()) {
-        return;
-    }
-
-    const QString expandedSpeech = substituteObjectClass(speech, className);
-
-#ifdef QT_TEXTTOSPEECH_FOUND
-    m_speech->say(expandedSpeech);
-#else
-    qWarning() << "CameraPostProcessor::saySpeech: TextToSpeech not supported. Unable to say" << expandedSpeech;
-#endif
-}
-
-void CameraPostProcessor::applyObjectDetectedSettings(const QString& className)
-{
-    if (!m_settings.m_objectDeviceSettings.contains(className)) {
-        return;
-    }
-
-    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
-    if (deviceSettingsList == nullptr) {
-        return;
-    }
-
-    MainCore *mainCore = MainCore::instance();
-    const MainSettings& mainSettings = mainCore->getSettings();
-    const std::vector<DeviceSet*>& deviceSets = mainCore->getDeviceSets();
-
-    for (int i = 0; i < deviceSettingsList->size(); ++i)
-    {
-        CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
-        if (devSettings == nullptr) {
-            continue;
-        }
-
-        if (devSettings->m_deviceSetIndex < 0 || devSettings->m_deviceSetIndex >= static_cast<int>(deviceSets.size()))
-        {
-            qWarning() << "CameraPostProcessor::applyObjectDetectedSettings: device set at"
-                       << devSettings->m_deviceSetIndex << "does not exist";
-            continue;
-        }
-
-        if (!devSettings->m_presetGroup.isEmpty())
-        {
-            const DeviceSet *deviceSet = deviceSets[devSettings->m_deviceSetIndex];
-            QString presetType;
-            if (deviceSet->m_deviceSourceEngine != nullptr) {
-                presetType = "R";
-            } else if (deviceSet->m_deviceSinkEngine != nullptr) {
-                presetType = "T";
-            } else if (deviceSet->m_deviceMIMOEngine != nullptr) {
-                presetType = "M";
-            }
-
-            const Preset *preset = mainSettings.getPreset(
-                devSettings->m_presetGroup,
-                devSettings->m_presetFrequency,
-                devSettings->m_presetDescription,
-                presetType);
-
-            if (preset != nullptr)
-            {
-                qDebug() << "CameraPostProcessor::applyObjectDetectedSettings: loading preset"
-                         << preset->getDescription() << "for class" << className
-                         << "to device set" << devSettings->m_deviceSetIndex;
-                mainCore->getMainMessageQueue()->push(
-                    MainCore::MsgLoadPreset::create(preset, devSettings->m_deviceSetIndex));
-            }
-            else
-            {
-                qWarning() << "CameraPostProcessor::applyObjectDetectedSettings: unable to get preset"
-                           << devSettings->m_presetGroup
-                           << devSettings->m_presetFrequency
-                           << devSettings->m_presetDescription;
-            }
-        }
-
-        if (devSettings->m_recordVideo) {
-            setVideoRecordingEnabled(true);
-        }
-    }
-
-    QTimer::singleShot(1000, this, [this, deviceSettingsList, className]()
-    {
-        for (int i = 0; i < deviceSettingsList->size(); ++i)
-        {
-            CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
-            if (devSettings == nullptr) {
-                continue;
-            }
-
-            if (devSettings->m_startOnDetect) {
-                ChannelWebAPIUtils::run(devSettings->m_deviceSetIndex);
-            }
-
-            if (devSettings->m_startStopFileSink) {
-                ChannelWebAPIUtils::startStopFileSinks(devSettings->m_deviceSetIndex, true);
-            }
-
-            if (!devSettings->m_detectCommand.isEmpty()) {
-                executeCommand(devSettings->m_detectCommand, className);
-            }
-
-            if (!devSettings->m_detectSpeech.isEmpty()) {
-                saySpeech(devSettings->m_detectSpeech, className);
-            }
-        }
-    });
-}
-
-void CameraPostProcessor::applyObjectDisappearedSettings(const QString& className)
-{
-    if (!m_settings.m_objectDeviceSettings.contains(className)) {
-        return;
-    }
-
-    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
-    if (deviceSettingsList == nullptr) {
-        return;
-    }
-
-    for (int i = 0; i < deviceSettingsList->size(); ++i)
-    {
-        CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
-        if (devSettings == nullptr) {
-            continue;
-        }
-
-        if (devSettings->m_startStopFileSink) {
-            ChannelWebAPIUtils::startStopFileSinks(devSettings->m_deviceSetIndex, false);
-        }
-
-        if (devSettings->m_stopOnDisappear) {
-            ChannelWebAPIUtils::stop(devSettings->m_deviceSetIndex);
-        }
-
-        if (!devSettings->m_disappearCommand.isEmpty()) {
-            executeCommand(devSettings->m_disappearCommand, className);
-        }
-
-        if (!devSettings->m_disappearSpeech.isEmpty()) {
-            saySpeech(devSettings->m_disappearSpeech, className);
-        }
-    }
-
-    if (!shouldRecordVideoForDetectedObjects()) {
-        setVideoRecordingEnabled(false);
     }
 }

@@ -20,21 +20,13 @@
 #define INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
 
 #include <QObject>
-#include <deque>
-#include <vector>
-#include <QHash>
 #include <QImage>
 #include <QDateTime>
-#include <QSet>
 #include <QTextDocument>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/videoio.hpp>
-
-#ifdef QT_TEXTTOSPEECH_FOUND
-#include <QTextToSpeech>
-#endif
 
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -151,6 +143,26 @@ public:
         { }
     };
 
+    class MsgSetVideoRecordingEnabled : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool getEnabled() const { return m_enabled; }
+
+        static MsgSetVideoRecordingEnabled* create(bool enabled)
+        {
+            return new MsgSetVideoRecordingEnabled(enabled);
+        }
+
+    private:
+        bool m_enabled;
+
+        MsgSetVideoRecordingEnabled(bool enabled) :
+            Message(),
+            m_enabled(enabled)
+        { }
+    };
+
     class MsgCaptureActive : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -186,13 +198,8 @@ private:
     bool m_captureActive;
     CameraPipelineFrame m_lastFrame;
     QDateTime m_captureDateTime;
-    QSet<QString> m_detectedObjectClasses;
-    QHash<QString, QDateTime> m_pendingDisappearDeadlines;
     cv::VideoWriter m_videoWriter;
     QImage m_spectrumViewImage;
-#ifdef QT_TEXTTOSPEECH_FOUND
-    QTextToSpeech *m_speech;
-#endif
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFrame& frame);
@@ -203,12 +210,6 @@ private:
     [[nodiscard]] QImage convertBgrToRgbImage(cv::Mat& bgrMat) const;
     void applyDateTimeOverlay(QImage& image) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
-    void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
-    void applyObjectDetectedSettings(const QString& className);
-    void applyObjectDisappearedSettings(const QString& className);
-    void executeCommand(const QString& command, const QString& className);
-    void saySpeech(const QString& speech, const QString& className);
-    bool shouldRecordVideoForDetectedObjects() const;
     void setVideoRecordingEnabled(bool enabled);
     void reportFrameToGUI(const QImage& image);
 private slots:

@@ -21,6 +21,11 @@
 
 #include <QObject>
 #include <deque>
+#include <QHash>
+#include <QSet>
+#ifdef QT_TEXTTOSPEECH_FOUND
+#include <QTextToSpeech>
+#endif
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -125,6 +130,11 @@ private:
     QString m_yoloLoadedModelPath;
     QStringList m_yoloLabels;
     QString m_yoloLoadedLabelsPath;
+    QSet<QString> m_detectedObjectClasses;
+    QHash<QString, QDateTime> m_pendingDisappearDeadlines;
+#ifdef QT_TEXTTOSPEECH_FOUND
+    QTextToSpeech *m_speech;
+#endif
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
@@ -133,6 +143,13 @@ private:
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes);
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
+    void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
+    void applyObjectDetectedSettings(const QString& className);
+    void applyObjectDisappearedSettings(const QString& className);
+    void executeCommand(const QString& command, const QString& className);
+    void saySpeech(const QString& speech, const QString& className);
+    bool shouldRecordVideoForDetectedObjects() const;
+    void setVideoRecordingEnabled(bool enabled);
     [[nodiscard]] QImage convertBgrToRgbImage(cv::Mat& bgrMat) const;
 
 private slots:

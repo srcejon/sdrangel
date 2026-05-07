@@ -3148,14 +3148,14 @@ QImage CameraWorker::asiFrameToImage() const
             return image;
         }
 
-        int cvCode16 = cv::COLOR_BayerRG2RGB;
+        int cvCode16 = cv::COLOR_BayerRG2BGR;
         switch (m_asiBayerPattern)
         {
-        case ASI_BAYER_BG: cvCode16 = cv::COLOR_BayerBG2RGB; break;
-        case ASI_BAYER_GR: cvCode16 = cv::COLOR_BayerGR2RGB; break;
-        case ASI_BAYER_GB: cvCode16 = cv::COLOR_BayerGB2RGB; break;
+        case ASI_BAYER_BG: cvCode16 = cv::COLOR_BayerBG2BGR; break;
+        case ASI_BAYER_GR: cvCode16 = cv::COLOR_BayerGR2BGR; break;
+        case ASI_BAYER_GB: cvCode16 = cv::COLOR_BayerGB2BGR; break;
         case ASI_BAYER_RG:
-        default: cvCode16 = cv::COLOR_BayerRG2RGB; break;
+        default: cvCode16 = cv::COLOR_BayerRG2BGR; break;
         }
 
         cv::Mat rgb16Mat;
@@ -3169,7 +3169,7 @@ QImage CameraWorker::asiFrameToImage() const
 
             for (int x = 0; x < m_asiFrameWidth; ++x)
             {
-                outputLine[x] = qRgba64(inputLine[x][0], inputLine[x][1], inputLine[x][2], 65535);
+                outputLine[x] = qRgba64(inputLine[x][2], inputLine[x][1], inputLine[x][0], 65535);
             }
         }
 

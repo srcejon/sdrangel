@@ -138,6 +138,24 @@
          <iconset resource="cameraicons.qrc">
           <normaloff>:/camera/icons/media_previous.png</normaloff>:/camera/icons/media_previous.png</iconset>
         </property>
+        </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="playPauseVideo">
+        <property name="toolTip">
+         <string>Play or pause playback of the selected video file</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/play.png</normaloff>
+          <normalon>:/pause.png</normalon>:/play.png</iconset>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
        </widget>
       </item>
       <item>

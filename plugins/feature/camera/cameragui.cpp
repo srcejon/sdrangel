@@ -1149,6 +1149,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->cameraCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cameraCombo_currentIndexChanged);
     QObject::connect(ui->browseVideoFileButton, &QToolButton::clicked, this, &CameraGUI::on_browseVideoFileButton_clicked);
     QObject::connect(ui->restartVideo, &QToolButton::clicked, this, &CameraGUI::on_restartVideo_clicked);
+    QObject::connect(ui->playPauseVideo, &ButtonSwitch::clicked, this, &CameraGUI::on_playPauseVideo_clicked);
     QObject::connect(ui->loopVideo, &ButtonSwitch::clicked, this, &CameraGUI::on_loopVideo_clicked);
     QObject::connect(ui->playbackRateSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_playbackRateSpin_valueChanged);
     QObject::connect(ui->playbackPositionSlider, &QSlider::sliderMoved, this, &CameraGUI::on_playbackPositionSlider_sliderMoved);
@@ -1508,6 +1509,8 @@ void CameraGUI::updateVideoFileControls()
     ui->browseVideoFileButton->setEnabled(fileCameraSelected);
     ui->restartVideo->setVisible(fileCameraSelected);
     ui->restartVideo->setEnabled(hasVideoFile);
+    ui->playPauseVideo->setVisible(fileCameraSelected);
+    ui->playPauseVideo->setEnabled(hasVideoFile);
     ui->loopVideo->setVisible(fileCameraSelected);
     ui->loopVideo->setEnabled(hasVideoFile);
     ui->playbackRateSpin->setVisible(fileCameraSelected);
@@ -1868,6 +1871,7 @@ void CameraGUI::setupQtCapture()
         connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
         connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &CameraGUI::handleMediaPlayerPositionChanged);
         connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this, &CameraGUI::handleMediaPlayerDurationChanged);
+        connect(m_mediaPlayer, &QMediaPlayer::playbackStateChanged, this, &CameraGUI::handleMediaPlayerPlaybackStateChanged);
         m_mediaPlayer->setSource(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath));
         m_mediaPlayer->setPlaybackRate(ui->playbackRateSpin->value());
         m_mediaPlayer->play();
@@ -2203,6 +2207,10 @@ void CameraGUI::cleanupQtCapture()
     {
         QSignalBlocker blocker(ui->playbackPositionSlider);
         ui->playbackPositionSlider->setValue(0);
+    }
+    {
+        QSignalBlocker blocker(ui->playPauseVideo);
+        ui->playPauseVideo->setChecked(false);
     }
     updateVideoFileControls();
 #else
@@ -2582,6 +2590,16 @@ void CameraGUI::handleMediaPlayerDurationChanged(qint64 duration)
 #endif
 }
 
+void CameraGUI::handleMediaPlayerPlaybackStateChanged(QMediaPlayer::PlaybackState state)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    QSignalBlocker blocker(ui->playPauseVideo);
+    ui->playPauseVideo->setChecked(state == QMediaPlayer::PlayingState);
+#else
+    Q_UNUSED(state)
+#endif
+}
+
 
 void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info)
 {
@@ -2872,6 +2890,33 @@ void CameraGUI::on_restartVideo_clicked()
         m_mediaPlayer->setPosition(0);
         m_mediaPlayer->play();
     }
+#endif
+}
+
+void CameraGUI::on_playPauseVideo_clicked(bool checked)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (!m_settings.isFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
+        return;
+    }
+
+    if (!m_mediaPlayer && checked && (m_camera->getState() == Feature::StRunning)) {
+        setupQtCapture();
+    }
+
+    if (!m_mediaPlayer) {
+        QSignalBlocker blocker(ui->playPauseVideo);
+        ui->playPauseVideo->setChecked(false);
+        return;
+    }
+
+    if (checked) {
+        m_mediaPlayer->play();
+    } else {
+        m_mediaPlayer->pause();
+    }
+#else
+    Q_UNUSED(checked)
 #endif
 }
 

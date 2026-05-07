@@ -28,6 +28,7 @@
 #include <QSize>
 #include <QToolButton>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QMediaPlayer>
 #include <QVideoFrame>
 #else
 #include <QAbstractVideoSurface>
@@ -216,6 +217,7 @@ private:
     void updateCameraStatusDisplay();
     void handleMediaPlayerPositionChanged(qint64 position);
     void handleMediaPlayerDurationChanged(qint64 duration);
+    void handleMediaPlayerPlaybackStateChanged(QMediaPlayer::PlaybackState state);
     void updateCameraSubframeControls();
     void updateImageWidget();
     void updateCaptureModeControls();
@@ -273,6 +275,7 @@ private slots:
     void on_cameraCombo_currentIndexChanged(int index);
     void on_browseVideoFileButton_clicked();
     void on_restartVideo_clicked();
+    void on_playPauseVideo_clicked(bool checked);
     void on_loopVideo_clicked(bool checked=false);
     void on_playbackRateSpin_valueChanged(double value);
     void on_playbackPositionSlider_sliderMoved(int value);

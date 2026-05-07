@@ -188,6 +188,7 @@ private:
     QMediaPlayer *m_mediaPlayer;
     QVideoSink *m_videoSink;
     QMediaCaptureSession *m_captureSession;
+    qint64 m_mediaPlayerDurationMs = 0;
 #else
     QCamera *m_qtCamera;
     QCameraImageCapture *m_imageCapture;
@@ -213,6 +214,8 @@ private:
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo& info);
     void updateCameraStatusDisplay();
+    void handleMediaPlayerPositionChanged(qint64 position);
+    void handleMediaPlayerDurationChanged(qint64 duration);
     void updateCameraSubframeControls();
     void updateImageWidget();
     void updateCaptureModeControls();
@@ -261,6 +264,7 @@ private:
     static double sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int sliderValue);
     static double currentExposureUnitScaleMs(const Ui::CameraSettingsDialog *ui);
     static void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps);
+    static constexpr int PlaybackPositionSliderMaximum = 1000;
 
 private slots:
     void handleInputMessages();
@@ -270,6 +274,9 @@ private slots:
     void on_browseVideoFileButton_clicked();
     void on_restartVideo_clicked();
     void on_loopVideo_clicked(bool checked=false);
+    void on_playbackRateSpin_valueChanged(double value);
+    void on_playbackPositionSlider_sliderMoved(int value);
+    void on_playbackPositionSlider_sliderReleased();
     void on_resolutionCombo_currentIndexChanged(int index);
     void on_fpsLabel_currentIndexChanged(int index);
     void on_fpsSpin_valueChanged(int value);

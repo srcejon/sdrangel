@@ -1150,6 +1150,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->browseVideoFileButton, &QToolButton::clicked, this, &CameraGUI::on_browseVideoFileButton_clicked);
     QObject::connect(ui->restartVideo, &QToolButton::clicked, this, &CameraGUI::on_restartVideo_clicked);
     QObject::connect(ui->loopVideo, &ButtonSwitch::clicked, this, &CameraGUI::on_loopVideo_clicked);
+    QObject::connect(ui->playbackRateSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_playbackRateSpin_valueChanged);
+    QObject::connect(ui->playbackPositionSlider, &QSlider::sliderMoved, this, &CameraGUI::on_playbackPositionSlider_sliderMoved);
+    QObject::connect(ui->playbackPositionSlider, &QSlider::sliderReleased, this, &CameraGUI::on_playbackPositionSlider_sliderReleased);
     QObject::connect(settingsUI()->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fpsLabel, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsLabel_currentIndexChanged);
     QObject::connect(settingsUI()->fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_fpsSpin_valueChanged);
@@ -1499,6 +1502,7 @@ void CameraGUI::updateVideoFileControls()
 {
     const bool fileCameraSelected = m_settings.isFileCamera();
     const bool hasVideoFile = fileCameraSelected && !m_settings.m_videoFileCameraPath.isEmpty();
+    const bool hasPlaybackPosition = hasVideoFile && (m_mediaPlayerDurationMs > 0);
 
     ui->browseVideoFileButton->setVisible(fileCameraSelected);
     ui->browseVideoFileButton->setEnabled(fileCameraSelected);
@@ -1506,6 +1510,10 @@ void CameraGUI::updateVideoFileControls()
     ui->restartVideo->setEnabled(hasVideoFile);
     ui->loopVideo->setVisible(fileCameraSelected);
     ui->loopVideo->setEnabled(hasVideoFile);
+    ui->playbackRateSpin->setVisible(fileCameraSelected);
+    ui->playbackRateSpin->setEnabled(hasVideoFile);
+    ui->playbackPositionSlider->setVisible(fileCameraSelected);
+    ui->playbackPositionSlider->setEnabled(hasPlaybackPosition);
     ui->videoLine->setVisible(fileCameraSelected);
 }
 
@@ -1847,11 +1855,21 @@ void CameraGUI::setupQtCapture()
             return;
         }
 
+        m_mediaPlayerDurationMs = 0;
+        {
+            QSignalBlocker blocker(ui->playbackPositionSlider);
+            ui->playbackPositionSlider->setValue(0);
+        }
+        updateVideoFileControls();
+
         m_mediaPlayer = new QMediaPlayer(this);
         m_videoSink = new QVideoSink(this);
         m_mediaPlayer->setVideoOutput(m_videoSink);
         connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
+        connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &CameraGUI::handleMediaPlayerPositionChanged);
+        connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this, &CameraGUI::handleMediaPlayerDurationChanged);
         m_mediaPlayer->setSource(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath));
+        m_mediaPlayer->setPlaybackRate(ui->playbackRateSpin->value());
         m_mediaPlayer->play();
 
         m_qtZoomSupported = false;
@@ -2181,6 +2199,12 @@ void CameraGUI::cleanupQtCapture()
         delete m_qtCamera;
         m_qtCamera = nullptr;
     }
+    m_mediaPlayerDurationMs = 0;
+    {
+        QSignalBlocker blocker(ui->playbackPositionSlider);
+        ui->playbackPositionSlider->setValue(0);
+    }
+    updateVideoFileControls();
 #else
     if (m_imageCapture)
     {
@@ -2525,6 +2549,39 @@ void CameraGUI::updateCameraStatusDisplay()
         m_lastAlpacaErrorMessage.isEmpty() ? "-" : m_lastAlpacaErrorMessage);
 }
 
+void CameraGUI::handleMediaPlayerPositionChanged(qint64 position)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_mediaPlayerDurationMs <= 0 || ui->playbackPositionSlider->isSliderDown()) {
+        return;
+    }
+
+    const int sliderValue = static_cast<int>(
+        qBound<qint64>(0,
+            (position * PlaybackPositionSliderMaximum) / m_mediaPlayerDurationMs,
+            static_cast<qint64>(PlaybackPositionSliderMaximum)));
+    QSignalBlocker blocker(ui->playbackPositionSlider);
+    ui->playbackPositionSlider->setValue(sliderValue);
+#else
+    Q_UNUSED(position)
+#endif
+}
+
+void CameraGUI::handleMediaPlayerDurationChanged(qint64 duration)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    m_mediaPlayerDurationMs = qMax<qint64>(0, duration);
+    if (m_mediaPlayerDurationMs <= 0)
+    {
+        QSignalBlocker blocker(ui->playbackPositionSlider);
+        ui->playbackPositionSlider->setValue(0);
+    }
+    updateVideoFileControls();
+#else
+    Q_UNUSED(duration)
+#endif
+}
+
 
 void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info)
 {
@@ -2839,6 +2896,38 @@ void CameraGUI::on_loopVideo_clicked(bool checked)
             m_mediaPlayer->play();
         }
     }
+#endif
+}
+
+void CameraGUI::on_playbackRateSpin_valueChanged(double value)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_mediaPlayer) {
+        m_mediaPlayer->setPlaybackRate(value);
+    }
+#else
+    Q_UNUSED(value)
+#endif
+}
+
+void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (!m_mediaPlayer || (m_mediaPlayerDurationMs <= 0)) {
+        return;
+    }
+
+    const qint64 position = (static_cast<qint64>(value) * m_mediaPlayerDurationMs) / PlaybackPositionSliderMaximum;
+    m_mediaPlayer->setPosition(position);
+#else
+    Q_UNUSED(value)
+#endif
+}
+
+void CameraGUI::on_playbackPositionSlider_sliderReleased()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    on_playbackPositionSlider_sliderMoved(ui->playbackPositionSlider->value());
 #endif
 }
 

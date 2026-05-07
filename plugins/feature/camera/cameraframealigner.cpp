@@ -128,6 +128,7 @@ void CameraFrameAligner::applySettings(const CameraSettings& settings, const QLi
 
 void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
 {
+    PROFILER_START();
     if (!frame || frame->m_image.isNull()) {
         return;
     }
@@ -142,6 +143,7 @@ void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
     if (m_nextStageInputMessageQueue) {
         m_nextStageInputMessageQueue->push(CameraFrameStacker::MsgProcessFrame::create(frame));
     }
+    PROFILER_STOP(__FUNCTION__);
 }
 
 cv::Mat CameraFrameAligner::imageToWorkingMat(const QImage& input, bool& highBitDepthInput)

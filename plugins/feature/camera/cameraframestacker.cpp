@@ -246,6 +246,7 @@ QImage CameraFrameStacker::applyFrameStacking(const QImage& input)
             std::memcpy(stackedImage.scanLine(row), averaged8u.ptr(row), static_cast<size_t>(averaged8u.cols * 3));
         }
 
+        PROFILER_STOP(__FUNCTION__);
         return stackedImage;
     }
 
@@ -341,5 +342,6 @@ QImage CameraFrameStacker::applyFrameStacking(const QImage& input)
         }
     }
 
+    PROFILER_STOP(__FUNCTION__);
     return stackedImage;
 }

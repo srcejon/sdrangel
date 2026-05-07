@@ -164,6 +164,23 @@ bool CameraWorker::asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_I
     return false;
 }
 
+int CameraWorker::asiBayerToOpenCvCode(int bayerPattern)
+{
+    switch (bayerPattern)
+    {
+    case ASI_BAYER_RG:
+        return cv::COLOR_BayerRGGB2BGR;
+    case ASI_BAYER_BG:
+        return cv::COLOR_BayerBGGR2BGR;
+    case ASI_BAYER_GR:
+        return cv::COLOR_BayerGRBG2BGR;
+    case ASI_BAYER_GB:
+        return cv::COLOR_BayerGBRG2BGR;
+    default:
+        return cv::COLOR_BayerRGGB2BGR;
+    }
+}
+
 ASI_IMG_TYPE CameraWorker::asiSelectImageType(const ASI_CAMERA_INFO& cameraInfo) const
 {
     if (cameraInfo.IsColorCam == ASI_TRUE)
@@ -3148,18 +3165,8 @@ QImage CameraWorker::asiFrameToImage() const
             return image;
         }
 
-        int cvCode16 = cv::COLOR_BayerRG2BGR;
-        switch (m_asiBayerPattern)
-        {
-        case ASI_BAYER_BG: cvCode16 = cv::COLOR_BayerBG2BGR; break;
-        case ASI_BAYER_GR: cvCode16 = cv::COLOR_BayerGR2BGR; break;
-        case ASI_BAYER_GB: cvCode16 = cv::COLOR_BayerGB2BGR; break;
-        case ASI_BAYER_RG:
-        default: cvCode16 = cv::COLOR_BayerRG2BGR; break;
-        }
-
         cv::Mat rgb16Mat;
-        cv::cvtColor(raw16, rgb16Mat, cvCode16);
+        cv::cvtColor(raw16, rgb16Mat, asiBayerToOpenCvCode(m_asiBayerPattern));
 
         QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_RGBA64);
         for (int y = 0; y < m_asiFrameHeight; ++y)
@@ -3189,18 +3196,8 @@ QImage CameraWorker::asiFrameToImage() const
         return image;
     }
 
-    int cvCode = cv::COLOR_BayerRG2BGR;
-    switch (m_asiBayerPattern)
-    {
-    case ASI_BAYER_BG: cvCode = cv::COLOR_BayerBG2BGR; break;
-    case ASI_BAYER_GR: cvCode = cv::COLOR_BayerGR2BGR; break;
-    case ASI_BAYER_GB: cvCode = cv::COLOR_BayerGB2BGR; break;
-    case ASI_BAYER_RG:
-    default: cvCode = cv::COLOR_BayerRG2BGR; break;
-    }
-
     cv::Mat rgbMat;
-    cv::cvtColor(rawMat, rgbMat, cvCode);
+    cv::cvtColor(rawMat, rgbMat, asiBayerToOpenCvCode(m_asiBayerPattern));
     QImage image(rgbMat.data, rgbMat.cols, rgbMat.rows, static_cast<int>(rgbMat.step), QImage::Format_RGB888);
     return image.rgbSwapped();
 }

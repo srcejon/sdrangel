@@ -616,6 +616,7 @@ private:
     static bool asiGetControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS& controlCaps);
     static bool asiGetControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& value, ASI_BOOL& isAuto);
     static bool asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageType);
+    static int asiBayerToOpenCvCode(int bayerPattern);
     ASI_IMG_TYPE asiSelectImageType(const ASI_CAMERA_INFO& cameraInfo) const;
     void asiQueryCameraCapabilities();
     bool asiOpenCamera();

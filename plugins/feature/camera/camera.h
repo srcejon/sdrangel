@@ -25,6 +25,7 @@
 #include "util/message.h"
 #include "camerasettings.h"
 #include "cameradetector.h"
+#include "cameraframealigner.h"
 #include "cameraframestacker.h"
 #include "cameraimageprocessor.h"
 #include "camerapostprocessor.h"
@@ -150,6 +151,7 @@ public:
     static const char* const m_featureId;
 
     MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
+    MessageQueue* getFrameAlignerInputMessageQueue() { return m_frameAligner ? m_frameAligner->getInputMessageQueue() : nullptr; }
     MessageQueue* getFrameStackerInputMessageQueue() { return m_frameStacker ? m_frameStacker->getInputMessageQueue() : nullptr; }
     MessageQueue* getImageProcessorInputMessageQueue() { return m_imageProcessor ? m_imageProcessor->getInputMessageQueue() : nullptr; }
     MessageQueue* getDetectorInputMessageQueue() { return m_detector ? m_detector->getInputMessageQueue() : nullptr; }
@@ -159,6 +161,8 @@ public:
 private:
     QThread *m_workerThread;
     CameraWorker *m_worker;
+    QThread *m_frameAlignerThread;
+    CameraFrameAligner *m_frameAligner;
     QThread *m_frameStackerThread;
     CameraFrameStacker *m_frameStacker;
     QThread *m_imageProcessorThread;

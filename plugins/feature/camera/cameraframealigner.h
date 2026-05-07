@@ -16,25 +16,27 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
-#ifndef INCLUDE_FEATURE_CAMERAFRAMESTACKER_H_
-#define INCLUDE_FEATURE_CAMERAFRAMESTACKER_H_
+#ifndef INCLUDE_FEATURE_CAMERAFRAMEALIGNER_H_
+#define INCLUDE_FEATURE_CAMERAFRAMEALIGNER_H_
 
 #include <QObject>
 #include <deque>
 #include <vector>
 
 #include <opencv2/core/core.hpp>
+#include <opencv2/calib3d.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
 #include "util/message.h"
 #include "util/messagequeue.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
-class CameraFrameStacker : public QObject
+class CameraFrameAligner : public QObject
 {
     Q_OBJECT
 public:
-    class MsgConfigureCameraFrameStacker : public Message {
+    class MsgConfigureCameraFrameAligner : public Message {
         MESSAGE_CLASS_DECLARATION
 
     public:
@@ -42,9 +44,9 @@ public:
         const QList<QString>& getSettingsKeys() const { return m_settingsKeys; }
         bool getForce() const { return m_force; }
 
-        static MsgConfigureCameraFrameStacker* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
+        static MsgConfigureCameraFrameAligner* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
         {
-            return new MsgConfigureCameraFrameStacker(settings, settingsKeys, force);
+            return new MsgConfigureCameraFrameAligner(settings, settingsKeys, force);
         }
 
     private:
@@ -52,7 +54,7 @@ public:
         QList<QString> m_settingsKeys;
         bool m_force;
 
-        MsgConfigureCameraFrameStacker(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
+        MsgConfigureCameraFrameAligner(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
             Message(),
             m_settings(settings),
             m_settingsKeys(settingsKeys),
@@ -100,8 +102,8 @@ public:
         { }
     };
 
-    CameraFrameStacker();
-    ~CameraFrameStacker();
+    CameraFrameAligner();
+    ~CameraFrameAligner();
 
     void startWork();
     void stopWork();
@@ -113,17 +115,24 @@ private:
     MessageQueue *m_nextStageInputMessageQueue;
     CameraSettings m_settings;
     bool m_captureActive;
-    std::deque<cv::Mat> m_stackFrameHistory;
-    cv::Mat m_stackAccumulator;
+    std::deque<cv::Mat> m_alignmentReferenceHistory;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
-    void resetFrameHistoryState();
-    [[nodiscard]] QImage applyFrameStacking(const QImage& input);
+    void resetAlignmentState();
+    [[nodiscard]] QImage applyAlignment(const QImage& input);
+    [[nodiscard]] static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
+    [[nodiscard]] static QImage workingMatToImage(const cv::Mat& frameMat, bool highBitDepthInput);
+    [[nodiscard]] cv::Mat alignFrame(const cv::Mat& frameMat) const;
+    [[nodiscard]] cv::Mat alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const;
+    [[nodiscard]] cv::Mat alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const;
+    [[nodiscard]] cv::Mat warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform) const;
+    [[nodiscard]] cv::Mat frameToAlignmentGray(const cv::Mat& frameMat) const;
+    [[nodiscard]] std::vector<cv::Point2f> detectStarCentroids(const cv::Mat& grayFrame) const;
 
 private slots:
     void handleInputMessages();
 };
 
-#endif // INCLUDE_FEATURE_CAMERAFRAMESTACKER_H_
+#endif // INCLUDE_FEATURE_CAMERAFRAMEALIGNER_H_

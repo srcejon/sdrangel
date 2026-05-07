@@ -43,6 +43,8 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),
     m_workerThread(new QThread()),
     m_worker(new CameraWorker()),
+    m_frameAlignerThread(new QThread()),
+    m_frameAligner(new CameraFrameAligner()),
     m_frameStackerThread(new QThread()),
     m_frameStacker(new CameraFrameStacker()),
     m_imageProcessorThread(new QThread()),
@@ -62,10 +64,18 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
     QObject::connect(m_workerThread, &QThread::finished, m_workerThread, &QThread::deleteLater);
     m_worker->setMessageQueueToGUI(getMessageQueueToGUI());
-    m_worker->setFrameStackerInputMessageQueue(getFrameStackerInputMessageQueue());
+    m_worker->setFrameAlignerInputMessageQueue(getFrameAlignerInputMessageQueue());
     m_worker->setPostProcessorInputMessageQueue(getPostProcessorInputMessageQueue());
     m_workerThread->start();
     m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(m_settings, QList<QString>(), true));
+
+    m_frameAligner->moveToThread(m_frameAlignerThread);
+    QObject::connect(m_frameAlignerThread, &QThread::started, m_frameAligner, &CameraFrameAligner::startWork);
+    QObject::connect(m_frameAlignerThread, &QThread::finished, m_frameAligner, &QObject::deleteLater);
+    QObject::connect(m_frameAlignerThread, &QThread::finished, m_frameAlignerThread, &QThread::deleteLater);
+    m_frameAligner->setNextStageInputMessageQueue(getFrameStackerInputMessageQueue());
+    m_frameAlignerThread->start();
+    m_frameAligner->getInputMessageQueue()->push(CameraFrameAligner::MsgConfigureCameraFrameAligner::create(m_settings, QList<QString>(), true));
 
     m_frameStacker->moveToThread(m_frameStackerThread);
     QObject::connect(m_frameStackerThread, &QThread::started, m_frameStacker, &CameraFrameStacker::startWork);
@@ -113,6 +123,14 @@ Camera::~Camera()
         m_worker = nullptr;
     }
 
+    if (m_frameAlignerThread)
+    {
+        m_frameAlignerThread->quit();
+        m_frameAlignerThread->wait();
+        m_frameAlignerThread = nullptr;
+        m_frameAligner = nullptr;
+    }
+
     if (m_frameStackerThread)
     {
         m_frameStackerThread->quit();
@@ -158,6 +176,9 @@ void Camera::start()
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
     }
+    if (m_frameAligner) {
+        m_frameAligner->getInputMessageQueue()->push(CameraFrameAligner::MsgCaptureActive::create(true));
+    }
     if (m_frameStacker) {
         m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgCaptureActive::create(true));
     }
@@ -199,6 +220,9 @@ void Camera::stop()
     if (m_frameStacker) {
         m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgCaptureActive::create(false));
     }
+    if (m_frameAligner) {
+        m_frameAligner->getInputMessageQueue()->push(CameraFrameAligner::MsgCaptureActive::create(false));
+    }
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(false));
     }
@@ -209,6 +233,9 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
     Feature::setMessageQueueToGUI(queue);
     if (m_worker) {
         m_worker->setMessageQueueToGUI(queue);
+    }
+    if (m_frameAligner) {
+        (void) queue;
     }
     if (m_frameStacker) {
         (void) queue;
@@ -284,6 +311,9 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
 
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(settings, settingsKeys, force));
+    }
+    if (m_frameAligner) {
+        m_frameAligner->getInputMessageQueue()->push(CameraFrameAligner::MsgConfigureCameraFrameAligner::create(settings, settingsKeys, force));
     }
     if (m_frameStacker) {
         m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgConfigureCameraFrameStacker::create(settings, settingsKeys, force));

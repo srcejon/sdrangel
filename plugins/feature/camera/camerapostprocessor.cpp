@@ -699,6 +699,7 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
 
 QImage CameraPostProcessor::applyFrameStacking(const QImage& input)
 {
+    PROFILER_START();
     const bool highBitDepthInput = (input.format() == QImage::Format_RGBA64) || (input.format() == QImage::Format_RGBX64);
 
     auto convertToRgb888 = [](const QImage& source) -> QImage {
@@ -799,6 +800,7 @@ QImage CameraPostProcessor::applyFrameStacking(const QImage& input)
             std::memcpy(stackedImage.scanLine(row), averaged8u.ptr(row), static_cast<size_t>(averaged8u.cols * 3));
         }
 
+        PROFILER_STOP(__FUNCTION__);
         return stackedImage;
     }
 
@@ -893,7 +895,7 @@ QImage CameraPostProcessor::applyFrameStacking(const QImage& input)
             }
         }
     }
-
+    PROFILER_STOP(__FUNCTION__);
     return stackedImage;
 }
 
@@ -1119,6 +1121,7 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image)
 
 void CameraPostProcessor::applyWhiteBalance(cv::Mat& bgrMat)
 {
+    PROFILER_START();
     cv::Vec3d gains(
         m_settings.m_postProcessWhiteBalanceBlueGain,
         m_settings.m_postProcessWhiteBalanceGreenGain,
@@ -1159,10 +1162,12 @@ void CameraPostProcessor::applyWhiteBalance(cv::Mat& bgrMat)
     channels[1].convertTo(channels[1], -1, gains[1], 0.0);
     channels[2].convertTo(channels[2], -1, gains[2], 0.0);
     cv::merge(channels, bgrMat);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applySaturation(cv::Mat& bgrMat)
 {
+    PROFILER_START();
     cv::Mat hsvMat;
     cv::cvtColor(bgrMat, hsvMat, cv::COLOR_BGR2HSV);
     std::vector<cv::Mat> hsvChannels;
@@ -1170,39 +1175,49 @@ void CameraPostProcessor::applySaturation(cv::Mat& bgrMat)
     hsvChannels[1].convertTo(hsvChannels[1], -1, m_settings.m_saturation, 0.0);
     cv::merge(hsvChannels, hsvMat);
     cv::cvtColor(hsvMat, bgrMat, cv::COLOR_HSV2BGR);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applyGamma(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     cv::Mat lut(1, 256, CV_8U);
     uchar* lutData = lut.ptr<uchar>();
     for (int i = 0; i < 256; ++i) {
         lutData[i] = static_cast<uchar>(qBound(0, static_cast<int>(std::pow(i / 255.0, m_settings.m_gamma) * 255.0 + 0.5), 255));
     }
     cv::LUT(bgrMat, lut, bgrMat);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applyGaussianBlur(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     const int kernelSize = 2 * m_settings.m_gaussianBlur + 1;
     cv::GaussianBlur(bgrMat, bgrMat, cv::Size(kernelSize, kernelSize), 0.0);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applyMedianBlur(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     const int kernelSize = 2 * m_settings.m_medianBlur + 1;
     cv::medianBlur(bgrMat, bgrMat, kernelSize);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applySharpen(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     cv::Mat blurred;
     cv::GaussianBlur(bgrMat, blurred, cv::Size(0, 0), 1.0);
     cv::addWeighted(bgrMat, 1.0 + m_settings.m_sharpen, blurred, -m_settings.m_sharpen, 0.0, bgrMat);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applySobelEdge(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     cv::Mat grayMat;
     cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
 
@@ -1222,24 +1237,31 @@ void CameraPostProcessor::applySobelEdge(cv::Mat& bgrMat) const
     cv::Mat edgesBgr;
     cv::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
     cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrMat);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applyFlip(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
     cv::flip(bgrMat, bgrMat, flipCode);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applyBrightnessContrast(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     cv::Mat adjusted;
     cv::convertScaleAbs(bgrMat, adjusted, m_settings.m_contrast, m_settings.m_brightness);
     bgrMat = adjusted;
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applyInvertColors(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     cv::bitwise_not(bgrMat, bgrMat);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 cv::Rect CameraPostProcessor::resolveDetectionRoi(const cv::Size& frameSize) const
@@ -1259,6 +1281,7 @@ cv::Rect CameraPostProcessor::resolveDetectionRoi(const cv::Size& frameSize) con
 
 void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi)
 {
+    PROFILER_START();
     const QImage prevRgb = m_previousRawFrame.convertToFormat(QImage::Format_RGB888);
     cv::Mat prevMat(prevRgb.height(), prevRgb.width(), CV_8UC3,
                     const_cast<uchar*>(prevRgb.bits()),
@@ -1309,10 +1332,12 @@ void CameraPostProcessor::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi)
     combinedMask.copyTo(fullMask(roi));
     cv::bitwise_and(bgrMat, bgrMat, result, fullMask);
     bgrMat = result;
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applyMotionDetection(cv::Mat& bgrMat, const cv::Rect& roi)
 {
+    PROFILER_START();
     if (!m_bgSubtractor) {
         m_bgSubtractor = cv::createBackgroundSubtractorMOG2(
             m_settings.m_motionHistory,
@@ -1369,10 +1394,12 @@ void CameraPostProcessor::applyMotionDetection(cv::Mat& bgrMat, const cv::Rect& 
     for (const auto& box : boxes) {
         cv::rectangle(bgrMat, box, boxColor, 2);
     }
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applySpectrumOverlay(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     QImage specSrc = m_spectrumViewImage;
     if (qAbs(m_settings.m_spectrumScale - 1.0) > 1e-4)
     {
@@ -1426,10 +1453,12 @@ void CameraPostProcessor::applySpectrumOverlay(cv::Mat& bgrMat) const
             }
         }
     }
+    PROFILER_STOP(__FUNCTION__);
 }
 
 QImage CameraPostProcessor::convertBgrToRgbImage(cv::Mat& bgrMat) const
 {
+    PROFILER_START();
     cv::cvtColor(bgrMat, bgrMat, cv::COLOR_BGR2RGB);
     const QImage rawResult(bgrMat.data, bgrMat.cols, bgrMat.rows,
                            static_cast<qsizetype>(bgrMat.step[0]),
@@ -1439,6 +1468,7 @@ QImage CameraPostProcessor::convertBgrToRgbImage(cv::Mat& bgrMat) const
 
 void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const
 {
+    PROFILER_START();
     const QString fmt = m_settings.m_dateTimeFormat.isEmpty()
                         ? QStringLiteral("yyyy-MM-dd hh:mm:ss")
                         : m_settings.m_dateTimeFormat;
@@ -1456,10 +1486,12 @@ void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const
     const int x = m_settings.m_dateTimePosX;
     const int y = m_settings.m_dateTimePosY + fm.ascent();
     painter.drawText(x, y, text);
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const
 {
+    PROFILER_START();
     QFont font;
     if (!m_settings.m_overlayTextFontFamily.isEmpty()) {
         font.setFamily(m_settings.m_overlayTextFontFamily);
@@ -1479,6 +1511,7 @@ void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlay
     painter.translate(x, m_settings.m_overlayTextPosY);
     overlayTextDocument.drawContents(&painter);
     painter.restore();
+    PROFILER_STOP(__FUNCTION__);
 }
 
 QImage CameraPostProcessor::applyPostProcessing(const QImage& input)

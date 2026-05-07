@@ -21,6 +21,8 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
+#include "util/profiler.h"
+
 #include "camerahistogramdialog.h"
 
 CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* parent)
@@ -70,6 +72,7 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
 
 void CameraHistogramDialog::updateImage(const QImage& image)
 {
+    PROFILER_START();
     m_chart->removeAllSeries();
 
     if (image.isNull()) {
@@ -124,4 +127,5 @@ void CameraHistogramDialog::updateImage(const QImage& image)
     }
 
     m_axisY->setRange(0, maxCount > 0 ? maxCount : 1.0);
+    PROFILER_STOP("CameraHistogram");
 }

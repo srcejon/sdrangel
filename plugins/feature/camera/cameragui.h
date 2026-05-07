@@ -194,6 +194,8 @@ private:
     QVideoSink *m_videoSink;
     QMediaCaptureSession *m_captureSession;
     qint64 m_mediaPlayerDurationMs = 0;
+    QVideoFrame m_pendingQtVideoFrame;
+    bool m_processingQtVideoFrame = false;
 #else
     QCamera *m_qtCamera;
     QCameraImageCapture *m_imageCapture;
@@ -435,6 +437,7 @@ private slots:
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void onQtVideoFrame(const QVideoFrame& frame);
+    void processPendingQtVideoFrame();
 #else
     void onQt5VideoFrame(const QImage& image);
 #endif

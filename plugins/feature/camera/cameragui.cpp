@@ -1873,6 +1873,8 @@ void CameraGUI::setupQtCapture()
             return;
         }
 
+        m_pendingQtVideoFrame = QVideoFrame();
+        m_processingQtVideoFrame = false;
         m_mediaPlayerDurationMs = 0;
         {
             QSignalBlocker blocker(ui->playbackPositionSlider);
@@ -1972,6 +1974,8 @@ void CameraGUI::setupQtCapture()
     }
     else
     {
+        m_pendingQtVideoFrame = QVideoFrame();
+        m_processingQtVideoFrame = false;
         m_videoSink = new QVideoSink(this);
         m_captureSession->setVideoOutput(m_videoSink);
         connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
@@ -2183,6 +2187,8 @@ void CameraGUI::cleanupQtCapture()
 {
     m_qtStillCaptureTimer.stop();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    m_pendingQtVideoFrame = QVideoFrame();
+    m_processingQtVideoFrame = false;
     if (m_imageCapture)
     {
         if (m_captureSession) {
@@ -2357,8 +2363,38 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void CameraGUI::onQtVideoFrame(const QVideoFrame& frame)
 {
+    if (!frame.isValid()) {
+        return;
+    }
+
+    m_pendingQtVideoFrame = frame;
+
+    if (!m_processingQtVideoFrame)
+    {
+        m_processingQtVideoFrame = true;
+        QMetaObject::invokeMethod(this, &CameraGUI::processPendingQtVideoFrame, Qt::QueuedConnection);
+    }
+}
+
+void CameraGUI::processPendingQtVideoFrame()
+{
+    QVideoFrame frame = m_pendingQtVideoFrame;
+    m_pendingQtVideoFrame = QVideoFrame();
+
+    if (!frame.isValid())
+    {
+        m_processingQtVideoFrame = false;
+        return;
+    }
+
     const QImage image = frame.toImage();
     onQtImageCaptured(-1, image);
+
+    if (m_pendingQtVideoFrame.isValid()) {
+        QMetaObject::invokeMethod(this, &CameraGUI::processPendingQtVideoFrame, Qt::QueuedConnection);
+    } else {
+        m_processingQtVideoFrame = false;
+    }
 }
 #else
 void CameraGUI::onQt5VideoFrame(const QImage& image)

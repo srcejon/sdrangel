@@ -71,24 +71,6 @@ void CameraPostProcessor::handleInputMessages()
         if (handleMessage(*message)) {
             delete message;
         }
-        // Post processing can be slow, so drop image frames if the queue gets too large
-        if (m_inputMessageQueue.size() > 20)
-        {
-            while (m_inputMessageQueue.size() > 0)
-            {
-                message = m_inputMessageQueue.pop();
-                if (MsgProcessFrame::match(*message))
-                {
-                    qDebug() << "CameraPostProcessor: Dropping frame to catch up";
-                    delete message;
-                } else
-                {
-                    if (handleMessage(*message)) {
-                        delete message;
-                    }
-                }
-            }
-        }
     }
 }
 

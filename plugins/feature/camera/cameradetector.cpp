@@ -419,25 +419,6 @@ void CameraDetector::handleInputMessages()
         if (handleMessage(*message)) {
             delete message;
         }
-
-        if (m_inputMessageQueue.size() > 20)
-        {
-            while (m_inputMessageQueue.size() > 0)
-            {
-                message = m_inputMessageQueue.pop();
-                if (MsgProcessFrame::match(*message))
-                {
-                    qDebug() << "CameraDetector: Dropping frame to catch up";
-                    delete message;
-                }
-                else
-                {
-                    if (handleMessage(*message)) {
-                        delete message;
-                    }
-                }
-            }
-        }
     }
 }
 

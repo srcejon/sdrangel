@@ -555,6 +555,7 @@ void CameraDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
+    CameraPipelineFrame inputFrameSnapshot(*frame);
     frame->m_motionBoxes.clear();
     frame->m_detections.clear();
 
@@ -587,7 +588,7 @@ void CameraDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     processObjectDetections(currentDetectedClasses, detectionTime);
 
     frame->m_image = convertBgrToRgbImage(bgrMat);
-    m_lastInputFrame = *frame;
+    m_lastInputFrame = inputFrameSnapshot;
 
     if (m_nextStageInputMessageQueue) {
         m_nextStageInputMessageQueue->push(CameraPostProcessor::MsgProcessFrame::create(frame));

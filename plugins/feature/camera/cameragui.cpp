@@ -477,6 +477,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_asiTargetTempSupported(false),
     m_asiUsbBandwidthSupported(false),
     m_asiHighSpeedModeSupported(false),
+    m_asiColorCameraActive(false),
+    m_asiRgb24Supported(false),
+    m_asiRaw16Supported(false),
     m_imageScene(nullptr),
     m_imagePixmapItem(nullptr),
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -874,6 +877,7 @@ void CameraGUI::displaySettings()
         m_settings.m_asiTargetTemp == std::numeric_limits<int>::min() ? 0 : m_settings.m_asiTargetTemp);
     settingsUI()->asiUsbBandwidthSpin->setValue(std::max(0, m_settings.m_asiUsbBandwidth));
     settingsUI()->asiHighSpeedModeCheck->setChecked(m_settings.m_asiHighSpeedMode > 0);
+    settingsUI()->asiColorImageTypeCombo->setCurrentIndex(static_cast<int>(m_settings.m_asiColorImageType));
     ui->saveImageCheck->setChecked(m_settings.m_saveImage);
     settingsUI()->imagePathEdit->setText(m_settings.m_imageFileName);
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
@@ -1192,6 +1196,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cameraOffsetSlider, &QSlider::valueChanged, this, &CameraGUI::on_cameraOffsetSlider_valueChanged);
     QObject::connect(settingsUI()->cameraOffsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cameraOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaReadoutModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaReadoutModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->asiCoolerOnCheck, &QCheckBox::toggled, this, &CameraGUI::on_asiCoolerOnCheck_toggled);
+    QObject::connect(settingsUI()->asiTargetTempSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_asiTargetTempSpin_valueChanged);
+    QObject::connect(settingsUI()->asiUsbBandwidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_asiUsbBandwidthSpin_valueChanged);
+    QObject::connect(settingsUI()->asiHighSpeedModeCheck, &QCheckBox::toggled, this, &CameraGUI::on_asiHighSpeedModeCheck_toggled);
+    QObject::connect(settingsUI()->asiColorImageTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_asiColorImageTypeCombo_currentIndexChanged);
     QObject::connect(ui->saveImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveImageCheck_toggled);
     QObject::connect(settingsUI()->imagePathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_imagePathEdit_editingFinished);
     QObject::connect(settingsUI()->imagePathButton, &QToolButton::clicked, this, &CameraGUI::on_imagePathButton_clicked);
@@ -2432,6 +2441,8 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->asiUsbBandwidthSpin->setVisible(asi && m_asiUsbBandwidthSupported);
     settingsUI()->asiHighSpeedModeLabel->setVisible(asi && m_asiHighSpeedModeSupported);
     settingsUI()->asiHighSpeedModeCheck->setVisible(asi && m_asiHighSpeedModeSupported);
+    settingsUI()->asiColorImageTypeLabel->setVisible(asi && m_asiColorCameraActive && (m_asiRgb24Supported || m_asiRaw16Supported));
+    settingsUI()->asiColorImageTypeCombo->setVisible(asi && m_asiColorCameraActive && (m_asiRgb24Supported || m_asiRaw16Supported));
     settingsUI()->alpacaFocusPositionLabel->setVisible(alpaca);
     settingsUI()->alpacaFocusPositionSpin->setVisible(alpaca);
     settingsUI()->alpacaFocusStepSizeLabel->setVisible(alpaca);
@@ -2728,6 +2739,9 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
     m_asiTargetTempSupported = info.isTargetTempSupported();
     m_asiUsbBandwidthSupported = info.isUsbBandwidthSupported();
     m_asiHighSpeedModeSupported = info.isHighSpeedModeSupported();
+    m_asiColorCameraActive = info.isColor();
+    m_asiRgb24Supported = info.isRgb24Supported();
+    m_asiRaw16Supported = info.isRaw16Supported();
     m_alpacaCameraSizeX = std::max(0, info.getCameraSizeX());
     m_alpacaCameraSizeY = std::max(0, info.getCameraSizeY());
 
@@ -2786,6 +2800,26 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
         m_settings.m_asiHighSpeedMode = info.isHighSpeedMode() ? 1 : 0;
     }
     settingsUI()->asiHighSpeedModeCheck->setChecked(m_settings.m_asiHighSpeedMode > 0);
+
+    {
+        QSignalBlocker blocker(settingsUI()->asiColorImageTypeCombo);
+        settingsUI()->asiColorImageTypeCombo->clear();
+        if (info.isRgb24Supported()) {
+            settingsUI()->asiColorImageTypeCombo->addItem(QStringLiteral("RGB24"), CameraSettings::AsiColorImageTypeRgb24);
+        }
+        if (info.isRaw16Supported()) {
+            settingsUI()->asiColorImageTypeCombo->addItem(QStringLiteral("RAW16"), CameraSettings::AsiColorImageTypeRaw16);
+        }
+
+        int comboIndex = settingsUI()->asiColorImageTypeCombo->findData(m_settings.m_asiColorImageType);
+        if ((comboIndex < 0) && (settingsUI()->asiColorImageTypeCombo->count() > 0))
+        {
+            comboIndex = 0;
+            m_settings.m_asiColorImageType = static_cast<CameraSettings::AsiColorImageType>(
+                settingsUI()->asiColorImageTypeCombo->itemData(0).toInt());
+        }
+        settingsUI()->asiColorImageTypeCombo->setCurrentIndex(comboIndex);
+    }
 
     settingsUI()->cameraNameLabel->setText(info.getName().isEmpty() ? "-" : info.getName());
     settingsUI()->cameraDescriptionLabel->setText(QStringLiteral("ASI Camera"));
@@ -3381,6 +3415,17 @@ void CameraGUI::on_asiHighSpeedModeCheck_toggled(bool checked)
 {
     m_settings.m_asiHighSpeedMode = checked ? 1 : 0;
     applySetting("asiHighSpeedMode");
+}
+
+void CameraGUI::on_asiColorImageTypeCombo_currentIndexChanged(int index)
+{
+    if (index < 0) {
+        return;
+    }
+
+    m_settings.m_asiColorImageType = static_cast<CameraSettings::AsiColorImageType>(
+        settingsUI()->asiColorImageTypeCombo->itemData(index).toInt());
+    applySetting("asiColorImageType");
 }
 
 void CameraGUI::on_saveImageCheck_toggled(bool checked)

@@ -166,6 +166,7 @@ void CameraSettings::resetToDefaults()
     m_asiTargetTemp = std::numeric_limits<int>::min();
     m_asiUsbBandwidth = -1;
     m_asiHighSpeedMode = -1;
+    m_asiColorImageType = AsiColorImageTypeRgb24;
     m_saveImage = false;
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
@@ -388,6 +389,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(122, m_asiTargetTemp);
     s.writeS32(123, m_asiUsbBandwidth);
     s.writeS32(124, m_asiHighSpeedMode);
+    s.writeS32(128, m_asiColorImageType);
 
     return s.final();
 }
@@ -627,11 +629,13 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(122, &m_asiTargetTemp, std::numeric_limits<int>::min());
         d.readS32(123, &m_asiUsbBandwidth, -1);
         d.readS32(124, &m_asiHighSpeedMode, -1);
+        d.readS32(128, (qint32 *) &m_asiColorImageType, (qint32) AsiColorImageTypeRgb24);
         m_asiCoolerOn = qBound(-1, m_asiCoolerOn, 1);
         m_asiUsbBandwidth = std::max(-1, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(-1, m_asiHighSpeedMode, 1);
+        m_asiColorImageType = qBound(AsiColorImageTypeRgb24, m_asiColorImageType, AsiColorImageTypeRaw16);
         m_stackFrameCount = qBound(1, m_stackFrameCount, 256);
-        m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodAverage);
+        m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodSigmaClippedAverage);
 
         return true;
     }
@@ -784,6 +788,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("asiHighSpeedMode")) {
         m_asiHighSpeedMode = qBound(-1, settings.m_asiHighSpeedMode, 1);
     }
+    if (settingsKeys.contains("asiColorImageType")) {
+        m_asiColorImageType = qBound(AsiColorImageTypeRgb24, settings.m_asiColorImageType, AsiColorImageTypeRaw16);
+    }
     if (settingsKeys.contains("saveImage")) {
         m_saveImage = settings.m_saveImage;
     }
@@ -809,7 +816,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_stackFrameCount = qBound(1, settings.m_stackFrameCount, 256);
     }
     if (settingsKeys.contains("stackMethod")) {
-        m_stackMethod = qBound(StackMethodAverage, settings.m_stackMethod, StackMethodAverage);
+        m_stackMethod = qBound(StackMethodAverage, settings.m_stackMethod, StackMethodSigmaClippedAverage);
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -1143,6 +1150,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("asiHighSpeedMode") || force) {
         ostr << " m_asiHighSpeedMode: " << m_asiHighSpeedMode;
+    }
+    if (settingsKeys.contains("asiColorImageType") || force) {
+        ostr << " m_asiColorImageType: " << m_asiColorImageType;
     }
     if (settingsKeys.contains("saveImage") || force) {
         ostr << " m_saveImage: " << m_saveImage;

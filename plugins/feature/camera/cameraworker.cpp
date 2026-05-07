@@ -164,6 +164,47 @@ bool CameraWorker::asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_I
     return false;
 }
 
+ASI_IMG_TYPE CameraWorker::asiSelectImageType(const ASI_CAMERA_INFO& cameraInfo) const
+{
+    if (cameraInfo.IsColorCam == ASI_TRUE)
+    {
+        const bool wantsRaw16 = m_settings.m_asiColorImageType == CameraSettings::AsiColorImageTypeRaw16;
+
+        if (wantsRaw16 && asiSupportsImageType(cameraInfo, ASI_IMG_RAW16)) {
+            return ASI_IMG_RAW16;
+        }
+        if (!wantsRaw16 && asiSupportsImageType(cameraInfo, ASI_IMG_RGB24)) {
+            return ASI_IMG_RGB24;
+        }
+        if (asiSupportsImageType(cameraInfo, ASI_IMG_RGB24)) {
+            return ASI_IMG_RGB24;
+        }
+        if (asiSupportsImageType(cameraInfo, ASI_IMG_RAW16)) {
+            return ASI_IMG_RAW16;
+        }
+        if (asiSupportsImageType(cameraInfo, ASI_IMG_RAW8)) {
+            return ASI_IMG_RAW8;
+        }
+        if (asiSupportsImageType(cameraInfo, ASI_IMG_Y8)) {
+            return ASI_IMG_Y8;
+        }
+    }
+    else
+    {
+        if (asiSupportsImageType(cameraInfo, ASI_IMG_RAW16)) {
+            return ASI_IMG_RAW16;
+        }
+        if (asiSupportsImageType(cameraInfo, ASI_IMG_RAW8)) {
+            return ASI_IMG_RAW8;
+        }
+        if (asiSupportsImageType(cameraInfo, ASI_IMG_Y8)) {
+            return ASI_IMG_Y8;
+        }
+    }
+
+    return ASI_IMG_Y8;
+}
+
 #endif
 
 QImage CameraWorker::renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height)
@@ -426,6 +467,8 @@ CameraWorker::CameraWorker() :
     m_asiColorCamera(false),
     m_asiBitDepth(8),
     m_asiImageType(ASI_IMG_Y8),
+    m_asiRgb24Supported(false),
+    m_asiRaw16Supported(false),
     m_asiPixelSizeUm(0.0),
     m_asiExposureMinMs(0.001),
     m_asiExposureMaxMs(60000.0),
@@ -696,6 +739,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("asiTargetTemp")
         || settingsKeys.contains("asiUsbBandwidth")
         || settingsKeys.contains("asiHighSpeedMode")
+        || settingsKeys.contains("asiColorImageType")
         || settingsKeys.contains("alpacaHost")
         || settingsKeys.contains("alpacaPort");
 
@@ -809,6 +853,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
             || settingsKeys.contains("asiTargetTemp")
             || settingsKeys.contains("asiUsbBandwidth")
             || settingsKeys.contains("asiHighSpeedMode")
+            || settingsKeys.contains("asiColorImageType")
             || settingsKeys.contains("exposureTimeMs")))
     {
         invalidateAsiSettings();
@@ -2842,16 +2887,9 @@ void CameraWorker::asiQueryCameraCapabilities()
     m_asiPixelSizeUm = cameraInfo.PixelSize;
     m_asiExposureMinMs = hasExposureRange ? std::max(0.001, exposureRange.MinValue / 1000.0) : 0.001;
     m_asiExposureMaxMs = hasExposureRange ? std::max(m_asiExposureMinMs, exposureRange.MaxValue / 1000.0) : 60000.0;
-
-    if (m_asiColorCamera && asiSupportsImageType(cameraInfo, ASI_IMG_RGB24)) {
-        m_asiImageType = ASI_IMG_RGB24;
-    } else if (asiSupportsImageType(cameraInfo, ASI_IMG_RAW8)) {
-        m_asiImageType = ASI_IMG_RAW8;
-    } else if (asiSupportsImageType(cameraInfo, ASI_IMG_Y8)) {
-        m_asiImageType = ASI_IMG_Y8;
-    } else if (asiSupportsImageType(cameraInfo, ASI_IMG_RAW16)) {
-        m_asiImageType = ASI_IMG_RAW16;
-    }
+    m_asiRgb24Supported = asiSupportsImageType(cameraInfo, ASI_IMG_RGB24);
+    m_asiRaw16Supported = asiSupportsImageType(cameraInfo, ASI_IMG_RAW16);
+    m_asiImageType = asiSelectImageType(cameraInfo);
 
     if (m_msgQueueToGUI)
     {
@@ -2881,7 +2919,9 @@ void CameraWorker::asiQueryCameraCapabilities()
             hasUsbBandwidth ? static_cast<int>(usbBandwidthCaps.MaxValue) : 0,
             hasUsbBandwidthValue ? static_cast<int>(usbBandwidthValue) : 0,
             hasHighSpeedMode && highSpeedModeCaps.IsWritable == ASI_TRUE,
-            hasHighSpeedModeValue ? (highSpeedModeValue != 0) : false));
+            hasHighSpeedModeValue ? (highSpeedModeValue != 0) : false,
+            m_asiRgb24Supported,
+            m_asiRaw16Supported));
     }
 
     asiPollStatus();
@@ -2898,6 +2938,10 @@ bool CameraWorker::asiApplyCameraSettings()
     }
 
     const int cameraId = m_settings.cameraIdInt();
+    ASI_CAMERA_INFO cameraInfo {};
+    if (asiGetCameraInfoById(cameraId, cameraInfo)) {
+        m_asiImageType = asiSelectImageType(cameraInfo);
+    }
     const int bin = std::max(1, std::min(m_settings.m_cameraBinX, m_settings.m_cameraBinY));
     const int maxWidth = std::max(16, m_asiCameraSizeX / std::max(1, bin));
     const int maxHeight = std::max(16, m_asiCameraSizeY / std::max(1, bin));
@@ -3030,7 +3074,47 @@ QImage CameraWorker::asiFrameToImage() const
     if (m_asiImageType == ASI_IMG_RAW16)
     {
         cv::Mat raw16(m_asiFrameHeight, m_asiFrameWidth, CV_16UC1, const_cast<uchar*>(m_asiFrameBuffer.constData()));
-        raw16.convertTo(rawMat, CV_8UC1, 1.0 / 256.0);
+
+        if (!m_asiColorCamera)
+        {
+            cv::Mat raw8;
+            raw16.convertTo(raw8, CV_8UC1, 255.0 / 65535.0);
+            QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_Grayscale8);
+            for (int y = 0; y < m_asiFrameHeight; ++y) {
+                std::memcpy(image.scanLine(y), raw8.ptr(y), static_cast<size_t>(m_asiFrameWidth));
+            }
+            return image;
+        }
+
+        int cvCode16 = cv::COLOR_BayerRG2BGR;
+        switch (m_asiBayerPattern)
+        {
+        case ASI_BAYER_BG: cvCode16 = cv::COLOR_BayerBG2BGR; break;
+        case ASI_BAYER_GR: cvCode16 = cv::COLOR_BayerGR2BGR; break;
+        case ASI_BAYER_GB: cvCode16 = cv::COLOR_BayerGB2BGR; break;
+        case ASI_BAYER_RG:
+        default: cvCode16 = cv::COLOR_BayerRG2BGR; break;
+        }
+
+        cv::Mat bgr16Mat;
+        cv::cvtColor(raw16, bgr16Mat, cvCode16);
+
+        QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_RGBA64);
+        for (int y = 0; y < m_asiFrameHeight; ++y)
+        {
+            const cv::Vec<uint16_t, 3> *inputLine = bgr16Mat.ptr<cv::Vec<uint16_t, 3>>(y);
+            quint16 *outputLine = reinterpret_cast<quint16*>(image.scanLine(y));
+
+            for (int x = 0; x < m_asiFrameWidth; ++x)
+            {
+                outputLine[x * 4 + 0] = inputLine[x][2];
+                outputLine[x * 4 + 1] = inputLine[x][1];
+                outputLine[x * 4 + 2] = inputLine[x][0];
+                outputLine[x * 4 + 3] = 65535;
+            }
+        }
+
+        return image;
     }
     else
     {

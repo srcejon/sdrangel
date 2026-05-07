@@ -17,7 +17,10 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstring>
+#include <vector>
 
 #include <QDebug>
 #include <QFile>
@@ -695,50 +698,197 @@ void CameraPostProcessor::processNewFrame(const QImage& image)
 
 QImage CameraPostProcessor::applyFrameStacking(const QImage& input)
 {
+    const bool highBitDepthInput = (input.format() == QImage::Format_RGBA64) || (input.format() == QImage::Format_RGBX64);
+
+    auto convertToRgb888 = [](const QImage& source) -> QImage {
+        if ((source.format() != QImage::Format_RGBA64) && (source.format() != QImage::Format_RGBX64)) {
+            return source.convertToFormat(QImage::Format_RGB888);
+        }
+
+        QImage rgb8(source.width(), source.height(), QImage::Format_RGB888);
+        for (int y = 0; y < source.height(); ++y)
+        {
+            const quint16 *inputLine = reinterpret_cast<const quint16*>(source.constScanLine(y));
+            uchar *outputLine = rgb8.scanLine(y);
+
+            for (int x = 0; x < source.width(); ++x)
+            {
+                outputLine[x * 3 + 0] = static_cast<uchar>(std::lround((inputLine[x * 4 + 0] * 255.0) / 65535.0));
+                outputLine[x * 3 + 1] = static_cast<uchar>(std::lround((inputLine[x * 4 + 1] * 255.0) / 65535.0));
+                outputLine[x * 3 + 2] = static_cast<uchar>(std::lround((inputLine[x * 4 + 2] * 255.0) / 65535.0));
+            }
+        }
+
+        return rgb8;
+    };
+
     if (!m_settings.m_stackEnabled || (m_settings.m_stackFrameCount <= 1)) {
-        return input;
+        return highBitDepthInput ? convertToRgb888(input) : input;
     }
 
-    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
-    cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
-                   const_cast<uchar*>(rgb.bits()),
-                   static_cast<size_t>(rgb.bytesPerLine()));
-    cv::Mat rgbMatCopy = rgbMat.clone();
+    cv::Mat frameMat;
+    if (highBitDepthInput)
+    {
+        frameMat = cv::Mat(input.height(), input.width(), CV_16UC3);
+        for (int y = 0; y < input.height(); ++y)
+        {
+            const quint16 *inputLine = reinterpret_cast<const quint16*>(input.constScanLine(y));
+            cv::Vec<uint16_t, 3> *outputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
+
+            for (int x = 0; x < input.width(); ++x)
+            {
+                outputLine[x][0] = inputLine[x * 4 + 0];
+                outputLine[x][1] = inputLine[x * 4 + 1];
+                outputLine[x][2] = inputLine[x * 4 + 2];
+            }
+        }
+    }
+    else
+    {
+        const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
+        cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
+                       const_cast<uchar*>(rgb.bits()),
+                       static_cast<size_t>(rgb.bytesPerLine()));
+        frameMat = rgbMat.clone();
+    }
 
     if (m_stackFrameHistory.empty()
-        || m_stackFrameHistory.front().size() != rgbMatCopy.size()
-        || m_stackFrameHistory.front().type() != rgbMatCopy.type())
+        || m_stackFrameHistory.front().size() != frameMat.size()
+        || m_stackFrameHistory.front().type() != frameMat.type())
     {
         m_stackFrameHistory.clear();
         m_stackAccumulator.release();
     }
 
-    if (m_stackAccumulator.empty()) {
-        m_stackAccumulator = cv::Mat::zeros(rgbMatCopy.size(), CV_32FC3);
-    }
-
-    cv::Mat floatFrame;
-    rgbMatCopy.convertTo(floatFrame, CV_32FC3);
-    m_stackAccumulator += floatFrame;
-    m_stackFrameHistory.push_back(rgbMatCopy);
+    m_stackFrameHistory.push_back(frameMat.clone());
 
     const int maxFrames = qBound(1, m_settings.m_stackFrameCount, 256);
     while (static_cast<int>(m_stackFrameHistory.size()) > maxFrames)
     {
-        cv::Mat oldestFloatFrame;
-        m_stackFrameHistory.front().convertTo(oldestFloatFrame, CV_32FC3);
-        m_stackAccumulator -= oldestFloatFrame;
+        if (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
+        {
+            cv::Mat oldestFloatFrame;
+            m_stackFrameHistory.front().convertTo(oldestFloatFrame, CV_32FC3);
+            m_stackAccumulator -= oldestFloatFrame;
+        }
         m_stackFrameHistory.pop_front();
     }
 
-    cv::Mat averagedFloat;
-    m_stackAccumulator.convertTo(averagedFloat, CV_32FC3, 1.0 / static_cast<double>(m_stackFrameHistory.size()));
-    cv::Mat averaged8u;
-    averagedFloat.convertTo(averaged8u, CV_8UC3);
+    const double scaleTo8Bit = highBitDepthInput ? (255.0 / 65535.0) : 1.0;
 
-    QImage stackedImage(averaged8u.cols, averaged8u.rows, QImage::Format_RGB888);
-    for (int row = 0; row < averaged8u.rows; ++row) {
-        std::memcpy(stackedImage.scanLine(row), averaged8u.ptr(row), static_cast<size_t>(averaged8u.cols * 3));
+    if (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
+    {
+        if (m_stackAccumulator.empty()) {
+            m_stackAccumulator = cv::Mat::zeros(frameMat.size(), CV_32FC3);
+        }
+
+        cv::Mat floatFrame;
+        frameMat.convertTo(floatFrame, CV_32FC3);
+        m_stackAccumulator += floatFrame;
+
+        cv::Mat averagedFloat;
+        m_stackAccumulator.convertTo(averagedFloat, CV_32FC3, 1.0 / static_cast<double>(m_stackFrameHistory.size()));
+        cv::Mat averaged8u;
+        averagedFloat.convertTo(averaged8u, CV_8UC3, scaleTo8Bit);
+
+        QImage stackedImage(averaged8u.cols, averaged8u.rows, QImage::Format_RGB888);
+        for (int row = 0; row < averaged8u.rows; ++row) {
+            std::memcpy(stackedImage.scanLine(row), averaged8u.ptr(row), static_cast<size_t>(averaged8u.cols * 3));
+        }
+
+        return stackedImage;
+    }
+
+    m_stackAccumulator.release();
+
+    QImage stackedImage(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
+    const size_t frameCount = m_stackFrameHistory.size();
+    constexpr double sigmaThreshold = 2.0;
+
+    std::vector<int> channelSamples[3];
+    for (std::vector<int>& samples : channelSamples) {
+        samples.reserve(frameCount);
+    }
+
+    for (int row = 0; row < frameMat.rows; ++row)
+    {
+        uchar *output = stackedImage.scanLine(row);
+
+        for (int col = 0; col < frameMat.cols; ++col)
+        {
+            for (std::vector<int>& samples : channelSamples) {
+                samples.clear();
+            }
+
+            for (const cv::Mat& frame : m_stackFrameHistory)
+            {
+                if (highBitDepthInput)
+                {
+                    const cv::Vec<uint16_t, 3>& pixel = frame.at<cv::Vec<uint16_t, 3>>(row, col);
+                    channelSamples[0].push_back(pixel[0]);
+                    channelSamples[1].push_back(pixel[1]);
+                    channelSamples[2].push_back(pixel[2]);
+                }
+                else
+                {
+                    const cv::Vec3b& pixel = frame.at<cv::Vec3b>(row, col);
+                    channelSamples[0].push_back(pixel[0]);
+                    channelSamples[1].push_back(pixel[1]);
+                    channelSamples[2].push_back(pixel[2]);
+                }
+            }
+
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                int channelValue = 0;
+
+                if (m_settings.m_stackMethod == CameraSettings::StackMethodMedian)
+                {
+                    std::vector<int>& samples = channelSamples[channel];
+                    const size_t medianIndex = samples.size() / 2;
+                    std::nth_element(samples.begin(), samples.begin() + static_cast<std::ptrdiff_t>(medianIndex), samples.end());
+                    channelValue = samples[medianIndex];
+                }
+                else
+                {
+                    const std::vector<int>& samples = channelSamples[channel];
+                    double sum = 0.0;
+                    double sumSquares = 0.0;
+
+                    for (int sample : samples)
+                    {
+                        sum += sample;
+                        sumSquares += static_cast<double>(sample) * sample;
+                    }
+
+                    const double mean = sum / static_cast<double>(samples.size());
+                    const double variance = std::max(0.0, (sumSquares / static_cast<double>(samples.size())) - (mean * mean));
+                    const double sigma = std::sqrt(variance);
+                    const double minValue = mean - sigmaThreshold * sigma;
+                    const double maxValue = mean + sigmaThreshold * sigma;
+
+                    double clippedSum = 0.0;
+                    int clippedCount = 0;
+                    for (int sample : samples)
+                    {
+                        if ((sample >= minValue) && (sample <= maxValue))
+                        {
+                            clippedSum += sample;
+                            ++clippedCount;
+                        }
+                    }
+
+                    channelValue = clippedCount > 0
+                        ? static_cast<int>(std::lround(clippedSum / static_cast<double>(clippedCount)))
+                        : static_cast<int>(std::lround(mean));
+                }
+
+                const int outputValue = highBitDepthInput
+                    ? static_cast<int>(std::lround((channelValue * 255.0) / 65535.0))
+                    : channelValue;
+                output[col * 3 + channel] = static_cast<uchar>(qBound(0, outputValue, 255));
+            }
+        }
     }
 
     return stackedImage;

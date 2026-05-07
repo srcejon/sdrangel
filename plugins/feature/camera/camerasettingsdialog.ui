@@ -67,15 +67,29 @@
            </property>
           </widget>
          </item>
-         <item row="19" column="1" colspan="3">
-          <widget class="QCheckBox" name="asiHighSpeedModeCheck">
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-         <item row="13" column="1">
-          <widget class="QSpinBox" name="cameraNumXSpin">
+           <item row="19" column="1" colspan="3">
+            <widget class="QCheckBox" name="asiHighSpeedModeCheck">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="20" column="0">
+            <widget class="QLabel" name="asiColorImageTypeLabel">
+             <property name="text">
+              <string>Colour image type</string>
+             </property>
+            </widget>
+           </item>
+           <item row="20" column="1" colspan="3">
+            <widget class="QComboBox" name="asiColorImageTypeCombo">
+             <property name="toolTip">
+              <string>Select RGB24 for camera-side colour conversion or RAW16 for 16-bit Bayer data debayered in SDRangel.</string>
+             </property>
+            </widget>
+           </item>
+           <item row="13" column="1">
+            <widget class="QSpinBox" name="cameraNumXSpin">
            <property name="toolTip">
             <string>Subframe width after binning (0 uses the full available width)</string>
            </property>
@@ -1801,13 +1815,23 @@
             <property name="toolTip">
              <string>Stacking method used to combine frames</string>
             </property>
-            <item>
-             <property name="text">
-              <string>Average</string>
-             </property>
-            </item>
-           </widget>
-          </item>
+             <item>
+              <property name="text">
+               <string>Average</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Median</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Sigma clipped average</string>
+              </property>
+             </item>
+            </widget>
+           </item>
          </layout>
         </widget>
        </item>
@@ -3449,11 +3473,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
   <tabstop>cameraStartXSpin</tabstop>
   <tabstop>cameraStartYSpin</tabstop>
   <tabstop>alpacaReadoutModeCombo</tabstop>
-  <tabstop>asiCoolerOnCheck</tabstop>
-  <tabstop>asiTargetTempSpin</tabstop>
-  <tabstop>asiUsbBandwidthSpin</tabstop>
-  <tabstop>asiHighSpeedModeCheck</tabstop>
-  <tabstop>alpacaFocusPositionSpin</tabstop>
+   <tabstop>asiCoolerOnCheck</tabstop>
+   <tabstop>asiTargetTempSpin</tabstop>
+   <tabstop>asiUsbBandwidthSpin</tabstop>
+   <tabstop>asiHighSpeedModeCheck</tabstop>
+   <tabstop>asiColorImageTypeCombo</tabstop>
+   <tabstop>alpacaFocusPositionSpin</tabstop>
   <tabstop>alpacaFocusStepSizeSpin</tabstop>
   <tabstop>alpacaFilterWheelPositionCombo</tabstop>
   <tabstop>clearChart</tabstop>

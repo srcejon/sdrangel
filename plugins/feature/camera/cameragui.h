@@ -176,6 +176,9 @@ private:
     bool m_asiTargetTempSupported;
     bool m_asiUsbBandwidthSupported;
     bool m_asiHighSpeedModeSupported;
+    bool m_asiColorCameraActive;
+    bool m_asiRgb24Supported;
+    bool m_asiRaw16Supported;
     QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
     QList<CameraObjectDeviceSettingsGUI *> m_actionDeviceSettingsGUIs;
 
@@ -322,6 +325,7 @@ private slots:
     void on_asiTargetTempSpin_valueChanged(int value);
     void on_asiUsbBandwidthSpin_valueChanged(int value);
     void on_asiHighSpeedModeCheck_toggled(bool checked);
+    void on_asiColorImageTypeCombo_currentIndexChanged(int index);
     void on_saveImageCheck_toggled(bool checked);
     void on_imagePathEdit_editingFinished();
     void on_imagePathButton_clicked();

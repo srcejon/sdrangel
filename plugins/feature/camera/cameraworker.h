@@ -320,6 +320,8 @@ MESSAGE_CLASS_DECLARATION
         int getUsbBandwidth() const { return m_usbBandwidth; }
         bool isHighSpeedModeSupported() const { return m_highSpeedModeSupported; }
         bool isHighSpeedMode() const { return m_highSpeedMode; }
+        bool isRgb24Supported() const { return m_rgb24Supported; }
+        bool isRaw16Supported() const { return m_raw16Supported; }
 
         static MsgReportAsiCameraInfo* create(const QString& name, int maxBinX, int maxBinY,
             int gainMin, int gainMax, int offsetMin, int offsetMax,
@@ -328,13 +330,14 @@ MESSAGE_CLASS_DECLARATION
             bool coolerSupported, bool coolerOn,
             bool targetTempSupported, int targetTempMin, int targetTempMax, int targetTemp,
             bool usbBandwidthSupported, int usbBandwidthMin, int usbBandwidthMax, int usbBandwidth,
-            bool highSpeedModeSupported, bool highSpeedMode)
+            bool highSpeedModeSupported, bool highSpeedMode,
+            bool rgb24Supported, bool raw16Supported)
         {
             return new MsgReportAsiCameraInfo(name, maxBinX, maxBinY, gainMin, gainMax, offsetMin, offsetMax,
                 cameraSizeX, cameraSizeY, pixelSizeUm, bitDepth, isColor, exposureMinMs, exposureMaxMs,
                 coolerSupported, coolerOn, targetTempSupported, targetTempMin, targetTempMax, targetTemp,
                 usbBandwidthSupported, usbBandwidthMin, usbBandwidthMax, usbBandwidth,
-                highSpeedModeSupported, highSpeedMode);
+                highSpeedModeSupported, highSpeedMode, rgb24Supported, raw16Supported);
         }
 
     private:
@@ -364,6 +367,8 @@ MESSAGE_CLASS_DECLARATION
         int m_usbBandwidth;
         bool m_highSpeedModeSupported;
         bool m_highSpeedMode;
+        bool m_rgb24Supported;
+        bool m_raw16Supported;
 
         MsgReportAsiCameraInfo(const QString& name, int maxBinX, int maxBinY,
             int gainMin, int gainMax, int offsetMin, int offsetMax,
@@ -372,7 +377,8 @@ MESSAGE_CLASS_DECLARATION
             bool coolerSupported, bool coolerOn,
             bool targetTempSupported, int targetTempMin, int targetTempMax, int targetTemp,
             bool usbBandwidthSupported, int usbBandwidthMin, int usbBandwidthMax, int usbBandwidth,
-            bool highSpeedModeSupported, bool highSpeedMode) :
+            bool highSpeedModeSupported, bool highSpeedMode,
+            bool rgb24Supported, bool raw16Supported) :
             Message(),
             m_name(name),
             m_maxBinX(maxBinX),
@@ -399,7 +405,9 @@ MESSAGE_CLASS_DECLARATION
             m_usbBandwidthMax(usbBandwidthMax),
             m_usbBandwidth(usbBandwidth),
             m_highSpeedModeSupported(highSpeedModeSupported),
-            m_highSpeedMode(highSpeedMode)
+            m_highSpeedMode(highSpeedMode),
+            m_rgb24Supported(rgb24Supported),
+            m_raw16Supported(raw16Supported)
         {}
     };
 
@@ -536,6 +544,8 @@ private:
     bool m_asiColorCamera;
     int m_asiBitDepth;
     int m_asiImageType;
+    bool m_asiRgb24Supported;
+    bool m_asiRaw16Supported;
     double m_asiPixelSizeUm;
     double m_asiExposureMinMs;
     double m_asiExposureMaxMs;
@@ -606,6 +616,7 @@ private:
     static bool asiGetControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS& controlCaps);
     static bool asiGetControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& value, ASI_BOOL& isAuto);
     static bool asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageType);
+    ASI_IMG_TYPE asiSelectImageType(const ASI_CAMERA_INFO& cameraInfo) const;
     void asiQueryCameraCapabilities();
     bool asiOpenCamera();
     void asiCloseCamera();

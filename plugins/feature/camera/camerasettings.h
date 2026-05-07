@@ -44,7 +44,15 @@ struct CameraSettings
 
     enum StackMethod
     {
-        StackMethodAverage = 0
+        StackMethodAverage = 0,
+        StackMethodMedian,
+        StackMethodSigmaClippedAverage
+    };
+
+    enum AsiColorImageType
+    {
+        AsiColorImageTypeRgb24 = 0,
+        AsiColorImageTypeRaw16
     };
 
     struct ObjectDeviceSettings
@@ -107,6 +115,7 @@ struct CameraSettings
     int m_asiTargetTemp;      // target temperature in Celsius; sentinel means do not set
     int m_asiUsbBandwidth;    // USB bandwidth overload setting; -1 = do not set
     int m_asiHighSpeedMode;   // -1 = do not set, 0 = off, 1 = on
+    AsiColorImageType m_asiColorImageType;
     bool m_saveImage;
     QString m_imageFileName;
     bool m_saveVideo;

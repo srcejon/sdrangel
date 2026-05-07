@@ -1847,10 +1847,8 @@ void CameraGUI::setupQtCapture()
             return;
         }
 
-        m_captureSession = new QMediaCaptureSession(this);
         m_mediaPlayer = new QMediaPlayer(this);
         m_videoSink = new QVideoSink(this);
-        m_captureSession->setVideoOutput(m_videoSink);
         m_mediaPlayer->setVideoOutput(m_videoSink);
         connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
         m_mediaPlayer->setSource(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath));
@@ -2150,22 +2148,30 @@ void CameraGUI::cleanupQtCapture()
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     if (m_imageCapture)
     {
+        if (m_captureSession) {
+            m_captureSession->setImageCapture(nullptr);
+        }
         delete m_imageCapture;
         m_imageCapture = nullptr;
     }
     if (m_mediaPlayer)
     {
+        m_mediaPlayer->setVideoOutput(static_cast<QVideoSink *>(nullptr));
         m_mediaPlayer->stop();
+        m_mediaPlayer->setSource(QUrl());
         delete m_mediaPlayer;
         m_mediaPlayer = nullptr;
     }
     if (m_videoSink)
     {
+        disconnect(m_videoSink, nullptr, this, nullptr);
         delete m_videoSink;
         m_videoSink = nullptr;
     }
     if (m_captureSession)
     {
+        m_captureSession->setCamera(nullptr);
+        m_captureSession->setVideoOutput(static_cast<QVideoSink *>(nullptr));
         delete m_captureSession;
         m_captureSession = nullptr;
     }

@@ -379,6 +379,7 @@ private slots:
     void on_overlayTextPosYSlider_valueChanged(int value);
     void on_diffMaskButton_toggled(bool checked);
     void on_diffThresholdSpin_valueChanged(int value);
+    void on_diffMaskOpenSizeSpin_valueChanged(int value);
     void on_dilationSpin_valueChanged(int value);
     void on_diffMaskHistoryFramesSpin_valueChanged(int value);
     void on_diffMaskCloseSizeSpin_valueChanged(int value);

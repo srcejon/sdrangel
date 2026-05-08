@@ -938,6 +938,7 @@ void CameraGUI::displaySettings()
     settingsUI()->overlayTextPosYValue->setText(QString::number(m_settings.m_overlayTextPosY));
     ui->diffMaskButton->setChecked(m_settings.m_diffMask);
     settingsUI()->diffThresholdSpin->setValue(m_settings.m_diffThreshold);
+    settingsUI()->diffMaskOpenSizeSpin->setValue(m_settings.m_diffMaskOpenSize);
     settingsUI()->dilationSpin->setValue(m_settings.m_dilationSize);
     settingsUI()->diffMaskHistoryFramesSpin->setValue(m_settings.m_diffMaskHistoryFrames);
     settingsUI()->diffMaskCloseSizeSpin->setValue(m_settings.m_diffMaskCloseSize);
@@ -1256,6 +1257,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->overlayTextPosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_overlayTextPosYSlider_valueChanged);
     QObject::connect(ui->diffMaskButton, &QToolButton::toggled, this, &CameraGUI::on_diffMaskButton_toggled);
     QObject::connect(settingsUI()->diffThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->diffMaskOpenSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffMaskOpenSizeSpin_valueChanged);
     QObject::connect(settingsUI()->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
     QObject::connect(settingsUI()->diffMaskHistoryFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffMaskHistoryFramesSpin_valueChanged);
     QObject::connect(settingsUI()->diffMaskCloseSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffMaskCloseSizeSpin_valueChanged);
@@ -3886,6 +3888,12 @@ void CameraGUI::on_diffThresholdSpin_valueChanged(int value)
 {
     m_settings.m_diffThreshold = value;
     applySetting("diffThreshold");
+}
+
+void CameraGUI::on_diffMaskOpenSizeSpin_valueChanged(int value)
+{
+    m_settings.m_diffMaskOpenSize = value;
+    applySetting("diffMaskOpenSize");
 }
 
 void CameraGUI::on_dilationSpin_valueChanged(int value)

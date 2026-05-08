@@ -167,6 +167,7 @@ struct CameraSettings
     int m_overlayTextPosY;     ///< Y pixel offset from top for text overlay: 0..4096 (0 = auto bottom)
     bool m_diffMask;          ///< Show pixel differences from previous frame
     int m_diffThreshold;      ///< Threshold for diff-mask binary classification: 0..255
+    int m_diffMaskOpenSize;   ///< Kernel radius for morphological open on diff mask before accumulation: 0..20
     int m_dilationSize;       ///< Kernel radius for diff-mask dilation: 0..20
     int m_diffMaskHistoryFrames; ///< Number of diff masks to accumulate with bitwise_or: 1..120
     int m_diffMaskCloseSize;  ///< Kernel radius for morphological close on accumulated diff mask: 0..20

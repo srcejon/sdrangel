@@ -208,6 +208,7 @@ void CameraSettings::resetToDefaults()
     m_overlayTextPosY = 0;
     m_diffMask = false;
     m_diffThreshold = 30;
+    m_diffMaskOpenSize = 0;
     m_dilationSize = 3;
     m_diffMaskHistoryFrames = 1;
     m_diffMaskCloseSize = 0;
@@ -392,6 +393,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(123, m_asiUsbBandwidth);
     s.writeS32(124, m_asiHighSpeedMode);
     s.writeS32(125, m_asiColorImageType);
+    s.writeS32(126, m_diffMaskOpenSize);
 
     return s.final();
 }
@@ -524,9 +526,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(50, &m_dilationSize, 3);
         d.readS32(51, &m_diffMaskHistoryFrames, 1);
         d.readS32(52, &m_diffMaskCloseSize, 0);
+        d.readS32(126, &m_diffMaskOpenSize, 0);
         m_brightness = qBound(-100.0, m_brightness, 100.0);
         m_contrast = qBound(0.1, m_contrast, 3.0);
         m_diffThreshold = qBound(0, m_diffThreshold, 255);
+        m_diffMaskOpenSize = qBound(0, m_diffMaskOpenSize, 20);
         m_dilationSize = qBound(0, m_dilationSize, 20);
         m_diffMaskHistoryFrames = qBound(1, m_diffMaskHistoryFrames, 120);
         m_diffMaskCloseSize = qBound(0, m_diffMaskCloseSize, 20);
@@ -885,6 +889,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("diffThreshold")) {
         m_diffThreshold = qBound(0, settings.m_diffThreshold, 255);
+    }
+    if (settingsKeys.contains("diffMaskOpenSize")) {
+        m_diffMaskOpenSize = qBound(0, settings.m_diffMaskOpenSize, 20);
     }
     if (settingsKeys.contains("dilationSize")) {
         m_dilationSize = qBound(0, settings.m_dilationSize, 20);
@@ -1248,6 +1255,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("diffThreshold") || force) {
         ostr << " m_diffThreshold: " << m_diffThreshold;
+    }
+    if (settingsKeys.contains("diffMaskOpenSize") || force) {
+        ostr << " m_diffMaskOpenSize: " << m_diffMaskOpenSize;
     }
     if (settingsKeys.contains("dilationSize") || force) {
         ostr << " m_dilationSize: " << m_dilationSize;

@@ -3233,6 +3233,35 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="diffMaskOpenSizeLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Open size</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="diffMaskOpenSizeSpin">
+            <property name="toolTip">
+             <string>Kernel radius for morphological open before diff-mask accumulation (0 disables)</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>20</number>
+            </property>
+            <property name="value">
+             <number>0</number>
+            </property>
+           </widget>
+          </item>
           <item row="2" column="2">
            <widget class="QLabel" name="diffMaskCloseSizeLabel">
             <property name="minimumSize">
@@ -3603,6 +3632,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
   <tabstop>motionDetectShadowsCheck</tabstop>
   <tabstop>dilationSpin</tabstop>
   <tabstop>diffThresholdSpin</tabstop>
+  <tabstop>diffMaskOpenSizeSpin</tabstop>
   <tabstop>diffMaskHistoryFramesSpin</tabstop>
   <tabstop>diffMaskCloseSizeSpin</tabstop>
   <tabstop>detectionRoiXSpin</tabstop>

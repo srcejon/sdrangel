@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>810</width>
-    <height>777</height>
+    <height>791</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -67,29 +67,29 @@
            </property>
           </widget>
          </item>
-           <item row="19" column="1" colspan="3">
-            <widget class="QCheckBox" name="asiHighSpeedModeCheck">
-             <property name="text">
-              <string/>
-             </property>
-            </widget>
-           </item>
-           <item row="20" column="0">
-            <widget class="QLabel" name="asiColorImageTypeLabel">
-             <property name="text">
-              <string>Colour image type</string>
-             </property>
-            </widget>
-           </item>
-           <item row="20" column="1" colspan="3">
-            <widget class="QComboBox" name="asiColorImageTypeCombo">
-             <property name="toolTip">
-              <string>Select RGB24 for camera-side colour conversion or RAW16 for 16-bit Bayer data debayered in SDRangel.</string>
-             </property>
-            </widget>
-           </item>
-           <item row="13" column="1">
-            <widget class="QSpinBox" name="cameraNumXSpin">
+         <item row="19" column="1" colspan="3">
+          <widget class="QCheckBox" name="asiHighSpeedModeCheck">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="20" column="0">
+          <widget class="QLabel" name="asiColorImageTypeLabel">
+           <property name="text">
+            <string>Colour image type</string>
+           </property>
+          </widget>
+         </item>
+         <item row="20" column="1" colspan="3">
+          <widget class="QComboBox" name="asiColorImageTypeCombo">
+           <property name="toolTip">
+            <string>Select RGB24 for camera-side colour conversion or RAW16 for 16-bit Bayer data debayered in SDRangel.</string>
+           </property>
+          </widget>
+         </item>
+         <item row="13" column="1">
+          <widget class="QSpinBox" name="cameraNumXSpin">
            <property name="toolTip">
             <string>Subframe width after binning (0 uses the full available width)</string>
            </property>
@@ -1118,6 +1118,139 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="stackingTab">
+      <attribute name="title">
+       <string>Stacking</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_stacking">
+       <item>
+        <widget class="QGroupBox" name="stackingGroup">
+         <property name="title">
+          <string>Image Stacking</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout_stacking">
+          <item row="0" column="0">
+           <widget class="QLabel" name="stackEnabledLabel">
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Enable</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QCheckBox" name="stackEnabledCheck">
+            <property name="toolTip">
+             <string>Average multiple frames together to reduce random noise. Best for static scenes.</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="stackFrameCountLabel">
+            <property name="text">
+             <string>Frames</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="stackFrameCountSpin">
+            <property name="toolTip">
+             <string>Number of frames to average together</string>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>256</number>
+            </property>
+            <property name="value">
+             <number>4</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="stackMethodLabel">
+            <property name="text">
+             <string>Method</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="stackMethodCombo">
+            <property name="toolTip">
+             <string>Stacking method used to combine frames</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Average</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Median</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Sigma clipped average</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="stackAlignmentLabel">
+            <property name="text">
+             <string>Alignment</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QComboBox" name="stackAlignmentCombo">
+            <property name="toolTip">
+             <string>Optional frame alignment before stacking. Phase correlation handles translation; star centroid matching can also compensate small rotation/scale drift.</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>None</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Phase correlation</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Star centroid matching</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacerStacking">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
      <widget class="QWidget" name="colourTab">
       <attribute name="title">
        <string>Colour</string>
@@ -1764,139 +1897,6 @@
        </item>
        <item>
         <spacer name="verticalSpacer">
-         <property name="orientation">
-          <enum>Qt::Orientation::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-     </layout>
-     </widget>
-     <widget class="QWidget" name="stackingTab">
-      <attribute name="title">
-       <string>Stacking</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_stacking">
-       <item>
-        <widget class="QGroupBox" name="stackingGroup">
-         <property name="title">
-          <string>Image Stacking</string>
-         </property>
-         <layout class="QFormLayout" name="formLayout_stacking">
-          <item row="0" column="0">
-           <widget class="QLabel" name="stackEnabledLabel">
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Enable</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QCheckBox" name="stackEnabledCheck">
-            <property name="toolTip">
-             <string>Average multiple frames together to reduce random noise. Best for static scenes.</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="stackFrameCountLabel">
-            <property name="text">
-             <string>Frames</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QSpinBox" name="stackFrameCountSpin">
-            <property name="toolTip">
-             <string>Number of frames to average together</string>
-            </property>
-            <property name="minimum">
-             <number>1</number>
-            </property>
-            <property name="maximum">
-             <number>256</number>
-            </property>
-            <property name="value">
-             <number>4</number>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="stackMethodLabel">
-            <property name="text">
-             <string>Method</string>
-            </property>
-           </widget>
-          </item>
-            <item row="2" column="1">
-             <widget class="QComboBox" name="stackMethodCombo">
-              <property name="toolTip">
-               <string>Stacking method used to combine frames</string>
-              </property>
-             <item>
-              <property name="text">
-               <string>Average</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Median</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Sigma clipped average</string>
-              </property>
-              </item>
-             </widget>
-            </item>
-            <item row="3" column="0">
-             <widget class="QLabel" name="stackAlignmentLabel">
-              <property name="text">
-               <string>Alignment</string>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="1">
-             <widget class="QComboBox" name="stackAlignmentCombo">
-              <property name="toolTip">
-               <string>Optional frame alignment before stacking. Phase correlation handles translation; star centroid matching can also compensate small rotation/scale drift.</string>
-              </property>
-              <item>
-               <property name="text">
-                <string>None</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>Phase correlation</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>Star centroid matching</string>
-               </property>
-              </item>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacerStacking">
          <property name="orientation">
           <enum>Qt::Orientation::Vertical</enum>
          </property>
@@ -2560,21 +2560,21 @@ li.checked::marker { content: &quot;\2612&quot;; }
             <property name="toolTip">
              <string>Select whether raw, post-processed, or both image/video outputs should be saved</string>
             </property>
-           <item>
-            <property name="text">
-             <string>Raw images</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>Post-processed images</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>Both</string>
-            </property>
-           </item>
+            <item>
+             <property name="text">
+              <string>Raw images</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Post-processed images</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Both</string>
+             </property>
+            </item>
            </widget>
           </item>
           <item row="3" column="0">
@@ -3567,12 +3567,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
   <tabstop>cameraStartXSpin</tabstop>
   <tabstop>cameraStartYSpin</tabstop>
   <tabstop>alpacaReadoutModeCombo</tabstop>
-   <tabstop>asiCoolerOnCheck</tabstop>
-   <tabstop>asiTargetTempSpin</tabstop>
-   <tabstop>asiUsbBandwidthSpin</tabstop>
-   <tabstop>asiHighSpeedModeCheck</tabstop>
-   <tabstop>asiColorImageTypeCombo</tabstop>
-   <tabstop>alpacaFocusPositionSpin</tabstop>
+  <tabstop>asiCoolerOnCheck</tabstop>
+  <tabstop>asiTargetTempSpin</tabstop>
+  <tabstop>asiUsbBandwidthSpin</tabstop>
+  <tabstop>asiHighSpeedModeCheck</tabstop>
+  <tabstop>asiColorImageTypeCombo</tabstop>
+  <tabstop>alpacaFocusPositionSpin</tabstop>
   <tabstop>alpacaFocusStepSizeSpin</tabstop>
   <tabstop>alpacaFilterWheelPositionCombo</tabstop>
   <tabstop>clearChart</tabstop>

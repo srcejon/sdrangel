@@ -908,6 +908,7 @@ void CameraGUI::displaySettings()
     settingsUI()->altitudeSpin->setValue(m_settings.m_altitude);
     settingsUI()->azimuthSpin->setValue(m_settings.m_azimuth);
     settingsUI()->elevationSpin->setValue(m_settings.m_elevation);
+    settingsUI()->rollSpin->setValue(m_settings.m_roll);
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
     settingsUI()->lensProjectionCombo->setCurrentIndex(static_cast<int>(m_settings.m_lensProjection));
     populateGs232ControllerCombo();
@@ -1257,6 +1258,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->useMyPositionButton, &QToolButton::clicked, this, &CameraGUI::on_useMyPositionButton_clicked);
     QObject::connect(settingsUI()->azimuthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthSpin_valueChanged);
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
+    QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
     QObject::connect(settingsUI()->azElGs232ControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_azElGs232ControllerCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
     QObject::connect(settingsUI()->lensProjectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_lensProjectionCombo_currentIndexChanged);
@@ -3841,6 +3843,12 @@ void CameraGUI::on_elevationSpin_valueChanged(double value)
 {
     m_settings.m_elevation = static_cast<float>(value);
     applySetting("elevation");
+}
+
+void CameraGUI::on_rollSpin_valueChanged(double value)
+{
+    m_settings.m_roll = static_cast<float>(value);
+    applySetting("roll");
 }
 
 void CameraGUI::on_azElGs232ControllerCombo_currentIndexChanged(int index)

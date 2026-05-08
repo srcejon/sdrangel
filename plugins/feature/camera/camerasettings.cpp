@@ -187,6 +187,7 @@ void CameraSettings::resetToDefaults()
     m_positionSync = false;
     m_azimuth = 0.0f;
     m_elevation = 0.0f;
+    m_roll = 0.0f;
     m_rotator.clear();
     m_fov = 60.0f;
     m_lensProjection = LensProjectionRectilinear;
@@ -308,6 +309,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(140, m_positionSync);
     s.writeFloat(141, m_azimuth);
     s.writeFloat(142, m_elevation);
+    s.writeFloat(150, m_roll);
     s.writeString(143, m_rotator);
     s.writeFloat(144, m_fov);
     s.writeS32(149, m_lensProjection);
@@ -511,6 +513,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(140, &m_positionSync, false);
         d.readFloat(141, &m_azimuth, 0.0f);
         d.readFloat(142, &m_elevation, 0.0f);
+        d.readFloat(150, &m_roll, 0.0f);
         d.readString(143, &m_rotator, "");
         d.readFloat(144, &m_fov, 60.0f);
         d.readS32(149, (int *) &m_lensProjection, LensProjectionRectilinear);
@@ -715,6 +718,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
             m_azimuth += 360.0f;
         }
         m_elevation = qBound(-90.0f, m_elevation, 90.0f);
+        m_roll = std::fmod(m_roll, 360.0f);
+        if (m_roll < 0.0f) {
+            m_roll += 360.0f;
+        }
         m_fov = qBound(0.01f, m_fov, 360.0f);
         m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) m_lensProjection, (int) LensProjectionEquisolid);
 
@@ -931,6 +938,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("elevation")) {
         m_elevation = qBound(-90.0f, settings.m_elevation, 90.0f);
+    }
+    if (settingsKeys.contains("roll")) {
+        m_roll = std::fmod(settings.m_roll, 360.0f);
+        if (m_roll < 0.0f) {
+            m_roll += 360.0f;
+        }
     }
     if (settingsKeys.contains("rotator")) {
         m_rotator = settings.m_rotator;
@@ -1351,6 +1364,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("elevation") || force) {
         ostr << " m_elevation: " << m_elevation;
+    }
+    if (settingsKeys.contains("roll") || force) {
+        ostr << " m_roll: " << m_roll;
     }
     if (settingsKeys.contains("rotator") || force) {
         ostr << " m_rotator: " << m_rotator.toStdString();

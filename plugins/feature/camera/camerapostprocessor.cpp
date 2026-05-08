@@ -161,6 +161,20 @@ static SkyVector normalize(const SkyVector& vector)
     };
 }
 
+static SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians)
+{
+    const double cosAngle = std::cos(angleRadians);
+    const double sinAngle = std::sin(angleRadians);
+    const SkyVector axisCrossVector = cross(axis, vector);
+    const double axisDotVector = dot(axis, vector);
+
+    return {
+        vector.x * cosAngle + axisCrossVector.x * sinAngle + axis.x * axisDotVector * (1.0 - cosAngle),
+        vector.y * cosAngle + axisCrossVector.y * sinAngle + axis.y * axisDotVector * (1.0 - cosAngle),
+        vector.z * cosAngle + axisCrossVector.z * sinAngle + axis.z * axisDotVector * (1.0 - cosAngle)
+    };
+}
+
 static bool equatorialToAltAz(double rightAscensionDegrees,
                               double declinationDegrees,
                               double latitudeDegrees,
@@ -228,6 +242,13 @@ struct SkyProjector
         projector.up = normalize(cross(projector.right, projector.center));
         if (length(projector.right) <= 0.0 || length(projector.up) <= 0.0) {
             return projector;
+        }
+
+        const double rollRadians = degToRad(settings.m_roll);
+        if (std::fabs(rollRadians) > 1e-9)
+        {
+            projector.right = normalize(rotateAroundAxis(projector.right, projector.center, rollRadians));
+            projector.up = normalize(rotateAroundAxis(projector.up, projector.center, rollRadians));
         }
 
         const double halfHorizontalFov = degToRad(settings.m_fov) * 0.5;
@@ -395,7 +416,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayFontFamily", "overlayFontScale",
         "motionBoxColor",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
-        "latitude", "longitude", "altitude", "azimuth", "elevation", "fov", "lensProjection",
+        "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov", "lensProjection",
         "yoloBoxColor"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),

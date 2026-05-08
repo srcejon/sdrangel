@@ -156,6 +156,7 @@ struct CameraSettings
     bool m_positionSync;           ///< Continually sync camera location from Main Settings
     float m_azimuth;               ///< Camera pointing azimuth in degrees
     float m_elevation;             ///< Camera pointing elevation in degrees
+    float m_roll;                  ///< Camera roll about optical axis in degrees
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
     float m_fov;                   ///< Camera field of view in degrees
     LensProjection m_lensProjection; ///< Lens projection model used for sky overlays

@@ -809,8 +809,17 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
             }
 
             QPointF labelPoint;
-            const double labelAltitude = std::clamp(static_cast<double>(m_settings.m_elevation), 0.0, 80.0);
-            if (projector.projectAltAz(static_cast<double>(azimuth), labelAltitude, labelPoint)) {
+            bool foundLabelPoint = false;
+            for (double altitude = -10.0; altitude <= 90.0 + 1e-6; altitude += 2.0)
+            {
+                if (projector.projectAltAz(static_cast<double>(azimuth), altitude, labelPoint))
+                {
+                    foundLabelPoint = true;
+                    break;
+                }
+            }
+
+            if (foundLabelPoint) {
                 drawLabel(labelPoint, formatAzimuthDegrees(static_cast<double>(azimuth)), m_settings.m_altAzGridColor);
             }
         }

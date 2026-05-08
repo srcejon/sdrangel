@@ -62,6 +62,13 @@ struct CameraSettings
         AsiColorImageTypeRaw16
     };
 
+    enum SavedMediaMode
+    {
+        SavedMediaRaw = 0,
+        SavedMediaProcessed,
+        SavedMediaBoth
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -142,6 +149,7 @@ struct CameraSettings
     double m_postProcessWhiteBalanceRedGain;   ///< Manual red gain: 0.1..8.0
     double m_postProcessWhiteBalanceGreenGain; ///< Manual green gain: 0.1..8.0
     double m_postProcessWhiteBalanceBlueGain;  ///< Manual blue gain: 0.1..8.0
+    bool m_postProcessGreyscale; ///< Convert the post-processed image to greyscale after white balance
     double m_saturation;      ///< Saturation multiplier: 0.0..3.0
     double m_gamma;           ///< Gamma correction exponent: 0.1..3.0
     int m_gaussianBlur;       ///< Gaussian blur strength: 0..15 (0 = off)
@@ -186,7 +194,7 @@ struct CameraSettings
     int    m_motionPersistenceFrames; ///< Keep last motion boxes for this many frames after motion disappears: 0..120
     QColor m_motionBoxColor;    ///< Bounding box colour for motion contours
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
-    bool   m_videoPostProcess;  ///< When true, write post-processed frames to video; when false, write raw frames
+    SavedMediaMode m_videoPostProcess;  ///< Save raw frames, post-processed frames, or both
 
     // Spectrum overlay settings
     bool   m_overlaySpectrum;   ///< Enable overlaying the spectrum view image on the post-processed frame

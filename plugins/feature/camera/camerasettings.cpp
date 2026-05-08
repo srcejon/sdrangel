@@ -183,6 +183,7 @@ void CameraSettings::resetToDefaults()
     m_postProcessWhiteBalanceRedGain = 1.0;
     m_postProcessWhiteBalanceGreenGain = 1.0;
     m_postProcessWhiteBalanceBlueGain = 1.0;
+    m_postProcessGreyscale = false;
     m_saturation = 1.0;
     m_gamma = 1.0;
     m_gaussianBlur = 0;
@@ -227,7 +228,7 @@ void CameraSettings::resetToDefaults()
     m_motionPersistenceFrames = 0;
     m_motionBoxColor = Qt::red;
     m_minContourArea = 100;
-    m_videoPostProcess = false;
+    m_videoPostProcess = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
     m_spectrumOffsetX = 0;
@@ -301,6 +302,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(32, m_postProcessWhiteBalanceRedGain);
     s.writeDouble(33, m_postProcessWhiteBalanceGreenGain);
     s.writeDouble(34, m_postProcessWhiteBalanceBlueGain);
+    s.writeBool(127, m_postProcessGreyscale);
     s.writeDouble(35, m_saturation);
     s.writeDouble(36, m_gamma);
     s.writeS32(37, m_gaussianBlur);
@@ -334,7 +336,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(65, m_motionPersistenceFrames);
     s.writeU32(66, m_motionBoxColor.rgba());
     s.writeS32(67, m_minContourArea);
-    s.writeBool(68, m_videoPostProcess);
+    s.writeBool(68, m_videoPostProcess != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
     s.writeS32(71, m_spectrumOffsetX);
@@ -394,6 +396,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(124, m_asiHighSpeedMode);
     s.writeS32(125, m_asiColorImageType);
     s.writeS32(126, m_diffMaskOpenSize);
+    s.writeS32(128, m_videoPostProcess);
 
     return s.final();
 }
@@ -495,6 +498,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(32, &m_postProcessWhiteBalanceRedGain, 1.0);
         d.readDouble(33, &m_postProcessWhiteBalanceGreenGain, 1.0);
         d.readDouble(34, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        d.readBool(127, &m_postProcessGreyscale, false);
         d.readDouble(35, &m_saturation, 1.0);
         d.readDouble(36, &m_gamma, 1.0);
         d.readS32(37, &m_gaussianBlur, 0);
@@ -563,7 +567,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_motionCloseSize = qBound(0, m_motionCloseSize, 20);
         m_motionPersistenceFrames = qBound(0, m_motionPersistenceFrames, 120);
         m_minContourArea = qBound(0, m_minContourArea, 10000);
-        d.readBool(68, &m_videoPostProcess, false);
+        bool legacyVideoPostProcess = false;
+        d.readBool(68, &legacyVideoPostProcess, false);
+        qint32 videoPostProcessMode = legacyVideoPostProcess ? static_cast<qint32>(SavedMediaProcessed)
+                                                             : static_cast<qint32>(SavedMediaRaw);
+        d.readS32(128, &videoPostProcessMode, videoPostProcessMode);
+        m_videoPostProcess = qBound(SavedMediaRaw, static_cast<SavedMediaMode>(videoPostProcessMode), SavedMediaBoth);
         d.readBool(69, &m_overlaySpectrum, false);
         d.readString(70, &m_spectrumDevice, "");
         d.readS32(71, &m_spectrumOffsetX, 0);
@@ -848,6 +857,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain")) {
         m_postProcessWhiteBalanceBlueGain = qBound(0.1, settings.m_postProcessWhiteBalanceBlueGain, 8.0);
     }
+    if (settingsKeys.contains("postProcessGreyscale")) {
+        m_postProcessGreyscale = settings.m_postProcessGreyscale;
+    }
     if (settingsKeys.contains("saturation")) {
         m_saturation = qBound(0.0, settings.m_saturation, 3.0);
     }
@@ -948,7 +960,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_minContourArea = qBound(0, settings.m_minContourArea, 10000);
     }
     if (settingsKeys.contains("videoPostProcess")) {
-        m_videoPostProcess = settings.m_videoPostProcess;
+        m_videoPostProcess = qBound(SavedMediaRaw, settings.m_videoPostProcess, SavedMediaBoth);
     }
     if (settingsKeys.contains("overlaySpectrum")) {
         m_overlaySpectrum = settings.m_overlaySpectrum;
@@ -1213,6 +1225,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain") || force) {
         ostr << " m_postProcessWhiteBalanceBlueGain: " << m_postProcessWhiteBalanceBlueGain;
+    }
+    if (settingsKeys.contains("postProcessGreyscale") || force) {
+        ostr << " m_postProcessGreyscale: " << m_postProcessGreyscale;
     }
     if (settingsKeys.contains("saturation") || force) {
         ostr << " m_saturation: " << m_saturation;

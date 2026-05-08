@@ -203,7 +203,8 @@ private:
     bool m_captureActive;
     CameraPipelineFrame m_lastFrame;
     QDateTime m_captureDateTime;
-    cv::VideoWriter m_videoWriter;
+    cv::VideoWriter m_rawVideoWriter;
+    cv::VideoWriter m_processedVideoWriter;
     QImage m_spectrumViewImage;
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
@@ -222,6 +223,12 @@ private:
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     void setVideoRecordingEnabled(bool enabled);
     void reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData);
+    [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant);
+    [[nodiscard]] bool shouldSaveRawMedia() const;
+    [[nodiscard]] bool shouldSaveProcessedMedia() const;
+    void closeVideoWriters();
+    bool ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant);
+    void writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite);
 private slots:
     void handleInputMessages();
     void processNextFrame();

@@ -903,6 +903,7 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceRedGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceRedGainSpin, m_settings.m_postProcessWhiteBalanceRedGain));
     settingsUI()->postProcessWhiteBalanceGreenGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceGreenGainSpin, m_settings.m_postProcessWhiteBalanceGreenGain));
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, m_settings.m_postProcessWhiteBalanceBlueGain));
+    settingsUI()->postProcessGreyscaleCheck->setChecked(m_settings.m_postProcessGreyscale);
     settingsUI()->saturationSlider->setValue(static_cast<int>(m_settings.m_saturation * 100.0));
     settingsUI()->saturationSpin->setValue(m_settings.m_saturation);
     settingsUI()->gammaSlider->setValue(static_cast<int>(m_settings.m_gamma * 100.0));
@@ -1227,6 +1228,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->postProcessWhiteBalanceGreenGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
+    QObject::connect(settingsUI()->postProcessGreyscaleCheck, &QCheckBox::toggled, this, &CameraGUI::on_postProcessGreyscaleCheck_toggled);
     QObject::connect(settingsUI()->saturationSlider, &QSlider::valueChanged, this, &CameraGUI::on_saturationSlider_valueChanged);
     QObject::connect(settingsUI()->saturationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_saturationSpin_valueChanged);
     QObject::connect(settingsUI()->gammaSlider, &QSlider::valueChanged, this, &CameraGUI::on_gammaSlider_valueChanged);
@@ -3538,7 +3540,9 @@ void CameraGUI::on_videoHwAccelerationCheck_toggled(bool checked)
 
 void CameraGUI::on_videoPostProcessCombo_currentIndexChanged(int index)
 {
-    m_settings.m_videoPostProcess = static_cast<bool>(index);
+    m_settings.m_videoPostProcess = qBound(CameraSettings::SavedMediaRaw,
+        static_cast<CameraSettings::SavedMediaMode>(index),
+        CameraSettings::SavedMediaBoth);
     applySetting("videoPostProcess");
 }
 
@@ -3639,6 +3643,12 @@ void CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceBlueGain = value;
     applySetting("postProcessWhiteBalanceBlueGain");
+}
+
+void CameraGUI::on_postProcessGreyscaleCheck_toggled(bool checked)
+{
+    m_settings.m_postProcessGreyscale = checked;
+    applySetting("postProcessGreyscale");
 }
 
 void CameraGUI::on_saturationSlider_valueChanged(int value)
@@ -3942,6 +3952,7 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(1);
+    settingsUI()->postProcessGreyscaleCheck->setChecked(false);
     settingsUI()->brightnessSpin->setValue(0);
     settingsUI()->contrastSpin->setValue(1.0);
     settingsUI()->saturationSpin->setValue(1.0);

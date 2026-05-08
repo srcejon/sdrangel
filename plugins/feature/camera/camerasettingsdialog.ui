@@ -1308,6 +1308,23 @@
             </property>
            </widget>
           </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="postProcessGreyscaleLabel">
+            <property name="text">
+             <string>Greyscale</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1" colspan="2">
+           <widget class="QCheckBox" name="postProcessGreyscaleCheck">
+            <property name="toolTip">
+             <string>Convert the image to greyscale after white balance</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
           <item row="0" column="0">
            <widget class="QLabel" name="postProcessWhiteBalanceModeLabel">
             <property name="minimumSize">
@@ -2541,18 +2558,23 @@ li.checked::marker { content: &quot;\2612&quot;; }
           <item row="2" column="1">
            <widget class="QComboBox" name="videoPostProcessCombo">
             <property name="toolTip">
-             <string>Select whether pre (raw) or post processed images should be recorded</string>
+             <string>Select whether raw, post-processed, or both image/video outputs should be saved</string>
             </property>
-            <item>
-             <property name="text">
-              <string>Raw images</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Post-processed images</string>
-             </property>
-            </item>
+           <item>
+            <property name="text">
+             <string>Raw images</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Post-processed images</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Both</string>
+            </property>
+           </item>
            </widget>
           </item>
           <item row="3" column="0">
@@ -3573,6 +3595,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
   <tabstop>postProcessWhiteBalanceGreenGainSpin</tabstop>
   <tabstop>postProcessWhiteBalanceBlueGainSlider</tabstop>
   <tabstop>postProcessWhiteBalanceBlueGainSpin</tabstop>
+  <tabstop>postProcessGreyscaleCheck</tabstop>
   <tabstop>brightnessSlider</tabstop>
   <tabstop>brightnessSpin</tabstop>
   <tabstop>contrastSlider</tabstop>

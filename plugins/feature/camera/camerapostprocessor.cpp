@@ -57,9 +57,7 @@ void CameraPostProcessor::stopWork()
 {
     QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraPostProcessor::handleInputMessages);
 
-    if (m_videoWriter.isOpened()) {
-        m_videoWriter.release();
-    }
+    closeVideoWriters();
 }
 
 void CameraPostProcessor::handleInputMessages()
@@ -109,9 +107,9 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         {
             m_lastFrame = CameraPipelineFrame();
         }
-        else if (m_videoWriter.isOpened())
+        else
         {
-            m_videoWriter.release();
+            closeVideoWriters();
         }
 
         QMutexLocker locker(&m_frameMutex);
@@ -176,11 +174,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_spectrumViewImage = QImage();
     }
 
-    if (settingsKeys.contains("saveVideo") || settingsKeys.contains("videoFileName") || settingsKeys.contains("videoHwAcceleration"))
+    if (settingsKeys.contains("saveVideo") || settingsKeys.contains("videoFileName")
+        || settingsKeys.contains("videoHwAcceleration") || settingsKeys.contains("videoPostProcess"))
     {
-        if (m_videoWriter.isOpened()) {
-            m_videoWriter.release();
-        }
+        closeVideoWriters();
     }
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
@@ -264,48 +261,29 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     if (m_captureActive && m_settings.m_saveImage && !m_settings.m_imageFileName.isEmpty())
     {
-        QFileInfo fileInfo(m_settings.m_imageFileName);
-        QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
-        qDebug() << "CameraPostProcessor: Saving image to" << filename;
-        const QImage& frameToSave = m_settings.m_videoPostProcess ? processed : unprocessedImage;
-        frameToSave.save(filename);
+        if (shouldSaveRawMedia())
+        {
+            const QString rawFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, true);
+            qDebug() << "CameraPostProcessor: Saving raw image to" << rawFilename;
+            unprocessedImage.save(rawFilename);
+        }
+
+        if (shouldSaveProcessedMedia())
+        {
+            const QString processedFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, false);
+            qDebug() << "CameraPostProcessor: Saving processed image to" << processedFilename;
+            processed.save(processedFilename);
+        }
     }
 
     if (m_captureActive && m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
     {
-        if (!m_videoWriter.isOpened())
-        {
-            QFileInfo fileInfo(m_settings.m_videoFileName);
-            QString filename = fileInfo.path() + "/" + fileInfo.baseName() + "." + QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz") + "." + fileInfo.suffix();
-
-            const QImage& frameForSize = m_settings.m_videoPostProcess ? processed : unprocessedImage;
-            const int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1');
-            const std::vector<int> params = {
-                cv::VIDEOWRITER_PROP_HW_ACCELERATION,
-                m_settings.m_videoHwAcceleration ? cv::VIDEO_ACCELERATION_ANY : cv::VIDEO_ACCELERATION_NONE
-            };
-            m_videoWriter.open(
-                filename.toStdString(),
-                fourcc,
-                m_settings.getCaptureFrameRate(),
-                cv::Size(frameForSize.width(), frameForSize.height()),
-                params);
-            if (m_videoWriter.isOpened()) {
-                qDebug() << "CameraPostProcessor opened:" << filename << "backend:" << m_videoWriter.getBackendName();
-            } else {
-                qWarning() << "CameraPostProcessor failed to open:" << filename;
-            }
+        if (shouldSaveRawMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, unprocessedImage, true)) {
+            writeVideoFrame(m_rawVideoWriter, unprocessedImage);
         }
 
-        if (m_videoWriter.isOpened())
-        {
-            const QImage& frameToWrite = m_settings.m_videoPostProcess ? processed : unprocessedImage;
-            QImage convertedRgb;
-            const QImage& rgb = ensureRgb888(frameToWrite, convertedRgb);
-            cv::Mat mat = wrapRgb888Image(rgb);
-            cv::Mat bgrMat;
-            cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-            m_videoWriter.write(bgrMat);
+        if (shouldSaveProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processed, false)) {
+            writeVideoFrame(m_processedVideoWriter, processed);
         }
     }
 }
@@ -536,11 +514,80 @@ void CameraPostProcessor::setVideoRecordingEnabled(bool enabled)
 
     m_settings.m_saveVideo = enabled;
 
-    if (!enabled && m_videoWriter.isOpened()) {
-        m_videoWriter.release();
+    if (!enabled) {
+        closeVideoWriters();
     }
 
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportSaveVideoState::create(enabled));
     }
+}
+
+QString CameraPostProcessor::createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant)
+{
+    const QFileInfo fileInfo(baseFileName);
+    const QString timestamp = QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz");
+    const QString infix = rawVariant ? "._raw_" : ".";
+    return fileInfo.path() + "/" + fileInfo.baseName() + infix + timestamp + "." + fileInfo.suffix();
+}
+
+bool CameraPostProcessor::shouldSaveRawMedia() const
+{
+    return (m_settings.m_videoPostProcess == CameraSettings::SavedMediaRaw)
+        || (m_settings.m_videoPostProcess == CameraSettings::SavedMediaBoth);
+}
+
+bool CameraPostProcessor::shouldSaveProcessedMedia() const
+{
+    return (m_settings.m_videoPostProcess == CameraSettings::SavedMediaProcessed)
+        || (m_settings.m_videoPostProcess == CameraSettings::SavedMediaBoth);
+}
+
+void CameraPostProcessor::closeVideoWriters()
+{
+    if (m_rawVideoWriter.isOpened()) {
+        m_rawVideoWriter.release();
+    }
+    if (m_processedVideoWriter.isOpened()) {
+        m_processedVideoWriter.release();
+    }
+}
+
+bool CameraPostProcessor::ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant)
+{
+    if (writer.isOpened()) {
+        return true;
+    }
+
+    const QString filename = createTimestampedOutputFilename(baseFileName, rawVariant);
+    const int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1');
+    const std::vector<int> params = {
+        cv::VIDEOWRITER_PROP_HW_ACCELERATION,
+        m_settings.m_videoHwAcceleration ? cv::VIDEO_ACCELERATION_ANY : cv::VIDEO_ACCELERATION_NONE
+    };
+
+    writer.open(
+        filename.toStdString(),
+        fourcc,
+        m_settings.getCaptureFrameRate(),
+        cv::Size(frameForSize.width(), frameForSize.height()),
+        params);
+
+    if (writer.isOpened()) {
+        qDebug() << "CameraPostProcessor opened:" << filename << "backend:" << writer.getBackendName();
+    } else {
+        qWarning() << "CameraPostProcessor failed to open:" << filename;
+    }
+
+    return writer.isOpened();
+}
+
+void CameraPostProcessor::writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite)
+{
+    QImage convertedRgb;
+    const QImage& rgb = ensureRgb888(frameToWrite, convertedRgb);
+    cv::Mat mat = wrapRgb888Image(rgb);
+    cv::Mat bgrMat;
+    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+    writer.write(bgrMat);
 }

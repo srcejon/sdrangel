@@ -128,6 +128,7 @@ private:
     void processNewFrame(const CameraPipelineFramePtr& frame);
     [[nodiscard]] QImage applyImageProcessing(const QImage& input);
     void applyWhiteBalance(cv::Mat& bgrMat);
+    void applyGreyscale(cv::Mat& bgrMat) const;
     void applySaturation(cv::Mat& bgrMat);
     void applyGamma(cv::Mat& bgrMat) const;
     void applyGaussianBlur(cv::Mat& bgrMat) const;

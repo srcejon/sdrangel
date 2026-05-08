@@ -106,6 +106,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "postProcessWhiteBalanceRedGain",
         "postProcessWhiteBalanceGreenGain",
         "postProcessWhiteBalanceBlueGain",
+        "postProcessGreyscale",
         "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "sobelEdge", "flipX", "flipY",
         "brightness", "contrast", "invertColors"
     };
@@ -145,7 +146,8 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         || settingsKeys.contains("postProcessWhiteBalanceMode")
         || settingsKeys.contains("postProcessWhiteBalanceRedGain")
         || settingsKeys.contains("postProcessWhiteBalanceGreenGain")
-        || settingsKeys.contains("postProcessWhiteBalanceBlueGain"))
+        || settingsKeys.contains("postProcessWhiteBalanceBlueGain")
+        || settingsKeys.contains("postProcessGreyscale"))
     {
         m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
         m_autoWhiteBalanceInitialized = false;
@@ -277,7 +279,8 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     PROFILER_START();
 
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
-    const bool needsSaturation = std::abs(m_settings.m_saturation - 1.0) > 1e-4;
+    const bool needsGreyscale = m_settings.m_postProcessGreyscale;
+    const bool needsSaturation = !needsGreyscale && (std::abs(m_settings.m_saturation - 1.0) > 1e-4);
     const bool needsGamma = std::abs(m_settings.m_gamma - 1.0) > 1e-4;
     const bool needsGaussianBlur = m_settings.m_gaussianBlur > 0;
     const bool needsMedianBlur = m_settings.m_medianBlur > 0;
@@ -294,6 +297,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
         || needsSobelEdge
         || needsFlip
         || needsBrightContrast
+        || needsGreyscale
         || m_settings.m_invertColors;
 
     if (!needsAny) {
@@ -307,6 +311,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 
     if (needsWhiteBalance) { applyWhiteBalance(bgrMat); }
+    if (needsGreyscale) { applyGreyscale(bgrMat); }
     if (needsSaturation) { applySaturation(bgrMat); }
     if (needsGamma) { applyGamma(bgrMat); }
     if (needsGaussianBlur) { applyGaussianBlur(bgrMat); }
@@ -365,6 +370,15 @@ void CameraImageProcessor::applyWhiteBalance(cv::Mat& bgrMat)
     channels[1].convertTo(channels[1], -1, gains[1], 0.0);
     channels[2].convertTo(channels[2], -1, gains[2], 0.0);
     cv::merge(channels, bgrMat);
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyGreyscale(cv::Mat& bgrMat) const
+{
+    PROFILER_START();
+    cv::Mat grayMat;
+    cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(grayMat, bgrMat, cv::COLOR_GRAY2BGR);
     PROFILER_STOP(__FUNCTION__);
 }
 

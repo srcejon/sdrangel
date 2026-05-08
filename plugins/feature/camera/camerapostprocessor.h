@@ -110,20 +110,23 @@ public:
     public:
         const QImage& getImage() const { return m_image; }
         const CameraHistogramData& getHistogramData() const { return m_histogramData; }
+        int getStackCount() const { return m_stackCount; }
 
-        static MsgReportFrame* create(const QImage& image, const CameraHistogramData& histogramData)
+        static MsgReportFrame* create(const QImage& image, const CameraHistogramData& histogramData, int stackCount)
         {
-            return new MsgReportFrame(image, histogramData);
+            return new MsgReportFrame(image, histogramData, stackCount);
         }
 
     private:
         QImage m_image;
         CameraHistogramData m_histogramData;
+        int m_stackCount;
 
-        MsgReportFrame(const QImage& image, const CameraHistogramData& histogramData) :
+        MsgReportFrame(const QImage& image, const CameraHistogramData& histogramData, int stackCount) :
             Message(),
             m_image(image),
-            m_histogramData(histogramData)
+            m_histogramData(histogramData),
+            m_stackCount(stackCount)
         { }
     };
 
@@ -223,7 +226,7 @@ private:
     void applyDateTimeOverlay(QImage& image) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     void setVideoRecordingEnabled(bool enabled);
-    void reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData);
+    void reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData, int stackCount);
     [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant);
     [[nodiscard]] bool shouldSaveRawMedia() const;
     [[nodiscard]] bool shouldSaveProcessedMedia() const;

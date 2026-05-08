@@ -485,6 +485,7 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     frame->m_image = applyFrameStacking(frame->m_image, frame->m_bayerPattern);
     frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
     frame->m_unprocessedImage = frame->m_image;
+    frame->m_stackCount = std::max(1, static_cast<int>(m_stackFrameHistory.size()));
 
     if (m_nextStage) {
         m_nextStage->submitFrame(frame);

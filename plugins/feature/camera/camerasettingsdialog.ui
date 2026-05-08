@@ -1264,11 +1264,11 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
-           <widget class="QSpinBox" name="stackFrameCountSpin">
-            <property name="toolTip">
-             <string>Number of frames to average together</string>
-            </property>
+            <item row="1" column="1">
+             <widget class="QSpinBox" name="stackFrameCountSpin">
+              <property name="toolTip">
+               <string>Number of frames to average together</string>
+              </property>
             <property name="minimum">
              <number>1</number>
             </property>
@@ -1277,18 +1277,32 @@
             </property>
             <property name="value">
              <number>4</number>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="stackMethodLabel">
-            <property name="text">
-             <string>Method</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="stackMethodCombo">
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="stackCurrentCountLabel">
+              <property name="text">
+               <string>Currently stacked</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QLabel" name="stackCurrentCountValue">
+              <property name="text">
+               <string>1</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="stackMethodLabel">
+              <property name="text">
+               <string>Method</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QComboBox" name="stackMethodCombo">
             <property name="toolTip">
              <string>Stacking method used to combine frames</string>
             </property>
@@ -1309,15 +1323,15 @@
             </item>
            </widget>
           </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="stackAlignmentLabel">
+            <item row="4" column="0">
+             <widget class="QLabel" name="stackAlignmentLabel">
             <property name="text">
              <string>Alignment</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
-           <widget class="QComboBox" name="stackAlignmentCombo">
+            <item row="4" column="1">
+             <widget class="QComboBox" name="stackAlignmentCombo">
             <property name="toolTip">
              <string>Optional frame alignment before stacking. Phase correlation handles translation; star centroid matching can also compensate small rotation/scale drift.</string>
             </property>

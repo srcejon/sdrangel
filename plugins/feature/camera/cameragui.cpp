@@ -338,6 +338,8 @@ bool CameraGUI::handleMessage(const Message& message)
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
         m_lastHistogramData = report.getHistogramData();
+        m_lastStackCount = report.getStackCount();
+        settingsUI()->stackCurrentCountValue->setText(QString::number(m_lastStackCount));
         updateImageWidget();
         if (m_histogramDialog) {
             m_histogramDialog->updateHistogram(m_lastHistogramData);
@@ -940,6 +942,7 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceRedGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceRedGainSpin, m_settings.m_postProcessWhiteBalanceRedGain));
     settingsUI()->postProcessWhiteBalanceGreenGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceGreenGainSpin, m_settings.m_postProcessWhiteBalanceGreenGain));
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, m_settings.m_postProcessWhiteBalanceBlueGain));
+    settingsUI()->stackCurrentCountValue->setText(QString::number(m_lastStackCount));
     settingsUI()->postProcessUnwarpCheck->setChecked(m_settings.m_postProcessUnwarp);
     settingsUI()->postProcessGreyscaleCheck->setChecked(m_settings.m_postProcessGreyscale);
     settingsUI()->saturationSlider->setValue(static_cast<int>(m_settings.m_saturation * 100.0));

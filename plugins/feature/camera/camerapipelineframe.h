@@ -62,6 +62,7 @@ struct CameraPipelineFrame
     QDateTime m_captureDateTime;
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
+    int m_stackCount = 1;
     BayerPattern m_bayerPattern = BayerNone;
 };
 

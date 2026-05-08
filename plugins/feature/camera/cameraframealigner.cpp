@@ -141,6 +141,9 @@ void CameraFrameAligner::submitFrame(const CameraPipelineFramePtr& frame)
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
+        if (m_pendingFrame) {
+            qDebug() << "CameraFrameAligner: Dropping pending frame in favor of new frame";
+        }
         m_pendingFrame = frame;
         if (!m_processingFrame)
         {

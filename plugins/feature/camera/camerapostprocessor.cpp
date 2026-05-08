@@ -198,6 +198,9 @@ void CameraPostProcessor::submitFrame(const CameraPipelineFramePtr& frame)
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
+        if (m_pendingFrame) {
+            qDebug() << "CameraPostProcessor: Dropping pending frame in favor of new frame";
+        }
         m_pendingFrame = frame;
         if (!m_processingFrame)
         {

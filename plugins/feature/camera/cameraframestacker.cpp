@@ -21,9 +21,11 @@
 #include <cstring>
 
 #include <QDebug>
+#include <QFileInfo>
 #include <QTimer>
 
 #include "util/profiler.h"
+#include "util/fits.h"
 #include "cameraframestacker.h"
 #include "cameraimageprocessor.h"
 
@@ -54,6 +56,121 @@ void CameraFrameStacker::resetFrameHistoryState()
 {
     m_stackFrameHistory.clear();
     m_stackAccumulator.release();
+}
+
+void CameraFrameStacker::reloadCalibrationFrames()
+{
+    m_darkCalibrationFrame.release();
+    m_flatCalibrationFrame.release();
+    m_biasCalibrationFrame.release();
+
+    if (!m_settings.m_stackDarkFileName.isEmpty()) {
+        m_darkCalibrationFrame = loadFitsCalibrationFrame(m_settings.m_stackDarkFileName, QStringLiteral("dark"), false);
+    }
+
+    if (!m_settings.m_stackFlatFileName.isEmpty()) {
+        m_flatCalibrationFrame = loadFitsCalibrationFrame(m_settings.m_stackFlatFileName, QStringLiteral("flat"), true);
+    }
+
+    if (!m_settings.m_stackBiasFileName.isEmpty()) {
+        m_biasCalibrationFrame = loadFitsCalibrationFrame(m_settings.m_stackBiasFileName, QStringLiteral("bias"), false);
+    }
+}
+
+cv::Mat CameraFrameStacker::loadFitsCalibrationFrame(const QString& fileName, const QString& calibrationType, bool normalizeFlat) const
+{
+    FITS fits(fileName);
+
+    if (!fits.valid())
+    {
+        qWarning() << "CameraFrameStacker: Failed to load" << calibrationType << "calibration FITS:" << fileName;
+        return cv::Mat();
+    }
+
+    cv::Mat monoFrame(fits.height(), fits.width(), CV_32FC1);
+    for (int y = 0; y < fits.height(); ++y)
+    {
+        float *outputLine = monoFrame.ptr<float>(y);
+        for (int x = 0; x < fits.width(); ++x) {
+            outputLine[x] = fits.scaledValue(x, y);
+        }
+    }
+
+    if (normalizeFlat)
+    {
+        const double meanValue = cv::mean(monoFrame)[0];
+        constexpr double epsilon = 1.0e-6;
+
+        if (std::abs(meanValue) < epsilon)
+        {
+            qWarning() << "CameraFrameStacker:" << calibrationType << "calibration FITS has near-zero mean and cannot be normalized:" << fileName;
+            return cv::Mat();
+        }
+
+        monoFrame /= static_cast<float>(meanValue);
+    }
+
+    std::vector<cv::Mat> channels(3, monoFrame);
+    cv::Mat calibrationFrame;
+    cv::merge(channels, calibrationFrame);
+    return calibrationFrame;
+}
+
+void CameraFrameStacker::validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName)
+{
+    if (calibrationFrame.empty()) {
+        return;
+    }
+
+    if (calibrationFrame.size() != expectedSize)
+    {
+        qWarning() << "CameraFrameStacker:" << calibrationType << "calibration FITS size"
+                   << calibrationFrame.cols << "x" << calibrationFrame.rows
+                   << "does not match frame size" << expectedSize.width << "x" << expectedSize.height
+                   << "- disabling calibration file:" << fileName;
+        calibrationFrame.release();
+    }
+}
+
+cv::Mat CameraFrameStacker::applyCalibration(const cv::Mat& input)
+{
+    if (input.empty()) {
+        return input;
+    }
+
+    validateCalibrationFrame(m_darkCalibrationFrame, input.size(), QStringLiteral("dark"), m_settings.m_stackDarkFileName);
+    validateCalibrationFrame(m_flatCalibrationFrame, input.size(), QStringLiteral("flat"), m_settings.m_stackFlatFileName);
+    validateCalibrationFrame(m_biasCalibrationFrame, input.size(), QStringLiteral("bias"), m_settings.m_stackBiasFileName);
+
+    if (m_darkCalibrationFrame.empty() && m_flatCalibrationFrame.empty() && m_biasCalibrationFrame.empty()) {
+        return input;
+    }
+
+    cv::Mat calibratedFloat;
+    input.convertTo(calibratedFloat, CV_32FC3);
+
+    if (!m_biasCalibrationFrame.empty()) {
+        calibratedFloat -= m_biasCalibrationFrame;
+    }
+
+    if (!m_darkCalibrationFrame.empty()) {
+        calibratedFloat -= m_darkCalibrationFrame;
+    }
+
+    if (!m_flatCalibrationFrame.empty())
+    {
+        cv::Mat safeFlatFrame;
+        cv::max(m_flatCalibrationFrame, cv::Scalar::all(1.0e-6), safeFlatFrame);
+        cv::divide(calibratedFloat, safeFlatFrame, calibratedFloat);
+    }
+
+    const double maxValue = input.depth() == CV_16U ? 65535.0 : 255.0;
+    cv::max(calibratedFloat, cv::Scalar::all(0.0), calibratedFloat);
+    cv::min(calibratedFloat, cv::Scalar::all(maxValue), calibratedFloat);
+
+    cv::Mat calibratedFrame;
+    calibratedFloat.convertTo(calibratedFrame, input.type());
+    return calibratedFrame;
 }
 
 bool CameraFrameStacker::handleMessage(const Message& cmd)
@@ -122,12 +239,23 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("stackEnabled")
         || settingsKeys.contains("stackFrameCount")
         || settingsKeys.contains("stackMethod")
-        || settingsKeys.contains("stackAlignmentMethod");
+        || settingsKeys.contains("stackAlignmentMethod")
+        || settingsKeys.contains("stackDarkFileName")
+        || settingsKeys.contains("stackFlatFileName")
+        || settingsKeys.contains("stackBiasFileName");
 
     if (force) {
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
+    }
+
+    if (force
+        || settingsKeys.contains("stackDarkFileName")
+        || settingsKeys.contains("stackFlatFileName")
+        || settingsKeys.contains("stackBiasFileName"))
+    {
+        reloadCalibrationFrames();
     }
 
     if (sourceChanged) {
@@ -211,6 +339,7 @@ QImage CameraFrameStacker::applyFrameStacking(const QImage& input)
 {
     PROFILER_START();
     const bool highBitDepthInput = (input.format() == QImage::Format_RGBA64) || (input.format() == QImage::Format_RGBX64);
+    const bool stackEnabled = m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1);
 
     auto convertToRgb888 = [](const QImage& source) -> QImage {
         if ((source.format() != QImage::Format_RGBA64) && (source.format() != QImage::Format_RGBX64)) {
@@ -234,7 +363,38 @@ QImage CameraFrameStacker::applyFrameStacking(const QImage& input)
         return rgb8;
     };
 
-    if (!m_settings.m_stackEnabled || (m_settings.m_stackFrameCount <= 1)) {
+    auto matToRgb888 = [](const cv::Mat& frameMat) -> QImage {
+        if (frameMat.type() == CV_8UC3)
+        {
+            QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
+            for (int row = 0; row < frameMat.rows; ++row) {
+                std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * 3));
+            }
+            return image;
+        }
+
+        QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
+        for (int y = 0; y < frameMat.rows; ++y)
+        {
+            const cv::Vec<uint16_t, 3> *inputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
+            uchar *outputLine = image.scanLine(y);
+
+            for (int x = 0; x < frameMat.cols; ++x)
+            {
+                outputLine[x * 3 + 0] = static_cast<uchar>(std::lround((inputLine[x][0] * 255.0) / 65535.0));
+                outputLine[x * 3 + 1] = static_cast<uchar>(std::lround((inputLine[x][1] * 255.0) / 65535.0));
+                outputLine[x * 3 + 2] = static_cast<uchar>(std::lround((inputLine[x][2] * 255.0) / 65535.0));
+            }
+        }
+
+        return image;
+    };
+
+    const bool calibrationEnabled = !m_darkCalibrationFrame.empty()
+        || !m_flatCalibrationFrame.empty()
+        || !m_biasCalibrationFrame.empty();
+
+    if (!stackEnabled && !calibrationEnabled) {
         return highBitDepthInput ? convertToRgb888(input) : input;
     }
 
@@ -262,6 +422,14 @@ QImage CameraFrameStacker::applyFrameStacking(const QImage& input)
                        const_cast<uchar*>(rgb.bits()),
                        static_cast<size_t>(rgb.bytesPerLine()));
         frameMat = rgbMat.clone();
+    }
+
+    frameMat = applyCalibration(frameMat);
+
+    if (!stackEnabled)
+    {
+        PROFILER_STOP(__FUNCTION__);
+        return matToRgb888(frameMat);
     }
 
     cv::Mat alignedFrameMat = frameMat;

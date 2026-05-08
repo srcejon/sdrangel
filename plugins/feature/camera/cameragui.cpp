@@ -893,6 +893,9 @@ void CameraGUI::displaySettings()
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
     settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
     settingsUI()->stackAlignmentCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackAlignmentMethod));
+    settingsUI()->stackDarkFileEdit->setText(m_settings.m_stackDarkFileName);
+    settingsUI()->stackFlatFileEdit->setText(m_settings.m_stackFlatFileName);
+    settingsUI()->stackBiasFileEdit->setText(m_settings.m_stackBiasFileName);
     settingsUI()->postProcessWhiteBalanceModeCombo->setCurrentIndex(m_settings.m_postProcessWhiteBalanceMode);
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(m_settings.m_postProcessWhiteBalanceRedGain);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
@@ -1221,6 +1224,12 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
     QObject::connect(settingsUI()->stackAlignmentCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackAlignmentCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->stackDarkFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackDarkFileEdit_editingFinished);
+    QObject::connect(settingsUI()->stackDarkFileButton, &QToolButton::clicked, this, &CameraGUI::on_stackDarkFileButton_clicked);
+    QObject::connect(settingsUI()->stackFlatFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackFlatFileEdit_editingFinished);
+    QObject::connect(settingsUI()->stackFlatFileButton, &QToolButton::clicked, this, &CameraGUI::on_stackFlatFileButton_clicked);
+    QObject::connect(settingsUI()->stackBiasFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackBiasFileEdit_editingFinished);
+    QObject::connect(settingsUI()->stackBiasFileButton, &QToolButton::clicked, this, &CameraGUI::on_stackBiasFileButton_clicked);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -3568,6 +3577,72 @@ void CameraGUI::on_stackAlignmentCombo_currentIndexChanged(int index)
 {
     m_settings.m_stackAlignmentMethod = static_cast<CameraSettings::StackAlignmentMethod>(index);
     applySetting("stackAlignmentMethod");
+}
+
+void CameraGUI::on_stackDarkFileEdit_editingFinished()
+{
+    m_settings.m_stackDarkFileName = settingsUI()->stackDarkFileEdit->text();
+    applySetting("stackDarkFileName");
+}
+
+void CameraGUI::on_stackDarkFileButton_clicked()
+{
+    const QString fileName = QFileDialog::getOpenFileName(
+        this,
+        tr("Select dark FITS"),
+        m_settings.m_stackDarkFileName,
+        tr("FITS files (*.fits *.fit *.fts);;All files (*)"));
+
+    if (!fileName.isEmpty())
+    {
+        m_settings.m_stackDarkFileName = fileName;
+        settingsUI()->stackDarkFileEdit->setText(fileName);
+        applySetting("stackDarkFileName");
+    }
+}
+
+void CameraGUI::on_stackFlatFileEdit_editingFinished()
+{
+    m_settings.m_stackFlatFileName = settingsUI()->stackFlatFileEdit->text();
+    applySetting("stackFlatFileName");
+}
+
+void CameraGUI::on_stackFlatFileButton_clicked()
+{
+    const QString fileName = QFileDialog::getOpenFileName(
+        this,
+        tr("Select flat FITS"),
+        m_settings.m_stackFlatFileName,
+        tr("FITS files (*.fits *.fit *.fts);;All files (*)"));
+
+    if (!fileName.isEmpty())
+    {
+        m_settings.m_stackFlatFileName = fileName;
+        settingsUI()->stackFlatFileEdit->setText(fileName);
+        applySetting("stackFlatFileName");
+    }
+}
+
+void CameraGUI::on_stackBiasFileEdit_editingFinished()
+{
+    m_settings.m_stackBiasFileName = settingsUI()->stackBiasFileEdit->text();
+    applySetting("stackBiasFileName");
+}
+
+void CameraGUI::on_stackBiasFileButton_clicked()
+{
+    const QString fileName = QFileDialog::getOpenFileName(
+        this,
+        tr("Select bias FITS"),
+        m_settings.m_stackBiasFileName,
+        tr("FITS files (*.fits *.fit *.fts);;All files (*)"));
+
+    if (!fileName.isEmpty())
+    {
+        m_settings.m_stackBiasFileName = fileName;
+        settingsUI()->stackBiasFileEdit->setText(fileName);
+        applySetting("stackBiasFileName");
+    }
 }
 
 void CameraGUI::updatePostProcessWhiteBalanceControls()

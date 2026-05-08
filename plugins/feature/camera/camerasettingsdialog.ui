@@ -1124,7 +1124,7 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_stacking">
        <item>
-        <widget class="QGroupBox" name="stackingGroup">
+       <widget class="QGroupBox" name="stackingGroup">
          <property name="title">
           <string>Image Stacking</string>
          </property>
@@ -1232,6 +1232,111 @@
              </property>
             </item>
            </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="stackCalibrationGroup">
+         <property name="title">
+          <string>Calibration</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout_stackCalibration">
+          <item row="0" column="0">
+           <widget class="QLabel" name="stackDarkFileLabel">
+            <property name="text">
+             <string>Dark FITS</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <layout class="QHBoxLayout" name="stackDarkFileLayout">
+            <item>
+             <widget class="QLineEdit" name="stackDarkFileEdit">
+              <property name="toolTip">
+               <string>Optional FITS master dark frame used for pre-stacking calibration</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="stackDarkFileButton">
+              <property name="toolTip">
+               <string>Browse for FITS master dark frame</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset resource="../../../sdrgui/resources/res.qrc">
+                <normaloff>:/load.png</normaloff>:/load.png</iconset>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="stackFlatFileLabel">
+            <property name="text">
+             <string>Flat FITS</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <layout class="QHBoxLayout" name="stackFlatFileLayout">
+            <item>
+             <widget class="QLineEdit" name="stackFlatFileEdit">
+              <property name="toolTip">
+               <string>Optional FITS master flat frame used for pre-stacking calibration</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="stackFlatFileButton">
+              <property name="toolTip">
+               <string>Browse for FITS master flat frame</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset resource="../../../sdrgui/resources/res.qrc">
+                <normaloff>:/load.png</normaloff>:/load.png</iconset>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="stackBiasFileLabel">
+            <property name="text">
+             <string>Bias FITS</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <layout class="QHBoxLayout" name="stackBiasFileLayout">
+            <item>
+             <widget class="QLineEdit" name="stackBiasFileEdit">
+              <property name="toolTip">
+               <string>Optional FITS master bias frame used for pre-stacking calibration</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="stackBiasFileButton">
+              <property name="toolTip">
+               <string>Browse for FITS master bias frame</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset resource="../../../sdrgui/resources/res.qrc">
+                <normaloff>:/load.png</normaloff>:/load.png</iconset>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>

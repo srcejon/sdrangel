@@ -140,6 +140,9 @@ struct CameraSettings
     int m_stackFrameCount;
     StackMethod m_stackMethod;
     StackAlignmentMethod m_stackAlignmentMethod;
+    QString m_stackDarkFileName;
+    QString m_stackFlatFileName;
+    QString m_stackBiasFileName;
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

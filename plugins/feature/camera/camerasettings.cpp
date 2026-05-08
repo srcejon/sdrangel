@@ -177,6 +177,9 @@ void CameraSettings::resetToDefaults()
     m_stackFrameCount = 4;
     m_stackMethod = StackMethodAverage;
     m_stackAlignmentMethod = StackAlignmentNone;
+    m_stackDarkFileName.clear();
+    m_stackFlatFileName.clear();
+    m_stackBiasFileName.clear();
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -282,6 +285,9 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(131, m_stackFrameCount);
     s.writeS32(132, m_stackMethod);
     s.writeS32(133, m_stackAlignmentMethod);
+    s.writeString(134, m_stackDarkFileName);
+    s.writeString(135, m_stackFlatFileName);
+    s.writeString(136, m_stackBiasFileName);
 
     if (m_rollupState) {
         s.writeBlob(19, m_rollupState->serialize());
@@ -468,7 +474,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(130, &m_stackEnabled, false);
         d.readS32(131, &m_stackFrameCount, 4);
         d.readS32(132, (qint32 *) &m_stackMethod, (qint32) StackMethodAverage);
-        d.readS32(132, (qint32 *) &m_stackAlignmentMethod, (qint32) StackAlignmentNone);
+        d.readS32(133, (qint32 *) &m_stackAlignmentMethod, (qint32) StackAlignmentNone);
+        d.readString(134, &m_stackDarkFileName, "");
+        d.readString(135, &m_stackFlatFileName, "");
+        d.readString(136, &m_stackBiasFileName, "");
 
         if (m_rollupState)
         {
@@ -838,6 +847,15 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("stackAlignmentMethod")) {
         m_stackAlignmentMethod = qBound(StackAlignmentNone, settings.m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
+    }
+    if (settingsKeys.contains("stackDarkFileName")) {
+        m_stackDarkFileName = settings.m_stackDarkFileName;
+    }
+    if (settingsKeys.contains("stackFlatFileName")) {
+        m_stackFlatFileName = settings.m_stackFlatFileName;
+    }
+    if (settingsKeys.contains("stackBiasFileName")) {
+        m_stackBiasFileName = settings.m_stackBiasFileName;
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -1210,6 +1228,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("stackAlignmentMethod") || force) {
         ostr << " m_stackAlignmentMethod: " << m_stackAlignmentMethod;
+    }
+    if (settingsKeys.contains("stackDarkFileName") || force) {
+        ostr << " m_stackDarkFileName: " << m_stackDarkFileName.toStdString();
+    }
+    if (settingsKeys.contains("stackFlatFileName") || force) {
+        ostr << " m_stackFlatFileName: " << m_stackFlatFileName.toStdString();
+    }
+    if (settingsKeys.contains("stackBiasFileName") || force) {
+        ostr << " m_stackBiasFileName: " << m_stackBiasFileName.toStdString();
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

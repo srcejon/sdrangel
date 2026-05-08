@@ -20,6 +20,7 @@
 #include <cmath>
 
 #include <QtGlobal>
+#include <QFile>
 #include <QRegularExpression>
 #include <QDebug>
 #include <QResource>
@@ -29,23 +30,37 @@
 FITS::FITS(QString resourceName) :
     m_valid(false)
 {
-    QResource m_res(resourceName);
-    if (!m_res.isValid()) {
-        qWarning() << "FITS: - " << resourceName << " is not a valid resource";
-        return;
-    }
     int m_headerSize = 2880;
     qint64 m_fileSize;
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-    m_data = m_res.uncompressedData();
-    m_fileSize = m_res.uncompressedSize();
-#else
-    m_data = QByteArray::fromRawData((const char *)m_res.data(), m_res.size());
-    if (m_res.isCompressed()) {
-        m_data = qUncompress(m_data);
+
+    QResource m_res(resourceName);
+    if (m_res.isValid())
+    {
+    #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+        m_data = m_res.uncompressedData();
+        m_fileSize = m_res.uncompressedSize();
+    #else
+        m_data = QByteArray::fromRawData((const char *)m_res.data(), m_res.size());
+        if (m_res.isCompressed()) {
+            m_data = qUncompress(m_data);
+        }
+        m_fileSize = m_res.size();
+    #endif
     }
-    m_fileSize = m_res.size();
-#endif
+    else
+    {
+        QFile file(resourceName);
+
+        if (!file.open(QIODevice::ReadOnly))
+        {
+            qWarning() << "FITS:" << resourceName << "is not a valid resource and could not be opened as a file";
+            return;
+        }
+
+        m_data = file.readAll();
+        m_fileSize = m_data.size();
+    }
+
     int hLen = std::min((qint64)m_headerSize * 3, m_fileSize);   // Could possibly be bigger
     QByteArray headerBytes = m_data.left(hLen);
     QString header = QString::fromLatin1(headerBytes);

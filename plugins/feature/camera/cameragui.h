@@ -342,6 +342,12 @@ private slots:
     void on_stackFrameCountSpin_valueChanged(int value);
     void on_stackMethodCombo_currentIndexChanged(int index);
     void on_stackAlignmentCombo_currentIndexChanged(int index);
+    void on_stackDarkFileEdit_editingFinished();
+    void on_stackDarkFileButton_clicked();
+    void on_stackFlatFileEdit_editingFinished();
+    void on_stackFlatFileButton_clicked();
+    void on_stackBiasFileEdit_editingFinished();
+    void on_stackBiasFileButton_clicked();
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);

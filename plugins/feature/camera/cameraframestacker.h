@@ -21,6 +21,7 @@
 
 #include <QObject>
 #include <QMutex>
+#include <QString>
 #include <deque>
 #include <vector>
 
@@ -119,6 +120,9 @@ private:
     bool m_captureActive;
     std::deque<cv::Mat> m_stackFrameHistory;
     cv::Mat m_stackAccumulator;
+    cv::Mat m_darkCalibrationFrame;
+    cv::Mat m_flatCalibrationFrame;
+    cv::Mat m_biasCalibrationFrame;
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
     bool m_processingFrame;
@@ -127,6 +131,10 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
     void resetFrameHistoryState();
+    void reloadCalibrationFrames();
+    cv::Mat loadFitsCalibrationFrame(const QString& fileName, const QString& calibrationType, bool normalizeFlat) const;
+    void validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName);
+    cv::Mat applyCalibration(const cv::Mat& input);
     [[nodiscard]] QImage applyFrameStacking(const QImage& input);
 
 private slots:

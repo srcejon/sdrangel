@@ -69,6 +69,13 @@ struct CameraSettings
         SavedMediaBoth
     };
 
+    enum LensProjection
+    {
+        LensProjectionRectilinear = 0,
+        LensProjectionEquidistant,
+        LensProjectionEquisolid
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -151,6 +158,7 @@ struct CameraSettings
     float m_elevation;             ///< Camera pointing elevation in degrees
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
     float m_fov;                   ///< Camera field of view in degrees
+    LensProjection m_lensProjection; ///< Lens projection model used for sky overlays
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

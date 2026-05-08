@@ -909,6 +909,7 @@ void CameraGUI::displaySettings()
     settingsUI()->azimuthSpin->setValue(m_settings.m_azimuth);
     settingsUI()->elevationSpin->setValue(m_settings.m_elevation);
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
+    settingsUI()->lensProjectionCombo->setCurrentIndex(static_cast<int>(m_settings.m_lensProjection));
     populateGs232ControllerCombo();
     applyPositionSync();
     updatePositionControls();
@@ -1258,6 +1259,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
     QObject::connect(settingsUI()->azElGs232ControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_azElGs232ControllerCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
+    QObject::connect(settingsUI()->lensProjectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_lensProjectionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -3855,6 +3857,12 @@ void CameraGUI::on_fovSpin_valueChanged(double value)
 {
     m_settings.m_fov = static_cast<float>(value);
     applySetting("fov");
+}
+
+void CameraGUI::on_lensProjectionCombo_currentIndexChanged(int index)
+{
+    m_settings.m_lensProjection = static_cast<CameraSettings::LensProjection>(index);
+    applySetting("lensProjection");
 }
 
 void CameraGUI::updatePostProcessWhiteBalanceControls()

@@ -196,11 +196,13 @@ static bool equatorialToAltAz(double rightAscensionDegrees,
 struct SkyProjector
 {
     bool valid = false;
+    CameraSettings::LensProjection lensProjection = CameraSettings::LensProjectionRectilinear;
     SkyVector center;
     SkyVector right;
     SkyVector up;
-    double halfWidthTan = 1.0;
-    double halfHeightTan = 1.0;
+    double halfHorizontalFov = 0.0;
+    double horizontalScale = 1.0;
+    double verticalScale = 1.0;
     int width = 0;
     int height = 0;
 
@@ -209,6 +211,7 @@ struct SkyProjector
         SkyProjector projector;
         projector.width = size.width();
         projector.height = size.height();
+        projector.lensProjection = settings.m_lensProjection;
 
         if (projector.width <= 0 || projector.height <= 0 || settings.m_fov <= 0.0f) {
             return projector;
@@ -233,9 +236,11 @@ struct SkyProjector
             return projector;
         }
 
-        projector.halfWidthTan = std::tan(halfHorizontalFov);
-        projector.halfHeightTan = projector.halfWidthTan * static_cast<double>(projector.height) / static_cast<double>(projector.width);
-        projector.valid = projector.halfWidthTan > 0.0 && projector.halfHeightTan > 0.0;
+        projector.halfHorizontalFov = halfHorizontalFov;
+        const double aspect = static_cast<double>(projector.height) / static_cast<double>(projector.width);
+        projector.horizontalScale = 1.0;
+        projector.verticalScale = aspect;
+        projector.valid = projector.verticalScale > 0.0;
         return projector;
     }
 
@@ -251,14 +256,30 @@ struct SkyProjector
             return false;
         }
 
-        const double tangentX = dot(vector, right) / depth;
-        const double tangentY = dot(vector, up) / depth;
-        if (!std::isfinite(tangentX) || !std::isfinite(tangentY)) {
+        const double planeX = dot(vector, right);
+        const double planeY = dot(vector, up);
+        if (!std::isfinite(planeX) || !std::isfinite(planeY)) {
             return false;
         }
 
-        const double normalizedX = tangentX / halfWidthTan;
-        const double normalizedY = tangentY / halfHeightTan;
+        const double theta = std::acos(std::clamp(depth, -1.0, 1.0));
+        const double phi = std::atan2(planeY, planeX);
+        const double projectionRadius = [&]() -> double
+        {
+            switch (lensProjection)
+            {
+            case CameraSettings::LensProjectionEquidistant:
+                return theta / halfHorizontalFov;
+            case CameraSettings::LensProjectionEquisolid:
+                return std::sin(theta * 0.5) / std::sin(halfHorizontalFov * 0.5);
+            case CameraSettings::LensProjectionRectilinear:
+            default:
+                return std::tan(theta) / std::tan(halfHorizontalFov);
+            }
+        }();
+
+        const double normalizedX = std::cos(phi) * projectionRadius / horizontalScale;
+        const double normalizedY = std::sin(phi) * projectionRadius / verticalScale;
         if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY)) {
             return false;
         }
@@ -374,7 +395,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayFontFamily", "overlayFontScale",
         "motionBoxColor",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
-        "latitude", "longitude", "altitude", "azimuth", "elevation", "fov",
+        "latitude", "longitude", "altitude", "azimuth", "elevation", "fov", "lensProjection",
         "yoloBoxColor"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),

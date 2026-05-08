@@ -365,6 +365,7 @@ private slots:
     void on_elevationSpin_valueChanged(double value);
     void on_azElGs232ControllerCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);
+    void on_lensProjectionCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);

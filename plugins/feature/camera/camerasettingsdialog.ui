@@ -1538,6 +1538,32 @@
             </property>
            </widget>
           </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="lensProjectionLabel">
+            <property name="text">
+             <string>Projection</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QComboBox" name="lensProjectionCombo">
+            <item>
+             <property name="text">
+              <string>Rectilinear</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Equidistant fisheye</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Equisolid fisheye</string>
+             </property>
+            </item>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

@@ -189,6 +189,7 @@ void CameraSettings::resetToDefaults()
     m_elevation = 0.0f;
     m_rotator.clear();
     m_fov = 60.0f;
+    m_lensProjection = LensProjectionRectilinear;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -309,6 +310,7 @@ QByteArray CameraSettings::serialize() const
     s.writeFloat(142, m_elevation);
     s.writeString(143, m_rotator);
     s.writeFloat(144, m_fov);
+    s.writeS32(149, m_lensProjection);
 
     if (m_rollupState) {
         s.writeBlob(19, m_rollupState->serialize());
@@ -511,6 +513,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readFloat(142, &m_elevation, 0.0f);
         d.readString(143, &m_rotator, "");
         d.readFloat(144, &m_fov, 60.0f);
+        d.readS32(149, (int *) &m_lensProjection, LensProjectionRectilinear);
 
         if (m_rollupState)
         {
@@ -713,6 +716,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         }
         m_elevation = qBound(-90.0f, m_elevation, 90.0f);
         m_fov = qBound(0.01f, m_fov, 360.0f);
+        m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) m_lensProjection, (int) LensProjectionEquisolid);
 
         return true;
     }
@@ -933,6 +937,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("fov")) {
         m_fov = qBound(0.01f, settings.m_fov, 360.0f);
+    }
+    if (settingsKeys.contains("lensProjection")) {
+        m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) settings.m_lensProjection, (int) LensProjectionEquisolid);
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -1350,6 +1357,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("fov") || force) {
         ostr << " m_fov: " << m_fov;
+    }
+    if (settingsKeys.contains("lensProjection") || force) {
+        ostr << " m_lensProjection: " << m_lensProjection;
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

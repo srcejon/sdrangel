@@ -919,6 +919,13 @@ void CameraGUI::displaySettings()
     settingsUI()->scheduleEnabledCheck->setChecked(m_settings.m_scheduleEnabled);
     settingsUI()->scheduleStartTimeEdit->setTime(parseScheduleTime(m_settings.m_scheduleStartTime, QTime(20, 0, 0)));
     settingsUI()->scheduleEndTimeEdit->setTime(parseScheduleTime(m_settings.m_scheduleEndTime, QTime(6, 0, 0)));
+    settingsUI()->scheduleMondayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 0)) != 0);
+    settingsUI()->scheduleTuesdayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 1)) != 0);
+    settingsUI()->scheduleWednesdayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 2)) != 0);
+    settingsUI()->scheduleThursdayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 3)) != 0);
+    settingsUI()->scheduleFridayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 4)) != 0);
+    settingsUI()->scheduleSaturdayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 5)) != 0);
+    settingsUI()->scheduleSundayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 6)) != 0);
     populateGs232ControllerCombo();
     applyPositionSync();
     updatePositionControls();
@@ -1274,6 +1281,13 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->scheduleEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleEnabledCheck_toggled);
     QObject::connect(settingsUI()->scheduleStartTimeEdit, &QTimeEdit::timeChanged, this, &CameraGUI::on_scheduleStartTimeEdit_timeChanged);
     QObject::connect(settingsUI()->scheduleEndTimeEdit, &QTimeEdit::timeChanged, this, &CameraGUI::on_scheduleEndTimeEdit_timeChanged);
+    QObject::connect(settingsUI()->scheduleMondayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
+    QObject::connect(settingsUI()->scheduleTuesdayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
+    QObject::connect(settingsUI()->scheduleWednesdayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
+    QObject::connect(settingsUI()->scheduleThursdayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
+    QObject::connect(settingsUI()->scheduleFridayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
+    QObject::connect(settingsUI()->scheduleSaturdayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
+    QObject::connect(settingsUI()->scheduleSundayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -1672,10 +1686,21 @@ void CameraGUI::updateScheduleControls()
     const bool enabled = m_settings.m_scheduleEnabled;
     settingsUI()->scheduleStartTimeEdit->setEnabled(enabled);
     settingsUI()->scheduleEndTimeEdit->setEnabled(enabled);
+    settingsUI()->scheduleMondayCheck->setEnabled(enabled);
+    settingsUI()->scheduleTuesdayCheck->setEnabled(enabled);
+    settingsUI()->scheduleWednesdayCheck->setEnabled(enabled);
+    settingsUI()->scheduleThursdayCheck->setEnabled(enabled);
+    settingsUI()->scheduleFridayCheck->setEnabled(enabled);
+    settingsUI()->scheduleSaturdayCheck->setEnabled(enabled);
+    settingsUI()->scheduleSundayCheck->setEnabled(enabled);
 
     QString statusText;
     if (!enabled) {
         statusText = tr("Disabled");
+    } else if (m_scheduleManualStopLatch) {
+        statusText = tr("Paused until next window");
+    } else if (m_settings.m_scheduleWeekdays == 0) {
+        statusText = tr("Inactive: no weekdays selected");
     } else if (m_settings.m_scheduleStartTime == m_settings.m_scheduleEndTime) {
         statusText = tr("Inactive: start and end are the same");
     } else if (isWithinScheduleWindow()) {
@@ -1689,13 +1714,20 @@ void CameraGUI::updateScheduleControls()
 
 void CameraGUI::updateScheduledCapture()
 {
+    const bool withinWindow = isWithinScheduleWindow();
+
+    if (m_scheduleLastWithinWindow && !withinWindow) {
+        m_scheduleManualStopLatch = false;
+    }
+    m_scheduleLastWithinWindow = withinWindow;
+
     updateScheduleControls();
 
-    if (!m_settings.m_scheduleEnabled || (m_settings.m_scheduleStartTime == m_settings.m_scheduleEndTime)) {
+    if (!m_settings.m_scheduleEnabled || (m_settings.m_scheduleStartTime == m_settings.m_scheduleEndTime) || (m_settings.m_scheduleWeekdays == 0)) {
         return;
     }
 
-    const bool shouldRun = isWithinScheduleWindow();
+    const bool shouldRun = withinWindow && !m_scheduleManualStopLatch;
     const int state = m_camera->getState();
 
     if (shouldRun && (state == Feature::StIdle)) {
@@ -1710,17 +1742,45 @@ bool CameraGUI::isWithinScheduleWindow() const
     const QTime startTime = parseScheduleTime(m_settings.m_scheduleStartTime, QTime(20, 0, 0));
     const QTime endTime = parseScheduleTime(m_settings.m_scheduleEndTime, QTime(6, 0, 0));
 
-    if (!startTime.isValid() || !endTime.isValid() || (startTime == endTime)) {
+    if (!startTime.isValid() || !endTime.isValid() || (startTime == endTime) || (m_settings.m_scheduleWeekdays == 0)) {
         return false;
     }
 
     const QTime now = QTime::currentTime();
+    const int today = QDate::currentDate().dayOfWeek();
+    const int previousDay = (today == 1) ? 7 : (today - 1);
 
     if (startTime < endTime) {
-        return (now >= startTime) && (now < endTime);
+        return isScheduleWeekdaySelected(today) && (now >= startTime) && (now < endTime);
     }
 
-    return (now >= startTime) || (now < endTime);
+    if (now >= startTime) {
+        return isScheduleWeekdaySelected(today);
+    }
+
+    return (now < endTime) && isScheduleWeekdaySelected(previousDay);
+}
+
+bool CameraGUI::isScheduleWeekdaySelected(int dayOfWeek) const
+{
+    if ((dayOfWeek < 1) || (dayOfWeek > 7)) {
+        return false;
+    }
+
+    return (m_settings.m_scheduleWeekdays & (1 << (dayOfWeek - 1))) != 0;
+}
+
+int CameraGUI::scheduleWeekdayMaskFromUi() const
+{
+    int mask = 0;
+    if (settingsUI()->scheduleMondayCheck->isChecked()) { mask |= (1 << 0); }
+    if (settingsUI()->scheduleTuesdayCheck->isChecked()) { mask |= (1 << 1); }
+    if (settingsUI()->scheduleWednesdayCheck->isChecked()) { mask |= (1 << 2); }
+    if (settingsUI()->scheduleThursdayCheck->isChecked()) { mask |= (1 << 3); }
+    if (settingsUI()->scheduleFridayCheck->isChecked()) { mask |= (1 << 4); }
+    if (settingsUI()->scheduleSaturdayCheck->isChecked()) { mask |= (1 << 5); }
+    if (settingsUI()->scheduleSundayCheck->isChecked()) { mask |= (1 << 6); }
+    return mask;
 }
 
 QTime CameraGUI::parseScheduleTime(const QString& timeText, const QTime& fallbackTime)
@@ -3161,6 +3221,12 @@ void CameraGUI::updateCameraSubframeControls()
 
 void CameraGUI::on_startStop_clicked(bool checked)
 {
+    if (!checked && m_settings.m_scheduleEnabled && isWithinScheduleWindow()) {
+        m_scheduleManualStopLatch = true;
+    } else if (checked) {
+        m_scheduleManualStopLatch = false;
+    }
+
     m_camera->getInputMessageQueue()->push(Camera::MsgStartStop::create(checked));
 }
 
@@ -3968,6 +4034,16 @@ void CameraGUI::on_scheduleEndTimeEdit_timeChanged(const QTime& time)
     m_settings.m_scheduleEndTime = time.toString(QStringLiteral("HH:mm:ss"));
     updateScheduleControls();
     applySetting("scheduleEndTime");
+    updateScheduledCapture();
+}
+
+void CameraGUI::on_scheduleWeekdayCheck_toggled(bool checked)
+{
+    Q_UNUSED(checked)
+
+    m_settings.m_scheduleWeekdays = scheduleWeekdayMaskFromUi();
+    updateScheduleControls();
+    applySetting("scheduleWeekdays");
     updateScheduledCapture();
 }
 

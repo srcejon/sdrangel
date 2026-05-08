@@ -163,6 +163,7 @@ struct CameraSettings
     bool m_scheduleEnabled;        ///< Enable daily capture schedule
     QString m_scheduleStartTime;   ///< Daily schedule start time in HH:mm:ss
     QString m_scheduleEndTime;     ///< Daily schedule end time in HH:mm:ss
+    int m_scheduleWeekdays;        ///< Bitmask of active weekdays: bit0=Mon ... bit6=Sun
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

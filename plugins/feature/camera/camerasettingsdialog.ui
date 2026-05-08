@@ -1673,13 +1673,73 @@
            </widget>
           </item>
           <item row="3" column="0">
+           <widget class="QLabel" name="scheduleWeekdaysLabel">
+            <property name="text">
+             <string>Weekdays</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <layout class="QHBoxLayout" name="scheduleWeekdaysLayout">
+            <item>
+             <widget class="QCheckBox" name="scheduleMondayCheck">
+              <property name="text">
+               <string>Mon</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleTuesdayCheck">
+              <property name="text">
+               <string>Tue</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleWednesdayCheck">
+              <property name="text">
+               <string>Wed</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleThursdayCheck">
+              <property name="text">
+               <string>Thu</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleFridayCheck">
+              <property name="text">
+               <string>Fri</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleSaturdayCheck">
+              <property name="text">
+               <string>Sat</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleSundayCheck">
+              <property name="text">
+               <string>Sun</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="4" column="0">
            <widget class="QLabel" name="scheduleStatusLabel">
             <property name="text">
              <string>Status</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="4" column="1">
            <widget class="QLabel" name="scheduleStatusValue">
             <property name="text">
              <string>Disabled</string>

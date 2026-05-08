@@ -194,6 +194,7 @@ void CameraSettings::resetToDefaults()
     m_scheduleEnabled = false;
     m_scheduleStartTime = QStringLiteral("20:00:00");
     m_scheduleEndTime = QStringLiteral("06:00:00");
+    m_scheduleWeekdays = 0x7f;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -319,6 +320,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(151, m_scheduleEnabled);
     s.writeString(152, m_scheduleStartTime);
     s.writeString(153, m_scheduleEndTime);
+    s.writeS32(154, m_scheduleWeekdays);
 
     if (m_rollupState) {
         s.writeBlob(19, m_rollupState->serialize());
@@ -526,6 +528,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(151, &m_scheduleEnabled, false);
         d.readString(152, &m_scheduleStartTime, "20:00:00");
         d.readString(153, &m_scheduleEndTime, "06:00:00");
+        d.readS32(154, &m_scheduleWeekdays, 0x7f);
 
         if (m_rollupState)
         {
@@ -972,6 +975,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("scheduleEndTime")) {
         m_scheduleEndTime = settings.m_scheduleEndTime;
     }
+    if (settingsKeys.contains("scheduleWeekdays")) {
+        m_scheduleWeekdays = settings.m_scheduleWeekdays & 0x7f;
+    }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
     }
@@ -1403,6 +1409,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("scheduleEndTime") || force) {
         ostr << " m_scheduleEndTime: " << m_scheduleEndTime.toStdString();
+    }
+    if (settingsKeys.contains("scheduleWeekdays") || force) {
+        ostr << " m_scheduleWeekdays: " << m_scheduleWeekdays;
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

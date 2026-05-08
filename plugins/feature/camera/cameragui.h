@@ -143,6 +143,8 @@ private:
     bool m_forceSettings;
     QTimer m_updateTimer;
     QTimer m_scheduleTimer;
+    bool m_scheduleManualStopLatch = false;
+    bool m_scheduleLastWithinWindow = false;
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
@@ -228,6 +230,8 @@ private:
     void updateScheduleControls();
     void updateScheduledCapture();
     bool isWithinScheduleWindow() const;
+    bool isScheduleWeekdaySelected(int dayOfWeek) const;
+    int scheduleWeekdayMaskFromUi() const;
     static QTime parseScheduleTime(const QString& timeText, const QTime& fallbackTime);
     void syncFromMainSettings();
     void syncFromSelectedGs232Controller();
@@ -376,6 +380,7 @@ private slots:
     void on_scheduleEnabledCheck_toggled(bool checked);
     void on_scheduleStartTimeEdit_timeChanged(const QTime& time);
     void on_scheduleEndTimeEdit_timeChanged(const QTime& time);
+    void on_scheduleWeekdayCheck_toggled(bool checked);
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);

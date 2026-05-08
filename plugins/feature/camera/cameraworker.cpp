@@ -57,6 +57,7 @@
 #include "maincore.h"
 #include "dsp/dspengine.h"
 #include "audio/audiodevicemanager.h"
+#include "util/profiler.h"
 #include "camerafinder.h"
 #include "cameraframealigner.h"
 #include "camerapostprocessor.h"

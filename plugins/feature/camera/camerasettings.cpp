@@ -231,7 +231,7 @@ void CameraSettings::resetToDefaults()
     m_motionPersistenceFrames = 0;
     m_motionBoxColor = Qt::red;
     m_minContourArea = 100;
-    m_videoPostProcess = SavedMediaRaw;
+    m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
     m_spectrumOffsetX = 0;
@@ -342,7 +342,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(65, m_motionPersistenceFrames);
     s.writeU32(66, m_motionBoxColor.rgba());
     s.writeS32(67, m_minContourArea);
-    s.writeBool(68, m_videoPostProcess != SavedMediaRaw);
+    s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
     s.writeS32(71, m_spectrumOffsetX);
@@ -402,7 +402,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(124, m_asiHighSpeedMode);
     s.writeS32(125, m_asiColorImageType);
     s.writeS32(126, m_diffMaskOpenSize);
-    s.writeS32(128, m_videoPostProcess);
+    s.writeS32(128, m_recordMode);
 
     return s.final();
 }
@@ -581,7 +581,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         qint32 videoPostProcessMode = legacyVideoPostProcess ? static_cast<qint32>(SavedMediaProcessed)
                                                              : static_cast<qint32>(SavedMediaRaw);
         d.readS32(128, &videoPostProcessMode, videoPostProcessMode);
-        m_videoPostProcess = qBound(SavedMediaRaw, static_cast<SavedMediaMode>(videoPostProcessMode), SavedMediaBoth);
+        m_recordMode = qBound(SavedMediaRaw, static_cast<SavedMediaMode>(videoPostProcessMode), SavedMediaBoth);
         d.readBool(69, &m_overlaySpectrum, false);
         d.readString(70, &m_spectrumDevice, "");
         d.readS32(71, &m_spectrumOffsetX, 0);
@@ -978,7 +978,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_minContourArea = qBound(0, settings.m_minContourArea, 10000);
     }
     if (settingsKeys.contains("videoPostProcess")) {
-        m_videoPostProcess = qBound(SavedMediaRaw, settings.m_videoPostProcess, SavedMediaBoth);
+        m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
     }
     if (settingsKeys.contains("overlaySpectrum")) {
         m_overlaySpectrum = settings.m_overlaySpectrum;
@@ -1353,7 +1353,7 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
         ostr << " m_minContourArea: " << m_minContourArea;
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
-        ostr << " m_videoPostProcess: " << m_videoPostProcess;
+        ostr << " m_videoPostProcess: " << m_recordMode;
     }
     if (settingsKeys.contains("overlaySpectrum") || force) {
         ostr << " m_overlaySpectrum: " << m_overlaySpectrum;

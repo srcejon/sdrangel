@@ -888,7 +888,7 @@ void CameraGUI::displaySettings()
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
     settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
     settingsUI()->videoHwAccelerationCheck->setChecked(m_settings.m_videoHwAcceleration);
-    settingsUI()->videoPostProcessCombo->setCurrentIndex(static_cast<int>(m_settings.m_videoPostProcess));
+    settingsUI()->recordModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_recordMode));
     settingsUI()->stackEnabledCheck->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
     settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
@@ -1010,8 +1010,8 @@ void CameraGUI::displaySettings()
     settingsUI()->zoomSpin->setValue(m_settings.m_zoomFactor);
     updateCameraSettingsVisibility();
     updateCameraStatusDisplay();
-    applyVideoPath();
-    applyImagePath();
+    applyVideoToolTip();
+    applyImageToolTip();
 }
 
 void CameraGUI::applySetting(const QString& settingsKey)
@@ -1219,7 +1219,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
-    QObject::connect(settingsUI()->videoPostProcessCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_videoPostProcessCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->recordModeCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_recordModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->stackEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
@@ -3499,7 +3499,7 @@ void CameraGUI::on_imagePathEdit_editingFinished()
 {
     m_settings.m_imageFileName = settingsUI()->imagePathEdit->text();
     applySetting("imageFileName");
-    applyImagePath();
+    applyImageToolTip();
 }
 
 void CameraGUI::on_imagePathButton_clicked()
@@ -3511,7 +3511,7 @@ void CameraGUI::on_imagePathButton_clicked()
         m_settings.m_imageFileName = fileName;
         settingsUI()->imagePathEdit->setText(fileName);
         applySetting("imageFileName");
-        applyImagePath();
+        applyImageToolTip();
     }
 }
 
@@ -3525,7 +3525,7 @@ void CameraGUI::on_videoPathEdit_editingFinished()
 {
     m_settings.m_videoFileName = settingsUI()->videoPathEdit->text();
     applySetting("videoFileName");
-    applyVideoPath();
+    applyVideoToolTip();
 }
 
 void CameraGUI::on_videoPathButton_clicked()
@@ -3537,7 +3537,7 @@ void CameraGUI::on_videoPathButton_clicked()
         m_settings.m_videoFileName = fileName;
         settingsUI()->videoPathEdit->setText(fileName);
         applySetting("videoFileName");
-        applyVideoPath();
+        applyVideoToolTip();
     }
 }
 
@@ -3547,12 +3547,14 @@ void CameraGUI::on_videoHwAccelerationCheck_toggled(bool checked)
     applySetting("videoHwAcceleration");
 }
 
-void CameraGUI::on_videoPostProcessCombo_currentIndexChanged(int index)
+void CameraGUI::on_recordModeCombo_currentIndexChanged(int index)
 {
-    m_settings.m_videoPostProcess = qBound(CameraSettings::SavedMediaRaw,
+    m_settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
         static_cast<CameraSettings::SavedMediaMode>(index),
         CameraSettings::SavedMediaBoth);
     applySetting("videoPostProcess");
+    applyImageToolTip();
+    applyVideoToolTip();
 }
 
 void CameraGUI::on_stackEnabledCheck_toggled(bool checked)
@@ -4499,14 +4501,36 @@ void CameraGUI::on_cameraSettingsButton_clicked()
     m_settingsDialog->activateWindow();
 }
 
-void CameraGUI::applyImagePath()
+void CameraGUI::applyImageToolTip()
 {
-    ui->saveImageCheck->setToolTip(QString("Save images to %1").arg(m_settings.m_imageFileName));
+    switch (m_settings.m_recordMode)
+    {
+    case CameraSettings::SavedMediaRaw:
+        ui->saveImageCheck->setToolTip(QString("Save raw images to %1").arg(m_settings.m_imageFileName));
+        break;
+    case CameraSettings::SavedMediaProcessed:
+        ui->saveImageCheck->setToolTip(QString("Save processed images to %1").arg(m_settings.m_imageFileName));
+        break;
+    case CameraSettings::SavedMediaBoth:
+        ui->saveImageCheck->setToolTip(QString("Save raw and processed images to %1").arg(m_settings.m_imageFileName));
+        break;
+    }
 }
 
-void CameraGUI::applyVideoPath()
+void CameraGUI::applyVideoToolTip()
 {
-    ui->saveVideoCheck->setToolTip(QString("Record video to %1").arg(m_settings.m_videoFileName));
+    switch (m_settings.m_recordMode)
+    {
+    case CameraSettings::SavedMediaRaw:
+        ui->saveVideoCheck->setToolTip(QString("Record raw video to %1").arg(m_settings.m_videoFileName));
+        break;
+    case CameraSettings::SavedMediaProcessed:
+        ui->saveVideoCheck->setToolTip(QString("Record processed video to %1").arg(m_settings.m_videoFileName));
+        break;
+    case CameraSettings::SavedMediaBoth:
+        ui->saveVideoCheck->setToolTip(QString("Record raw and processed video to %1").arg(m_settings.m_videoFileName));
+        break;
+    }
 }
 
 void CameraGUI::onSettingsDialogFinished(int result)

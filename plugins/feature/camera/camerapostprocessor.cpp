@@ -533,14 +533,14 @@ QString CameraPostProcessor::createTimestampedOutputFilename(const QString& base
 
 bool CameraPostProcessor::shouldSaveRawMedia() const
 {
-    return (m_settings.m_videoPostProcess == CameraSettings::SavedMediaRaw)
-        || (m_settings.m_videoPostProcess == CameraSettings::SavedMediaBoth);
+    return (m_settings.m_recordMode == CameraSettings::SavedMediaRaw)
+        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
 }
 
 bool CameraPostProcessor::shouldSaveProcessedMedia() const
 {
-    return (m_settings.m_videoPostProcess == CameraSettings::SavedMediaProcessed)
-        || (m_settings.m_videoPostProcess == CameraSettings::SavedMediaBoth);
+    return (m_settings.m_recordMode == CameraSettings::SavedMediaProcessed)
+        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
 }
 
 void CameraPostProcessor::closeVideoWriters()

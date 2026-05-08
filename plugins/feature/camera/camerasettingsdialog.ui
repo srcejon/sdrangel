@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>6</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -2654,14 +2654,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </layout>
           </item>
           <item row="2" column="0">
-           <widget class="QLabel" name="videoPostProcessLabel">
+           <widget class="QLabel" name="recordModeLabel">
             <property name="text">
              <string>Record</string>
             </property>
            </widget>
           </item>
           <item row="2" column="1">
-           <widget class="QComboBox" name="videoPostProcessCombo">
+           <widget class="QComboBox" name="recordModeCombo">
             <property name="toolTip">
              <string>Select whether raw, post-processed, or both image/video outputs should be saved</string>
             </property>
@@ -3740,7 +3740,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
   <tabstop>imagePathButton</tabstop>
   <tabstop>videoPathEdit</tabstop>
   <tabstop>videoPathButton</tabstop>
-  <tabstop>videoPostProcessCombo</tabstop>
+  <tabstop>recordModeCombo</tabstop>
   <tabstop>videoHwAccelerationCheck</tabstop>
   <tabstop>yoloModelPathCombo</tabstop>
   <tabstop>yoloModelPathButton</tabstop>

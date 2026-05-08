@@ -197,7 +197,7 @@ struct CameraSettings
     int    m_motionPersistenceFrames; ///< Keep last motion boxes for this many frames after motion disappears: 0..120
     QColor m_motionBoxColor;    ///< Bounding box colour for motion contours
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
-    SavedMediaMode m_videoPostProcess;  ///< Save raw frames, post-processed frames, or both
+    SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 
     // Spectrum overlay settings
     bool   m_overlaySpectrum;   ///< Enable overlaying the spectrum view image on the post-processed frame

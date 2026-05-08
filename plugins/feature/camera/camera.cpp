@@ -536,7 +536,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setMotionPersistenceFrames(settings.m_motionPersistenceFrames);
     swg->setMotionBoxColor((qint32) settings.m_motionBoxColor.rgb());
     swg->setMinContourArea(settings.m_minContourArea);
-    swg->setVideoPostProcess(settings.m_videoPostProcess);
+    swg->setVideoPostProcess(settings.m_recordMode);
 
     // Spectrum overlay
     swg->setOverlaySpectrum(settings.m_overlaySpectrum ? 1 : 0);
@@ -914,7 +914,7 @@ void Camera::webapiUpdateFeatureSettings(
         settings.m_minContourArea = swg->getMinContourArea();
     }
     if (featureSettingsKeys.contains("videoPostProcess")) {
-        settings.m_videoPostProcess = qBound(CameraSettings::SavedMediaRaw,
+        settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
             static_cast<CameraSettings::SavedMediaMode>(swg->getVideoPostProcess()),
             CameraSettings::SavedMediaBoth);
     }

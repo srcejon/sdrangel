@@ -940,6 +940,7 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceRedGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceRedGainSpin, m_settings.m_postProcessWhiteBalanceRedGain));
     settingsUI()->postProcessWhiteBalanceGreenGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceGreenGainSpin, m_settings.m_postProcessWhiteBalanceGreenGain));
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, m_settings.m_postProcessWhiteBalanceBlueGain));
+    settingsUI()->postProcessUnwarpCheck->setChecked(m_settings.m_postProcessUnwarp);
     settingsUI()->postProcessGreyscaleCheck->setChecked(m_settings.m_postProcessGreyscale);
     settingsUI()->saturationSlider->setValue(static_cast<int>(m_settings.m_saturation * 100.0));
     settingsUI()->saturationSpin->setValue(m_settings.m_saturation);
@@ -1297,6 +1298,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->postProcessWhiteBalanceGreenGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
+    QObject::connect(settingsUI()->postProcessUnwarpCheck, &QCheckBox::toggled, this, &CameraGUI::on_postProcessUnwarpCheck_toggled);
     QObject::connect(settingsUI()->postProcessGreyscaleCheck, &QCheckBox::toggled, this, &CameraGUI::on_postProcessGreyscaleCheck_toggled);
     QObject::connect(settingsUI()->saturationSlider, &QSlider::valueChanged, this, &CameraGUI::on_saturationSlider_valueChanged);
     QObject::connect(settingsUI()->saturationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_saturationSpin_valueChanged);
@@ -4156,6 +4158,12 @@ void CameraGUI::on_postProcessGreyscaleCheck_toggled(bool checked)
     applySetting("postProcessGreyscale");
 }
 
+void CameraGUI::on_postProcessUnwarpCheck_toggled(bool checked)
+{
+    m_settings.m_postProcessUnwarp = checked;
+    applySetting("postProcessUnwarp");
+}
+
 void CameraGUI::on_saturationSlider_valueChanged(int value)
 {
     m_settings.m_saturation = value / 100.0;
@@ -4505,6 +4513,7 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(1);
+    settingsUI()->postProcessUnwarpCheck->setChecked(false);
     settingsUI()->postProcessGreyscaleCheck->setChecked(false);
     settingsUI()->brightnessSpin->setValue(0);
     settingsUI()->contrastSpin->setValue(1.0);

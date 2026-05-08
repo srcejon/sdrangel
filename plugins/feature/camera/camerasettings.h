@@ -173,6 +173,7 @@ struct CameraSettings
     double m_postProcessWhiteBalanceRedGain;   ///< Manual red gain: 0.1..8.0
     double m_postProcessWhiteBalanceGreenGain; ///< Manual green gain: 0.1..8.0
     double m_postProcessWhiteBalanceBlueGain;  ///< Manual blue gain: 0.1..8.0
+    bool m_postProcessUnwarp; ///< Unwarp fisheye images using the configured lens projection and FoV
     bool m_postProcessGreyscale; ///< Convert the post-processed image to greyscale after white balance
     double m_saturation;      ///< Saturation multiplier: 0.0..3.0
     double m_gamma;           ///< Gamma correction exponent: 0.1..3.0

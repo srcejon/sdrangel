@@ -16,6 +16,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <algorithm>
 #include <cmath>
 
 #include <QDebug>
@@ -33,6 +34,8 @@ CameraImageProcessor::CameraImageProcessor() :
     m_captureActive(false),
     m_autoWhiteBalanceGains(1.0, 1.0, 1.0),
     m_autoWhiteBalanceInitialized(false),
+    m_unwarpSourceProjection(CameraSettings::LensProjectionRectilinear),
+    m_unwarpSourceFov(0.0),
     m_processingFrame(false)
 {
 }
@@ -73,6 +76,7 @@ bool CameraImageProcessor::handleMessage(const Message& cmd)
             m_lastInputFrame = CameraPipelineFrame();
             m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
             m_autoWhiteBalanceInitialized = false;
+            invalidateUnwarpMaps();
         }
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrame.reset();
@@ -106,6 +110,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "postProcessWhiteBalanceRedGain",
         "postProcessWhiteBalanceGreenGain",
         "postProcessWhiteBalanceBlueGain",
+        "postProcessUnwarp",
         "postProcessGreyscale",
         "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "sobelEdge", "flipX", "flipY",
         "brightness", "contrast", "invertColors"
@@ -130,7 +135,9 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         || settingsKeys.contains("stackEnabled")
         || settingsKeys.contains("stackFrameCount")
         || settingsKeys.contains("stackMethod")
-        || settingsKeys.contains("stackAlignmentMethod");
+        || settingsKeys.contains("stackAlignmentMethod")
+        || settingsKeys.contains("lensProjection")
+        || settingsKeys.contains("fov");
 
     if (force) {
         m_settings = settings;
@@ -140,6 +147,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
 
     if (sourceChanged) {
         m_lastInputFrame = CameraPipelineFrame();
+        invalidateUnwarpMaps();
     }
 
     if (force
@@ -151,6 +159,14 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     {
         m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
         m_autoWhiteBalanceInitialized = false;
+    }
+
+    if (force
+        || settingsKeys.contains("postProcessUnwarp")
+        || settingsKeys.contains("lensProjection")
+        || settingsKeys.contains("fov"))
+    {
+        invalidateUnwarpMaps();
     }
 
     if (imageProcessingChanged && !m_lastInputFrame.m_image.isNull()) {
@@ -279,6 +295,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     PROFILER_START();
 
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
+    const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
     const bool needsGreyscale = m_settings.m_postProcessGreyscale;
     const bool needsSaturation = !needsGreyscale && (std::abs(m_settings.m_saturation - 1.0) > 1e-4);
     const bool needsGamma = std::abs(m_settings.m_gamma - 1.0) > 1e-4;
@@ -289,6 +306,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
+        || needsUnwarp
         || needsSaturation
         || needsGamma
         || needsGaussianBlur
@@ -310,6 +328,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 
+    if (needsUnwarp) { applyLensUnwarp(bgrMat); }
     if (needsWhiteBalance) { applyWhiteBalance(bgrMat); }
     if (needsGreyscale) { applyGreyscale(bgrMat); }
     if (needsSaturation) { applySaturation(bgrMat); }
@@ -370,6 +389,159 @@ void CameraImageProcessor::applyWhiteBalance(cv::Mat& bgrMat)
     channels[1].convertTo(channels[1], -1, gains[1], 0.0);
     channels[2].convertTo(channels[2], -1, gains[2], 0.0);
     cv::merge(channels, bgrMat);
+    PROFILER_STOP(__FUNCTION__);
+}
+
+double CameraImageProcessor::degreesToRadians(double degrees)
+{
+    return degrees * M_PI / 180.0;
+}
+
+double CameraImageProcessor::sourceRadiusForTheta(double thetaRadians, CameraSettings::LensProjection projection, double focalPixels)
+{
+    switch (projection)
+    {
+    case CameraSettings::LensProjectionEquidistant:
+        return focalPixels * thetaRadians;
+    case CameraSettings::LensProjectionEquisolid:
+        return 2.0 * focalPixels * std::sin(thetaRadians * 0.5);
+    case CameraSettings::LensProjectionRectilinear:
+    default:
+        return focalPixels * std::tan(thetaRadians);
+    }
+}
+
+void CameraImageProcessor::invalidateUnwarpMaps()
+{
+    m_unwarpMapX.release();
+    m_unwarpMapY.release();
+    m_unwarpMapSize = cv::Size();
+    m_unwarpSourceProjection = CameraSettings::LensProjectionRectilinear;
+    m_unwarpSourceFov = 0.0;
+}
+
+void CameraImageProcessor::ensureUnwarpMaps(const cv::Size& frameSize)
+{
+    const double sourceFovDegrees = std::clamp(static_cast<double>(m_settings.m_fov), 1.0, 359.0);
+    const CameraSettings::LensProjection sourceProjection = m_settings.m_lensProjection;
+
+    if (!m_unwarpMapX.empty()
+        && !m_unwarpMapY.empty()
+        && (m_unwarpMapSize == frameSize)
+        && (m_unwarpSourceProjection == sourceProjection)
+        && (std::abs(m_unwarpSourceFov - sourceFovDegrees) < 1e-6))
+    {
+        return;
+    }
+
+    invalidateUnwarpMaps();
+
+    if ((frameSize.width <= 1) || (frameSize.height <= 1)) {
+        return;
+    }
+
+    const double sourceHalfFovRadians = degreesToRadians(sourceFovDegrees * 0.5);
+    if (!std::isfinite(sourceHalfFovRadians) || (sourceHalfFovRadians <= 1e-6)) {
+        return;
+    }
+
+    double sourceFocalPixels = 0.0;
+    switch (sourceProjection)
+    {
+    case CameraSettings::LensProjectionEquidistant:
+        sourceFocalPixels = (frameSize.width * 0.5) / sourceHalfFovRadians;
+        break;
+    case CameraSettings::LensProjectionEquisolid:
+    {
+        const double denom = 2.0 * std::sin(sourceHalfFovRadians * 0.5);
+        if (std::abs(denom) <= 1e-9) {
+            return;
+        }
+        sourceFocalPixels = (frameSize.width * 0.5) / denom;
+        break;
+    }
+    case CameraSettings::LensProjectionRectilinear:
+    default:
+    {
+        const double denom = std::tan(sourceHalfFovRadians);
+        if (std::abs(denom) <= 1e-9) {
+            return;
+        }
+        sourceFocalPixels = (frameSize.width * 0.5) / denom;
+        break;
+    }
+    }
+
+    const double outputFovDegrees = std::min(sourceFovDegrees, 170.0);
+    const double outputHalfFovRadians = degreesToRadians(outputFovDegrees * 0.5);
+    const double outputFocalPixels = (frameSize.width * 0.5) / std::tan(outputHalfFovRadians);
+    if (!std::isfinite(outputFocalPixels) || (outputFocalPixels <= 0.0)) {
+        return;
+    }
+
+    m_unwarpMapX.create(frameSize, CV_32FC1);
+    m_unwarpMapY.create(frameSize, CV_32FC1);
+
+    const double centerX = 0.5 * static_cast<double>(frameSize.width - 1);
+    const double centerY = 0.5 * static_cast<double>(frameSize.height - 1);
+
+    for (int y = 0; y < frameSize.height; ++y)
+    {
+        float *mapXRow = m_unwarpMapX.ptr<float>(y);
+        float *mapYRow = m_unwarpMapY.ptr<float>(y);
+        const double yNorm = (centerY - static_cast<double>(y)) / outputFocalPixels;
+
+        for (int x = 0; x < frameSize.width; ++x)
+        {
+            const double xNorm = (static_cast<double>(x) - centerX) / outputFocalPixels;
+            const double radiusNorm = std::sqrt((xNorm * xNorm) + (yNorm * yNorm));
+            const double theta = std::atan(radiusNorm);
+
+            if (!std::isfinite(theta) || (theta > sourceHalfFovRadians)) {
+                mapXRow[x] = -1.0f;
+                mapYRow[x] = -1.0f;
+                continue;
+            }
+
+            const double radiusPixels = sourceRadiusForTheta(theta, sourceProjection, sourceFocalPixels);
+            if (!std::isfinite(radiusPixels)) {
+                mapXRow[x] = -1.0f;
+                mapYRow[x] = -1.0f;
+                continue;
+            }
+
+            if (radiusNorm <= 1e-9)
+            {
+                mapXRow[x] = static_cast<float>(centerX);
+                mapYRow[x] = static_cast<float>(centerY);
+                continue;
+            }
+
+            const double scale = radiusPixels / radiusNorm;
+            mapXRow[x] = static_cast<float>(centerX + (xNorm * scale));
+            mapYRow[x] = static_cast<float>(centerY - (yNorm * scale));
+        }
+    }
+
+    m_unwarpMapSize = frameSize;
+    m_unwarpSourceProjection = sourceProjection;
+    m_unwarpSourceFov = sourceFovDegrees;
+}
+
+void CameraImageProcessor::applyLensUnwarp(cv::Mat& bgrMat)
+{
+    PROFILER_START();
+
+    ensureUnwarpMaps(bgrMat.size());
+    if (m_unwarpMapX.empty() || m_unwarpMapY.empty()) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    cv::Mat unwarped;
+    cv::remap(bgrMat, unwarped, m_unwarpMapX, m_unwarpMapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+    bgrMat = std::move(unwarped);
+
     PROFILER_STOP(__FUNCTION__);
 }
 

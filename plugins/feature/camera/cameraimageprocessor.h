@@ -119,6 +119,11 @@ private:
     CameraPipelineFrame m_lastInputFrame;
     cv::Vec3d m_autoWhiteBalanceGains;
     bool m_autoWhiteBalanceInitialized;
+    cv::Mat m_unwarpMapX;
+    cv::Mat m_unwarpMapY;
+    cv::Size m_unwarpMapSize;
+    CameraSettings::LensProjection m_unwarpSourceProjection;
+    double m_unwarpSourceFov;
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
     bool m_processingFrame;
@@ -128,6 +133,7 @@ private:
     void processNewFrame(const CameraPipelineFramePtr& frame);
     [[nodiscard]] QImage applyImageProcessing(const QImage& input);
     void applyWhiteBalance(cv::Mat& bgrMat);
+    void applyLensUnwarp(cv::Mat& bgrMat);
     void applyGreyscale(cv::Mat& bgrMat) const;
     void applySaturation(cv::Mat& bgrMat);
     void applyGamma(cv::Mat& bgrMat) const;
@@ -142,6 +148,10 @@ private:
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
+    static double degreesToRadians(double degrees);
+    static double sourceRadiusForTheta(double thetaRadians, CameraSettings::LensProjection projection, double focalPixels);
+    void invalidateUnwarpMaps();
+    void ensureUnwarpMaps(const cv::Size& frameSize);
 
 private slots:
     void handleInputMessages();

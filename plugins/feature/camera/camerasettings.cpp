@@ -201,6 +201,7 @@ void CameraSettings::resetToDefaults()
     m_postProcessWhiteBalanceRedGain = 1.0;
     m_postProcessWhiteBalanceGreenGain = 1.0;
     m_postProcessWhiteBalanceBlueGain = 1.0;
+    m_postProcessUnwarp = false;
     m_postProcessGreyscale = false;
     m_saturation = 1.0;
     m_gamma = 1.0;
@@ -343,6 +344,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(32, m_postProcessWhiteBalanceRedGain);
     s.writeDouble(33, m_postProcessWhiteBalanceGreenGain);
     s.writeDouble(34, m_postProcessWhiteBalanceBlueGain);
+    s.writeBool(157, m_postProcessUnwarp);
     s.writeBool(127, m_postProcessGreyscale);
     s.writeDouble(35, m_saturation);
     s.writeDouble(36, m_gamma);
@@ -562,6 +564,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(32, &m_postProcessWhiteBalanceRedGain, 1.0);
         d.readDouble(33, &m_postProcessWhiteBalanceGreenGain, 1.0);
         d.readDouble(34, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        d.readBool(157, &m_postProcessUnwarp, false);
         d.readBool(127, &m_postProcessGreyscale, false);
         d.readDouble(35, &m_saturation, 1.0);
         d.readDouble(36, &m_gamma, 1.0);
@@ -1003,6 +1006,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain")) {
         m_postProcessWhiteBalanceBlueGain = qBound(0.1, settings.m_postProcessWhiteBalanceBlueGain, 8.0);
     }
+    if (settingsKeys.contains("postProcessUnwarp")) {
+        m_postProcessUnwarp = settings.m_postProcessUnwarp;
+    }
     if (settingsKeys.contains("postProcessGreyscale")) {
         m_postProcessGreyscale = settings.m_postProcessGreyscale;
     }
@@ -1440,6 +1446,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain") || force) {
         ostr << " m_postProcessWhiteBalanceBlueGain: " << m_postProcessWhiteBalanceBlueGain;
+    }
+    if (settingsKeys.contains("postProcessUnwarp") || force) {
+        ostr << " m_postProcessUnwarp: " << m_postProcessUnwarp;
     }
     if (settingsKeys.contains("postProcessGreyscale") || force) {
         ostr << " m_postProcessGreyscale: " << m_postProcessGreyscale;

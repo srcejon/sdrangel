@@ -124,6 +124,7 @@ private:
     CameraPostProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
+    CameraPipelineFrame m_previousInputFrame;
     CameraPipelineFrame m_lastInputFrame;
     std::deque<cv::Mat> m_diffMaskHistory;
     cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
@@ -145,9 +146,11 @@ private:
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
+    void reprocessLastFrame();
     void processNewFrame(const CameraPipelineFramePtr& frame);
+    void processFrame(const CameraPipelineFramePtr& frame, const CameraPipelineFrame& diffReferenceFrame, bool updateInputHistory);
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
-    void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi);
+    void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes);
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);

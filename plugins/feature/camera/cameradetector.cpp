@@ -391,6 +391,7 @@ bool CameraDetector::handleMessage(const Message& cmd)
         m_captureActive = activeMsg.isActive();
         if (m_captureActive)
         {
+            m_previousInputFrame = CameraPipelineFrame();
             m_lastInputFrame = CameraPipelineFrame();
             m_diffMaskHistory.clear();
             m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
@@ -453,6 +454,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
     }
 
     if (sourceChanged) {
+        m_previousInputFrame = CameraPipelineFrame();
         m_lastInputFrame = CameraPipelineFrame();
         m_diffMaskHistory.clear();
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
@@ -463,6 +465,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
     if (force
         || settingsKeys.contains("diffMask")
         || settingsKeys.contains("diffThreshold")
+        || settingsKeys.contains("diffMaskOpenSize")
         || settingsKeys.contains("dilationSize")
         || settingsKeys.contains("diffMaskHistoryFrames")
         || settingsKeys.contains("diffMaskCloseSize")
@@ -480,6 +483,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
         || settingsKeys.contains("detectionRoiHeight")) {
+        m_previousInputFrame = CameraPipelineFrame();
         m_lastInputFrame = CameraPipelineFrame();
     }
 
@@ -534,6 +538,40 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_detectedObjectClasses.clear();
         m_pendingDisappearDeadlines.clear();
     }
+
+    const bool detectorVisualsChanged = force
+        || settingsKeys.contains("diffMask")
+        || settingsKeys.contains("diffThreshold")
+        || settingsKeys.contains("diffMaskOpenSize")
+        || settingsKeys.contains("dilationSize")
+        || settingsKeys.contains("diffMaskHistoryFrames")
+        || settingsKeys.contains("diffMaskCloseSize")
+        || settingsKeys.contains("motionDetect")
+        || settingsKeys.contains("motionHistory")
+        || settingsKeys.contains("motionVarThreshold")
+        || settingsKeys.contains("motionDetectShadows")
+        || settingsKeys.contains("motionOpenSize")
+        || settingsKeys.contains("motionCloseSize")
+        || settingsKeys.contains("motionPersistenceFrames")
+        || settingsKeys.contains("minContourArea")
+        || settingsKeys.contains("detectionRoiX")
+        || settingsKeys.contains("detectionRoiY")
+        || settingsKeys.contains("detectionRoiWidth")
+        || settingsKeys.contains("detectionRoiHeight");
+
+    if (detectorVisualsChanged) {
+        reprocessLastFrame();
+    }
+}
+
+void CameraDetector::reprocessLastFrame()
+{
+    if (m_lastInputFrame.m_image.isNull()) {
+        return;
+    }
+
+    CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
+    processFrame(frame, m_previousInputFrame, false);
 }
 
 void CameraDetector::submitFrame(const CameraPipelineFramePtr& frame)
@@ -597,6 +635,15 @@ void CameraDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
+    processFrame(frame, m_lastInputFrame, true);
+}
+
+void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const CameraPipelineFrame& diffReferenceFrame, bool updateInputHistory)
+{
+    if (!frame || frame->m_image.isNull()) {
+        return;
+    }
+
     CameraPipelineFrame inputFrameSnapshot(*frame);
     frame->m_motionBoxes.clear();
     frame->m_detections.clear();
@@ -608,10 +655,10 @@ void CameraDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
     const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
 
-    if (m_settings.m_diffMask && !m_lastInputFrame.m_image.isNull()
-        && m_lastInputFrame.m_image.width() == frame->m_image.width()
-        && m_lastInputFrame.m_image.height() == frame->m_image.height()) {
-        applyDiffMask(bgrMat, detectionRoi);
+    if (m_settings.m_diffMask && !diffReferenceFrame.m_image.isNull()
+        && diffReferenceFrame.m_image.width() == frame->m_image.width()
+        && diffReferenceFrame.m_image.height() == frame->m_image.height()) {
+        applyDiffMask(bgrMat, detectionRoi, diffReferenceFrame);
     }
 
     if (m_settings.m_motionDetect) {
@@ -630,7 +677,12 @@ void CameraDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     processObjectDetections(currentDetectedClasses, detectionTime);
 
     frame->m_image = convertBgrToRgbImage(bgrMat);
-    m_lastInputFrame = inputFrameSnapshot;
+
+    if (updateInputHistory)
+    {
+        m_previousInputFrame = m_lastInputFrame;
+        m_lastInputFrame = inputFrameSnapshot;
+    }
 
     if (m_nextStage) {
         m_nextStage->submitFrame(frame);
@@ -652,11 +704,11 @@ cv::Rect CameraDetector::resolveDetectionRoi(const cv::Size& frameSize) const
     return cv::Rect(x, y, width, height);
 }
 
-void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi)
+void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
 {
     PROFILER_START();
     QImage convertedPrevRgb;
-    const QImage& prevRgb = ensureRgb888(m_lastInputFrame.m_image, convertedPrevRgb);
+    const QImage& prevRgb = ensureRgb888(diffReferenceFrame.m_image, convertedPrevRgb);
     cv::Mat prevMat = wrapRgb888Image(prevRgb);
     cv::Mat prevBgr;
     cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
@@ -668,6 +720,13 @@ void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi)
     cv::absdiff(gray(roi), prevGray(roi), diff);
     cv::Mat mask;
     cv::threshold(diff, mask, m_settings.m_diffThreshold, 255, cv::THRESH_BINARY);
+
+    if (m_settings.m_diffMaskOpenSize > 0)
+    {
+        const int openKsize = 2 * m_settings.m_diffMaskOpenSize + 1;
+        const cv::Mat openKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(openKsize, openKsize));
+        cv::morphologyEx(mask, mask, cv::MORPH_OPEN, openKernel);
+    }
 
     if (m_settings.m_dilationSize > 0)
     {

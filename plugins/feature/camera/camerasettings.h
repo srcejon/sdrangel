@@ -143,6 +143,14 @@ struct CameraSettings
     QString m_stackDarkFileName;
     QString m_stackFlatFileName;
     QString m_stackBiasFileName;
+    float m_latitude;              ///< Camera latitude in degrees
+    float m_longitude;             ///< Camera longitude in degrees
+    float m_altitude;              ///< Camera altitude in metres
+    bool m_positionSync;           ///< Continually sync camera location from Main Settings
+    float m_azimuth;               ///< Camera pointing azimuth in degrees
+    float m_elevation;             ///< Camera pointing elevation in degrees
+    QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
+    float m_fov;                   ///< Camera field of view in degrees
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

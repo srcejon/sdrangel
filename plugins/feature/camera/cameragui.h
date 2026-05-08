@@ -25,6 +25,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsPixmapItem>
 #include <QNetworkReply>
+#include <QPair>
 #include <QSize>
 #include <QToolButton>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -49,6 +50,7 @@
 class PluginAPI;
 class FeatureUISet;
 class Camera;
+class Feature;
 class CameraSettingsDialog;
 class CameraHistogramDialog;
 class Message;
@@ -218,6 +220,12 @@ private:
     bool handleMessage(const Message& message);
     void makeUIConnections();
     void updateCameraSettingsVisibility();
+    void populateGs232ControllerCombo();
+    void applyPositionSync();
+    void updatePositionControls();
+    void syncFromMainSettings();
+    void syncFromSelectedGs232Controller();
+    QPair<int, int> selectedGs232ControllerIndices() const;
     void populateAlpacaAccessoryCombos();
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo& info);
@@ -348,6 +356,15 @@ private slots:
     void on_stackFlatFileButton_clicked();
     void on_stackBiasFileEdit_editingFinished();
     void on_stackBiasFileButton_clicked();
+    void on_latitudeSpin_valueChanged(double value);
+    void on_longitudeSpin_valueChanged(double value);
+    void on_altitudeSpin_valueChanged(double value);
+    void on_useMyPositionButton_clicked();
+    void useMyPositionButton_rightClicked(const QPoint& p);
+    void on_azimuthSpin_valueChanged(double value);
+    void on_elevationSpin_valueChanged(double value);
+    void on_azElGs232ControllerCombo_currentIndexChanged(int index);
+    void on_fovSpin_valueChanged(double value);
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);
@@ -443,6 +460,9 @@ private slots:
     void on_cameraSettingsButton_clicked();
     void updateStatus();
     void updateHardware();
+    void preferenceChanged(int elementType);
+    void onFeatureAdded(int featureSetIndex, Feature *feature);
+    void onFeatureRemoved(int featureSetIndex, Feature *feature);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void onQtVideoFrame(const QVideoFrame& frame);

@@ -27,6 +27,7 @@
 #include "util/simpleserializer.h"
 #include "util/httpdownloadmanager.h"
 #include "settings/serializable.h"
+#include "maincore.h"
 #include "camerasettings.h"
 
 #define DEFAULT_OVERLAY_TEXT_STRING "<img src=\":/sdrangel_icon.png\"><h1 style=\"color:blue\">SDRangel</h1>\n<p>\nText overlay "
@@ -180,6 +181,14 @@ void CameraSettings::resetToDefaults()
     m_stackDarkFileName.clear();
     m_stackFlatFileName.clear();
     m_stackBiasFileName.clear();
+    m_latitude = MainCore::instance()->getSettings().getLatitude();
+    m_longitude = MainCore::instance()->getSettings().getLongitude();
+    m_altitude = MainCore::instance()->getSettings().getAltitude();
+    m_positionSync = false;
+    m_azimuth = 0.0f;
+    m_elevation = 0.0f;
+    m_rotator.clear();
+    m_fov = 60.0f;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -288,6 +297,14 @@ QByteArray CameraSettings::serialize() const
     s.writeString(134, m_stackDarkFileName);
     s.writeString(135, m_stackFlatFileName);
     s.writeString(136, m_stackBiasFileName);
+    s.writeFloat(137, m_latitude);
+    s.writeFloat(138, m_longitude);
+    s.writeFloat(139, m_altitude);
+    s.writeBool(140, m_positionSync);
+    s.writeFloat(141, m_azimuth);
+    s.writeFloat(142, m_elevation);
+    s.writeString(143, m_rotator);
+    s.writeFloat(144, m_fov);
 
     if (m_rollupState) {
         s.writeBlob(19, m_rollupState->serialize());
@@ -478,6 +495,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(134, &m_stackDarkFileName, "");
         d.readString(135, &m_stackFlatFileName, "");
         d.readString(136, &m_stackBiasFileName, "");
+        d.readFloat(137, &m_latitude, MainCore::instance()->getSettings().getLatitude());
+        d.readFloat(138, &m_longitude, MainCore::instance()->getSettings().getLongitude());
+        d.readFloat(139, &m_altitude, MainCore::instance()->getSettings().getAltitude());
+        d.readBool(140, &m_positionSync, false);
+        d.readFloat(141, &m_azimuth, 0.0f);
+        d.readFloat(142, &m_elevation, 0.0f);
+        d.readString(143, &m_rotator, "");
+        d.readFloat(144, &m_fov, 60.0f);
 
         if (m_rollupState)
         {
@@ -663,6 +688,15 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_stackFrameCount = qBound(1, m_stackFrameCount, 256);
         m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodSigmaClippedAverage);
         m_stackAlignmentMethod = qBound(StackAlignmentNone, m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
+        m_latitude = qBound(-90.0f, m_latitude, 90.0f);
+        m_longitude = qBound(-180.0f, m_longitude, 180.0f);
+        m_altitude = qBound(-1000.0f, m_altitude, 100000.0f);
+        m_azimuth = std::fmod(m_azimuth, 360.0f);
+        if (m_azimuth < 0.0f) {
+            m_azimuth += 360.0f;
+        }
+        m_elevation = qBound(-90.0f, m_elevation, 90.0f);
+        m_fov = qBound(0.01f, m_fov, 360.0f);
 
         return true;
     }
@@ -856,6 +890,33 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("stackBiasFileName")) {
         m_stackBiasFileName = settings.m_stackBiasFileName;
+    }
+    if (settingsKeys.contains("latitude")) {
+        m_latitude = qBound(-90.0f, settings.m_latitude, 90.0f);
+    }
+    if (settingsKeys.contains("longitude")) {
+        m_longitude = qBound(-180.0f, settings.m_longitude, 180.0f);
+    }
+    if (settingsKeys.contains("altitude")) {
+        m_altitude = qBound(-1000.0f, settings.m_altitude, 100000.0f);
+    }
+    if (settingsKeys.contains("positionSync")) {
+        m_positionSync = settings.m_positionSync;
+    }
+    if (settingsKeys.contains("azimuth")) {
+        m_azimuth = std::fmod(settings.m_azimuth, 360.0f);
+        if (m_azimuth < 0.0f) {
+            m_azimuth += 360.0f;
+        }
+    }
+    if (settingsKeys.contains("elevation")) {
+        m_elevation = qBound(-90.0f, settings.m_elevation, 90.0f);
+    }
+    if (settingsKeys.contains("rotator")) {
+        m_rotator = settings.m_rotator;
+    }
+    if (settingsKeys.contains("fov")) {
+        m_fov = qBound(0.01f, settings.m_fov, 360.0f);
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -1237,6 +1298,30 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("stackBiasFileName") || force) {
         ostr << " m_stackBiasFileName: " << m_stackBiasFileName.toStdString();
+    }
+    if (settingsKeys.contains("latitude") || force) {
+        ostr << " m_latitude: " << m_latitude;
+    }
+    if (settingsKeys.contains("longitude") || force) {
+        ostr << " m_longitude: " << m_longitude;
+    }
+    if (settingsKeys.contains("altitude") || force) {
+        ostr << " m_altitude: " << m_altitude;
+    }
+    if (settingsKeys.contains("positionSync") || force) {
+        ostr << " m_positionSync: " << m_positionSync;
+    }
+    if (settingsKeys.contains("azimuth") || force) {
+        ostr << " m_azimuth: " << m_azimuth;
+    }
+    if (settingsKeys.contains("elevation") || force) {
+        ostr << " m_elevation: " << m_elevation;
+    }
+    if (settingsKeys.contains("rotator") || force) {
+        ostr << " m_rotator: " << m_rotator.toStdString();
+    }
+    if (settingsKeys.contains("fov") || force) {
+        ostr << " m_fov: " << m_fov;
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

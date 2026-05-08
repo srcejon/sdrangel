@@ -69,6 +69,9 @@
 #include "gui/audioselectdialog.h"
 #include "gui/dialogpositioner.h"
 #include "dsp/dspengine.h"
+#include "maincore.h"
+#include "feature/featureset.h"
+#include "channel/channelwebapiutils.h"
 
 #include "ui_cameragui.h"
 #include "camera.h"
@@ -529,6 +532,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     CRightClickEnabler *audioMuteRightClickEnabler = new CRightClickEnabler(ui->audioMute);
     connect(audioMuteRightClickEnabler, SIGNAL(rightClick(const QPoint &)), this, SLOT(audioSelect(const QPoint &)));
+    CRightClickEnabler *useMyPositionRightClickEnabler = new CRightClickEnabler(settingsUI()->useMyPositionButton);
+    connect(useMyPositionRightClickEnabler, SIGNAL(rightClick(const QPoint &)), this, SLOT(useMyPositionButton_rightClicked(const QPoint &)));
 
     // Populate white-balance combo (indices match QCamera::WhiteBalanceMode / QCameraImageProcessing::WhiteBalanceMode)
     settingsUI()->whiteBalanceCombo->addItem(tr("Auto"),        0);
@@ -556,6 +561,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     connect(m_settingsDialog, &QDialog::finished, this, &CameraGUI::onSettingsDialogFinished);
     connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
     connect(&m_dlm, &HttpDownloadManagerGUI::downloadComplete, this, &CameraGUI::handleYoloDownloadComplete);
+    connect(MainCore::instance(), &MainCore::featureAdded, this, &CameraGUI::onFeatureAdded);
+    connect(MainCore::instance(), &MainCore::featureRemoved, this, &CameraGUI::onFeatureRemoved);
     m_qtStillCaptureTimer.setSingleShot(false);
 
     settingsUI()->fpsLabel->addItem(tr("Frame Rate"), CameraSettings::CaptureModeFrameRate);
@@ -896,6 +903,15 @@ void CameraGUI::displaySettings()
     settingsUI()->stackDarkFileEdit->setText(m_settings.m_stackDarkFileName);
     settingsUI()->stackFlatFileEdit->setText(m_settings.m_stackFlatFileName);
     settingsUI()->stackBiasFileEdit->setText(m_settings.m_stackBiasFileName);
+    settingsUI()->latitudeSpin->setValue(m_settings.m_latitude);
+    settingsUI()->longitudeSpin->setValue(m_settings.m_longitude);
+    settingsUI()->altitudeSpin->setValue(m_settings.m_altitude);
+    settingsUI()->azimuthSpin->setValue(m_settings.m_azimuth);
+    settingsUI()->elevationSpin->setValue(m_settings.m_elevation);
+    settingsUI()->fovSpin->setValue(m_settings.m_fov);
+    populateGs232ControllerCombo();
+    applyPositionSync();
+    updatePositionControls();
     settingsUI()->postProcessWhiteBalanceModeCombo->setCurrentIndex(m_settings.m_postProcessWhiteBalanceMode);
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(m_settings.m_postProcessWhiteBalanceRedGain);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
@@ -1230,6 +1246,14 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->stackFlatFileButton, &QToolButton::clicked, this, &CameraGUI::on_stackFlatFileButton_clicked);
     QObject::connect(settingsUI()->stackBiasFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackBiasFileEdit_editingFinished);
     QObject::connect(settingsUI()->stackBiasFileButton, &QToolButton::clicked, this, &CameraGUI::on_stackBiasFileButton_clicked);
+    QObject::connect(settingsUI()->latitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_latitudeSpin_valueChanged);
+    QObject::connect(settingsUI()->longitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_longitudeSpin_valueChanged);
+    QObject::connect(settingsUI()->altitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_altitudeSpin_valueChanged);
+    QObject::connect(settingsUI()->useMyPositionButton, &QToolButton::clicked, this, &CameraGUI::on_useMyPositionButton_clicked);
+    QObject::connect(settingsUI()->azimuthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthSpin_valueChanged);
+    QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
+    QObject::connect(settingsUI()->azElGs232ControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_azElGs232ControllerCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -1547,6 +1571,124 @@ void CameraGUI::updateVideoFileControls()
     ui->playbackPositionSlider->setVisible(fileCameraSelected);
     ui->playbackPositionSlider->setEnabled(hasPlaybackPosition);
     ui->videoLine->setVisible(fileCameraSelected);
+}
+
+void CameraGUI::populateGs232ControllerCombo()
+{
+    const QString currentSelection = m_settings.m_rotator;
+    QSignalBlocker blocker(settingsUI()->azElGs232ControllerCombo);
+    settingsUI()->azElGs232ControllerCombo->clear();
+    settingsUI()->azElGs232ControllerCombo->addItem(tr("None"), QString());
+
+    std::vector<FeatureSet*>& featureSets = MainCore::instance()->getFeatureeSets();
+
+    for (int featureSetIndex = 0; featureSetIndex < static_cast<int>(featureSets.size()); ++featureSetIndex)
+    {
+        FeatureSet *featureSet = featureSets[featureSetIndex];
+
+        if (!featureSet) {
+            continue;
+        }
+
+        for (int featureIndex = 0; featureIndex < featureSet->getNumberOfFeatures(); ++featureIndex)
+        {
+            Feature *feature = featureSet->getFeatureAt(featureIndex);
+
+            if (!feature || (feature->getURI() != QLatin1String("sdrangel.feature.gs232controller"))) {
+                continue;
+            }
+
+            QString title;
+            feature->getTitle(title);
+            if (title.isEmpty()) {
+                title = tr("GS232 Controller");
+            }
+
+            const QString selectionId = QStringLiteral("%1:%2").arg(featureSetIndex).arg(featureIndex);
+            settingsUI()->azElGs232ControllerCombo->addItem(
+                QStringLiteral("F%1:%2 %3").arg(featureSetIndex).arg(featureIndex).arg(title),
+                selectionId);
+        }
+    }
+
+    const int index = settingsUI()->azElGs232ControllerCombo->findData(currentSelection);
+    settingsUI()->azElGs232ControllerCombo->setCurrentIndex(index >= 0 ? index : 0);
+}
+
+void CameraGUI::applyPositionSync()
+{
+    if (m_settings.m_positionSync) {
+        settingsUI()->useMyPositionButton->setStyleSheet(
+            QStringLiteral("QToolButton{ background-color: %1; }")
+                .arg(palette().highlight().color().darker(150).name()));
+        syncFromMainSettings();
+        connect(&MainCore::instance()->getSettings(), &MainSettings::preferenceChanged,
+            this, &CameraGUI::preferenceChanged, Qt::UniqueConnection);
+    } else {
+        settingsUI()->useMyPositionButton->setStyleSheet(
+            QStringLiteral("QToolButton{ background-color: %1; }")
+                .arg(palette().button().color().name()));
+        disconnect(&MainCore::instance()->getSettings(), &MainSettings::preferenceChanged,
+            this, &CameraGUI::preferenceChanged);
+    }
+}
+
+void CameraGUI::updatePositionControls()
+{
+    const bool azElSynced = !m_settings.m_rotator.isEmpty();
+    settingsUI()->latitudeSpin->setReadOnly(m_settings.m_positionSync);
+    settingsUI()->longitudeSpin->setReadOnly(m_settings.m_positionSync);
+    settingsUI()->altitudeSpin->setReadOnly(m_settings.m_positionSync);
+    settingsUI()->azimuthSpin->setReadOnly(azElSynced);
+    settingsUI()->elevationSpin->setReadOnly(azElSynced);
+}
+
+void CameraGUI::syncFromMainSettings()
+{
+    settingsUI()->latitudeSpin->setValue(MainCore::instance()->getSettings().getLatitude());
+    settingsUI()->longitudeSpin->setValue(MainCore::instance()->getSettings().getLongitude());
+    settingsUI()->altitudeSpin->setValue(MainCore::instance()->getSettings().getAltitude());
+}
+
+QPair<int, int> CameraGUI::selectedGs232ControllerIndices() const
+{
+    const QString selection = m_settings.m_rotator.trimmed();
+    const QStringList parts = selection.split(QLatin1Char(':'));
+
+    if (parts.size() != 2) {
+        return qMakePair(-1, -1);
+    }
+
+    bool okFeatureSet = false;
+    bool okFeature = false;
+    const int featureSetIndex = parts.at(0).toInt(&okFeatureSet);
+    const int featureIndex = parts.at(1).toInt(&okFeature);
+
+    if (!okFeatureSet || !okFeature) {
+        return qMakePair(-1, -1);
+    }
+
+    return qMakePair(featureSetIndex, featureIndex);
+}
+
+void CameraGUI::syncFromSelectedGs232Controller()
+{
+    const QPair<int, int> indices = selectedGs232ControllerIndices();
+
+    if ((indices.first < 0) || (indices.second < 0)) {
+        return;
+    }
+
+    double azimuth = 0.0;
+    double elevation = 0.0;
+    if (!ChannelWebAPIUtils::getFeatureSetting(indices.first, indices.second, "azimuth", azimuth)
+        || !ChannelWebAPIUtils::getFeatureSetting(indices.first, indices.second, "elevation", elevation))
+    {
+        return;
+    }
+
+    settingsUI()->azimuthSpin->setValue(azimuth);
+    settingsUI()->elevationSpin->setValue(elevation);
 }
 
 void CameraGUI::probeQtCameraCapabilities()
@@ -3647,6 +3789,66 @@ void CameraGUI::on_stackBiasFileButton_clicked()
     }
 }
 
+void CameraGUI::on_latitudeSpin_valueChanged(double value)
+{
+    m_settings.m_latitude = static_cast<float>(value);
+    applySetting("latitude");
+}
+
+void CameraGUI::on_longitudeSpin_valueChanged(double value)
+{
+    m_settings.m_longitude = static_cast<float>(value);
+    applySetting("longitude");
+}
+
+void CameraGUI::on_altitudeSpin_valueChanged(double value)
+{
+    m_settings.m_altitude = static_cast<float>(value);
+    applySetting("altitude");
+}
+
+void CameraGUI::on_useMyPositionButton_clicked()
+{
+    syncFromMainSettings();
+}
+
+void CameraGUI::useMyPositionButton_rightClicked(const QPoint& p)
+{
+    (void) p;
+    m_settings.m_positionSync = !m_settings.m_positionSync;
+    applyPositionSync();
+    updatePositionControls();
+    applySetting("positionSync");
+}
+
+void CameraGUI::on_azimuthSpin_valueChanged(double value)
+{
+    m_settings.m_azimuth = static_cast<float>(value);
+    applySetting("azimuth");
+}
+
+void CameraGUI::on_elevationSpin_valueChanged(double value)
+{
+    m_settings.m_elevation = static_cast<float>(value);
+    applySetting("elevation");
+}
+
+void CameraGUI::on_azElGs232ControllerCombo_currentIndexChanged(int index)
+{
+    m_settings.m_rotator = settingsUI()->azElGs232ControllerCombo->itemData(index).toString();
+    updatePositionControls();
+    if (!m_settings.m_rotator.isEmpty()) {
+        syncFromSelectedGs232Controller();
+    }
+    applySetting("rotator");
+}
+
+void CameraGUI::on_fovSpin_valueChanged(double value)
+{
+    m_settings.m_fov = static_cast<float>(value);
+    applySetting("fov");
+}
+
 void CameraGUI::updatePostProcessWhiteBalanceControls()
 {
     const bool manual = m_settings.m_postProcessWhiteBalanceMode == 2;
@@ -4541,6 +4743,10 @@ void CameraGUI::onSettingsDialogFinished(int result)
 
 void CameraGUI::updateStatus()
 {
+    if (!m_settings.m_rotator.isEmpty()) {
+        syncFromSelectedGs232Controller();
+    }
+
     int state = m_camera->getState();
 
     if (m_lastFeatureState != state)
@@ -4573,6 +4779,44 @@ void CameraGUI::updateStatus()
         }
 
         m_lastFeatureState = state;
+    }
+}
+
+void CameraGUI::preferenceChanged(int elementType)
+{
+    const Preferences::ElementType pref = static_cast<Preferences::ElementType>(elementType);
+
+    if (!m_settings.m_positionSync) {
+        return;
+    }
+
+    if ((pref == Preferences::Latitude)
+        || (pref == Preferences::Longitude)
+        || (pref == Preferences::Altitude))
+    {
+        syncFromMainSettings();
+    }
+}
+
+void CameraGUI::onFeatureAdded(int featureSetIndex, Feature *feature)
+{
+    (void) featureSetIndex;
+    if (feature && (feature->getURI() == QLatin1String("sdrangel.feature.gs232controller"))) {
+        populateGs232ControllerCombo();
+        updatePositionControls();
+    }
+}
+
+void CameraGUI::onFeatureRemoved(int featureSetIndex, Feature *feature)
+{
+    (void) featureSetIndex;
+    if (feature && (feature->getURI() == QLatin1String("sdrangel.feature.gs232controller"))) {
+        populateGs232ControllerCombo();
+        if (settingsUI()->azElGs232ControllerCombo->findData(m_settings.m_rotator) < 0) {
+            m_settings.m_rotator.clear();
+            applySetting("rotator");
+        }
+        updatePositionControls();
     }
 }
 

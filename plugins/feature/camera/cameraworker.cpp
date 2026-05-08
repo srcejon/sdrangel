@@ -1884,7 +1884,7 @@ void CameraWorker::alpacaStartExposure()
 
     const double durationSecs = m_settings.m_exposureTimeMs / 1000.0;
     QUrlQuery body;
-    body.addQueryItem("Duration", QString::number(durationSecs, 'f', 3));
+    body.addQueryItem("Duration", QString::number(durationSecs, 'f', 6)); // 6 needed for microsecond precision
     body.addQueryItem("Light", "True");
     body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
     body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));

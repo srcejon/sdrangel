@@ -143,6 +143,7 @@ private:
     bool m_forceSettings;
     QTimer m_updateTimer;
     QTimer m_scheduleTimer;
+    bool m_scheduleManualStartLatch = false;
     bool m_scheduleManualStopLatch = false;
     bool m_scheduleLastWithinWindow = false;
 

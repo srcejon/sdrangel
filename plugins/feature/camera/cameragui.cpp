@@ -1697,6 +1697,8 @@ void CameraGUI::updateScheduleControls()
     QString statusText;
     if (!enabled) {
         statusText = tr("Disabled");
+    } else if (m_scheduleManualStartLatch) {
+        statusText = tr("Manual run until next window");
     } else if (m_scheduleManualStopLatch) {
         statusText = tr("Paused until next window");
     } else if (m_settings.m_scheduleWeekdays == 0) {
@@ -1716,6 +1718,10 @@ void CameraGUI::updateScheduledCapture()
 {
     const bool withinWindow = isWithinScheduleWindow();
 
+    if (!m_scheduleLastWithinWindow && withinWindow) {
+        m_scheduleManualStartLatch = false;
+    }
+
     if (m_scheduleLastWithinWindow && !withinWindow) {
         m_scheduleManualStopLatch = false;
     }
@@ -1727,7 +1733,7 @@ void CameraGUI::updateScheduledCapture()
         return;
     }
 
-    const bool shouldRun = withinWindow && !m_scheduleManualStopLatch;
+    const bool shouldRun = (withinWindow && !m_scheduleManualStopLatch) || (!withinWindow && m_scheduleManualStartLatch);
     const int state = m_camera->getState();
 
     if (shouldRun && (state == Feature::StIdle)) {
@@ -3221,10 +3227,23 @@ void CameraGUI::updateCameraSubframeControls()
 
 void CameraGUI::on_startStop_clicked(bool checked)
 {
-    if (!checked && m_settings.m_scheduleEnabled && isWithinScheduleWindow()) {
-        m_scheduleManualStopLatch = true;
-    } else if (checked) {
-        m_scheduleManualStopLatch = false;
+    if (m_settings.m_scheduleEnabled)
+    {
+        if (checked)
+        {
+            if (!isWithinScheduleWindow()) {
+                m_scheduleManualStartLatch = true;
+            }
+            m_scheduleManualStopLatch = false;
+        }
+        else
+        {
+            m_scheduleManualStartLatch = false;
+
+            if (isWithinScheduleWindow()) {
+                m_scheduleManualStopLatch = true;
+            }
+        }
     }
 
     m_camera->getInputMessageQueue()->push(Camera::MsgStartStop::create(checked));
@@ -4016,6 +4035,11 @@ void CameraGUI::on_lensProjectionCombo_currentIndexChanged(int index)
 void CameraGUI::on_scheduleEnabledCheck_toggled(bool checked)
 {
     m_settings.m_scheduleEnabled = checked;
+    if (!checked)
+    {
+        m_scheduleManualStartLatch = false;
+        m_scheduleManualStopLatch = false;
+    }
     updateScheduleControls();
     applySetting("scheduleEnabled");
     updateScheduledCapture();

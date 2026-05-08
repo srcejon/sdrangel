@@ -768,33 +768,15 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
 {
     qDebug() << "CameraWorker::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
-    const bool recapture = force
+    const bool cameraSourceChanged = force
         || settingsKeys.contains("cameraProtocol")
-        || settingsKeys.contains("cameraId")
-        || settingsKeys.contains("audioDeviceName")
-        || settingsKeys.contains("resolutionWidth")
-        || settingsKeys.contains("resolutionHeight")
-        || settingsKeys.contains("captureMode")
+        || settingsKeys.contains("cameraId");
+    const bool captureModeChanged = force
+        || settingsKeys.contains("captureMode");
+    const bool captureCadenceChanged = force
         || settingsKeys.contains("captureInterval")
         || settingsKeys.contains("captureIntervalUnits")
-        || settingsKeys.contains("framesPerSecond")
-        || settingsKeys.contains("exposureTimeMs")
-        || settingsKeys.contains("isoSensitivity")
-        || settingsKeys.contains("cameraBinX")
-        || settingsKeys.contains("cameraBinY")
-        || settingsKeys.contains("cameraNumX")
-        || settingsKeys.contains("cameraNumY")
-        || settingsKeys.contains("cameraStartX")
-        || settingsKeys.contains("cameraStartY")
-        || settingsKeys.contains("cameraGain")
-        || settingsKeys.contains("cameraOffset")
-        || settingsKeys.contains("asiCoolerOn")
-        || settingsKeys.contains("asiTargetTemp")
-        || settingsKeys.contains("asiUsbBandwidth")
-        || settingsKeys.contains("asiHighSpeedMode")
-        || settingsKeys.contains("asiColorImageType")
-        || settingsKeys.contains("alpacaHost")
-        || settingsKeys.contains("alpacaPort");
+        || settingsKeys.contains("framesPerSecond");
 
     if (force) {
         m_settings = settings;
@@ -811,10 +793,21 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         m_cameraFinder->reportCameraList(m_settings);
     }
 
-    if (recapture && m_capturing)
+    const bool recapture = m_capturing && (
+        cameraSourceChanged
+        || (m_settings.isQtCamera() && (force || settingsKeys.contains("audioDeviceName")))
+        || (m_settings.isAsiCamera() && captureModeChanged));
+
+    if (recapture)
     {
         stopCapture();
         startCapture();
+    }
+    else if (m_capturing && (m_settings.isAlpacaCamera() || m_settings.isAsiCamera()) && captureCadenceChanged)
+    {
+        m_captureTimer.start(m_settings.isIntervalCaptureMode()
+            ? m_settings.getCaptureIntervalMs()
+            : std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond)))));
     }
 
     const bool alpacaEndpointChanged = force

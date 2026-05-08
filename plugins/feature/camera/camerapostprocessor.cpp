@@ -527,7 +527,7 @@ QString CameraPostProcessor::createTimestampedOutputFilename(const QString& base
 {
     const QFileInfo fileInfo(baseFileName);
     const QString timestamp = QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz");
-    const QString infix = rawVariant ? "._raw_" : ".";
+    const QString infix = rawVariant ? ".raw." : ".";
     return fileInfo.path() + "/" + fileInfo.baseName() + infix + timestamp + "." + fileInfo.suffix();
 }
 

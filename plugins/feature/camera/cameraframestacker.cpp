@@ -110,10 +110,7 @@ cv::Mat CameraFrameStacker::loadFitsCalibrationFrame(const QString& fileName, co
         monoFrame /= static_cast<float>(meanValue);
     }
 
-    std::vector<cv::Mat> channels(3, monoFrame);
-    cv::Mat calibrationFrame;
-    cv::merge(channels, calibrationFrame);
-    return calibrationFrame;
+    return monoFrame;
 }
 
 void CameraFrameStacker::validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName)
@@ -146,21 +143,57 @@ cv::Mat CameraFrameStacker::applyCalibration(const cv::Mat& input)
         return input;
     }
 
+    const int channels = input.channels();
+    const int floatType = CV_MAKETYPE(CV_32F, channels);
     cv::Mat calibratedFloat;
-    input.convertTo(calibratedFloat, CV_32FC3);
+    input.convertTo(calibratedFloat, floatType);
 
-    if (!m_biasCalibrationFrame.empty()) {
-        calibratedFloat -= m_biasCalibrationFrame;
+    auto expandedCalibration = [channels](const cv::Mat& calibrationFrame) -> cv::Mat {
+        if (calibrationFrame.empty()) {
+            return cv::Mat();
+        }
+
+        if (calibrationFrame.channels() == channels) {
+            return calibrationFrame;
+        }
+
+        if ((calibrationFrame.channels() == 1) && (channels == 3))
+        {
+            std::vector<cv::Mat> mats(3, calibrationFrame);
+            cv::Mat merged;
+            cv::merge(mats, merged);
+            return merged;
+        }
+
+        return cv::Mat();
+    };
+
+    const cv::Mat biasFrame = expandedCalibration(m_biasCalibrationFrame);
+    const cv::Mat darkFrame = expandedCalibration(m_darkCalibrationFrame);
+    const cv::Mat flatFrame = expandedCalibration(m_flatCalibrationFrame);
+
+    if (!m_biasCalibrationFrame.empty() && biasFrame.empty()) {
+        qWarning() << "CameraFrameStacker: bias calibration channel count does not match input";
+    }
+    if (!m_darkCalibrationFrame.empty() && darkFrame.empty()) {
+        qWarning() << "CameraFrameStacker: dark calibration channel count does not match input";
+    }
+    if (!m_flatCalibrationFrame.empty() && flatFrame.empty()) {
+        qWarning() << "CameraFrameStacker: flat calibration channel count does not match input";
     }
 
-    if (!m_darkCalibrationFrame.empty()) {
-        calibratedFloat -= m_darkCalibrationFrame;
+    if (!biasFrame.empty()) {
+        calibratedFloat -= biasFrame;
     }
 
-    if (!m_flatCalibrationFrame.empty())
+    if (!darkFrame.empty()) {
+        calibratedFloat -= darkFrame;
+    }
+
+    if (!flatFrame.empty())
     {
         cv::Mat safeFlatFrame;
-        cv::max(m_flatCalibrationFrame, cv::Scalar::all(1.0e-6), safeFlatFrame);
+        cv::max(flatFrame, cv::Scalar::all(1.0e-6), safeFlatFrame);
         cv::divide(calibratedFloat, safeFlatFrame, calibratedFloat);
     }
 
@@ -171,6 +204,128 @@ cv::Mat CameraFrameStacker::applyCalibration(const cv::Mat& input)
     cv::Mat calibratedFrame;
     calibratedFloat.convertTo(calibratedFrame, input.type());
     return calibratedFrame;
+}
+
+int CameraFrameStacker::bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern)
+{
+    switch (bayerPattern)
+    {
+    case CameraPipelineFrame::BayerRGGB:
+        return cv::COLOR_BayerRGGB2BGR;
+    case CameraPipelineFrame::BayerBGGR:
+        return cv::COLOR_BayerBGGR2BGR;
+    case CameraPipelineFrame::BayerGRBG:
+        return cv::COLOR_BayerGRBG2BGR;
+    case CameraPipelineFrame::BayerGBRG:
+        return cv::COLOR_BayerGBRG2BGR;
+    case CameraPipelineFrame::BayerNone:
+    default:
+        return -1;
+    }
+}
+
+cv::Mat CameraFrameStacker::imageToWorkingMat(const QImage& input, bool& highBitDepthInput)
+{
+    highBitDepthInput = (input.format() == QImage::Format_RGBA64)
+        || (input.format() == QImage::Format_RGBX64)
+        || (input.format() == QImage::Format_Grayscale16);
+
+    if (input.format() == QImage::Format_Grayscale16)
+    {
+        cv::Mat frameMat(input.height(), input.width(), CV_16UC1,
+            const_cast<uchar*>(input.bits()),
+            static_cast<size_t>(input.bytesPerLine()));
+        return frameMat.clone();
+    }
+
+    if (input.format() == QImage::Format_Grayscale8)
+    {
+        cv::Mat frameMat(input.height(), input.width(), CV_8UC1,
+            const_cast<uchar*>(input.bits()),
+            static_cast<size_t>(input.bytesPerLine()));
+        return frameMat.clone();
+    }
+
+    if ((input.format() == QImage::Format_RGBA64) || (input.format() == QImage::Format_RGBX64))
+    {
+        cv::Mat frameMat(input.height(), input.width(), CV_16UC3);
+        for (int y = 0; y < input.height(); ++y)
+        {
+            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(input.constScanLine(y));
+            cv::Vec<uint16_t, 3> *outputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
+
+            for (int x = 0; x < input.width(); ++x)
+            {
+                outputLine[x][0] = inputLine[x].red();
+                outputLine[x][1] = inputLine[x].green();
+                outputLine[x][2] = inputLine[x].blue();
+            }
+        }
+        return frameMat;
+    }
+
+    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
+    cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
+                   const_cast<uchar*>(rgb.bits()),
+                   static_cast<size_t>(rgb.bytesPerLine()));
+    return rgbMat.clone();
+}
+
+QImage CameraFrameStacker::workingMatToImage(const cv::Mat& frameMat)
+{
+    if (frameMat.channels() == 1)
+    {
+        if (frameMat.depth() == CV_16U)
+        {
+            QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale16);
+            for (int row = 0; row < frameMat.rows; ++row) {
+                std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * sizeof(quint16)));
+            }
+            return image;
+        }
+
+        QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale8);
+        for (int row = 0; row < frameMat.rows; ++row) {
+            std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols));
+        }
+        return image;
+    }
+
+    if (frameMat.depth() == CV_16U)
+    {
+        QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGBA64);
+        for (int y = 0; y < frameMat.rows; ++y)
+        {
+            const cv::Vec<uint16_t, 3> *inputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
+            QRgba64 *outputLine = reinterpret_cast<QRgba64*>(image.scanLine(y));
+
+            for (int x = 0; x < frameMat.cols; ++x) {
+                outputLine[x] = qRgba64(inputLine[x][0], inputLine[x][1], inputLine[x][2], 65535);
+            }
+        }
+        return image;
+    }
+
+    QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
+    for (int row = 0; row < frameMat.rows; ++row) {
+        std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * 3));
+    }
+    return image;
+}
+
+cv::Mat CameraFrameStacker::debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern)
+{
+    const int cvCode = bayerPatternToOpenCvCode(bayerPattern);
+    if ((cvCode < 0) || (input.channels() != 1)) {
+        return input;
+    }
+
+    cv::Mat debayered;
+    cv::cvtColor(input, debayered, cvCode);
+    if (debayered.channels() == 3) {
+        cv::cvtColor(debayered, debayered, cv::COLOR_BGR2RGB);
+    }
+    return debayered;
 }
 
 bool CameraFrameStacker::handleMessage(const Message& cmd)
@@ -327,7 +482,8 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    frame->m_image = applyFrameStacking(frame->m_image);
+    frame->m_image = applyFrameStacking(frame->m_image, frame->m_bayerPattern);
+    frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
     frame->m_unprocessedImage = frame->m_image;
 
     if (m_nextStage) {
@@ -335,101 +491,33 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 }
 
-QImage CameraFrameStacker::applyFrameStacking(const QImage& input)
+QImage CameraFrameStacker::applyFrameStacking(const QImage& input, CameraPipelineFrame::BayerPattern bayerPattern)
 {
     PROFILER_START();
-    const bool highBitDepthInput = (input.format() == QImage::Format_RGBA64) || (input.format() == QImage::Format_RGBX64);
     const bool stackEnabled = m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1);
-
-    auto convertToRgb888 = [](const QImage& source) -> QImage {
-        if ((source.format() != QImage::Format_RGBA64) && (source.format() != QImage::Format_RGBX64)) {
-            return source.convertToFormat(QImage::Format_RGB888);
-        }
-
-        QImage rgb8(source.width(), source.height(), QImage::Format_RGB888);
-        for (int y = 0; y < source.height(); ++y)
-        {
-            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(source.constScanLine(y));
-            uchar *outputLine = rgb8.scanLine(y);
-
-            for (int x = 0; x < source.width(); ++x)
-            {
-                outputLine[x * 3 + 0] = static_cast<uchar>(std::lround((inputLine[x].red() * 255.0) / 65535.0));
-                outputLine[x * 3 + 1] = static_cast<uchar>(std::lround((inputLine[x].green() * 255.0) / 65535.0));
-                outputLine[x * 3 + 2] = static_cast<uchar>(std::lround((inputLine[x].blue() * 255.0) / 65535.0));
-            }
-        }
-
-        return rgb8;
-    };
-
-    auto matToRgb888 = [](const cv::Mat& frameMat) -> QImage {
-        if (frameMat.type() == CV_8UC3)
-        {
-            QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
-            for (int row = 0; row < frameMat.rows; ++row) {
-                std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * 3));
-            }
-            return image;
-        }
-
-        QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
-        for (int y = 0; y < frameMat.rows; ++y)
-        {
-            const cv::Vec<uint16_t, 3> *inputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
-            uchar *outputLine = image.scanLine(y);
-
-            for (int x = 0; x < frameMat.cols; ++x)
-            {
-                outputLine[x * 3 + 0] = static_cast<uchar>(std::lround((inputLine[x][0] * 255.0) / 65535.0));
-                outputLine[x * 3 + 1] = static_cast<uchar>(std::lround((inputLine[x][1] * 255.0) / 65535.0));
-                outputLine[x * 3 + 2] = static_cast<uchar>(std::lround((inputLine[x][2] * 255.0) / 65535.0));
-            }
-        }
-
-        return image;
-    };
 
     const bool calibrationEnabled = !m_darkCalibrationFrame.empty()
         || !m_flatCalibrationFrame.empty()
         || !m_biasCalibrationFrame.empty();
 
-    if (!stackEnabled && !calibrationEnabled) {
-        return highBitDepthInput ? convertToRgb888(input) : input;
+    if (!stackEnabled && !calibrationEnabled && (bayerPattern == CameraPipelineFrame::BayerNone)) {
+        return input;
     }
 
-    cv::Mat frameMat;
-    if (highBitDepthInput)
-    {
-        frameMat = cv::Mat(input.height(), input.width(), CV_16UC3);
-        for (int y = 0; y < input.height(); ++y)
-        {
-            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(input.constScanLine(y));
-            cv::Vec<uint16_t, 3> *outputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
-
-            for (int x = 0; x < input.width(); ++x)
-            {
-                outputLine[x][0] = inputLine[x].red();
-                outputLine[x][1] = inputLine[x].green();
-                outputLine[x][2] = inputLine[x].blue();
-            }
-        }
-    }
-    else
-    {
-        const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
-        cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
-                       const_cast<uchar*>(rgb.bits()),
-                       static_cast<size_t>(rgb.bytesPerLine()));
-        frameMat = rgbMat.clone();
-    }
+    bool highBitDepthInput = false;
+    cv::Mat frameMat = imageToWorkingMat(input, highBitDepthInput);
 
     frameMat = applyCalibration(frameMat);
+    frameMat = debayerRawMat(frameMat, bayerPattern);
 
     if (!stackEnabled)
     {
         PROFILER_STOP(__FUNCTION__);
-        return matToRgb888(frameMat);
+        return workingMatToImage(frameMat);
+    }
+
+    if (frameMat.channels() == 1) {
+        cv::cvtColor(frameMat, frameMat, cv::COLOR_GRAY2RGB);
     }
 
     cv::Mat alignedFrameMat = frameMat;
@@ -456,7 +544,7 @@ QImage CameraFrameStacker::applyFrameStacking(const QImage& input)
         m_stackFrameHistory.pop_front();
     }
 
-    const double scaleTo8Bit = highBitDepthInput ? (255.0 / 65535.0) : 1.0;
+    const double scaleTo8Bit = alignedFrameMat.depth() == CV_16U ? (255.0 / 65535.0) : 1.0;
 
     if (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
     {

@@ -183,6 +183,23 @@ int CameraWorker::asiBayerToOpenCvCode(int bayerPattern)
     }
 }
 
+CameraPipelineFrame::BayerPattern CameraWorker::asiBayerToPipelinePattern(int bayerPattern)
+{
+    switch (bayerPattern)
+    {
+    case ASI_BAYER_RG:
+        return CameraPipelineFrame::BayerRGGB;
+    case ASI_BAYER_BG:
+        return CameraPipelineFrame::BayerBGGR;
+    case ASI_BAYER_GR:
+        return CameraPipelineFrame::BayerGRBG;
+    case ASI_BAYER_GB:
+        return CameraPipelineFrame::BayerGBRG;
+    default:
+        return CameraPipelineFrame::BayerRGGB;
+    }
+}
+
 ASI_IMG_TYPE CameraWorker::asiSelectImageType(const ASI_CAMERA_INFO& cameraInfo) const
 {
     if (cameraInfo.IsColorCam == ASI_TRUE)
@@ -242,13 +259,13 @@ QImage CameraWorker::renderGrayscaleRaw(const QVector<QVector<int>>& raw, int wi
     if (use16Bit)
     {
         const int uniformGray = (range == 0) ? (minValue > 0 ? 32768 : 0) : 0;
-        QImage image(width, height, QImage::Format_RGBA64);
+        QImage image(width, height, QImage::Format_Grayscale16);
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
                 const int value = (range > 0)
                     ? qBound(0, static_cast<int>(((raw[x][y] - minValue) * 65535.0) / range), 65535)
                     : uniformGray;
-                reinterpret_cast<QRgba64*>(image.scanLine(y))[x] = qRgba64(value, value, value, 65535);
+                reinterpret_cast<quint16*>(image.scanLine(y))[x] = static_cast<quint16>(value);
             }
         }
         return image;
@@ -1981,20 +1998,21 @@ void CameraWorker::alpacaFetchImageArray()
         }
 
         QImage image = createPlaceholderFrame();
+        CameraPipelineFrame::BayerPattern bayerPattern = CameraPipelineFrame::BayerNone;
         QString receiveImageFormat;
 
         if (reply->error() == QNetworkReply::NoError) {
             const QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
             if (contentType.contains(QLatin1String("application/imagebytes"), Qt::CaseInsensitive)) {
                 m_alpacaImageBytesSupported = true;
-                image = parseAlpacaImageBytes(data, &receiveImageFormat);
+                image = parseAlpacaImageBytes(data, &receiveImageFormat, &bayerPattern);
             } else {
                 // Server returned JSON — either it doesn't support ImageBytes or we didn't request it
                 if (m_alpacaImageBytesSupported) {
                     qDebug() << "CameraWorker::alpacaFetchImageArray: server returned JSON; disabling ImageBytes for this camera";
                     m_alpacaImageBytesSupported = false;
                 }
-                image = parseAlpacaImageArray(data, &receiveImageFormat);
+                image = parseAlpacaImageArray(data, &receiveImageFormat, &bayerPattern);
             }
         }
 
@@ -2010,6 +2028,7 @@ void CameraWorker::alpacaFetchImageArray()
             CameraPipelineFramePtr frame(new CameraPipelineFrame);
             frame->m_image = image;
             frame->m_captureDateTime = QDateTime::currentDateTime();
+            frame->m_bayerPattern = bayerPattern;
             m_frameAligner->submitFrame(frame);
         }
         reply->deleteLater();
@@ -2386,8 +2405,13 @@ QString CameraWorker::transportError(QNetworkReply *reply) const
     }
 }
 
-QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload, QString *receiveImageFormat) const
+QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload, QString *receiveImageFormat,
+    CameraPipelineFrame::BayerPattern *bayerPattern) const
 {
+    if (bayerPattern) {
+        *bayerPattern = CameraPipelineFrame::BayerNone;
+    }
+
     const QJsonDocument doc = QJsonDocument::fromJson(payload);
     if (!doc.isObject()) {
         return createPlaceholderFrame();
@@ -2450,7 +2474,7 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload, QString *r
 
         // Bayer demosaicing for sensorType 2 (RGGB), 3 (CMYG), 4 (CMYG2), 5 (LRGB)
         // sensorType 0 = Monochrome, 1 = Colour (handled by rank 3 normally)
-        return renderRawPixelArray(raw, width, height, use16Bit);
+        return renderRawPixelArray(raw, width, height, use16Bit, bayerPattern);
     }
     else if (rank == 3)
     {
@@ -2515,7 +2539,8 @@ QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload, QString *r
     return createPlaceholderFrame();
 }
 
-QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit) const
+QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit,
+    CameraPipelineFrame::BayerPattern *bayerPattern) const
 {
     int minValue = std::numeric_limits<int>::max();
     int maxValue = std::numeric_limits<int>::min();
@@ -2529,74 +2554,25 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
 
     const int range = maxValue - minValue;
 
-    // Bayer demosaicing for sensorType 2 (RGGB).
-    // RGGB pattern shifted by BayerOffsetX/Y:
-    //   (even x, even y) = R
-    //   (odd  x, even y) = G1
-    //   (even x, odd  y) = G2
-    //   (odd  x, odd  y) = B
-    // For CMYG/CMYG2/LRGB (sensorType 3-5) we fall back to greyscale
-    // as those require colour-matrix transforms beyond the scope here.
     if (m_alpacaSensorType == 2)
     {
-        QImage image(width, height, use16Bit ? QImage::Format_RGBA64 : QImage::Format_RGB32);
-        auto scaleValue = [minValue, range, use16Bit](int v) {
-            if (range <= 0) {
-                return use16Bit ? (minValue > 0 ? 32768 : 0) : (minValue > 0 ? 128 : 0);
-            }
-
-            if (use16Bit) {
-                return qBound(0, static_cast<int>(((v - minValue) * 65535.0) / range), 65535);
-            }
-
-            return qBound(0, static_cast<int>(((v - minValue) * 255.0) / range), 255);
-        };
-        auto safe  = [&raw, width, height](int x, int y) -> int {
-            return raw[qBound(0, x, width-1)][qBound(0, y, height-1)];
-        };
         const int phaseX = ((m_alpacaBayerOffsetX % 2) + 2) % 2;
         const int phaseY = ((m_alpacaBayerOffsetY % 2) + 2) % 2;
 
-        for (int x = 0; x < width; ++x) {
-            for (int y = 0; y < height; ++y) {
-                int r, g, b;
-                const int shiftedX = (x + phaseX) % 2;
-                const int shiftedY = (y + phaseY) % 2;
-
-                if ((shiftedX == 0) && (shiftedY == 0)) {
-                    // R site
-                    r = raw[x][y];
-                    g = (safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4;
-                    b = (safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4;
-                } else if ((shiftedX == 1) && (shiftedY == 0)) {
-                    // G1 site (R row)
-                    r = (safe(x-1,y) + safe(x+1,y)) / 2;
-                    g = raw[x][y];
-                    b = (safe(x,y-1) + safe(x,y+1)) / 2;
-                } else if ((shiftedX == 0) && (shiftedY == 1)) {
-                    // G2 site (B row)
-                    r = (safe(x,y-1) + safe(x,y+1)) / 2;
-                    g = raw[x][y];
-                    b = (safe(x-1,y) + safe(x+1,y)) / 2;
-                } else {
-                    // B site
-                    b = raw[x][y];
-                    g = (safe(x-1,y) + safe(x+1,y) + safe(x,y-1) + safe(x,y+1)) / 4;
-                    r = (safe(x-1,y-1) + safe(x+1,y-1) + safe(x-1,y+1) + safe(x+1,y+1)) / 4;
-                }
-
-                const int scaledR = scaleValue(r);
-                const int scaledG = scaleValue(g);
-                const int scaledB = scaleValue(b);
-
-                if (use16Bit) {
-                    reinterpret_cast<QRgba64*>(image.scanLine(y))[x] = qRgba64(scaledR, scaledG, scaledB, 65535);
-                } else {
-                    reinterpret_cast<QRgb*>(image.scanLine(y))[x] = qRgb(scaledR, scaledG, scaledB);
-                }
+        if (bayerPattern)
+        {
+            if ((phaseX == 0) && (phaseY == 0)) {
+                *bayerPattern = CameraPipelineFrame::BayerRGGB;
+            } else if ((phaseX == 1) && (phaseY == 0)) {
+                *bayerPattern = CameraPipelineFrame::BayerGRBG;
+            } else if ((phaseX == 0) && (phaseY == 1)) {
+                *bayerPattern = CameraPipelineFrame::BayerGBRG;
+            } else {
+                *bayerPattern = CameraPipelineFrame::BayerBGGR;
             }
         }
-        return image;
+
+        return renderGrayscaleRaw(raw, width, height, use16Bit);
     }
 
     // Monochrome (sensorType 0 or 1 returning rank 2, or unsupported Bayer types 3-5)
@@ -2623,8 +2599,13 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
 //
 // Pixel data is column-major within each rank-2 plane: pixel[x][y] at index (x*height + y)
 // For rank 3: pixel[plane][x][y] at index (plane*width*height + x*height + y)
-QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload, QString *receiveImageFormat) const
+QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload, QString *receiveImageFormat,
+    CameraPipelineFrame::BayerPattern *bayerPattern) const
 {
+    if (bayerPattern) {
+        *bayerPattern = CameraPipelineFrame::BayerNone;
+    }
+
     static constexpr int    kHeaderSize         = 44;
     // ASCOM ImageArrayElementTypes enum values
     static constexpr qint32 kElementTypeInt16   = 1;
@@ -2774,7 +2755,7 @@ QImage CameraWorker::parseAlpacaImageBytes(const QByteArray& payload, QString *r
             }
         }
 
-        return renderRawPixelArray(raw, width, height, use16Bit);
+        return renderRawPixelArray(raw, width, height, use16Bit, bayerPattern);
     }
     else if (rank == 3)
     {
@@ -3171,8 +3152,12 @@ bool CameraWorker::asiApplyCameraSettings()
     return true;
 }
 
-QImage CameraWorker::asiFrameToImage() const
+QImage CameraWorker::asiFrameToImage(CameraPipelineFrame::BayerPattern *bayerPattern) const
 {
+    if (bayerPattern) {
+        *bayerPattern = CameraPipelineFrame::BayerNone;
+    }
+
     if (m_asiFrameWidth <= 0 || m_asiFrameHeight <= 0 || m_asiFrameBuffer.isEmpty()) {
         return createPlaceholderFrame();
     }
@@ -3199,30 +3184,21 @@ QImage CameraWorker::asiFrameToImage() const
 
         if (!m_asiColorCamera)
         {
-            cv::Mat raw8;
-            raw16.convertTo(raw8, CV_8UC1, 255.0 / 65535.0);
-            QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_Grayscale8);
+            QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_Grayscale16);
             for (int y = 0; y < m_asiFrameHeight; ++y) {
-                std::memcpy(image.scanLine(y), raw8.ptr(y), static_cast<size_t>(m_asiFrameWidth));
+                std::memcpy(image.scanLine(y), raw16.ptr(y), static_cast<size_t>(m_asiFrameWidth * sizeof(quint16)));
             }
             return image;
         }
 
-        cv::Mat rgb16Mat;
-        cv::cvtColor(raw16, rgb16Mat, asiBayerToOpenCvCode(m_asiBayerPattern));
-
-        QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_RGBA64);
-        for (int y = 0; y < m_asiFrameHeight; ++y)
-        {
-            const cv::Vec<uint16_t, 3> *inputLine = rgb16Mat.ptr<cv::Vec<uint16_t, 3>>(y);
-            QRgba64 *outputLine = reinterpret_cast<QRgba64*>(image.scanLine(y));
-
-            for (int x = 0; x < m_asiFrameWidth; ++x)
-            {
-                outputLine[x] = qRgba64(inputLine[x][2], inputLine[x][1], inputLine[x][0], 65535);
-            }
+        if (bayerPattern) {
+            *bayerPattern = asiBayerToPipelinePattern(m_asiBayerPattern);
         }
 
+        QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_Grayscale16);
+        for (int y = 0; y < m_asiFrameHeight; ++y) {
+            std::memcpy(image.scanLine(y), raw16.ptr(y), static_cast<size_t>(m_asiFrameWidth * sizeof(quint16)));
+        }
         return image;
     }
     else
@@ -3239,10 +3215,15 @@ QImage CameraWorker::asiFrameToImage() const
         return image;
     }
 
-    cv::Mat rgbMat;
-    cv::cvtColor(rawMat, rgbMat, asiBayerToOpenCvCode(m_asiBayerPattern));
-    QImage image(rgbMat.data, rgbMat.cols, rgbMat.rows, static_cast<int>(rgbMat.step), QImage::Format_RGB888);
-    return image.rgbSwapped();
+    if (bayerPattern) {
+        *bayerPattern = asiBayerToPipelinePattern(m_asiBayerPattern);
+    }
+
+    QImage image(m_asiFrameWidth, m_asiFrameHeight, QImage::Format_Grayscale8);
+    for (int y = 0; y < m_asiFrameHeight; ++y) {
+        std::memcpy(image.scanLine(y), rawMat.ptr(y), static_cast<size_t>(m_asiFrameWidth));
+    }
+    return image;
 }
 
 void CameraWorker::asiCaptureExposureFrame()
@@ -3321,9 +3302,11 @@ void CameraWorker::asiCaptureExposureFrame()
     setLastAsiError(ASI_SUCCESS, QString());
     m_lastAsiCaptureTimeMs = captureTimer.elapsed();
     if (m_frameAligner) {
+        CameraPipelineFrame::BayerPattern bayerPattern = CameraPipelineFrame::BayerNone;
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
-        frame->m_image = asiFrameToImage();
+        frame->m_image = asiFrameToImage(&bayerPattern);
         frame->m_captureDateTime = QDateTime::currentDateTime();
+        frame->m_bayerPattern = bayerPattern;
         m_frameAligner->submitFrame(frame);
     }
 }
@@ -3353,9 +3336,11 @@ void CameraWorker::asiCaptureVideoFrame()
         setLastAsiError(ASI_SUCCESS, QString());
         m_lastAsiCaptureTimeMs = captureTimer.elapsed();
         if (m_frameAligner) {
+            CameraPipelineFrame::BayerPattern bayerPattern = CameraPipelineFrame::BayerNone;
             CameraPipelineFramePtr frame(new CameraPipelineFrame);
-            frame->m_image = asiFrameToImage();
+            frame->m_image = asiFrameToImage(&bayerPattern);
             frame->m_captureDateTime = QDateTime::currentDateTime();
+            frame->m_bayerPattern = bayerPattern;
             m_frameAligner->submitFrame(frame);
         }
     }

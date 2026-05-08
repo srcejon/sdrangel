@@ -47,12 +47,22 @@ struct CameraHistogramData
 
 struct CameraPipelineFrame
 {
+    enum BayerPattern
+    {
+        BayerNone = 0,
+        BayerRGGB,
+        BayerBGGR,
+        BayerGRBG,
+        BayerGBRG
+    };
+
     QImage m_image;
     QImage m_unprocessedImage;
     CameraHistogramData m_histogramData;
     QDateTime m_captureDateTime;
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
+    BayerPattern m_bayerPattern = BayerNone;
 };
 
 using CameraPipelineFramePtr = QSharedPointer<CameraPipelineFrame>;

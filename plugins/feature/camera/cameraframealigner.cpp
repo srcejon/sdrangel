@@ -212,7 +212,25 @@ void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
 
 cv::Mat CameraFrameAligner::imageToWorkingMat(const QImage& input, bool& highBitDepthInput)
 {
-    highBitDepthInput = (input.format() == QImage::Format_RGBA64) || (input.format() == QImage::Format_RGBX64);
+    highBitDepthInput = (input.format() == QImage::Format_RGBA64)
+        || (input.format() == QImage::Format_RGBX64)
+        || (input.format() == QImage::Format_Grayscale16);
+
+    if (input.format() == QImage::Format_Grayscale16)
+    {
+        cv::Mat frameMat(input.height(), input.width(), CV_16UC1,
+            const_cast<uchar*>(input.bits()),
+            static_cast<size_t>(input.bytesPerLine()));
+        return frameMat.clone();
+    }
+
+    if (input.format() == QImage::Format_Grayscale8)
+    {
+        cv::Mat frameMat(input.height(), input.width(), CV_8UC1,
+            const_cast<uchar*>(input.bits()),
+            static_cast<size_t>(input.bytesPerLine()));
+        return frameMat.clone();
+    }
 
     if (highBitDepthInput)
     {
@@ -244,6 +262,24 @@ cv::Mat CameraFrameAligner::imageToWorkingMat(const QImage& input, bool& highBit
 
 QImage CameraFrameAligner::workingMatToImage(const cv::Mat& frameMat, bool highBitDepthInput)
 {
+    if (frameMat.channels() == 1)
+    {
+        if (highBitDepthInput)
+        {
+            QImage result(frameMat.cols, frameMat.rows, QImage::Format_Grayscale16);
+            for (int row = 0; row < frameMat.rows; ++row) {
+                std::memcpy(result.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * sizeof(quint16)));
+            }
+            return result;
+        }
+
+        QImage result(frameMat.cols, frameMat.rows, QImage::Format_Grayscale8);
+        for (int row = 0; row < frameMat.rows; ++row) {
+            std::memcpy(result.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols));
+        }
+        return result;
+    }
+
     if (!highBitDepthInput)
     {
         QImage result(frameMat.cols, frameMat.rows, QImage::Format_RGB888);

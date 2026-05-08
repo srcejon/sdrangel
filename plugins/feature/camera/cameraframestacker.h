@@ -135,7 +135,11 @@ private:
     cv::Mat loadFitsCalibrationFrame(const QString& fileName, const QString& calibrationType, bool normalizeFlat) const;
     void validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName);
     cv::Mat applyCalibration(const cv::Mat& input);
-    [[nodiscard]] QImage applyFrameStacking(const QImage& input);
+    static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
+    static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
+    static QImage workingMatToImage(const cv::Mat& frameMat);
+    static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
+    [[nodiscard]] QImage applyFrameStacking(const QImage& input, CameraPipelineFrame::BayerPattern bayerPattern);
 
 private slots:
     void handleInputMessages();

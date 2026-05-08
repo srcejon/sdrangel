@@ -585,9 +585,12 @@ private:
     void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
     void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray());
     QString transportError(QNetworkReply *reply) const;
-    QImage parseAlpacaImageArray(const QByteArray& payload, QString *receiveImageFormat = nullptr) const;
-    QImage parseAlpacaImageBytes(const QByteArray& payload, QString *receiveImageFormat = nullptr) const;
-    QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit) const;
+    QImage parseAlpacaImageArray(const QByteArray& payload, QString *receiveImageFormat = nullptr,
+        CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
+    QImage parseAlpacaImageBytes(const QByteArray& payload, QString *receiveImageFormat = nullptr,
+        CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
+    QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit,
+        CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
     static QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit);
     static QString normalizeAudioMatchName(QString text);
     static int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName);
@@ -627,6 +630,7 @@ private:
     static bool asiGetControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& value, ASI_BOOL& isAuto);
     static bool asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageType);
     static int asiBayerToOpenCvCode(int bayerPattern);
+    static CameraPipelineFrame::BayerPattern asiBayerToPipelinePattern(int bayerPattern);
     ASI_IMG_TYPE asiSelectImageType(const ASI_CAMERA_INFO& cameraInfo) const;
     void asiQueryCameraCapabilities();
     bool asiOpenCamera();
@@ -636,7 +640,7 @@ private:
     void asiCaptureVideoFrame();
     void asiPollStatus();
     void asiCaptureTick();
-    QImage asiFrameToImage() const;
+    QImage asiFrameToImage(CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
     void invalidateAsiSettings();
     void setLastAsiError(int errorCode, const QString& errorMessage);
 #endif

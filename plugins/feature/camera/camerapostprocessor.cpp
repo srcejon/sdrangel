@@ -95,6 +95,26 @@ static double greenwichMeanSiderealDegrees(const QDateTime& utcDateTime)
     return normalizeDegrees(gmst);
 }
 
+static QString formatSignedDegrees(double value)
+{
+    const int rounded = qRound(value);
+    return QStringLiteral("%1%2°").arg(rounded >= 0 ? "+" : "").arg(rounded);
+}
+
+static QString formatAzimuthDegrees(double value)
+{
+    return QStringLiteral("%1°").arg(qRound(normalizeDegrees(value)));
+}
+
+static QString formatRightAscensionDegrees(double value)
+{
+    int hours = static_cast<int>(std::round(normalizeDegrees(value) / 15.0)) % 24;
+    if (hours < 0) {
+        hours += 24;
+    }
+    return QStringLiteral("%1h").arg(hours, 2, 10, QLatin1Char('0'));
+}
+
 static SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
 {
     const double azimuth = degToRad(azimuthDegrees);
@@ -682,7 +702,50 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
     const QDateTime utcDateTime = m_captureDateTime.toUTC();
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
     painter.setClipRect(image.rect());
+    QFont font;
+    if (!m_settings.m_overlayFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_overlayFontFamily);
+    }
+    font.setPointSizeF(std::max(7.0, m_settings.m_overlayFontScale * 0.75));
+    painter.setFont(font);
+    const QFontMetrics fontMetrics(font);
+
+    const auto drawLabel = [&](const QPointF& point, const QString& text, const QColor& color)
+    {
+        if (text.isEmpty()) {
+            return;
+        }
+
+        QPointF labelPoint = point + QPointF(4.0, -4.0);
+        QRect textRect = fontMetrics.boundingRect(text);
+        QRect targetRect(
+            qRound(labelPoint.x()),
+            qRound(labelPoint.y()) - textRect.height(),
+            textRect.width() + 4,
+            textRect.height() + 2);
+
+        if (!image.rect().adjusted(0, 0, -1, -1).intersects(targetRect)) {
+            return;
+        }
+
+        painter.save();
+        painter.setPen(Qt::black);
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+            for (int dy = -1; dy <= 1; ++dy)
+            {
+                if (dx == 0 && dy == 0) {
+                    continue;
+                }
+                painter.drawText(targetRect.translated(dx, dy), Qt::AlignLeft | Qt::AlignTop, text);
+            }
+        }
+        painter.setPen(color);
+        painter.drawText(targetRect, Qt::AlignLeft | Qt::AlignTop, text);
+        painter.restore();
+    };
 
     if (drawAltAz)
     {
@@ -702,6 +765,11 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
                 previousPoint = point;
                 havePrevious = ok;
             }
+
+            QPointF labelPoint;
+            if (projector.projectAltAz(m_settings.m_azimuth, static_cast<double>(altitude), labelPoint)) {
+                drawLabel(labelPoint, formatSignedDegrees(static_cast<double>(altitude)), m_settings.m_altAzGridColor);
+            }
         }
 
         for (int azimuth = 0; azimuth < 360; azimuth += 15)
@@ -717,6 +785,12 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
                 }
                 previousPoint = point;
                 havePrevious = ok;
+            }
+
+            QPointF labelPoint;
+            const double labelAltitude = std::clamp(static_cast<double>(m_settings.m_elevation), 0.0, 80.0);
+            if (projector.projectAltAz(static_cast<double>(azimuth), labelAltitude, labelPoint)) {
+                drawLabel(labelPoint, formatAzimuthDegrees(static_cast<double>(azimuth)), m_settings.m_altAzGridColor);
             }
         }
     }
@@ -750,6 +824,22 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
                 previousPoint = point;
                 havePrevious = ok;
             }
+
+            double labelAzimuth = 0.0;
+            double labelElevation = 0.0;
+            QPointF labelPoint;
+            if (equatorialToAltAz(
+                    greenwichMeanSiderealDegrees(utcDateTime) + m_settings.m_longitude,
+                    static_cast<double>(declination),
+                    m_settings.m_latitude,
+                    m_settings.m_longitude,
+                    utcDateTime,
+                    labelAzimuth,
+                    labelElevation)
+                && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
+            {
+                drawLabel(labelPoint, formatSignedDegrees(static_cast<double>(declination)), m_settings.m_equatorialGridColor);
+            }
         }
 
         for (int rightAscension = 0; rightAscension < 360; rightAscension += 15)
@@ -776,6 +866,22 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
                 }
                 previousPoint = point;
                 havePrevious = ok;
+            }
+
+            double labelAzimuth = 0.0;
+            double labelElevation = 0.0;
+            QPointF labelPoint;
+            if (equatorialToAltAz(
+                    static_cast<double>(rightAscension),
+                    std::clamp(static_cast<double>(m_settings.m_elevation), -60.0, 60.0),
+                    m_settings.m_latitude,
+                    m_settings.m_longitude,
+                    utcDateTime,
+                    labelAzimuth,
+                    labelElevation)
+                && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
+            {
+                drawLabel(labelPoint, formatRightAscensionDegrees(static_cast<double>(rightAscension)), m_settings.m_equatorialGridColor);
             }
         }
     }

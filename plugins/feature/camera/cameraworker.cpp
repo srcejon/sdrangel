@@ -3040,29 +3040,43 @@ bool CameraWorker::asiApplyCameraSettings()
         m_asiImageType = asiSelectImageType(cameraInfo);
     }
     const int bin = std::max(1, std::min(m_settings.m_cameraBinX, m_settings.m_cameraBinY));
-    const int maxWidth = std::max(16, m_asiCameraSizeX / std::max(1, bin));
-    const int maxHeight = std::max(16, m_asiCameraSizeY / std::max(1, bin));
-    const int startX = qBound(0, m_settings.m_cameraStartX, maxWidth - 1);
-    const int startY = qBound(0, m_settings.m_cameraStartY, maxHeight - 1);
-    const int width = (m_settings.m_cameraNumX == 0)
-        ? std::max(16, maxWidth - startX)
-        : qBound(16, m_settings.m_cameraNumX, std::max(16, maxWidth - startX));
-    const int height = (m_settings.m_cameraNumY == 0)
-        ? std::max(16, maxHeight - startY)
-        : qBound(16, m_settings.m_cameraNumY, std::max(16, maxHeight - startY));
+    const int roiWidthStep = 8;
+    const int roiHeightStep = 2;
+    const int minWidth = 16;
+    const int minHeight = 16;
+    const int maxWidth = std::max(minWidth, m_asiCameraSizeX / std::max(1, bin));
+    const int maxHeight = std::max(minHeight, m_asiCameraSizeY / std::max(1, bin));
 
-    const ASI_ERROR_CODE startPosError = ASISetStartPos(cameraId, startX, startY);
-    if (startPosError != ASI_SUCCESS) {
-        setLastAsiError(startPosError, asiErrorCodeToString(startPosError));
-        qDebug() << "CameraWorker: ASISetStartPos failed:" << startPosError << asiErrorCodeToString(startPosError);
-        return false;
-    }
+    auto alignDown = [](int value, int step, int minimum) {
+        const int aligned = (value / step) * step;
+        return std::max(minimum, aligned);
+    };
+
+    const int requestedWidth = (m_settings.m_cameraNumX == 0)
+        ? maxWidth
+        : qBound(minWidth, m_settings.m_cameraNumX, maxWidth);
+    const int requestedHeight = (m_settings.m_cameraNumY == 0)
+        ? maxHeight
+        : qBound(minHeight, m_settings.m_cameraNumY, maxHeight);
+
+    const int width = alignDown(requestedWidth, roiWidthStep, minWidth);
+    const int height = alignDown(requestedHeight, roiHeightStep, minHeight);
+    const int startX = qBound(0, m_settings.m_cameraStartX, std::max(0, maxWidth - width));
+    const int startY = qBound(0, m_settings.m_cameraStartY, std::max(0, maxHeight - height));
 
     const ASI_ERROR_CODE roiError = ASISetROIFormat(cameraId, width, height, bin, static_cast<ASI_IMG_TYPE>(m_asiImageType));
     if (roiError != ASI_SUCCESS) {
         setLastAsiError(roiError, asiErrorCodeToString(roiError));
         qDebug() << "CameraWorker: ASISetROIFormat failed:" << roiError << asiErrorCodeToString(roiError)
-                 << "width" << width << "height" << height << "bin" << bin << "imageType" << m_asiImageType;
+                   << "width" << width << "height" << height << "bin" << bin << "imageType" << m_asiImageType;
+        return false;
+    }
+
+    const ASI_ERROR_CODE startPosError = ASISetStartPos(cameraId, startX, startY);
+    if (startPosError != ASI_SUCCESS) {
+        setLastAsiError(startPosError, asiErrorCodeToString(startPosError));
+        qDebug() << "CameraWorker: ASISetStartPos failed:" << startPosError << asiErrorCodeToString(startPosError)
+                 << "startX" << startX << "startY" << startY << "width" << width << "height" << height << "bin" << bin;
         return false;
     }
 

@@ -949,6 +949,8 @@ void CameraGUI::displaySettings()
     settingsUI()->dateTimePosXValue->setText(QString::number(m_settings.m_dateTimePosX));
     settingsUI()->dateTimePosYSlider->setValue(m_settings.m_dateTimePosY);
     settingsUI()->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
+    settingsUI()->equatorialGridCheck->setChecked(m_settings.m_equatorialGrid);
+    settingsUI()->altAzGridCheck->setChecked(m_settings.m_altAzGrid);
     ui->overlayTextButton->setChecked(m_settings.m_overlayText);
     settingsUI()->overlayTextEdit->blockSignals(true);
     settingsUI()->overlayTextEdit->setPlainText(m_settings.m_overlayTextString);
@@ -980,6 +982,8 @@ void CameraGUI::displaySettings()
     settingsUI()->motionPersistenceFramesSpin->setValue(m_settings.m_motionPersistenceFrames);
     settingsUI()->minContourAreaSpin->setValue(m_settings.m_minContourArea);
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
+    updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
+    updateColorButton(settingsUI()->altAzGridColorButton, m_settings.m_altAzGridColor);
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
     updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
     ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
@@ -1286,6 +1290,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->dateTimeFormatEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_dateTimeFormatEdit_editingFinished);
     QObject::connect(settingsUI()->dateTimePosXSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosXSlider_valueChanged);
     QObject::connect(settingsUI()->dateTimePosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosYSlider_valueChanged);
+    QObject::connect(settingsUI()->equatorialGridCheck, &QCheckBox::toggled, this, &CameraGUI::on_equatorialGridCheck_toggled);
+    QObject::connect(settingsUI()->equatorialGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_equatorialGridColorButton_clicked);
+    QObject::connect(settingsUI()->altAzGridCheck, &QCheckBox::toggled, this, &CameraGUI::on_altAzGridCheck_toggled);
+    QObject::connect(settingsUI()->altAzGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_altAzGridColorButton_clicked);
     QObject::connect(ui->overlayTextButton, &QToolButton::toggled, this, &CameraGUI::on_overlayTextButton_toggled);
     QObject::connect(settingsUI()->overlayTextColorButton, &QToolButton::clicked, this, &CameraGUI::on_overlayTextColorButton_clicked);
     QObject::connect(settingsUI()->overlayTextEdit, &QTextEdit::textChanged, this, &CameraGUI::on_overlayTextEdit_textChanged);
@@ -4128,6 +4136,42 @@ void CameraGUI::on_dateTimePosYSlider_valueChanged(int value)
     m_settings.m_dateTimePosY = value;
     settingsUI()->dateTimePosYValue->setText(QString::number(value));
     applySetting("dateTimePosY");
+}
+
+void CameraGUI::on_equatorialGridCheck_toggled(bool checked)
+{
+    m_settings.m_equatorialGrid = checked;
+    applySetting("equatorialGrid");
+}
+
+void CameraGUI::on_equatorialGridColorButton_clicked()
+{
+    const QColor color = QColorDialog::getColor(m_settings.m_equatorialGridColor, this, tr("Select equatorial grid colour"));
+
+    if (color.isValid())
+    {
+        m_settings.m_equatorialGridColor = color;
+        updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
+        applySetting("equatorialGridColor");
+    }
+}
+
+void CameraGUI::on_altAzGridCheck_toggled(bool checked)
+{
+    m_settings.m_altAzGrid = checked;
+    applySetting("altAzGrid");
+}
+
+void CameraGUI::on_altAzGridColorButton_clicked()
+{
+    const QColor color = QColorDialog::getColor(m_settings.m_altAzGridColor, this, tr("Select alt-az grid colour"));
+
+    if (color.isValid())
+    {
+        m_settings.m_altAzGridColor = color;
+        updateColorButton(settingsUI()->altAzGridColorButton, m_settings.m_altAzGridColor);
+        applySetting("altAzGridColor");
+    }
 }
 
 void CameraGUI::on_overlayTextButton_toggled(bool checked)

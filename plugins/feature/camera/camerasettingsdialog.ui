@@ -2387,7 +2387,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="dateTimeOverlay">
+       <widget class="QGroupBox" name="dateTimeOverlay">
          <property name="title">
           <string>Date / Time Overlay</string>
          </property>
@@ -2568,6 +2568,62 @@
              <string>yyyy-MM-dd hh:mm:ss</string>
             </property>
            </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="skyGridOverlay">
+         <property name="title">
+          <string>Sky Grid</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_skyGridOverlay">
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="equatorialGridCheck">
+            <property name="text">
+             <string>Equatorial grid</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QToolButton" name="equatorialGridColorButton">
+            <property name="toolTip">
+             <string>Select equatorial grid colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QCheckBox" name="altAzGridCheck">
+            <property name="text">
+             <string>Alt-az grid</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QToolButton" name="altAzGridColorButton">
+            <property name="toolTip">
+             <string>Select alt-az grid colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2" rowspan="2">
+           <spacer name="horizontalSpacer_skyGrid">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
           </item>
          </layout>
         </widget>

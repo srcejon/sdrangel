@@ -17,6 +17,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cmath>
 
 #include <QDebug>
 #include <QFileInfo>
@@ -34,6 +35,221 @@ MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveVideoState, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSetVideoRecordingEnabled, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
+
+namespace {
+
+struct SkyVector
+{
+    double x;
+    double y;
+    double z;
+};
+
+static double degToRad(double value)
+{
+    static constexpr double kPi = 3.14159265358979323846;
+    return value * kPi / 180.0;
+}
+
+static double normalizeDegrees(double value)
+{
+    value = std::fmod(value, 360.0);
+    if (value < 0.0) {
+        value += 360.0;
+    }
+    return value;
+}
+
+static double julianDateUtc(const QDateTime& utcDateTime)
+{
+    const QDate date = utcDateTime.date();
+    const QTime time = utcDateTime.time();
+    int year = date.year();
+    int month = date.month();
+    if (month <= 2)
+    {
+        year -= 1;
+        month += 12;
+    }
+
+    const int a = year / 100;
+    const int b = 2 - a + (a / 4);
+    const double fractionalDay = (static_cast<double>(time.hour())
+        + (static_cast<double>(time.minute())
+            + (static_cast<double>(time.second()) + static_cast<double>(time.msec()) / 1000.0) / 60.0) / 60.0) / 24.0;
+    const double day = static_cast<double>(date.day()) + fractionalDay;
+
+    return std::floor(365.25 * static_cast<double>(year + 4716))
+        + std::floor(30.6001 * static_cast<double>(month + 1))
+        + day + static_cast<double>(b) - 1524.5;
+}
+
+static double greenwichMeanSiderealDegrees(const QDateTime& utcDateTime)
+{
+    const double jd = julianDateUtc(utcDateTime);
+    const double t = (jd - 2451545.0) / 36525.0;
+    const double gmst = 280.46061837
+        + 360.98564736629 * (jd - 2451545.0)
+        + 0.000387933 * t * t
+        - (t * t * t) / 38710000.0;
+    return normalizeDegrees(gmst);
+}
+
+static SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
+{
+    const double azimuth = degToRad(azimuthDegrees);
+    const double elevation = degToRad(elevationDegrees);
+    const double cosElevation = std::cos(elevation);
+
+    return {
+        cosElevation * std::sin(azimuth),
+        cosElevation * std::cos(azimuth),
+        std::sin(elevation)
+    };
+}
+
+static double dot(const SkyVector& lhs, const SkyVector& rhs)
+{
+    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+static SkyVector cross(const SkyVector& lhs, const SkyVector& rhs)
+{
+    return {
+        lhs.y * rhs.z - lhs.z * rhs.y,
+        lhs.z * rhs.x - lhs.x * rhs.z,
+        lhs.x * rhs.y - lhs.y * rhs.x
+    };
+}
+
+static double length(const SkyVector& vector)
+{
+    return std::sqrt(dot(vector, vector));
+}
+
+static SkyVector normalize(const SkyVector& vector)
+{
+    const double vectorLength = length(vector);
+    if (vectorLength <= 0.0) {
+        return {0.0, 0.0, 0.0};
+    }
+
+    return {
+        vector.x / vectorLength,
+        vector.y / vectorLength,
+        vector.z / vectorLength
+    };
+}
+
+static bool equatorialToAltAz(double rightAscensionDegrees,
+                              double declinationDegrees,
+                              double latitudeDegrees,
+                              double longitudeDegrees,
+                              const QDateTime& utcDateTime,
+                              double& azimuthDegrees,
+                              double& elevationDegrees)
+{
+    const double lstDegrees = normalizeDegrees(greenwichMeanSiderealDegrees(utcDateTime) + longitudeDegrees);
+    double hourAngleDegrees = normalizeDegrees(lstDegrees - rightAscensionDegrees);
+    if (hourAngleDegrees > 180.0) {
+        hourAngleDegrees -= 360.0;
+    }
+
+    const double hourAngle = degToRad(hourAngleDegrees);
+    const double declination = degToRad(declinationDegrees);
+    const double latitude = degToRad(latitudeDegrees);
+
+    const double sinAltitude = std::sin(declination) * std::sin(latitude)
+        + std::cos(declination) * std::cos(latitude) * std::cos(hourAngle);
+    const double altitude = std::asin(std::clamp(sinAltitude, -1.0, 1.0));
+
+    static constexpr double kPi = 3.14159265358979323846;
+    const double azimuth = std::atan2(
+        std::sin(hourAngle),
+        std::cos(hourAngle) * std::sin(latitude) - std::tan(declination) * std::cos(latitude)) + kPi;
+
+    azimuthDegrees = normalizeDegrees(azimuth * 180.0 / M_PI);
+    elevationDegrees = altitude * 180.0 / M_PI;
+    return std::isfinite(azimuthDegrees) && std::isfinite(elevationDegrees);
+}
+
+struct SkyProjector
+{
+    bool valid = false;
+    SkyVector center;
+    SkyVector right;
+    SkyVector up;
+    double halfWidthTan = 1.0;
+    double halfHeightTan = 1.0;
+    int width = 0;
+    int height = 0;
+
+    static SkyProjector create(const CameraSettings& settings, const QSize& size)
+    {
+        SkyProjector projector;
+        projector.width = size.width();
+        projector.height = size.height();
+
+        if (projector.width <= 0 || projector.height <= 0 || settings.m_fov <= 0.0f) {
+            return projector;
+        }
+
+        projector.center = normalize(vectorFromAltAz(settings.m_azimuth, settings.m_elevation));
+
+        SkyVector reference = {0.0, 0.0, 1.0};
+        if (std::fabs(dot(projector.center, reference)) > 0.98) {
+            reference = {0.0, 1.0, 0.0};
+        }
+
+        projector.right = normalize(cross(projector.center, reference));
+        projector.up = normalize(cross(projector.right, projector.center));
+        if (length(projector.right) <= 0.0 || length(projector.up) <= 0.0) {
+            return projector;
+        }
+
+        const double halfHorizontalFov = degToRad(settings.m_fov) * 0.5;
+        static constexpr double kPi = 3.14159265358979323846;
+        if (halfHorizontalFov <= 0.0 || halfHorizontalFov >= (kPi * 0.5)) {
+            return projector;
+        }
+
+        projector.halfWidthTan = std::tan(halfHorizontalFov);
+        projector.halfHeightTan = projector.halfWidthTan * static_cast<double>(projector.height) / static_cast<double>(projector.width);
+        projector.valid = projector.halfWidthTan > 0.0 && projector.halfHeightTan > 0.0;
+        return projector;
+    }
+
+    bool projectAltAz(double azimuthDegrees, double elevationDegrees, QPointF& point) const
+    {
+        if (!valid) {
+            return false;
+        }
+
+        const SkyVector vector = vectorFromAltAz(azimuthDegrees, elevationDegrees);
+        const double depth = dot(vector, center);
+        if (depth <= 0.0) {
+            return false;
+        }
+
+        const double tangentX = dot(vector, right) / depth;
+        const double tangentY = dot(vector, up) / depth;
+        if (!std::isfinite(tangentX) || !std::isfinite(tangentY)) {
+            return false;
+        }
+
+        const double normalizedX = tangentX / halfWidthTan;
+        const double normalizedY = tangentY / halfHeightTan;
+        if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY)) {
+            return false;
+        }
+
+        point.setX((normalizedX + 1.0) * 0.5 * static_cast<double>(width));
+        point.setY((1.0 - normalizedY) * 0.5 * static_cast<double>(height));
+        return true;
+    }
+};
+
+} // namespace
 
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
@@ -131,11 +347,14 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     static const QStringList kPostProcessingKeys = {
         "overlayDateTime", "dateTimeColor",
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
+        "equatorialGrid", "equatorialGridColor",
+        "altAzGrid", "altAzGridColor",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "overlayFontFamily", "overlayFontScale",
         "motionBoxColor",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
+        "latitude", "longitude", "altitude", "azimuth", "elevation", "fov",
         "yoloBoxColor"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
@@ -443,6 +662,127 @@ void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const
     PROFILER_STOP(__FUNCTION__);
 }
 
+void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
+{
+    PROFILER_START();
+
+    const bool drawEquatorial = m_settings.m_equatorialGrid;
+    const bool drawAltAz = m_settings.m_altAzGrid;
+    if (!drawEquatorial && !drawAltAz) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    const SkyProjector projector = SkyProjector::create(m_settings, image.size());
+    if (!projector.valid) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    const QDateTime utcDateTime = m_captureDateTime.toUTC();
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setClipRect(image.rect());
+
+    if (drawAltAz)
+    {
+        painter.setPen(QPen(m_settings.m_altAzGridColor, 1.0));
+
+        for (int altitude = -80; altitude <= 80; altitude += 10)
+        {
+            bool havePrevious = false;
+            QPointF previousPoint;
+            for (double azimuth = 0.0; azimuth <= 360.0 + 1e-6; azimuth += 2.0)
+            {
+                QPointF point;
+                const bool ok = projector.projectAltAz(azimuth, static_cast<double>(altitude), point);
+                if (ok && havePrevious && QLineF(previousPoint, point).length() <= std::hypot(static_cast<double>(image.width()), static_cast<double>(image.height())) * 2.0) {
+                    painter.drawLine(previousPoint, point);
+                }
+                previousPoint = point;
+                havePrevious = ok;
+            }
+        }
+
+        for (int azimuth = 0; azimuth < 360; azimuth += 15)
+        {
+            bool havePrevious = false;
+            QPointF previousPoint;
+            for (double altitude = -10.0; altitude <= 90.0 + 1e-6; altitude += 2.0)
+            {
+                QPointF point;
+                const bool ok = projector.projectAltAz(static_cast<double>(azimuth), altitude, point);
+                if (ok && havePrevious && QLineF(previousPoint, point).length() <= std::hypot(static_cast<double>(image.width()), static_cast<double>(image.height())) * 2.0) {
+                    painter.drawLine(previousPoint, point);
+                }
+                previousPoint = point;
+                havePrevious = ok;
+            }
+        }
+    }
+
+    if (drawEquatorial)
+    {
+        painter.setPen(QPen(m_settings.m_equatorialGridColor, 1.0));
+
+        for (int declination = -80; declination <= 80; declination += 10)
+        {
+            bool havePrevious = false;
+            QPointF previousPoint;
+            for (double rightAscension = 0.0; rightAscension <= 360.0 + 1e-6; rightAscension += 2.0)
+            {
+                double azimuth = 0.0;
+                double elevation = 0.0;
+                QPointF point;
+                const bool ok = equatorialToAltAz(
+                    rightAscension,
+                    static_cast<double>(declination),
+                    m_settings.m_latitude,
+                    m_settings.m_longitude,
+                    utcDateTime,
+                    azimuth,
+                    elevation)
+                    && projector.projectAltAz(azimuth, elevation, point);
+
+                if (ok && havePrevious && QLineF(previousPoint, point).length() <= std::hypot(static_cast<double>(image.width()), static_cast<double>(image.height())) * 2.0) {
+                    painter.drawLine(previousPoint, point);
+                }
+                previousPoint = point;
+                havePrevious = ok;
+            }
+        }
+
+        for (int rightAscension = 0; rightAscension < 360; rightAscension += 15)
+        {
+            bool havePrevious = false;
+            QPointF previousPoint;
+            for (double declination = -80.0; declination <= 80.0 + 1e-6; declination += 2.0)
+            {
+                double azimuth = 0.0;
+                double elevation = 0.0;
+                QPointF point;
+                const bool ok = equatorialToAltAz(
+                    static_cast<double>(rightAscension),
+                    declination,
+                    m_settings.m_latitude,
+                    m_settings.m_longitude,
+                    utcDateTime,
+                    azimuth,
+                    elevation)
+                    && projector.projectAltAz(azimuth, elevation, point);
+
+                if (ok && havePrevious && QLineF(previousPoint, point).length() <= std::hypot(static_cast<double>(image.width()), static_cast<double>(image.height())) * 2.0) {
+                    painter.drawLine(previousPoint, point);
+                }
+                previousPoint = point;
+                havePrevious = ok;
+            }
+        }
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
 void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const
 {
     PROFILER_START();
@@ -478,6 +818,8 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     overlayTextDocument.setHtml(m_settings.m_overlayTextString);
     const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
     const bool needsAny = m_settings.m_overlayDateTime
+        || m_settings.m_equatorialGrid
+        || m_settings.m_altAzGrid
         || needsTextOverlay
         || !frame.m_motionBoxes.isEmpty()
         || !frame.m_detections.isEmpty()
@@ -499,6 +841,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     QImage result = convertBgrToRgbImage(bgrMat);
 
+    if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
     if (needsTextOverlay) { applyTextOverlay(result, overlayTextDocument); }
 

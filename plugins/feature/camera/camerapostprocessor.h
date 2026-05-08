@@ -219,6 +219,7 @@ private:
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
+    void applySkyGridOverlay(QImage& image) const;
     void applyDateTimeOverlay(QImage& image) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     void setVideoRecordingEnabled(bool enabled);

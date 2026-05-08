@@ -177,6 +177,10 @@ struct CameraSettings
     QString m_dateTimeFormat; ///< QDateTime::toString format string, e.g. "yyyy-MM-dd hh:mm:ss"
     int m_dateTimePosX;       ///< X pixel offset from left for date/time text: 0..4096
     int m_dateTimePosY;       ///< Y pixel offset from top for date/time text: 0..4096 (0 = auto bottom)
+    bool m_equatorialGrid;    ///< Draw equatorial sky grid overlay
+    QColor m_equatorialGridColor; ///< Colour for equatorial sky grid
+    bool m_altAzGrid;         ///< Draw alt-az sky grid overlay
+    QColor m_altAzGridColor;  ///< Colour for alt-az sky grid
     bool m_overlayText;       ///< Draw custom HTML text on frame
     QString m_overlayTextString; ///< HTML text content to render on the frame
     QColor m_overlayTextColor;   ///< Colour for the text overlay content

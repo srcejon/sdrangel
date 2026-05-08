@@ -397,6 +397,10 @@ private slots:
     void on_dateTimeFormatEdit_editingFinished();
     void on_dateTimePosXSlider_valueChanged(int value);
     void on_dateTimePosYSlider_valueChanged(int value);
+    void on_equatorialGridCheck_toggled(bool checked);
+    void on_equatorialGridColorButton_clicked();
+    void on_altAzGridCheck_toggled(bool checked);
+    void on_altAzGridColorButton_clicked();
     void on_overlayTextButton_toggled(bool checked);
     void on_overlayTextColorButton_clicked();
     void on_overlayTextEdit_textChanged();

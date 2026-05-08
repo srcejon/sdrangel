@@ -212,6 +212,10 @@ void CameraSettings::resetToDefaults()
     m_dateTimeFormat = QStringLiteral("yyyy-MM-dd hh:mm:ss");
     m_dateTimePosX = 4;
     m_dateTimePosY = 0;
+    m_equatorialGrid = false;
+    m_equatorialGridColor = QColor(80, 170, 255);
+    m_altAzGrid = false;
+    m_altAzGridColor = QColor(255, 170, 80);
     m_overlayText = false;
     m_overlayTextString = QStringLiteral(DEFAULT_OVERLAY_TEXT_STRING);
     m_overlayTextColor = Qt::white;
@@ -375,6 +379,10 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(81, m_overlayTextFontScale);
     s.writeS32(82, m_overlayTextPosX);
     s.writeS32(83, m_overlayTextPosY);
+    s.writeBool(145, m_equatorialGrid);
+    s.writeU32(146, m_equatorialGridColor.rgba());
+    s.writeBool(147, m_altAzGrid);
+    s.writeU32(148, m_altAzGridColor.rgba());
     s.writeBool(84, m_yoloEnabled);
     s.writeString(85, m_yoloModelPath);
     s.writeString(86, m_yoloLabelsPath);
@@ -620,6 +628,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(76, &m_dateTimePosY, 0);
         m_dateTimePosX = qBound(0, m_dateTimePosX, 4096);
         m_dateTimePosY = qBound(0, m_dateTimePosY, 4096);
+        d.readBool(145, &m_equatorialGrid, false);
+        uint32_t equatorialGridColorRgba = QColor(80, 170, 255).rgba();
+        d.readU32(146, &equatorialGridColorRgba, QColor(80, 170, 255).rgba());
+        m_equatorialGridColor = QColor::fromRgba(equatorialGridColorRgba);
+        d.readBool(147, &m_altAzGrid, false);
+        uint32_t altAzGridColorRgba = QColor(255, 170, 80).rgba();
+        d.readU32(148, &altAzGridColorRgba, QColor(255, 170, 80).rgba());
+        m_altAzGridColor = QColor::fromRgba(altAzGridColorRgba);
         d.readBool(77, &m_overlayText, false);
         d.readString(78, &m_overlayTextString, DEFAULT_OVERLAY_TEXT_STRING);
         uint32_t overlayTextColorRgba = QColor(Qt::white).rgba();
@@ -1065,6 +1081,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("dateTimePosY")) {
         m_dateTimePosY = qBound(0, settings.m_dateTimePosY, 4096);
     }
+    if (settingsKeys.contains("equatorialGrid")) {
+        m_equatorialGrid = settings.m_equatorialGrid;
+    }
+    if (settingsKeys.contains("equatorialGridColor")) {
+        m_equatorialGridColor = settings.m_equatorialGridColor;
+    }
+    if (settingsKeys.contains("altAzGrid")) {
+        m_altAzGrid = settings.m_altAzGrid;
+    }
+    if (settingsKeys.contains("altAzGridColor")) {
+        m_altAzGridColor = settings.m_altAzGridColor;
+    }
     if (settingsKeys.contains("overlayText")) {
         m_overlayText = settings.m_overlayText;
     }
@@ -1463,6 +1491,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("dateTimePosY") || force) {
         ostr << " m_dateTimePosY: " << m_dateTimePosY;
+    }
+    if (settingsKeys.contains("equatorialGrid") || force) {
+        ostr << " m_equatorialGrid: " << m_equatorialGrid;
+    }
+    if (settingsKeys.contains("equatorialGridColor") || force) {
+        ostr << " m_equatorialGridColor: " << m_equatorialGridColor.name().toStdString();
+    }
+    if (settingsKeys.contains("altAzGrid") || force) {
+        ostr << " m_altAzGrid: " << m_altAzGrid;
+    }
+    if (settingsKeys.contains("altAzGridColor") || force) {
+        ostr << " m_altAzGridColor: " << m_altAzGridColor.name().toStdString();
     }
     if (settingsKeys.contains("overlayText") || force) {
         ostr << " m_overlayText: " << m_overlayText;

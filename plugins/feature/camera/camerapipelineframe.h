@@ -33,10 +33,23 @@ struct CameraPipelineDetection
     float m_score;
 };
 
+struct CameraHistogramData
+{
+    QVector<float> m_redBins;
+    QVector<float> m_greenBins;
+    QVector<float> m_blueBins;
+
+    bool isValid() const
+    {
+        return !m_redBins.isEmpty() && (m_redBins.size() == m_greenBins.size()) && (m_redBins.size() == m_blueBins.size());
+    }
+};
+
 struct CameraPipelineFrame
 {
     QImage m_image;
     QImage m_unprocessedImage;
+    CameraHistogramData m_histogramData;
     QDateTime m_captureDateTime;
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;

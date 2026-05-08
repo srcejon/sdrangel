@@ -18,14 +18,11 @@
 
 #include <QPushButton>
 #include <QVBoxLayout>
-#include <opencv2/core/core.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-
 #include "util/profiler.h"
 
 #include "camerahistogramdialog.h"
 
-CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* parent)
+CameraHistogramDialog::CameraHistogramDialog(const CameraHistogramData& histogramData, QWidget* parent)
     : QDialog(parent),
       m_chart(new QChart()),
       m_chartView(new QChartView(m_chart, this)),
@@ -67,54 +64,37 @@ CameraHistogramDialog::CameraHistogramDialog(const QImage& image, QWidget* paren
     layout->addLayout(buttonLayout);
     setLayout(layout);
 
-    updateImage(image);
+    updateHistogram(histogramData);
 }
 
-void CameraHistogramDialog::updateImage(const QImage& image)
+void CameraHistogramDialog::updateHistogram(const CameraHistogramData& histogramData)
 {
     PROFILER_START();
     m_chart->removeAllSeries();
 
-    if (image.isNull()) {
+    if (!histogramData.isValid()) {
         m_axisY->setRange(0, 1.0);
         return;
     }
 
-    const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
-    cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                const_cast<uchar*>(rgb.bits()),
-                static_cast<size_t>(rgb.bytesPerLine()));
-    cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-
-    std::vector<cv::Mat> channels;
-    cv::split(bgrMat, channels);
-
-    constexpr int histSize = 256;
-    const float range[] = {0.0f, 256.0f};
-    const float* histRange = range;
-
-    const struct { int idx; const char* name; QColor color; } channelDefs[] = {
-        {2, "Red",   Qt::red},
-        {1, "Green", Qt::green},
-        {0, "Blue",  Qt::blue}
+    const struct { const QVector<float>* bins; const char* name; QColor color; } channelDefs[] = {
+        {&histogramData.m_redBins, "Red",   Qt::red},
+        {&histogramData.m_greenBins, "Green", Qt::green},
+        {&histogramData.m_blueBins, "Blue",  Qt::blue}
     };
 
     double maxCount = 0.0;
     for (const auto& def : channelDefs)
     {
-        cv::Mat hist;
-        cv::calcHist(&channels[def.idx], 1, nullptr, cv::Mat(), hist, 1, &histSize, &histRange);
-
         auto* series = new QLineSeries();
         series->setName(tr(def.name));
         QPen pen(def.color);
         pen.setWidth(1);
         series->setPen(pen);
 
-        for (int j = 0; j < histSize; ++j)
+        for (int j = 0; j < def.bins->size(); ++j)
         {
-            const float v = hist.at<float>(j);
+            const float v = def.bins->at(j);
             series->append(j, v);
             if (v > maxCount) {
                 maxCount = v;

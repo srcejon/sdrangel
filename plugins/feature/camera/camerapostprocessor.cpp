@@ -185,7 +185,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
         const QImage processed = applyPostProcessing(m_lastFrame);
-        reportFrameToGUI(processed);
+        reportFrameToGUI(processed, m_lastFrame.m_histogramData);
     }
 }
 
@@ -257,7 +257,7 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     m_lastFrame = *frame;
 
-    reportFrameToGUI(processed);
+    reportFrameToGUI(processed, frame->m_histogramData);
 
     if (m_captureActive && m_settings.m_saveImage && !m_settings.m_imageFileName.isEmpty())
     {
@@ -307,10 +307,10 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 }
 
-void CameraPostProcessor::reportFrameToGUI(const QImage& image)
+void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData)
 {
     if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportFrame::create(image));
+        m_msgQueueToGUI->push(MsgReportFrame::create(image, histogramData));
     }
 }
 

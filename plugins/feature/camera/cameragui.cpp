@@ -333,9 +333,10 @@ bool CameraGUI::handleMessage(const Message& message)
         const CameraPostProcessor::MsgReportFrame& report = (CameraPostProcessor::MsgReportFrame&) message;
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
+        m_lastHistogramData = report.getHistogramData();
         updateImageWidget();
         if (m_histogramDialog) {
-            m_histogramDialog->updateImage(m_lastImage);
+            m_histogramDialog->updateHistogram(m_lastHistogramData);
         }
         // When the image size changes, refit to view
         if (oldSize != m_lastImage.size()) {
@@ -3916,17 +3917,17 @@ void CameraGUI::on_diffMaskCloseSizeSpin_valueChanged(int value)
 
 void CameraGUI::on_histogramButton_clicked()
 {
-    if (!m_lastImage.isNull())
+    if (m_lastHistogramData.isValid())
     {
         if (!m_histogramDialog)
         {
-            m_histogramDialog = new CameraHistogramDialog(m_lastImage, this);
+            m_histogramDialog = new CameraHistogramDialog(m_lastHistogramData, this);
             m_histogramDialog->setAttribute(Qt::WA_DeleteOnClose); // Delete when closed, so we don't waste CPU calculating the histogram when not visible
             connect(m_histogramDialog, &QObject::destroyed, this, [this]() { m_histogramDialog = nullptr; });
         }
         else
         {
-            m_histogramDialog->updateImage(m_lastImage);
+            m_histogramDialog->updateHistogram(m_lastHistogramData);
         }
 
         m_histogramDialog->show();

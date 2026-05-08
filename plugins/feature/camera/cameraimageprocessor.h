@@ -137,6 +137,7 @@ private:
     void applyFlip(cv::Mat& bgrMat) const;
     void applyBrightnessContrast(cv::Mat& bgrMat) const;
     void applyInvertColors(cv::Mat& bgrMat) const;
+    [[nodiscard]] static CameraHistogramData computeHistogramData(const QImage& image);
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);

@@ -224,10 +224,49 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->m_unprocessedImage = frame->m_image;
     }
     frame->m_image = applyImageProcessing(frame->m_image);
+    frame->m_histogramData = computeHistogramData(frame->m_image);
 
     if (m_nextStage) {
         m_nextStage->submitFrame(frame);
     }
+}
+
+CameraHistogramData CameraImageProcessor::computeHistogramData(const QImage& image)
+{
+    CameraHistogramData histogramData;
+
+    if (image.isNull()) {
+        return histogramData;
+    }
+
+    const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
+    cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
+                const_cast<uchar*>(rgb.bits()),
+                static_cast<size_t>(rgb.bytesPerLine()));
+    cv::Mat bgrMat;
+    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+
+    std::vector<cv::Mat> channels;
+    cv::split(bgrMat, channels);
+
+    constexpr int histSize = 256;
+    const float range[] = {0.0f, 256.0f};
+    const float* histRange = range;
+
+    auto fillBins = [&](int channelIndex, QVector<float>& bins)
+    {
+        cv::Mat hist;
+        cv::calcHist(&channels[channelIndex], 1, nullptr, cv::Mat(), hist, 1, &histSize, &histRange);
+        bins.resize(histSize);
+        for (int i = 0; i < histSize; ++i) {
+            bins[i] = hist.at<float>(i);
+        }
+    };
+
+    fillBins(2, histogramData.m_redBins);
+    fillBins(1, histogramData.m_greenBins);
+    fillBins(0, histogramData.m_blueBins);
+    return histogramData;
 }
 
 QImage CameraImageProcessor::applyImageProcessing(const QImage& input)

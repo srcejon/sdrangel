@@ -20,27 +20,26 @@
 #define INCLUDE_FEATURE_CAMERAHISTOGRAMDIALOG_H_
 
 #include <QDialog>
-#include <QImage>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QValueAxis>
+
+#include "camerapipelineframe.h"
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 using namespace QtCharts;
 #endif
 
 /**
- * @brief Dialog that displays per-channel histogram of a camera frame.
- *
- * Uses OpenCV to compute the histogram and Qt Charts to render it.
+ * @brief Dialog that displays precomputed per-channel histogram data.
  */
 class CameraHistogramDialog : public QDialog
 {
     Q_OBJECT
 public:
-    explicit CameraHistogramDialog(const QImage& image, QWidget* parent = nullptr);
-    void updateImage(const QImage& image);
+    explicit CameraHistogramDialog(const CameraHistogramData& histogramData, QWidget* parent = nullptr);
+    void updateHistogram(const CameraHistogramData& histogramData);
 
 private:
     QChart* m_chart;

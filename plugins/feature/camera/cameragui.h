@@ -159,6 +159,7 @@ private:
     QString m_lastAlpacaErrorMessage;
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
+    CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
     CameraSettingsDialog *m_settingsDialog;
     CameraHistogramDialog *m_histogramDialog;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries

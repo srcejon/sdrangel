@@ -109,18 +109,21 @@ public:
 
     public:
         const QImage& getImage() const { return m_image; }
+        const CameraHistogramData& getHistogramData() const { return m_histogramData; }
 
-        static MsgReportFrame* create(const QImage& image)
+        static MsgReportFrame* create(const QImage& image, const CameraHistogramData& histogramData)
         {
-            return new MsgReportFrame(image);
+            return new MsgReportFrame(image, histogramData);
         }
 
     private:
         QImage m_image;
+        CameraHistogramData m_histogramData;
 
-        MsgReportFrame(const QImage& image) :
+        MsgReportFrame(const QImage& image, const CameraHistogramData& histogramData) :
             Message(),
-            m_image(image)
+            m_image(image),
+            m_histogramData(histogramData)
         { }
     };
 
@@ -218,7 +221,7 @@ private:
     void applyDateTimeOverlay(QImage& image) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     void setVideoRecordingEnabled(bool enabled);
-    void reportFrameToGUI(const QImage& image);
+    void reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData);
 private slots:
     void handleInputMessages();
     void processNextFrame();

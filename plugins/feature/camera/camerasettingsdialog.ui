@@ -2820,22 +2820,59 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="2" rowspan="2">
-           <spacer name="horizontalSpacer_skyGrid">
-            <property name="orientation">
-             <enum>Qt::Orientation::Horizontal</enum>
+           <item row="0" column="2" rowspan="2">
+            <spacer name="horizontalSpacer_skyGrid">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
             </property>
             <property name="sizeHint" stdset="0">
              <size>
               <width>40</width>
               <height>20</height>
              </size>
-            </property>
-           </spacer>
-          </item>
-         </layout>
-        </widget>
-       </item>
+             </property>
+            </spacer>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="gridLabelFontLabel">
+             <property name="text">
+              <string>Label font</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QFontComboBox" name="gridLabelFontCombo">
+             <property name="toolTip">
+              <string>Select font to use for sky grid labels</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="gridLabelFontScaleLabel">
+             <property name="text">
+              <string>Label size</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QDoubleSpinBox" name="gridLabelFontScaleSpin">
+             <property name="toolTip">
+              <string>Font point size for sky grid labels</string>
+             </property>
+             <property name="decimals">
+              <number>0</number>
+             </property>
+             <property name="minimum">
+              <double>4.000000000000000</double>
+             </property>
+             <property name="maximum">
+              <double>144.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
        <item>
         <widget class="QGroupBox" name="textOverlay">
          <property name="title">

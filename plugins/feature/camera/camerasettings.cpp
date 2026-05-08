@@ -222,6 +222,8 @@ void CameraSettings::resetToDefaults()
     m_equatorialGridColor = QColor(80, 170, 255);
     m_altAzGrid = false;
     m_altAzGridColor = QColor(255, 170, 80);
+    m_gridLabelFontFamily.clear();
+    m_gridLabelFontScale = 9.0;
     m_overlayText = false;
     m_overlayTextString = QStringLiteral(DEFAULT_OVERLAY_TEXT_STRING);
     m_overlayTextColor = Qt::white;
@@ -395,6 +397,8 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(146, m_equatorialGridColor.rgba());
     s.writeBool(147, m_altAzGrid);
     s.writeU32(148, m_altAzGridColor.rgba());
+    s.writeString(155, m_gridLabelFontFamily);
+    s.writeDouble(156, m_gridLabelFontScale);
     s.writeBool(84, m_yoloEnabled);
     s.writeString(85, m_yoloModelPath);
     s.writeString(86, m_yoloLabelsPath);
@@ -654,6 +658,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         uint32_t altAzGridColorRgba = QColor(255, 170, 80).rgba();
         d.readU32(148, &altAzGridColorRgba, QColor(255, 170, 80).rgba());
         m_altAzGridColor = QColor::fromRgba(altAzGridColorRgba);
+        d.readString(155, &m_gridLabelFontFamily, "");
+        d.readDouble(156, &m_gridLabelFontScale, 9.0);
+        m_gridLabelFontScale = qBound(4.0, m_gridLabelFontScale, 144.0);
         d.readBool(77, &m_overlayText, false);
         d.readString(78, &m_overlayTextString, DEFAULT_OVERLAY_TEXT_STRING);
         uint32_t overlayTextColorRgba = QColor(Qt::white).rgba();
@@ -1137,6 +1144,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("altAzGridColor")) {
         m_altAzGridColor = settings.m_altAzGridColor;
     }
+    if (settingsKeys.contains("gridLabelFontFamily")) {
+        m_gridLabelFontFamily = settings.m_gridLabelFontFamily;
+    }
+    if (settingsKeys.contains("gridLabelFontScale")) {
+        m_gridLabelFontScale = qBound(4.0, settings.m_gridLabelFontScale, 144.0);
+    }
     if (settingsKeys.contains("overlayText")) {
         m_overlayText = settings.m_overlayText;
     }
@@ -1565,6 +1578,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("altAzGridColor") || force) {
         ostr << " m_altAzGridColor: " << m_altAzGridColor.name().toStdString();
+    }
+    if (settingsKeys.contains("gridLabelFontFamily") || force) {
+        ostr << " m_gridLabelFontFamily: " << m_gridLabelFontFamily.toStdString();
+    }
+    if (settingsKeys.contains("gridLabelFontScale") || force) {
+        ostr << " m_gridLabelFontScale: " << m_gridLabelFontScale;
     }
     if (settingsKeys.contains("overlayText") || force) {
         ostr << " m_overlayText: " << m_overlayText;

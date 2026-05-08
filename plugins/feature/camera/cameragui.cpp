@@ -969,6 +969,8 @@ void CameraGUI::displaySettings()
     settingsUI()->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
     settingsUI()->equatorialGridCheck->setChecked(m_settings.m_equatorialGrid);
     settingsUI()->altAzGridCheck->setChecked(m_settings.m_altAzGrid);
+    settingsUI()->gridLabelFontCombo->setCurrentText(m_settings.m_gridLabelFontFamily);
+    settingsUI()->gridLabelFontScaleSpin->setValue(m_settings.m_gridLabelFontScale);
     ui->overlayTextButton->setChecked(m_settings.m_overlayText);
     settingsUI()->overlayTextEdit->blockSignals(true);
     settingsUI()->overlayTextEdit->setPlainText(m_settings.m_overlayTextString);
@@ -1324,6 +1326,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->equatorialGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_equatorialGridColorButton_clicked);
     QObject::connect(settingsUI()->altAzGridCheck, &QCheckBox::toggled, this, &CameraGUI::on_altAzGridCheck_toggled);
     QObject::connect(settingsUI()->altAzGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_altAzGridColorButton_clicked);
+    QObject::connect(settingsUI()->gridLabelFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_gridLabelFontCombo_currentFontChanged);
+    QObject::connect(settingsUI()->gridLabelFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_gridLabelFontScaleSpin_valueChanged);
     QObject::connect(ui->overlayTextButton, &QToolButton::toggled, this, &CameraGUI::on_overlayTextButton_toggled);
     QObject::connect(settingsUI()->overlayTextColorButton, &QToolButton::clicked, this, &CameraGUI::on_overlayTextColorButton_clicked);
     QObject::connect(settingsUI()->overlayTextEdit, &QTextEdit::textChanged, this, &CameraGUI::on_overlayTextEdit_textChanged);
@@ -4386,6 +4390,18 @@ void CameraGUI::on_altAzGridColorButton_clicked()
         updateColorButton(settingsUI()->altAzGridColorButton, m_settings.m_altAzGridColor);
         applySetting("altAzGridColor");
     }
+}
+
+void CameraGUI::on_gridLabelFontCombo_currentFontChanged(const QFont& font)
+{
+    m_settings.m_gridLabelFontFamily = font.family();
+    applySetting("gridLabelFontFamily");
+}
+
+void CameraGUI::on_gridLabelFontScaleSpin_valueChanged(double value)
+{
+    m_settings.m_gridLabelFontScale = value;
+    applySetting("gridLabelFontScale");
 }
 
 void CameraGUI::on_overlayTextButton_toggled(bool checked)

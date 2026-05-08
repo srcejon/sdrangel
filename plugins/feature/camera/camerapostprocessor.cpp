@@ -411,6 +411,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
+        "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "overlayFontFamily", "overlayFontScale",
@@ -747,10 +748,10 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
     painter.setRenderHint(QPainter::TextAntialiasing);
     painter.setClipRect(image.rect());
     QFont font;
-    if (!m_settings.m_overlayFontFamily.isEmpty()) {
-        font.setFamily(m_settings.m_overlayFontFamily);
+    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_gridLabelFontFamily);
     }
-    font.setPointSizeF(std::max(7.0, m_settings.m_overlayFontScale * 0.75));
+    font.setPointSizeF(m_settings.m_gridLabelFontScale);
     painter.setFont(font);
     const QFontMetrics fontMetrics(font);
 

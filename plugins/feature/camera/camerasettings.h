@@ -160,6 +160,9 @@ struct CameraSettings
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
     float m_fov;                   ///< Camera field of view in degrees
     LensProjection m_lensProjection; ///< Lens projection model used for sky overlays
+    bool m_scheduleEnabled;        ///< Enable daily capture schedule
+    QString m_scheduleStartTime;   ///< Daily schedule start time in HH:mm:ss
+    QString m_scheduleEndTime;     ///< Daily schedule end time in HH:mm:ss
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

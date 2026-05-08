@@ -27,6 +27,7 @@
 #include <QNetworkReply>
 #include <QPair>
 #include <QSize>
+#include <QTime>
 #include <QToolButton>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QMediaPlayer>
@@ -141,6 +142,7 @@ private:
     bool m_doApplySettings;
     bool m_forceSettings;
     QTimer m_updateTimer;
+    QTimer m_scheduleTimer;
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
@@ -223,6 +225,10 @@ private:
     void populateGs232ControllerCombo();
     void applyPositionSync();
     void updatePositionControls();
+    void updateScheduleControls();
+    void updateScheduledCapture();
+    bool isWithinScheduleWindow() const;
+    static QTime parseScheduleTime(const QString& timeText, const QTime& fallbackTime);
     void syncFromMainSettings();
     void syncFromSelectedGs232Controller();
     QPair<int, int> selectedGs232ControllerIndices() const;
@@ -367,6 +373,9 @@ private slots:
     void on_azElGs232ControllerCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);
     void on_lensProjectionCombo_currentIndexChanged(int index);
+    void on_scheduleEnabledCheck_toggled(bool checked);
+    void on_scheduleStartTimeEdit_timeChanged(const QTime& time);
+    void on_scheduleEndTimeEdit_timeChanged(const QTime& time);
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);

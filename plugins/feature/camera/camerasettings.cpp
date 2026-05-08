@@ -191,6 +191,9 @@ void CameraSettings::resetToDefaults()
     m_rotator.clear();
     m_fov = 60.0f;
     m_lensProjection = LensProjectionRectilinear;
+    m_scheduleEnabled = false;
+    m_scheduleStartTime = QStringLiteral("20:00:00");
+    m_scheduleEndTime = QStringLiteral("06:00:00");
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -313,6 +316,9 @@ QByteArray CameraSettings::serialize() const
     s.writeString(143, m_rotator);
     s.writeFloat(144, m_fov);
     s.writeS32(149, m_lensProjection);
+    s.writeBool(151, m_scheduleEnabled);
+    s.writeString(152, m_scheduleStartTime);
+    s.writeString(153, m_scheduleEndTime);
 
     if (m_rollupState) {
         s.writeBlob(19, m_rollupState->serialize());
@@ -517,6 +523,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(143, &m_rotator, "");
         d.readFloat(144, &m_fov, 60.0f);
         d.readS32(149, (int *) &m_lensProjection, LensProjectionRectilinear);
+        d.readBool(151, &m_scheduleEnabled, false);
+        d.readString(152, &m_scheduleStartTime, "20:00:00");
+        d.readString(153, &m_scheduleEndTime, "06:00:00");
 
         if (m_rollupState)
         {
@@ -954,6 +963,15 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("lensProjection")) {
         m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) settings.m_lensProjection, (int) LensProjectionEquisolid);
     }
+    if (settingsKeys.contains("scheduleEnabled")) {
+        m_scheduleEnabled = settings.m_scheduleEnabled;
+    }
+    if (settingsKeys.contains("scheduleStartTime")) {
+        m_scheduleStartTime = settings.m_scheduleStartTime;
+    }
+    if (settingsKeys.contains("scheduleEndTime")) {
+        m_scheduleEndTime = settings.m_scheduleEndTime;
+    }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
     }
@@ -1376,6 +1394,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("lensProjection") || force) {
         ostr << " m_lensProjection: " << m_lensProjection;
+    }
+    if (settingsKeys.contains("scheduleEnabled") || force) {
+        ostr << " m_scheduleEnabled: " << m_scheduleEnabled;
+    }
+    if (settingsKeys.contains("scheduleStartTime") || force) {
+        ostr << " m_scheduleStartTime: " << m_scheduleStartTime.toStdString();
+    }
+    if (settingsKeys.contains("scheduleEndTime") || force) {
+        ostr << " m_scheduleEndTime: " << m_scheduleEndTime.toStdString();
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

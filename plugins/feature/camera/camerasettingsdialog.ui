@@ -1603,6 +1603,105 @@
          </property>
         </spacer>
        </item>
+     </layout>
+     </widget>
+     <widget class="QWidget" name="scheduleTab">
+      <attribute name="title">
+       <string>Schedule</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="scheduleTabLayout">
+       <item>
+        <widget class="QGroupBox" name="captureScheduleGroup">
+         <property name="title">
+          <string>Capture Schedule</string>
+         </property>
+         <layout class="QFormLayout" name="captureScheduleLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="scheduleEnabledLabel">
+            <property name="text">
+             <string>Enable</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QCheckBox" name="scheduleEnabledCheck">
+            <property name="text">
+             <string>Use daily schedule</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="scheduleStartTimeLabel">
+            <property name="text">
+             <string>Start time</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QTimeEdit" name="scheduleStartTimeEdit">
+            <property name="displayFormat">
+             <string>HH:mm:ss</string>
+            </property>
+            <property name="time">
+             <time>
+              <hour>20</hour>
+              <minute>0</minute>
+              <second>0</second>
+             </time>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="scheduleEndTimeLabel">
+            <property name="text">
+             <string>End time</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QTimeEdit" name="scheduleEndTimeEdit">
+            <property name="displayFormat">
+             <string>HH:mm:ss</string>
+            </property>
+            <property name="time">
+             <time>
+              <hour>6</hour>
+              <minute>0</minute>
+              <second>0</second>
+             </time>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="scheduleStatusLabel">
+            <property name="text">
+             <string>Status</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLabel" name="scheduleStatusValue">
+            <property name="text">
+             <string>Disabled</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacerSchedule">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
       </layout>
      </widget>
      <widget class="QWidget" name="colourTab">

@@ -111,6 +111,7 @@ bool CameraGUI::deserialize(const QByteArray& data)
         displaySettings();
         applyAllSettings();
         updateHardware();
+        updateScheduledCapture();
         m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
         return true;
     }
@@ -457,6 +458,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_doApplySettings(true),
     m_forceSettings(false),
     m_updateTimer(this),
+    m_scheduleTimer(this),
     m_lastFeatureState(0),
     m_dlm(this),
     m_settingsDialog(nullptr),
@@ -558,6 +560,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 #endif
 
     connect(&m_statusTimer, &QTimer::timeout, this, &CameraGUI::updateStatus);
+    connect(&m_scheduleTimer, &QTimer::timeout, this, &CameraGUI::updateScheduledCapture);
     connect(m_settingsDialog, &QDialog::finished, this, &CameraGUI::onSettingsDialogFinished);
     connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
     connect(&m_dlm, &HttpDownloadManagerGUI::downloadComplete, this, &CameraGUI::handleYoloDownloadComplete);
@@ -575,11 +578,13 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     settingsUI()->exposureUnitsCombo->addItem(tr("min"), 60000.0);
     settingsUI()->exposureUnitsCombo->setCurrentIndex(1);
     m_statusTimer.start(250);
+    m_scheduleTimer.start(1000);
 
     connect(&m_updateTimer, &QTimer::timeout, this, &CameraGUI::updateHardware);
 
     displaySettings();
     applyAllSettings();
+    updateScheduledCapture();
     makeUIConnections();
     m_resizer.enableChildMouseTracking();
 
@@ -911,9 +916,13 @@ void CameraGUI::displaySettings()
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
     settingsUI()->lensProjectionCombo->setCurrentIndex(static_cast<int>(m_settings.m_lensProjection));
+    settingsUI()->scheduleEnabledCheck->setChecked(m_settings.m_scheduleEnabled);
+    settingsUI()->scheduleStartTimeEdit->setTime(parseScheduleTime(m_settings.m_scheduleStartTime, QTime(20, 0, 0)));
+    settingsUI()->scheduleEndTimeEdit->setTime(parseScheduleTime(m_settings.m_scheduleEndTime, QTime(6, 0, 0)));
     populateGs232ControllerCombo();
     applyPositionSync();
     updatePositionControls();
+    updateScheduleControls();
     settingsUI()->postProcessWhiteBalanceModeCombo->setCurrentIndex(m_settings.m_postProcessWhiteBalanceMode);
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(m_settings.m_postProcessWhiteBalanceRedGain);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
@@ -1262,6 +1271,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->azElGs232ControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_azElGs232ControllerCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
     QObject::connect(settingsUI()->lensProjectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_lensProjectionCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->scheduleEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleEnabledCheck_toggled);
+    QObject::connect(settingsUI()->scheduleStartTimeEdit, &QTimeEdit::timeChanged, this, &CameraGUI::on_scheduleStartTimeEdit_timeChanged);
+    QObject::connect(settingsUI()->scheduleEndTimeEdit, &QTimeEdit::timeChanged, this, &CameraGUI::on_scheduleEndTimeEdit_timeChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -1653,6 +1665,68 @@ void CameraGUI::updatePositionControls()
     settingsUI()->altitudeSpin->setReadOnly(m_settings.m_positionSync);
     settingsUI()->azimuthSpin->setReadOnly(azElSynced);
     settingsUI()->elevationSpin->setReadOnly(azElSynced);
+}
+
+void CameraGUI::updateScheduleControls()
+{
+    const bool enabled = m_settings.m_scheduleEnabled;
+    settingsUI()->scheduleStartTimeEdit->setEnabled(enabled);
+    settingsUI()->scheduleEndTimeEdit->setEnabled(enabled);
+
+    QString statusText;
+    if (!enabled) {
+        statusText = tr("Disabled");
+    } else if (m_settings.m_scheduleStartTime == m_settings.m_scheduleEndTime) {
+        statusText = tr("Inactive: start and end are the same");
+    } else if (isWithinScheduleWindow()) {
+        statusText = tr("Inside schedule window");
+    } else {
+        statusText = tr("Outside schedule window");
+    }
+
+    settingsUI()->scheduleStatusValue->setText(statusText);
+}
+
+void CameraGUI::updateScheduledCapture()
+{
+    updateScheduleControls();
+
+    if (!m_settings.m_scheduleEnabled || (m_settings.m_scheduleStartTime == m_settings.m_scheduleEndTime)) {
+        return;
+    }
+
+    const bool shouldRun = isWithinScheduleWindow();
+    const int state = m_camera->getState();
+
+    if (shouldRun && (state == Feature::StIdle)) {
+        m_camera->getInputMessageQueue()->push(Camera::MsgStartStop::create(true));
+    } else if (!shouldRun && (state == Feature::StRunning)) {
+        m_camera->getInputMessageQueue()->push(Camera::MsgStartStop::create(false));
+    }
+}
+
+bool CameraGUI::isWithinScheduleWindow() const
+{
+    const QTime startTime = parseScheduleTime(m_settings.m_scheduleStartTime, QTime(20, 0, 0));
+    const QTime endTime = parseScheduleTime(m_settings.m_scheduleEndTime, QTime(6, 0, 0));
+
+    if (!startTime.isValid() || !endTime.isValid() || (startTime == endTime)) {
+        return false;
+    }
+
+    const QTime now = QTime::currentTime();
+
+    if (startTime < endTime) {
+        return (now >= startTime) && (now < endTime);
+    }
+
+    return (now >= startTime) || (now < endTime);
+}
+
+QTime CameraGUI::parseScheduleTime(const QString& timeText, const QTime& fallbackTime)
+{
+    const QTime parsedTime = QTime::fromString(timeText, QStringLiteral("HH:mm:ss"));
+    return parsedTime.isValid() ? parsedTime : fallbackTime;
 }
 
 void CameraGUI::syncFromMainSettings()
@@ -3871,6 +3945,30 @@ void CameraGUI::on_lensProjectionCombo_currentIndexChanged(int index)
 {
     m_settings.m_lensProjection = static_cast<CameraSettings::LensProjection>(index);
     applySetting("lensProjection");
+}
+
+void CameraGUI::on_scheduleEnabledCheck_toggled(bool checked)
+{
+    m_settings.m_scheduleEnabled = checked;
+    updateScheduleControls();
+    applySetting("scheduleEnabled");
+    updateScheduledCapture();
+}
+
+void CameraGUI::on_scheduleStartTimeEdit_timeChanged(const QTime& time)
+{
+    m_settings.m_scheduleStartTime = time.toString(QStringLiteral("HH:mm:ss"));
+    updateScheduleControls();
+    applySetting("scheduleStartTime");
+    updateScheduledCapture();
+}
+
+void CameraGUI::on_scheduleEndTimeEdit_timeChanged(const QTime& time)
+{
+    m_settings.m_scheduleEndTime = time.toString(QStringLiteral("HH:mm:ss"));
+    updateScheduleControls();
+    applySetting("scheduleEndTime");
+    updateScheduledCapture();
 }
 
 void CameraGUI::updatePostProcessWhiteBalanceControls()

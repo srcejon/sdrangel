@@ -620,6 +620,7 @@ void CameraPostProcessor::updateTrackedMapObject(const QObject* pipeSource, SWGS
         object.m_label = (swgMapItem->getLabel() && !swgMapItem->getLabel()->trimmed().isEmpty())
             ? swgMapItem->getLabel()->trimmed()
             : name;
+        object.m_label = object.m_label.replace("<br>", "\n");
         object.m_latitude = swgMapItem->getLatitude();
         object.m_longitude = swgMapItem->getLongitude();
         object.m_altitude = swgMapItem->getAltitude();

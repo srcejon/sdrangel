@@ -896,6 +896,7 @@ void CameraGUI::displaySettings()
         m_settings.m_asiTargetTemp == std::numeric_limits<int>::min() ? 0 : m_settings.m_asiTargetTemp);
     settingsUI()->asiUsbBandwidthSpin->setValue(std::max(0, m_settings.m_asiUsbBandwidth));
     settingsUI()->asiHighSpeedModeCheck->setChecked(m_settings.m_asiHighSpeedMode > 0);
+    settingsUI()->asiAutoExposureGainCheck->setChecked(m_settings.m_asiAutoExposureGain);
     settingsUI()->asiColorImageTypeCombo->setCurrentIndex(static_cast<int>(m_settings.m_asiColorImageType));
     ui->saveImageCheck->setChecked(m_settings.m_saveImage);
     settingsUI()->imagePathEdit->setText(m_settings.m_imageFileName);
@@ -1268,6 +1269,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->asiTargetTempSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_asiTargetTempSpin_valueChanged);
     QObject::connect(settingsUI()->asiUsbBandwidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_asiUsbBandwidthSpin_valueChanged);
     QObject::connect(settingsUI()->asiHighSpeedModeCheck, &QCheckBox::toggled, this, &CameraGUI::on_asiHighSpeedModeCheck_toggled);
+    QObject::connect(settingsUI()->asiAutoExposureGainCheck, &QCheckBox::toggled, this, &CameraGUI::on_asiAutoExposureGainCheck_toggled);
     QObject::connect(settingsUI()->asiColorImageTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_asiColorImageTypeCombo_currentIndexChanged);
     QObject::connect(ui->saveImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveImageCheck_toggled);
     QObject::connect(settingsUI()->imagePathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_imagePathEdit_editingFinished);
@@ -2828,6 +2830,8 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->asiUsbBandwidthSpin->setVisible(asi && m_asiUsbBandwidthSupported);
     settingsUI()->asiHighSpeedModeLabel->setVisible(asi && m_asiHighSpeedModeSupported);
     settingsUI()->asiHighSpeedModeCheck->setVisible(asi && m_asiHighSpeedModeSupported);
+    settingsUI()->asiAutoExposureGainLabel->setVisible(asi);
+    settingsUI()->asiAutoExposureGainCheck->setVisible(asi);
     settingsUI()->asiColorImageTypeLabel->setVisible(asi && m_asiColorCameraActive && (m_asiRgb24Supported || m_asiRaw16Supported));
     settingsUI()->asiColorImageTypeCombo->setVisible(asi && m_asiColorCameraActive && (m_asiRgb24Supported || m_asiRaw16Supported));
     settingsUI()->alpacaFocusPositionLabel->setVisible(alpaca);
@@ -2840,6 +2844,9 @@ void CameraGUI::updateCameraSettingsVisibility()
     bool focuserAvailable = alpaca && (settingsUI()->alpacaFocuserCombo->count() > 0);
     settingsUI()->alpacaFocuserEnabledCheck->setEnabled(focuserAvailable);
     settingsUI()->alpacaFocuserCombo->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
+    const bool asiAutoExposureGainEnabled = asi && (m_settings.m_captureMode == CameraSettings::CaptureModeFrameRate);
+    settingsUI()->asiAutoExposureGainLabel->setEnabled(asiAutoExposureGainEnabled);
+    settingsUI()->asiAutoExposureGainCheck->setEnabled(asiAutoExposureGainEnabled);
     settingsUI()->alpacaFocusPositionLabel->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
     settingsUI()->alpacaFocusPositionSpin->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
     settingsUI()->alpacaFocusStepSizeLabel->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
@@ -3823,6 +3830,12 @@ void CameraGUI::on_asiHighSpeedModeCheck_toggled(bool checked)
 {
     m_settings.m_asiHighSpeedMode = checked ? 1 : 0;
     applySetting("asiHighSpeedMode");
+}
+
+void CameraGUI::on_asiAutoExposureGainCheck_toggled(bool checked)
+{
+    m_settings.m_asiAutoExposureGain = checked;
+    applySetting("asiAutoExposureGain");
 }
 
 void CameraGUI::on_asiColorImageTypeCombo_currentIndexChanged(int index)

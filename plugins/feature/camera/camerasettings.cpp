@@ -167,6 +167,7 @@ void CameraSettings::resetToDefaults()
     m_asiTargetTemp = std::numeric_limits<int>::min();
     m_asiUsbBandwidth = -1;
     m_asiHighSpeedMode = -1;
+    m_asiAutoExposureGain = false;
     m_asiColorImageType = AsiColorImageTypeRgb24;
     m_saveImage = false;
     m_imageFileName = "camera.jpg";
@@ -460,6 +461,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(125, m_asiColorImageType);
     s.writeS32(126, m_diffMaskOpenSize);
     s.writeS32(128, m_recordMode);
+    s.writeBool(168, m_asiAutoExposureGain);
 
     return s.final();
 }
@@ -752,6 +754,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(123, &m_asiUsbBandwidth, -1);
         d.readS32(124, &m_asiHighSpeedMode, -1);
         d.readS32(125, (qint32 *) &m_asiColorImageType, (qint32) AsiColorImageTypeRgb24);
+        d.readBool(168, &m_asiAutoExposureGain, false);
         m_asiCoolerOn = qBound(-1, m_asiCoolerOn, 1);
         m_asiUsbBandwidth = std::max(-1, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(-1, m_asiHighSpeedMode, 1);
@@ -924,6 +927,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("asiHighSpeedMode")) {
         m_asiHighSpeedMode = qBound(-1, settings.m_asiHighSpeedMode, 1);
+    }
+    if (settingsKeys.contains("asiAutoExposureGain")) {
+        m_asiAutoExposureGain = settings.m_asiAutoExposureGain;
     }
     if (settingsKeys.contains("asiColorImageType")) {
         m_asiColorImageType = qBound(AsiColorImageTypeRgb24, settings.m_asiColorImageType, AsiColorImageTypeRaw16);
@@ -1395,6 +1401,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("asiHighSpeedMode") || force) {
         ostr << " m_asiHighSpeedMode: " << m_asiHighSpeedMode;
+    }
+    if (settingsKeys.contains("asiAutoExposureGain") || force) {
+        ostr << " m_asiAutoExposureGain: " << m_asiAutoExposureGain;
     }
     if (settingsKeys.contains("asiColorImageType") || force) {
         ostr << " m_asiColorImageType: " << m_asiColorImageType;

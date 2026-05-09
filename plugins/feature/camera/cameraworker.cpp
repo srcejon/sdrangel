@@ -899,6 +899,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
             || settingsKeys.contains("asiTargetTemp")
             || settingsKeys.contains("asiUsbBandwidth")
             || settingsKeys.contains("asiHighSpeedMode")
+            || settingsKeys.contains("asiAutoExposureGain")
             || settingsKeys.contains("asiColorImageType")
             || settingsKeys.contains("exposureTimeMs")))
     {
@@ -3080,10 +3081,14 @@ bool CameraWorker::asiApplyCameraSettings()
         return false;
     }
 
+    const ASI_BOOL autoExposureGain = (m_settings.m_asiAutoExposureGain
+            && (m_settings.m_captureMode == CameraSettings::CaptureModeFrameRate))
+        ? ASI_TRUE
+        : ASI_FALSE;
     const ASI_ERROR_CODE exposureError = ASISetControlValue(cameraId, ASI_EXPOSURE,
-        std::max(1L, static_cast<long>(std::llround(m_settings.m_exposureTimeMs * 1000.0))), ASI_FALSE);
+        std::max(1L, static_cast<long>(std::llround(m_settings.m_exposureTimeMs * 1000.0))), autoExposureGain);
     const ASI_ERROR_CODE gainError = ASISetControlValue(cameraId, ASI_GAIN,
-        std::max(0L, static_cast<long>(m_settings.m_cameraGain)), ASI_FALSE);
+        std::max(0L, static_cast<long>(m_settings.m_cameraGain)), autoExposureGain);
     const ASI_ERROR_CODE offsetError = ASISetControlValue(cameraId, ASI_OFFSET,
         std::max(0L, static_cast<long>(m_settings.m_cameraOffset)), ASI_FALSE);
     const ASI_ERROR_CODE coolerOnError = (m_settings.m_asiCoolerOn >= 0)

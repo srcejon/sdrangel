@@ -2845,6 +2845,7 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->alpacaFocuserEnabledCheck->setEnabled(focuserAvailable);
     settingsUI()->alpacaFocuserCombo->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
     const bool asiAutoExposureGainEnabled = asi && (m_settings.m_captureMode == CameraSettings::CaptureModeFrameRate);
+    const bool asiManualExposureGainEnabled = !(asi && m_settings.m_asiAutoExposureGain && asiAutoExposureGainEnabled);
     settingsUI()->asiAutoExposureGainLabel->setEnabled(asiAutoExposureGainEnabled);
     settingsUI()->asiAutoExposureGainCheck->setEnabled(asiAutoExposureGainEnabled);
     settingsUI()->alpacaFocusPositionLabel->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
@@ -2890,10 +2891,14 @@ void CameraGUI::updateCameraSettingsVisibility()
 
     if (alpaca || asi)
     {
-        settingsUI()->exposureLabel->setEnabled(true);
-        settingsUI()->exposureSlider->setEnabled(true);
-        settingsUI()->exposureSpin->setEnabled(true);
-        settingsUI()->exposureUnitsCombo->setEnabled(true);
+        settingsUI()->exposureLabel->setEnabled(asiManualExposureGainEnabled);
+        settingsUI()->exposureSlider->setEnabled(asiManualExposureGainEnabled);
+        settingsUI()->exposureSpin->setEnabled(asiManualExposureGainEnabled);
+        settingsUI()->exposureUnitsCombo->setEnabled(asiManualExposureGainEnabled);
+        settingsUI()->cameraGainLabel->setEnabled(asiManualExposureGainEnabled);
+        settingsUI()->cameraGainCombo->setEnabled((alpaca && m_alpacaHasNamedGains) ? true : asiManualExposureGainEnabled);
+        settingsUI()->cameraGainSlider->setEnabled(asiManualExposureGainEnabled);
+        settingsUI()->cameraGainSpin->setEnabled(asiManualExposureGainEnabled);
     }
     else if (fileCamera)
     {
@@ -3529,7 +3534,7 @@ void CameraGUI::on_fpsLabel_currentIndexChanged(int index)
     }
 
     m_settings.m_captureMode = static_cast<CameraSettings::CaptureMode>(settingsUI()->fpsLabel->itemData(index).toInt());
-    updateCaptureModeControls();
+    updateCameraSettingsVisibility();
     applySetting("captureMode");
 }
 
@@ -3835,6 +3840,7 @@ void CameraGUI::on_asiHighSpeedModeCheck_toggled(bool checked)
 void CameraGUI::on_asiAutoExposureGainCheck_toggled(bool checked)
 {
     m_settings.m_asiAutoExposureGain = checked;
+    updateCameraSettingsVisibility();
     applySetting("asiAutoExposureGain");
 }
 

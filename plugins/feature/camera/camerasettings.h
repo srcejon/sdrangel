@@ -163,6 +163,7 @@ struct CameraSettings
     float m_longitude;             ///< Camera longitude in degrees
     float m_altitude;              ///< Camera altitude in metres
     bool m_positionSync;           ///< Continually sync camera location from Main Settings
+    QString m_owmAPIKey;           ///< API key for openweathermap.org weather updates
     float m_azimuth;               ///< Camera pointing azimuth in degrees
     float m_elevation;             ///< Camera pointing elevation in degrees
     float m_roll;                  ///< Camera roll about optical axis in degrees

@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
 
 #include <QObject>
+#include <limits>
 #include <QMutex>
 #include <QImage>
 #include <QDateTime>
@@ -33,6 +34,8 @@
 #include "util/messagequeue.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
+
+class Weather;
 
 class CameraPostProcessor : public QObject
 {
@@ -209,6 +212,10 @@ private:
     cv::VideoWriter m_rawVideoWriter;
     cv::VideoWriter m_processedVideoWriter;
     QImage m_spectrumViewImage;
+    Weather *m_weather = nullptr;
+    float m_weatherTemperature = std::numeric_limits<float>::quiet_NaN();
+    float m_weatherPressure = std::numeric_limits<float>::quiet_NaN();
+    float m_weatherHumidity = std::numeric_limits<float>::quiet_NaN();
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
     bool m_processingFrame;
@@ -226,6 +233,7 @@ private:
     void applyDateTimeOverlay(QImage& image) const;
     void applyTextOverlay(QImage& image, const QString& overlayTextHtml) const;
     [[nodiscard]] QString expandOverlayTextTemplate() const;
+    void restartWeatherUpdates();
     void setVideoRecordingEnabled(bool enabled);
     void reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData, int stackCount);
     [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant);
@@ -237,6 +245,7 @@ private:
 private slots:
     void handleInputMessages();
     void processNextFrame();
+    void weatherUpdated(float temperature, float pressure, float humidity);
 
 };
 

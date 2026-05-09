@@ -372,6 +372,7 @@ private slots:
     void on_latitudeSpin_valueChanged(double value);
     void on_longitudeSpin_valueChanged(double value);
     void on_altitudeSpin_valueChanged(double value);
+    void on_owmApiKeyEdit_editingFinished();
     void on_useMyPositionButton_clicked();
     void useMyPositionButton_rightClicked(const QPoint& p);
     void on_azimuthSpin_valueChanged(double value);

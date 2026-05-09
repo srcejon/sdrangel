@@ -1404,7 +1404,7 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="2" rowspan="3">
+          <item row="0" column="2" rowspan="4">
            <widget class="QToolButton" name="useMyPositionButton">
             <property name="toolTip">
              <string>Copy My Position once. Right-click to toggle continual synchronization from Main Settings.</string>
@@ -1460,9 +1460,23 @@
             </property>
            </widget>
           </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="owmApiKeyLabel">
+            <property name="text">
+             <string>OWM API Key</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="owmApiKeyEdit">
+            <property name="toolTip">
+             <string>API key from openweathermap.org used to periodically fetch weather for the camera latitude and longitude.</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
-       </item>
+      </item>
        <item>
         <widget class="QGroupBox" name="cameraDirectionGroup">
          <property name="title">

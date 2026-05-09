@@ -185,6 +185,7 @@ void CameraSettings::resetToDefaults()
     m_longitude = MainCore::instance()->getSettings().getLongitude();
     m_altitude = MainCore::instance()->getSettings().getAltitude();
     m_positionSync = false;
+    m_owmAPIKey.clear();
     m_azimuth = 0.0f;
     m_elevation = 0.0f;
     m_roll = 0.0f;
@@ -320,6 +321,7 @@ QByteArray CameraSettings::serialize() const
     s.writeFloat(138, m_longitude);
     s.writeFloat(139, m_altitude);
     s.writeBool(140, m_positionSync);
+    s.writeString(164, m_owmAPIKey);
     s.writeFloat(141, m_azimuth);
     s.writeFloat(142, m_elevation);
     s.writeFloat(150, m_roll);
@@ -537,6 +539,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readFloat(138, &m_longitude, MainCore::instance()->getSettings().getLongitude());
         d.readFloat(139, &m_altitude, MainCore::instance()->getSettings().getAltitude());
         d.readBool(140, &m_positionSync, false);
+        d.readString(164, &m_owmAPIKey, "");
         d.readFloat(141, &m_azimuth, 0.0f);
         d.readFloat(142, &m_elevation, 0.0f);
         d.readFloat(150, &m_roll, 0.0f);
@@ -975,6 +978,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("positionSync")) {
         m_positionSync = settings.m_positionSync;
+    }
+    if (settingsKeys.contains("owmAPIKey")) {
+        m_owmAPIKey = settings.m_owmAPIKey;
     }
     if (settingsKeys.contains("azimuth")) {
         m_azimuth = std::fmod(settings.m_azimuth, 360.0f);
@@ -1443,6 +1449,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("positionSync") || force) {
         ostr << " m_positionSync: " << m_positionSync;
+    }
+    if (settingsKeys.contains("owmAPIKey") || force) {
+        ostr << " m_owmAPIKey: " << m_owmAPIKey.toStdString();
     }
     if (settingsKeys.contains("azimuth") || force) {
         ostr << " m_azimuth: " << m_azimuth;

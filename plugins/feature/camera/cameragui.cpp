@@ -913,6 +913,7 @@ void CameraGUI::displaySettings()
     settingsUI()->latitudeSpin->setValue(m_settings.m_latitude);
     settingsUI()->longitudeSpin->setValue(m_settings.m_longitude);
     settingsUI()->altitudeSpin->setValue(m_settings.m_altitude);
+    settingsUI()->owmApiKeyEdit->setText(m_settings.m_owmAPIKey);
     settingsUI()->azimuthSpin->setValue(m_settings.m_azimuth);
     settingsUI()->elevationSpin->setValue(m_settings.m_elevation);
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
@@ -1289,6 +1290,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->latitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_latitudeSpin_valueChanged);
     QObject::connect(settingsUI()->longitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_longitudeSpin_valueChanged);
     QObject::connect(settingsUI()->altitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_altitudeSpin_valueChanged);
+    QObject::connect(settingsUI()->owmApiKeyEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_owmApiKeyEdit_editingFinished);
     QObject::connect(settingsUI()->useMyPositionButton, &QToolButton::clicked, this, &CameraGUI::on_useMyPositionButton_clicked);
     QObject::connect(settingsUI()->azimuthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthSpin_valueChanged);
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
@@ -4008,6 +4010,12 @@ void CameraGUI::on_altitudeSpin_valueChanged(double value)
 {
     m_settings.m_altitude = static_cast<float>(value);
     applySetting("altitude");
+}
+
+void CameraGUI::on_owmApiKeyEdit_editingFinished()
+{
+    m_settings.m_owmAPIKey = settingsUI()->owmApiKeyEdit->text().trimmed();
+    applySetting("owmAPIKey");
 }
 
 void CameraGUI::on_useMyPositionButton_clicked()

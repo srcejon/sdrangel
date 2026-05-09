@@ -25,6 +25,7 @@
 #include <QFontMetrics>
 #include <QPainter>
 #include <QTextDocument>
+#include "util/weather.h"
 #include "util/profiler.h"
 #include "camerapostprocessor.h"
 
@@ -335,6 +336,13 @@ void CameraPostProcessor::stopWork()
 {
     QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraPostProcessor::handleInputMessages);
 
+    if (m_weather)
+    {
+        disconnect(m_weather, &Weather::weatherUpdated, this, &CameraPostProcessor::weatherUpdated);
+        delete m_weather;
+        m_weather = nullptr;
+    }
+
     closeVideoWriters();
 }
 
@@ -417,7 +425,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayFontFamily", "overlayFontScale",
         "motionBoxColor",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
-        "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov", "lensProjection",
+        "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov", "lensProjection", "owmAPIKey",
         "yoloBoxColor"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
@@ -456,6 +464,11 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_spectrumViewImage = QImage();
     }
 
+    if (force || settingsKeys.contains("owmAPIKey") || settingsKeys.contains("latitude") || settingsKeys.contains("longitude"))
+    {
+        restartWeatherUpdates();
+    }
+
     if (settingsKeys.contains("saveVideo") || settingsKeys.contains("videoFileName")
         || settingsKeys.contains("videoHwAcceleration") || settingsKeys.contains("videoPostProcess"))
     {
@@ -463,6 +476,49 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     }
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
+        const QImage processed = applyPostProcessing(m_lastFrame);
+        reportFrameToGUI(processed, m_lastFrame.m_histogramData, m_lastFrame.m_stackCount);
+    }
+}
+
+void CameraPostProcessor::restartWeatherUpdates()
+{
+    if (m_weather)
+    {
+        disconnect(m_weather, &Weather::weatherUpdated, this, &CameraPostProcessor::weatherUpdated);
+        delete m_weather;
+        m_weather = nullptr;
+    }
+
+    m_weatherTemperature = NAN;
+    m_weatherPressure = NAN;
+    m_weatherHumidity = NAN;
+
+    if (!m_settings.m_owmAPIKey.trimmed().isEmpty())
+    {
+        m_weather = Weather::create(m_settings.m_owmAPIKey.trimmed());
+        if (m_weather)
+        {
+            connect(m_weather, &Weather::weatherUpdated, this, &CameraPostProcessor::weatherUpdated);
+            m_weather->getWeatherPeriodically(m_settings.m_latitude, m_settings.m_longitude, 15);
+        }
+    }
+}
+
+void CameraPostProcessor::weatherUpdated(float temperature, float pressure, float humidity)
+{
+    if (!std::isnan(temperature)) {
+        m_weatherTemperature = temperature;
+    }
+    if (!std::isnan(pressure)) {
+        m_weatherPressure = pressure;
+    }
+    if (!std::isnan(humidity)) {
+        m_weatherHumidity = humidity;
+    }
+
+    if (!m_lastFrame.m_image.isNull())
+    {
         const QImage processed = applyPostProcessing(m_lastFrame);
         reportFrameToGUI(processed, m_lastFrame.m_histogramData, m_lastFrame.m_stackCount);
     }
@@ -732,6 +788,10 @@ QString CameraPostProcessor::expandOverlayTextTemplate() const
     {
         overlayText.replace(token, value.toHtmlEscaped());
     };
+    const auto weatherValueString = [](float value, int decimals) -> QString
+    {
+        return std::isnan(value) ? QStringLiteral("N/A") : QString::number(value, 'f', decimals);
+    };
 
     replaceToken(QStringLiteral("${date}"), m_captureDateTime.date().toString(Qt::ISODate));
     replaceToken(QStringLiteral("${time}"), m_captureDateTime.time().toString(QStringLiteral("HH:mm:ss")));
@@ -743,6 +803,10 @@ QString CameraPostProcessor::expandOverlayTextTemplate() const
     replaceToken(QStringLiteral("${azimuth}"), QString::number(m_settings.m_azimuth, 'f', 2));
     replaceToken(QStringLiteral("${elevation}"), QString::number(m_settings.m_elevation, 'f', 2));
     replaceToken(QStringLiteral("${roll}"), QString::number(m_settings.m_roll, 'f', 2));
+    replaceToken(QStringLiteral("${temp}"), weatherValueString(m_weatherTemperature, 1));
+    replaceToken(QStringLiteral("${pressure}"), weatherValueString(m_weatherPressure, 1));
+    replaceToken(QStringLiteral("${humidity}"), weatherValueString(m_weatherHumidity, 0));
+    replaceToken(QStringLiteral("${humidty}"), weatherValueString(m_weatherHumidity, 0));
 
     return overlayText;
 }

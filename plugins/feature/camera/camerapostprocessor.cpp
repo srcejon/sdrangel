@@ -302,14 +302,9 @@ struct SkyProjector
             return projector;
         }
 
+        const double azimuth = degToRad(settings.m_azimuth);
         projector.center = normalize(vectorFromAltAz(settings.m_azimuth, settings.m_elevation));
-
-        SkyVector reference = {0.0, 0.0, 1.0};
-        if (std::fabs(dot(projector.center, reference)) > 0.98) {
-            reference = {0.0, 1.0, 0.0};
-        }
-
-        projector.right = normalize(cross(projector.center, reference));
+        projector.right = normalize({std::cos(azimuth), -std::sin(azimuth), 0.0});
         projector.up = normalize(cross(projector.right, projector.center));
         if (length(projector.right) <= 0.0 || length(projector.up) <= 0.0) {
             return projector;

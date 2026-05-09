@@ -56,6 +56,7 @@ class CameraSettingsDialog;
 class CameraHistogramDialog;
 class Message;
 class QDoubleSpinBox;
+class QGraphicsRectItem;
 class QTableWidgetItem;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 class QCamera;
@@ -196,6 +197,11 @@ private:
 
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
+    QList<QGraphicsRectItem *> m_motionExclusionRectItems;
+    QGraphicsRectItem *m_motionExclusionDragItem = nullptr;
+    bool m_motionExclusionDrawMode = false;
+    bool m_motionExclusionDragging = false;
+    QPoint m_motionExclusionDragStartImagePos;
 
     // Qt camera code appears to need to be on GUI thread. Would hang on clean up in the worker thread.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -231,6 +237,9 @@ private:
     void updateHistogramStretchControls();
     void updateMotionExclusionRectsTable();
     void applyMotionExclusionRectsFromTable();
+    void updateMotionExclusionPreview();
+    void setMotionExclusionDrawMode(bool enabled);
+    QPoint mapViewportPointToImage(const QPoint& viewportPos) const;
     void populateGs232ControllerCombo();
     void applyPositionSync();
     void updatePositionControls();

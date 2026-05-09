@@ -118,7 +118,6 @@ void CameraFrameAligner::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("cameraReadoutMode")
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("stackEnabled")
-        || settingsKeys.contains("stackFrameCount")
         || settingsKeys.contains("stackAlignmentMethod");
 
     if (force) {
@@ -129,6 +128,16 @@ void CameraFrameAligner::applySettings(const CameraSettings& settings, const QLi
 
     if (sourceChanged) {
         resetAlignmentState();
+    } else if (settingsKeys.contains("stackFrameCount")) {
+        trimAlignmentHistoryToCurrentLimit();
+    }
+}
+
+void CameraFrameAligner::trimAlignmentHistoryToCurrentLimit()
+{
+    const int maxFrames = qBound(1, m_settings.m_stackFrameCount, 256);
+    while (static_cast<int>(m_alignmentReferenceHistory.size()) > maxFrames) {
+        m_alignmentReferenceHistory.pop_front();
     }
 }
 
@@ -320,10 +329,7 @@ QImage CameraFrameAligner::applyAlignment(const QImage& input)
     cv::Mat alignedFrameMat = alignFrame(frameMat);
 
     m_alignmentReferenceHistory.push_back(alignedFrameMat.clone());
-    const int maxFrames = qBound(1, m_settings.m_stackFrameCount, 256);
-    while (static_cast<int>(m_alignmentReferenceHistory.size()) > maxFrames) {
-        m_alignmentReferenceHistory.pop_front();
-    }
+    trimAlignmentHistoryToCurrentLimit();
 
     return workingMatToImage(alignedFrameMat, highBitDepthInput);
 }

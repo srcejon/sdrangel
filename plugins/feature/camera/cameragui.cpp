@@ -339,11 +339,29 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (CameraPostProcessor::MsgReportFrame::match(message))
     {
         const CameraPostProcessor::MsgReportFrame& report = (CameraPostProcessor::MsgReportFrame&) message;
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
         m_lastHistogramData = report.getHistogramData();
         m_lastStackCount = report.getStackCount();
         settingsUI()->stackCurrentCountValue->setText(QString::number(m_lastStackCount));
+        m_pipelineFrameTimes.append(nowMs);
+        while ((m_pipelineFrameTimes.size() > 1) && (m_pipelineFrameTimes.first() < nowMs - 5000)) {
+            m_pipelineFrameTimes.removeFirst();
+        }
+        if (m_pipelineFrameTimes.size() >= 2)
+        {
+            const qint64 spanMs = m_pipelineFrameTimes.last() - m_pipelineFrameTimes.first();
+            m_lastPipelineFps = spanMs > 0
+                ? (1000.0 * static_cast<double>(m_pipelineFrameTimes.size() - 1) / static_cast<double>(spanMs))
+                : 0.0;
+        }
+        else
+        {
+            m_lastPipelineFps = 0.0;
+        }
+        settingsUI()->pipelineFpsLabel->setText(
+            m_lastPipelineFps > 0.0 ? QString::number(m_lastPipelineFps, 'f', 1) : "-");
         updateImageWidget();
         if (m_histogramDialog) {
             m_histogramDialog->updateHistogram(m_lastHistogramData);
@@ -718,6 +736,9 @@ void CameraGUI::resetCameraStatus()
     m_lastAlpacaCcdTemperatureValid = false;
     m_lastAlpacaErrorNumber = 0;
     m_lastAlpacaErrorMessage.clear();
+    m_pipelineFrameTimes.clear();
+    m_lastPipelineFps = 0.0;
+    settingsUI()->pipelineFpsLabel->setText("-");
     m_settingsDialog->clearCameraStatus();
 }
 
@@ -1630,7 +1651,6 @@ void CameraGUI::updateExposureControls()
     const double maximum = m_exposureMaximumMs / unitScaleMs;
     const double singleStep = std::max(0.000001, m_exposureStepMs / unitScaleMs);
     const double value = qBound(minimum, m_settings.m_exposureTimeMs / unitScaleMs, maximum);
-    const double sliderMaximumValue = std::min(maximum, 1000.0);
 
     {
         QSignalBlocker blocker(settingsUI()->exposureSpin);
@@ -1644,12 +1664,8 @@ void CameraGUI::updateExposureControls()
     {
         QSignalBlocker blocker(settingsUI()->exposureSlider);
         settingsUI()->exposureSlider->setMinimum(0);
-        settingsUI()->exposureSlider->setMaximum(std::max(
-            0,
-            static_cast<int>(std::llround((sliderMaximumValue - minimum) / singleStep))));
-        settingsUI()->exposureSlider->setValue(std::min(
-            settingsUI()->exposureSlider->maximum(),
-            doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, value)));
+        settingsUI()->exposureSlider->setMaximum(1000);
+        settingsUI()->exposureSlider->setValue(exposureValueToSlider(settingsUI()->exposureSpin, value));
     }
 }
 
@@ -2958,7 +2974,14 @@ void CameraGUI::updateCameraSettingsVisibility()
 
 void CameraGUI::updateCameraStatusDisplay()
 {
-    if (!m_settingsDialog || (!m_settings.isAlpacaCamera() && !m_settings.isAsiCamera())) {
+    if (!m_settingsDialog) {
+        return;
+    }
+
+    settingsUI()->pipelineFpsLabel->setText(
+        m_lastPipelineFps > 0.0 ? QString::number(m_lastPipelineFps, 'f', 1) : "-");
+
+    if (!m_settings.isAlpacaCamera() && !m_settings.isAsiCamera()) {
         return;
     }
 
@@ -3599,7 +3622,7 @@ void CameraGUI::on_intervalUnitsCombo_currentIndexChanged(int index)
 
 void CameraGUI::on_exposureSlider_valueChanged(int value)
 {
-    const double exposureValue = sliderValueToDoubleSpinBox(settingsUI()->exposureSpin, value);
+    const double exposureValue = sliderToExposureValue(settingsUI()->exposureSpin, value);
     const double exposureMs = exposureValue * currentExposureUnitScaleMs(settingsUI());
     settingsUI()->exposureSpin->blockSignals(true);
     settingsUI()->exposureSpin->setValue(exposureValue);
@@ -3611,7 +3634,7 @@ void CameraGUI::on_exposureSlider_valueChanged(int value)
 void CameraGUI::on_exposureSpin_valueChanged(double value)
 {
     settingsUI()->exposureSlider->blockSignals(true);
-    settingsUI()->exposureSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->exposureSpin, value));
+    settingsUI()->exposureSlider->setValue(exposureValueToSlider(settingsUI()->exposureSpin, value));
     settingsUI()->exposureSlider->blockSignals(false);
     m_settings.m_exposureTimeMs = value * currentExposureUnitScaleMs(settingsUI());
     applySetting("exposureTimeMs");
@@ -5665,6 +5688,36 @@ double CameraGUI::sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int 
 {
     const double step = std::max(0.000001, spinBox->singleStep());
     return qBound(spinBox->minimum(), spinBox->minimum() + (sliderValue * step), spinBox->maximum());
+}
+
+int CameraGUI::exposureValueToSlider(const QDoubleSpinBox *spinBox, double value)
+{
+    const double minimum = std::max(0.000001, spinBox->minimum());
+    const double maximum = std::max(minimum, spinBox->maximum());
+    const int sliderMaximum = 1000;
+
+    if (maximum <= minimum) {
+        return 0;
+    }
+
+    const double clampedValue = qBound(minimum, value, maximum);
+    const double normalized = (std::log(clampedValue) - std::log(minimum)) / (std::log(maximum) - std::log(minimum));
+    return qBound(0, static_cast<int>(std::lround(normalized * sliderMaximum)), sliderMaximum);
+}
+
+double CameraGUI::sliderToExposureValue(const QDoubleSpinBox *spinBox, int sliderValue)
+{
+    const double minimum = std::max(0.000001, spinBox->minimum());
+    const double maximum = std::max(minimum, spinBox->maximum());
+    const int sliderMaximum = 1000;
+
+    if (maximum <= minimum) {
+        return minimum;
+    }
+
+    const double normalized = qBound(0.0, static_cast<double>(sliderValue) / sliderMaximum, 1.0);
+    const double value = std::exp(std::log(minimum) + normalized * (std::log(maximum) - std::log(minimum)));
+    return qBound(minimum, value, maximum);
 }
 
 double CameraGUI::currentExposureUnitScaleMs(const Ui::CameraSettingsDialog *ui)

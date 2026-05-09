@@ -131,6 +131,7 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
     void resetFrameHistoryState();
+    void trimFrameHistoryToCurrentLimit();
     void reloadCalibrationFrames();
     cv::Mat loadFitsCalibrationFrame(const QString& fileName, const QString& calibrationType, bool normalizeFlat) const;
     void validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName);

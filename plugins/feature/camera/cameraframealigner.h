@@ -128,6 +128,7 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
     void resetAlignmentState();
+    void trimAlignmentHistoryToCurrentLimit();
     [[nodiscard]] QImage applyAlignment(const QImage& input);
     [[nodiscard]] static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     [[nodiscard]] static QImage workingMatToImage(const cv::Mat& frameMat, bool highBitDepthInput);

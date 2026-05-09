@@ -58,6 +58,27 @@ void CameraFrameStacker::resetFrameHistoryState()
     m_stackAccumulator.release();
 }
 
+void CameraFrameStacker::trimFrameHistoryToCurrentLimit()
+{
+    const int maxFrames = qBound(1, m_settings.m_stackFrameCount, 256);
+
+    while (static_cast<int>(m_stackFrameHistory.size()) > maxFrames)
+    {
+        if ((m_settings.m_stackMethod == CameraSettings::StackMethodAverage) && !m_stackAccumulator.empty())
+        {
+            cv::Mat oldestFloatFrame;
+            m_stackFrameHistory.front().convertTo(oldestFloatFrame, CV_32FC3);
+            m_stackAccumulator -= oldestFloatFrame;
+        }
+
+        m_stackFrameHistory.pop_front();
+    }
+
+    if (m_stackFrameHistory.empty()) {
+        m_stackAccumulator.release();
+    }
+}
+
 void CameraFrameStacker::reloadCalibrationFrames()
 {
     m_darkCalibrationFrame.release();
@@ -392,7 +413,6 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("cameraReadoutMode")
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("stackEnabled")
-        || settingsKeys.contains("stackFrameCount")
         || settingsKeys.contains("stackMethod")
         || settingsKeys.contains("stackAlignmentMethod")
         || settingsKeys.contains("stackDarkFileName")
@@ -415,6 +435,8 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
 
     if (sourceChanged) {
         resetFrameHistoryState();
+    } else if (settingsKeys.contains("stackFrameCount")) {
+        trimFrameHistoryToCurrentLimit();
     }
 }
 
@@ -532,18 +554,7 @@ QImage CameraFrameStacker::applyFrameStacking(const QImage& input, CameraPipelin
     }
 
     m_stackFrameHistory.push_back(alignedFrameMat.clone());
-
-    const int maxFrames = qBound(1, m_settings.m_stackFrameCount, 256);
-    while (static_cast<int>(m_stackFrameHistory.size()) > maxFrames)
-    {
-        if (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
-        {
-            cv::Mat oldestFloatFrame;
-            m_stackFrameHistory.front().convertTo(oldestFloatFrame, CV_32FC3);
-            m_stackAccumulator -= oldestFloatFrame;
-        }
-        m_stackFrameHistory.pop_front();
-    }
+    trimFrameHistoryToCurrentLimit();
 
     const double scaleTo8Bit = alignedFrameMat.depth() == CV_16U ? (255.0 / 65535.0) : 1.0;
 

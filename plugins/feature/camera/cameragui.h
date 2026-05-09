@@ -150,6 +150,8 @@ private:
     bool m_scheduleLastWithinWindow = false;
     bool m_updatingMotionExclusionRectsTable = false;
     bool m_showMotionExclusionRects = true;
+    QList<qint64> m_pipelineFrameTimes;
+    double m_lastPipelineFps = 0.0;
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
@@ -306,6 +308,8 @@ private:
     static int doubleSpinBoxSliderMaximum(const QDoubleSpinBox *spinBox);
     static int doubleSpinBoxValueToSlider(const QDoubleSpinBox *spinBox, double value);
     static double sliderValueToDoubleSpinBox(const QDoubleSpinBox *spinBox, int sliderValue);
+    static int exposureValueToSlider(const QDoubleSpinBox *spinBox, double value);
+    static double sliderToExposureValue(const QDoubleSpinBox *spinBox, int sliderValue);
     static double currentExposureUnitScaleMs(const Ui::CameraSettingsDialog *ui);
     static void appendFpsRange(QSet<int>& fpsValues, qreal minFps, qreal maxFps);
     static constexpr int PlaybackPositionSliderMaximum = 1000;

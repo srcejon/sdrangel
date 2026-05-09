@@ -226,6 +226,7 @@ private:
     bool handleMessage(const Message& message);
     void makeUIConnections();
     void updateCameraSettingsVisibility();
+    void updateHistogramStretchControls();
     void populateGs232ControllerCombo();
     void applyPositionSync();
     void updatePositionControls();
@@ -391,6 +392,17 @@ private slots:
     void on_postProcessWhiteBalanceBlueGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value);
     void on_postProcessUnwarpCheck_toggled(bool checked);
+    void on_histogramStretchModeCombo_currentIndexChanged(int index);
+    void on_histogramStretchBlackPointSlider_valueChanged(int value);
+    void on_histogramStretchBlackPointSpin_valueChanged(double value);
+    void on_histogramStretchWhitePointSlider_valueChanged(int value);
+    void on_histogramStretchWhitePointSpin_valueChanged(double value);
+    void on_histogramStretchGammaSlider_valueChanged(int value);
+    void on_histogramStretchGammaSpin_valueChanged(double value);
+    void on_histogramStretchAsinhSlider_valueChanged(int value);
+    void on_histogramStretchAsinhSpin_valueChanged(double value);
+    void on_histogramStretchLogSlider_valueChanged(int value);
+    void on_histogramStretchLogSpin_valueChanged(double value);
     void on_postProcessGreyscaleCheck_toggled(bool checked);
     void on_saturationSlider_valueChanged(int value);
     void on_saturationSpin_valueChanged(double value);

@@ -134,6 +134,7 @@ private:
     [[nodiscard]] QImage applyImageProcessing(const QImage& input);
     void applyWhiteBalance(cv::Mat& bgrMat);
     void applyLensUnwarp(cv::Mat& bgrMat);
+    void applyHistogramStretch(cv::Mat& bgrMat) const;
     void applyGreyscale(cv::Mat& bgrMat) const;
     void applySaturation(cv::Mat& bgrMat);
     void applyGamma(cv::Mat& bgrMat) const;

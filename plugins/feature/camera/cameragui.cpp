@@ -944,6 +944,17 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, m_settings.m_postProcessWhiteBalanceBlueGain));
     settingsUI()->stackCurrentCountValue->setText(QString::number(m_lastStackCount));
     settingsUI()->postProcessUnwarpCheck->setChecked(m_settings.m_postProcessUnwarp);
+    settingsUI()->histogramStretchModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_histogramStretch));
+    settingsUI()->histogramStretchBlackPointSlider->setValue(static_cast<int>(std::lround(m_settings.m_histogramStretchBlackPoint * 1000.0)));
+    settingsUI()->histogramStretchBlackPointSpin->setValue(m_settings.m_histogramStretchBlackPoint);
+    settingsUI()->histogramStretchWhitePointSlider->setValue(static_cast<int>(std::lround(m_settings.m_histogramStretchWhitePoint * 1000.0)));
+    settingsUI()->histogramStretchWhitePointSpin->setValue(m_settings.m_histogramStretchWhitePoint);
+    settingsUI()->histogramStretchGammaSlider->setValue(static_cast<int>(std::lround(m_settings.m_histogramStretchGamma * 100.0)));
+    settingsUI()->histogramStretchGammaSpin->setValue(m_settings.m_histogramStretchGamma);
+    settingsUI()->histogramStretchAsinhSlider->setValue(static_cast<int>(std::lround(m_settings.m_histogramStretchAsinhStrength * 10.0)));
+    settingsUI()->histogramStretchAsinhSpin->setValue(m_settings.m_histogramStretchAsinhStrength);
+    settingsUI()->histogramStretchLogSlider->setValue(static_cast<int>(std::lround(m_settings.m_histogramStretchLogStrength * 10.0)));
+    settingsUI()->histogramStretchLogSpin->setValue(m_settings.m_histogramStretchLogStrength);
     settingsUI()->postProcessGreyscaleCheck->setChecked(m_settings.m_postProcessGreyscale);
     settingsUI()->saturationSlider->setValue(static_cast<int>(m_settings.m_saturation * 100.0));
     settingsUI()->saturationSpin->setValue(m_settings.m_saturation);
@@ -964,6 +975,7 @@ void CameraGUI::displaySettings()
     settingsUI()->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
     settingsUI()->contrastSpin->setValue(m_settings.m_contrast);
     updatePostProcessWhiteBalanceControls();
+    updateHistogramStretchControls();
     ui->invertColorsButton->setChecked(m_settings.m_invertColors);
     ui->overlayDateTimeButton->setChecked(m_settings.m_overlayDateTime);
     settingsUI()->dateTimeFormatEdit->setText(m_settings.m_dateTimeFormat);
@@ -1302,6 +1314,17 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessUnwarpCheck, &QCheckBox::toggled, this, &CameraGUI::on_postProcessUnwarpCheck_toggled);
+    QObject::connect(settingsUI()->histogramStretchModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_histogramStretchModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->histogramStretchBlackPointSlider, &QSlider::valueChanged, this, &CameraGUI::on_histogramStretchBlackPointSlider_valueChanged);
+    QObject::connect(settingsUI()->histogramStretchBlackPointSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_histogramStretchBlackPointSpin_valueChanged);
+    QObject::connect(settingsUI()->histogramStretchWhitePointSlider, &QSlider::valueChanged, this, &CameraGUI::on_histogramStretchWhitePointSlider_valueChanged);
+    QObject::connect(settingsUI()->histogramStretchWhitePointSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_histogramStretchWhitePointSpin_valueChanged);
+    QObject::connect(settingsUI()->histogramStretchGammaSlider, &QSlider::valueChanged, this, &CameraGUI::on_histogramStretchGammaSlider_valueChanged);
+    QObject::connect(settingsUI()->histogramStretchGammaSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_histogramStretchGammaSpin_valueChanged);
+    QObject::connect(settingsUI()->histogramStretchAsinhSlider, &QSlider::valueChanged, this, &CameraGUI::on_histogramStretchAsinhSlider_valueChanged);
+    QObject::connect(settingsUI()->histogramStretchAsinhSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_histogramStretchAsinhSpin_valueChanged);
+    QObject::connect(settingsUI()->histogramStretchLogSlider, &QSlider::valueChanged, this, &CameraGUI::on_histogramStretchLogSlider_valueChanged);
+    QObject::connect(settingsUI()->histogramStretchLogSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_histogramStretchLogSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessGreyscaleCheck, &QCheckBox::toggled, this, &CameraGUI::on_postProcessGreyscaleCheck_toggled);
     QObject::connect(settingsUI()->saturationSlider, &QSlider::valueChanged, this, &CameraGUI::on_saturationSlider_valueChanged);
     QObject::connect(settingsUI()->saturationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_saturationSpin_valueChanged);
@@ -4091,6 +4114,32 @@ void CameraGUI::updatePostProcessWhiteBalanceControls()
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setEnabled(manual);
 }
 
+void CameraGUI::updateHistogramStretchControls()
+{
+    const CameraSettings::HistogramStretch stretchMode = m_settings.m_histogramStretch;
+    const bool stretchEnabled = stretchMode != CameraSettings::HistogramStretchOff;
+    const bool gammaMode = stretchMode == CameraSettings::HistogramStretchGamma;
+    const bool asinhMode = stretchMode == CameraSettings::HistogramStretchAsinh;
+    const bool logMode = stretchMode == CameraSettings::HistogramStretchLog;
+
+    settingsUI()->histogramStretchBlackPointLabel->setEnabled(stretchEnabled);
+    settingsUI()->histogramStretchBlackPointSlider->setEnabled(stretchEnabled);
+    settingsUI()->histogramStretchBlackPointSpin->setEnabled(stretchEnabled);
+    settingsUI()->histogramStretchWhitePointLabel->setEnabled(stretchEnabled);
+    settingsUI()->histogramStretchWhitePointSlider->setEnabled(stretchEnabled);
+    settingsUI()->histogramStretchWhitePointSpin->setEnabled(stretchEnabled);
+
+    settingsUI()->histogramStretchGammaLabel->setEnabled(gammaMode);
+    settingsUI()->histogramStretchGammaSlider->setEnabled(gammaMode);
+    settingsUI()->histogramStretchGammaSpin->setEnabled(gammaMode);
+    settingsUI()->histogramStretchAsinhLabel->setEnabled(asinhMode);
+    settingsUI()->histogramStretchAsinhSlider->setEnabled(asinhMode);
+    settingsUI()->histogramStretchAsinhSpin->setEnabled(asinhMode);
+    settingsUI()->histogramStretchLogLabel->setEnabled(logMode);
+    settingsUI()->histogramStretchLogSlider->setEnabled(logMode);
+    settingsUI()->histogramStretchLogSpin->setEnabled(logMode);
+}
+
 void CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_postProcessWhiteBalanceMode = index;
@@ -4165,6 +4214,129 @@ void CameraGUI::on_postProcessUnwarpCheck_toggled(bool checked)
 {
     m_settings.m_postProcessUnwarp = checked;
     applySetting("postProcessUnwarp");
+}
+
+void CameraGUI::on_histogramStretchModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_histogramStretch = static_cast<CameraSettings::HistogramStretch>(
+        qBound(static_cast<int>(CameraSettings::HistogramStretchOff), index, static_cast<int>(CameraSettings::HistogramStretchLog)));
+    updateHistogramStretchControls();
+    applySetting("histogramStretch");
+}
+
+void CameraGUI::on_histogramStretchBlackPointSlider_valueChanged(int value)
+{
+    const double blackPoint = value / 1000.0;
+    settingsUI()->histogramStretchBlackPointSpin->blockSignals(true);
+    settingsUI()->histogramStretchBlackPointSpin->setValue(blackPoint);
+    settingsUI()->histogramStretchBlackPointSpin->blockSignals(false);
+    m_settings.m_histogramStretchBlackPoint = blackPoint;
+
+    if (m_settings.m_histogramStretchWhitePoint <= blackPoint) {
+        settingsUI()->histogramStretchWhitePointSpin->setValue(std::min(1.0, blackPoint + 0.001));
+    }
+
+    applySetting("histogramStretchBlackPoint");
+}
+
+void CameraGUI::on_histogramStretchBlackPointSpin_valueChanged(double value)
+{
+    settingsUI()->histogramStretchBlackPointSlider->blockSignals(true);
+    settingsUI()->histogramStretchBlackPointSlider->setValue(static_cast<int>(std::lround(value * 1000.0)));
+    settingsUI()->histogramStretchBlackPointSlider->blockSignals(false);
+    m_settings.m_histogramStretchBlackPoint = value;
+
+    if (m_settings.m_histogramStretchWhitePoint <= value) {
+        settingsUI()->histogramStretchWhitePointSpin->setValue(std::min(1.0, value + 0.001));
+    }
+
+    applySetting("histogramStretchBlackPoint");
+}
+
+void CameraGUI::on_histogramStretchWhitePointSlider_valueChanged(int value)
+{
+    const double whitePoint = value / 1000.0;
+    settingsUI()->histogramStretchWhitePointSpin->blockSignals(true);
+    settingsUI()->histogramStretchWhitePointSpin->setValue(whitePoint);
+    settingsUI()->histogramStretchWhitePointSpin->blockSignals(false);
+    m_settings.m_histogramStretchWhitePoint = whitePoint;
+
+    if (whitePoint <= m_settings.m_histogramStretchBlackPoint) {
+        settingsUI()->histogramStretchBlackPointSpin->setValue(std::max(0.0, whitePoint - 0.001));
+    }
+
+    applySetting("histogramStretchWhitePoint");
+}
+
+void CameraGUI::on_histogramStretchWhitePointSpin_valueChanged(double value)
+{
+    settingsUI()->histogramStretchWhitePointSlider->blockSignals(true);
+    settingsUI()->histogramStretchWhitePointSlider->setValue(static_cast<int>(std::lround(value * 1000.0)));
+    settingsUI()->histogramStretchWhitePointSlider->blockSignals(false);
+    m_settings.m_histogramStretchWhitePoint = value;
+
+    if (value <= m_settings.m_histogramStretchBlackPoint) {
+        settingsUI()->histogramStretchBlackPointSpin->setValue(std::max(0.0, value - 0.001));
+    }
+
+    applySetting("histogramStretchWhitePoint");
+}
+
+void CameraGUI::on_histogramStretchGammaSlider_valueChanged(int value)
+{
+    const double gammaValue = value / 100.0;
+    settingsUI()->histogramStretchGammaSpin->blockSignals(true);
+    settingsUI()->histogramStretchGammaSpin->setValue(gammaValue);
+    settingsUI()->histogramStretchGammaSpin->blockSignals(false);
+    m_settings.m_histogramStretchGamma = gammaValue;
+    applySetting("histogramStretchGamma");
+}
+
+void CameraGUI::on_histogramStretchGammaSpin_valueChanged(double value)
+{
+    settingsUI()->histogramStretchGammaSlider->blockSignals(true);
+    settingsUI()->histogramStretchGammaSlider->setValue(static_cast<int>(std::lround(value * 100.0)));
+    settingsUI()->histogramStretchGammaSlider->blockSignals(false);
+    m_settings.m_histogramStretchGamma = value;
+    applySetting("histogramStretchGamma");
+}
+
+void CameraGUI::on_histogramStretchAsinhSlider_valueChanged(int value)
+{
+    const double strength = value / 10.0;
+    settingsUI()->histogramStretchAsinhSpin->blockSignals(true);
+    settingsUI()->histogramStretchAsinhSpin->setValue(strength);
+    settingsUI()->histogramStretchAsinhSpin->blockSignals(false);
+    m_settings.m_histogramStretchAsinhStrength = strength;
+    applySetting("histogramStretchAsinhStrength");
+}
+
+void CameraGUI::on_histogramStretchAsinhSpin_valueChanged(double value)
+{
+    settingsUI()->histogramStretchAsinhSlider->blockSignals(true);
+    settingsUI()->histogramStretchAsinhSlider->setValue(static_cast<int>(std::lround(value * 10.0)));
+    settingsUI()->histogramStretchAsinhSlider->blockSignals(false);
+    m_settings.m_histogramStretchAsinhStrength = value;
+    applySetting("histogramStretchAsinhStrength");
+}
+
+void CameraGUI::on_histogramStretchLogSlider_valueChanged(int value)
+{
+    const double strength = value / 10.0;
+    settingsUI()->histogramStretchLogSpin->blockSignals(true);
+    settingsUI()->histogramStretchLogSpin->setValue(strength);
+    settingsUI()->histogramStretchLogSpin->blockSignals(false);
+    m_settings.m_histogramStretchLogStrength = strength;
+    applySetting("histogramStretchLogStrength");
+}
+
+void CameraGUI::on_histogramStretchLogSpin_valueChanged(double value)
+{
+    settingsUI()->histogramStretchLogSlider->blockSignals(true);
+    settingsUI()->histogramStretchLogSlider->setValue(static_cast<int>(std::lround(value * 10.0)));
+    settingsUI()->histogramStretchLogSlider->blockSignals(false);
+    m_settings.m_histogramStretchLogStrength = value;
+    applySetting("histogramStretchLogStrength");
 }
 
 void CameraGUI::on_saturationSlider_valueChanged(int value)
@@ -4517,6 +4689,12 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(1);
     settingsUI()->postProcessUnwarpCheck->setChecked(false);
+    settingsUI()->histogramStretchModeCombo->setCurrentIndex(static_cast<int>(CameraSettings::HistogramStretchOff));
+    settingsUI()->histogramStretchBlackPointSpin->setValue(0.0);
+    settingsUI()->histogramStretchWhitePointSpin->setValue(1.0);
+    settingsUI()->histogramStretchGammaSpin->setValue(1.0);
+    settingsUI()->histogramStretchAsinhSpin->setValue(10.0);
+    settingsUI()->histogramStretchLogSpin->setValue(10.0);
     settingsUI()->postProcessGreyscaleCheck->setChecked(false);
     settingsUI()->brightnessSpin->setValue(0);
     settingsUI()->contrastSpin->setValue(1.0);

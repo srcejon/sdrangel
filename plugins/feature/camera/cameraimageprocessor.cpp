@@ -111,6 +111,12 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "postProcessWhiteBalanceGreenGain",
         "postProcessWhiteBalanceBlueGain",
         "postProcessUnwarp",
+        "histogramStretch",
+        "histogramStretchBlackPoint",
+        "histogramStretchWhitePoint",
+        "histogramStretchGamma",
+        "histogramStretchAsinhStrength",
+        "histogramStretchLogStrength",
         "postProcessGreyscale",
         "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "sobelEdge", "flipX", "flipY",
         "brightness", "contrast", "invertColors"
@@ -296,6 +302,8 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
 
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
+    const bool needsHistogramStretch = (m_settings.m_histogramStretch != CameraSettings::HistogramStretchOff)
+        && (m_settings.m_histogramStretchWhitePoint > m_settings.m_histogramStretchBlackPoint + 1e-6);
     const bool needsGreyscale = m_settings.m_postProcessGreyscale;
     const bool needsSaturation = !needsGreyscale && (std::abs(m_settings.m_saturation - 1.0) > 1e-4);
     const bool needsGamma = std::abs(m_settings.m_gamma - 1.0) > 1e-4;
@@ -307,6 +315,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
         || needsUnwarp
+        || needsHistogramStretch
         || needsSaturation
         || needsGamma
         || needsGaussianBlur
@@ -330,6 +339,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
 
     if (needsUnwarp) { applyLensUnwarp(bgrMat); }
     if (needsWhiteBalance) { applyWhiteBalance(bgrMat); }
+    if (needsHistogramStretch) { applyHistogramStretch(bgrMat); }
     if (needsGreyscale) { applyGreyscale(bgrMat); }
     if (needsSaturation) { applySaturation(bgrMat); }
     if (needsGamma) { applyGamma(bgrMat); }
@@ -389,6 +399,61 @@ void CameraImageProcessor::applyWhiteBalance(cv::Mat& bgrMat)
     channels[1].convertTo(channels[1], -1, gains[1], 0.0);
     channels[2].convertTo(channels[2], -1, gains[2], 0.0);
     cv::merge(channels, bgrMat);
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyHistogramStretch(cv::Mat& bgrMat) const
+{
+    PROFILER_START();
+
+    cv::Mat floatMat;
+    bgrMat.convertTo(floatMat, CV_32FC3, 1.0 / 255.0);
+
+    const float blackPoint = static_cast<float>(m_settings.m_histogramStretchBlackPoint);
+    const float whitePoint = static_cast<float>(m_settings.m_histogramStretchWhitePoint);
+    const float rangeScale = 1.0f / std::max(0.001f, whitePoint - blackPoint);
+
+    const float gammaValue = static_cast<float>(m_settings.m_histogramStretchGamma);
+    const float asinhStrength = static_cast<float>(m_settings.m_histogramStretchAsinhStrength);
+    const float logStrength = static_cast<float>(m_settings.m_histogramStretchLogStrength);
+    const float asinhNorm = std::asinh(asinhStrength);
+    const float logNorm = std::log1p(logStrength);
+
+    for (int row = 0; row < floatMat.rows; ++row)
+    {
+        cv::Vec3f* pixelRow = floatMat.ptr<cv::Vec3f>(row);
+        for (int col = 0; col < floatMat.cols; ++col)
+        {
+            cv::Vec3f& pixel = pixelRow[col];
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                float value = (pixel[channel] - blackPoint) * rangeScale;
+                value = std::clamp(value, 0.0f, 1.0f);
+
+                switch (m_settings.m_histogramStretch)
+                {
+                case CameraSettings::HistogramStretchLinear:
+                    break;
+                case CameraSettings::HistogramStretchGamma:
+                    value = std::pow(value, gammaValue);
+                    break;
+                case CameraSettings::HistogramStretchAsinh:
+                    value = (asinhNorm > 0.0f) ? (std::asinh(asinhStrength * value) / asinhNorm) : value;
+                    break;
+                case CameraSettings::HistogramStretchLog:
+                    value = (logNorm > 0.0f) ? (std::log1p(logStrength * value) / logNorm) : value;
+                    break;
+                case CameraSettings::HistogramStretchOff:
+                default:
+                    break;
+                }
+
+                pixel[channel] = std::clamp(value, 0.0f, 1.0f);
+            }
+        }
+    }
+
+    floatMat.convertTo(bgrMat, CV_8UC3, 255.0);
     PROFILER_STOP(__FUNCTION__);
 }
 

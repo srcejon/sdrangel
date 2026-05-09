@@ -202,6 +202,12 @@ void CameraSettings::resetToDefaults()
     m_postProcessWhiteBalanceGreenGain = 1.0;
     m_postProcessWhiteBalanceBlueGain = 1.0;
     m_postProcessUnwarp = false;
+    m_histogramStretch = HistogramStretchOff;
+    m_histogramStretchBlackPoint = 0.0;
+    m_histogramStretchWhitePoint = 1.0;
+    m_histogramStretchGamma = 1.0;
+    m_histogramStretchAsinhStrength = 10.0;
+    m_histogramStretchLogStrength = 10.0;
     m_postProcessGreyscale = false;
     m_saturation = 1.0;
     m_gamma = 1.0;
@@ -345,6 +351,12 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(33, m_postProcessWhiteBalanceGreenGain);
     s.writeDouble(34, m_postProcessWhiteBalanceBlueGain);
     s.writeBool(157, m_postProcessUnwarp);
+    s.writeS32(158, static_cast<qint32>(m_histogramStretch));
+    s.writeDouble(159, m_histogramStretchBlackPoint);
+    s.writeDouble(160, m_histogramStretchWhitePoint);
+    s.writeDouble(161, m_histogramStretchGamma);
+    s.writeDouble(162, m_histogramStretchAsinhStrength);
+    s.writeDouble(163, m_histogramStretchLogStrength);
     s.writeBool(127, m_postProcessGreyscale);
     s.writeDouble(35, m_saturation);
     s.writeDouble(36, m_gamma);
@@ -565,6 +577,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(33, &m_postProcessWhiteBalanceGreenGain, 1.0);
         d.readDouble(34, &m_postProcessWhiteBalanceBlueGain, 1.0);
         d.readBool(157, &m_postProcessUnwarp, false);
+        d.readS32(158, reinterpret_cast<qint32*>(&m_histogramStretch), static_cast<qint32>(HistogramStretchOff));
+        d.readDouble(159, &m_histogramStretchBlackPoint, 0.0);
+        d.readDouble(160, &m_histogramStretchWhitePoint, 1.0);
+        d.readDouble(161, &m_histogramStretchGamma, 1.0);
+        d.readDouble(162, &m_histogramStretchAsinhStrength, 10.0);
+        d.readDouble(163, &m_histogramStretchLogStrength, 10.0);
         d.readBool(127, &m_postProcessGreyscale, false);
         d.readDouble(35, &m_saturation, 1.0);
         d.readDouble(36, &m_gamma, 1.0);
@@ -578,6 +596,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_postProcessWhiteBalanceRedGain = qBound(0.1, m_postProcessWhiteBalanceRedGain, 8.0);
         m_postProcessWhiteBalanceGreenGain = qBound(0.1, m_postProcessWhiteBalanceGreenGain, 8.0);
         m_postProcessWhiteBalanceBlueGain = qBound(0.1, m_postProcessWhiteBalanceBlueGain, 8.0);
+        m_histogramStretch = qBound(HistogramStretchOff, m_histogramStretch, HistogramStretchLog);
+        m_histogramStretchBlackPoint = qBound(0.0, m_histogramStretchBlackPoint, 1.0);
+        m_histogramStretchWhitePoint = qBound(m_histogramStretchBlackPoint + 0.001, m_histogramStretchWhitePoint, 1.0);
+        m_histogramStretchGamma = qBound(0.1, m_histogramStretchGamma, 8.0);
+        m_histogramStretchAsinhStrength = qBound(0.1, m_histogramStretchAsinhStrength, 100.0);
+        m_histogramStretchLogStrength = qBound(0.1, m_histogramStretchLogStrength, 100.0);
         m_saturation = qBound(0.0, m_saturation, 3.0);
         m_gamma = qBound(0.1, m_gamma, 3.0);
         m_gaussianBlur = qBound(0, m_gaussianBlur, 15);
@@ -1008,6 +1032,24 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("postProcessUnwarp")) {
         m_postProcessUnwarp = settings.m_postProcessUnwarp;
+    }
+    if (settingsKeys.contains("histogramStretch")) {
+        m_histogramStretch = qBound(HistogramStretchOff, settings.m_histogramStretch, HistogramStretchLog);
+    }
+    if (settingsKeys.contains("histogramStretchBlackPoint")) {
+        m_histogramStretchBlackPoint = qBound(0.0, settings.m_histogramStretchBlackPoint, 1.0);
+    }
+    if (settingsKeys.contains("histogramStretchWhitePoint")) {
+        m_histogramStretchWhitePoint = qBound(m_histogramStretchBlackPoint + 0.001, settings.m_histogramStretchWhitePoint, 1.0);
+    }
+    if (settingsKeys.contains("histogramStretchGamma")) {
+        m_histogramStretchGamma = qBound(0.1, settings.m_histogramStretchGamma, 8.0);
+    }
+    if (settingsKeys.contains("histogramStretchAsinhStrength")) {
+        m_histogramStretchAsinhStrength = qBound(0.1, settings.m_histogramStretchAsinhStrength, 100.0);
+    }
+    if (settingsKeys.contains("histogramStretchLogStrength")) {
+        m_histogramStretchLogStrength = qBound(0.1, settings.m_histogramStretchLogStrength, 100.0);
     }
     if (settingsKeys.contains("postProcessGreyscale")) {
         m_postProcessGreyscale = settings.m_postProcessGreyscale;
@@ -1449,6 +1491,24 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("postProcessUnwarp") || force) {
         ostr << " m_postProcessUnwarp: " << m_postProcessUnwarp;
+    }
+    if (settingsKeys.contains("histogramStretch") || force) {
+        ostr << " m_histogramStretch: " << m_histogramStretch;
+    }
+    if (settingsKeys.contains("histogramStretchBlackPoint") || force) {
+        ostr << " m_histogramStretchBlackPoint: " << m_histogramStretchBlackPoint;
+    }
+    if (settingsKeys.contains("histogramStretchWhitePoint") || force) {
+        ostr << " m_histogramStretchWhitePoint: " << m_histogramStretchWhitePoint;
+    }
+    if (settingsKeys.contains("histogramStretchGamma") || force) {
+        ostr << " m_histogramStretchGamma: " << m_histogramStretchGamma;
+    }
+    if (settingsKeys.contains("histogramStretchAsinhStrength") || force) {
+        ostr << " m_histogramStretchAsinhStrength: " << m_histogramStretchAsinhStrength;
+    }
+    if (settingsKeys.contains("histogramStretchLogStrength") || force) {
+        ostr << " m_histogramStretchLogStrength: " << m_histogramStretchLogStrength;
     }
     if (settingsKeys.contains("postProcessGreyscale") || force) {
         ostr << " m_postProcessGreyscale: " << m_postProcessGreyscale;

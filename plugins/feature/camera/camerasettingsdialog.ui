@@ -3876,6 +3876,36 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </item>
            </widget>
           </item>
+          <item row="2" column="2">
+           <widget class="QLabel" name="motionBackgroundSubtractorLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Subtractor</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="3">
+           <widget class="QComboBox" name="motionBackgroundSubtractorCombo">
+            <property name="toolTip">
+             <string>Background subtractor used for motion detection</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>MOG2</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>KNN</string>
+             </property>
+            </item>
+           </widget>
+          </item>
           <item row="7" column="2">
            <widget class="QLabel" name="motionDetectShadowsLabel">
             <property name="text">

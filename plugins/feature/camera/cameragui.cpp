@@ -1040,6 +1040,7 @@ void CameraGUI::displaySettings()
     settingsUI()->detectionRoiWidthSpin->setValue(m_settings.m_detectionRoiWidth);
     settingsUI()->detectionRoiHeightSpin->setValue(m_settings.m_detectionRoiHeight);
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
+    settingsUI()->motionBackgroundSubtractorCombo->setCurrentIndex(static_cast<int>(m_settings.m_motionBackgroundSubtractor));
     settingsUI()->motionHistorySpin->setValue(m_settings.m_motionHistory);
     settingsUI()->motionVarThresholdSpin->setValue(m_settings.m_motionVarThreshold);
     settingsUI()->motionLearningRateSpin->setValue(m_settings.m_motionLearningRate);
@@ -1423,6 +1424,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->detectionRoiWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiWidthSpin_valueChanged);
     QObject::connect(settingsUI()->detectionRoiHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiHeightSpin_valueChanged);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
+    QObject::connect(settingsUI()->motionBackgroundSubtractorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged);
     QObject::connect(settingsUI()->motionHistorySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionHistorySpin_valueChanged);
     QObject::connect(settingsUI()->motionVarThresholdSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_motionVarThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->motionLearningRateSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_motionLearningRateSpin_valueChanged);
@@ -4981,6 +4983,12 @@ void CameraGUI::on_motionDetectButton_toggled(bool checked)
 {
     m_settings.m_motionDetect = checked;
     applySetting("motionDetect");
+}
+
+void CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged(int index)
+{
+    m_settings.m_motionBackgroundSubtractor = static_cast<CameraSettings::MotionBackgroundSubtractor>(index);
+    applySetting("motionBackgroundSubtractor");
 }
 
 void CameraGUI::on_motionHistorySpin_valueChanged(int value)

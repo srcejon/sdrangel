@@ -86,6 +86,12 @@ struct CameraSettings
         HistogramStretchLog
     };
 
+    enum MotionBackgroundSubtractor
+    {
+        MotionBackgroundSubtractorMOG2 = 0,
+        MotionBackgroundSubtractorKNN
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -238,10 +244,11 @@ struct CameraSettings
     int    m_detectionRoiY;     ///< Detection ROI Y origin in pixels; 0..4096
     int    m_detectionRoiWidth; ///< Detection ROI width in pixels; 0 disables ROI/full width
     int    m_detectionRoiHeight; ///< Detection ROI height in pixels; 0 disables ROI/full height
-    bool   m_motionDetect;      ///< Enable MOG2 background subtractor
+    bool   m_motionDetect;      ///< Enable motion background subtraction
+    MotionBackgroundSubtractor m_motionBackgroundSubtractor; ///< Background subtractor algorithm
     int    m_motionHistory;     ///< Background subtractor history length: 1..5000
-    double m_motionVarThreshold; ///< Variance threshold for MOG2 foreground classification: 1.0..200.0
-    double m_motionLearningRate; ///< Explicit MOG2 learning rate: -1.0 = auto, otherwise 0.0..1.0
+    double m_motionVarThreshold; ///< MOG2 variance or KNN distance threshold: 1.0..200.0
+    double m_motionLearningRate; ///< Explicit background subtractor learning rate: -1.0 = auto, otherwise 0.0..1.0
     int    m_motionConfirmFrames; ///< Require motion this many consecutive frames before reporting: 1..60
     double m_motionDownscale;   ///< Downscale factor for motion detection path: 1.0, 0.5, 0.25
     bool   m_motionDetectShadows; ///< Enable MOG2 shadow detection

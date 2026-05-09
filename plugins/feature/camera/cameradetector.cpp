@@ -395,7 +395,7 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_previousInputFrame = CameraPipelineFrame();
             m_lastInputFrame = CameraPipelineFrame();
             m_diffMaskHistory.clear();
-            m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
+            m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
             m_lastMotionBoxes.clear();
             m_motionPersistenceRemaining = 0;
             m_motionConfirmCount = 0;
@@ -459,7 +459,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_previousInputFrame = CameraPipelineFrame();
         m_lastInputFrame = CameraPipelineFrame();
         m_diffMaskHistory.clear();
-        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
+        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
         m_motionConfirmCount = 0;
@@ -492,6 +492,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
 
     if (force
         || settingsKeys.contains("motionDetect")
+        || settingsKeys.contains("motionBackgroundSubtractor")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
         || settingsKeys.contains("motionLearningRate")
@@ -502,11 +503,12 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("detectionRoiWidth")
         || settingsKeys.contains("detectionRoiHeight"))
     {
-        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
+        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
     }
 
     if (force
         || settingsKeys.contains("motionDetect")
+        || settingsKeys.contains("motionBackgroundSubtractor")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
         || settingsKeys.contains("motionLearningRate")
@@ -557,6 +559,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("diffMaskHistoryFrames")
         || settingsKeys.contains("diffMaskCloseSize")
         || settingsKeys.contains("motionDetect")
+        || settingsKeys.contains("motionBackgroundSubtractor")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
         || settingsKeys.contains("motionLearningRate")
@@ -813,14 +816,27 @@ cv::Mat CameraDetector::buildExclusionMask(const cv::Rect& roi, const cv::Size& 
     return mask;
 }
 
+cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createBackgroundSubtractor() const
+{
+    if (m_settings.m_motionBackgroundSubtractor == CameraSettings::MotionBackgroundSubtractorKNN)
+    {
+        return cv::createBackgroundSubtractorKNN(
+            m_settings.m_motionHistory,
+            m_settings.m_motionVarThreshold,
+            m_settings.m_motionDetectShadows);
+    }
+
+    return cv::createBackgroundSubtractorMOG2(
+        m_settings.m_motionHistory,
+        m_settings.m_motionVarThreshold,
+        m_settings.m_motionDetectShadows);
+}
+
 void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes)
 {
     PROFILER_START();
     if (!m_bgSubtractor) {
-        m_bgSubtractor = cv::createBackgroundSubtractorMOG2(
-            m_settings.m_motionHistory,
-            m_settings.m_motionVarThreshold,
-            m_settings.m_motionDetectShadows);
+        m_bgSubtractor = createBackgroundSubtractor();
     }
 
     const double downscale = m_settings.m_motionDownscale;

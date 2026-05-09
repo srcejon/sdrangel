@@ -127,7 +127,7 @@ private:
     CameraPipelineFrame m_previousInputFrame;
     CameraPipelineFrame m_lastInputFrame;
     std::deque<cv::Mat> m_diffMaskHistory;
-    cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
+    cv::Ptr<cv::BackgroundSubtractor> m_bgSubtractor;
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;
     int m_motionConfirmCount;
@@ -151,6 +151,7 @@ private:
     void processNewFrame(const CameraPipelineFramePtr& frame);
     void processFrame(const CameraPipelineFramePtr& frame, const CameraPipelineFrame& diffReferenceFrame, bool updateInputHistory);
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
+    [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createBackgroundSubtractor() const;
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes);
     [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;

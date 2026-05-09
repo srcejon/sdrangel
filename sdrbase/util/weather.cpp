@@ -109,14 +109,18 @@ void OpenWeatherMap::handleReply(QNetworkReply* reply)
         if (!reply->error())
         {
             QJsonDocument document = QJsonDocument::fromJson(reply->readAll());
+            qDebug() << "WEATHER" << document;
             if (document.isObject())
             {
+                float temp = NAN, pressure = NAN, humidity = NAN;
+                float cloudiness = NAN;
+                float windSpeed = NAN, windDirection = NAN;
+
                 QJsonObject obj = document.object();
                 if (obj.contains(QStringLiteral("main")))
                 {
                     QJsonValue val = obj.value(QStringLiteral("main"));
                     QJsonObject mainObj = val.toObject();
-                    float temp = NAN, pressure = NAN, humidity = NAN;
                     if (mainObj.contains(QStringLiteral("temp"))) {
                        temp = mainObj.value(QStringLiteral("temp")).toDouble();
                     }
@@ -126,12 +130,31 @@ void OpenWeatherMap::handleReply(QNetworkReply* reply)
                     if (mainObj.contains(QStringLiteral("humidity"))) {
                         humidity = mainObj.value(QStringLiteral("humidity")).toDouble();
                     }
-                    emit weatherUpdated(temp, pressure, humidity);
                 }
                 else
                 {
                     qDebug() << "OpenWeatherMap::handleReply: Object doesn't contain a main: " << obj;
                 }
+                if (obj.contains(QStringLiteral("clouds")))
+                {
+                    QJsonValue val = obj.value(QStringLiteral("clouds"));
+                    QJsonObject cloudsObj = val.toObject();
+                    if (cloudsObj.contains(QStringLiteral("all"))) {
+                        cloudiness = cloudsObj.value(QStringLiteral("all")).toDouble();
+                    }
+                }
+                if (obj.contains(QStringLiteral("wind")))
+                {
+                    QJsonValue val = obj.value(QStringLiteral("wind"));
+                    QJsonObject windObj = val.toObject();
+                    if (windObj.contains(QStringLiteral("speed"))) {
+                        windSpeed = windObj.value(QStringLiteral("speed")).toDouble();
+                    }
+                    if (windObj.contains(QStringLiteral("deg"))) {
+                        windDirection = windObj.value(QStringLiteral("deg")).toDouble();
+                    }
+                }
+                emit weatherUpdated(temp, pressure, humidity, cloudiness, windSpeed, windDirection);
             }
             else
             {

@@ -216,6 +216,9 @@ private:
     float m_weatherTemperature = std::numeric_limits<float>::quiet_NaN();
     float m_weatherPressure = std::numeric_limits<float>::quiet_NaN();
     float m_weatherHumidity = std::numeric_limits<float>::quiet_NaN();
+    float m_weatherCloudiness = std::numeric_limits<float>::quiet_NaN();
+    float m_weatherWindSpeed = std::numeric_limits<float>::quiet_NaN();
+    float m_weatherWindDirection = std::numeric_limits<float>::quiet_NaN();
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
     bool m_processingFrame;
@@ -245,7 +248,7 @@ private:
 private slots:
     void handleInputMessages();
     void processNextFrame();
-    void weatherUpdated(float temperature, float pressure, float humidity);
+    void weatherUpdated(float temperature, float pressure, float humidity, float cloudiness, float windSpeed, float windDirection);
 
 };
 

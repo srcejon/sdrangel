@@ -505,17 +505,14 @@ void CameraPostProcessor::restartWeatherUpdates()
     }
 }
 
-void CameraPostProcessor::weatherUpdated(float temperature, float pressure, float humidity)
+void CameraPostProcessor::weatherUpdated(float temperature, float pressure, float humidity, float cloudiness, float windSpeed, float windDirection)
 {
-    if (!std::isnan(temperature)) {
-        m_weatherTemperature = temperature;
-    }
-    if (!std::isnan(pressure)) {
-        m_weatherPressure = pressure;
-    }
-    if (!std::isnan(humidity)) {
-        m_weatherHumidity = humidity;
-    }
+    m_weatherTemperature = temperature;
+    m_weatherPressure = pressure;
+    m_weatherHumidity = humidity;
+    m_weatherCloudiness = cloudiness;
+    m_weatherWindSpeed = windSpeed;
+    m_weatherWindDirection = windDirection;
 
     if (!m_lastFrame.m_image.isNull())
     {
@@ -807,6 +804,9 @@ QString CameraPostProcessor::expandOverlayTextTemplate() const
     replaceToken(QStringLiteral("${pressure}"), weatherValueString(m_weatherPressure, 1));
     replaceToken(QStringLiteral("${humidity}"), weatherValueString(m_weatherHumidity, 0));
     replaceToken(QStringLiteral("${humidty}"), weatherValueString(m_weatherHumidity, 0));
+    replaceToken(QStringLiteral("${cloudiness}"), weatherValueString(m_weatherCloudiness, 0));
+    replaceToken(QStringLiteral("${windSpeed}"), weatherValueString(m_weatherWindSpeed, 0));
+    replaceToken(QStringLiteral("${windDirection}"), weatherValueString(m_weatherWindDirection, 0));
 
     return overlayText;
 }

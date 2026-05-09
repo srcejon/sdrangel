@@ -48,7 +48,7 @@ public slots:
     void update();
 
 signals:
-    void weatherUpdated(float temperature, float pressure, float humidity);  // Called when new data available. If no value is available, parameter will be NAN
+    void weatherUpdated(float temperature, float pressure, float humidity, float cloudiness, float windSpeed, float windDirection);  // Called when new data available. If no value is available, parameter will be NAN
 
 private:
     QTimer m_timer;             // Timer for periodic updates

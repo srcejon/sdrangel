@@ -453,6 +453,36 @@
        </widget>
       </item>
       <item>
+       <widget class="ButtonSwitch" name="equatorialGridButton">
+        <property name="toolTip">
+         <string>Overlay equatorial grid</string>
+        </property>
+        <property name="text">
+         <string>EQ</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="altAzGridButton">
+        <property name="toolTip">
+         <string>Overlay azimuthal grid</string>
+        </property>
+        <property name="text">
+         <string>AZ</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="trackObjectsButton">
+        <property name="toolTip">
+         <string>Overlay ADS-B / satellite / star tracked objects</string>
+        </property>
+        <property name="text">
+         <string>OBJ</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="horizontalSpacer">
         <property name="orientation">
          <enum>Qt::Orientation::Horizontal</enum>

@@ -985,9 +985,9 @@ void CameraGUI::displaySettings()
     settingsUI()->dateTimePosXValue->setText(QString::number(m_settings.m_dateTimePosX));
     settingsUI()->dateTimePosYSlider->setValue(m_settings.m_dateTimePosY);
     settingsUI()->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
-    settingsUI()->equatorialGridCheck->setChecked(m_settings.m_equatorialGrid);
-    settingsUI()->altAzGridCheck->setChecked(m_settings.m_altAzGrid);
-    settingsUI()->trackObjectsCheck->setChecked(m_settings.m_trackObjects);
+    ui->equatorialGridButton->setChecked(m_settings.m_equatorialGrid);
+    ui->altAzGridButton->setChecked(m_settings.m_altAzGrid);
+    ui->trackObjectsButton->setChecked(m_settings.m_trackObjects);
     settingsUI()->trackObjectMinElevationSpin->setValue(m_settings.m_trackObjectMinElevation);
     settingsUI()->trackObjectFontScaleSpin->setValue(m_settings.m_trackObjectFontScale);
     settingsUI()->gridLabelFontCombo->setCurrentText(m_settings.m_gridLabelFontFamily);
@@ -1358,11 +1358,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->dateTimeFormatEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_dateTimeFormatEdit_editingFinished);
     QObject::connect(settingsUI()->dateTimePosXSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosXSlider_valueChanged);
     QObject::connect(settingsUI()->dateTimePosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosYSlider_valueChanged);
-    QObject::connect(settingsUI()->equatorialGridCheck, &QCheckBox::toggled, this, &CameraGUI::on_equatorialGridCheck_toggled);
+    QObject::connect(ui->equatorialGridButton, &QToolButton::toggled, this, &CameraGUI::on_equatorialGridCheck_toggled);
     QObject::connect(settingsUI()->equatorialGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_equatorialGridColorButton_clicked);
-    QObject::connect(settingsUI()->altAzGridCheck, &QCheckBox::toggled, this, &CameraGUI::on_altAzGridCheck_toggled);
+    QObject::connect(ui->altAzGridButton, &QToolButton::toggled, this, &CameraGUI::on_altAzGridCheck_toggled);
     QObject::connect(settingsUI()->altAzGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_altAzGridColorButton_clicked);
-    QObject::connect(settingsUI()->trackObjectsCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
+    QObject::connect(ui->trackObjectsButton, &QToolButton::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
     QObject::connect(settingsUI()->trackObjectColorButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectColorButton_clicked);
     QObject::connect(settingsUI()->trackObjectFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectFontScaleSpin_valueChanged);

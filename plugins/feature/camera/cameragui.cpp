@@ -1295,7 +1295,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->azimuthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthSpin_valueChanged);
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
     QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
-    QObject::connect(settingsUI()->azElGs232ControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_azElGs232ControllerCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->rotatorControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_rotatorControllerCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
     QObject::connect(settingsUI()->lensProjectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_lensProjectionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->scheduleEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleEnabledCheck_toggled);
@@ -1648,9 +1648,9 @@ void CameraGUI::updateVideoFileControls()
 void CameraGUI::populateGs232ControllerCombo()
 {
     const QString currentSelection = m_settings.m_rotator;
-    QSignalBlocker blocker(settingsUI()->azElGs232ControllerCombo);
-    settingsUI()->azElGs232ControllerCombo->clear();
-    settingsUI()->azElGs232ControllerCombo->addItem(tr("None"), QString());
+    QSignalBlocker blocker(settingsUI()->rotatorControllerCombo);
+    settingsUI()->rotatorControllerCombo->clear();
+    settingsUI()->rotatorControllerCombo->addItem(tr("None"), QString());
 
     std::vector<FeatureSet*>& featureSets = MainCore::instance()->getFeatureeSets();
 
@@ -1677,14 +1677,14 @@ void CameraGUI::populateGs232ControllerCombo()
             }
 
             const QString selectionId = QStringLiteral("%1:%2").arg(featureSetIndex).arg(featureIndex);
-            settingsUI()->azElGs232ControllerCombo->addItem(
+            settingsUI()->rotatorControllerCombo->addItem(
                 QStringLiteral("F%1:%2 %3").arg(featureSetIndex).arg(featureIndex).arg(title),
                 selectionId);
         }
     }
 
-    const int index = settingsUI()->azElGs232ControllerCombo->findData(currentSelection);
-    settingsUI()->azElGs232ControllerCombo->setCurrentIndex(index >= 0 ? index : 0);
+    const int index = settingsUI()->rotatorControllerCombo->findData(currentSelection);
+    settingsUI()->rotatorControllerCombo->setCurrentIndex(index >= 0 ? index : 0);
 }
 
 void CameraGUI::applyPositionSync()
@@ -4050,9 +4050,9 @@ void CameraGUI::on_rollSpin_valueChanged(double value)
     applySetting("roll");
 }
 
-void CameraGUI::on_azElGs232ControllerCombo_currentIndexChanged(int index)
+void CameraGUI::on_rotatorControllerCombo_currentIndexChanged(int index)
 {
-    m_settings.m_rotator = settingsUI()->azElGs232ControllerCombo->itemData(index).toString();
+    m_settings.m_rotator = settingsUI()->rotatorControllerCombo->itemData(index).toString();
     updatePositionControls();
     if (!m_settings.m_rotator.isEmpty()) {
         syncFromSelectedGs232Controller();
@@ -5284,7 +5284,7 @@ void CameraGUI::onFeatureRemoved(int featureSetIndex, Feature *feature)
     (void) featureSetIndex;
     if (feature && (feature->getURI() == QLatin1String("sdrangel.feature.gs232controller"))) {
         populateGs232ControllerCombo();
-        if (settingsUI()->azElGs232ControllerCombo->findData(m_settings.m_rotator) < 0) {
+        if (settingsUI()->rotatorControllerCombo->findData(m_settings.m_rotator) < 0) {
             m_settings.m_rotator.clear();
             applySetting("rotator");
         }

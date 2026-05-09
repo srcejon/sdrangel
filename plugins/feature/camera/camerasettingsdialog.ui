@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>810</width>
-    <height>791</height>
+    <height>1027</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>6</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -26,195 +26,10 @@
       <layout class="QVBoxLayout" name="cameraTabLayout">
        <item>
         <layout class="QGridLayout" name="cameraSettingsLayout">
-         <item row="0" column="0">
-          <widget class="QLabel" name="resolutionLabel">
+         <item row="21" column="2">
+          <widget class="QLabel" name="alpacaFocusStepSizeLabel">
            <property name="text">
-            <string>Resolution</string>
-           </property>
-          </widget>
-         </item>
-         <item row="14" column="0">
-          <widget class="QLabel" name="cameraStartXLabel">
-           <property name="text">
-            <string>Subframe X</string>
-           </property>
-          </widget>
-         </item>
-         <item row="12" column="2">
-          <widget class="QLabel" name="cameraBinYLabel">
-           <property name="text">
-            <string>Bin Y</string>
-           </property>
-          </widget>
-         </item>
-         <item row="14" column="1">
-          <widget class="QSpinBox" name="cameraStartXSpin">
-           <property name="toolTip">
-            <string>Subframe X offset after binning</string>
-           </property>
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>65535</number>
-           </property>
-          </widget>
-         </item>
-         <item row="18" column="1" colspan="3">
-          <widget class="QSpinBox" name="asiUsbBandwidthSpin">
-           <property name="maximum">
-            <number>1000</number>
-           </property>
-          </widget>
-         </item>
-         <item row="19" column="1" colspan="3">
-          <widget class="QCheckBox" name="asiHighSpeedModeCheck">
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-         <item row="20" column="0">
-          <widget class="QLabel" name="asiColorImageTypeLabel">
-           <property name="text">
-            <string>Colour image type</string>
-           </property>
-          </widget>
-         </item>
-         <item row="20" column="1" colspan="3">
-          <widget class="QComboBox" name="asiColorImageTypeCombo">
-           <property name="toolTip">
-            <string>Select RGB24 for camera-side colour conversion or RAW16 for 16-bit Bayer data debayered in SDRangel.</string>
-           </property>
-          </widget>
-         </item>
-         <item row="13" column="1">
-          <widget class="QSpinBox" name="cameraNumXSpin">
-           <property name="toolTip">
-            <string>Subframe width after binning (0 uses the full available width)</string>
-           </property>
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>65535</number>
-           </property>
-          </widget>
-         </item>
-         <item row="16" column="1" colspan="3">
-          <widget class="QCheckBox" name="asiCoolerOnCheck">
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-         <item row="12" column="3">
-          <widget class="QSpinBox" name="cameraBinYSpin">
-           <property name="toolTip">
-            <string>Camera sensor binning in Y direction</string>
-           </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>16</number>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="0">
-          <widget class="QLabel" name="whiteBalanceLabel">
-           <property name="text">
-            <string>White balance</string>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="3">
-          <widget class="QDoubleSpinBox" name="focusDistSpin">
-           <property name="toolTip">
-            <string>Normalised focus distance: 0.0 = near, 1.0 = far/infinity</string>
-           </property>
-           <property name="decimals">
-            <number>2</number>
-           </property>
-           <property name="minimum">
-            <double>0.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.010000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="19" column="0">
-          <widget class="QLabel" name="asiHighSpeedModeLabel">
-           <property name="text">
-            <string>High speed mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="0">
-          <widget class="QLabel" name="focusModeLabel">
-           <property name="text">
-            <string>Focus mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="17" column="1" colspan="3">
-          <widget class="QSpinBox" name="asiTargetTempSpin">
-           <property name="minimum">
-            <number>-50</number>
-           </property>
-           <property name="maximum">
-            <number>50</number>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="1">
-          <widget class="QComboBox" name="focusModeCombo">
-           <property name="toolTip">
-            <string>Focus mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="11" column="0">
-          <widget class="QLabel" name="cameraOffsetLabel">
-           <property name="text">
-            <string>Offset</string>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="1" colspan="3">
-          <widget class="QDoubleSpinBox" name="exposureCompSpin">
-           <property name="toolTip">
-            <string>Exposure compensation in EV steps: -2.0 to +2.0</string>
-           </property>
-           <property name="decimals">
-            <number>1</number>
-           </property>
-           <property name="minimum">
-            <double>-2.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>2.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.100000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="22" column="1" colspan="3">
-          <widget class="QComboBox" name="alpacaFilterWheelPositionCombo">
-           <property name="toolTip">
-            <string>Filter wheel position using the Alpaca names list</string>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="2">
-          <widget class="QLabel" name="focusDistLabel">
-           <property name="text">
-            <string>Focus distance</string>
+            <string>Focus step size</string>
            </property>
           </widget>
          </item>
@@ -225,103 +40,20 @@
            </property>
           </widget>
          </item>
-         <item row="3" column="1" colspan="3">
-          <layout class="QHBoxLayout" name="exposureLayout">
-           <item>
-            <widget class="QSlider" name="exposureSlider">
-             <property name="toolTip">
-              <string>Exposure time</string>
-             </property>
-             <property name="minimum">
-              <number>0</number>
-             </property>
-             <property name="maximum">
-              <number>59999</number>
-             </property>
-             <property name="value">
-              <number>0</number>
-             </property>
-             <property name="orientation">
-              <enum>Qt::Orientation::Horizontal</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QDoubleSpinBox" name="exposureSpin">
-             <property name="toolTip">
-              <string>Exposure time</string>
-             </property>
-             <property name="decimals">
-              <number>0</number>
-             </property>
-             <property name="minimum">
-              <double>1.000000000000000</double>
-             </property>
-             <property name="maximum">
-              <double>60000.000000000000000</double>
-             </property>
-             <property name="singleStep">
-              <double>1.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QComboBox" name="exposureUnitsCombo">
-             <property name="toolTip">
-              <string>Exposure time units</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item row="10" column="1" colspan="3">
-          <layout class="QHBoxLayout" name="gainLayout">
-           <item>
-            <widget class="QComboBox" name="cameraGainCombo">
-             <property name="toolTip">
-              <string>Camera gain</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSlider" name="cameraGainSlider">
-             <property name="toolTip">
-              <string>Camera gain</string>
-             </property>
-             <property name="maximum">
-              <number>10000</number>
-             </property>
-             <property name="orientation">
-              <enum>Qt::Orientation::Horizontal</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSpinBox" name="cameraGainSpin">
-             <property name="toolTip">
-              <string>Camera gain</string>
-             </property>
-             <property name="minimum">
-              <number>0</number>
-             </property>
-             <property name="maximum">
-              <number>10000</number>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item row="20" column="2">
-          <widget class="QLabel" name="alpacaFocusStepSizeLabel">
+         <item row="9" column="0">
+          <widget class="QLabel" name="zoomLabel">
            <property name="text">
-            <string>Focus step size</string>
+            <string>Zoom</string>
            </property>
           </widget>
          </item>
-         <item row="22" column="0">
-          <widget class="QLabel" name="alpacaFilterWheelPositionLabel">
-           <property name="text">
-            <string>Filter</string>
+         <item row="21" column="3">
+          <widget class="QSpinBox" name="alpacaFocusStepSizeSpin">
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>100000</number>
            </property>
           </widget>
          </item>
@@ -338,133 +70,6 @@
            </property>
           </widget>
          </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="isoLabel">
-           <property name="text">
-            <string>ISO</string>
-           </property>
-          </widget>
-         </item>
-         <item row="10" column="0">
-          <widget class="QLabel" name="cameraGainLabel">
-           <property name="text">
-            <string>Gain</string>
-           </property>
-          </widget>
-         </item>
-         <item row="16" column="0">
-          <widget class="QLabel" name="asiCoolerOnLabel">
-           <property name="text">
-            <string>Cooler</string>
-           </property>
-          </widget>
-         </item>
-         <item row="13" column="0">
-          <widget class="QLabel" name="cameraNumXLabel">
-           <property name="text">
-            <string>Subframe Width</string>
-           </property>
-          </widget>
-         </item>
-         <item row="17" column="0">
-          <widget class="QLabel" name="asiTargetTempLabel">
-           <property name="text">
-            <string>Target temp</string>
-           </property>
-          </widget>
-         </item>
-         <item row="9" column="0">
-          <widget class="QLabel" name="zoomLabel">
-           <property name="text">
-            <string>Zoom</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1" colspan="3">
-          <widget class="QComboBox" name="resolutionCombo">
-           <property name="toolTip">
-            <string>Camera resolution in pixels</string>
-           </property>
-          </widget>
-         </item>
-         <item row="20" column="3">
-          <widget class="QSpinBox" name="alpacaFocusStepSizeSpin">
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>100000</number>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="1" colspan="3">
-          <widget class="QComboBox" name="whiteBalanceCombo">
-           <property name="toolTip">
-            <string>White balance mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="13" column="3">
-          <widget class="QSpinBox" name="cameraNumYSpin">
-           <property name="toolTip">
-            <string>Subframe height after binning (0 uses the full available height)</string>
-           </property>
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>65535</number>
-           </property>
-          </widget>
-         </item>
-         <item row="15" column="1" colspan="3">
-          <widget class="QComboBox" name="alpacaReadoutModeCombo">
-           <property name="toolTip">
-            <string>Sensor readout mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="14" column="3">
-          <widget class="QSpinBox" name="cameraStartYSpin">
-           <property name="toolTip">
-            <string>Subframe Y offset after binning</string>
-           </property>
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>65535</number>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="0">
-          <widget class="QLabel" name="exposureCompLabel">
-           <property name="text">
-            <string>Exp. comp. (EV)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="20" column="0">
-          <widget class="QLabel" name="alpacaFocusPositionLabel">
-           <property name="text">
-            <string>Focus position</string>
-           </property>
-          </widget>
-         </item>
-         <item row="20" column="1">
-          <widget class="QSpinBox" name="alpacaFocusPositionSpin">
-           <property name="maximum">
-            <number>1000000</number>
-           </property>
-          </widget>
-         </item>
-         <item row="13" column="2">
-          <widget class="QLabel" name="cameraNumYLabel">
-           <property name="text">
-            <string>Subframe Height</string>
-           </property>
-          </widget>
-         </item>
          <item row="4" column="1" colspan="3">
           <widget class="QSpinBox" name="isoSpin">
            <property name="toolTip">
@@ -478,100 +83,31 @@
            </property>
           </widget>
          </item>
-         <item row="14" column="2">
-          <widget class="QLabel" name="cameraStartYLabel">
+         <item row="20" column="1" colspan="3">
+          <widget class="QCheckBox" name="asiHighSpeedModeCheck">
            <property name="text">
-            <string>Subframe Y</string>
+            <string/>
            </property>
           </widget>
          </item>
-         <item row="12" column="0">
-          <widget class="QLabel" name="cameraBinXLabel">
+         <item row="7" column="0">
+          <widget class="QLabel" name="focusModeLabel">
            <property name="text">
-            <string>Bin X</string>
+            <string>Focus mode</string>
            </property>
           </widget>
          </item>
-         <item row="18" column="0">
-          <widget class="QLabel" name="asiUsbBandwidthLabel">
+         <item row="23" column="0">
+          <widget class="QLabel" name="alpacaFilterWheelPositionLabel">
            <property name="text">
-            <string>USB bandwidth</string>
+            <string>Filter</string>
            </property>
           </widget>
          </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="exposureLabel">
+         <item row="20" column="0">
+          <widget class="QLabel" name="asiHighSpeedModeLabel">
            <property name="text">
-            <string>Exposure</string>
-           </property>
-          </widget>
-         </item>
-         <item row="9" column="1" colspan="3">
-          <widget class="QDoubleSpinBox" name="zoomSpin">
-           <property name="toolTip">
-            <string>Hardware optical zoom factor</string>
-           </property>
-           <property name="decimals">
-            <number>2</number>
-           </property>
-           <property name="minimum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>32.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.100000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="11" column="1" colspan="3">
-          <layout class="QHBoxLayout" name="offsetLayout">
-           <item>
-            <widget class="QComboBox" name="cameraOffsetCombo">
-             <property name="toolTip">
-              <string>Camera offset</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSlider" name="cameraOffsetSlider">
-             <property name="toolTip">
-              <string>Camera offset</string>
-             </property>
-             <property name="maximum">
-              <number>10000</number>
-             </property>
-             <property name="orientation">
-              <enum>Qt::Orientation::Horizontal</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSpinBox" name="cameraOffsetSpin">
-             <property name="toolTip">
-              <string>Camera offset</string>
-             </property>
-             <property name="minimum">
-              <number>0</number>
-             </property>
-             <property name="maximum">
-              <number>10000</number>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item row="2" column="0">
-          <widget class="QComboBox" name="fpsLabel">
-           <property name="maximumSize">
-            <size>
-             <width>110</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="toolTip">
-            <string>Select whether the camera captures video frames continuously or still images at an interval</string>
+            <string>High speed mode</string>
            </property>
           </widget>
          </item>
@@ -708,6 +244,470 @@
             </widget>
            </item>
           </layout>
+         </item>
+         <item row="10" column="1" colspan="3">
+          <layout class="QHBoxLayout" name="gainLayout">
+           <item>
+            <widget class="QComboBox" name="cameraGainCombo">
+             <property name="toolTip">
+              <string>Camera gain</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="cameraGainSlider">
+             <property name="toolTip">
+              <string>Camera gain</string>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="cameraGainSpin">
+             <property name="toolTip">
+              <string>Camera gain</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="5" column="1" colspan="3">
+          <widget class="QComboBox" name="whiteBalanceCombo">
+           <property name="toolTip">
+            <string>White balance mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="14" column="0">
+          <widget class="QLabel" name="cameraStartXLabel">
+           <property name="text">
+            <string>Subframe X</string>
+           </property>
+          </widget>
+         </item>
+         <item row="19" column="1" colspan="3">
+          <widget class="QSpinBox" name="asiUsbBandwidthSpin">
+           <property name="maximum">
+            <number>1000</number>
+           </property>
+          </widget>
+         </item>
+         <item row="21" column="1">
+          <widget class="QSpinBox" name="alpacaFocusPositionSpin">
+           <property name="maximum">
+            <number>1000000</number>
+           </property>
+          </widget>
+         </item>
+         <item row="18" column="1" colspan="3">
+          <widget class="QSpinBox" name="asiTargetTempSpin">
+           <property name="minimum">
+            <number>-50</number>
+           </property>
+           <property name="maximum">
+            <number>50</number>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <widget class="QLabel" name="resolutionLabel">
+           <property name="text">
+            <string>Resolution</string>
+           </property>
+          </widget>
+         </item>
+         <item row="15" column="1" colspan="3">
+          <widget class="QComboBox" name="alpacaReadoutModeCombo">
+           <property name="toolTip">
+            <string>Sensor readout mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="exposureLabel">
+           <property name="text">
+            <string>Exposure</string>
+           </property>
+          </widget>
+         </item>
+         <item row="11" column="1" colspan="3">
+          <layout class="QHBoxLayout" name="offsetLayout">
+           <item>
+            <widget class="QComboBox" name="cameraOffsetCombo">
+             <property name="toolTip">
+              <string>Camera offset</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="cameraOffsetSlider">
+             <property name="toolTip">
+              <string>Camera offset</string>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="cameraOffsetSpin">
+             <property name="toolTip">
+              <string>Camera offset</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>10000</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="whiteBalanceLabel">
+           <property name="text">
+            <string>White balance</string>
+           </property>
+          </widget>
+         </item>
+         <item row="17" column="1" colspan="3">
+          <widget class="QCheckBox" name="asiCoolerOnCheck">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="3">
+          <widget class="QDoubleSpinBox" name="focusDistSpin">
+           <property name="toolTip">
+            <string>Normalised focus distance: 0.0 = near, 1.0 = far/infinity</string>
+           </property>
+           <property name="decimals">
+            <number>2</number>
+           </property>
+           <property name="minimum">
+            <double>0.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>1.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.010000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1" colspan="3">
+          <layout class="QHBoxLayout" name="exposureLayout">
+           <item>
+            <widget class="QSlider" name="exposureSlider">
+             <property name="toolTip">
+              <string>Exposure time</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>59999</number>
+             </property>
+             <property name="value">
+              <number>0</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QDoubleSpinBox" name="exposureSpin">
+             <property name="toolTip">
+              <string>Exposure time</string>
+             </property>
+             <property name="decimals">
+              <number>0</number>
+             </property>
+             <property name="minimum">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="maximum">
+              <double>60000.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>1.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="exposureUnitsCombo">
+             <property name="toolTip">
+              <string>Exposure time units</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="10" column="0">
+          <widget class="QLabel" name="cameraGainLabel">
+           <property name="text">
+            <string>Gain</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QComboBox" name="fpsLabel">
+           <property name="maximumSize">
+            <size>
+             <width>110</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string>Select whether the camera captures video frames continuously or still images at an interval</string>
+           </property>
+          </widget>
+         </item>
+         <item row="12" column="3">
+          <widget class="QSpinBox" name="cameraBinYSpin">
+           <property name="toolTip">
+            <string>Camera sensor binning in Y direction</string>
+           </property>
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>16</number>
+           </property>
+          </widget>
+         </item>
+         <item row="11" column="0">
+          <widget class="QLabel" name="cameraOffsetLabel">
+           <property name="text">
+            <string>Offset</string>
+           </property>
+          </widget>
+         </item>
+         <item row="21" column="0">
+          <widget class="QLabel" name="alpacaFocusPositionLabel">
+           <property name="text">
+            <string>Focus position</string>
+           </property>
+          </widget>
+         </item>
+         <item row="14" column="3">
+          <widget class="QSpinBox" name="cameraStartYSpin">
+           <property name="toolTip">
+            <string>Subframe Y offset after binning</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+          </widget>
+         </item>
+         <item row="14" column="1">
+          <widget class="QSpinBox" name="cameraStartXSpin">
+           <property name="toolTip">
+            <string>Subframe X offset after binning</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1" colspan="3">
+          <widget class="QComboBox" name="resolutionCombo">
+           <property name="toolTip">
+            <string>Camera resolution in pixels</string>
+           </property>
+          </widget>
+         </item>
+         <item row="13" column="1">
+          <widget class="QSpinBox" name="cameraNumXSpin">
+           <property name="toolTip">
+            <string>Subframe width after binning (0 uses the full available width)</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="0">
+          <widget class="QLabel" name="exposureCompLabel">
+           <property name="text">
+            <string>Exp. comp. (EV)</string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="1" colspan="3">
+          <widget class="QDoubleSpinBox" name="exposureCompSpin">
+           <property name="toolTip">
+            <string>Exposure compensation in EV steps: -2.0 to +2.0</string>
+           </property>
+           <property name="decimals">
+            <number>1</number>
+           </property>
+           <property name="minimum">
+            <double>-2.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>2.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.100000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="13" column="2">
+          <widget class="QLabel" name="cameraNumYLabel">
+           <property name="text">
+            <string>Subframe Height</string>
+           </property>
+          </widget>
+         </item>
+         <item row="9" column="1" colspan="3">
+          <widget class="QDoubleSpinBox" name="zoomSpin">
+           <property name="toolTip">
+            <string>Hardware optical zoom factor</string>
+           </property>
+           <property name="decimals">
+            <number>2</number>
+           </property>
+           <property name="minimum">
+            <double>1.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>32.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.100000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="23" column="1" colspan="3">
+          <widget class="QComboBox" name="alpacaFilterWheelPositionCombo">
+           <property name="toolTip">
+            <string>Filter wheel position using the Alpaca names list</string>
+           </property>
+          </widget>
+         </item>
+         <item row="19" column="0">
+          <widget class="QLabel" name="asiUsbBandwidthLabel">
+           <property name="text">
+            <string>USB bandwidth</string>
+           </property>
+          </widget>
+         </item>
+         <item row="12" column="0">
+          <widget class="QLabel" name="cameraBinXLabel">
+           <property name="text">
+            <string>Bin X</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="2">
+          <widget class="QLabel" name="focusDistLabel">
+           <property name="text">
+            <string>Focus distance</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="1">
+          <widget class="QComboBox" name="focusModeCombo">
+           <property name="toolTip">
+            <string>Focus mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="isoLabel">
+           <property name="text">
+            <string>ISO</string>
+           </property>
+          </widget>
+         </item>
+         <item row="17" column="0">
+          <widget class="QLabel" name="asiCoolerOnLabel">
+           <property name="text">
+            <string>Cooler</string>
+           </property>
+          </widget>
+         </item>
+         <item row="18" column="0">
+          <widget class="QLabel" name="asiTargetTempLabel">
+           <property name="text">
+            <string>Target temp</string>
+           </property>
+          </widget>
+         </item>
+         <item row="14" column="2">
+          <widget class="QLabel" name="cameraStartYLabel">
+           <property name="text">
+            <string>Subframe Y</string>
+           </property>
+          </widget>
+         </item>
+         <item row="12" column="2">
+          <widget class="QLabel" name="cameraBinYLabel">
+           <property name="text">
+            <string>Bin Y</string>
+           </property>
+          </widget>
+         </item>
+         <item row="13" column="0">
+          <widget class="QLabel" name="cameraNumXLabel">
+           <property name="text">
+            <string>Subframe Width</string>
+           </property>
+          </widget>
+         </item>
+         <item row="13" column="3">
+          <widget class="QSpinBox" name="cameraNumYSpin">
+           <property name="toolTip">
+            <string>Subframe height after binning (0 uses the full available height)</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+          </widget>
+         </item>
+         <item row="16" column="0">
+          <widget class="QLabel" name="asiColorImageTypeLabel">
+           <property name="text">
+            <string>Colour image type</string>
+           </property>
+          </widget>
+         </item>
+         <item row="16" column="1">
+          <widget class="QComboBox" name="asiColorImageTypeCombo">
+           <property name="toolTip">
+            <string>Select RGB24 for camera-side colour conversion or RAW16 for 16-bit Bayer data debayered in SDRangel.</string>
+           </property>
+          </widget>
          </item>
         </layout>
        </item>
@@ -1264,11 +1264,11 @@
             </property>
            </widget>
           </item>
-            <item row="1" column="1">
-             <widget class="QSpinBox" name="stackFrameCountSpin">
-              <property name="toolTip">
-               <string>Number of frames to average together</string>
-              </property>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="stackFrameCountSpin">
+            <property name="toolTip">
+             <string>Number of frames to average together</string>
+            </property>
             <property name="minimum">
              <number>1</number>
             </property>
@@ -1277,32 +1277,32 @@
             </property>
             <property name="value">
              <number>4</number>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="0">
-             <widget class="QLabel" name="stackCurrentCountLabel">
-              <property name="text">
-               <string>Currently stacked</string>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="1">
-             <widget class="QLabel" name="stackCurrentCountValue">
-              <property name="text">
-               <string>1</string>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="0">
-             <widget class="QLabel" name="stackMethodLabel">
-              <property name="text">
-               <string>Method</string>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="1">
-             <widget class="QComboBox" name="stackMethodCombo">
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="stackCurrentCountLabel">
+            <property name="text">
+             <string>Currently stacked</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLabel" name="stackCurrentCountValue">
+            <property name="text">
+             <string>1</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="stackMethodLabel">
+            <property name="text">
+             <string>Method</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QComboBox" name="stackMethodCombo">
             <property name="toolTip">
              <string>Stacking method used to combine frames</string>
             </property>
@@ -1323,15 +1323,15 @@
             </item>
            </widget>
           </item>
-            <item row="4" column="0">
-             <widget class="QLabel" name="stackAlignmentLabel">
+          <item row="4" column="0">
+           <widget class="QLabel" name="stackAlignmentLabel">
             <property name="text">
              <string>Alignment</string>
             </property>
            </widget>
           </item>
-            <item row="4" column="1">
-             <widget class="QComboBox" name="stackAlignmentCombo">
+          <item row="4" column="1">
+           <widget class="QComboBox" name="stackAlignmentCombo">
             <property name="toolTip">
              <string>Optional frame alignment before stacking. Phase correlation handles translation; star centroid matching can also compensate small rotation/scale drift.</string>
             </property>
@@ -1357,428 +1357,6 @@
        </item>
        <item>
         <spacer name="verticalSpacerStacking">
-         <property name="orientation">
-          <enum>Qt::Orientation::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-     </layout>
-     </widget>
-     <widget class="QWidget" name="positionTab">
-      <attribute name="title">
-       <string>Position</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="positionTabLayout">
-       <item>
-        <widget class="QGroupBox" name="cameraPositionGroup">
-         <property name="title">
-          <string>Location</string>
-         </property>
-         <layout class="QGridLayout" name="cameraPositionLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="latitudeLabel">
-            <property name="text">
-             <string>Latitude</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QDoubleSpinBox" name="latitudeSpin">
-            <property name="decimals">
-             <number>6</number>
-            </property>
-            <property name="minimum">
-             <double>-90.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>90.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.001000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2" rowspan="4">
-           <widget class="QToolButton" name="useMyPositionButton">
-            <property name="toolTip">
-             <string>Copy My Position once. Right-click to toggle continual synchronization from Main Settings.</string>
-            </property>
-            <property name="text">
-             <string>My Position</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="longitudeLabel">
-            <property name="text">
-             <string>Longitude</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QDoubleSpinBox" name="longitudeSpin">
-            <property name="decimals">
-             <number>6</number>
-            </property>
-            <property name="minimum">
-             <double>-180.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>180.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.001000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="altitudeLabel">
-            <property name="text">
-             <string>Altitude (m)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QDoubleSpinBox" name="altitudeSpin">
-            <property name="decimals">
-             <number>1</number>
-            </property>
-            <property name="minimum">
-             <double>-1000.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>100000.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>1.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="owmApiKeyLabel">
-            <property name="text">
-             <string>OWM API Key</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QLineEdit" name="owmApiKeyEdit">
-            <property name="toolTip">
-             <string>API key from openweathermap.org used to periodically fetch weather for the camera latitude and longitude.</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-      </item>
-       <item>
-        <widget class="QGroupBox" name="cameraDirectionGroup">
-         <property name="title">
-          <string>Direction</string>
-         </property>
-         <layout class="QFormLayout" name="cameraDirectionLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="azimuthLabel">
-            <property name="text">
-             <string>Azimuth</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QDoubleSpinBox" name="azimuthSpin">
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="minimum">
-             <double>0.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>360.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.100000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="elevationLabel">
-            <property name="text">
-             <string>Elevation</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QDoubleSpinBox" name="elevationSpin">
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="minimum">
-             <double>-90.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>90.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.100000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="rollLabel">
-            <property name="text">
-             <string>Roll</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QDoubleSpinBox" name="rollSpin">
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="minimum">
-             <double>0.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>360.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.100000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="azElGs232ControllerLabel">
-            <property name="text">
-             <string>GS232 sync</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QComboBox" name="azElGs232ControllerCombo">
-            <property name="toolTip">
-             <string>Select a GS232Controller feature to continually synchronize the camera azimuth and elevation.</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="fovLabel">
-            <property name="text">
-             <string>FoV (deg)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QDoubleSpinBox" name="fovSpin">
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="minimum">
-             <double>0.010000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>360.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.100000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="lensProjectionLabel">
-            <property name="text">
-             <string>Projection</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QComboBox" name="lensProjectionCombo">
-            <item>
-             <property name="text">
-              <string>Rectilinear</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Equidistant fisheye</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Equisolid fisheye</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacerPosition">
-         <property name="orientation">
-          <enum>Qt::Orientation::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-     </layout>
-     </widget>
-     <widget class="QWidget" name="scheduleTab">
-      <attribute name="title">
-       <string>Schedule</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="scheduleTabLayout">
-       <item>
-        <widget class="QGroupBox" name="captureScheduleGroup">
-         <property name="title">
-          <string>Capture Schedule</string>
-         </property>
-         <layout class="QFormLayout" name="captureScheduleLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="scheduleEnabledLabel">
-            <property name="text">
-             <string>Enable</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QCheckBox" name="scheduleEnabledCheck">
-            <property name="text">
-             <string>Use daily schedule</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="scheduleStartTimeLabel">
-            <property name="text">
-             <string>Start time</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QTimeEdit" name="scheduleStartTimeEdit">
-            <property name="displayFormat">
-             <string>HH:mm:ss</string>
-            </property>
-            <property name="time">
-             <time>
-              <hour>20</hour>
-              <minute>0</minute>
-              <second>0</second>
-             </time>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="scheduleEndTimeLabel">
-            <property name="text">
-             <string>End time</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QTimeEdit" name="scheduleEndTimeEdit">
-            <property name="displayFormat">
-             <string>HH:mm:ss</string>
-            </property>
-            <property name="time">
-             <time>
-              <hour>6</hour>
-              <minute>0</minute>
-              <second>0</second>
-             </time>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="scheduleWeekdaysLabel">
-            <property name="text">
-             <string>Weekdays</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <layout class="QHBoxLayout" name="scheduleWeekdaysLayout">
-            <item>
-             <widget class="QCheckBox" name="scheduleMondayCheck">
-              <property name="text">
-               <string>Mon</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="scheduleTuesdayCheck">
-              <property name="text">
-               <string>Tue</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="scheduleWednesdayCheck">
-              <property name="text">
-               <string>Wed</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="scheduleThursdayCheck">
-              <property name="text">
-               <string>Thu</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="scheduleFridayCheck">
-              <property name="text">
-               <string>Fri</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="scheduleSaturdayCheck">
-              <property name="text">
-               <string>Sat</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="scheduleSundayCheck">
-              <property name="text">
-               <string>Sun</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="scheduleStatusLabel">
-            <property name="text">
-             <string>Status</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QLabel" name="scheduleStatusValue">
-            <property name="text">
-             <string>Disabled</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacerSchedule">
          <property name="orientation">
           <enum>Qt::Orientation::Vertical</enum>
          </property>
@@ -1989,35 +1567,18 @@
             </property>
            </widget>
           </item>
-            <item row="8" column="1" colspan="2">
-            <widget class="QCheckBox" name="postProcessGreyscaleCheck">
-              <property name="toolTip">
-               <string>Convert the image to greyscale after white balance</string>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-             </widget>
-            </item>
-            <item row="9" column="0">
-             <widget class="QLabel" name="postProcessUnwarpLabel">
-              <property name="text">
-               <string>Unwarp Fisheye</string>
-              </property>
-             </widget>
-            </item>
-            <item row="9" column="1" colspan="2">
-             <widget class="QCheckBox" name="postProcessUnwarpCheck">
-              <property name="toolTip">
-               <string>Unwarp the image from the configured fisheye lens projection using the camera FoV setting</string>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="0">
-             <widget class="QLabel" name="postProcessWhiteBalanceModeLabel">
+          <item row="8" column="1" colspan="2">
+           <widget class="QCheckBox" name="postProcessGreyscaleCheck">
+            <property name="toolTip">
+             <string>Convert the image to greyscale after white balance</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="postProcessWhiteBalanceModeLabel">
             <property name="minimumSize">
              <size>
               <width>100</width>
@@ -2200,266 +1761,280 @@
            </widget>
           </item>
          </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QGroupBox" name="histogramStretchGroup">
-        <property name="title">
-         <string>Histogram Stretch</string>
-        </property>
-        <layout class="QGridLayout" name="gridLayout_histogramStretch">
-         <item row="0" column="0">
-          <widget class="QLabel" name="histogramStretchModeLabel">
-           <property name="minimumSize">
-            <size>
-             <width>100</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="text">
-            <string>Mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1" colspan="2">
-          <widget class="QComboBox" name="histogramStretchModeCombo">
-           <item>
-            <property name="text">
-             <string>Off</string>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="histogramStretchGroup">
+         <property name="title">
+          <string>Histogram Stretch</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_histogramStretch">
+          <item row="0" column="0">
+           <widget class="QLabel" name="histogramStretchModeLabel">
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
             </property>
-           </item>
-           <item>
             <property name="text">
-             <string>Linear</string>
+             <string>Mode</string>
             </property>
-           </item>
-           <item>
+           </widget>
+          </item>
+          <item row="0" column="1" colspan="2">
+           <widget class="QComboBox" name="histogramStretchModeCombo">
+            <item>
+             <property name="text">
+              <string>Off</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Linear</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Gamma</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Asinh</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Log</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="histogramStretchBlackPointLabel">
+            <property name="text">
+             <string>Black Point</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSlider" name="histogramStretchBlackPointSlider">
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>1000</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QDoubleSpinBox" name="histogramStretchBlackPointSpin">
+            <property name="decimals">
+             <number>3</number>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="histogramStretchWhitePointLabel">
+            <property name="text">
+             <string>White Point</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSlider" name="histogramStretchWhitePointSlider">
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>1000</number>
+            </property>
+            <property name="value">
+             <number>1000</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QDoubleSpinBox" name="histogramStretchWhitePointSpin">
+            <property name="decimals">
+             <number>3</number>
+            </property>
+            <property name="minimum">
+             <double>0.001000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="value">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="histogramStretchGammaLabel">
             <property name="text">
              <string>Gamma</string>
             </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>Asinh</string>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QSlider" name="histogramStretchGammaSlider">
+            <property name="minimum">
+             <number>10</number>
             </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>Log</string>
+            <property name="maximum">
+             <number>800</number>
             </property>
-           </item>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="histogramStretchBlackPointLabel">
-           <property name="text">
-            <string>Black Point</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QSlider" name="histogramStretchBlackPointSlider">
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>1000</number>
-           </property>
-           <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="2">
-          <widget class="QDoubleSpinBox" name="histogramStretchBlackPointSpin">
-           <property name="decimals">
-            <number>3</number>
-           </property>
-           <property name="maximum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.010000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="histogramStretchWhitePointLabel">
-           <property name="text">
-            <string>White Point</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QSlider" name="histogramStretchWhitePointSlider">
-           <property name="minimum">
-            <number>0</number>
-           </property>
-           <property name="maximum">
-            <number>1000</number>
-           </property>
-           <property name="value">
-            <number>1000</number>
-           </property>
-           <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="2">
-          <widget class="QDoubleSpinBox" name="histogramStretchWhitePointSpin">
-           <property name="decimals">
-            <number>3</number>
-           </property>
-           <property name="minimum">
-            <double>0.001000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.010000000000000</double>
-           </property>
-           <property name="value">
-            <double>1.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="histogramStretchGammaLabel">
-           <property name="text">
-            <string>Gamma</string>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <widget class="QSlider" name="histogramStretchGammaSlider">
-           <property name="minimum">
-            <number>10</number>
-           </property>
-           <property name="maximum">
-            <number>800</number>
-           </property>
-           <property name="value">
-            <number>100</number>
-           </property>
-           <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="2">
-          <widget class="QDoubleSpinBox" name="histogramStretchGammaSpin">
-           <property name="decimals">
-            <number>2</number>
-           </property>
-           <property name="minimum">
-            <double>0.100000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>8.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.010000000000000</double>
-           </property>
-           <property name="value">
-            <double>1.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="histogramStretchAsinhLabel">
-           <property name="text">
-            <string>Asinh Strength</string>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="1">
-          <widget class="QSlider" name="histogramStretchAsinhSlider">
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>1000</number>
-           </property>
-           <property name="value">
-            <number>100</number>
-           </property>
-           <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="2">
-          <widget class="QDoubleSpinBox" name="histogramStretchAsinhSpin">
-           <property name="decimals">
-            <number>2</number>
-           </property>
-           <property name="minimum">
-            <double>0.100000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>100.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.100000000000000</double>
-           </property>
-           <property name="value">
-            <double>10.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="0">
-          <widget class="QLabel" name="histogramStretchLogLabel">
-           <property name="text">
-            <string>Log Strength</string>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="1">
-          <widget class="QSlider" name="histogramStretchLogSlider">
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>1000</number>
-           </property>
-           <property name="value">
-            <number>100</number>
-           </property>
-           <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="2">
-          <widget class="QDoubleSpinBox" name="histogramStretchLogSpin">
-           <property name="decimals">
-            <number>2</number>
-           </property>
-           <property name="minimum">
-            <double>0.100000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>100.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.100000000000000</double>
-           </property>
-           <property name="value">
-            <double>10.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QGroupBox" name="filterGroup">
+            <property name="value">
+             <number>100</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QDoubleSpinBox" name="histogramStretchGammaSpin">
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>8.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="value">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="histogramStretchAsinhLabel">
+            <property name="text">
+             <string>Asinh Strength</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QSlider" name="histogramStretchAsinhSlider">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>1000</number>
+            </property>
+            <property name="value">
+             <number>100</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QDoubleSpinBox" name="histogramStretchAsinhSpin">
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="value">
+             <double>10.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="histogramStretchLogLabel">
+            <property name="text">
+             <string>Log Strength</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QSlider" name="histogramStretchLogSlider">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>1000</number>
+            </property>
+            <property name="value">
+             <number>100</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QDoubleSpinBox" name="histogramStretchLogSpin">
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="value">
+             <double>10.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="filterGroup">
          <property name="title">
           <string>Filter</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_4">
+          <item row="2" column="0">
+           <widget class="QLabel" name="sharpenLabel">
+            <property name="text">
+             <string>Sharpen</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="sobelEdgeLabel">
+            <property name="text">
+             <string>Sobel Edge</string>
+            </property>
+           </widget>
+          </item>
           <item row="3" column="1">
            <widget class="QSlider" name="sobelEdgeSlider">
             <property name="toolTip">
@@ -2479,88 +2054,10 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="sharpenLabel">
-            <property name="text">
-             <string>Sharpen</string>
-            </property>
-           </widget>
-          </item>
           <item row="1" column="0">
            <widget class="QLabel" name="medianBlurLabel">
             <property name="text">
              <string>Median Blur</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="gaussianBlurLabel">
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Gaussian Blur</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QSlider" name="sharpenSlider">
-            <property name="toolTip">
-             <string>Image sharpening amount</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>300</number>
-            </property>
-            <property name="value">
-             <number>0</number>
-            </property>
-            <property name="orientation">
-             <enum>Qt::Orientation::Horizontal</enum>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="sobelEdgeLabel">
-            <property name="text">
-             <string>Sobel Edge</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="2">
-           <widget class="QDoubleSpinBox" name="sharpenSpin">
-            <property name="toolTip">
-             <string>Image sharpening amount</string>
-            </property>
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="maximum">
-             <double>3.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.010000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="2">
-           <widget class="QDoubleSpinBox" name="sobelEdgeSpin">
-            <property name="toolTip">
-             <string>Sobel edge detection blend amount</string>
-            </property>
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="maximum">
-             <double>3.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.010000000000000</double>
             </property>
            </widget>
           </item>
@@ -2593,16 +2090,16 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="2">
-           <widget class="QSpinBox" name="gaussianBlurSpin">
-            <property name="toolTip">
-             <string>Gaussian blur strength (0 = off)</string>
+          <item row="0" column="0">
+           <widget class="QLabel" name="gaussianBlurLabel">
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
             </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>15</number>
+            <property name="text">
+             <string>Gaussian Blur</string>
             </property>
            </widget>
           </item>
@@ -2619,6 +2116,70 @@
             </property>
             <property name="orientation">
              <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QSpinBox" name="gaussianBlurSpin">
+            <property name="toolTip">
+             <string>Gaussian blur strength (0 = off)</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>15</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QDoubleSpinBox" name="sharpenSpin">
+            <property name="toolTip">
+             <string>Image sharpening amount</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="maximum">
+             <double>3.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSlider" name="sharpenSlider">
+            <property name="toolTip">
+             <string>Image sharpening amount</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>300</number>
+            </property>
+            <property name="value">
+             <number>0</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QDoubleSpinBox" name="sobelEdgeSpin">
+            <property name="toolTip">
+             <string>Sobel edge detection blend amount</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="maximum">
+             <double>3.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
             </property>
            </widget>
           </item>
@@ -2665,6 +2226,23 @@
            <widget class="QCheckBox" name="flipYButton">
             <property name="toolTip">
              <string>Flip the image vertically</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="postProcessUnwarpLabel">
+            <property name="text">
+             <string>Unwarp Fisheye</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QCheckBox" name="postProcessUnwarpCheck">
+            <property name="toolTip">
+             <string>Unwarp the image from the configured fisheye lens projection using the camera FoV setting</string>
             </property>
             <property name="text">
              <string/>
@@ -2892,7 +2470,94 @@
         </widget>
        </item>
        <item>
-       <widget class="QGroupBox" name="dateTimeOverlay">
+        <widget class="QGroupBox" name="skyGridOverlay">
+         <property name="title">
+          <string>Sky Grid</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_skyGridOverlay">
+          <item row="0" column="4">
+           <widget class="QFontComboBox" name="gridLabelFontCombo">
+            <property name="toolTip">
+             <string>Select font to use for sky grid labels</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="6">
+           <widget class="QToolButton" name="equatorialGridColorButton">
+            <property name="toolTip">
+             <string>Select equatorial grid colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="5">
+           <widget class="QDoubleSpinBox" name="gridLabelFontScaleSpin">
+            <property name="toolTip">
+             <string>Font point size for sky grid labels</string>
+            </property>
+            <property name="decimals">
+             <number>0</number>
+            </property>
+            <property name="minimum">
+             <double>4.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>144.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="6">
+           <widget class="QToolButton" name="altAzGridColorButton">
+            <property name="toolTip">
+             <string>Select alt-az grid colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QCheckBox" name="altAzGridCheck">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QLabel" name="gridLabelFontLabel">
+            <property name="text">
+             <string>Font</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QCheckBox" name="equatorialGridCheck">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="equatorialGridLabel">
+            <property name="text">
+             <string>Equatorial grid</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="altAzGridLabel">
+            <property name="text">
+             <string>Azimuthal grid</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="dateTimeOverlay">
          <property name="title">
           <string>Date / Time Overlay</string>
          </property>
@@ -3077,99 +2742,6 @@
          </layout>
         </widget>
        </item>
-       <item>
-        <widget class="QGroupBox" name="skyGridOverlay">
-         <property name="title">
-          <string>Sky Grid</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_skyGridOverlay">
-          <item row="0" column="0">
-           <widget class="QCheckBox" name="equatorialGridCheck">
-            <property name="text">
-             <string>Equatorial grid</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QToolButton" name="equatorialGridColorButton">
-            <property name="toolTip">
-             <string>Select equatorial grid colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QCheckBox" name="altAzGridCheck">
-            <property name="text">
-             <string>Alt-az grid</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QToolButton" name="altAzGridColorButton">
-            <property name="toolTip">
-             <string>Select alt-az grid colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-           <item row="0" column="2" rowspan="2">
-            <spacer name="horizontalSpacer_skyGrid">
-             <property name="orientation">
-              <enum>Qt::Orientation::Horizontal</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>40</width>
-              <height>20</height>
-             </size>
-             </property>
-            </spacer>
-           </item>
-           <item row="2" column="0">
-            <widget class="QLabel" name="gridLabelFontLabel">
-             <property name="text">
-              <string>Label font</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1">
-            <widget class="QFontComboBox" name="gridLabelFontCombo">
-             <property name="toolTip">
-              <string>Select font to use for sky grid labels</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="0">
-            <widget class="QLabel" name="gridLabelFontScaleLabel">
-             <property name="text">
-              <string>Label size</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="1">
-            <widget class="QDoubleSpinBox" name="gridLabelFontScaleSpin">
-             <property name="toolTip">
-              <string>Font point size for sky grid labels</string>
-             </property>
-             <property name="decimals">
-              <number>0</number>
-             </property>
-             <property name="minimum">
-              <double>4.000000000000000</double>
-             </property>
-             <property name="maximum">
-              <double>144.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
-        </item>
        <item>
         <widget class="QGroupBox" name="textOverlay">
          <property name="title">
@@ -3499,6 +3071,158 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </item>
          </layout>
         </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="captureScheduleGroup">
+         <property name="title">
+          <string>Schedule</string>
+         </property>
+         <layout class="QFormLayout" name="captureScheduleLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="scheduleEnabledLabel">
+            <property name="text">
+             <string>Enable</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QCheckBox" name="scheduleEnabledCheck">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="scheduleStartTimeLabel">
+            <property name="text">
+             <string>Start time</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QTimeEdit" name="scheduleStartTimeEdit">
+            <property name="displayFormat">
+             <string>HH:mm:ss</string>
+            </property>
+            <property name="time">
+             <time>
+              <hour>20</hour>
+              <minute>0</minute>
+              <second>0</second>
+             </time>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="scheduleEndTimeLabel">
+            <property name="text">
+             <string>End time</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QTimeEdit" name="scheduleEndTimeEdit">
+            <property name="displayFormat">
+             <string>HH:mm:ss</string>
+            </property>
+            <property name="time">
+             <time>
+              <hour>6</hour>
+              <minute>0</minute>
+              <second>0</second>
+             </time>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="scheduleWeekdaysLabel">
+            <property name="text">
+             <string>Weekdays</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <layout class="QHBoxLayout" name="scheduleWeekdaysLayout">
+            <item>
+             <widget class="QCheckBox" name="scheduleMondayCheck">
+              <property name="text">
+               <string>Mon</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleTuesdayCheck">
+              <property name="text">
+               <string>Tue</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleWednesdayCheck">
+              <property name="text">
+               <string>Wed</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleThursdayCheck">
+              <property name="text">
+               <string>Thu</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleFridayCheck">
+              <property name="text">
+               <string>Fri</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleSaturdayCheck">
+              <property name="text">
+               <string>Sat</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="scheduleSundayCheck">
+              <property name="text">
+               <string>Sun</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="scheduleStatusLabel">
+            <property name="text">
+             <string>Status</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QLabel" name="scheduleStatusValue">
+            <property name="text">
+             <string>Disabled</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_6">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </widget>
@@ -4431,6 +4155,295 @@ li.checked::marker { content: &quot;\2612&quot;; }
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="positionTab">
+      <attribute name="title">
+       <string>Position</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="positionTabLayout">
+       <item>
+        <widget class="QGroupBox" name="cameraPositionGroup">
+         <property name="title">
+          <string>Camera position</string>
+         </property>
+         <layout class="QGridLayout" name="cameraPositionLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="latitudeLabel">
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Latitude</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QDoubleSpinBox" name="latitudeSpin">
+            <property name="decimals">
+             <number>6</number>
+            </property>
+            <property name="minimum">
+             <double>-90.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>90.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.001000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="longitudeLabel">
+            <property name="text">
+             <string>Longitude</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QDoubleSpinBox" name="longitudeSpin">
+            <property name="decimals">
+             <number>6</number>
+            </property>
+            <property name="minimum">
+             <double>-180.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>180.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.001000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="altitudeLabel">
+            <property name="text">
+             <string>Altitude (m)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QDoubleSpinBox" name="altitudeSpin">
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>-1000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QToolButton" name="useMyPositionButton">
+            <property name="toolTip">
+             <string>Left click: set to My Position once.
+Right-click: toggle continual synchronization from My Position.</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/import.png</normaloff>:/import.png</iconset>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="cameraDirectionGroup">
+         <property name="title">
+          <string>Camera direction</string>
+         </property>
+         <layout class="QFormLayout" name="cameraDirectionLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="rotatorControllerLabel">
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Rotator</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="rotatorControllerCombo">
+            <property name="toolTip">
+             <string>Select a GS232Controller feature to continually synchronize the camera azimuth and elevation.</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="azimuthLabel">
+            <property name="text">
+             <string>Azimuth</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QDoubleSpinBox" name="azimuthSpin">
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>360.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="elevationLabel">
+            <property name="text">
+             <string>Elevation</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QDoubleSpinBox" name="elevationSpin">
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>-90.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>90.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="rollLabel">
+            <property name="text">
+             <string>Roll</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QDoubleSpinBox" name="rollSpin">
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>360.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="fovLabel">
+            <property name="text">
+             <string>FoV (deg)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QDoubleSpinBox" name="fovSpin">
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>360.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="lensProjectionLabel">
+            <property name="text">
+             <string>Projection</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QComboBox" name="lensProjectionCombo">
+            <item>
+             <property name="text">
+              <string>Rectilinear</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Equidistant fisheye</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Equisolid fisheye</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox">
+         <property name="title">
+          <string>Weather</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="owmApiKeyLabel">
+            <property name="text">
+             <string>OpenWeatherMap API Key</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="owmApiKeyEdit">
+            <property name="toolTip">
+             <string>API key from openweathermap.org used to periodically fetch weather for the camera latitude and longitude.</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacerPosition">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
    <item>
@@ -4474,8 +4487,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
   <tabstop>asiTargetTempSpin</tabstop>
   <tabstop>asiUsbBandwidthSpin</tabstop>
   <tabstop>asiHighSpeedModeCheck</tabstop>
-  <tabstop>asiColorImageTypeCombo</tabstop>
-  <tabstop>alpacaFocusPositionSpin</tabstop>
   <tabstop>alpacaFocusStepSizeSpin</tabstop>
   <tabstop>alpacaFilterWheelPositionCombo</tabstop>
   <tabstop>clearChart</tabstop>
@@ -4498,9 +4509,8 @@ li.checked::marker { content: &quot;\2612&quot;; }
   <tabstop>postProcessWhiteBalanceGreenGainSpin</tabstop>
   <tabstop>postProcessWhiteBalanceBlueGainSlider</tabstop>
   <tabstop>postProcessWhiteBalanceBlueGainSpin</tabstop>
-   <tabstop>postProcessGreyscaleCheck</tabstop>
-   <tabstop>postProcessUnwarpCheck</tabstop>
-   <tabstop>brightnessSlider</tabstop>
+  <tabstop>postProcessGreyscaleCheck</tabstop>
+  <tabstop>brightnessSlider</tabstop>
   <tabstop>brightnessSpin</tabstop>
   <tabstop>contrastSlider</tabstop>
   <tabstop>contrastSpin</tabstop>

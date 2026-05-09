@@ -2570,6 +2570,49 @@
             </property>
            </widget>
           </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="trackObjectsLabel">
+            <property name="text">
+             <string>ADS-B / satellite objects</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QCheckBox" name="trackObjectsCheck">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="3">
+           <widget class="QLabel" name="trackObjectMinElevationLabel">
+            <property name="text">
+             <string>Min elevation</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="4">
+           <widget class="QDoubleSpinBox" name="trackObjectMinElevationSpin">
+            <property name="toolTip">
+             <string>Minimum elevation in degrees for tracked object overlays</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>90.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

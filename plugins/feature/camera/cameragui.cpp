@@ -987,6 +987,8 @@ void CameraGUI::displaySettings()
     settingsUI()->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
     settingsUI()->equatorialGridCheck->setChecked(m_settings.m_equatorialGrid);
     settingsUI()->altAzGridCheck->setChecked(m_settings.m_altAzGrid);
+    settingsUI()->trackObjectsCheck->setChecked(m_settings.m_trackObjects);
+    settingsUI()->trackObjectMinElevationSpin->setValue(m_settings.m_trackObjectMinElevation);
     settingsUI()->gridLabelFontCombo->setCurrentText(m_settings.m_gridLabelFontFamily);
     settingsUI()->gridLabelFontScaleSpin->setValue(m_settings.m_gridLabelFontScale);
     ui->overlayTextButton->setChecked(m_settings.m_overlayText);
@@ -1358,6 +1360,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->equatorialGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_equatorialGridColorButton_clicked);
     QObject::connect(settingsUI()->altAzGridCheck, &QCheckBox::toggled, this, &CameraGUI::on_altAzGridCheck_toggled);
     QObject::connect(settingsUI()->altAzGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_altAzGridColorButton_clicked);
+    QObject::connect(settingsUI()->trackObjectsCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
+    QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
     QObject::connect(settingsUI()->gridLabelFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_gridLabelFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->gridLabelFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_gridLabelFontScaleSpin_valueChanged);
     QObject::connect(ui->overlayTextButton, &QToolButton::toggled, this, &CameraGUI::on_overlayTextButton_toggled);
@@ -4600,6 +4604,18 @@ void CameraGUI::on_altAzGridColorButton_clicked()
         updateColorButton(settingsUI()->altAzGridColorButton, m_settings.m_altAzGridColor);
         applySetting("altAzGridColor");
     }
+}
+
+void CameraGUI::on_trackObjectsCheck_toggled(bool checked)
+{
+    m_settings.m_trackObjects = checked;
+    applySetting("trackObjects");
+}
+
+void CameraGUI::on_trackObjectMinElevationSpin_valueChanged(double value)
+{
+    m_settings.m_trackObjectMinElevation = value;
+    applySetting("trackObjectMinElevation");
 }
 
 void CameraGUI::on_gridLabelFontCombo_currentFontChanged(const QFont& font)

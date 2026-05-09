@@ -492,6 +492,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
+        "trackObjects", "trackObjectMinElevation",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
@@ -1114,7 +1115,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
 {
     PROFILER_START();
 
-    if (m_trackedMapObjects.isEmpty()) {
+    if (!m_settings.m_trackObjects || m_trackedMapObjects.isEmpty()) {
         PROFILER_STOP(__FUNCTION__);
         return;
     }
@@ -1152,7 +1153,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
         azEl.setLocation(m_settings.m_latitude, m_settings.m_longitude, m_settings.m_altitude);
         azEl.setTarget(object.m_latitude, object.m_longitude, object.m_altitude);
         azEl.calculate();
-        if (!std::isfinite(azEl.getAzimuth()) || !std::isfinite(azEl.getElevation()) || (azEl.getElevation() < 0.0)) {
+        if (!std::isfinite(azEl.getAzimuth()) || !std::isfinite(azEl.getElevation()) || (azEl.getElevation() < m_settings.m_trackObjectMinElevation)) {
             continue;
         }
 
@@ -1212,6 +1213,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     const bool needsAny = m_settings.m_overlayDateTime
         || m_settings.m_equatorialGrid
         || m_settings.m_altAzGrid
+        || (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty())
         || needsTextOverlay
         || !frame.m_motionBoxes.isEmpty()
         || !frame.m_detections.isEmpty()
@@ -1234,7 +1236,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     QImage result = convertBgrToRgbImage(bgrMat);
 
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
-    if (!m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }
+    if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
     if (needsTextOverlay) { applyTextOverlay(result, expandedOverlayText); }
 

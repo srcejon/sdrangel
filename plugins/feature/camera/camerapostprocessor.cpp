@@ -1158,13 +1158,12 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
             continue;
         }
 
-        const QRectF box(point.x() - 10.0, point.y() - 10.0, 20.0, 20.0);
-        if (!image.rect().adjusted(0, 0, -1, -1).intersects(box.toAlignedRect())) {
+        const QPoint labelPoint(static_cast<int>(std::lround(point.x())), static_cast<int>(std::lround(point.y())));
+        if (!image.rect().adjusted(0, 0, -1, -1).contains(labelPoint)) {
             continue;
         }
 
-        painter.drawRect(box);
-        drawOutlinedLabel(painter, image.rect(), QPointF(box.right(), box.top()), object.m_label, kObjectOverlayColor, fontMetrics);
+        drawOutlinedLabel(painter, image.rect(), point, object.m_label, kObjectOverlayColor, fontMetrics);
     }
 
     PROFILER_STOP(__FUNCTION__);

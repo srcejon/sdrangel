@@ -634,12 +634,6 @@ void CameraPostProcessor::updateTrackedMapObject(const QObject* pipeSource, SWGS
 
         m_trackedMapObjects.insert(key, object);
     }
-
-    if (!m_lastFrame.m_image.isNull())
-    {
-        const QImage processed = applyPostProcessing(m_lastFrame);
-        reportFrameToGUI(processed, m_lastFrame.m_histogramData, m_lastFrame.m_stackCount);
-    }
 }
 
 void CameraPostProcessor::submitFrame(const CameraPipelineFramePtr& frame)

@@ -136,20 +136,42 @@ static void drawOutlinedLabel(QPainter& painter,
         return;
     }
 
+    const QStringList lines = text.split(QChar('\n'));
+    int textWidth = 0;
+    int lineCount = 0;
+    for (const QString& line : lines)
+    {
+        textWidth = std::max(textWidth, fontMetrics.horizontalAdvance(line));
+        lineCount++;
+    }
+    if (lineCount <= 0) {
+        return;
+    }
+
     QPointF labelPoint = point + QPointF(4.0, -4.0);
-    QRect textRect = fontMetrics.boundingRect(text);
     QRect targetRect(
         qRound(labelPoint.x()),
-        qRound(labelPoint.y()) - textRect.height(),
-        textRect.width() + 4,
-        textRect.height() + 2);
+        qRound(labelPoint.y()) - lineCount * fontMetrics.lineSpacing(),
+        textWidth + 4,
+        lineCount * fontMetrics.lineSpacing() + 2);
 
     if (!imageRect.adjusted(0, 0, -1, -1).intersects(targetRect)) {
         return;
     }
 
     painter.save();
-    painter.setPen(Qt::black);
+    auto drawLines = [&](const QPoint& offset, const QColor& penColor)
+    {
+        painter.setPen(penColor);
+        const int baseX = targetRect.left();
+        int baselineY = targetRect.top() + fontMetrics.ascent();
+        for (const QString& line : lines)
+        {
+            painter.drawText(baseX + offset.x(), baselineY + offset.y(), line);
+            baselineY += fontMetrics.lineSpacing();
+        }
+    };
+
     for (int dx = -1; dx <= 1; ++dx)
     {
         for (int dy = -1; dy <= 1; ++dy)
@@ -157,11 +179,10 @@ static void drawOutlinedLabel(QPainter& painter,
             if (dx == 0 && dy == 0) {
                 continue;
             }
-            painter.drawText(targetRect.translated(dx, dy), Qt::AlignLeft | Qt::AlignTop, text);
+            drawLines(QPoint(dx, dy), Qt::black);
         }
     }
-    painter.setPen(color);
-    painter.drawText(targetRect, Qt::AlignLeft | Qt::AlignTop, text);
+    drawLines(QPoint(0, 0), color);
     painter.restore();
 }
 

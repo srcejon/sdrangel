@@ -904,7 +904,7 @@ void CameraGUI::displaySettings()
     settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
     settingsUI()->videoHwAccelerationCheck->setChecked(m_settings.m_videoHwAcceleration);
     settingsUI()->recordModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_recordMode));
-    settingsUI()->stackEnabledCheck->setChecked(m_settings.m_stackEnabled);
+    ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
     settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
     settingsUI()->stackAlignmentCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackAlignmentMethod));
@@ -1283,7 +1283,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
     QObject::connect(settingsUI()->recordModeCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_recordModeCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->stackEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
+    QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
     QObject::connect(settingsUI()->stackAlignmentCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackAlignmentCombo_currentIndexChanged);

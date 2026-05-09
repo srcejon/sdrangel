@@ -320,6 +320,16 @@
        </widget>
       </item>
       <item>
+       <widget class="ButtonSwitch" name="stackEnabledButton">
+        <property name="toolTip">
+         <string>Enable image stacking</string>
+        </property>
+        <property name="text">
+         <string>STK</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="Line" name="line_3">
         <property name="orientation">
          <enum>Qt::Orientation::Vertical</enum>

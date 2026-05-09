@@ -44,7 +44,8 @@ namespace {
 
 const QStringList kTrackedObjectPipeURIs = {
     QStringLiteral("sdrangel.channel.adsbdemod"),
-    QStringLiteral("sdrangel.feature.satellitetracker")
+    QStringLiteral("sdrangel.feature.satellitetracker"),
+    QStringLiteral("sdrangel.feature.startracker")
 };
 
 struct SkyVector

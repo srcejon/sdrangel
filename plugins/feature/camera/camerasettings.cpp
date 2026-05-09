@@ -416,8 +416,8 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(146, m_equatorialGridColor.rgba());
     s.writeBool(147, m_altAzGrid);
     s.writeU32(148, m_altAzGridColor.rgba());
-    s.writeBool(157, m_trackObjects);
-    s.writeDouble(158, m_trackObjectMinElevation);
+    s.writeBool(165, m_trackObjects);
+    s.writeDouble(166, m_trackObjectMinElevation);
     s.writeString(155, m_gridLabelFontFamily);
     s.writeDouble(156, m_gridLabelFontScale);
     s.writeBool(84, m_yoloEnabled);
@@ -694,8 +694,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         uint32_t altAzGridColorRgba = QColor(255, 170, 80).rgba();
         d.readU32(148, &altAzGridColorRgba, QColor(255, 170, 80).rgba());
         m_altAzGridColor = QColor::fromRgba(altAzGridColorRgba);
-        d.readBool(157, &m_trackObjects, false);
-        d.readDouble(158, &m_trackObjectMinElevation, 0.0);
+        d.readBool(165, &m_trackObjects, false);
+        d.readDouble(166, &m_trackObjectMinElevation, 0.0);
         m_trackObjectMinElevation = qBound(0.0, m_trackObjectMinElevation, 90.0);
         d.readString(155, &m_gridLabelFontFamily, "");
         d.readDouble(156, &m_gridLabelFontScale, 9.0);

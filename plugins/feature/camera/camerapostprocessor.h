@@ -21,6 +21,7 @@
 
 #include <QObject>
 #include <limits>
+#include <QHash>
 #include <QMutex>
 #include <QImage>
 #include <QDateTime>
@@ -32,10 +33,14 @@
 
 #include "util/message.h"
 #include "util/messagequeue.h"
+#include "availablechannelorfeaturehandler.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
 class Weather;
+namespace SWGSDRangel {
+    class SWGMapItem;
+}
 
 class CameraPostProcessor : public QObject
 {
@@ -203,8 +208,19 @@ public:
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
 
 private:
+    struct TrackedMapObject
+    {
+        QString m_label;
+        double m_latitude = 0.0;
+        double m_longitude = 0.0;
+        double m_altitude = 0.0;
+        QDateTime m_positionDateTime;
+        QDateTime m_availableUntil;
+    };
+
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
+    AvailableChannelOrFeatureHandler m_availableChannelOrFeatureHandler;
     CameraSettings m_settings;
     bool m_captureActive;
     CameraPipelineFrame m_lastFrame;
@@ -219,6 +235,7 @@ private:
     float m_weatherCloudiness = std::numeric_limits<float>::quiet_NaN();
     float m_weatherWindSpeed = std::numeric_limits<float>::quiet_NaN();
     float m_weatherWindDirection = std::numeric_limits<float>::quiet_NaN();
+    QHash<QString, TrackedMapObject> m_trackedMapObjects;
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
     bool m_processingFrame;
@@ -233,9 +250,11 @@ private:
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
     void applySkyGridOverlay(QImage& image) const;
+    void applyTrackedObjectOverlay(QImage& image) const;
     void applyDateTimeOverlay(QImage& image) const;
     void applyTextOverlay(QImage& image, const QString& overlayTextHtml) const;
     [[nodiscard]] QString expandOverlayTextTemplate() const;
+    void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void restartWeatherUpdates();
     void setVideoRecordingEnabled(bool enabled);
     void reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData, int stackCount);
@@ -247,6 +266,7 @@ private:
     void writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite);
 private slots:
     void handleInputMessages();
+    void handlePipeMessageQueue(MessageQueue* messageQueue);
     void processNextFrame();
     void weatherUpdated(float temperature, float pressure, float humidity, float cloudiness, float windSpeed, float windDirection);
 

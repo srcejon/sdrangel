@@ -25,8 +25,11 @@
 #include <QFontMetrics>
 #include <QPainter>
 #include <QTextDocument>
+#include "SWGMapItem.h"
+#include "util/azel.h"
 #include "util/weather.h"
 #include "util/profiler.h"
+#include "maincore.h"
 #include "camerapostprocessor.h"
 
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgConfigureCameraPostProcessor, Message)
@@ -38,6 +41,11 @@ MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSetVideoRecordingEnabled, Messa
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
 
 namespace {
+
+const QStringList kTrackedObjectPipeURIs = {
+    QStringLiteral("sdrangel.channel.adsbdemod"),
+    QStringLiteral("sdrangel.feature.satellitetracker")
+};
 
 struct SkyVector
 {
@@ -114,6 +122,46 @@ static QString formatRightAscensionDegrees(double value)
         hours += 24;
     }
     return QStringLiteral("%1h").arg(hours, 2, 10, QLatin1Char('0'));
+}
+
+static void drawOutlinedLabel(QPainter& painter,
+                              const QRect& imageRect,
+                              const QPointF& point,
+                              const QString& text,
+                              const QColor& color,
+                              const QFontMetrics& fontMetrics)
+{
+    if (text.isEmpty()) {
+        return;
+    }
+
+    QPointF labelPoint = point + QPointF(4.0, -4.0);
+    QRect textRect = fontMetrics.boundingRect(text);
+    QRect targetRect(
+        qRound(labelPoint.x()),
+        qRound(labelPoint.y()) - textRect.height(),
+        textRect.width() + 4,
+        textRect.height() + 2);
+
+    if (!imageRect.adjusted(0, 0, -1, -1).intersects(targetRect)) {
+        return;
+    }
+
+    painter.save();
+    painter.setPen(Qt::black);
+    for (int dx = -1; dx <= 1; ++dx)
+    {
+        for (int dy = -1; dy <= 1; ++dy)
+        {
+            if (dx == 0 && dy == 0) {
+                continue;
+            }
+            painter.drawText(targetRect.translated(dx, dy), Qt::AlignLeft | Qt::AlignTop, text);
+        }
+    }
+    painter.setPen(color);
+    painter.drawText(targetRect, Qt::AlignLeft | Qt::AlignTop, text);
+    painter.restore();
 }
 
 static SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
@@ -316,6 +364,7 @@ struct SkyProjector
 
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
+    m_availableChannelOrFeatureHandler(kTrackedObjectPipeURIs, QStringList{QStringLiteral("mapitems")}),
     m_captureActive(false),
     m_processingFrame(false)
 {}
@@ -329,12 +378,15 @@ CameraPostProcessor::~CameraPostProcessor()
 void CameraPostProcessor::startWork()
 {
     QObject::connect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraPostProcessor::handleInputMessages);
+    QObject::connect(&m_availableChannelOrFeatureHandler, &AvailableChannelOrFeatureHandler::messageEnqueued, this, &CameraPostProcessor::handlePipeMessageQueue);
+    m_availableChannelOrFeatureHandler.scanAvailableChannelsAndFeatures();
     handleInputMessages();
 }
 
 void CameraPostProcessor::stopWork()
 {
     QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraPostProcessor::handleInputMessages);
+    QObject::disconnect(&m_availableChannelOrFeatureHandler, &AvailableChannelOrFeatureHandler::messageEnqueued, this, &CameraPostProcessor::handlePipeMessageQueue);
 
     if (m_weather)
     {
@@ -351,6 +403,21 @@ void CameraPostProcessor::handleInputMessages()
     Message* message;
 
     while ((message = m_inputMessageQueue.pop()) != nullptr)
+    {
+        if (handleMessage(*message)) {
+            delete message;
+        }
+    }
+}
+
+void CameraPostProcessor::handlePipeMessageQueue(MessageQueue* messageQueue)
+{
+    if (!messageQueue) {
+        return;
+    }
+
+    Message* message = nullptr;
+    while ((message = messageQueue->pop()) != nullptr)
     {
         if (handleMessage(*message)) {
             delete message;
@@ -376,6 +443,12 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     {
         MsgSpectrumFrame& frameMsg = (MsgSpectrumFrame&) cmd;
         m_spectrumViewImage = frameMsg.getImage();
+        return true;
+    }
+    else if (MainCore::MsgMapItem::match(cmd))
+    {
+        const MainCore::MsgMapItem& msgMapItem = (const MainCore::MsgMapItem&) cmd;
+        updateTrackedMapObject(msgMapItem.getPipeSource(), msgMapItem.getSWGMapItem());
         return true;
     }
     else if (MsgSetVideoRecordingEnabled::match(cmd))
@@ -513,6 +586,51 @@ void CameraPostProcessor::weatherUpdated(float temperature, float pressure, floa
     m_weatherCloudiness = cloudiness;
     m_weatherWindSpeed = windSpeed;
     m_weatherWindDirection = windDirection;
+
+    if (!m_lastFrame.m_image.isNull())
+    {
+        const QImage processed = applyPostProcessing(m_lastFrame);
+        reportFrameToGUI(processed, m_lastFrame.m_histogramData, m_lastFrame.m_stackCount);
+    }
+}
+
+void CameraPostProcessor::updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem)
+{
+    if (!swgMapItem || (swgMapItem->getType() != 0)) {
+        return;
+    }
+
+    const QString name = swgMapItem->getName() ? swgMapItem->getName()->trimmed() : QString();
+    if (name.isEmpty()) {
+        return;
+    }
+
+    const QString key = QStringLiteral("%1:%2").arg(pipeSource ? pipeSource->objectName() : QString(), name);
+    const QString image = swgMapItem->getImage() ? *swgMapItem->getImage() : QString();
+
+    if (image.isEmpty())
+    {
+        m_trackedMapObjects.remove(key);
+    }
+    else
+    {
+        TrackedMapObject object;
+        object.m_label = (swgMapItem->getLabel() && !swgMapItem->getLabel()->trimmed().isEmpty())
+            ? swgMapItem->getLabel()->trimmed()
+            : name;
+        object.m_latitude = swgMapItem->getLatitude();
+        object.m_longitude = swgMapItem->getLongitude();
+        object.m_altitude = swgMapItem->getAltitude();
+
+        if (swgMapItem->getPositionDateTime()) {
+            object.m_positionDateTime = QDateTime::fromString(*swgMapItem->getPositionDateTime(), Qt::ISODateWithMs);
+        }
+        if (swgMapItem->getAvailableUntil()) {
+            object.m_availableUntil = QDateTime::fromString(*swgMapItem->getAvailableUntil(), Qt::ISODateWithMs);
+        }
+
+        m_trackedMapObjects.insert(key, object);
+    }
 
     if (!m_lastFrame.m_image.isNull())
     {
@@ -841,41 +959,6 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
     painter.setFont(font);
     const QFontMetrics fontMetrics(font);
 
-    const auto drawLabel = [&](const QPointF& point, const QString& text, const QColor& color)
-    {
-        if (text.isEmpty()) {
-            return;
-        }
-
-        QPointF labelPoint = point + QPointF(4.0, -4.0);
-        QRect textRect = fontMetrics.boundingRect(text);
-        QRect targetRect(
-            qRound(labelPoint.x()),
-            qRound(labelPoint.y()) - textRect.height(),
-            textRect.width() + 4,
-            textRect.height() + 2);
-
-        if (!image.rect().adjusted(0, 0, -1, -1).intersects(targetRect)) {
-            return;
-        }
-
-        painter.save();
-        painter.setPen(Qt::black);
-        for (int dx = -1; dx <= 1; ++dx)
-        {
-            for (int dy = -1; dy <= 1; ++dy)
-            {
-                if (dx == 0 && dy == 0) {
-                    continue;
-                }
-                painter.drawText(targetRect.translated(dx, dy), Qt::AlignLeft | Qt::AlignTop, text);
-            }
-        }
-        painter.setPen(color);
-        painter.drawText(targetRect, Qt::AlignLeft | Qt::AlignTop, text);
-        painter.restore();
-    };
-
     if (drawAltAz)
     {
         painter.setPen(QPen(m_settings.m_altAzGridColor, 1.0));
@@ -897,7 +980,7 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
 
             QPointF labelPoint;
             if (projector.projectAltAz(m_settings.m_azimuth, static_cast<double>(altitude), labelPoint)) {
-                drawLabel(labelPoint, formatSignedDegrees(static_cast<double>(altitude)), m_settings.m_altAzGridColor);
+                drawOutlinedLabel(painter, image.rect(), labelPoint, formatSignedDegrees(static_cast<double>(altitude)), m_settings.m_altAzGridColor, fontMetrics);
             }
         }
 
@@ -928,7 +1011,7 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
             }
 
             if (foundLabelPoint) {
-                drawLabel(labelPoint, formatAzimuthDegrees(static_cast<double>(azimuth)), m_settings.m_altAzGridColor);
+                drawOutlinedLabel(painter, image.rect(), labelPoint, formatAzimuthDegrees(static_cast<double>(azimuth)), m_settings.m_altAzGridColor, fontMetrics);
             }
         }
     }
@@ -976,7 +1059,7 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
                     labelElevation)
                 && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
             {
-                drawLabel(labelPoint, formatSignedDegrees(static_cast<double>(declination)), m_settings.m_equatorialGridColor);
+                drawOutlinedLabel(painter, image.rect(), labelPoint, formatSignedDegrees(static_cast<double>(declination)), m_settings.m_equatorialGridColor, fontMetrics);
             }
         }
 
@@ -1019,9 +1102,72 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
                     labelElevation)
                 && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
             {
-                drawLabel(labelPoint, formatRightAscensionDegrees(static_cast<double>(rightAscension)), m_settings.m_equatorialGridColor);
+                drawOutlinedLabel(painter, image.rect(), labelPoint, formatRightAscensionDegrees(static_cast<double>(rightAscension)), m_settings.m_equatorialGridColor, fontMetrics);
             }
         }
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
+{
+    PROFILER_START();
+
+    if (m_trackedMapObjects.isEmpty()) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    const SkyProjector projector = SkyProjector::create(m_settings, image.size());
+    if (!projector.valid) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    static const QColor kObjectOverlayColor(80, 255, 80);
+    const QDateTime currentDateTime = m_captureDateTime.isValid() ? m_captureDateTime : QDateTime::currentDateTime();
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    painter.setClipRect(image.rect());
+    QFont font;
+    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_gridLabelFontFamily);
+    }
+    font.setPointSizeF(m_settings.m_gridLabelFontScale);
+    painter.setFont(font);
+    const QFontMetrics fontMetrics(font);
+    painter.setPen(QPen(kObjectOverlayColor, 2.0));
+
+    for (auto it = m_trackedMapObjects.cbegin(); it != m_trackedMapObjects.cend(); ++it)
+    {
+        const TrackedMapObject& object = it.value();
+        if (object.m_availableUntil.isValid() && (object.m_availableUntil < currentDateTime)) {
+            continue;
+        }
+
+        AzEl azEl;
+        azEl.setLocation(m_settings.m_latitude, m_settings.m_longitude, m_settings.m_altitude);
+        azEl.setTarget(object.m_latitude, object.m_longitude, object.m_altitude);
+        azEl.calculate();
+        if (!std::isfinite(azEl.getAzimuth()) || !std::isfinite(azEl.getElevation()) || (azEl.getElevation() < 0.0)) {
+            continue;
+        }
+
+        QPointF point;
+        if (!projector.projectAltAz(azEl.getAzimuth(), azEl.getElevation(), point)) {
+            continue;
+        }
+
+        const QRectF box(point.x() - 10.0, point.y() - 10.0, 20.0, 20.0);
+        if (!image.rect().adjusted(0, 0, -1, -1).intersects(box.toAlignedRect())) {
+            continue;
+        }
+
+        painter.drawRect(box);
+        drawOutlinedLabel(painter, image.rect(), QPointF(box.right(), box.top()), object.m_label, kObjectOverlayColor, fontMetrics);
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1088,6 +1234,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     QImage result = convertBgrToRgbImage(bgrMat);
 
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
+    if (!m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
     if (needsTextOverlay) { applyTextOverlay(result, expandedOverlayText); }
 

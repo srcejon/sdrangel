@@ -3967,6 +3967,22 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </widget>
             </item>
             <item>
+             <widget class="QToolButton" name="motionExclusionShowButton">
+              <property name="toolTip">
+               <string>Show or hide exclusion rectangles on the preview image</string>
+              </property>
+              <property name="checkable">
+               <bool>true</bool>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+              <property name="text">
+               <string>Show</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <spacer name="motionExclusionButtonsSpacer">
               <property name="orientation">
                <enum>Qt::Orientation::Horizontal</enum>

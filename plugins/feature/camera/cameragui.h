@@ -149,6 +149,7 @@ private:
     bool m_scheduleManualStopLatch = false;
     bool m_scheduleLastWithinWindow = false;
     bool m_updatingMotionExclusionRectsTable = false;
+    bool m_showMotionExclusionRects = true;
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
@@ -488,6 +489,7 @@ private slots:
     void on_motionBoxColorButton_clicked();
     void on_motionExclusionAddButton_clicked();
     void on_motionExclusionRemoveButton_clicked();
+    void on_motionExclusionShowButton_toggled(bool checked);
     void on_motionExclusionTable_itemChanged(QTableWidgetItem *item);
     void on_spectrumOverlayButton_toggled(bool checked);
     void on_spectrumDeviceCombo_currentIndexChanged(int index);

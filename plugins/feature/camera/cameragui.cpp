@@ -1031,6 +1031,7 @@ void CameraGUI::displaySettings()
     settingsUI()->motionCloseSizeSpin->setValue(m_settings.m_motionCloseSize);
     settingsUI()->motionPersistenceFramesSpin->setValue(m_settings.m_motionPersistenceFrames);
     settingsUI()->minContourAreaSpin->setValue(m_settings.m_minContourArea);
+    settingsUI()->motionExclusionShowButton->setChecked(m_showMotionExclusionRects);
     updateMotionExclusionRectsTable();
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
@@ -1414,6 +1415,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
     QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
+    QObject::connect(settingsUI()->motionExclusionShowButton, &QToolButton::toggled, this, &CameraGUI::on_motionExclusionShowButton_toggled);
     QObject::connect(settingsUI()->motionExclusionTable, &QTableWidget::itemChanged, this, &CameraGUI::on_motionExclusionTable_itemChanged);
     QObject::connect(ui->spectrumOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_spectrumOverlayButton_toggled);
     QObject::connect(settingsUI()->spectrumDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_spectrumDeviceCombo_currentIndexChanged);
@@ -4247,7 +4249,7 @@ void CameraGUI::updateMotionExclusionPreview()
     }
     m_motionExclusionRectItems.clear();
 
-    if (m_lastImage.isNull()) {
+    if (m_lastImage.isNull() || !m_showMotionExclusionRects) {
         return;
     }
 
@@ -5049,6 +5051,12 @@ void CameraGUI::on_motionExclusionRemoveButton_clicked()
         updateMotionExclusionRectsTable();
         applySetting("motionExclusionRects");
     }
+}
+
+void CameraGUI::on_motionExclusionShowButton_toggled(bool checked)
+{
+    m_showMotionExclusionRects = checked;
+    updateMotionExclusionPreview();
 }
 
 void CameraGUI::on_motionExclusionTable_itemChanged(QTableWidgetItem *item)

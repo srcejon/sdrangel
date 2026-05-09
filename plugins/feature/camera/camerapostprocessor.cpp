@@ -725,6 +725,28 @@ void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const
     PROFILER_STOP(__FUNCTION__);
 }
 
+QString CameraPostProcessor::expandOverlayTextTemplate() const
+{
+    QString overlayText = m_settings.m_overlayTextString;
+    const auto replaceToken = [&overlayText](const QString& token, const QString& value)
+    {
+        overlayText.replace(token, value.toHtmlEscaped());
+    };
+
+    replaceToken(QStringLiteral("${date}"), m_captureDateTime.date().toString(Qt::ISODate));
+    replaceToken(QStringLiteral("${time}"), m_captureDateTime.time().toString(QStringLiteral("HH:mm:ss")));
+    replaceToken(QStringLiteral("${exposure}"), QString::number(m_settings.m_exposureTimeMs, 'f', 3));
+    replaceToken(QStringLiteral("${cameraId}"), m_settings.m_cameraId);
+    replaceToken(QStringLiteral("${latitude}"), QString::number(m_settings.m_latitude, 'f', 6));
+    replaceToken(QStringLiteral("${longitude}"), QString::number(m_settings.m_longitude, 'f', 6));
+    replaceToken(QStringLiteral("${altitude}"), QString::number(m_settings.m_altitude, 'f', 2));
+    replaceToken(QStringLiteral("${azimuth}"), QString::number(m_settings.m_azimuth, 'f', 2));
+    replaceToken(QStringLiteral("${elevation}"), QString::number(m_settings.m_elevation, 'f', 2));
+    replaceToken(QStringLiteral("${roll}"), QString::number(m_settings.m_roll, 'f', 2));
+
+    return overlayText;
+}
+
 void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
 {
     PROFILER_START();
@@ -941,9 +963,10 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const
+void CameraPostProcessor::applyTextOverlay(QImage& image, const QString& overlayTextHtml) const
 {
     PROFILER_START();
+    QTextDocument overlayTextDocument;
     QFont font;
     if (!m_settings.m_overlayTextFontFamily.isEmpty()) {
         font.setFamily(m_settings.m_overlayTextFontFamily);
@@ -951,7 +974,7 @@ void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlay
     font.setPointSizeF(m_settings.m_overlayTextFontScale);
     overlayTextDocument.setDefaultFont(font);
     overlayTextDocument.setDefaultStyleSheet(QStringLiteral("* { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
-    overlayTextDocument.setHtml(QString("<div>%1</div>").arg(m_settings.m_overlayTextString));
+    overlayTextDocument.setHtml(QStringLiteral("<div>%1</div>").arg(overlayTextHtml));
 
     const int x = std::max(0, m_settings.m_overlayTextPosX);
     const qreal maxTextWidth = std::max(1, image.width() - x);
@@ -972,8 +995,9 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     const QImage& input = frame.m_image;
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
+    const QString expandedOverlayText = expandOverlayTextTemplate();
     QTextDocument overlayTextDocument;
-    overlayTextDocument.setHtml(m_settings.m_overlayTextString);
+    overlayTextDocument.setHtml(expandedOverlayText);
     const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
     const bool needsAny = m_settings.m_overlayDateTime
         || m_settings.m_equatorialGrid
@@ -1001,7 +1025,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
-    if (needsTextOverlay) { applyTextOverlay(result, overlayTextDocument); }
+    if (needsTextOverlay) { applyTextOverlay(result, expandedOverlayText); }
 
     PROFILER_STOP("CameraPostProcessor::applyPostProcessing");
     return result;

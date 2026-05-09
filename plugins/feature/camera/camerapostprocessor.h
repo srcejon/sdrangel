@@ -224,7 +224,8 @@ private:
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
     void applySkyGridOverlay(QImage& image) const;
     void applyDateTimeOverlay(QImage& image) const;
-    void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
+    void applyTextOverlay(QImage& image, const QString& overlayTextHtml) const;
+    [[nodiscard]] QString expandOverlayTextTemplate() const;
     void setVideoRecordingEnabled(bool enabled);
     void reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData, int stackCount);
     [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant);

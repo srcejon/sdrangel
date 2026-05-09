@@ -23,6 +23,7 @@
 #include <QColor>
 #include <QHash>
 #include <QList>
+#include <QRect>
 #include <QString>
 #include <QStringList>
 
@@ -240,12 +241,16 @@ struct CameraSettings
     bool   m_motionDetect;      ///< Enable MOG2 background subtractor
     int    m_motionHistory;     ///< Background subtractor history length: 1..5000
     double m_motionVarThreshold; ///< Variance threshold for MOG2 foreground classification: 1.0..200.0
+    double m_motionLearningRate; ///< Explicit MOG2 learning rate: -1.0 = auto, otherwise 0.0..1.0
+    int    m_motionConfirmFrames; ///< Require motion this many consecutive frames before reporting: 1..60
+    double m_motionDownscale;   ///< Downscale factor for motion detection path: 1.0, 0.5, 0.25
     bool   m_motionDetectShadows; ///< Enable MOG2 shadow detection
     int    m_motionOpenSize;    ///< Kernel radius for motion-mask morphological open: 0..20
     int    m_motionCloseSize;   ///< Kernel radius for motion-mask morphological close: 0..20
     int    m_motionPersistenceFrames; ///< Keep last motion boxes for this many frames after motion disappears: 0..120
     QColor m_motionBoxColor;    ///< Bounding box colour for motion contours
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
+    QList<QRect> m_motionExclusionRects; ///< Full-resolution exclusion rectangles for diff/motion detection
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 
     // Spectrum overlay settings
@@ -295,6 +300,8 @@ struct CameraSettings
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
     QByteArray serializeObjectDeviceSettings(QHash<QString, QList<ObjectDeviceSettings *> *> objectDeviceSettings) const;
     void deserializeObjectDeviceSettings(const QByteArray& data, QHash<QString, QList<ObjectDeviceSettings *> *>& objectDeviceSettings);
+    QByteArray serializeMotionExclusionRects(const QList<QRect>& rects) const;
+    void deserializeMotionExclusionRects(const QByteArray& data, QList<QRect>& rects);
     void applySettings(const QStringList& settingsKeys, const CameraSettings& settings);
     QString getDebugString(const QStringList& settingsKeys, bool force=false) const;
     bool isAlpacaCamera() const;

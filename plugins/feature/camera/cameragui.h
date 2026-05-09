@@ -56,6 +56,7 @@ class CameraSettingsDialog;
 class CameraHistogramDialog;
 class Message;
 class QDoubleSpinBox;
+class QTableWidgetItem;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 class QCamera;
 class QImageCapture;
@@ -146,6 +147,7 @@ private:
     bool m_scheduleManualStartLatch = false;
     bool m_scheduleManualStopLatch = false;
     bool m_scheduleLastWithinWindow = false;
+    bool m_updatingMotionExclusionRectsTable = false;
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
@@ -227,6 +229,8 @@ private:
     void makeUIConnections();
     void updateCameraSettingsVisibility();
     void updateHistogramStretchControls();
+    void updateMotionExclusionRectsTable();
+    void applyMotionExclusionRectsFromTable();
     void populateGs232ControllerCombo();
     void applyPositionSync();
     void updatePositionControls();
@@ -464,12 +468,18 @@ private slots:
     void on_motionDetectButton_toggled(bool checked);
     void on_motionHistorySpin_valueChanged(int value);
     void on_motionVarThresholdSpin_valueChanged(double value);
+    void on_motionLearningRateSpin_valueChanged(double value);
+    void on_motionConfirmFramesSpin_valueChanged(int value);
+    void on_motionDownscaleCombo_currentIndexChanged(int index);
     void on_motionDetectShadowsCheck_toggled(bool checked);
     void on_motionOpenSizeSpin_valueChanged(int value);
     void on_motionCloseSizeSpin_valueChanged(int value);
     void on_motionPersistenceFramesSpin_valueChanged(int value);
     void on_minContourAreaSpin_valueChanged(int value);
     void on_motionBoxColorButton_clicked();
+    void on_motionExclusionAddButton_clicked();
+    void on_motionExclusionRemoveButton_clicked();
+    void on_motionExclusionTable_itemChanged(QTableWidgetItem *item);
     void on_spectrumOverlayButton_toggled(bool checked);
     void on_spectrumDeviceCombo_currentIndexChanged(int index);
     void on_spectrumOffsetXSlider_valueChanged(int value);

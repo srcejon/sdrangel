@@ -130,6 +130,7 @@ private:
     cv::Ptr<cv::BackgroundSubtractorMOG2> m_bgSubtractor;
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;
+    int m_motionConfirmCount;
     cv::dnn::Net m_yoloNet;
     cv::Size m_yoloInputSize;
     QString m_yoloLoadedModelPath;
@@ -152,6 +153,7 @@ private:
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes);
+    [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
     void applyObjectDetectedSettings(const QString& className);

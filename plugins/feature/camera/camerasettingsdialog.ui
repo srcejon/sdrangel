@@ -3760,6 +3760,108 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="motionLearningRateLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Learning rate</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QDoubleSpinBox" name="motionLearningRateSpin">
+            <property name="toolTip">
+             <string>MOG2 learning rate (-1 = automatic)</string>
+            </property>
+            <property name="decimals">
+             <number>3</number>
+            </property>
+            <property name="minimum">
+             <double>-1.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="specialValueText">
+             <string>Auto</string>
+            </property>
+            <property name="value">
+             <double>-1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QLabel" name="motionConfirmFramesLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Confirm frames</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QSpinBox" name="motionConfirmFramesSpin">
+            <property name="toolTip">
+             <string>Motion must persist for this many consecutive frames before it is reported</string>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>60</number>
+            </property>
+            <property name="value">
+             <number>1</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="motionDownscaleLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Downscale</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="motionDownscaleCombo">
+            <property name="toolTip">
+             <string>Optional downscaled path for motion detection</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>100%</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>50%</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>25%</string>
+             </property>
+            </item>
+           </widget>
+          </item>
           <item row="7" column="2">
            <widget class="QLabel" name="motionDetectShadowsLabel">
             <property name="text">
@@ -3833,6 +3935,83 @@ li.checked::marker { content: &quot;\2612&quot;; }
             <property name="value">
              <number>100</number>
             </property>
+           </widget>
+          </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="motionExclusionLabel">
+            <property name="text">
+             <string>Exclusion rects</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1" colspan="3">
+           <layout class="QHBoxLayout" name="motionExclusionButtonsLayout">
+            <item>
+             <widget class="QToolButton" name="motionExclusionAddButton">
+              <property name="toolTip">
+               <string>Add an exclusion rectangle for diff/motion detection</string>
+              </property>
+              <property name="text">
+               <string>Add</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="motionExclusionRemoveButton">
+              <property name="toolTip">
+               <string>Remove the selected exclusion rectangle</string>
+              </property>
+              <property name="text">
+               <string>Remove</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="motionExclusionButtonsSpacer">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item row="9" column="0" colspan="4">
+           <widget class="QTableWidget" name="motionExclusionTable">
+            <property name="toolTip">
+             <string>Full-resolution exclusion rectangles for diff/motion detection</string>
+            </property>
+            <property name="columnCount">
+             <number>4</number>
+            </property>
+            <attribute name="horizontalHeaderStretchLastSection">
+             <bool>true</bool>
+            </attribute>
+            <column>
+             <property name="text">
+              <string>X</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Y</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>W</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>H</string>
+             </property>
+            </column>
            </widget>
           </item>
          </layout>

@@ -259,12 +259,16 @@ void CameraSettings::resetToDefaults()
     m_motionDetect = false;
     m_motionHistory = 500;
     m_motionVarThreshold = 16.0;
+    m_motionLearningRate = -1.0;
+    m_motionConfirmFrames = 1;
+    m_motionDownscale = 1.0;
     m_motionDetectShadows = true;
     m_motionOpenSize = 0;
     m_motionCloseSize = 0;
     m_motionPersistenceFrames = 0;
     m_motionBoxColor = Qt::red;
     m_minContourArea = 100;
+    m_motionExclusionRects.clear();
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
@@ -398,6 +402,10 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(65, m_motionPersistenceFrames);
     s.writeU32(66, m_motionBoxColor.rgba());
     s.writeS32(67, m_minContourArea);
+    s.writeDouble(171, m_motionLearningRate);
+    s.writeS32(172, m_motionConfirmFrames);
+    s.writeDouble(173, m_motionDownscale);
+    s.writeBlob(174, serializeMotionExclusionRects(m_motionExclusionRects));
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -652,6 +660,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(59, &m_motionDetect, false);
         d.readS32(60, &m_motionHistory, 500);
         d.readDouble(61, &m_motionVarThreshold, 16.0);
+        d.readDouble(171, &m_motionLearningRate, -1.0);
+        d.readS32(172, &m_motionConfirmFrames, 1);
+        d.readDouble(173, &m_motionDownscale, 1.0);
         d.readBool(62, &m_motionDetectShadows, true);
         d.readS32(63, &m_motionOpenSize, 0);
         d.readS32(64, &m_motionCloseSize, 0);
@@ -660,6 +671,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readU32(66, &motionBoxColorRgba, QColor(Qt::red).rgba());
         m_motionBoxColor = QColor::fromRgba(motionBoxColorRgba);
         d.readS32(67, &m_minContourArea, 100);
+        d.readBlob(174, &bytetmp);
+        deserializeMotionExclusionRects(bytetmp, m_motionExclusionRects);
         m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
         m_detectionRoiX = qBound(0, m_detectionRoiX, 4096);
         m_detectionRoiY = qBound(0, m_detectionRoiY, 4096);
@@ -667,6 +680,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_detectionRoiHeight = qBound(0, m_detectionRoiHeight, 4096);
         m_motionHistory = qBound(1, m_motionHistory, 5000);
         m_motionVarThreshold = qBound(1.0, m_motionVarThreshold, 200.0);
+        m_motionLearningRate = qBound(-1.0, m_motionLearningRate, 1.0);
+        m_motionConfirmFrames = qBound(1, m_motionConfirmFrames, 60);
+        const QList<double> validDownscales{1.0, 0.5, 0.25};
+        if (!validDownscales.contains(m_motionDownscale)) {
+            m_motionDownscale = 1.0;
+        }
         m_motionOpenSize = qBound(0, m_motionOpenSize, 20);
         m_motionCloseSize = qBound(0, m_motionCloseSize, 20);
         m_motionPersistenceFrames = qBound(0, m_motionPersistenceFrames, 120);
@@ -817,6 +836,25 @@ void CameraSettings::deserializeObjectDeviceSettings(const QByteArray& data, QHa
 
     QDataStream stream(data);
     stream >> objectDeviceSettings;
+}
+
+QByteArray CameraSettings::serializeMotionExclusionRects(const QList<QRect>& rects) const
+{
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    stream << rects;
+    return data;
+}
+
+void CameraSettings::deserializeMotionExclusionRects(const QByteArray& data, QList<QRect>& rects)
+{
+    if (data.isEmpty()) {
+        rects.clear();
+        return;
+    }
+
+    QDataStream stream(data);
+    stream >> rects;
 }
 
 void CameraSettings::applySettings(const QStringList& settingsKeys, const CameraSettings& settings)
@@ -1163,6 +1201,16 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("motionVarThreshold")) {
         m_motionVarThreshold = qBound(1.0, settings.m_motionVarThreshold, 200.0);
     }
+    if (settingsKeys.contains("motionLearningRate")) {
+        m_motionLearningRate = qBound(-1.0, settings.m_motionLearningRate, 1.0);
+    }
+    if (settingsKeys.contains("motionConfirmFrames")) {
+        m_motionConfirmFrames = qBound(1, settings.m_motionConfirmFrames, 60);
+    }
+    if (settingsKeys.contains("motionDownscale")) {
+        const QList<double> validDownscales{1.0, 0.5, 0.25};
+        m_motionDownscale = validDownscales.contains(settings.m_motionDownscale) ? settings.m_motionDownscale : 1.0;
+    }
     if (settingsKeys.contains("motionDetectShadows")) {
         m_motionDetectShadows = settings.m_motionDetectShadows;
     }
@@ -1180,6 +1228,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("minContourArea")) {
         m_minContourArea = qBound(0, settings.m_minContourArea, 10000);
+    }
+    if (settingsKeys.contains("motionExclusionRects")) {
+        m_motionExclusionRects = settings.m_motionExclusionRects;
     }
     if (settingsKeys.contains("videoPostProcess")) {
         m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
@@ -1640,6 +1691,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("motionVarThreshold") || force) {
         ostr << " m_motionVarThreshold: " << m_motionVarThreshold;
     }
+    if (settingsKeys.contains("motionLearningRate") || force) {
+        ostr << " m_motionLearningRate: " << m_motionLearningRate;
+    }
+    if (settingsKeys.contains("motionConfirmFrames") || force) {
+        ostr << " m_motionConfirmFrames: " << m_motionConfirmFrames;
+    }
+    if (settingsKeys.contains("motionDownscale") || force) {
+        ostr << " m_motionDownscale: " << m_motionDownscale;
+    }
     if (settingsKeys.contains("motionDetectShadows") || force) {
         ostr << " m_motionDetectShadows: " << m_motionDetectShadows;
     }
@@ -1654,6 +1714,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("minContourArea") || force) {
         ostr << " m_minContourArea: " << m_minContourArea;
+    }
+    if (settingsKeys.contains("motionExclusionRects") || force) {
+        ostr << " m_motionExclusionRects: " << m_motionExclusionRects.size();
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_recordMode;

@@ -350,6 +350,7 @@ CameraDetector::CameraDetector() :
     m_nextStage(nullptr),
     m_captureActive(false),
     m_motionPersistenceRemaining(0),
+    m_motionConfirmCount(0),
     m_yoloInputSize(640, 640),
     m_processingFrame(false)
 #ifdef QT_TEXTTOSPEECH_FOUND
@@ -397,6 +398,7 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
             m_lastMotionBoxes.clear();
             m_motionPersistenceRemaining = 0;
+            m_motionConfirmCount = 0;
             m_detectedObjectClasses.clear();
             m_pendingDisappearDeadlines.clear();
         }
@@ -460,6 +462,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractorMOG2>();
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
+        m_motionConfirmCount = 0;
     }
 
     if (force
@@ -491,6 +494,8 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("motionDetect")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
+        || settingsKeys.contains("motionLearningRate")
+        || settingsKeys.contains("motionDownscale")
         || settingsKeys.contains("motionDetectShadows")
         || settingsKeys.contains("detectionRoiX")
         || settingsKeys.contains("detectionRoiY")
@@ -504,11 +509,15 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("motionDetect")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
+        || settingsKeys.contains("motionLearningRate")
+        || settingsKeys.contains("motionConfirmFrames")
+        || settingsKeys.contains("motionDownscale")
         || settingsKeys.contains("motionDetectShadows")
         || settingsKeys.contains("motionOpenSize")
         || settingsKeys.contains("motionCloseSize")
         || settingsKeys.contains("motionPersistenceFrames")
         || settingsKeys.contains("minContourArea")
+        || settingsKeys.contains("motionExclusionRects")
         || settingsKeys.contains("detectionRoiX")
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
@@ -516,6 +525,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
     {
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
+        m_motionConfirmCount = 0;
     }
 
     if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
@@ -549,11 +559,15 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("motionDetect")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
+        || settingsKeys.contains("motionLearningRate")
+        || settingsKeys.contains("motionConfirmFrames")
+        || settingsKeys.contains("motionDownscale")
         || settingsKeys.contains("motionDetectShadows")
         || settingsKeys.contains("motionOpenSize")
         || settingsKeys.contains("motionCloseSize")
         || settingsKeys.contains("motionPersistenceFrames")
         || settingsKeys.contains("minContourArea")
+        || settingsKeys.contains("motionExclusionRects")
         || settingsKeys.contains("detectionRoiX")
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
@@ -755,6 +769,7 @@ void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const C
     for (size_t i = 1; i < m_diffMaskHistory.size(); ++i) {
         cv::bitwise_or(combinedMask, m_diffMaskHistory[i], combinedMask);
     }
+    cv::bitwise_and(combinedMask, buildExclusionMask(roi, combinedMask.size()), combinedMask);
     if (m_settings.m_diffMaskCloseSize > 0) {
         const int closeKsize = 2 * m_settings.m_diffMaskCloseSize + 1;
         const cv::Mat closeKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(closeKsize, closeKsize));
@@ -769,6 +784,35 @@ void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const C
     PROFILER_STOP(__FUNCTION__);
 }
 
+cv::Mat CameraDetector::buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
+{
+    cv::Mat mask(workSize, CV_8UC1, cv::Scalar(255));
+
+    if (m_settings.m_motionExclusionRects.isEmpty()) {
+        return mask;
+    }
+
+    const double scaleX = static_cast<double>(workSize.width) / std::max(1, roi.width);
+    const double scaleY = static_cast<double>(workSize.height) / std::max(1, roi.height);
+
+    for (const QRect& rect : m_settings.m_motionExclusionRects)
+    {
+        const QRect intersected = rect.intersected(QRect(roi.x, roi.y, roi.width, roi.height));
+        if (intersected.isEmpty()) {
+            continue;
+        }
+
+        const int x0 = std::clamp(static_cast<int>(std::floor((intersected.left() - roi.x) * scaleX)), 0, std::max(0, workSize.width - 1));
+        const int y0 = std::clamp(static_cast<int>(std::floor((intersected.top() - roi.y) * scaleY)), 0, std::max(0, workSize.height - 1));
+        const int x1 = std::clamp(static_cast<int>(std::ceil((intersected.right() + 1 - roi.x) * scaleX)), x0 + 1, workSize.width);
+        const int y1 = std::clamp(static_cast<int>(std::ceil((intersected.bottom() + 1 - roi.y) * scaleY)), y0 + 1, workSize.height);
+
+        cv::rectangle(mask, cv::Rect(x0, y0, x1 - x0, y1 - y0), cv::Scalar(0), cv::FILLED);
+    }
+
+    return mask;
+}
+
 void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes)
 {
     PROFILER_START();
@@ -779,9 +823,22 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
             m_settings.m_motionDetectShadows);
     }
 
+    const double downscale = m_settings.m_motionDownscale;
+    cv::Mat motionInput = bgrMat(roi);
+    cv::Mat downscaledInput;
+    if (downscale < 0.999)
+    {
+        const cv::Size downscaledSize(
+            std::max(1, static_cast<int>(std::lround(roi.width * downscale))),
+            std::max(1, static_cast<int>(std::lround(roi.height * downscale))));
+        cv::resize(motionInput, downscaledInput, downscaledSize, 0.0, 0.0, cv::INTER_AREA);
+        motionInput = downscaledInput;
+    }
+
     cv::Mat fgMask;
-    m_bgSubtractor->apply(bgrMat(roi), fgMask);
+    m_bgSubtractor->apply(motionInput, fgMask, m_settings.m_motionLearningRate);
     cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
+    cv::bitwise_and(fgMask, buildExclusionMask(roi, fgMask.size()), fgMask);
 
     if (m_settings.m_motionOpenSize > 0)
     {
@@ -802,14 +859,31 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
 
     QVector<QRect> boxes;
     boxes.reserve(static_cast<qsizetype>(contours.size()));
+    const double scaledMinArea = static_cast<double>(m_settings.m_minContourArea) * downscale * downscale;
     for (const auto& contour : contours)
     {
-        if (cv::contourArea(contour) >= static_cast<double>(m_settings.m_minContourArea)) {
+        if (cv::contourArea(contour) >= scaledMinArea) {
             cv::Rect box = cv::boundingRect(contour);
+            if (downscale < 0.999)
+            {
+                box.x = static_cast<int>(std::floor(box.x / downscale));
+                box.y = static_cast<int>(std::floor(box.y / downscale));
+                box.width = std::max(1, static_cast<int>(std::ceil(box.width / downscale)));
+                box.height = std::max(1, static_cast<int>(std::ceil(box.height / downscale)));
+            }
             box.x += roi.x;
             box.y += roi.y;
             boxes.append(QRect(box.x, box.y, box.width, box.height));
         }
+    }
+
+    if (!boxes.isEmpty()) {
+        m_motionConfirmCount = std::min(m_settings.m_motionConfirmFrames, m_motionConfirmCount + 1);
+        if (m_motionConfirmCount < m_settings.m_motionConfirmFrames) {
+            boxes.clear();
+        }
+    } else {
+        m_motionConfirmCount = 0;
     }
 
     if (!boxes.isEmpty()) {

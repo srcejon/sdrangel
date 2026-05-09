@@ -37,6 +37,8 @@
 #include <QSet>
 #include <QSignalBlocker>
 #include <QStandardItemModel>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 #include <QTextStream>
 #include <QWheelEvent>
 #include <QMessageBox>
@@ -1017,11 +1019,17 @@ void CameraGUI::displaySettings()
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
     settingsUI()->motionHistorySpin->setValue(m_settings.m_motionHistory);
     settingsUI()->motionVarThresholdSpin->setValue(m_settings.m_motionVarThreshold);
+    settingsUI()->motionLearningRateSpin->setValue(m_settings.m_motionLearningRate);
+    settingsUI()->motionConfirmFramesSpin->setValue(m_settings.m_motionConfirmFrames);
+    settingsUI()->motionDownscaleCombo->setCurrentIndex(
+        qFuzzyCompare(m_settings.m_motionDownscale, 0.5) ? 1 :
+        qFuzzyCompare(m_settings.m_motionDownscale, 0.25) ? 2 : 0);
     settingsUI()->motionDetectShadowsCheck->setChecked(m_settings.m_motionDetectShadows);
     settingsUI()->motionOpenSizeSpin->setValue(m_settings.m_motionOpenSize);
     settingsUI()->motionCloseSizeSpin->setValue(m_settings.m_motionCloseSize);
     settingsUI()->motionPersistenceFramesSpin->setValue(m_settings.m_motionPersistenceFrames);
     settingsUI()->minContourAreaSpin->setValue(m_settings.m_minContourArea);
+    updateMotionExclusionRectsTable();
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
     updateColorButton(settingsUI()->altAzGridColorButton, m_settings.m_altAzGridColor);
@@ -1392,12 +1400,18 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
     QObject::connect(settingsUI()->motionHistorySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionHistorySpin_valueChanged);
     QObject::connect(settingsUI()->motionVarThresholdSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_motionVarThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->motionLearningRateSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_motionLearningRateSpin_valueChanged);
+    QObject::connect(settingsUI()->motionConfirmFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionConfirmFramesSpin_valueChanged);
+    QObject::connect(settingsUI()->motionDownscaleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionDownscaleCombo_currentIndexChanged);
     QObject::connect(settingsUI()->motionDetectShadowsCheck, &QCheckBox::toggled, this, &CameraGUI::on_motionDetectShadowsCheck_toggled);
     QObject::connect(settingsUI()->motionOpenSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionOpenSizeSpin_valueChanged);
     QObject::connect(settingsUI()->motionCloseSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionCloseSizeSpin_valueChanged);
     QObject::connect(settingsUI()->motionPersistenceFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionPersistenceFramesSpin_valueChanged);
     QObject::connect(settingsUI()->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
     QObject::connect(settingsUI()->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
+    QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
+    QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
+    QObject::connect(settingsUI()->motionExclusionTable, &QTableWidget::itemChanged, this, &CameraGUI::on_motionExclusionTable_itemChanged);
     QObject::connect(ui->spectrumOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_spectrumOverlayButton_toggled);
     QObject::connect(settingsUI()->spectrumDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_spectrumDeviceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->spectrumOffsetXSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetXSlider_valueChanged);
@@ -4175,6 +4189,44 @@ void CameraGUI::updateHistogramStretchControls()
     settingsUI()->histogramStretchLogSpin->setEnabled(logMode);
 }
 
+void CameraGUI::updateMotionExclusionRectsTable()
+{
+    m_updatingMotionExclusionRectsTable = true;
+    settingsUI()->motionExclusionTable->setRowCount(m_settings.m_motionExclusionRects.size());
+
+    for (int i = 0; i < m_settings.m_motionExclusionRects.size(); ++i)
+    {
+        const QRect& rect = m_settings.m_motionExclusionRects.at(i);
+        settingsUI()->motionExclusionTable->setItem(i, 0, new QTableWidgetItem(QString::number(rect.x())));
+        settingsUI()->motionExclusionTable->setItem(i, 1, new QTableWidgetItem(QString::number(rect.y())));
+        settingsUI()->motionExclusionTable->setItem(i, 2, new QTableWidgetItem(QString::number(rect.width())));
+        settingsUI()->motionExclusionTable->setItem(i, 3, new QTableWidgetItem(QString::number(rect.height())));
+    }
+
+    m_updatingMotionExclusionRectsTable = false;
+}
+
+void CameraGUI::applyMotionExclusionRectsFromTable()
+{
+    QList<QRect> rects;
+
+    for (int row = 0; row < settingsUI()->motionExclusionTable->rowCount(); ++row)
+    {
+        auto *xItem = settingsUI()->motionExclusionTable->item(row, 0);
+        auto *yItem = settingsUI()->motionExclusionTable->item(row, 1);
+        auto *wItem = settingsUI()->motionExclusionTable->item(row, 2);
+        auto *hItem = settingsUI()->motionExclusionTable->item(row, 3);
+
+        const int x = qMax(0, xItem ? xItem->text().toInt() : 0);
+        const int y = qMax(0, yItem ? yItem->text().toInt() : 0);
+        const int w = qMax(1, wItem ? wItem->text().toInt() : 1);
+        const int h = qMax(1, hItem ? hItem->text().toInt() : 1);
+        rects.append(QRect(x, y, w, h));
+    }
+
+    m_settings.m_motionExclusionRects = rects;
+}
+
 void CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_postProcessWhiteBalanceMode = index;
@@ -4847,6 +4899,24 @@ void CameraGUI::on_motionVarThresholdSpin_valueChanged(double value)
     applySetting("motionVarThreshold");
 }
 
+void CameraGUI::on_motionLearningRateSpin_valueChanged(double value)
+{
+    m_settings.m_motionLearningRate = value;
+    applySetting("motionLearningRate");
+}
+
+void CameraGUI::on_motionConfirmFramesSpin_valueChanged(int value)
+{
+    m_settings.m_motionConfirmFrames = value;
+    applySetting("motionConfirmFrames");
+}
+
+void CameraGUI::on_motionDownscaleCombo_currentIndexChanged(int index)
+{
+    m_settings.m_motionDownscale = index == 1 ? 0.5 : index == 2 ? 0.25 : 1.0;
+    applySetting("motionDownscale");
+}
+
 void CameraGUI::on_motionDetectShadowsCheck_toggled(bool checked)
 {
     m_settings.m_motionDetectShadows = checked;
@@ -4887,6 +4957,35 @@ void CameraGUI::on_motionBoxColorButton_clicked()
         updateColorButton(settingsUI()->motionBoxColorButton, color);
         applySetting("motionBoxColor");
     }
+}
+
+void CameraGUI::on_motionExclusionAddButton_clicked()
+{
+    m_settings.m_motionExclusionRects.append(QRect(0, 0, 100, 100));
+    updateMotionExclusionRectsTable();
+    applySetting("motionExclusionRects");
+}
+
+void CameraGUI::on_motionExclusionRemoveButton_clicked()
+{
+    const int row = settingsUI()->motionExclusionTable->currentRow();
+
+    if ((row >= 0) && (row < m_settings.m_motionExclusionRects.size()))
+    {
+        m_settings.m_motionExclusionRects.removeAt(row);
+        updateMotionExclusionRectsTable();
+        applySetting("motionExclusionRects");
+    }
+}
+
+void CameraGUI::on_motionExclusionTable_itemChanged(QTableWidgetItem *item)
+{
+    if (m_updatingMotionExclusionRectsTable || !item) {
+        return;
+    }
+
+    applyMotionExclusionRectsFromTable();
+    applySetting("motionExclusionRects");
 }
 
 void CameraGUI::on_spectrumOverlayButton_toggled(bool checked)

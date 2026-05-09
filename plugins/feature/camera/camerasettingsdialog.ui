@@ -2613,6 +2613,39 @@
             </property>
            </widget>
           </item>
+          <item row="2" column="5">
+           <widget class="QLabel" name="trackObjectFontScaleLabel">
+            <property name="text">
+             <string>Label size</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="6">
+           <widget class="QDoubleSpinBox" name="trackObjectFontScaleSpin">
+            <property name="toolTip">
+             <string>Font point size for tracked object labels</string>
+            </property>
+            <property name="decimals">
+             <number>0</number>
+            </property>
+            <property name="minimum">
+             <double>4.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>144.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="7">
+           <widget class="QToolButton" name="trackObjectColorButton">
+            <property name="toolTip">
+             <string>Select tracked object label colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

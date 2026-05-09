@@ -233,6 +233,8 @@ void CameraSettings::resetToDefaults()
     m_altAzGridColor = QColor(255, 170, 80);
     m_trackObjects = false;
     m_trackObjectMinElevation = 0.0;
+    m_trackObjectColor = QColor(80, 255, 80);
+    m_trackObjectFontScale = 9.0;
     m_gridLabelFontFamily.clear();
     m_gridLabelFontScale = 9.0;
     m_overlayText = false;
@@ -418,6 +420,8 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(148, m_altAzGridColor.rgba());
     s.writeBool(165, m_trackObjects);
     s.writeDouble(166, m_trackObjectMinElevation);
+    s.writeU32(169, m_trackObjectColor.rgba());
+    s.writeDouble(170, m_trackObjectFontScale);
     s.writeString(155, m_gridLabelFontFamily);
     s.writeDouble(156, m_gridLabelFontScale);
     s.writeBool(84, m_yoloEnabled);
@@ -697,6 +701,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(165, &m_trackObjects, false);
         d.readDouble(166, &m_trackObjectMinElevation, 0.0);
         m_trackObjectMinElevation = qBound(0.0, m_trackObjectMinElevation, 90.0);
+        uint32_t trackObjectColorRgba = QColor(80, 255, 80).rgba();
+        d.readU32(169, &trackObjectColorRgba, QColor(80, 255, 80).rgba());
+        m_trackObjectColor = QColor::fromRgba(trackObjectColorRgba);
+        d.readDouble(170, &m_trackObjectFontScale, 9.0);
+        m_trackObjectFontScale = qBound(4.0, m_trackObjectFontScale, 144.0);
         d.readString(155, &m_gridLabelFontFamily, "");
         d.readDouble(156, &m_gridLabelFontScale, 9.0);
         m_gridLabelFontScale = qBound(4.0, m_gridLabelFontScale, 144.0);
@@ -1217,6 +1226,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("trackObjectMinElevation")) {
         m_trackObjectMinElevation = qBound(0.0, settings.m_trackObjectMinElevation, 90.0);
     }
+    if (settingsKeys.contains("trackObjectColor")) {
+        m_trackObjectColor = settings.m_trackObjectColor;
+    }
+    if (settingsKeys.contains("trackObjectFontScale")) {
+        m_trackObjectFontScale = qBound(4.0, settings.m_trackObjectFontScale, 144.0);
+    }
     if (settingsKeys.contains("gridLabelFontFamily")) {
         m_gridLabelFontFamily = settings.m_gridLabelFontFamily;
     }
@@ -1684,6 +1699,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("trackObjectMinElevation") || force) {
         ostr << " m_trackObjectMinElevation: " << m_trackObjectMinElevation;
+    }
+    if (settingsKeys.contains("trackObjectColor") || force) {
+        ostr << " m_trackObjectColor: " << m_trackObjectColor.name().toStdString();
+    }
+    if (settingsKeys.contains("trackObjectFontScale") || force) {
+        ostr << " m_trackObjectFontScale: " << m_trackObjectFontScale;
     }
     if (settingsKeys.contains("gridLabelFontFamily") || force) {
         ostr << " m_gridLabelFontFamily: " << m_gridLabelFontFamily.toStdString();

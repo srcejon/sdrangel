@@ -989,6 +989,7 @@ void CameraGUI::displaySettings()
     settingsUI()->altAzGridCheck->setChecked(m_settings.m_altAzGrid);
     settingsUI()->trackObjectsCheck->setChecked(m_settings.m_trackObjects);
     settingsUI()->trackObjectMinElevationSpin->setValue(m_settings.m_trackObjectMinElevation);
+    settingsUI()->trackObjectFontScaleSpin->setValue(m_settings.m_trackObjectFontScale);
     settingsUI()->gridLabelFontCombo->setCurrentText(m_settings.m_gridLabelFontFamily);
     settingsUI()->gridLabelFontScaleSpin->setValue(m_settings.m_gridLabelFontScale);
     ui->overlayTextButton->setChecked(m_settings.m_overlayText);
@@ -1024,6 +1025,7 @@ void CameraGUI::displaySettings()
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
     updateColorButton(settingsUI()->altAzGridColorButton, m_settings.m_altAzGridColor);
+    updateColorButton(settingsUI()->trackObjectColorButton, m_settings.m_trackObjectColor);
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
     updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
     ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
@@ -1362,6 +1364,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->altAzGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_altAzGridColorButton_clicked);
     QObject::connect(settingsUI()->trackObjectsCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
+    QObject::connect(settingsUI()->trackObjectColorButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectColorButton_clicked);
+    QObject::connect(settingsUI()->trackObjectFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectFontScaleSpin_valueChanged);
     QObject::connect(settingsUI()->gridLabelFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_gridLabelFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->gridLabelFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_gridLabelFontScaleSpin_valueChanged);
     QObject::connect(ui->overlayTextButton, &QToolButton::toggled, this, &CameraGUI::on_overlayTextButton_toggled);
@@ -4616,6 +4620,24 @@ void CameraGUI::on_trackObjectMinElevationSpin_valueChanged(double value)
 {
     m_settings.m_trackObjectMinElevation = value;
     applySetting("trackObjectMinElevation");
+}
+
+void CameraGUI::on_trackObjectColorButton_clicked()
+{
+    const QColor color = QColorDialog::getColor(m_settings.m_trackObjectColor, this, tr("Select tracked object colour"));
+
+    if (color.isValid())
+    {
+        m_settings.m_trackObjectColor = color;
+        updateColorButton(settingsUI()->trackObjectColorButton, m_settings.m_trackObjectColor);
+        applySetting("trackObjectColor");
+    }
+}
+
+void CameraGUI::on_trackObjectFontScaleSpin_valueChanged(double value)
+{
+    m_settings.m_trackObjectFontScale = value;
+    applySetting("trackObjectFontScale");
 }
 
 void CameraGUI::on_gridLabelFontCombo_currentFontChanged(const QFont& font)

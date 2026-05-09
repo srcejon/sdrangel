@@ -514,7 +514,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
-        "trackObjects", "trackObjectMinElevation",
+        "trackObjects", "trackObjectMinElevation", "trackObjectColor", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
@@ -1143,7 +1143,6 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
         return;
     }
 
-    static const QColor kObjectOverlayColor(80, 255, 80);
     const QDateTime currentDateTime = m_captureDateTime.isValid() ? m_captureDateTime : QDateTime::currentDateTime();
 
     QPainter painter(&image);
@@ -1154,10 +1153,10 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
     if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
         font.setFamily(m_settings.m_gridLabelFontFamily);
     }
-    font.setPointSizeF(m_settings.m_gridLabelFontScale);
+    font.setPointSizeF(m_settings.m_trackObjectFontScale);
     painter.setFont(font);
     const QFontMetrics fontMetrics(font);
-    painter.setPen(QPen(kObjectOverlayColor, 2.0));
+    painter.setPen(QPen(m_settings.m_trackObjectColor, 2.0));
 
     for (auto it = m_trackedMapObjects.cbegin(); it != m_trackedMapObjects.cend(); ++it)
     {
@@ -1184,7 +1183,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
             continue;
         }
 
-        drawOutlinedLabel(painter, image.rect(), point, object.m_label, kObjectOverlayColor, fontMetrics);
+        drawOutlinedLabel(painter, image.rect(), point, object.m_label, m_settings.m_trackObjectColor, fontMetrics);
     }
 
     PROFILER_STOP(__FUNCTION__);

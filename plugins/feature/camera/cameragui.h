@@ -436,6 +436,8 @@ private slots:
     void on_altAzGridColorButton_clicked();
     void on_trackObjectsCheck_toggled(bool checked);
     void on_trackObjectMinElevationSpin_valueChanged(double value);
+    void on_trackObjectColorButton_clicked();
+    void on_trackObjectFontScaleSpin_valueChanged(double value);
     void on_gridLabelFontCombo_currentFontChanged(const QFont& font);
     void on_gridLabelFontScaleSpin_valueChanged(double value);
     void on_overlayTextButton_toggled(bool checked);

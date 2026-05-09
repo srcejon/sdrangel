@@ -214,6 +214,8 @@ struct CameraSettings
     QColor m_altAzGridColor;  ///< Colour for alt-az sky grid
     bool m_trackObjects;      ///< Draw ADS-B / satellite tracked object overlay
     double m_trackObjectMinElevation; ///< Minimum elevation in degrees for tracked object overlay
+    QColor m_trackObjectColor; ///< Colour for tracked object labels
+    double m_trackObjectFontScale; ///< Font point size for tracked object labels: 4.0..144.0
     QString m_gridLabelFontFamily; ///< QPainter font family for sky grid labels
     double  m_gridLabelFontScale;  ///< Font point size for sky grid labels: 4.0..144.0
     bool m_overlayText;       ///< Draw custom HTML text on frame

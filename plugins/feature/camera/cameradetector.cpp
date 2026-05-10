@@ -493,7 +493,6 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
     if (force
         || settingsKeys.contains("motionDetect")
         || settingsKeys.contains("motionBackgroundSubtractor")
-        || settingsKeys.contains("motionMaskView")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
         || settingsKeys.contains("motionLearningRate")

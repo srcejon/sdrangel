@@ -4131,31 +4131,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
           <item row="7" column="1">
            <widget class="QToolButton" name="motionBoxColorButton">
             <property name="toolTip">
-<<<<<<< HEAD
              <string>Select bounding box colour</string>
-=======
-             <string>Background subtractor used for motion detection</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>MOG2</string>
-             </property>
-            </item>
-             <item>
-              <property name="text">
-               <string>KNN</string>
-              </property>
-             </item>
-            </widget>
-           </item>
-          <item row="0" column="2">
-           <widget class="QLabel" name="motionMaskViewLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
->>>>>>> 2174ba3a2 (Revert unsupported camera GSOC subtractor option)
             </property>
             <property name="text">
              <string/>

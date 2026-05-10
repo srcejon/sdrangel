@@ -745,7 +745,6 @@ void CameraImageProcessor::applyLineEnhancement(cv::Mat& bgrMat) const
     cv::Mat grayMat;
     cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
 
-    cv::Mat response8u;
     cv::Mat response = cv::Mat::zeros(grayMat.size(), CV_8U);
 
     auto updateResponse = [&](const cv::Mat& kernel)
@@ -755,27 +754,33 @@ void CameraImageProcessor::applyLineEnhancement(cv::Mat& bgrMat) const
         cv::max(response, enhanced, response);
     };
 
-    const cv::Mat kernelHorizontal = (cv::Mat_<uchar>(1, 5) << 1, 1, 1, 1, 1);
-    const cv::Mat kernelVertical = (cv::Mat_<uchar>(5, 1) << 1, 1, 1, 1, 1);
-    const cv::Mat kernelDiag1 = (cv::Mat_<uchar>(5, 5) <<
-        1, 0, 0, 0, 0,
-        0, 1, 0, 0, 0,
-        0, 0, 1, 0, 0,
-        0, 0, 0, 1, 0,
-        0, 0, 0, 0, 1);
-    const cv::Mat kernelDiag2 = (cv::Mat_<uchar>(5, 5) <<
-        0, 0, 0, 0, 1,
-        0, 0, 0, 1, 0,
-        0, 0, 1, 0, 0,
-        0, 1, 0, 0, 0,
-        1, 0, 0, 0, 0);
+    const std::array<int, 3> kernelSizes{3, 5, 7};
+    for (int kernelSize : kernelSizes)
+    {
+        cv::Mat kernelHorizontal = cv::Mat::ones(1, kernelSize, CV_8U);
+        cv::Mat kernelVertical = cv::Mat::ones(kernelSize, 1, CV_8U);
+        cv::Mat kernelDiag1 = cv::Mat::zeros(kernelSize, kernelSize, CV_8U);
+        cv::Mat kernelDiag2 = cv::Mat::zeros(kernelSize, kernelSize, CV_8U);
 
-    updateResponse(kernelHorizontal);
-    updateResponse(kernelVertical);
-    updateResponse(kernelDiag1);
-    updateResponse(kernelDiag2);
+        for (int i = 0; i < kernelSize; ++i)
+        {
+            kernelDiag1.at<uchar>(i, i) = 1;
+            kernelDiag2.at<uchar>(i, kernelSize - 1 - i) = 1;
+        }
 
-    response8u = response;
+        updateResponse(kernelHorizontal);
+        updateResponse(kernelVertical);
+        updateResponse(kernelDiag1);
+        updateResponse(kernelDiag2);
+    }
+
+    cv::Mat response8u = response;
+    double maxValue = 0.0;
+    cv::minMaxLoc(response8u, nullptr, &maxValue);
+    if (maxValue > 0.0) {
+        response8u.convertTo(response8u, CV_8U, 255.0 / maxValue);
+    }
+
     cv::Mat responseBgr;
     cv::cvtColor(response8u, responseBgr, cv::COLOR_GRAY2BGR);
     if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {

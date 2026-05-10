@@ -737,6 +737,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
             bgrMat,
             detectionRoi,
             frame->m_streakDetections,
+            updateInputHistory,
             (m_settings.m_streakDebugView != CameraSettings::StreakDebugViewOff) ? &streakDebugMask : nullptr);
 
         if (!streakDebugMask.empty())
@@ -1010,7 +1011,7 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, cv::Mat* debugMask)
+void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -1034,7 +1035,7 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
     m_streakBgSubtractor->getBackgroundImage(backgroundGray);
 
     cv::Mat foregroundMask;
-    constexpr double streakLearningRate = 0.25;
+    const double streakLearningRate = updateBackgroundModel ? 0.25 : 0.0;
     m_streakBgSubtractor->apply(currentGray, foregroundMask, streakLearningRate);
 
     cv::Mat diff;

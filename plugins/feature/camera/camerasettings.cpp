@@ -221,6 +221,7 @@ void CameraSettings::resetToDefaults()
     m_edgeDisplayMode = EdgeDisplayOverlay;
     m_sobelEdge = 0.0;
     m_cannyEdge = 0.0;
+    m_lineEnhancement = 0.0;
     m_flipX = false;
     m_flipY = false;
     m_brightness = 0.0;
@@ -396,6 +397,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(191, static_cast<qint32>(m_edgeDisplayMode));
     s.writeDouble(40, m_sobelEdge);
     s.writeDouble(190, m_cannyEdge);
+    s.writeDouble(192, m_lineEnhancement);
     s.writeBool(41, m_flipX);
     s.writeBool(42, m_flipY);
     s.writeDouble(43, m_brightness);
@@ -652,6 +654,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
             static_cast<qint32>(EdgeDisplayEdgesOnly)));
         d.readDouble(40, &m_sobelEdge, 0.0);
         d.readDouble(190, &m_cannyEdge, 0.0);
+        d.readDouble(192, &m_lineEnhancement, 0.0);
         d.readBool(41, &m_flipX, false);
         d.readBool(42, &m_flipY, false);
         m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
@@ -675,6 +678,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
             static_cast<qint32>(EdgeDisplayEdgesOnly)));
         m_sobelEdge = qBound(0.0, m_sobelEdge, 3.0);
         m_cannyEdge = qBound(0.0, m_cannyEdge, 3.0);
+        m_lineEnhancement = qBound(0.0, m_lineEnhancement, 3.0);
 
         d.readDouble(43, &m_brightness, 0.0);
         d.readDouble(44, &m_contrast, 1.0);
@@ -1237,6 +1241,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("cannyEdge")) {
         m_cannyEdge = qBound(0.0, settings.m_cannyEdge, 3.0);
     }
+    if (settingsKeys.contains("lineEnhancement")) {
+        m_lineEnhancement = qBound(0.0, settings.m_lineEnhancement, 3.0);
+    }
     if (settingsKeys.contains("flipX")) {
         m_flipX = settings.m_flipX;
     }
@@ -1790,6 +1797,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("cannyEdge") || force) {
         ostr << " m_cannyEdge: " << m_cannyEdge;
+    }
+    if (settingsKeys.contains("lineEnhancement") || force) {
+        ostr << " m_lineEnhancement: " << m_lineEnhancement;
     }
     if (settingsKeys.contains("flipX") || force) {
         ostr << " m_flipX: " << m_flipX;

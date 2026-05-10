@@ -998,6 +998,8 @@ void CameraGUI::displaySettings()
     settingsUI()->sobelEdgeSpin->setValue(m_settings.m_sobelEdge);
     settingsUI()->cannyEdgeSlider->setValue(static_cast<int>(m_settings.m_cannyEdge * 100.0));
     settingsUI()->cannyEdgeSpin->setValue(m_settings.m_cannyEdge);
+    settingsUI()->lineEnhancementSlider->setValue(static_cast<int>(m_settings.m_lineEnhancement * 100.0));
+    settingsUI()->lineEnhancementSpin->setValue(m_settings.m_lineEnhancement);
     settingsUI()->flipXButton->setChecked(m_settings.m_flipX);
     settingsUI()->flipYButton->setChecked(m_settings.m_flipY);
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
@@ -1402,6 +1404,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->sobelEdgeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_sobelEdgeSpin_valueChanged);
     QObject::connect(settingsUI()->cannyEdgeSlider, &QSlider::valueChanged, this, &CameraGUI::on_cannyEdgeSlider_valueChanged);
     QObject::connect(settingsUI()->cannyEdgeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cannyEdgeSpin_valueChanged);
+    QObject::connect(settingsUI()->lineEnhancementSlider, &QSlider::valueChanged, this, &CameraGUI::on_lineEnhancementSlider_valueChanged);
+    QObject::connect(settingsUI()->lineEnhancementSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lineEnhancementSpin_valueChanged);
     QObject::connect(settingsUI()->flipXButton, &QCheckBox::toggled, this, &CameraGUI::on_flipXButton_toggled);
     QObject::connect(settingsUI()->flipYButton, &QCheckBox::toggled, this, &CameraGUI::on_flipYButton_toggled);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
@@ -4736,6 +4740,24 @@ void CameraGUI::on_cannyEdgeSpin_valueChanged(double value)
     applySetting("cannyEdge");
 }
 
+void CameraGUI::on_lineEnhancementSlider_valueChanged(int value)
+{
+    m_settings.m_lineEnhancement = value / 100.0;
+    settingsUI()->lineEnhancementSpin->blockSignals(true);
+    settingsUI()->lineEnhancementSpin->setValue(m_settings.m_lineEnhancement);
+    settingsUI()->lineEnhancementSpin->blockSignals(false);
+    applySetting("lineEnhancement");
+}
+
+void CameraGUI::on_lineEnhancementSpin_valueChanged(double value)
+{
+    settingsUI()->lineEnhancementSlider->blockSignals(true);
+    settingsUI()->lineEnhancementSlider->setValue(static_cast<int>(value * 100.0));
+    settingsUI()->lineEnhancementSlider->blockSignals(false);
+    m_settings.m_lineEnhancement = value;
+    applySetting("lineEnhancement");
+}
+
 void CameraGUI::on_flipXButton_toggled(bool checked)
 {
     m_settings.m_flipX = checked;
@@ -5025,6 +5047,7 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->edgeDisplayModeCombo->setCurrentIndex(static_cast<int>(CameraSettings::EdgeDisplayOverlay));
     settingsUI()->sobelEdgeSpin->setValue(0.0);
     settingsUI()->cannyEdgeSpin->setValue(0.0);
+    settingsUI()->lineEnhancementSpin->setValue(0.0);
     settingsUI()->flipXButton->setChecked(false);
     settingsUI()->flipYButton->setChecked(false);
 }

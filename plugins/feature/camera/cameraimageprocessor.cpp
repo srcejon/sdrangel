@@ -754,7 +754,7 @@ void CameraImageProcessor::applyLineEnhancement(cv::Mat& bgrMat) const
         cv::max(response, enhanced, response);
     };
 
-    const std::array<int, 3> kernelSizes{3, 5, 7};
+    const std::array<int, 2> kernelSizes{5, 7};
     for (int kernelSize : kernelSizes)
     {
         cv::Mat kernelHorizontal = cv::Mat::ones(1, kernelSize, CV_8U);

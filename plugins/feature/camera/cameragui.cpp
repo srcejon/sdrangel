@@ -1070,6 +1070,7 @@ void CameraGUI::displaySettings()
         qFuzzyCompare(m_settings.m_streakDownscale, 0.25) ? 2 : 0);
     settingsUI()->streakDebugViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakDebugView));
     settingsUI()->streakOverlayStyleCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakOverlayStyle));
+    settingsUI()->streakLineEnhancementCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakLineEnhancementPlacement));
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
     ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
     m_showMotionExclusionRects = m_settings.m_showMotionExclusionRects;
@@ -1474,6 +1475,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->streakDownscaleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_streakDownscaleCombo_currentIndexChanged);
     QObject::connect(settingsUI()->streakDebugViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_streakDebugViewCombo_currentIndexChanged);
     QObject::connect(settingsUI()->streakOverlayStyleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_streakOverlayStyleCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->streakLineEnhancementCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_streakLineEnhancementCombo_currentIndexChanged);
     QObject::connect(settingsUI()->streakColorButton, &QToolButton::clicked, this, &CameraGUI::on_streakColorButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
     QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
@@ -5152,6 +5154,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_streakDownscale = defaults.m_streakDownscale;
     m_settings.m_streakDebugView = defaults.m_streakDebugView;
     m_settings.m_streakOverlayStyle = defaults.m_streakOverlayStyle;
+    m_settings.m_streakLineEnhancementPlacement = defaults.m_streakLineEnhancementPlacement;
     m_settings.m_streakColor = defaults.m_streakColor;
 
     m_settings.m_diffMask = defaults.m_diffMask;
@@ -5196,6 +5199,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "streakDownscale",
         "streakDebugView",
         "streakOverlayStyle",
+        "streakLineEnhancementPlacement",
         "streakColor",
         "diffMask",
         "diffThreshold",
@@ -5348,6 +5352,12 @@ void CameraGUI::on_streakOverlayStyleCombo_currentIndexChanged(int index)
 {
     m_settings.m_streakOverlayStyle = static_cast<CameraSettings::StreakOverlayStyle>(index);
     applySetting("streakOverlayStyle");
+}
+
+void CameraGUI::on_streakLineEnhancementCombo_currentIndexChanged(int index)
+{
+    m_settings.m_streakLineEnhancementPlacement = static_cast<CameraSettings::StreakLineEnhancementPlacement>(index);
+    applySetting("streakLineEnhancementPlacement");
 }
 
 void CameraGUI::on_streakColorButton_clicked()

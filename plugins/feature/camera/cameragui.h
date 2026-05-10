@@ -519,6 +519,7 @@ private slots:
     void on_streakDownscaleCombo_currentIndexChanged(int index);
     void on_streakDebugViewCombo_currentIndexChanged(int index);
     void on_streakOverlayStyleCombo_currentIndexChanged(int index);
+    void on_streakLineEnhancementCombo_currentIndexChanged(int index);
     void on_streakColorButton_clicked();
     void on_motionExclusionAddButton_clicked();
     void on_motionExclusionRemoveButton_clicked();

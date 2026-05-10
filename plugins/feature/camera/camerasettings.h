@@ -125,6 +125,13 @@ struct CameraSettings
         StreakOverlayStyleBoundingBoxes
     };
 
+    enum StreakLineEnhancementPlacement
+    {
+        StreakLineEnhancementOff = 0,
+        StreakLineEnhancementBeforeBackground,
+        StreakLineEnhancementAfterBackground
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -307,6 +314,7 @@ struct CameraSettings
     double m_streakDownscale;   ///< Downscale factor for streak detection path: 1.0, 0.5, 0.25
     StreakDebugView m_streakDebugView; ///< Optional debug view of streak detection stages
     StreakOverlayStyle m_streakOverlayStyle; ///< How detected streaks are rendered on the output image
+    StreakLineEnhancementPlacement m_streakLineEnhancementPlacement; ///< Optional line enhancement placement within the streak detector
     QColor m_streakColor;       ///< Overlay colour for streak detections
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 

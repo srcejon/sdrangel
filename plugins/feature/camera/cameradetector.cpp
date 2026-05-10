@@ -17,6 +17,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <array>
 
 #include <QDebug>
 #include <QFile>
@@ -547,6 +548,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
     if (force
         || settingsKeys.contains("streakDetect")
         || settingsKeys.contains("streakDownscale")
+        || settingsKeys.contains("streakLineEnhancementPlacement")
         || settingsKeys.contains("detectionRoiX")
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
@@ -609,6 +611,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("streakDownscale")
         || settingsKeys.contains("streakColor")
         || settingsKeys.contains("streakDebugView")
+        || settingsKeys.contains("streakLineEnhancementPlacement")
         || settingsKeys.contains("detectionRoiX")
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
@@ -921,6 +924,46 @@ cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createStreakBackgroundSubtract
     return cv::createBackgroundSubtractorMOG2(streakHistory, streakVarThreshold, streakDetectShadows);
 }
 
+cv::Mat CameraDetector::applyStreakLineEnhancement(const cv::Mat& grayMat) const
+{
+    cv::Mat response = cv::Mat::zeros(grayMat.size(), CV_8U);
+
+    auto updateResponse = [&](const cv::Mat& kernel)
+    {
+        cv::Mat enhanced;
+        cv::morphologyEx(grayMat, enhanced, cv::MORPH_TOPHAT, kernel);
+        cv::max(response, enhanced, response);
+    };
+
+    const std::array<int, 2> kernelSizes{5, 7};
+    for (int kernelSize : kernelSizes)
+    {
+        cv::Mat kernelHorizontal = cv::Mat::ones(1, kernelSize, CV_8U);
+        cv::Mat kernelVertical = cv::Mat::ones(kernelSize, 1, CV_8U);
+        cv::Mat kernelDiag1 = cv::Mat::zeros(kernelSize, kernelSize, CV_8U);
+        cv::Mat kernelDiag2 = cv::Mat::zeros(kernelSize, kernelSize, CV_8U);
+
+        for (int i = 0; i < kernelSize; ++i)
+        {
+            kernelDiag1.at<uchar>(i, i) = 1;
+            kernelDiag2.at<uchar>(i, kernelSize - 1 - i) = 1;
+        }
+
+        updateResponse(kernelHorizontal);
+        updateResponse(kernelVertical);
+        updateResponse(kernelDiag1);
+        updateResponse(kernelDiag2);
+    }
+
+    double maxValue = 0.0;
+    cv::minMaxLoc(response, nullptr, &maxValue);
+    if (maxValue > 0.0) {
+        response.convertTo(response, CV_8U, 255.0 / maxValue);
+    }
+
+    return response;
+}
+
 void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
@@ -1049,6 +1092,15 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
         cv::resize(currentGray, currentGray, downscaledSize, 0.0, 0.0, cv::INTER_AREA);
     }
 
+    const bool enhanceBeforeBackground =
+        m_settings.m_streakLineEnhancementPlacement == CameraSettings::StreakLineEnhancementBeforeBackground;
+    const bool enhanceAfterBackground =
+        m_settings.m_streakLineEnhancementPlacement == CameraSettings::StreakLineEnhancementAfterBackground;
+
+    if (enhanceBeforeBackground) {
+        currentGray = applyStreakLineEnhancement(currentGray);
+    }
+
     if (!m_streakBgSubtractor) {
         m_streakBgSubtractor = createStreakBackgroundSubtractor();
     }
@@ -1084,6 +1136,10 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
     else
     {
         diff = foregroundMask.clone();
+    }
+
+    if (enhanceAfterBackground && !diff.empty()) {
+        diff = applyStreakLineEnhancement(diff);
     }
 
     if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewDiff)) {

@@ -159,6 +159,7 @@ private:
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
     [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createBackgroundSubtractor() const;
     [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createStreakBackgroundSubtractor() const;
+    [[nodiscard]] cv::Mat applyStreakLineEnhancement(const cv::Mat& grayMat) const;
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
     void applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);

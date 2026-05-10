@@ -129,6 +129,8 @@ private:
     std::deque<cv::Mat> m_diffMaskHistory;
     cv::Ptr<cv::BackgroundSubtractor> m_bgSubtractor;
     cv::Ptr<cv::BackgroundSubtractor> m_streakBgSubtractor;
+    cv::Mat m_streakLastBackgroundGray;
+    cv::Mat m_streakLastForegroundMask;
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;
     int m_motionConfirmCount;

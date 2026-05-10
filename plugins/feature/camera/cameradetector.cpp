@@ -398,6 +398,8 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_diffMaskHistory.clear();
             m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
             m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
+            m_streakLastBackgroundGray.release();
+            m_streakLastForegroundMask.release();
             m_lastMotionBoxes.clear();
             m_motionPersistenceRemaining = 0;
             m_motionConfirmCount = 0;
@@ -465,6 +467,8 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_diffMaskHistory.clear();
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
         m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
+        m_streakLastBackgroundGray.release();
+        m_streakLastForegroundMask.release();
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
         m_motionConfirmCount = 0;
@@ -546,6 +550,8 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("detectionRoiHeight"))
     {
         m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
+        m_streakLastBackgroundGray.release();
+        m_streakLastForegroundMask.release();
         m_lastStreakDetections.clear();
         m_streakPersistenceRemaining = 0;
     }
@@ -1032,11 +1038,24 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
     }
 
     cv::Mat backgroundGray;
-    m_streakBgSubtractor->getBackgroundImage(backgroundGray);
-
     cv::Mat foregroundMask;
-    const double streakLearningRate = updateBackgroundModel ? 0.25 : 0.0;
-    m_streakBgSubtractor->apply(currentGray, foregroundMask, streakLearningRate);
+    if (updateBackgroundModel)
+    {
+        m_streakBgSubtractor->getBackgroundImage(backgroundGray);
+        const double streakLearningRate = 0.25;
+        m_streakBgSubtractor->apply(currentGray, foregroundMask, streakLearningRate);
+        if (!backgroundGray.empty() && (backgroundGray.size() == currentGray.size())) {
+            m_streakLastBackgroundGray = backgroundGray.clone();
+        } else {
+            m_streakLastBackgroundGray.release();
+        }
+        m_streakLastForegroundMask = foregroundMask.clone();
+    }
+    else
+    {
+        backgroundGray = m_streakLastBackgroundGray.clone();
+        foregroundMask = m_streakLastForegroundMask.clone();
+    }
 
     cv::Mat diff;
     if (!backgroundGray.empty() && (backgroundGray.size() == currentGray.size()))
@@ -1063,8 +1082,11 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
         }
     }
     cv::threshold(diff, diff, m_settings.m_streakThreshold, 255, cv::THRESH_BINARY);
-    cv::threshold(foregroundMask, foregroundMask, 126, 255, cv::THRESH_BINARY);
-    cv::bitwise_and(diff, foregroundMask, diff);
+    if (!foregroundMask.empty())
+    {
+        cv::threshold(foregroundMask, foregroundMask, 126, 255, cv::THRESH_BINARY);
+        cv::bitwise_and(diff, foregroundMask, diff);
+    }
 
     cv::Mat exclusionMask = buildExclusionMask(roi, diff.size());
     cv::bitwise_and(diff, exclusionMask, diff);

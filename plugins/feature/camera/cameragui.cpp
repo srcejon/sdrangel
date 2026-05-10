@@ -1437,6 +1437,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->detectionRoiWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiWidthSpin_valueChanged);
     QObject::connect(settingsUI()->detectionRoiHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiHeightSpin_valueChanged);
     QObject::connect(settingsUI()->detectionRoiDrawButton, &QToolButton::clicked, this, &CameraGUI::on_detectionRoiDrawButton_clicked);
+    QObject::connect(settingsUI()->detectionResetDefaultsButton, &QToolButton::clicked, this, &CameraGUI::on_detectionResetDefaultsButton_clicked);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
     QObject::connect(settingsUI()->motionBackgroundSubtractorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged);
     QObject::connect(settingsUI()->motionMaskViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionMaskViewCombo_currentIndexChanged);
@@ -5048,6 +5049,93 @@ void CameraGUI::on_detectionRoiHeightSpin_valueChanged(int value)
 void CameraGUI::on_detectionRoiDrawButton_clicked()
 {
     setDetectionRoiDrawMode(true);
+}
+
+void CameraGUI::on_detectionResetDefaultsButton_clicked()
+{
+    const CameraSettings defaults;
+
+    m_settings.m_detectionRoiX = defaults.m_detectionRoiX;
+    m_settings.m_detectionRoiY = defaults.m_detectionRoiY;
+    m_settings.m_detectionRoiWidth = defaults.m_detectionRoiWidth;
+    m_settings.m_detectionRoiHeight = defaults.m_detectionRoiHeight;
+
+    m_settings.m_motionDetect = defaults.m_motionDetect;
+    m_settings.m_motionBackgroundSubtractor = defaults.m_motionBackgroundSubtractor;
+    m_settings.m_motionMaskView = defaults.m_motionMaskView;
+    m_settings.m_motionHistory = defaults.m_motionHistory;
+    m_settings.m_motionVarThreshold = defaults.m_motionVarThreshold;
+    m_settings.m_motionLearningRate = defaults.m_motionLearningRate;
+    m_settings.m_motionConfirmFrames = defaults.m_motionConfirmFrames;
+    m_settings.m_motionDownscale = defaults.m_motionDownscale;
+    m_settings.m_motionDetectShadows = defaults.m_motionDetectShadows;
+    m_settings.m_motionOpenSize = defaults.m_motionOpenSize;
+    m_settings.m_motionCloseSize = defaults.m_motionCloseSize;
+    m_settings.m_motionPersistenceFrames = defaults.m_motionPersistenceFrames;
+    m_settings.m_motionBoxColor = defaults.m_motionBoxColor;
+    m_settings.m_minContourArea = defaults.m_minContourArea;
+    m_settings.m_showMotionExclusionRects = defaults.m_showMotionExclusionRects;
+    m_settings.m_motionExclusionRects = defaults.m_motionExclusionRects;
+
+    m_settings.m_streakDetect = defaults.m_streakDetect;
+    m_settings.m_streakThreshold = defaults.m_streakThreshold;
+    m_settings.m_streakMinLength = defaults.m_streakMinLength;
+    m_settings.m_streakHoughThreshold = defaults.m_streakHoughThreshold;
+    m_settings.m_streakMaxGap = defaults.m_streakMaxGap;
+    m_settings.m_streakPersistenceFrames = defaults.m_streakPersistenceFrames;
+    m_settings.m_streakDownscale = defaults.m_streakDownscale;
+    m_settings.m_streakDebugView = defaults.m_streakDebugView;
+    m_settings.m_streakColor = defaults.m_streakColor;
+
+    m_settings.m_diffMask = defaults.m_diffMask;
+    m_settings.m_diffThreshold = defaults.m_diffThreshold;
+    m_settings.m_diffMaskOpenSize = defaults.m_diffMaskOpenSize;
+    m_settings.m_dilationSize = defaults.m_dilationSize;
+    m_settings.m_diffMaskHistoryFrames = defaults.m_diffMaskHistoryFrames;
+    m_settings.m_diffMaskCloseSize = defaults.m_diffMaskCloseSize;
+
+    blockApplySettings(true);
+    displaySettings();
+    blockApplySettings(false);
+    updateMotionExclusionPreview();
+
+    applySettings({
+        "detectionRoiX",
+        "detectionRoiY",
+        "detectionRoiWidth",
+        "detectionRoiHeight",
+        "motionDetect",
+        "motionBackgroundSubtractor",
+        "motionMaskView",
+        "motionHistory",
+        "motionVarThreshold",
+        "motionLearningRate",
+        "motionConfirmFrames",
+        "motionDownscale",
+        "motionDetectShadows",
+        "motionOpenSize",
+        "motionCloseSize",
+        "motionPersistenceFrames",
+        "motionBoxColor",
+        "minContourArea",
+        "showMotionExclusionRects",
+        "motionExclusionRects",
+        "streakDetect",
+        "streakThreshold",
+        "streakMinLength",
+        "streakHoughThreshold",
+        "streakMaxGap",
+        "streakPersistenceFrames",
+        "streakDownscale",
+        "streakDebugView",
+        "streakColor",
+        "diffMask",
+        "diffThreshold",
+        "diffMaskOpenSize",
+        "dilationSize",
+        "diffMaskHistoryFrames",
+        "diffMaskCloseSize"
+    });
 }
 
 void CameraGUI::on_motionDetectButton_toggled(bool checked)

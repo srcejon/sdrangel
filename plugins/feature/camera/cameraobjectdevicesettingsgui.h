@@ -22,7 +22,6 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QLineEdit>
-#include <QPushButton>
 #include <QTabWidget>
 #include <QWidget>
 
@@ -47,7 +46,6 @@ signals:
 
 private slots:
     void onDeviceSetChanged(const QString& text);
-    void onResetDefaultsClicked();
 
 private:
     void addDeviceSets();
@@ -66,7 +64,6 @@ private:
     QLineEdit *m_disappearCommandWidget;
     QLineEdit *m_detectSpeechWidget;
     QLineEdit *m_disappearSpeechWidget;
-    QPushButton *m_resetDefaultsButton;
     QChar m_currentPresetType;
     CameraSettings::ObjectDeviceSettings *m_devSettings;
 };

@@ -41,7 +41,6 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     m_disappearCommandWidget(new QLineEdit(this)),
     m_detectSpeechWidget(new QLineEdit(this)),
     m_disappearSpeechWidget(new QLineEdit(this)),
-    m_resetDefaultsButton(new QPushButton(tr("Reset defaults"), this)),
     m_currentPresetType('R'),
     m_devSettings(devSettings)
 {
@@ -78,8 +77,6 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     m_disappearSpeechWidget->setToolTip(tr("Speech to say when the selected object class disappears. Supports ${class}."));
     formLayout->addRow(tr("Disappear speech"), m_disappearSpeechWidget);
 
-    formLayout->addRow(QString(), m_resetDefaultsButton);
-
     addDeviceSets();
 
     int deviceSetIndex = m_deviceSetWidget->findData(devSettings->m_deviceSetIndex);
@@ -105,7 +102,6 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     connect(m_disappearCommandWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_detectSpeechWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_disappearSpeechWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
-    connect(m_resetDefaultsButton, &QPushButton::clicked, this, &CameraObjectDeviceSettingsGUI::onResetDefaultsClicked);
 }
 
 void CameraObjectDeviceSettingsGUI::addDeviceSets()
@@ -213,13 +209,6 @@ void CameraObjectDeviceSettingsGUI::onDeviceSetChanged(const QString& text)
         m_tab->setTabText(currentTabIndex, text);
     }
 
-    emit settingsChanged();
-}
-
-void CameraObjectDeviceSettingsGUI::onResetDefaultsClicked()
-{
-    CameraSettings::ObjectDeviceSettings defaults;
-    loadFromSettings(defaults);
     emit settingsChanged();
 }
 

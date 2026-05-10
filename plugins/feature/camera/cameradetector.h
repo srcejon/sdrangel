@@ -128,6 +128,7 @@ private:
     CameraPipelineFrame m_lastInputFrame;
     std::deque<cv::Mat> m_diffMaskHistory;
     cv::Ptr<cv::BackgroundSubtractor> m_bgSubtractor;
+    cv::Ptr<cv::BackgroundSubtractor> m_streakBgSubtractor;
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;
     int m_motionConfirmCount;
@@ -154,9 +155,10 @@ private:
     void processFrame(const CameraPipelineFramePtr& frame, const CameraPipelineFrame& diffReferenceFrame, bool updateInputHistory);
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
     [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createBackgroundSubtractor() const;
+    [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createStreakBackgroundSubtractor() const;
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
-    void applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame, QVector<CameraPipelineStreakDetection>& streakDetections, cv::Mat* debugMask = nullptr);
+    void applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, cv::Mat* debugMask = nullptr);
     [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);

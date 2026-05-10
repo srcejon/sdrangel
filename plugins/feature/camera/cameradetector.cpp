@@ -397,6 +397,7 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_lastInputFrame = CameraPipelineFrame();
             m_diffMaskHistory.clear();
             m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
+            m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
             m_lastMotionBoxes.clear();
             m_motionPersistenceRemaining = 0;
             m_motionConfirmCount = 0;
@@ -463,6 +464,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_lastInputFrame = CameraPipelineFrame();
         m_diffMaskHistory.clear();
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
+        m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
         m_motionConfirmCount = 0;
@@ -548,6 +550,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("detectionRoiWidth")
         || settingsKeys.contains("detectionRoiHeight"))
     {
+        m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
         m_lastStreakDetections.clear();
         m_streakPersistenceRemaining = 0;
     }
@@ -733,14 +736,11 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
         }
     }
 
-    if (m_settings.m_streakDetect && !diffReferenceFrame.m_image.isNull()
-        && diffReferenceFrame.m_image.width() == frame->m_image.width()
-        && diffReferenceFrame.m_image.height() == frame->m_image.height()) {
+    if (m_settings.m_streakDetect) {
         cv::Mat streakDebugMask;
         applyStreakDetection(
             bgrMat,
             detectionRoi,
-            diffReferenceFrame,
             frame->m_streakDetections,
             (m_settings.m_streakDebugView != CameraSettings::StreakDebugViewOff) ? &streakDebugMask : nullptr);
 
@@ -907,6 +907,14 @@ cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createBackgroundSubtractor() c
         m_settings.m_motionDetectShadows);
 }
 
+cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createStreakBackgroundSubtractor() const
+{
+    constexpr int streakHistory = 4;
+    constexpr double streakVarThreshold = 16.0;
+    constexpr bool streakDetectShadows = false;
+    return cv::createBackgroundSubtractorMOG2(streakHistory, streakVarThreshold, streakDetectShadows);
+}
+
 void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
 {
     PROFILER_START();
@@ -1007,20 +1015,12 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame, QVector<CameraPipelineStreakDetection>& streakDetections, cv::Mat* debugMask)
+void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, cv::Mat* debugMask)
 {
     PROFILER_START();
 
-    QImage convertedPrevRgb;
-    const QImage& prevRgb = ensureRgb888(diffReferenceFrame.m_image, convertedPrevRgb);
-    cv::Mat prevMat = wrapRgb888Image(prevRgb);
-    cv::Mat prevBgr;
-    cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
-
     cv::Mat currentGray;
-    cv::Mat previousGray;
     cv::cvtColor(bgrMat(roi), currentGray, cv::COLOR_BGR2GRAY);
-    cv::cvtColor(prevBgr(roi), previousGray, cv::COLOR_BGR2GRAY);
 
     const double downscale = m_settings.m_streakDownscale;
     if (downscale < 0.999)
@@ -1029,11 +1029,32 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
             std::max(1, static_cast<int>(std::lround(roi.width * downscale))),
             std::max(1, static_cast<int>(std::lround(roi.height * downscale))));
         cv::resize(currentGray, currentGray, downscaledSize, 0.0, 0.0, cv::INTER_AREA);
-        cv::resize(previousGray, previousGray, downscaledSize, 0.0, 0.0, cv::INTER_AREA);
     }
 
+    if (!m_streakBgSubtractor) {
+        m_streakBgSubtractor = createStreakBackgroundSubtractor();
+    }
+
+    cv::Mat backgroundGray;
+    m_streakBgSubtractor->getBackgroundImage(backgroundGray);
+
+    cv::Mat foregroundMask;
+    constexpr double streakLearningRate = 0.25;
+    m_streakBgSubtractor->apply(currentGray, foregroundMask, streakLearningRate);
+
     cv::Mat diff;
-    cv::absdiff(currentGray, previousGray, diff);
+    if (!backgroundGray.empty() && (backgroundGray.size() == currentGray.size()))
+    {
+        if (backgroundGray.type() != currentGray.type()) {
+            backgroundGray.convertTo(backgroundGray, currentGray.type());
+        }
+        cv::absdiff(currentGray, backgroundGray, diff);
+    }
+    else
+    {
+        diff = foregroundMask.clone();
+    }
+
     if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewDiff)) {
         double minValue = 0.0;
         double maxValue = 0.0;
@@ -1046,6 +1067,8 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
         }
     }
     cv::threshold(diff, diff, m_settings.m_streakThreshold, 255, cv::THRESH_BINARY);
+    cv::threshold(foregroundMask, foregroundMask, 126, 255, cv::THRESH_BINARY);
+    cv::bitwise_and(diff, foregroundMask, diff);
 
     cv::Mat exclusionMask = buildExclusionMask(roi, diff.size());
     cv::bitwise_and(diff, exclusionMask, diff);

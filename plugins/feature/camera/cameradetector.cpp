@@ -1114,6 +1114,7 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
         const double angleToleranceDegrees = 8.0;
         const double angleToleranceRadians = angleToleranceDegrees * CV_PI / 180.0;
         const double maxPerpendicularDistance = std::max(4.0, m_settings.m_streakMaxGap);
+        const double strongOverlapPerpendicularDistance = std::max(12.0, m_settings.m_streakMaxGap * 2.0);
         const double maxProjectedGap = std::max(12.0, m_settings.m_streakMaxGap * 2.0);
 
         auto canonicalDirection = [](const QLineF& line) -> QPointF
@@ -1161,6 +1162,21 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
             }
 
             return (bMin > aMax) ? (bMin - aMax) : (aMin - bMax);
+        };
+
+        auto projectedOverlap = [&](const QLineF& a, const QLineF& b) -> double
+        {
+            const QPointF direction = canonicalDirection(a);
+            const QPointF origin = a.p1();
+            const double a0 = dotProduct(a.p1() - origin, direction);
+            const double a1 = dotProduct(a.p2() - origin, direction);
+            const double b0 = dotProduct(b.p1() - origin, direction);
+            const double b1 = dotProduct(b.p2() - origin, direction);
+            const double aMin = std::min(a0, a1);
+            const double aMax = std::max(a0, a1);
+            const double bMin = std::min(b0, b1);
+            const double bMax = std::max(b0, b1);
+            return std::max(0.0, std::min(aMax, bMax) - std::max(aMin, bMin));
         };
 
         auto mergePair = [&](const CameraPipelineStreakDetection& first, const CameraPipelineStreakDetection& second) -> CameraPipelineStreakDetection
@@ -1218,7 +1234,12 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
                         continue;
                     }
 
-                    if (perpendicularDistance(first, second) > maxPerpendicularDistance) {
+                    const double perpendicular = perpendicularDistance(first, second);
+                    const double overlap = projectedOverlap(first, second);
+                    const double minLength = std::min(first.length(), second.length());
+                    const bool stronglyOverlapping = (minLength > 0.0) && (overlap >= minLength * 0.5);
+
+                    if (perpendicular > (stronglyOverlapping ? strongOverlapPerpendicularDistance : maxPerpendicularDistance)) {
                         continue;
                     }
 

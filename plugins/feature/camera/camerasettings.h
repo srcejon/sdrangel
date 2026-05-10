@@ -185,6 +185,8 @@ struct CameraSettings
     bool m_saveVideo;
     QString m_videoFileCameraPath;
     QString m_videoFileName;
+    bool m_videoLoop;
+    double m_videoPlaybackRate;
     bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported
     bool m_stackEnabled;
     int m_stackFrameCount;

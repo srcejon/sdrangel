@@ -1065,6 +1065,8 @@ void CameraGUI::displaySettings()
         qFuzzyCompare(m_settings.m_streakDownscale, 0.25) ? 2 : 0);
     settingsUI()->streakDebugViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakDebugView));
     settingsUI()->streakOverlayStyleCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakOverlayStyle));
+    ui->loopVideo->setChecked(m_settings.m_videoLoop);
+    ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
     m_showMotionExclusionRects = m_settings.m_showMotionExclusionRects;
     settingsUI()->motionExclusionShowButton->setChecked(m_showMotionExclusionRects);
     updateMotionExclusionRectsTable();
@@ -2306,7 +2308,8 @@ void CameraGUI::setupQtCapture()
         connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this, &CameraGUI::handleMediaPlayerDurationChanged);
         connect(m_mediaPlayer, &QMediaPlayer::playbackStateChanged, this, &CameraGUI::handleMediaPlayerPlaybackStateChanged);
         m_mediaPlayer->setSource(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath));
-        m_mediaPlayer->setPlaybackRate(ui->playbackRateSpin->value());
+        m_mediaPlayer->setLoops(m_settings.m_videoLoop ? QMediaPlayer::Infinite : 1);
+        m_mediaPlayer->setPlaybackRate(m_settings.m_videoPlaybackRate);
         m_mediaPlayer->play();
 
         m_qtZoomSupported = false;
@@ -3455,6 +3458,8 @@ void CameraGUI::on_playPauseVideo_clicked(bool checked)
 
 void CameraGUI::on_loopVideo_clicked(bool checked)
 {
+    m_settings.m_videoLoop = checked;
+    applySetting("videoLoop");
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     if (m_mediaPlayer)
     {
@@ -3479,6 +3484,8 @@ void CameraGUI::on_loopVideo_clicked(bool checked)
 
 void CameraGUI::on_playbackRateSpin_valueChanged(double value)
 {
+    m_settings.m_videoPlaybackRate = value;
+    applySetting("videoPlaybackRate");
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     if (m_mediaPlayer) {
         m_mediaPlayer->setPlaybackRate(value);

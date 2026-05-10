@@ -174,6 +174,8 @@ void CameraSettings::resetToDefaults()
     m_saveVideo = false;
     m_videoFileCameraPath.clear();
     m_videoFileName = "camera.mp4";
+    m_videoLoop = false;
+    m_videoPlaybackRate = 1.0;
     m_videoHwAcceleration = true;
     m_stackEnabled = false;
     m_stackFrameCount = 4;
@@ -332,6 +334,8 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(16, m_saveVideo);
     s.writeString(17, m_videoFileName);
     s.writeBool(18, m_videoHwAcceleration);
+    s.writeBool(188, m_videoLoop);
+    s.writeDouble(189, m_videoPlaybackRate);
     s.writeBool(130, m_stackEnabled);
     s.writeS32(131, m_stackFrameCount);
     s.writeS32(132, m_stackMethod);
@@ -831,6 +835,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_zoomFactor = std::max(1.0, m_zoomFactor);
 
         d.readString(115, &m_videoFileCameraPath, "");
+        d.readBool(188, &m_videoLoop, false);
+        d.readDouble(189, &m_videoPlaybackRate, 1.0);
+        m_videoPlaybackRate = qBound(0.1, m_videoPlaybackRate, 4.0);
 
         d.readBool(116, &m_useReverseAPI);
         d.readString(117, &m_reverseAPIAddress);
@@ -1063,6 +1070,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoFileCameraPath")) {
         m_videoFileCameraPath = settings.m_videoFileCameraPath;
+    }
+    if (settingsKeys.contains("videoLoop")) {
+        m_videoLoop = settings.m_videoLoop;
+    }
+    if (settingsKeys.contains("videoPlaybackRate")) {
+        m_videoPlaybackRate = qBound(0.1, settings.m_videoPlaybackRate, 4.0);
     }
     if (settingsKeys.contains("videoHwAcceleration")) {
         m_videoHwAcceleration = settings.m_videoHwAcceleration;
@@ -1614,6 +1627,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoFileCameraPath") || force) {
         ostr << " m_videoFileCameraPath: " << m_videoFileCameraPath.toStdString();
+    }
+    if (settingsKeys.contains("videoLoop") || force) {
+        ostr << " m_videoLoop: " << m_videoLoop;
+    }
+    if (settingsKeys.contains("videoPlaybackRate") || force) {
+        ostr << " m_videoPlaybackRate: " << m_videoPlaybackRate;
     }
     if (settingsKeys.contains("videoHwAcceleration") || force) {
         ostr << " m_videoHwAcceleration: " << m_videoHwAcceleration;

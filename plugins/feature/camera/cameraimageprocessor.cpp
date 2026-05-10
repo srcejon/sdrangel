@@ -118,7 +118,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "histogramStretchAsinhStrength",
         "histogramStretchLogStrength",
         "postProcessGreyscale",
-        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "edgeDisplayMode", "sobelEdge", "cannyEdge", "lineEnhancement", "flipX", "flipY",
+        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "edgeDisplayMode", "sobelEdge", "cannyEdge", "lineEnhancement", "ridgeDetection", "flipX", "flipY",
         "brightness", "contrast", "invertColors"
     };
     const bool imageProcessingChanged = force || std::any_of(kImageProcessingKeys.cbegin(), kImageProcessingKeys.cend(),
@@ -313,6 +313,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
     const bool needsCannyEdge = m_settings.m_cannyEdge > 1e-4;
     const bool needsLineEnhancement = m_settings.m_lineEnhancement > 1e-4;
+    const bool needsRidgeDetection = m_settings.m_ridgeDetection > 1e-4;
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
@@ -326,6 +327,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
         || needsSobelEdge
         || needsCannyEdge
         || needsLineEnhancement
+        || needsRidgeDetection
         || needsFlip
         || needsBrightContrast
         || needsGreyscale
@@ -353,6 +355,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     if (needsSobelEdge) { applySobelEdge(bgrMat); }
     if (needsCannyEdge) { applyCannyEdge(bgrMat); }
     if (needsLineEnhancement) { applyLineEnhancement(bgrMat); }
+    if (needsRidgeDetection) { applyRidgeDetection(bgrMat); }
     if (needsFlip) { applyFlip(bgrMat); }
     if (needsBrightContrast) { applyBrightnessContrast(bgrMat); }
     if (m_settings.m_invertColors) { applyInvertColors(bgrMat); }
@@ -787,6 +790,30 @@ void CameraImageProcessor::applyLineEnhancement(cv::Mat& bgrMat) const
         bgrMat = std::move(responseBgr);
     } else {
         cv::addWeighted(bgrMat, 1.0, responseBgr, m_settings.m_lineEnhancement, 0.0, bgrMat);
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyRidgeDetection(cv::Mat& bgrMat) const
+{
+    PROFILER_START();
+
+    cv::Mat grayMat;
+    cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
+
+    cv::Ptr<cv::ximgproc::RidgeDetectionFilter> ridgeFilter =
+        cv::ximgproc::RidgeDetectionFilter::create(CV_32FC1, 1, 1, 3, CV_8UC1, 1.0, 0.0);
+
+    cv::Mat ridgesGray;
+    ridgeFilter->getRidgeFilteredImage(grayMat, ridgesGray);
+
+    cv::Mat ridgesBgr;
+    cv::cvtColor(ridgesGray, ridgesBgr, cv::COLOR_GRAY2BGR);
+    if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
+        bgrMat = std::move(ridgesBgr);
+    } else {
+        cv::addWeighted(bgrMat, 1.0, ridgesBgr, m_settings.m_ridgeDetection, 0.0, bgrMat);
     }
 
     PROFILER_STOP(__FUNCTION__);

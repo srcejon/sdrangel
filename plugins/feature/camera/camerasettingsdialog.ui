@@ -2301,6 +2301,48 @@
             </property>
            </widget>
           </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="ridgeDetectionLabel">
+            <property name="text">
+             <string>Ridge Detection</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QSlider" name="ridgeDetectionSlider">
+            <property name="toolTip">
+             <string>Ridge detection blend amount</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>300</number>
+            </property>
+            <property name="value">
+             <number>0</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="2">
+           <widget class="QDoubleSpinBox" name="ridgeDetectionSpin">
+            <property name="toolTip">
+             <string>Ridge detection blend amount</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="maximum">
+             <double>3.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
@@ -5276,6 +5318,8 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>sharpenSpin</tabstop>
   <tabstop>sobelEdgeSlider</tabstop>
   <tabstop>sobelEdgeSpin</tabstop>
+  <tabstop>ridgeDetectionSlider</tabstop>
+  <tabstop>ridgeDetectionSpin</tabstop>
   <tabstop>flipXButton</tabstop>
   <tabstop>flipYButton</tabstop>
   <tabstop>defaultColorSettingsButton</tabstop>

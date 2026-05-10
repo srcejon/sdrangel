@@ -250,6 +250,7 @@ struct CameraSettings
     double m_sobelEdge;       ///< Sobel edge blend amount: 0.0..3.0
     double m_cannyEdge;       ///< Canny edge blend amount: 0.0..3.0
     double m_lineEnhancement; ///< Thin line enhancement amount: 0.0..3.0
+    double m_ridgeDetection;  ///< Ridge detection blend amount: 0.0..3.0
     bool m_flipX;             ///< Flip image horizontally
     bool m_flipY;             ///< Flip image vertically
     double m_brightness;      ///< Brightness adjustment: -100.0..100.0

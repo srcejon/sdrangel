@@ -4205,7 +4205,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
               <item row="0" column="3">
                <widget class="QSpinBox" name="streakThresholdSpin">
                 <property name="minimum">
-                 <number>1</number>
+                 <number>0</number>
                 </property>
                 <property name="maximum">
                  <number>255</number>

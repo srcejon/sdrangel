@@ -1325,7 +1325,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_streakDetect = settings.m_streakDetect;
     }
     if (settingsKeys.contains("streakThreshold")) {
-        m_streakThreshold = qBound(1, settings.m_streakThreshold, 255);
+        m_streakThreshold = qBound(0, settings.m_streakThreshold, 255);
     }
     if (settingsKeys.contains("streakMinLength")) {
         m_streakMinLength = qBound(1, settings.m_streakMinLength, 4096);

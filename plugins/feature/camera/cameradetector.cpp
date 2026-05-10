@@ -1035,7 +1035,15 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
     cv::Mat diff;
     cv::absdiff(currentGray, previousGray, diff);
     if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewDiff)) {
-        *debugMask = diff.clone();
+        double minValue = 0.0;
+        double maxValue = 0.0;
+        cv::minMaxLoc(diff, &minValue, &maxValue);
+        if (maxValue > minValue) {
+            cv::normalize(diff, *debugMask, 0, 255, cv::NORM_MINMAX);
+            debugMask->convertTo(*debugMask, CV_8UC1);
+        } else {
+            *debugMask = diff.clone();
+        }
     }
     cv::threshold(diff, diff, m_settings.m_streakThreshold, 255, cv::THRESH_BINARY);
 

@@ -824,7 +824,15 @@ void CameraPostProcessor::applyStreakOverlay(QImage& image, const QVector<Camera
 
     for (const CameraPipelineStreakDetection& detection : streakDetections)
     {
-        painter.drawLine(detection.m_line);
+        if (m_settings.m_streakOverlayStyle == CameraSettings::StreakOverlayStyleBoundingBoxes)
+        {
+            const QRectF box = QRectF(detection.m_line.p1(), detection.m_line.p2()).normalized();
+            painter.drawRect(box);
+        }
+        else
+        {
+            painter.drawLine(detection.m_line);
+        }
         const QPoint labelPoint = detection.m_line.p2().toPoint();
         drawOutlinedLabel(painter, image.rect(), labelPoint, detection.m_label, m_settings.m_streakColor, fontMetrics);
     }

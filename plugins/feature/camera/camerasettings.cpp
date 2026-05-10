@@ -280,6 +280,7 @@ void CameraSettings::resetToDefaults()
     m_streakPersistenceFrames = 1;
     m_streakDownscale = 0.5;
     m_streakDebugView = StreakDebugViewOff;
+    m_streakOverlayStyle = StreakOverlayStyleLines;
     m_streakColor = QColor(255, 255, 80);
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
@@ -430,6 +431,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(183, m_streakDownscale);
     s.writeU32(184, m_streakColor.rgba());
     s.writeS32(185, static_cast<qint32>(m_streakDebugView));
+    s.writeS32(187, static_cast<qint32>(m_streakOverlayStyle));
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -726,6 +728,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
             static_cast<qint32>(StreakDebugViewOff),
             streakDebugView,
             static_cast<qint32>(StreakDebugViewFinal)));
+        qint32 streakOverlayStyle = static_cast<qint32>(StreakOverlayStyleLines);
+        d.readS32(187, &streakOverlayStyle, static_cast<qint32>(StreakOverlayStyleLines));
+        m_streakOverlayStyle = static_cast<StreakOverlayStyle>(qBound(
+            static_cast<qint32>(StreakOverlayStyleLines),
+            streakOverlayStyle,
+            static_cast<qint32>(StreakOverlayStyleBoundingBoxes)));
         m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
         m_detectionRoiX = qBound(0, m_detectionRoiX, 4096);
         m_detectionRoiY = qBound(0, m_detectionRoiY, 4096);
@@ -1328,6 +1336,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             static_cast<qint32>(settings.m_streakDebugView),
             static_cast<qint32>(StreakDebugViewFinal)));
     }
+    if (settingsKeys.contains("streakOverlayStyle")) {
+        m_streakOverlayStyle = static_cast<StreakOverlayStyle>(qBound(
+            static_cast<qint32>(StreakOverlayStyleLines),
+            static_cast<qint32>(settings.m_streakOverlayStyle),
+            static_cast<qint32>(StreakOverlayStyleBoundingBoxes)));
+    }
     if (settingsKeys.contains("streakColor")) {
         m_streakColor = settings.m_streakColor;
     }
@@ -1849,6 +1863,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("streakDebugView") || force) {
         ostr << " m_streakDebugView: " << m_streakDebugView;
+    }
+    if (settingsKeys.contains("streakOverlayStyle") || force) {
+        ostr << " m_streakOverlayStyle: " << m_streakOverlayStyle;
     }
     if (settingsKeys.contains("streakColor") || force) {
         ostr << " m_streakColor: " << m_streakColor.name().toStdString();

@@ -278,6 +278,7 @@ struct CameraSettings
     int    m_motionPersistenceFrames; ///< Keep last motion boxes for this many frames after motion disappears: 0..120
     QColor m_motionBoxColor;    ///< Bounding box colour for motion contours
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
+    bool   m_showMotionExclusionRects; ///< Show motion exclusion rectangles on the preview image
     QList<QRect> m_motionExclusionRects; ///< Full-resolution exclusion rectangles for diff/motion detection
     bool   m_streakDetect;      ///< Enable streak detection for meteors/contrails
     int    m_streakThreshold;   ///< Binary threshold on frame-difference grayscale image

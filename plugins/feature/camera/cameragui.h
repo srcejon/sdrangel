@@ -118,6 +118,13 @@ public:
     QByteArray getGeometryBytes() const override { return m_settings.m_geometryBytes; }
 
 private:
+    enum PreviewDrawMode
+    {
+        PreviewDrawModeNone = 0,
+        PreviewDrawModeMotionExclusion,
+        PreviewDrawModeDetectionRoi
+    };
+
     enum CameraComboRole
     {
         CameraProtocolRole = Qt::UserRole,
@@ -201,10 +208,11 @@ private:
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
     QList<QGraphicsRectItem *> m_motionExclusionRectItems;
-    QGraphicsRectItem *m_motionExclusionDragItem = nullptr;
-    bool m_motionExclusionDrawMode = false;
-    bool m_motionExclusionDragging = false;
-    QPoint m_motionExclusionDragStartImagePos;
+    QGraphicsRectItem *m_detectionRoiRectItem = nullptr;
+    QGraphicsRectItem *m_previewDrawRectItem = nullptr;
+    PreviewDrawMode m_previewDrawMode = PreviewDrawModeNone;
+    bool m_previewDragging = false;
+    QPoint m_previewDragStartImagePos;
 
     // Qt camera code appears to need to be on GUI thread. Would hang on clean up in the worker thread.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -241,7 +249,9 @@ private:
     void updateMotionExclusionRectsTable();
     void applyMotionExclusionRectsFromTable();
     void updateMotionExclusionPreview();
+    void setPreviewDrawMode(PreviewDrawMode mode);
     void setMotionExclusionDrawMode(bool enabled);
+    void setDetectionRoiDrawMode(bool enabled);
     QPoint mapViewportPointToImage(const QPoint& viewportPos) const;
     void populateGs232ControllerCombo();
     void applyPositionSync();
@@ -479,6 +489,7 @@ private slots:
     void on_detectionRoiYSpin_valueChanged(int value);
     void on_detectionRoiWidthSpin_valueChanged(int value);
     void on_detectionRoiHeightSpin_valueChanged(int value);
+    void on_detectionRoiDrawButton_clicked();
     void on_motionDetectButton_toggled(bool checked);
     void on_motionBackgroundSubtractorCombo_currentIndexChanged(int index);
     void on_motionMaskViewCombo_currentIndexChanged(int index);

@@ -1064,6 +1064,7 @@ void CameraGUI::displaySettings()
         qFuzzyCompare(m_settings.m_streakDownscale, 0.5) ? 1 :
         qFuzzyCompare(m_settings.m_streakDownscale, 0.25) ? 2 : 0);
     settingsUI()->streakDebugViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakDebugView));
+    m_showMotionExclusionRects = m_settings.m_showMotionExclusionRects;
     settingsUI()->motionExclusionShowButton->setChecked(m_showMotionExclusionRects);
     updateMotionExclusionRectsTable();
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
@@ -1435,6 +1436,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->detectionRoiYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiYSpin_valueChanged);
     QObject::connect(settingsUI()->detectionRoiWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiWidthSpin_valueChanged);
     QObject::connect(settingsUI()->detectionRoiHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiHeightSpin_valueChanged);
+    QObject::connect(settingsUI()->detectionRoiDrawButton, &QToolButton::clicked, this, &CameraGUI::on_detectionRoiDrawButton_clicked);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
     QObject::connect(settingsUI()->motionBackgroundSubtractorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged);
     QObject::connect(settingsUI()->motionMaskViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionMaskViewCombo_currentIndexChanged);
@@ -4296,43 +4298,81 @@ void CameraGUI::updateMotionExclusionPreview()
     }
     m_motionExclusionRectItems.clear();
 
-    if (m_lastImage.isNull() || !m_showMotionExclusionRects) {
+    if (m_detectionRoiRectItem)
+    {
+        m_imageScene->removeItem(m_detectionRoiRectItem);
+        delete m_detectionRoiRectItem;
+        m_detectionRoiRectItem = nullptr;
+    }
+
+    if (m_lastImage.isNull()) {
         return;
     }
 
-    QPen pen(QColor(255, 215, 0));
-    pen.setWidth(2);
-    pen.setStyle(Qt::DashLine);
-
     const QRect imageBounds(0, 0, m_lastImage.width(), m_lastImage.height());
 
-    for (const QRect& rect : m_settings.m_motionExclusionRects)
+    if (m_showMotionExclusionRects)
     {
-        const QRect clipped = rect.intersected(imageBounds);
-        if (!clipped.isValid() || clipped.isEmpty()) {
-            continue;
-        }
+        QPen pen(QColor(255, 215, 0));
+        pen.setWidth(2);
+        pen.setStyle(Qt::DashLine);
 
-        QGraphicsRectItem *item = m_imageScene->addRect(QRectF(clipped), pen);
-        item->setZValue(1.0);
-        m_motionExclusionRectItems.append(item);
+        for (const QRect& rect : m_settings.m_motionExclusionRects)
+        {
+            const QRect clipped = rect.intersected(imageBounds);
+            if (!clipped.isValid() || clipped.isEmpty()) {
+                continue;
+            }
+
+            QGraphicsRectItem *item = m_imageScene->addRect(QRectF(clipped), pen);
+            item->setZValue(1.0);
+            m_motionExclusionRectItems.append(item);
+        }
     }
+
+    if ((m_settings.m_detectionRoiWidth > 0) && (m_settings.m_detectionRoiHeight > 0))
+    {
+        const QRect clipped = QRect(
+            m_settings.m_detectionRoiX,
+            m_settings.m_detectionRoiY,
+            m_settings.m_detectionRoiWidth,
+            m_settings.m_detectionRoiHeight).intersected(imageBounds);
+        if (clipped.isValid() && !clipped.isEmpty())
+        {
+            QPen roiPen(QColor(0, 220, 255));
+            roiPen.setWidth(2);
+            roiPen.setStyle(Qt::DashLine);
+            m_detectionRoiRectItem = m_imageScene->addRect(QRectF(clipped), roiPen);
+            m_detectionRoiRectItem->setZValue(1.1);
+        }
+    }
+}
+
+void CameraGUI::setPreviewDrawMode(PreviewDrawMode mode)
+{
+    m_previewDrawMode = mode;
+    m_previewDragging = false;
+
+    if ((mode == PreviewDrawModeNone) && m_previewDrawRectItem)
+    {
+        m_imageScene->removeItem(m_previewDrawRectItem);
+        delete m_previewDrawRectItem;
+        m_previewDrawRectItem = nullptr;
+    }
+
+    const bool drawing = mode != PreviewDrawModeNone;
+    ui->imageView->setDragMode(drawing ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
+    ui->imageView->viewport()->setCursor(drawing ? Qt::CrossCursor : Qt::ArrowCursor);
 }
 
 void CameraGUI::setMotionExclusionDrawMode(bool enabled)
 {
-    m_motionExclusionDrawMode = enabled;
-    m_motionExclusionDragging = false;
+    setPreviewDrawMode(enabled ? PreviewDrawModeMotionExclusion : PreviewDrawModeNone);
+}
 
-    if (!enabled && m_motionExclusionDragItem)
-    {
-        m_imageScene->removeItem(m_motionExclusionDragItem);
-        delete m_motionExclusionDragItem;
-        m_motionExclusionDragItem = nullptr;
-    }
-
-    ui->imageView->setDragMode(enabled ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
-    ui->imageView->viewport()->setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+void CameraGUI::setDetectionRoiDrawMode(bool enabled)
+{
+    setPreviewDrawMode(enabled ? PreviewDrawModeDetectionRoi : PreviewDrawModeNone);
 }
 
 QPoint CameraGUI::mapViewportPointToImage(const QPoint& viewportPos) const
@@ -4980,25 +5020,34 @@ void CameraGUI::on_overlayTextFontScaleSpin_valueChanged(double value)
 void CameraGUI::on_detectionRoiXSpin_valueChanged(int value)
 {
     m_settings.m_detectionRoiX = value;
+    updateMotionExclusionPreview();
     applySetting("detectionRoiX");
 }
 
 void CameraGUI::on_detectionRoiYSpin_valueChanged(int value)
 {
     m_settings.m_detectionRoiY = value;
+    updateMotionExclusionPreview();
     applySetting("detectionRoiY");
 }
 
 void CameraGUI::on_detectionRoiWidthSpin_valueChanged(int value)
 {
     m_settings.m_detectionRoiWidth = value;
+    updateMotionExclusionPreview();
     applySetting("detectionRoiWidth");
 }
 
 void CameraGUI::on_detectionRoiHeightSpin_valueChanged(int value)
 {
     m_settings.m_detectionRoiHeight = value;
+    updateMotionExclusionPreview();
     applySetting("detectionRoiHeight");
+}
+
+void CameraGUI::on_detectionRoiDrawButton_clicked()
+{
+    setDetectionRoiDrawMode(true);
 }
 
 void CameraGUI::on_motionDetectButton_toggled(bool checked)
@@ -5175,7 +5224,9 @@ void CameraGUI::on_motionExclusionRemoveButton_clicked()
 void CameraGUI::on_motionExclusionShowButton_toggled(bool checked)
 {
     m_showMotionExclusionRects = checked;
+    m_settings.m_showMotionExclusionRects = checked;
     updateMotionExclusionPreview();
+    applySetting("showMotionExclusionRects");
 }
 
 void CameraGUI::on_motionExclusionTable_itemChanged(QTableWidgetItem *item)
@@ -5453,75 +5504,103 @@ bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
             return true;
         }
 
-        if (m_motionExclusionDrawMode)
+        if (m_previewDrawMode != PreviewDrawModeNone)
         {
             if (event->type() == QEvent::MouseButtonPress)
             {
                 const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
                 if (mouseEvent->button() == Qt::LeftButton)
                 {
-                    m_motionExclusionDragStartImagePos = mapViewportPointToImage(mouseEvent->pos());
-                    if (m_motionExclusionDragStartImagePos.x() < 0) {
+                    m_previewDragStartImagePos = mapViewportPointToImage(mouseEvent->pos());
+                    if (m_previewDragStartImagePos.x() < 0) {
                         return true;
                     }
 
-                    m_motionExclusionDragging = true;
+                    m_previewDragging = true;
 
-                    if (!m_motionExclusionDragItem)
+                    if (!m_previewDrawRectItem)
                     {
                         QPen pen(QColor(255, 255, 0));
                         pen.setWidth(2);
                         pen.setStyle(Qt::DashLine);
-                        m_motionExclusionDragItem = m_imageScene->addRect(QRectF(), pen);
-                        m_motionExclusionDragItem->setZValue(2.0);
+                        m_previewDrawRectItem = m_imageScene->addRect(QRectF(), pen);
+                        m_previewDrawRectItem->setZValue(2.0);
                     }
 
-                    m_motionExclusionDragItem->setRect(QRectF(
-                        QPointF(m_motionExclusionDragStartImagePos),
+                    m_previewDrawRectItem->setRect(QRectF(
+                        QPointF(m_previewDragStartImagePos),
                         QSizeF(1.0, 1.0)));
                     return true;
                 }
                 if (mouseEvent->button() == Qt::RightButton)
                 {
-                    setMotionExclusionDrawMode(false);
+                    setPreviewDrawMode(PreviewDrawModeNone);
                     return true;
                 }
             }
             else if (event->type() == QEvent::MouseMove)
             {
                 const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-                if (m_motionExclusionDragging && m_motionExclusionDragItem)
+                if (m_previewDragging && m_previewDrawRectItem)
                 {
                     const QPoint current = mapViewportPointToImage(mouseEvent->pos());
                     const QRect rect(
-                        QPoint(std::min(m_motionExclusionDragStartImagePos.x(), current.x()),
-                               std::min(m_motionExclusionDragStartImagePos.y(), current.y())),
-                        QPoint(std::max(m_motionExclusionDragStartImagePos.x(), current.x()),
-                               std::max(m_motionExclusionDragStartImagePos.y(), current.y())));
-                    m_motionExclusionDragItem->setRect(QRectF(rect));
+                        QPoint(std::min(m_previewDragStartImagePos.x(), current.x()),
+                               std::min(m_previewDragStartImagePos.y(), current.y())),
+                        QPoint(std::max(m_previewDragStartImagePos.x(), current.x()),
+                               std::max(m_previewDragStartImagePos.y(), current.y())));
+                    m_previewDrawRectItem->setRect(QRectF(rect));
                     return true;
                 }
             }
             else if (event->type() == QEvent::MouseButtonRelease)
             {
                 const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-                if (m_motionExclusionDragging && mouseEvent->button() == Qt::LeftButton)
+                if (m_previewDragging && mouseEvent->button() == Qt::LeftButton)
                 {
-                    m_motionExclusionDragging = false;
+                    m_previewDragging = false;
                     const QPoint end = mapViewportPointToImage(mouseEvent->pos());
-                    const int left = std::min(m_motionExclusionDragStartImagePos.x(), end.x());
-                    const int top = std::min(m_motionExclusionDragStartImagePos.y(), end.y());
-                    const int width = std::abs(end.x() - m_motionExclusionDragStartImagePos.x()) + 1;
-                    const int height = std::abs(end.y() - m_motionExclusionDragStartImagePos.y()) + 1;
+                    const int left = std::min(m_previewDragStartImagePos.x(), end.x());
+                    const int top = std::min(m_previewDragStartImagePos.y(), end.y());
+                    const int width = std::abs(end.x() - m_previewDragStartImagePos.x()) + 1;
+                    const int height = std::abs(end.y() - m_previewDragStartImagePos.y()) + 1;
 
-                    setMotionExclusionDrawMode(false);
+                    const PreviewDrawMode completedMode = m_previewDrawMode;
+
+                    setPreviewDrawMode(PreviewDrawModeNone);
 
                     if ((width > 1) && (height > 1))
                     {
-                        m_settings.m_motionExclusionRects.append(QRect(left, top, width, height));
-                        updateMotionExclusionRectsTable();
-                        settingsUI()->motionExclusionTable->selectRow(settingsUI()->motionExclusionTable->rowCount() - 1);
-                        applySetting("motionExclusionRects");
+                        if (completedMode == PreviewDrawModeMotionExclusion)
+                        {
+                            m_settings.m_motionExclusionRects.append(QRect(left, top, width, height));
+                            updateMotionExclusionRectsTable();
+                            settingsUI()->motionExclusionTable->selectRow(settingsUI()->motionExclusionTable->rowCount() - 1);
+                            applySetting("motionExclusionRects");
+                        }
+                        else if (completedMode == PreviewDrawModeDetectionRoi)
+                        {
+                            m_settings.m_detectionRoiX = left;
+                            m_settings.m_detectionRoiY = top;
+                            m_settings.m_detectionRoiWidth = width;
+                            m_settings.m_detectionRoiHeight = height;
+
+                            settingsUI()->detectionRoiXSpin->blockSignals(true);
+                            settingsUI()->detectionRoiYSpin->blockSignals(true);
+                            settingsUI()->detectionRoiWidthSpin->blockSignals(true);
+                            settingsUI()->detectionRoiHeightSpin->blockSignals(true);
+                            settingsUI()->detectionRoiXSpin->setValue(left);
+                            settingsUI()->detectionRoiYSpin->setValue(top);
+                            settingsUI()->detectionRoiWidthSpin->setValue(width);
+                            settingsUI()->detectionRoiHeightSpin->setValue(height);
+                            settingsUI()->detectionRoiXSpin->blockSignals(false);
+                            settingsUI()->detectionRoiYSpin->blockSignals(false);
+                            settingsUI()->detectionRoiWidthSpin->blockSignals(false);
+                            settingsUI()->detectionRoiHeightSpin->blockSignals(false);
+
+                            updateMotionExclusionPreview();
+                            applySettings({"detectionRoiX", "detectionRoiY", "detectionRoiWidth", "detectionRoiHeight"});
+                        }
                     }
 
                     return true;

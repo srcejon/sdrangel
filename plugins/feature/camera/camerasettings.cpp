@@ -270,6 +270,7 @@ void CameraSettings::resetToDefaults()
     m_motionPersistenceFrames = 0;
     m_motionBoxColor = Qt::red;
     m_minContourArea = 100;
+    m_showMotionExclusionRects = true;
     m_motionExclusionRects.clear();
     m_streakDetect = false;
     m_streakThreshold = 24;
@@ -419,6 +420,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(172, m_motionConfirmFrames);
     s.writeDouble(173, m_motionDownscale);
     s.writeBlob(174, serializeMotionExclusionRects(m_motionExclusionRects));
+    s.writeBool(186, m_showMotionExclusionRects);
     s.writeBool(177, m_streakDetect);
     s.writeS32(178, m_streakThreshold);
     s.writeS32(179, m_streakMinLength);
@@ -707,6 +709,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(67, &m_minContourArea, 100);
         d.readBlob(174, &bytetmp);
         deserializeMotionExclusionRects(bytetmp, m_motionExclusionRects);
+        d.readBool(186, &m_showMotionExclusionRects, true);
         d.readBool(177, &m_streakDetect, false);
         d.readS32(178, &m_streakThreshold, 24);
         d.readS32(179, &m_streakMinLength, 80);
@@ -1294,6 +1297,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("motionExclusionRects")) {
         m_motionExclusionRects = settings.m_motionExclusionRects;
     }
+    if (settingsKeys.contains("showMotionExclusionRects")) {
+        m_showMotionExclusionRects = settings.m_showMotionExclusionRects;
+    }
     if (settingsKeys.contains("streakDetect")) {
         m_streakDetect = settings.m_streakDetect;
     }
@@ -1816,6 +1822,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("motionExclusionRects") || force) {
         ostr << " m_motionExclusionRects: " << m_motionExclusionRects.size();
+    }
+    if (settingsKeys.contains("showMotionExclusionRects") || force) {
+        ostr << " m_showMotionExclusionRects: " << m_showMotionExclusionRects;
     }
     if (settingsKeys.contains("streakDetect") || force) {
         ostr << " m_streakDetect: " << m_streakDetect;

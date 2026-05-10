@@ -41,6 +41,7 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     m_disappearCommandWidget(new QLineEdit(this)),
     m_detectSpeechWidget(new QLineEdit(this)),
     m_disappearSpeechWidget(new QLineEdit(this)),
+    m_resetDefaultsButton(new QPushButton(tr("Reset defaults"), this)),
     m_currentPresetType('R'),
     m_devSettings(devSettings)
 {
@@ -53,37 +54,31 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     m_presetWidget->setToolTip(tr("Preset to load when the selected object class is detected"));
     formLayout->addRow(tr("Preset"), m_presetWidget);
 
-    m_startOnDetectWidget->setChecked(devSettings->m_startOnDetect);
     m_startOnDetectWidget->setToolTip(tr("Start acquisition when the selected object class is detected"));
     formLayout->addRow(tr("Start acquisition on detection"), m_startOnDetectWidget);
 
-    m_stopOnDisappearWidget->setChecked(devSettings->m_stopOnDisappear);
     m_stopOnDisappearWidget->setToolTip(tr("Stop acquisition when the selected object class disappears"));
     formLayout->addRow(tr("Stop acquisition on disappearance"), m_stopOnDisappearWidget);
 
-    m_startStopFileSinkWidget->setChecked(devSettings->m_startStopFileSink);
     m_startStopFileSinkWidget->setToolTip(tr("Start file sinks on detection and stop them on disappearance"));
     formLayout->addRow(tr("Start/stop file sinks"), m_startStopFileSinkWidget);
 
-    m_recordVideoWidget->setChecked(devSettings->m_recordVideo);
     m_recordVideoWidget->setToolTip(tr("Start recording video on detection and stop when the object disappears"));
     formLayout->addRow(tr("Record video on detection"), m_recordVideoWidget);
 
-    m_detectCommandWidget->setText(devSettings->m_detectCommand);
     m_detectCommandWidget->setToolTip(tr("Command to execute when the selected object class is detected"));
     formLayout->addRow(tr("Detect command"), m_detectCommandWidget);
 
-    m_disappearCommandWidget->setText(devSettings->m_disappearCommand);
     m_disappearCommandWidget->setToolTip(tr("Command to execute when the selected object class disappears"));
     formLayout->addRow(tr("Disappear command"), m_disappearCommandWidget);
 
-    m_detectSpeechWidget->setText(devSettings->m_detectSpeech);
     m_detectSpeechWidget->setToolTip(tr("Speech to say when the selected object class is detected. Supports ${class}."));
     formLayout->addRow(tr("Detect speech"), m_detectSpeechWidget);
 
-    m_disappearSpeechWidget->setText(devSettings->m_disappearSpeech);
     m_disappearSpeechWidget->setToolTip(tr("Speech to say when the selected object class disappears. Supports ${class}."));
     formLayout->addRow(tr("Disappear speech"), m_disappearSpeechWidget);
+
+    formLayout->addRow(QString(), m_resetDefaultsButton);
 
     addDeviceSets();
 
@@ -98,6 +93,8 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
         onDeviceSetChanged(m_deviceSetWidget->currentText());
     }
 
+    loadFromSettings(*devSettings);
+
     connect(m_deviceSetWidget, &QComboBox::currentTextChanged, this, &CameraObjectDeviceSettingsGUI::onDeviceSetChanged);
     connect(m_presetWidget, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_startOnDetectWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
@@ -108,6 +105,7 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     connect(m_disappearCommandWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_detectSpeechWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_disappearSpeechWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_resetDefaultsButton, &QPushButton::clicked, this, &CameraObjectDeviceSettingsGUI::onResetDefaultsClicked);
 }
 
 void CameraObjectDeviceSettingsGUI::addDeviceSets()
@@ -216,6 +214,37 @@ void CameraObjectDeviceSettingsGUI::onDeviceSetChanged(const QString& text)
     }
 
     emit settingsChanged();
+}
+
+void CameraObjectDeviceSettingsGUI::onResetDefaultsClicked()
+{
+    CameraSettings::ObjectDeviceSettings defaults;
+    loadFromSettings(defaults);
+    emit settingsChanged();
+}
+
+void CameraObjectDeviceSettingsGUI::loadFromSettings(const CameraSettings::ObjectDeviceSettings& settings)
+{
+    const int deviceSetIndex = m_deviceSetWidget->findData(settings.m_deviceSetIndex);
+    if (deviceSetIndex >= 0) {
+        m_deviceSetWidget->setCurrentIndex(deviceSetIndex);
+    } else if (m_deviceSetWidget->count() > 0) {
+        m_deviceSetWidget->setCurrentIndex(0);
+    }
+
+    m_startOnDetectWidget->setChecked(settings.m_startOnDetect);
+    m_stopOnDisappearWidget->setChecked(settings.m_stopOnDisappear);
+    m_startStopFileSinkWidget->setChecked(settings.m_startStopFileSink);
+    m_recordVideoWidget->setChecked(settings.m_recordVideo);
+    m_detectCommandWidget->setText(settings.m_detectCommand);
+    m_disappearCommandWidget->setText(settings.m_disappearCommand);
+    m_detectSpeechWidget->setText(settings.m_detectSpeech);
+    m_disappearSpeechWidget->setText(settings.m_disappearSpeech);
+
+    m_devSettings->m_presetGroup = settings.m_presetGroup;
+    m_devSettings->m_presetFrequency = settings.m_presetFrequency;
+    m_devSettings->m_presetDescription = settings.m_presetDescription;
+    addPresets(m_currentPresetType);
 }
 
 void CameraObjectDeviceSettingsGUI::accept()

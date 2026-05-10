@@ -4542,7 +4542,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="3" column="3">
+         <item row="3" column="3">
            <widget class="QSpinBox" name="detectionRoiHeightSpin">
             <property name="toolTip">
              <string>Height of the detection region of interest. 0 uses the full frame height.</string>
@@ -4552,6 +4552,16 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
             <property name="maximum">
              <number>4096</number>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0" colspan="4">
+           <widget class="QToolButton" name="detectionRoiDrawButton">
+            <property name="toolTip">
+             <string>Draw the detection ROI directly on the preview image</string>
+            </property>
+            <property name="text">
+             <string>Draw On Preview</string>
             </property>
            </widget>
           </item>

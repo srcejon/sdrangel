@@ -452,6 +452,7 @@ void StarTrackerWorker::sendToMap(
         swgMapItem->setName(new QString(name));
         swgMapItem->setLatitude(lat);
         swgMapItem->setLongitude(lon);
+        swgMapItem->setAltitude(250000000); // Moon - Camera feature needs this to be non-zero
         swgMapItem->setImage(new QString(image));
         swgMapItem->setImageRotation(rotation);
         swgMapItem->setText(new QString(text));

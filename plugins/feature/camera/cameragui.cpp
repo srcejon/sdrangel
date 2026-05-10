@@ -1063,6 +1063,7 @@ void CameraGUI::displaySettings()
     settingsUI()->streakDownscaleCombo->setCurrentIndex(
         qFuzzyCompare(m_settings.m_streakDownscale, 0.5) ? 1 :
         qFuzzyCompare(m_settings.m_streakDownscale, 0.25) ? 2 : 0);
+    settingsUI()->streakDebugViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakDebugView));
     settingsUI()->motionExclusionShowButton->setChecked(m_showMotionExclusionRects);
     updateMotionExclusionRectsTable();
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
@@ -1455,6 +1456,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->streakMaxGapSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_streakMaxGapSpin_valueChanged);
     QObject::connect(settingsUI()->streakPersistenceFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_streakPersistenceFramesSpin_valueChanged);
     QObject::connect(settingsUI()->streakDownscaleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_streakDownscaleCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->streakDebugViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_streakDebugViewCombo_currentIndexChanged);
     QObject::connect(settingsUI()->streakColorButton, &QToolButton::clicked, this, &CameraGUI::on_streakColorButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
     QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
@@ -5129,6 +5131,12 @@ void CameraGUI::on_streakDownscaleCombo_currentIndexChanged(int index)
 {
     m_settings.m_streakDownscale = index == 1 ? 0.5 : index == 2 ? 0.25 : 1.0;
     applySetting("streakDownscale");
+}
+
+void CameraGUI::on_streakDebugViewCombo_currentIndexChanged(int index)
+{
+    m_settings.m_streakDebugView = static_cast<CameraSettings::StreakDebugView>(index);
+    applySetting("streakDebugView");
 }
 
 void CameraGUI::on_streakColorButton_clicked()

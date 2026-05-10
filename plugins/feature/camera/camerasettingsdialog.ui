@@ -4258,13 +4258,30 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </widget>
          </item>
          <item row="3" column="2">
+          <widget class="QLabel" name="streakDebugViewLabel">
+           <property name="text">
+            <string>Debug view</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="3">
+          <widget class="QComboBox" name="streakDebugViewCombo">
+           <item><property name="text"><string>Off</string></property></item>
+           <item><property name="text"><string>Diff</string></property></item>
+           <item><property name="text"><string>Thresholded</string></property></item>
+           <item><property name="text"><string>Edges</string></property></item>
+           <item><property name="text"><string>Lines</string></property></item>
+           <item><property name="text"><string>Final</string></property></item>
+          </widget>
+         </item>
+         <item row="4" column="2">
           <widget class="QLabel" name="streakColorLabel">
            <property name="text">
             <string>Colour</string>
            </property>
           </widget>
          </item>
-         <item row="3" column="3">
+         <item row="4" column="3">
           <widget class="QToolButton" name="streakColorButton">
            <property name="text">
             <string/>

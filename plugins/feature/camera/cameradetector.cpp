@@ -601,6 +601,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("streakPersistenceFrames")
         || settingsKeys.contains("streakDownscale")
         || settingsKeys.contains("streakColor")
+        || settingsKeys.contains("streakDebugView")
         || settingsKeys.contains("detectionRoiX")
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
@@ -735,7 +736,28 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     if (m_settings.m_streakDetect && !diffReferenceFrame.m_image.isNull()
         && diffReferenceFrame.m_image.width() == frame->m_image.width()
         && diffReferenceFrame.m_image.height() == frame->m_image.height()) {
-        applyStreakDetection(bgrMat, detectionRoi, diffReferenceFrame, frame->m_streakDetections);
+        cv::Mat streakDebugMask;
+        applyStreakDetection(
+            bgrMat,
+            detectionRoi,
+            diffReferenceFrame,
+            frame->m_streakDetections,
+            (m_settings.m_streakDebugView != CameraSettings::StreakDebugViewOff) ? &streakDebugMask : nullptr);
+
+        if (!streakDebugMask.empty())
+        {
+            cv::Mat maskCanvas = cv::Mat::zeros(bgrMat.size(), streakDebugMask.type());
+            cv::Mat roiMask = streakDebugMask;
+            if (streakDebugMask.size() != detectionRoi.size()) {
+                cv::resize(streakDebugMask, roiMask, detectionRoi.size(), 0.0, 0.0, cv::INTER_NEAREST);
+            }
+            roiMask.copyTo(maskCanvas(detectionRoi));
+            if (maskCanvas.channels() == 1) {
+                cv::cvtColor(maskCanvas, bgrMat, cv::COLOR_GRAY2BGR);
+            } else {
+                bgrMat = maskCanvas;
+            }
+        }
     }
 
     if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
@@ -985,7 +1007,7 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame, QVector<CameraPipelineStreakDetection>& streakDetections)
+void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame, QVector<CameraPipelineStreakDetection>& streakDetections, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -1012,13 +1034,22 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
 
     cv::Mat diff;
     cv::absdiff(currentGray, previousGray, diff);
+    if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewDiff)) {
+        *debugMask = diff.clone();
+    }
     cv::threshold(diff, diff, m_settings.m_streakThreshold, 255, cv::THRESH_BINARY);
 
     cv::Mat exclusionMask = buildExclusionMask(roi, diff.size());
     cv::bitwise_and(diff, exclusionMask, diff);
+    if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewThresholded)) {
+        *debugMask = diff.clone();
+    }
 
     cv::Mat edges;
     cv::Canny(diff, edges, std::max(1, m_settings.m_streakThreshold / 2), std::max(2, m_settings.m_streakThreshold));
+    if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewEdges)) {
+        *debugMask = edges.clone();
+    }
 
     std::vector<cv::Vec4i> lines;
     cv::HoughLinesP(
@@ -1029,6 +1060,25 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
         std::max(1, m_settings.m_streakHoughThreshold),
         std::max(1, m_settings.m_streakMinLength),
         std::max(0.0, m_settings.m_streakMaxGap));
+
+    cv::Mat lineMask;
+    if (debugMask && ((m_settings.m_streakDebugView == CameraSettings::StreakDebugViewLines)
+        || (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewFinal)))
+    {
+        lineMask = cv::Mat::zeros(edges.size(), CV_8UC1);
+        for (const cv::Vec4i& line : lines) {
+            cv::line(
+                lineMask,
+                cv::Point(line[0], line[1]),
+                cv::Point(line[2], line[3]),
+                cv::Scalar(255),
+                2,
+                cv::LINE_AA);
+        }
+        if (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewLines) {
+            *debugMask = lineMask.clone();
+        }
+    }
 
     QVector<CameraPipelineStreakDetection> detections;
     detections.reserve(static_cast<qsizetype>(lines.size()));
@@ -1068,6 +1118,35 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
     } else {
         m_lastStreakDetections.clear();
         m_streakPersistenceRemaining = 0;
+    }
+
+    if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewFinal))
+    {
+        if (lineMask.empty()) {
+            lineMask = cv::Mat::zeros(edges.size(), CV_8UC1);
+        } else {
+            lineMask = lineMask.clone();
+        }
+
+        for (const CameraPipelineStreakDetection& detection : detections)
+        {
+            QPointF p1 = detection.m_line.p1() - QPointF(roi.x, roi.y);
+            QPointF p2 = detection.m_line.p2() - QPointF(roi.x, roi.y);
+            if (downscale < 0.999) {
+                p1 *= downscale;
+                p2 *= downscale;
+            }
+
+            cv::line(
+                lineMask,
+                cv::Point(cvRound(p1.x()), cvRound(p1.y())),
+                cv::Point(cvRound(p2.x()), cvRound(p2.y())),
+                cv::Scalar(255),
+                3,
+                cv::LINE_AA);
+        }
+
+        *debugMask = lineMask;
     }
 
     streakDetections = detections;

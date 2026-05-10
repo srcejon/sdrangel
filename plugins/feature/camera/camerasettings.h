@@ -102,6 +102,16 @@ struct CameraSettings
         MotionMaskViewFinal
     };
 
+    enum StreakDebugView
+    {
+        StreakDebugViewOff = 0,
+        StreakDebugViewDiff,
+        StreakDebugViewThresholded,
+        StreakDebugViewEdges,
+        StreakDebugViewLines,
+        StreakDebugViewFinal
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -276,6 +286,7 @@ struct CameraSettings
     double m_streakMaxGap;      ///< Maximum line gap in pixels for HoughLinesP
     int    m_streakPersistenceFrames; ///< Keep last streaks for this many frames after they disappear
     double m_streakDownscale;   ///< Downscale factor for streak detection path: 1.0, 0.5, 0.25
+    StreakDebugView m_streakDebugView; ///< Optional debug view of streak detection stages
     QColor m_streakColor;       ///< Overlay colour for streak detections
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 

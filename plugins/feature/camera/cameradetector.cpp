@@ -539,11 +539,6 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
 
     if (force
         || settingsKeys.contains("streakDetect")
-        || settingsKeys.contains("streakThreshold")
-        || settingsKeys.contains("streakMinLength")
-        || settingsKeys.contains("streakHoughThreshold")
-        || settingsKeys.contains("streakMaxGap")
-        || settingsKeys.contains("streakPersistenceFrames")
         || settingsKeys.contains("streakDownscale")
         || settingsKeys.contains("detectionRoiX")
         || settingsKeys.contains("detectionRoiY")

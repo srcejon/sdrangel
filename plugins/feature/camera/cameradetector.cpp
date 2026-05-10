@@ -493,6 +493,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
     if (force
         || settingsKeys.contains("motionDetect")
         || settingsKeys.contains("motionBackgroundSubtractor")
+        || settingsKeys.contains("motionMaskView")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
         || settingsKeys.contains("motionLearningRate")
@@ -682,7 +683,23 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     }
 
     if (m_settings.m_motionDetect) {
-        applyMotionDetection(bgrMat, detectionRoi, frame->m_motionBoxes);
+        cv::Mat motionDebugMask;
+        applyMotionDetection(
+            bgrMat,
+            detectionRoi,
+            frame->m_motionBoxes,
+            (m_settings.m_motionMaskView != CameraSettings::MotionMaskViewOff) ? &motionDebugMask : nullptr);
+
+        if (!motionDebugMask.empty())
+        {
+            cv::Mat maskCanvas = cv::Mat::zeros(bgrMat.size(), CV_8UC1);
+            cv::Mat roiMask = motionDebugMask;
+            if (motionDebugMask.size() != detectionRoi.size()) {
+                cv::resize(motionDebugMask, roiMask, detectionRoi.size(), 0.0, 0.0, cv::INTER_NEAREST);
+            }
+            roiMask.copyTo(maskCanvas(detectionRoi));
+            cv::cvtColor(maskCanvas, bgrMat, cv::COLOR_GRAY2BGR);
+        }
     }
 
     if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
@@ -832,7 +849,7 @@ cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createBackgroundSubtractor() c
         m_settings.m_motionDetectShadows);
 }
 
-void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes)
+void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
 {
     PROFILER_START();
     if (!m_bgSubtractor) {
@@ -853,14 +870,23 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
 
     cv::Mat fgMask;
     m_bgSubtractor->apply(motionInput, fgMask, m_settings.m_motionLearningRate);
+    if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewRaw)) {
+        *debugMask = fgMask.clone();
+    }
     cv::threshold(fgMask, fgMask, 200, 255, cv::THRESH_BINARY);
     cv::bitwise_and(fgMask, buildExclusionMask(roi, fgMask.size()), fgMask);
+    if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewThresholded)) {
+        *debugMask = fgMask.clone();
+    }
 
     if (m_settings.m_motionOpenSize > 0)
     {
         const int ksize = 2 * m_settings.m_motionOpenSize + 1;
         const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
         cv::morphologyEx(fgMask, fgMask, cv::MORPH_OPEN, kernel);
+    }
+    if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewOpened)) {
+        *debugMask = fgMask.clone();
     }
 
     if (m_settings.m_motionCloseSize > 0)
@@ -869,9 +895,15 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
         const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
         cv::morphologyEx(fgMask, fgMask, cv::MORPH_CLOSE, kernel);
     }
+    if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewClosed)) {
+        *debugMask = fgMask.clone();
+    }
 
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewFinal)) {
+        *debugMask = fgMask.clone();
+    }
 
     QVector<QRect> boxes;
     boxes.reserve(static_cast<qsizetype>(contours.size()));

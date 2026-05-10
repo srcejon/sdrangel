@@ -258,6 +258,7 @@ void CameraSettings::resetToDefaults()
     m_detectionRoiHeight = 0;
     m_motionDetect = false;
     m_motionBackgroundSubtractor = MotionBackgroundSubtractorMOG2;
+    m_motionMaskView = MotionMaskViewOff;
     m_motionHistory = 500;
     m_motionVarThreshold = 16.0;
     m_motionLearningRate = -1.0;
@@ -396,6 +397,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(58, m_detectionRoiHeight);
     s.writeBool(59, m_motionDetect);
     s.writeS32(175, static_cast<qint32>(m_motionBackgroundSubtractor));
+    s.writeS32(176, static_cast<qint32>(m_motionMaskView));
     s.writeS32(60, m_motionHistory);
     s.writeDouble(61, m_motionVarThreshold);
     s.writeBool(62, m_motionDetectShadows);
@@ -666,6 +668,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
             static_cast<qint32>(MotionBackgroundSubtractorMOG2),
             motionBackgroundSubtractor,
             static_cast<qint32>(MotionBackgroundSubtractorKNN)));
+        qint32 motionMaskView = static_cast<qint32>(MotionMaskViewOff);
+        d.readS32(176, &motionMaskView, static_cast<qint32>(MotionMaskViewOff));
+        m_motionMaskView = static_cast<MotionMaskView>(qBound(
+            static_cast<qint32>(MotionMaskViewOff),
+            motionMaskView,
+            static_cast<qint32>(MotionMaskViewFinal)));
         d.readS32(60, &m_motionHistory, 500);
         d.readDouble(61, &m_motionVarThreshold, 16.0);
         d.readDouble(171, &m_motionLearningRate, -1.0);
@@ -1209,6 +1217,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             static_cast<qint32>(settings.m_motionBackgroundSubtractor),
             static_cast<qint32>(MotionBackgroundSubtractorKNN)));
     }
+    if (settingsKeys.contains("motionMaskView")) {
+        m_motionMaskView = static_cast<MotionMaskView>(qBound(
+            static_cast<qint32>(MotionMaskViewOff),
+            static_cast<qint32>(settings.m_motionMaskView),
+            static_cast<qint32>(MotionMaskViewFinal)));
+    }
     if (settingsKeys.contains("motionHistory")) {
         m_motionHistory = qBound(1, settings.m_motionHistory, 5000);
     }
@@ -1701,6 +1715,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("motionBackgroundSubtractor") || force) {
         ostr << " m_motionBackgroundSubtractor: " << m_motionBackgroundSubtractor;
+    }
+    if (settingsKeys.contains("motionMaskView") || force) {
+        ostr << " m_motionMaskView: " << m_motionMaskView;
     }
     if (settingsKeys.contains("motionHistory") || force) {
         ostr << " m_motionHistory: " << m_motionHistory;

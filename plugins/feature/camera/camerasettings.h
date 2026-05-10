@@ -92,6 +92,16 @@ struct CameraSettings
         MotionBackgroundSubtractorKNN
     };
 
+    enum MotionMaskView
+    {
+        MotionMaskViewOff = 0,
+        MotionMaskViewRaw,
+        MotionMaskViewThresholded,
+        MotionMaskViewOpened,
+        MotionMaskViewClosed,
+        MotionMaskViewFinal
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -246,6 +256,7 @@ struct CameraSettings
     int    m_detectionRoiHeight; ///< Detection ROI height in pixels; 0 disables ROI/full height
     bool   m_motionDetect;      ///< Enable motion background subtraction
     MotionBackgroundSubtractor m_motionBackgroundSubtractor; ///< Background subtractor algorithm
+    MotionMaskView m_motionMaskView; ///< Optional debug view of motion fgMask stages
     int    m_motionHistory;     ///< Background subtractor history length: 1..5000
     double m_motionVarThreshold; ///< MOG2 variance or KNN distance threshold: 1.0..200.0
     double m_motionLearningRate; ///< Explicit background subtractor learning rate: -1.0 = auto, otherwise 0.0..1.0

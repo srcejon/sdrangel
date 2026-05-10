@@ -481,6 +481,7 @@ private slots:
     void on_detectionRoiHeightSpin_valueChanged(int value);
     void on_motionDetectButton_toggled(bool checked);
     void on_motionBackgroundSubtractorCombo_currentIndexChanged(int index);
+    void on_motionMaskViewCombo_currentIndexChanged(int index);
     void on_motionHistorySpin_valueChanged(int value);
     void on_motionVarThresholdSpin_valueChanged(double value);
     void on_motionLearningRateSpin_valueChanged(double value);

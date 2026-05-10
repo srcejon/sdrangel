@@ -453,6 +453,9 @@ private slots:
     void on_lineEnhancementSpin_valueChanged(double value);
     void on_ridgeDetectionSlider_valueChanged(int value);
     void on_ridgeDetectionSpin_valueChanged(double value);
+    void on_ridgeDetectionKernelSizeCombo_currentIndexChanged(int index);
+    void on_ridgeDetectionScaleSpin_valueChanged(double value);
+    void on_ridgeDetectionDeltaSpin_valueChanged(double value);
     void on_flipXButton_toggled(bool checked);
     void on_flipYButton_toggled(bool checked);
     void on_brightnessSlider_valueChanged(int value);

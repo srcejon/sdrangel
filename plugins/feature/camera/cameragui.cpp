@@ -1002,6 +1002,12 @@ void CameraGUI::displaySettings()
     settingsUI()->lineEnhancementSpin->setValue(m_settings.m_lineEnhancement);
     settingsUI()->ridgeDetectionSlider->setValue(static_cast<int>(m_settings.m_ridgeDetection * 100.0));
     settingsUI()->ridgeDetectionSpin->setValue(m_settings.m_ridgeDetection);
+    settingsUI()->ridgeDetectionKernelSizeCombo->setCurrentIndex(
+        m_settings.m_ridgeDetectionKernelSize <= 1 ? 0 :
+        m_settings.m_ridgeDetectionKernelSize <= 3 ? 1 :
+        m_settings.m_ridgeDetectionKernelSize <= 5 ? 2 : 3);
+    settingsUI()->ridgeDetectionScaleSpin->setValue(m_settings.m_ridgeDetectionScale);
+    settingsUI()->ridgeDetectionDeltaSpin->setValue(m_settings.m_ridgeDetectionDelta);
     settingsUI()->flipXButton->setChecked(m_settings.m_flipX);
     settingsUI()->flipYButton->setChecked(m_settings.m_flipY);
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
@@ -1411,6 +1417,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->lineEnhancementSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lineEnhancementSpin_valueChanged);
     QObject::connect(settingsUI()->ridgeDetectionSlider, &QSlider::valueChanged, this, &CameraGUI::on_ridgeDetectionSlider_valueChanged);
     QObject::connect(settingsUI()->ridgeDetectionSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_ridgeDetectionSpin_valueChanged);
+    QObject::connect(settingsUI()->ridgeDetectionKernelSizeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_ridgeDetectionKernelSizeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->ridgeDetectionScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_ridgeDetectionScaleSpin_valueChanged);
+    QObject::connect(settingsUI()->ridgeDetectionDeltaSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_ridgeDetectionDeltaSpin_valueChanged);
     QObject::connect(settingsUI()->flipXButton, &QCheckBox::toggled, this, &CameraGUI::on_flipXButton_toggled);
     QObject::connect(settingsUI()->flipYButton, &QCheckBox::toggled, this, &CameraGUI::on_flipYButton_toggled);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
@@ -4782,6 +4791,25 @@ void CameraGUI::on_ridgeDetectionSpin_valueChanged(double value)
     applySetting("ridgeDetection");
 }
 
+void CameraGUI::on_ridgeDetectionKernelSizeCombo_currentIndexChanged(int index)
+{
+    static const int kernelSizes[] = {1, 3, 5, 7};
+    m_settings.m_ridgeDetectionKernelSize = kernelSizes[qBound(0, index, 3)];
+    applySetting("ridgeDetectionKernelSize");
+}
+
+void CameraGUI::on_ridgeDetectionScaleSpin_valueChanged(double value)
+{
+    m_settings.m_ridgeDetectionScale = value;
+    applySetting("ridgeDetectionScale");
+}
+
+void CameraGUI::on_ridgeDetectionDeltaSpin_valueChanged(double value)
+{
+    m_settings.m_ridgeDetectionDelta = value;
+    applySetting("ridgeDetectionDelta");
+}
+
 void CameraGUI::on_flipXButton_toggled(bool checked)
 {
     m_settings.m_flipX = checked;
@@ -5073,6 +5101,9 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->cannyEdgeSpin->setValue(0.0);
     settingsUI()->lineEnhancementSpin->setValue(0.0);
     settingsUI()->ridgeDetectionSpin->setValue(0.0);
+    settingsUI()->ridgeDetectionKernelSizeCombo->setCurrentIndex(1);
+    settingsUI()->ridgeDetectionScaleSpin->setValue(1.0);
+    settingsUI()->ridgeDetectionDeltaSpin->setValue(0.0);
     settingsUI()->flipXButton->setChecked(false);
     settingsUI()->flipYButton->setChecked(false);
 }

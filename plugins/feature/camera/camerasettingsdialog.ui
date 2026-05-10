@@ -2343,6 +2343,80 @@
             </property>
            </widget>
           </item>
+          <item row="6" column="3">
+           <widget class="QLabel" name="ridgeDetectionKernelSizeLabel">
+            <property name="text">
+             <string>Kernel</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="4">
+           <widget class="QComboBox" name="ridgeDetectionKernelSizeCombo">
+            <item>
+             <property name="text">
+              <string>1</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>3</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>5</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>7</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="7" column="3">
+           <widget class="QLabel" name="ridgeDetectionScaleLabel">
+            <property name="text">
+             <string>Scale</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="4">
+           <widget class="QDoubleSpinBox" name="ridgeDetectionScaleSpin">
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="maximum">
+             <double>16.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="value">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="3">
+           <widget class="QLabel" name="ridgeDetectionDeltaLabel">
+            <property name="text">
+             <string>Delta</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="4">
+           <widget class="QDoubleSpinBox" name="ridgeDetectionDeltaSpin">
+            <property name="minimum">
+             <double>-255.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>255.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
@@ -5320,6 +5394,9 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>sobelEdgeSpin</tabstop>
   <tabstop>ridgeDetectionSlider</tabstop>
   <tabstop>ridgeDetectionSpin</tabstop>
+  <tabstop>ridgeDetectionKernelSizeCombo</tabstop>
+  <tabstop>ridgeDetectionScaleSpin</tabstop>
+  <tabstop>ridgeDetectionDeltaSpin</tabstop>
   <tabstop>flipXButton</tabstop>
   <tabstop>flipYButton</tabstop>
   <tabstop>defaultColorSettingsButton</tabstop>

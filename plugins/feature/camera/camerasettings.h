@@ -251,6 +251,9 @@ struct CameraSettings
     double m_cannyEdge;       ///< Canny edge blend amount: 0.0..3.0
     double m_lineEnhancement; ///< Thin line enhancement amount: 0.0..3.0
     double m_ridgeDetection;  ///< Ridge detection blend amount: 0.0..3.0
+    int    m_ridgeDetectionKernelSize; ///< Sobel kernel size for ridge detection: 1,3,5,7
+    double m_ridgeDetectionScale; ///< Scale factor applied inside ridge detection
+    double m_ridgeDetectionDelta; ///< Bias added inside ridge detection
     bool m_flipX;             ///< Flip image horizontally
     bool m_flipY;             ///< Flip image vertically
     double m_brightness;      ///< Brightness adjustment: -100.0..100.0

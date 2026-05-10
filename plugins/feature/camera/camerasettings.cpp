@@ -223,6 +223,9 @@ void CameraSettings::resetToDefaults()
     m_cannyEdge = 0.0;
     m_lineEnhancement = 0.0;
     m_ridgeDetection = 0.0;
+    m_ridgeDetectionKernelSize = 3;
+    m_ridgeDetectionScale = 1.0;
+    m_ridgeDetectionDelta = 0.0;
     m_flipX = false;
     m_flipY = false;
     m_brightness = 0.0;
@@ -401,6 +404,9 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(190, m_cannyEdge);
     s.writeDouble(192, m_lineEnhancement);
     s.writeDouble(193, m_ridgeDetection);
+    s.writeS32(195, m_ridgeDetectionKernelSize);
+    s.writeDouble(196, m_ridgeDetectionScale);
+    s.writeDouble(197, m_ridgeDetectionDelta);
     s.writeBool(41, m_flipX);
     s.writeBool(42, m_flipY);
     s.writeDouble(43, m_brightness);
@@ -445,7 +451,7 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(184, m_streakColor.rgba());
     s.writeS32(185, static_cast<qint32>(m_streakDebugView));
     s.writeS32(187, static_cast<qint32>(m_streakOverlayStyle));
-    s.writeS32(188, static_cast<qint32>(m_streakLineEnhancementPlacement));
+    s.writeS32(194, static_cast<qint32>(m_streakLineEnhancementPlacement));
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -660,6 +666,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(190, &m_cannyEdge, 0.0);
         d.readDouble(192, &m_lineEnhancement, 0.0);
         d.readDouble(193, &m_ridgeDetection, 0.0);
+        d.readS32(195, &m_ridgeDetectionKernelSize, 3);
+        d.readDouble(196, &m_ridgeDetectionScale, 1.0);
+        d.readDouble(197, &m_ridgeDetectionDelta, 0.0);
         d.readBool(41, &m_flipX, false);
         d.readBool(42, &m_flipY, false);
         m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
@@ -685,6 +694,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_cannyEdge = qBound(0.0, m_cannyEdge, 3.0);
         m_lineEnhancement = qBound(0.0, m_lineEnhancement, 3.0);
         m_ridgeDetection = qBound(0.0, m_ridgeDetection, 3.0);
+        m_ridgeDetectionKernelSize = (m_ridgeDetectionKernelSize <= 1) ? 1 :
+            (m_ridgeDetectionKernelSize <= 3) ? 3 :
+            (m_ridgeDetectionKernelSize <= 5) ? 5 : 7;
+        m_ridgeDetectionScale = qBound(0.0, m_ridgeDetectionScale, 16.0);
+        m_ridgeDetectionDelta = qBound(-255.0, m_ridgeDetectionDelta, 255.0);
 
         d.readDouble(43, &m_brightness, 0.0);
         d.readDouble(44, &m_contrast, 1.0);
@@ -765,7 +779,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
             streakOverlayStyle,
             static_cast<qint32>(StreakOverlayStyleBoundingBoxes)));
         qint32 streakLineEnhancementPlacement = static_cast<qint32>(StreakLineEnhancementOff);
-        d.readS32(188, &streakLineEnhancementPlacement, static_cast<qint32>(StreakLineEnhancementOff));
+        d.readS32(194, &streakLineEnhancementPlacement, static_cast<qint32>(StreakLineEnhancementOff));
         m_streakLineEnhancementPlacement = static_cast<StreakLineEnhancementPlacement>(qBound(
             static_cast<qint32>(StreakLineEnhancementOff),
             streakLineEnhancementPlacement,
@@ -1258,6 +1272,17 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("ridgeDetection")) {
         m_ridgeDetection = qBound(0.0, settings.m_ridgeDetection, 3.0);
+    }
+    if (settingsKeys.contains("ridgeDetectionKernelSize")) {
+        m_ridgeDetectionKernelSize = (settings.m_ridgeDetectionKernelSize <= 1) ? 1 :
+            (settings.m_ridgeDetectionKernelSize <= 3) ? 3 :
+            (settings.m_ridgeDetectionKernelSize <= 5) ? 5 : 7;
+    }
+    if (settingsKeys.contains("ridgeDetectionScale")) {
+        m_ridgeDetectionScale = qBound(0.0, settings.m_ridgeDetectionScale, 16.0);
+    }
+    if (settingsKeys.contains("ridgeDetectionDelta")) {
+        m_ridgeDetectionDelta = qBound(-255.0, settings.m_ridgeDetectionDelta, 255.0);
     }
     if (settingsKeys.contains("flipX")) {
         m_flipX = settings.m_flipX;
@@ -1824,6 +1849,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("ridgeDetection") || force) {
         ostr << " m_ridgeDetection: " << m_ridgeDetection;
+    }
+    if (settingsKeys.contains("ridgeDetectionKernelSize") || force) {
+        ostr << " m_ridgeDetectionKernelSize: " << m_ridgeDetectionKernelSize;
+    }
+    if (settingsKeys.contains("ridgeDetectionScale") || force) {
+        ostr << " m_ridgeDetectionScale: " << m_ridgeDetectionScale;
+    }
+    if (settingsKeys.contains("ridgeDetectionDelta") || force) {
+        ostr << " m_ridgeDetectionDelta: " << m_ridgeDetectionDelta;
     }
     if (settingsKeys.contains("flipX") || force) {
         ostr << " m_flipX: " << m_flipX;

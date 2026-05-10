@@ -118,7 +118,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "histogramStretchAsinhStrength",
         "histogramStretchLogStrength",
         "postProcessGreyscale",
-        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "edgeDisplayMode", "sobelEdge", "cannyEdge", "lineEnhancement", "ridgeDetection", "flipX", "flipY",
+        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "edgeDisplayMode", "sobelEdge", "cannyEdge", "lineEnhancement", "ridgeDetection", "ridgeDetectionKernelSize", "ridgeDetectionScale", "ridgeDetectionDelta", "flipX", "flipY",
         "brightness", "contrast", "invertColors"
     };
     const bool imageProcessingChanged = force || std::any_of(kImageProcessingKeys.cbegin(), kImageProcessingKeys.cend(),
@@ -803,7 +803,14 @@ void CameraImageProcessor::applyRidgeDetection(cv::Mat& bgrMat) const
     cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
 
     cv::Ptr<cv::ximgproc::RidgeDetectionFilter> ridgeFilter =
-        cv::ximgproc::RidgeDetectionFilter::create(CV_32FC1, 1, 1, 3, CV_8UC1, 1.0, 0.0);
+        cv::ximgproc::RidgeDetectionFilter::create(
+            CV_32FC1,
+            1,
+            1,
+            m_settings.m_ridgeDetectionKernelSize,
+            CV_8UC1,
+            m_settings.m_ridgeDetectionScale,
+            m_settings.m_ridgeDetectionDelta);
 
     cv::Mat ridgesGray;
     ridgeFilter->getRidgeFilteredImage(grayMat, ridgesGray);

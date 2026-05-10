@@ -118,7 +118,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "histogramStretchAsinhStrength",
         "histogramStretchLogStrength",
         "postProcessGreyscale",
-        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "sobelEdge", "flipX", "flipY",
+        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "sobelEdge", "cannyEdge", "flipX", "flipY",
         "brightness", "contrast", "invertColors"
     };
     const bool imageProcessingChanged = force || std::any_of(kImageProcessingKeys.cbegin(), kImageProcessingKeys.cend(),
@@ -311,6 +311,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     const bool needsMedianBlur = m_settings.m_medianBlur > 0;
     const bool needsSharpen = m_settings.m_sharpen > 1e-4;
     const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
+    const bool needsCannyEdge = m_settings.m_cannyEdge > 1e-4;
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
@@ -322,6 +323,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
         || needsMedianBlur
         || needsSharpen
         || needsSobelEdge
+        || needsCannyEdge
         || needsFlip
         || needsBrightContrast
         || needsGreyscale
@@ -347,6 +349,7 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     if (needsMedianBlur) { applyMedianBlur(bgrMat); }
     if (needsSharpen) { applySharpen(bgrMat); }
     if (needsSobelEdge) { applySobelEdge(bgrMat); }
+    if (needsCannyEdge) { applyCannyEdge(bgrMat); }
     if (needsFlip) { applyFlip(bgrMat); }
     if (needsBrightContrast) { applyBrightnessContrast(bgrMat); }
     if (m_settings.m_invertColors) { applyInvertColors(bgrMat); }
@@ -419,6 +422,20 @@ void CameraImageProcessor::applyHistogramStretch(cv::Mat& bgrMat) const
     const float asinhNorm = std::asinh(asinhStrength);
     const float logNorm = std::log1p(logStrength);
 
+    if (m_settings.m_histogramStretch == CameraSettings::HistogramStretchCLAHE)
+    {
+        cv::Mat labMat;
+        cv::cvtColor(bgrMat, labMat, cv::COLOR_BGR2Lab);
+        std::vector<cv::Mat> labChannels;
+        cv::split(labMat, labChannels);
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
+        clahe->apply(labChannels[0], labChannels[0]);
+        cv::merge(labChannels, labMat);
+        cv::cvtColor(labMat, bgrMat, cv::COLOR_Lab2BGR);
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
     for (int row = 0; row < floatMat.rows; ++row)
     {
         cv::Vec3f* pixelRow = floatMat.ptr<cv::Vec3f>(row);
@@ -443,6 +460,7 @@ void CameraImageProcessor::applyHistogramStretch(cv::Mat& bgrMat) const
                 case CameraSettings::HistogramStretchLog:
                     value = (logNorm > 0.0f) ? (std::log1p(logStrength * value) / logNorm) : value;
                     break;
+                case CameraSettings::HistogramStretchCLAHE:
                 case CameraSettings::HistogramStretchOff:
                 default:
                     break;
@@ -691,6 +709,21 @@ void CameraImageProcessor::applySobelEdge(cv::Mat& bgrMat) const
     cv::Mat edgesBgr;
     cv::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
     cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrMat);
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyCannyEdge(cv::Mat& bgrMat) const
+{
+    PROFILER_START();
+    cv::Mat grayMat;
+    cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
+
+    cv::Mat edgesGray;
+    cv::Canny(grayMat, edgesGray, 50.0, 150.0);
+
+    cv::Mat edgesBgr;
+    cv::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
+    cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, bgrMat);
     PROFILER_STOP(__FUNCTION__);
 }
 

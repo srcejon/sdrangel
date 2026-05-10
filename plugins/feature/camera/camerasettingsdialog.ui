@@ -1817,6 +1817,11 @@
               <string>Log</string>
              </property>
             </item>
+            <item>
+             <property name="text">
+              <string>CLAHE</string>
+             </property>
+            </item>
            </widget>
           </item>
           <item row="1" column="0">
@@ -2179,6 +2184,48 @@
            <widget class="QDoubleSpinBox" name="sobelEdgeSpin">
             <property name="toolTip">
              <string>Sobel edge detection blend amount</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="maximum">
+             <double>3.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="cannyEdgeLabel">
+            <property name="text">
+             <string>Canny Edge</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QSlider" name="cannyEdgeSlider">
+            <property name="toolTip">
+             <string>Canny edge detection blend amount</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>300</number>
+            </property>
+            <property name="value">
+             <number>0</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QDoubleSpinBox" name="cannyEdgeSpin">
+            <property name="toolTip">
+             <string>Canny edge detection blend amount</string>
             </property>
             <property name="decimals">
              <number>2</number>

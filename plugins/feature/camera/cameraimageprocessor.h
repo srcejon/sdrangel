@@ -142,6 +142,7 @@ private:
     void applyMedianBlur(cv::Mat& bgrMat) const;
     void applySharpen(cv::Mat& bgrMat) const;
     void applySobelEdge(cv::Mat& bgrMat) const;
+    void applyCannyEdge(cv::Mat& bgrMat) const;
     void applyFlip(cv::Mat& bgrMat) const;
     void applyBrightnessContrast(cv::Mat& bgrMat) const;
     void applyInvertColors(cv::Mat& bgrMat) const;

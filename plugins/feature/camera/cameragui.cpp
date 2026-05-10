@@ -995,6 +995,8 @@ void CameraGUI::displaySettings()
     settingsUI()->sharpenSpin->setValue(m_settings.m_sharpen);
     settingsUI()->sobelEdgeSlider->setValue(static_cast<int>(m_settings.m_sobelEdge * 100.0));
     settingsUI()->sobelEdgeSpin->setValue(m_settings.m_sobelEdge);
+    settingsUI()->cannyEdgeSlider->setValue(static_cast<int>(m_settings.m_cannyEdge * 100.0));
+    settingsUI()->cannyEdgeSpin->setValue(m_settings.m_cannyEdge);
     settingsUI()->flipXButton->setChecked(m_settings.m_flipX);
     settingsUI()->flipYButton->setChecked(m_settings.m_flipY);
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
@@ -1396,6 +1398,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->sharpenSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_sharpenSpin_valueChanged);
     QObject::connect(settingsUI()->sobelEdgeSlider, &QSlider::valueChanged, this, &CameraGUI::on_sobelEdgeSlider_valueChanged);
     QObject::connect(settingsUI()->sobelEdgeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_sobelEdgeSpin_valueChanged);
+    QObject::connect(settingsUI()->cannyEdgeSlider, &QSlider::valueChanged, this, &CameraGUI::on_cannyEdgeSlider_valueChanged);
+    QObject::connect(settingsUI()->cannyEdgeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cannyEdgeSpin_valueChanged);
     QObject::connect(settingsUI()->flipXButton, &QCheckBox::toggled, this, &CameraGUI::on_flipXButton_toggled);
     QObject::connect(settingsUI()->flipYButton, &QCheckBox::toggled, this, &CameraGUI::on_flipYButton_toggled);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
@@ -4234,13 +4238,14 @@ void CameraGUI::updateHistogramStretchControls()
     const bool gammaMode = stretchMode == CameraSettings::HistogramStretchGamma;
     const bool asinhMode = stretchMode == CameraSettings::HistogramStretchAsinh;
     const bool logMode = stretchMode == CameraSettings::HistogramStretchLog;
+    const bool pointControls = stretchMode != CameraSettings::HistogramStretchCLAHE;
 
-    settingsUI()->histogramStretchBlackPointLabel->setEnabled(stretchEnabled);
-    settingsUI()->histogramStretchBlackPointSlider->setEnabled(stretchEnabled);
-    settingsUI()->histogramStretchBlackPointSpin->setEnabled(stretchEnabled);
-    settingsUI()->histogramStretchWhitePointLabel->setEnabled(stretchEnabled);
-    settingsUI()->histogramStretchWhitePointSlider->setEnabled(stretchEnabled);
-    settingsUI()->histogramStretchWhitePointSpin->setEnabled(stretchEnabled);
+    settingsUI()->histogramStretchBlackPointLabel->setEnabled(stretchEnabled && pointControls);
+    settingsUI()->histogramStretchBlackPointSlider->setEnabled(stretchEnabled && pointControls);
+    settingsUI()->histogramStretchBlackPointSpin->setEnabled(stretchEnabled && pointControls);
+    settingsUI()->histogramStretchWhitePointLabel->setEnabled(stretchEnabled && pointControls);
+    settingsUI()->histogramStretchWhitePointSlider->setEnabled(stretchEnabled && pointControls);
+    settingsUI()->histogramStretchWhitePointSpin->setEnabled(stretchEnabled && pointControls);
 
     settingsUI()->histogramStretchGammaLabel->setEnabled(gammaMode);
     settingsUI()->histogramStretchGammaSlider->setEnabled(gammaMode);
@@ -4476,7 +4481,7 @@ void CameraGUI::on_postProcessUnwarpCheck_toggled(bool checked)
 void CameraGUI::on_histogramStretchModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_histogramStretch = static_cast<CameraSettings::HistogramStretch>(
-        qBound(static_cast<int>(CameraSettings::HistogramStretchOff), index, static_cast<int>(CameraSettings::HistogramStretchLog)));
+        qBound(static_cast<int>(CameraSettings::HistogramStretchOff), index, static_cast<int>(CameraSettings::HistogramStretchCLAHE)));
     updateHistogramStretchControls();
     applySetting("histogramStretch");
 }
@@ -4702,6 +4707,24 @@ void CameraGUI::on_sobelEdgeSpin_valueChanged(double value)
     settingsUI()->sobelEdgeSlider->blockSignals(false);
     m_settings.m_sobelEdge = value;
     applySetting("sobelEdge");
+}
+
+void CameraGUI::on_cannyEdgeSlider_valueChanged(int value)
+{
+    m_settings.m_cannyEdge = value / 100.0;
+    settingsUI()->cannyEdgeSpin->blockSignals(true);
+    settingsUI()->cannyEdgeSpin->setValue(m_settings.m_cannyEdge);
+    settingsUI()->cannyEdgeSpin->blockSignals(false);
+    applySetting("cannyEdge");
+}
+
+void CameraGUI::on_cannyEdgeSpin_valueChanged(double value)
+{
+    settingsUI()->cannyEdgeSlider->blockSignals(true);
+    settingsUI()->cannyEdgeSlider->setValue(static_cast<int>(value * 100.0));
+    settingsUI()->cannyEdgeSlider->blockSignals(false);
+    m_settings.m_cannyEdge = value;
+    applySetting("cannyEdge");
 }
 
 void CameraGUI::on_flipXButton_toggled(bool checked)
@@ -4991,6 +5014,7 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->medianBlurSpin->setValue(0);
     settingsUI()->sharpenSpin->setValue(0.0);
     settingsUI()->sobelEdgeSpin->setValue(0.0);
+    settingsUI()->cannyEdgeSpin->setValue(0.0);
     settingsUI()->flipXButton->setChecked(false);
     settingsUI()->flipYButton->setChecked(false);
 }

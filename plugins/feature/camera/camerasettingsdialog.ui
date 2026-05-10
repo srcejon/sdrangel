@@ -2048,6 +2048,27 @@
             </property>
            </widget>
           </item>
+          <item row="3" column="3">
+           <widget class="QLabel" name="edgeDisplayModeLabel">
+            <property name="text">
+             <string>Edge Display</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="4">
+           <widget class="QComboBox" name="edgeDisplayModeCombo">
+            <item>
+             <property name="text">
+              <string>Overlay</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Edges Only</string>
+             </property>
+            </item>
+           </widget>
+          </item>
           <item row="3" column="1">
            <widget class="QSlider" name="sobelEdgeSlider">
             <property name="toolTip">

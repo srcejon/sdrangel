@@ -218,6 +218,7 @@ void CameraSettings::resetToDefaults()
     m_gaussianBlur = 0;
     m_medianBlur = 0;
     m_sharpen = 0.0;
+    m_edgeDisplayMode = EdgeDisplayOverlay;
     m_sobelEdge = 0.0;
     m_cannyEdge = 0.0;
     m_flipX = false;
@@ -392,6 +393,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(37, m_gaussianBlur);
     s.writeS32(38, m_medianBlur);
     s.writeDouble(39, m_sharpen);
+    s.writeS32(191, static_cast<qint32>(m_edgeDisplayMode));
     s.writeDouble(40, m_sobelEdge);
     s.writeDouble(190, m_cannyEdge);
     s.writeBool(41, m_flipX);
@@ -642,6 +644,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(37, &m_gaussianBlur, 0);
         d.readS32(38, &m_medianBlur, 0);
         d.readDouble(39, &m_sharpen, 0.0);
+        qint32 edgeDisplayMode = static_cast<qint32>(EdgeDisplayOverlay);
+        d.readS32(191, &edgeDisplayMode, static_cast<qint32>(EdgeDisplayOverlay));
+        m_edgeDisplayMode = static_cast<EdgeDisplayMode>(qBound(
+            static_cast<qint32>(EdgeDisplayOverlay),
+            edgeDisplayMode,
+            static_cast<qint32>(EdgeDisplayEdgesOnly)));
         d.readDouble(40, &m_sobelEdge, 0.0);
         d.readDouble(190, &m_cannyEdge, 0.0);
         d.readBool(41, &m_flipX, false);
@@ -661,6 +669,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_gaussianBlur = qBound(0, m_gaussianBlur, 15);
         m_medianBlur = qBound(0, m_medianBlur, 15);
         m_sharpen = qBound(0.0, m_sharpen, 3.0);
+        m_edgeDisplayMode = static_cast<EdgeDisplayMode>(qBound(
+            static_cast<qint32>(EdgeDisplayOverlay),
+            static_cast<qint32>(m_edgeDisplayMode),
+            static_cast<qint32>(EdgeDisplayEdgesOnly)));
         m_sobelEdge = qBound(0.0, m_sobelEdge, 3.0);
         m_cannyEdge = qBound(0.0, m_cannyEdge, 3.0);
 
@@ -1213,6 +1225,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("sharpen")) {
         m_sharpen = qBound(0.0, settings.m_sharpen, 3.0);
     }
+    if (settingsKeys.contains("edgeDisplayMode")) {
+        m_edgeDisplayMode = static_cast<EdgeDisplayMode>(qBound(
+            static_cast<qint32>(EdgeDisplayOverlay),
+            static_cast<qint32>(settings.m_edgeDisplayMode),
+            static_cast<qint32>(EdgeDisplayEdgesOnly)));
+    }
     if (settingsKeys.contains("sobelEdge")) {
         m_sobelEdge = qBound(0.0, settings.m_sobelEdge, 3.0);
     }
@@ -1763,6 +1781,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("sharpen") || force) {
         ostr << " m_sharpen: " << m_sharpen;
+    }
+    if (settingsKeys.contains("edgeDisplayMode") || force) {
+        ostr << " m_edgeDisplayMode: " << m_edgeDisplayMode;
     }
     if (settingsKeys.contains("sobelEdge") || force) {
         ostr << " m_sobelEdge: " << m_sobelEdge;

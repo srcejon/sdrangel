@@ -993,6 +993,7 @@ void CameraGUI::displaySettings()
     settingsUI()->medianBlurSpin->setValue(m_settings.m_medianBlur);
     settingsUI()->sharpenSlider->setValue(static_cast<int>(m_settings.m_sharpen * 100.0));
     settingsUI()->sharpenSpin->setValue(m_settings.m_sharpen);
+    settingsUI()->edgeDisplayModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_edgeDisplayMode));
     settingsUI()->sobelEdgeSlider->setValue(static_cast<int>(m_settings.m_sobelEdge * 100.0));
     settingsUI()->sobelEdgeSpin->setValue(m_settings.m_sobelEdge);
     settingsUI()->cannyEdgeSlider->setValue(static_cast<int>(m_settings.m_cannyEdge * 100.0));
@@ -1396,6 +1397,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->medianBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_medianBlurSpin_valueChanged);
     QObject::connect(settingsUI()->sharpenSlider, &QSlider::valueChanged, this, &CameraGUI::on_sharpenSlider_valueChanged);
     QObject::connect(settingsUI()->sharpenSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_sharpenSpin_valueChanged);
+    QObject::connect(settingsUI()->edgeDisplayModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_edgeDisplayModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->sobelEdgeSlider, &QSlider::valueChanged, this, &CameraGUI::on_sobelEdgeSlider_valueChanged);
     QObject::connect(settingsUI()->sobelEdgeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_sobelEdgeSpin_valueChanged);
     QObject::connect(settingsUI()->cannyEdgeSlider, &QSlider::valueChanged, this, &CameraGUI::on_cannyEdgeSlider_valueChanged);
@@ -4691,6 +4693,13 @@ void CameraGUI::on_sharpenSpin_valueChanged(double value)
     applySetting("sharpen");
 }
 
+void CameraGUI::on_edgeDisplayModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_edgeDisplayMode = static_cast<CameraSettings::EdgeDisplayMode>(
+        qBound(static_cast<int>(CameraSettings::EdgeDisplayOverlay), index, static_cast<int>(CameraSettings::EdgeDisplayEdgesOnly)));
+    applySetting("edgeDisplayMode");
+}
+
 void CameraGUI::on_sobelEdgeSlider_valueChanged(int value)
 {
     m_settings.m_sobelEdge = value / 100.0;
@@ -5013,6 +5022,7 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->gaussianBlurSpin->setValue(0);
     settingsUI()->medianBlurSpin->setValue(0);
     settingsUI()->sharpenSpin->setValue(0.0);
+    settingsUI()->edgeDisplayModeCombo->setCurrentIndex(static_cast<int>(CameraSettings::EdgeDisplayOverlay));
     settingsUI()->sobelEdgeSpin->setValue(0.0);
     settingsUI()->cannyEdgeSpin->setValue(0.0);
     settingsUI()->flipXButton->setChecked(false);

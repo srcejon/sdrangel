@@ -444,6 +444,7 @@ private slots:
     void on_medianBlurSpin_valueChanged(int value);
     void on_sharpenSlider_valueChanged(int value);
     void on_sharpenSpin_valueChanged(double value);
+    void on_edgeDisplayModeCombo_currentIndexChanged(int index);
     void on_sobelEdgeSlider_valueChanged(int value);
     void on_sobelEdgeSpin_valueChanged(double value);
     void on_cannyEdgeSlider_valueChanged(int value);

@@ -87,6 +87,12 @@ struct CameraSettings
         HistogramStretchCLAHE
     };
 
+    enum EdgeDisplayMode
+    {
+        EdgeDisplayOverlay = 0,
+        EdgeDisplayEdgesOnly
+    };
+
     enum MotionBackgroundSubtractor
     {
         MotionBackgroundSubtractorMOG2 = 0,
@@ -233,6 +239,7 @@ struct CameraSettings
     int m_gaussianBlur;       ///< Gaussian blur strength: 0..15 (0 = off)
     int m_medianBlur;         ///< Median blur strength: 0..15 (0 = off)
     double m_sharpen;         ///< Sharpen amount: 0.0..3.0
+    EdgeDisplayMode m_edgeDisplayMode; ///< Whether Sobel/Canny edges are overlaid or shown alone
     double m_sobelEdge;       ///< Sobel edge blend amount: 0.0..3.0
     double m_cannyEdge;       ///< Canny edge blend amount: 0.0..3.0
     bool m_flipX;             ///< Flip image horizontally

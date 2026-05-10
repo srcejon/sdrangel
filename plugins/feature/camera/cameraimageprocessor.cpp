@@ -118,7 +118,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "histogramStretchAsinhStrength",
         "histogramStretchLogStrength",
         "postProcessGreyscale",
-        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "sobelEdge", "cannyEdge", "flipX", "flipY",
+        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "edgeDisplayMode", "sobelEdge", "cannyEdge", "flipX", "flipY",
         "brightness", "contrast", "invertColors"
     };
     const bool imageProcessingChanged = force || std::any_of(kImageProcessingKeys.cbegin(), kImageProcessingKeys.cend(),
@@ -708,7 +708,11 @@ void CameraImageProcessor::applySobelEdge(cv::Mat& bgrMat) const
 
     cv::Mat edgesBgr;
     cv::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
-    cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrMat);
+    if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
+        bgrMat = std::move(edgesBgr);
+    } else {
+        cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrMat);
+    }
     PROFILER_STOP(__FUNCTION__);
 }
 
@@ -723,7 +727,11 @@ void CameraImageProcessor::applyCannyEdge(cv::Mat& bgrMat) const
 
     cv::Mat edgesBgr;
     cv::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
-    cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, bgrMat);
+    if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
+        bgrMat = std::move(edgesBgr);
+    } else {
+        cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, bgrMat);
+    }
     PROFILER_STOP(__FUNCTION__);
 }
 

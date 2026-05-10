@@ -849,7 +849,7 @@ endif()
 
 # unfortunately OpenCV library from windows doesn't set the cache option
 if(WIN32)
-  find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn)
+  find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn ximgproc)
 
   set(OpenCV_INCLUDE_DIRS "${OpenCV_INCLUDE_DIRS}" CACHE INTERNAL "")
   set(OpenCV_LIBS "${OpenCV_LIBS}" CACHE INTERNAL "")

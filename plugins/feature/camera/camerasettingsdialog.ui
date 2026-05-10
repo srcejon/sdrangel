@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>810</width>
-    <height>1027</height>
+    <height>1118</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>1</number>
      </property>
      <widget class="QWidget" name="cameraTab">
       <attribute name="title">
@@ -2566,6 +2566,9 @@
             <property name="toolTip">
              <string>Minimum elevation in degrees for tracked object overlays</string>
             </property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
             <property name="decimals">
              <number>1</number>
             </property>
@@ -2577,9 +2580,6 @@
             </property>
             <property name="singleStep">
              <double>1.000000000000000</double>
-            </property>
-            <property name="suffix">
-             <string> °</string>
             </property>
            </widget>
           </item>
@@ -3641,24 +3641,8 @@ li.checked::marker { content: &quot;\2612&quot;; }
           <string>Motion Detection</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_8">
-          <item row="0" column="1">
-           <widget class="QSpinBox" name="motionHistorySpin">
-            <property name="toolTip">
-             <string>Background history length for motion detection</string>
-            </property>
-            <property name="minimum">
-             <number>1</number>
-            </property>
-            <property name="maximum">
-             <number>5000</number>
-            </property>
-            <property name="value">
-             <number>500</number>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="motionOpenSizeLabel">
+          <item row="6" column="2">
+           <widget class="QLabel" name="minContourAreaLabel">
             <property name="minimumSize">
              <size>
               <width>130</width>
@@ -3666,12 +3650,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </size>
             </property>
             <property name="text">
-             <string>Open size</string>
+             <string>Min area</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="motionHistoryLabel">
+          <item row="2" column="2">
+           <widget class="QLabel" name="motionConfirmFramesLabel">
             <property name="minimumSize">
              <size>
               <width>130</width>
@@ -3679,67 +3663,11 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </size>
             </property>
             <property name="text">
-             <string>History</string>
+             <string>Confirm frames</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="0">
-           <widget class="QLabel" name="motionBoxColorLabel">
-            <property name="text">
-             <string>BBox Colour</string>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="1">
-           <widget class="QToolButton" name="motionBoxColorButton">
-            <property name="toolTip">
-             <string>Select bounding box colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="2">
-           <widget class="QLabel" name="motionMaskViewLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Mask view</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="3">
-           <widget class="QComboBox" name="motionMaskViewCombo">
-            <property name="toolTip">
-             <string>Display an intermediate motion fgMask stage instead of the normal image</string>
-            </property>
-            <item><property name="text"><string>Off</string></property></item>
-            <item><property name="text"><string>Raw</string></property></item>
-            <item><property name="text"><string>Thresholded</string></property></item>
-            <item><property name="text"><string>Opened</string></property></item>
-            <item><property name="text"><string>Closed</string></property></item>
-            <item><property name="text"><string>Final</string></property></item>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QSpinBox" name="motionOpenSizeSpin">
-            <property name="toolTip">
-             <string>Kernel radius for motion-mask morphological open (0 disables)</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>20</number>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
+          <item row="1" column="2">
            <widget class="QLabel" name="motionVarThresholdLabel">
             <property name="minimumSize">
              <size>
@@ -3752,71 +3680,33 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="5" column="1">
-           <widget class="QSpinBox" name="motionPersistenceFramesSpin">
+          <item row="9" column="0">
+           <widget class="QLabel" name="motionExclusionLabel">
+            <property name="text">
+             <string>Exclusion rects</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="3">
+           <widget class="QSpinBox" name="motionCloseSizeSpin">
             <property name="toolTip">
-             <string>Keep the last motion boxes for this many frames after motion disappears</string>
+             <string>Kernel radius for motion-mask morphological close (0 disables)</string>
             </property>
             <property name="minimum">
              <number>0</number>
             </property>
             <property name="maximum">
-             <number>120</number>
+             <number>20</number>
             </property>
            </widget>
           </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="motionPersistenceFramesLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Persistence</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QDoubleSpinBox" name="motionVarThresholdSpin">
-            <property name="toolTip">
-             <string>Variance threshold for MOG2 foreground classification</string>
-            </property>
-            <property name="decimals">
-             <number>1</number>
-            </property>
-            <property name="minimum">
-             <double>1.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>200.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>1.000000000000000</double>
-            </property>
-            <property name="value">
-             <double>16.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="motionLearningRateLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Learning rate</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
+          <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="motionLearningRateSpin">
             <property name="toolTip">
              <string>MOG2 learning rate (-1 = automatic)</string>
+            </property>
+            <property name="specialValueText">
+             <string>Auto</string>
             </property>
             <property name="decimals">
              <number>3</number>
@@ -3830,28 +3720,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
             <property name="singleStep">
              <double>0.010000000000000</double>
             </property>
-            <property name="specialValueText">
-             <string>Auto</string>
-            </property>
             <property name="value">
              <double>-1.000000000000000</double>
             </property>
            </widget>
           </item>
-          <item row="1" column="2">
-           <widget class="QLabel" name="motionConfirmFramesLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Confirm frames</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="3">
+          <item row="2" column="3">
            <widget class="QSpinBox" name="motionConfirmFramesSpin">
             <property name="toolTip">
              <string>Motion must persist for this many consecutive frames before it is reported</string>
@@ -3867,108 +3741,10 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="motionDownscaleLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Downscale</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="motionDownscaleCombo">
+          <item row="4" column="1">
+           <widget class="QSpinBox" name="motionOpenSizeSpin">
             <property name="toolTip">
-             <string>Optional downscaled path for motion detection</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>100%</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>50%</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>25%</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="2" column="2">
-           <widget class="QLabel" name="motionBackgroundSubtractorLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Subtractor</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="3">
-           <widget class="QComboBox" name="motionBackgroundSubtractorCombo">
-            <property name="toolTip">
-             <string>Background subtractor used for motion detection</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>MOG2</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>KNN</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="7" column="2">
-           <widget class="QLabel" name="motionDetectShadowsLabel">
-            <property name="text">
-             <string>Detect shadows</string>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="3">
-           <widget class="QCheckBox" name="motionDetectShadowsCheck">
-            <property name="toolTip">
-             <string>Enable MOG2 shadow detection</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-            <property name="checked">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="2">
-           <widget class="QLabel" name="motionCloseSizeLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Close size</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="3">
-           <widget class="QSpinBox" name="motionCloseSizeSpin">
-            <property name="toolTip">
-             <string>Kernel radius for motion-mask morphological close (0 disables)</string>
+             <string>Kernel radius for motion-mask morphological open (0 disables)</string>
             </property>
             <property name="minimum">
              <number>0</number>
@@ -3978,96 +3754,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="5" column="2">
-           <widget class="QLabel" name="minContourAreaLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Min area</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="3">
-           <widget class="QSpinBox" name="minContourAreaSpin">
-            <property name="toolTip">
-             <string>Minimum contour area (px²)</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>1000</number>
-            </property>
-            <property name="value">
-             <number>100</number>
-            </property>
-           </widget>
-          </item>
-          <item row="8" column="0">
-           <widget class="QLabel" name="motionExclusionLabel">
-            <property name="text">
-             <string>Exclusion rects</string>
-            </property>
-           </widget>
-          </item>
-          <item row="8" column="1" colspan="3">
-           <layout class="QHBoxLayout" name="motionExclusionButtonsLayout">
-            <item>
-             <widget class="QToolButton" name="motionExclusionAddButton">
-              <property name="toolTip">
-               <string>Add an exclusion rectangle for diff/motion detection</string>
-              </property>
-              <property name="text">
-               <string>Add</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QToolButton" name="motionExclusionRemoveButton">
-              <property name="toolTip">
-               <string>Remove the selected exclusion rectangle</string>
-              </property>
-              <property name="text">
-               <string>Remove</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QToolButton" name="motionExclusionShowButton">
-              <property name="toolTip">
-               <string>Show or hide exclusion rectangles on the preview image</string>
-              </property>
-              <property name="checkable">
-               <bool>true</bool>
-              </property>
-              <property name="checked">
-               <bool>true</bool>
-              </property>
-              <property name="text">
-               <string>Show</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="motionExclusionButtonsSpacer">
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>40</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-           </layout>
-          </item>
-          <item row="9" column="0" colspan="4">
+          <item row="10" column="0" colspan="4">
            <widget class="QTableWidget" name="motionExclusionTable">
             <property name="toolTip">
              <string>Full-resolution exclusion rectangles for diff/motion detection</string>
@@ -4098,6 +3785,343 @@ li.checked::marker { content: &quot;\2612&quot;; }
               <string>H</string>
              </property>
             </column>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QSpinBox" name="motionPersistenceFramesSpin">
+            <property name="toolTip">
+             <string>Keep the last motion boxes for this many frames after motion disappears</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>120</number>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="motionHistorySpin">
+            <property name="toolTip">
+             <string>Background history length for motion detection</string>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>5000</number>
+            </property>
+            <property name="value">
+             <number>500</number>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="motionPersistenceFramesLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Persistence</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="motionOpenSizeLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Open size</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="3">
+           <widget class="QSpinBox" name="minContourAreaSpin">
+            <property name="toolTip">
+             <string>Minimum contour area (px²)</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>1000</number>
+            </property>
+            <property name="value">
+             <number>100</number>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QDoubleSpinBox" name="motionVarThresholdSpin">
+            <property name="toolTip">
+             <string>Variance threshold for MOG2 foreground classification</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>200.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>16.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QLabel" name="motionCloseSizeLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Close size</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QComboBox" name="motionDownscaleCombo">
+            <property name="toolTip">
+             <string>Optional downscaled path for motion detection</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>100%</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>50%</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>25%</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="8" column="3">
+           <widget class="QCheckBox" name="motionDetectShadowsCheck">
+            <property name="toolTip">
+             <string>Enable MOG2 shadow detection</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <widget class="QToolButton" name="motionBoxColorButton">
+            <property name="toolTip">
+             <string>Select bounding box colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="motionBoxColorLabel">
+            <property name="text">
+             <string>BBox Colour</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="motionDownscaleLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Downscale</string>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="1" colspan="3">
+           <layout class="QHBoxLayout" name="motionExclusionButtonsLayout">
+            <item>
+             <widget class="QToolButton" name="motionExclusionAddButton">
+              <property name="toolTip">
+               <string>Add an exclusion rectangle for diff/motion detection</string>
+              </property>
+              <property name="text">
+               <string>Add</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="motionExclusionRemoveButton">
+              <property name="toolTip">
+               <string>Remove the selected exclusion rectangle</string>
+              </property>
+              <property name="text">
+               <string>Remove</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="motionExclusionShowButton">
+              <property name="toolTip">
+               <string>Show or hide exclusion rectangles on the preview image</string>
+              </property>
+              <property name="text">
+               <string>Show</string>
+              </property>
+              <property name="checkable">
+               <bool>true</bool>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="motionExclusionButtonsSpacer">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item row="8" column="2">
+           <widget class="QLabel" name="motionDetectShadowsLabel">
+            <property name="text">
+             <string>Detect shadows</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="motionHistoryLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>History</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="motionLearningRateLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Learning rate</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="motionBackgroundSubtractorLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Subtractor</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="motionBackgroundSubtractorCombo">
+            <property name="toolTip">
+             <string>Background subtractor used for motion detection</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>MOG2</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>KNN</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="motionMaskViewLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Mask view</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QComboBox" name="motionMaskViewCombo">
+            <property name="toolTip">
+             <string>Display an intermediate motion fgMask stage instead of the normal image</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Off</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Raw</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Thresholded</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Opened</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Closed</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Final</string>
+             </property>
+            </item>
            </widget>
           </item>
          </layout>
@@ -4876,7 +4900,6 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>motionHistorySpin</tabstop>
   <tabstop>motionVarThresholdSpin</tabstop>
   <tabstop>motionOpenSizeSpin</tabstop>
-  <tabstop>motionCloseSizeSpin</tabstop>
   <tabstop>motionPersistenceFramesSpin</tabstop>
   <tabstop>minContourAreaSpin</tabstop>
   <tabstop>motionBoxColorButton</tabstop>

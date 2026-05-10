@@ -269,6 +269,14 @@ struct CameraSettings
     QColor m_motionBoxColor;    ///< Bounding box colour for motion contours
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
     QList<QRect> m_motionExclusionRects; ///< Full-resolution exclusion rectangles for diff/motion detection
+    bool   m_streakDetect;      ///< Enable streak detection for meteors/contrails
+    int    m_streakThreshold;   ///< Binary threshold on frame-difference grayscale image
+    int    m_streakMinLength;   ///< Minimum detected streak length in pixels
+    int    m_streakHoughThreshold; ///< Hough line accumulator threshold
+    double m_streakMaxGap;      ///< Maximum line gap in pixels for HoughLinesP
+    int    m_streakPersistenceFrames; ///< Keep last streaks for this many frames after they disappear
+    double m_streakDownscale;   ///< Downscale factor for streak detection path: 1.0, 0.5, 0.25
+    QColor m_streakColor;       ///< Overlay colour for streak detections
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 
     // Spectrum overlay settings

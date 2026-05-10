@@ -271,6 +271,14 @@ void CameraSettings::resetToDefaults()
     m_motionBoxColor = Qt::red;
     m_minContourArea = 100;
     m_motionExclusionRects.clear();
+    m_streakDetect = false;
+    m_streakThreshold = 24;
+    m_streakMinLength = 80;
+    m_streakHoughThreshold = 30;
+    m_streakMaxGap = 12.0;
+    m_streakPersistenceFrames = 1;
+    m_streakDownscale = 0.5;
+    m_streakColor = QColor(255, 255, 80);
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
@@ -410,6 +418,14 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(172, m_motionConfirmFrames);
     s.writeDouble(173, m_motionDownscale);
     s.writeBlob(174, serializeMotionExclusionRects(m_motionExclusionRects));
+    s.writeBool(177, m_streakDetect);
+    s.writeS32(178, m_streakThreshold);
+    s.writeS32(179, m_streakMinLength);
+    s.writeS32(180, m_streakHoughThreshold);
+    s.writeDouble(181, m_streakMaxGap);
+    s.writeS32(182, m_streakPersistenceFrames);
+    s.writeDouble(183, m_streakDownscale);
+    s.writeU32(184, m_streakColor.rgba());
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -689,6 +705,16 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(67, &m_minContourArea, 100);
         d.readBlob(174, &bytetmp);
         deserializeMotionExclusionRects(bytetmp, m_motionExclusionRects);
+        d.readBool(177, &m_streakDetect, false);
+        d.readS32(178, &m_streakThreshold, 24);
+        d.readS32(179, &m_streakMinLength, 80);
+        d.readS32(180, &m_streakHoughThreshold, 30);
+        d.readDouble(181, &m_streakMaxGap, 12.0);
+        d.readS32(182, &m_streakPersistenceFrames, 1);
+        d.readDouble(183, &m_streakDownscale, 0.5);
+        uint32_t streakColorRgba = QColor(255, 255, 80).rgba();
+        d.readU32(184, &streakColorRgba, QColor(255, 255, 80).rgba());
+        m_streakColor = QColor::fromRgba(streakColorRgba);
         m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
         m_detectionRoiX = qBound(0, m_detectionRoiX, 4096);
         m_detectionRoiY = qBound(0, m_detectionRoiY, 4096);
@@ -1260,6 +1286,31 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("motionExclusionRects")) {
         m_motionExclusionRects = settings.m_motionExclusionRects;
     }
+    if (settingsKeys.contains("streakDetect")) {
+        m_streakDetect = settings.m_streakDetect;
+    }
+    if (settingsKeys.contains("streakThreshold")) {
+        m_streakThreshold = qBound(1, settings.m_streakThreshold, 255);
+    }
+    if (settingsKeys.contains("streakMinLength")) {
+        m_streakMinLength = qBound(1, settings.m_streakMinLength, 4096);
+    }
+    if (settingsKeys.contains("streakHoughThreshold")) {
+        m_streakHoughThreshold = qBound(1, settings.m_streakHoughThreshold, 500);
+    }
+    if (settingsKeys.contains("streakMaxGap")) {
+        m_streakMaxGap = qBound(0.0, settings.m_streakMaxGap, 1024.0);
+    }
+    if (settingsKeys.contains("streakPersistenceFrames")) {
+        m_streakPersistenceFrames = qBound(0, settings.m_streakPersistenceFrames, 120);
+    }
+    if (settingsKeys.contains("streakDownscale")) {
+        const QList<double> validDownscales{1.0, 0.5, 0.25};
+        m_streakDownscale = validDownscales.contains(settings.m_streakDownscale) ? settings.m_streakDownscale : 1.0;
+    }
+    if (settingsKeys.contains("streakColor")) {
+        m_streakColor = settings.m_streakColor;
+    }
     if (settingsKeys.contains("videoPostProcess")) {
         m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
     }
@@ -1751,6 +1802,30 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("motionExclusionRects") || force) {
         ostr << " m_motionExclusionRects: " << m_motionExclusionRects.size();
+    }
+    if (settingsKeys.contains("streakDetect") || force) {
+        ostr << " m_streakDetect: " << m_streakDetect;
+    }
+    if (settingsKeys.contains("streakThreshold") || force) {
+        ostr << " m_streakThreshold: " << m_streakThreshold;
+    }
+    if (settingsKeys.contains("streakMinLength") || force) {
+        ostr << " m_streakMinLength: " << m_streakMinLength;
+    }
+    if (settingsKeys.contains("streakHoughThreshold") || force) {
+        ostr << " m_streakHoughThreshold: " << m_streakHoughThreshold;
+    }
+    if (settingsKeys.contains("streakMaxGap") || force) {
+        ostr << " m_streakMaxGap: " << m_streakMaxGap;
+    }
+    if (settingsKeys.contains("streakPersistenceFrames") || force) {
+        ostr << " m_streakPersistenceFrames: " << m_streakPersistenceFrames;
+    }
+    if (settingsKeys.contains("streakDownscale") || force) {
+        ostr << " m_streakDownscale: " << m_streakDownscale;
+    }
+    if (settingsKeys.contains("streakColor") || force) {
+        ostr << " m_streakColor: " << m_streakColor.name().toStdString();
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_recordMode;

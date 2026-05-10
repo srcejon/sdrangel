@@ -799,6 +799,39 @@ void CameraPostProcessor::applyDetectionOverlay(cv::Mat& bgrMat, const QVector<C
     PROFILER_STOP(__FUNCTION__);
 }
 
+void CameraPostProcessor::applyStreakOverlay(QImage& image, const QVector<CameraPipelineStreakDetection>& streakDetections) const
+{
+    PROFILER_START();
+
+    if (streakDetections.isEmpty()) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPen pen(m_settings.m_streakColor);
+    pen.setWidth(2);
+    painter.setPen(pen);
+
+    QFont font;
+    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_gridLabelFontFamily);
+    }
+    font.setPointSizeF(m_settings.m_gridLabelFontScale);
+    painter.setFont(font);
+    const QFontMetrics fontMetrics(font);
+
+    for (const CameraPipelineStreakDetection& detection : streakDetections)
+    {
+        painter.drawLine(detection.m_line);
+        const QPoint labelPoint = detection.m_line.p2().toPoint();
+        drawOutlinedLabel(painter, image.rect(), labelPoint, detection.m_label, m_settings.m_streakColor, fontMetrics);
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
 void CameraPostProcessor::applySpectrumOverlay(cv::Mat& bgrMat) const
 {
     PROFILER_START();
@@ -1227,6 +1260,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         || needsTextOverlay
         || !frame.m_motionBoxes.isEmpty()
         || !frame.m_detections.isEmpty()
+        || !frame.m_streakDetections.isEmpty()
         || needsSpectrumOverlay;
 
     if (!needsAny) {
@@ -1245,6 +1279,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     QImage result = convertBgrToRgbImage(bgrMat);
 
+    if (!frame.m_streakDetections.isEmpty()) { applyStreakOverlay(result, frame.m_streakDetections); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
     if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }

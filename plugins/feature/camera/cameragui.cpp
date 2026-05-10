@@ -1054,12 +1054,22 @@ void CameraGUI::displaySettings()
     settingsUI()->motionCloseSizeSpin->setValue(m_settings.m_motionCloseSize);
     settingsUI()->motionPersistenceFramesSpin->setValue(m_settings.m_motionPersistenceFrames);
     settingsUI()->minContourAreaSpin->setValue(m_settings.m_minContourArea);
+    settingsUI()->streakDetectCheck->setChecked(m_settings.m_streakDetect);
+    settingsUI()->streakThresholdSpin->setValue(m_settings.m_streakThreshold);
+    settingsUI()->streakMinLengthSpin->setValue(m_settings.m_streakMinLength);
+    settingsUI()->streakHoughThresholdSpin->setValue(m_settings.m_streakHoughThreshold);
+    settingsUI()->streakMaxGapSpin->setValue(m_settings.m_streakMaxGap);
+    settingsUI()->streakPersistenceFramesSpin->setValue(m_settings.m_streakPersistenceFrames);
+    settingsUI()->streakDownscaleCombo->setCurrentIndex(
+        qFuzzyCompare(m_settings.m_streakDownscale, 0.5) ? 1 :
+        qFuzzyCompare(m_settings.m_streakDownscale, 0.25) ? 2 : 0);
     settingsUI()->motionExclusionShowButton->setChecked(m_showMotionExclusionRects);
     updateMotionExclusionRectsTable();
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
     updateColorButton(settingsUI()->altAzGridColorButton, m_settings.m_altAzGridColor);
     updateColorButton(settingsUI()->trackObjectColorButton, m_settings.m_trackObjectColor);
+    updateColorButton(settingsUI()->streakColorButton, m_settings.m_streakColor);
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
     updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
     ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
@@ -1438,6 +1448,14 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->motionPersistenceFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionPersistenceFramesSpin_valueChanged);
     QObject::connect(settingsUI()->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
     QObject::connect(settingsUI()->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
+    QObject::connect(settingsUI()->streakDetectCheck, &QCheckBox::toggled, this, &CameraGUI::on_streakDetectCheck_toggled);
+    QObject::connect(settingsUI()->streakThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_streakThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->streakMinLengthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_streakMinLengthSpin_valueChanged);
+    QObject::connect(settingsUI()->streakHoughThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_streakHoughThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->streakMaxGapSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_streakMaxGapSpin_valueChanged);
+    QObject::connect(settingsUI()->streakPersistenceFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_streakPersistenceFramesSpin_valueChanged);
+    QObject::connect(settingsUI()->streakDownscaleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_streakDownscaleCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->streakColorButton, &QToolButton::clicked, this, &CameraGUI::on_streakColorButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
     QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
     QObject::connect(settingsUI()->motionExclusionShowButton, &QToolButton::toggled, this, &CameraGUI::on_motionExclusionShowButton_toggled);
@@ -5068,6 +5086,60 @@ void CameraGUI::on_motionBoxColorButton_clicked()
         m_settings.m_motionBoxColor = color;
         updateColorButton(settingsUI()->motionBoxColorButton, color);
         applySetting("motionBoxColor");
+    }
+}
+
+void CameraGUI::on_streakDetectCheck_toggled(bool checked)
+{
+    m_settings.m_streakDetect = checked;
+    applySetting("streakDetect");
+}
+
+void CameraGUI::on_streakThresholdSpin_valueChanged(int value)
+{
+    m_settings.m_streakThreshold = value;
+    applySetting("streakThreshold");
+}
+
+void CameraGUI::on_streakMinLengthSpin_valueChanged(int value)
+{
+    m_settings.m_streakMinLength = value;
+    applySetting("streakMinLength");
+}
+
+void CameraGUI::on_streakHoughThresholdSpin_valueChanged(int value)
+{
+    m_settings.m_streakHoughThreshold = value;
+    applySetting("streakHoughThreshold");
+}
+
+void CameraGUI::on_streakMaxGapSpin_valueChanged(double value)
+{
+    m_settings.m_streakMaxGap = value;
+    applySetting("streakMaxGap");
+}
+
+void CameraGUI::on_streakPersistenceFramesSpin_valueChanged(int value)
+{
+    m_settings.m_streakPersistenceFrames = value;
+    applySetting("streakPersistenceFrames");
+}
+
+void CameraGUI::on_streakDownscaleCombo_currentIndexChanged(int index)
+{
+    m_settings.m_streakDownscale = index == 1 ? 0.5 : index == 2 ? 0.25 : 1.0;
+    applySetting("streakDownscale");
+}
+
+void CameraGUI::on_streakColorButton_clicked()
+{
+    const QColor color = QColorDialog::getColor(m_settings.m_streakColor, this, tr("Select streak colour"));
+
+    if (color.isValid())
+    {
+        m_settings.m_streakColor = color;
+        updateColorButton(settingsUI()->streakColorButton, color);
+        applySetting("streakColor");
     }
 }
 

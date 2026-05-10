@@ -131,6 +131,8 @@ private:
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;
     int m_motionConfirmCount;
+    QVector<CameraPipelineStreakDetection> m_lastStreakDetections;
+    int m_streakPersistenceRemaining;
     cv::dnn::Net m_yoloNet;
     cv::Size m_yoloInputSize;
     QString m_yoloLoadedModelPath;
@@ -154,6 +156,7 @@ private:
     [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createBackgroundSubtractor() const;
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
+    void applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame, QVector<CameraPipelineStreakDetection>& streakDetections);
     [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);

@@ -4139,10 +4139,143 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </widget>
           </item>
          </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="differenceDetectionGroup">
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="streakDetectionGroup">
+        <property name="title">
+         <string>Streak Detection</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayout_18">
+         <item row="0" column="0">
+          <widget class="QLabel" name="streakDetectLabel">
+           <property name="text">
+            <string>Enable</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QCheckBox" name="streakDetectCheck">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QLabel" name="streakThresholdLabel">
+           <property name="text">
+            <string>Threshold</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QSpinBox" name="streakThresholdSpin">
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>255</number>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="streakMinLengthLabel">
+           <property name="text">
+            <string>Min length</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QSpinBox" name="streakMinLengthSpin">
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>4096</number>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QLabel" name="streakHoughThresholdLabel">
+           <property name="text">
+            <string>Hough threshold</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QSpinBox" name="streakHoughThresholdSpin">
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>500</number>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="streakMaxGapLabel">
+           <property name="text">
+            <string>Max gap</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QDoubleSpinBox" name="streakMaxGapSpin">
+           <property name="decimals">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <double>1024.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QLabel" name="streakPersistenceFramesLabel">
+           <property name="text">
+            <string>Persistence</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QSpinBox" name="streakPersistenceFramesSpin">
+           <property name="maximum">
+            <number>120</number>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="streakDownscaleLabel">
+           <property name="text">
+            <string>Downscale</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QComboBox" name="streakDownscaleCombo">
+           <item><property name="text"><string>100%</string></property></item>
+           <item><property name="text"><string>50%</string></property></item>
+           <item><property name="text"><string>25%</string></property></item>
+          </widget>
+         </item>
+         <item row="3" column="2">
+          <widget class="QLabel" name="streakColorLabel">
+           <property name="text">
+            <string>Colour</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="3">
+          <widget class="QToolButton" name="streakColorButton">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="differenceDetectionGroup">
          <property name="title">
           <string>Difference Detection</string>
          </property>

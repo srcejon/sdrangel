@@ -351,6 +351,7 @@ CameraDetector::CameraDetector() :
     m_captureActive(false),
     m_motionPersistenceRemaining(0),
     m_motionConfirmCount(0),
+    m_streakPersistenceRemaining(0),
     m_yoloInputSize(640, 640),
     m_processingFrame(false)
 #ifdef QT_TEXTTOSPEECH_FOUND
@@ -399,6 +400,8 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_lastMotionBoxes.clear();
             m_motionPersistenceRemaining = 0;
             m_motionConfirmCount = 0;
+            m_lastStreakDetections.clear();
+            m_streakPersistenceRemaining = 0;
             m_detectedObjectClasses.clear();
             m_pendingDisappearDeadlines.clear();
         }
@@ -463,6 +466,8 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
         m_motionConfirmCount = 0;
+        m_lastStreakDetections.clear();
+        m_streakPersistenceRemaining = 0;
     }
 
     if (force
@@ -530,6 +535,23 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_motionConfirmCount = 0;
     }
 
+    if (force
+        || settingsKeys.contains("streakDetect")
+        || settingsKeys.contains("streakThreshold")
+        || settingsKeys.contains("streakMinLength")
+        || settingsKeys.contains("streakHoughThreshold")
+        || settingsKeys.contains("streakMaxGap")
+        || settingsKeys.contains("streakPersistenceFrames")
+        || settingsKeys.contains("streakDownscale")
+        || settingsKeys.contains("detectionRoiX")
+        || settingsKeys.contains("detectionRoiY")
+        || settingsKeys.contains("detectionRoiWidth")
+        || settingsKeys.contains("detectionRoiHeight"))
+    {
+        m_lastStreakDetections.clear();
+        m_streakPersistenceRemaining = 0;
+    }
+
     if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
     {
         m_yoloNet = cv::dnn::Net();
@@ -571,6 +593,14 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("motionPersistenceFrames")
         || settingsKeys.contains("minContourArea")
         || settingsKeys.contains("motionExclusionRects")
+        || settingsKeys.contains("streakDetect")
+        || settingsKeys.contains("streakThreshold")
+        || settingsKeys.contains("streakMinLength")
+        || settingsKeys.contains("streakHoughThreshold")
+        || settingsKeys.contains("streakMaxGap")
+        || settingsKeys.contains("streakPersistenceFrames")
+        || settingsKeys.contains("streakDownscale")
+        || settingsKeys.contains("streakColor")
         || settingsKeys.contains("detectionRoiX")
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
@@ -667,6 +697,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     CameraPipelineFrame inputFrameSnapshot(*frame);
     frame->m_motionBoxes.clear();
     frame->m_detections.clear();
+    frame->m_streakDetections.clear();
 
     QImage convertedRgb;
     const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
@@ -699,6 +730,12 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
             roiMask.copyTo(maskCanvas(detectionRoi));
             cv::cvtColor(maskCanvas, bgrMat, cv::COLOR_GRAY2BGR);
         }
+    }
+
+    if (m_settings.m_streakDetect && !diffReferenceFrame.m_image.isNull()
+        && diffReferenceFrame.m_image.width() == frame->m_image.width()
+        && diffReferenceFrame.m_image.height() == frame->m_image.height()) {
+        applyStreakDetection(bgrMat, detectionRoi, diffReferenceFrame, frame->m_streakDetections);
     }
 
     if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
@@ -945,6 +982,95 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
     }
 
     motionBoxes = boxes;
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame, QVector<CameraPipelineStreakDetection>& streakDetections)
+{
+    PROFILER_START();
+
+    QImage convertedPrevRgb;
+    const QImage& prevRgb = ensureRgb888(diffReferenceFrame.m_image, convertedPrevRgb);
+    cv::Mat prevMat = wrapRgb888Image(prevRgb);
+    cv::Mat prevBgr;
+    cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
+
+    cv::Mat currentGray;
+    cv::Mat previousGray;
+    cv::cvtColor(bgrMat(roi), currentGray, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(prevBgr(roi), previousGray, cv::COLOR_BGR2GRAY);
+
+    const double downscale = m_settings.m_streakDownscale;
+    if (downscale < 0.999)
+    {
+        const cv::Size downscaledSize(
+            std::max(1, static_cast<int>(std::lround(roi.width * downscale))),
+            std::max(1, static_cast<int>(std::lround(roi.height * downscale))));
+        cv::resize(currentGray, currentGray, downscaledSize, 0.0, 0.0, cv::INTER_AREA);
+        cv::resize(previousGray, previousGray, downscaledSize, 0.0, 0.0, cv::INTER_AREA);
+    }
+
+    cv::Mat diff;
+    cv::absdiff(currentGray, previousGray, diff);
+    cv::threshold(diff, diff, m_settings.m_streakThreshold, 255, cv::THRESH_BINARY);
+
+    cv::Mat exclusionMask = buildExclusionMask(roi, diff.size());
+    cv::bitwise_and(diff, exclusionMask, diff);
+
+    cv::Mat edges;
+    cv::Canny(diff, edges, std::max(1, m_settings.m_streakThreshold / 2), std::max(2, m_settings.m_streakThreshold));
+
+    std::vector<cv::Vec4i> lines;
+    cv::HoughLinesP(
+        edges,
+        lines,
+        1.0,
+        CV_PI / 180.0,
+        std::max(1, m_settings.m_streakHoughThreshold),
+        std::max(1, m_settings.m_streakMinLength),
+        std::max(0.0, m_settings.m_streakMaxGap));
+
+    QVector<CameraPipelineStreakDetection> detections;
+    detections.reserve(static_cast<qsizetype>(lines.size()));
+
+    for (const cv::Vec4i& line : lines)
+    {
+        QPointF p1(line[0], line[1]);
+        QPointF p2(line[2], line[3]);
+
+        if (downscale < 0.999)
+        {
+            p1 = p1 / downscale;
+            p2 = p2 / downscale;
+        }
+
+        p1 += QPointF(roi.x, roi.y);
+        p2 += QPointF(roi.x, roi.y);
+
+        const QLineF qline(p1, p2);
+        if (qline.length() < m_settings.m_streakMinLength) {
+            continue;
+        }
+
+        CameraPipelineStreakDetection detection;
+        detection.m_line = qline;
+        detection.m_label = QStringLiteral("Streak");
+        detection.m_score = static_cast<float>(qline.length());
+        detections.append(detection);
+    }
+
+    if (!detections.isEmpty()) {
+        m_lastStreakDetections = detections;
+        m_streakPersistenceRemaining = m_settings.m_streakPersistenceFrames;
+    } else if ((m_streakPersistenceRemaining > 0) && !m_lastStreakDetections.isEmpty()) {
+        detections = m_lastStreakDetections;
+        --m_streakPersistenceRemaining;
+    } else {
+        m_lastStreakDetections.clear();
+        m_streakPersistenceRemaining = 0;
+    }
+
+    streakDetections = detections;
     PROFILER_STOP(__FUNCTION__);
 }
 

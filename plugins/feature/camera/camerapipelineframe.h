@@ -21,6 +21,7 @@
 
 #include <QDateTime>
 #include <QImage>
+#include <QLineF>
 #include <QRect>
 #include <QSharedPointer>
 #include <QString>
@@ -45,6 +46,13 @@ struct CameraHistogramData
     }
 };
 
+struct CameraPipelineStreakDetection
+{
+    QLineF m_line;
+    QString m_label;
+    float m_score;
+};
+
 struct CameraPipelineFrame
 {
     enum BayerPattern
@@ -62,6 +70,7 @@ struct CameraPipelineFrame
     QDateTime m_captureDateTime;
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
+    QVector<CameraPipelineStreakDetection> m_streakDetections;
     int m_stackCount = 1;
     BayerPattern m_bayerPattern = BayerNone;
 };

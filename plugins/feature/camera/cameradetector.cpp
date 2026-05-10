@@ -398,6 +398,7 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_diffMaskHistory.clear();
             m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
             m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
+            m_motionLastFgMaskRaw.release();
             m_streakLastBackgroundGray.release();
             m_streakLastForegroundMask.release();
             m_lastMotionBoxes.clear();
@@ -467,6 +468,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_diffMaskHistory.clear();
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
         m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
+        m_motionLastFgMaskRaw.release();
         m_streakLastBackgroundGray.release();
         m_streakLastForegroundMask.release();
         m_lastMotionBoxes.clear();
@@ -515,6 +517,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("detectionRoiHeight"))
     {
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
+        m_motionLastFgMaskRaw.release();
     }
 
     if (force
@@ -723,6 +726,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
             bgrMat,
             detectionRoi,
             frame->m_motionBoxes,
+            updateInputHistory,
             (m_settings.m_motionMaskView != CameraSettings::MotionMaskViewOff) ? &motionDebugMask : nullptr);
 
         if (!motionDebugMask.empty())
@@ -917,7 +921,7 @@ cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createStreakBackgroundSubtract
     return cv::createBackgroundSubtractorMOG2(streakHistory, streakVarThreshold, streakDetectShadows);
 }
 
-void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
+void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
     if (!m_bgSubtractor) {
@@ -937,7 +941,19 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
     }
 
     cv::Mat fgMask;
-    m_bgSubtractor->apply(motionInput, fgMask, m_settings.m_motionLearningRate);
+    if (updateBackgroundModel)
+    {
+        m_bgSubtractor->apply(motionInput, fgMask, m_settings.m_motionLearningRate);
+        m_motionLastFgMaskRaw = fgMask.clone();
+    }
+    else
+    {
+        fgMask = m_motionLastFgMaskRaw.clone();
+    }
+
+    if (fgMask.empty()) {
+        m_bgSubtractor->apply(motionInput, fgMask, 0.0);
+    }
     if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewRaw)) {
         *debugMask = fgMask.clone();
     }

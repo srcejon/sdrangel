@@ -1109,6 +1109,132 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
         detections.append(detection);
     }
 
+    if (detections.size() > 1)
+    {
+        const double angleToleranceDegrees = 8.0;
+        const double angleToleranceRadians = angleToleranceDegrees * CV_PI / 180.0;
+        const double maxPerpendicularDistance = std::max(4.0, m_settings.m_streakMaxGap);
+        const double maxProjectedGap = std::max(12.0, m_settings.m_streakMaxGap * 2.0);
+
+        auto canonicalDirection = [](const QLineF& line) -> QPointF
+        {
+            const double length = line.length();
+            if (length <= 0.0) {
+                return QPointF(1.0, 0.0);
+            }
+
+            QPointF direction = (line.p2() - line.p1()) / length;
+            if ((direction.x() < 0.0) || ((std::abs(direction.x()) < 1e-9) && (direction.y() < 0.0))) {
+                direction = -direction;
+            }
+            return direction;
+        };
+
+        auto dotProduct = [](const QPointF& a, const QPointF& b) -> double
+        {
+            return a.x() * b.x() + a.y() * b.y();
+        };
+
+        auto perpendicularDistance = [&](const QLineF& a, const QLineF& b) -> double
+        {
+            const QPointF direction = canonicalDirection(a);
+            const QPointF normal(-direction.y(), direction.x());
+            const QPointF delta = b.center() - a.center();
+            return std::abs(dotProduct(delta, normal));
+        };
+
+        auto projectedGap = [&](const QLineF& a, const QLineF& b) -> double
+        {
+            const QPointF direction = canonicalDirection(a);
+            const QPointF origin = a.p1();
+            const double a0 = dotProduct(a.p1() - origin, direction);
+            const double a1 = dotProduct(a.p2() - origin, direction);
+            const double b0 = dotProduct(b.p1() - origin, direction);
+            const double b1 = dotProduct(b.p2() - origin, direction);
+            const double aMin = std::min(a0, a1);
+            const double aMax = std::max(a0, a1);
+            const double bMin = std::min(b0, b1);
+            const double bMax = std::max(b0, b1);
+
+            if ((aMax >= bMin) && (bMax >= aMin)) {
+                return 0.0;
+            }
+
+            return (bMin > aMax) ? (bMin - aMax) : (aMin - bMax);
+        };
+
+        auto mergePair = [&](const CameraPipelineStreakDetection& first, const CameraPipelineStreakDetection& second) -> CameraPipelineStreakDetection
+        {
+            const QPointF firstDirection = canonicalDirection(first.m_line);
+            const QPointF secondDirection = canonicalDirection(second.m_line);
+            QPointF mergedDirection = firstDirection + secondDirection;
+            const double mergedDirLength = std::hypot(mergedDirection.x(), mergedDirection.y());
+            if (mergedDirLength <= 1e-9) {
+                mergedDirection = firstDirection;
+            } else {
+                mergedDirection /= mergedDirLength;
+            }
+
+            const QPointF normal(-mergedDirection.y(), mergedDirection.x());
+            const QPointF points[] = { first.m_line.p1(), first.m_line.p2(), second.m_line.p1(), second.m_line.p2() };
+
+            double minProjection = std::numeric_limits<double>::max();
+            double maxProjection = -std::numeric_limits<double>::max();
+            double normalSum = 0.0;
+            for (const QPointF& point : points)
+            {
+                const double parallel = dotProduct(point, mergedDirection);
+                minProjection = std::min(minProjection, parallel);
+                maxProjection = std::max(maxProjection, parallel);
+                normalSum += dotProduct(point, normal);
+            }
+
+            const double averageNormal = normalSum / 4.0;
+            const QPointF start = mergedDirection * minProjection + normal * averageNormal;
+            const QPointF end = mergedDirection * maxProjection + normal * averageNormal;
+
+            CameraPipelineStreakDetection merged = first;
+            merged.m_line = QLineF(start, end);
+            merged.m_score = static_cast<float>(merged.m_line.length());
+            return merged;
+        };
+
+        bool mergedAny = true;
+        while (mergedAny)
+        {
+            mergedAny = false;
+            for (int i = 0; i < detections.size() && !mergedAny; ++i)
+            {
+                for (int j = i + 1; j < detections.size(); ++j)
+                {
+                    const QLineF& first = detections[i].m_line;
+                    const QLineF& second = detections[j].m_line;
+                    const QPointF dirA = canonicalDirection(first);
+                    const QPointF dirB = canonicalDirection(second);
+                    const double cosine = std::clamp(dotProduct(dirA, dirB), -1.0, 1.0);
+                    const double angle = std::acos(cosine);
+
+                    if (angle > angleToleranceRadians) {
+                        continue;
+                    }
+
+                    if (perpendicularDistance(first, second) > maxPerpendicularDistance) {
+                        continue;
+                    }
+
+                    if (projectedGap(first, second) > maxProjectedGap) {
+                        continue;
+                    }
+
+                    detections[i] = mergePair(detections[i], detections[j]);
+                    detections.removeAt(j);
+                    mergedAny = true;
+                    break;
+                }
+            }
+        }
+    }
+
     if (!detections.isEmpty()) {
         m_lastStreakDetections = detections;
         m_streakPersistenceRemaining = m_settings.m_streakPersistenceFrames;

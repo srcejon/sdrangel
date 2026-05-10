@@ -745,50 +745,37 @@ void CameraImageProcessor::applyLineEnhancement(cv::Mat& bgrMat) const
     cv::Mat grayMat;
     cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
 
-    cv::Mat grayFloat;
-    grayMat.convertTo(grayFloat, CV_32F, 1.0 / 255.0);
-
-    cv::Mat blurred;
-    cv::GaussianBlur(grayFloat, blurred, cv::Size(0, 0), 1.0);
-
-    cv::Mat response = cv::Mat::zeros(grayFloat.size(), CV_32F);
+    cv::Mat response8u;
+    cv::Mat response = cv::Mat::zeros(grayMat.size(), CV_8U);
 
     auto updateResponse = [&](const cv::Mat& kernel)
     {
-        cv::Mat filtered;
-        cv::filter2D(blurred, filtered, CV_32F, kernel);
-        cv::max(response, filtered, response);
+        cv::Mat enhanced;
+        cv::morphologyEx(grayMat, enhanced, cv::MORPH_TOPHAT, kernel);
+        cv::max(response, enhanced, response);
     };
 
-    const cv::Mat kernelHorizontal = (cv::Mat_<float>(5, 5) <<
-        -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
-        -1.0f, -0.5f, -0.5f, -0.5f, -1.0f,
-         2.0f,  2.0f,  2.0f,  2.0f,  2.0f,
-        -1.0f, -0.5f, -0.5f, -0.5f, -1.0f,
-        -1.0f, -1.0f, -1.0f, -1.0f, -1.0f);
-    const cv::Mat kernelVertical = kernelHorizontal.t();
-    const cv::Mat kernelDiag1 = (cv::Mat_<float>(5, 5) <<
-         2.0f, -0.5f, -1.0f, -1.0f, -1.0f,
-        -0.5f,  2.0f, -0.5f, -1.0f, -1.0f,
-        -1.0f, -0.5f,  2.0f, -0.5f, -1.0f,
-        -1.0f, -1.0f, -0.5f,  2.0f, -0.5f,
-        -1.0f, -1.0f, -1.0f, -0.5f,  2.0f);
-    const cv::Mat kernelDiag2 = (cv::Mat_<float>(5, 5) <<
-        -1.0f, -1.0f, -1.0f, -0.5f,  2.0f,
-        -1.0f, -1.0f, -0.5f,  2.0f, -0.5f,
-        -1.0f, -0.5f,  2.0f, -0.5f, -1.0f,
-        -0.5f,  2.0f, -0.5f, -1.0f, -1.0f,
-         2.0f, -0.5f, -1.0f, -1.0f, -1.0f);
+    const cv::Mat kernelHorizontal = (cv::Mat_<uchar>(1, 5) << 1, 1, 1, 1, 1);
+    const cv::Mat kernelVertical = (cv::Mat_<uchar>(5, 1) << 1, 1, 1, 1, 1);
+    const cv::Mat kernelDiag1 = (cv::Mat_<uchar>(5, 5) <<
+        1, 0, 0, 0, 0,
+        0, 1, 0, 0, 0,
+        0, 0, 1, 0, 0,
+        0, 0, 0, 1, 0,
+        0, 0, 0, 0, 1);
+    const cv::Mat kernelDiag2 = (cv::Mat_<uchar>(5, 5) <<
+        0, 0, 0, 0, 1,
+        0, 0, 0, 1, 0,
+        0, 0, 1, 0, 0,
+        0, 1, 0, 0, 0,
+        1, 0, 0, 0, 0);
 
     updateResponse(kernelHorizontal);
     updateResponse(kernelVertical);
     updateResponse(kernelDiag1);
     updateResponse(kernelDiag2);
 
-    cv::max(response, 0.0f, response);
-
-    cv::Mat response8u;
-    cv::normalize(response, response8u, 0, 255, cv::NORM_MINMAX, CV_8U);
+    response8u = response;
     cv::Mat responseBgr;
     cv::cvtColor(response8u, responseBgr, cv::COLOR_GRAY2BGR);
     if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {

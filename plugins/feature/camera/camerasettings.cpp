@@ -889,7 +889,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(115, &m_videoFileCameraPath, "");
         d.readBool(188, &m_videoLoop, false);
         d.readDouble(189, &m_videoPlaybackRate, 1.0);
-        m_videoPlaybackRate = qBound(0.1, m_videoPlaybackRate, 4.0);
+        m_videoPlaybackRate = qBound(0.1, m_videoPlaybackRate, 10.0);
 
         d.readBool(116, &m_useReverseAPI);
         d.readString(117, &m_reverseAPIAddress);
@@ -1127,7 +1127,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_videoLoop = settings.m_videoLoop;
     }
     if (settingsKeys.contains("videoPlaybackRate")) {
-        m_videoPlaybackRate = qBound(0.1, settings.m_videoPlaybackRate, 4.0);
+        m_videoPlaybackRate = qBound(0.1, settings.m_videoPlaybackRate, 10.0);
     }
     if (settingsKeys.contains("videoHwAcceleration")) {
         m_videoHwAcceleration = settings.m_videoHwAcceleration;

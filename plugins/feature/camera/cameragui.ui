@@ -292,6 +292,20 @@
        </widget>
       </item>
       <item>
+       <widget class="QToolButton" name="saveImageButton">
+        <property name="toolTip">
+         <string>Save current image to JPEG</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/save.png</normaloff>:/save.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="ButtonSwitch" name="saveImageCheck">
         <property name="toolTip">
          <string>Save images</string>
@@ -320,16 +334,6 @@
        </widget>
       </item>
       <item>
-       <widget class="ButtonSwitch" name="stackEnabledButton">
-        <property name="toolTip">
-         <string>Enable image stacking</string>
-        </property>
-        <property name="text">
-         <string>STK</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="Line" name="line_3">
         <property name="orientation">
          <enum>Qt::Orientation::Vertical</enum>
@@ -337,16 +341,16 @@
        </widget>
       </item>
       <item>
-       <widget class="QToolButton" name="histogramButton">
+       <widget class="ButtonSwitch" name="stackEnabledButton">
         <property name="toolTip">
-         <string>Show histogram</string>
+         <string>Enable image stacking</string>
         </property>
         <property name="text">
          <string/>
         </property>
         <property name="icon">
          <iconset resource="cameraicons.qrc">
-          <normaloff>:/camera/icons/histogram.png</normaloff>:/camera/icons/histogram.png</iconset>
+          <normaloff>:/camera/icons/stack_images.png</normaloff>:/camera/icons/stack_images.png</iconset>
         </property>
        </widget>
       </item>
@@ -361,6 +365,20 @@
         <property name="icon">
          <iconset resource="cameraicons.qrc">
           <normaloff>:/camera/icons/invert.png</normaloff>:/camera/icons/invert.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="histogramButton">
+        <property name="toolTip">
+         <string>Show histogram</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/histogram.png</normaloff>:/camera/icons/histogram.png</iconset>
         </property>
        </widget>
       </item>
@@ -410,6 +428,20 @@
         <property name="icon">
          <iconset resource="cameraicons.qrc">
           <normaloff>:/camera/icons/object_detect.png</normaloff>:/camera/icons/object_detect.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="trackObjectsButton">
+        <property name="toolTip">
+         <string>Overlay ADS-B / satellite / star tracked objects</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/aircraft.png</normaloff>:/camera/icons/aircraft.png</iconset>
         </property>
        </widget>
       </item>
@@ -478,17 +510,11 @@
          <string>Overlay azimuthal grid</string>
         </property>
         <property name="text">
-         <string>AZ</string>
+         <string/>
         </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="ButtonSwitch" name="trackObjectsButton">
-        <property name="toolTip">
-         <string>Overlay ADS-B / satellite / star tracked objects</string>
-        </property>
-        <property name="text">
-         <string>OBJ</string>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/grid.png</normaloff>:/camera/icons/grid.png</iconset>
         </property>
        </widget>
       </item>

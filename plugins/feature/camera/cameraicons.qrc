@@ -13,5 +13,10 @@
       <file>icons/media_loop.png</file>
       <file>icons/media_next.png</file>
       <file>icons/media_previous.png</file>
+      <file>icons/stack_images.png</file>
+      <file>icons/meteor.png</file>
+      <file>icons/grid.png</file>
+      <file>icons/layers.png</file>
+      <file>icons/aircraft.png</file>
     </qresource>
 </RCC>

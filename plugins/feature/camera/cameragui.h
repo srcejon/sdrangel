@@ -380,6 +380,7 @@ private slots:
     void on_asiHighSpeedModeCheck_toggled(bool checked);
     void on_asiAutoExposureGainCheck_toggled(bool checked);
     void on_asiColorImageTypeCombo_currentIndexChanged(int index);
+    void on_saveImageButton_clicked();
     void on_saveImageCheck_toggled(bool checked);
     void on_imagePathEdit_editingFinished();
     void on_imagePathButton_clicked();

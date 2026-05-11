@@ -1339,6 +1339,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->asiHighSpeedModeCheck, &QCheckBox::toggled, this, &CameraGUI::on_asiHighSpeedModeCheck_toggled);
     QObject::connect(settingsUI()->asiAutoExposureGainCheck, &QCheckBox::toggled, this, &CameraGUI::on_asiAutoExposureGainCheck_toggled);
     QObject::connect(settingsUI()->asiColorImageTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_asiColorImageTypeCombo_currentIndexChanged);
+    QObject::connect(ui->saveImageButton, &QToolButton::clicked, this, &CameraGUI::on_saveImageButton_clicked);
     QObject::connect(ui->saveImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveImageCheck_toggled);
     QObject::connect(settingsUI()->imagePathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_imagePathEdit_editingFinished);
     QObject::connect(settingsUI()->imagePathButton, &QToolButton::clicked, this, &CameraGUI::on_imagePathButton_clicked);
@@ -3964,6 +3965,23 @@ void CameraGUI::on_asiColorImageTypeCombo_currentIndexChanged(int index)
     m_settings.m_asiColorImageType = static_cast<CameraSettings::AsiColorImageType>(
         settingsUI()->asiColorImageTypeCombo->itemData(index).toInt());
     applySetting("asiColorImageType");
+}
+
+void CameraGUI::on_saveImageButton_clicked()
+{
+    const QString fileName = QFileDialog::getSaveFileName(this, tr("Save JPEG"), m_settings.m_imageFileName, tr("JPEG image (*.jpg *.jpeg)"));
+
+    if (!fileName.isEmpty())
+    {
+        QImage image(m_imageScene->sceneRect().size().toSize(), QImage::Format_ARGB32);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing);
+        m_imageScene->render(&painter); // Should render full image, regardless of zoom settings
+        if (!image.save(fileName)) {
+            QMessageBox::warning(this, tr("Save image"), tr("Failed to save image to %1").arg(fileName));
+        }
+    }
 }
 
 void CameraGUI::on_saveImageCheck_toggled(bool checked)

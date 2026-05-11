@@ -815,6 +815,15 @@ void CameraImageProcessor::applyRidgeDetection(cv::Mat& bgrMat) const
     cv::Mat ridgesGray;
     ridgeFilter->getRidgeFilteredImage(grayMat, ridgesGray);
 
+    double minValue = 0.0;
+    double maxValue = 0.0;
+    cv::minMaxLoc(ridgesGray, &minValue, &maxValue);
+    if (maxValue > minValue) {
+        cv::normalize(ridgesGray, ridgesGray, 0, 255, cv::NORM_MINMAX);
+        ridgesGray.convertTo(ridgesGray, CV_8UC1);
+    }
+    cv::bitwise_not(ridgesGray, ridgesGray);
+
     cv::Mat ridgesBgr;
     cv::cvtColor(ridgesGray, ridgesBgr, cv::COLOR_GRAY2BGR);
     if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {

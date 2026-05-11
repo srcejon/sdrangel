@@ -560,9 +560,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(9, (qint32 *) &m_captureMode, (qint32) CaptureModeFrameRate);
         d.readDouble(10, &m_exposureTimeMs, 50.0);
         d.readS32(11, &m_isoSensitivity, -1);
-        m_resolutionWidth = std::max(16, m_resolutionWidth);
-        m_resolutionHeight = std::max(16, m_resolutionHeight);
-        m_framesPerSecond = std::max(1, m_framesPerSecond);
+        m_resolutionWidth = std::max(m_minResolution, m_resolutionWidth);
+        m_resolutionHeight = std::max(m_minResolution, m_resolutionHeight);
+        m_framesPerSecond = std::max(m_minFramesPerSecond, m_framesPerSecond);
         d.readDouble(100, &m_captureInterval, 1.0);
         d.readS32(101, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
         d.readBool(102, &m_alpacaDiscoveryEnabled, false);
@@ -580,16 +580,16 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_alpacaFilterWheelPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
         d.readS32(113, &m_alpacaFilterWheelDeviceNumber, 0);
         d.readS32(114, &m_alpacaFilterWheelPosition, 0);
-        m_alpacaFocuserDeviceNumber = std::max(0, m_alpacaFocuserDeviceNumber);
-        m_alpacaFocusPosition = std::max(0, m_alpacaFocusPosition);
-        m_alpacaFocusStepSize = std::max(1, m_alpacaFocusStepSize);
-        m_alpacaFilterWheelDeviceNumber = std::max(0, m_alpacaFilterWheelDeviceNumber);
-        m_alpacaFilterWheelPosition = std::max(0, m_alpacaFilterWheelPosition);
+        m_alpacaFocuserDeviceNumber = std::max(m_minNonNegative, m_alpacaFocuserDeviceNumber);
+        m_alpacaFocusPosition = std::max(m_minNonNegative, m_alpacaFocusPosition);
+        m_alpacaFocusStepSize = std::max(m_minPositive, m_alpacaFocusStepSize);
+        m_alpacaFilterWheelDeviceNumber = std::max(m_minNonNegative, m_alpacaFilterWheelDeviceNumber);
+        m_alpacaFilterWheelPosition = std::max(m_minNonNegative, m_alpacaFilterWheelPosition);
         m_captureMode = qBound(CaptureModeFrameRate, m_captureMode, CaptureModeInterval);
-        m_captureInterval = std::max(0.1, m_captureInterval);
+        m_captureInterval = std::max(m_minCaptureInterval, m_captureInterval);
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, m_captureIntervalUnits, CaptureIntervalMinutes);
-        m_exposureTimeMs = std::max(0.001, m_exposureTimeMs);
-        m_isoSensitivity = std::max(-1, m_isoSensitivity);
+        m_exposureTimeMs = std::max(m_minExposureTimeMs, m_exposureTimeMs);
+        m_isoSensitivity = std::max(m_minIsoSensitivity, m_isoSensitivity);
         d.readString(12, &m_alpacaHost, "127.0.0.1");
         d.readU32(13, &utmp, 11111);
         m_alpacaPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
@@ -638,13 +638,13 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(28, &m_cameraNumY, 0);
         d.readS32(29, &m_cameraStartX, 0);
         d.readS32(30, &m_cameraStartY, 0);
-        m_cameraBinX = std::max(1, m_cameraBinX);
-        m_cameraBinY = std::max(1, m_cameraBinY);
-        m_cameraNumX = std::max(0, m_cameraNumX);
-        m_cameraNumY = std::max(0, m_cameraNumY);
-        m_cameraStartX = std::max(0, m_cameraStartX);
-        m_cameraStartY = std::max(0, m_cameraStartY);
-        m_cameraReadoutMode = std::max(0, m_cameraReadoutMode);
+        m_cameraBinX = std::max(m_minPositive, m_cameraBinX);
+        m_cameraBinY = std::max(m_minPositive, m_cameraBinY);
+        m_cameraNumX = std::max(m_minNonNegative, m_cameraNumX);
+        m_cameraNumY = std::max(m_minNonNegative, m_cameraNumY);
+        m_cameraStartX = std::max(m_minNonNegative, m_cameraStartX);
+        m_cameraStartY = std::max(m_minNonNegative, m_cameraStartY);
+        m_cameraReadoutMode = std::max(m_minNonNegative, m_cameraReadoutMode);
         d.readS32(31, &m_postProcessWhiteBalanceMode, 0);
         d.readDouble(32, &m_postProcessWhiteBalanceRedGain, 1.0);
         d.readDouble(33, &m_postProcessWhiteBalanceGreenGain, 1.0);
@@ -677,34 +677,34 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(197, &m_ridgeDetectionDelta, 0.0);
         d.readBool(41, &m_flipX, false);
         d.readBool(42, &m_flipY, false);
-        m_postProcessWhiteBalanceMode = qBound(0, m_postProcessWhiteBalanceMode, 2);
-        m_postProcessWhiteBalanceRedGain = qBound(0.1, m_postProcessWhiteBalanceRedGain, 8.0);
-        m_postProcessWhiteBalanceGreenGain = qBound(0.1, m_postProcessWhiteBalanceGreenGain, 8.0);
-        m_postProcessWhiteBalanceBlueGain = qBound(0.1, m_postProcessWhiteBalanceBlueGain, 8.0);
+        m_postProcessWhiteBalanceMode = qBound(m_minNonNegative, m_postProcessWhiteBalanceMode, 2);
+        m_postProcessWhiteBalanceRedGain = qBound(m_minWhiteBalanceGain, m_postProcessWhiteBalanceRedGain, m_maxWhiteBalanceGain);
+        m_postProcessWhiteBalanceGreenGain = qBound(m_minWhiteBalanceGain, m_postProcessWhiteBalanceGreenGain, m_maxWhiteBalanceGain);
+        m_postProcessWhiteBalanceBlueGain = qBound(m_minWhiteBalanceGain, m_postProcessWhiteBalanceBlueGain, m_maxWhiteBalanceGain);
         m_histogramStretch = qBound(HistogramStretchOff, m_histogramStretch, HistogramStretchCLAHE);
-        m_histogramStretchBlackPoint = qBound(0.0, m_histogramStretchBlackPoint, 1.0);
-        m_histogramStretchWhitePoint = qBound(m_histogramStretchBlackPoint + 0.001, m_histogramStretchWhitePoint, 1.0);
-        m_histogramStretchGamma = qBound(0.1, m_histogramStretchGamma, 8.0);
-        m_histogramStretchAsinhStrength = qBound(0.1, m_histogramStretchAsinhStrength, 100.0);
-        m_histogramStretchLogStrength = qBound(0.1, m_histogramStretchLogStrength, 100.0);
-        m_saturation = qBound(0.0, m_saturation, 3.0);
-        m_gamma = qBound(0.1, m_gamma, 3.0);
-        m_gaussianBlur = qBound(0, m_gaussianBlur, 15);
-        m_medianBlur = qBound(0, m_medianBlur, 15);
-        m_sharpen = qBound(0.0, m_sharpen, 3.0);
+        m_histogramStretchBlackPoint = qBound(m_minNormalized, m_histogramStretchBlackPoint, m_maxNormalized);
+        m_histogramStretchWhitePoint = qBound(m_histogramStretchBlackPoint + m_minHistogramWhitePointGap, m_histogramStretchWhitePoint, m_maxNormalized);
+        m_histogramStretchGamma = qBound(m_minHistogramStrength, m_histogramStretchGamma, m_maxWhiteBalanceGain);
+        m_histogramStretchAsinhStrength = qBound(m_minHistogramStrength, m_histogramStretchAsinhStrength, m_maxHistogramStrength);
+        m_histogramStretchLogStrength = qBound(m_minHistogramStrength, m_histogramStretchLogStrength, m_maxHistogramStrength);
+        m_saturation = qBound(m_minFilterAmount, m_saturation, m_maxFilterAmount);
+        m_gamma = qBound(m_minHistogramStrength, m_gamma, m_maxFilterAmount);
+        m_gaussianBlur = qBound(m_minBlurRadius, m_gaussianBlur, m_maxBlurRadius);
+        m_medianBlur = qBound(m_minBlurRadius, m_medianBlur, m_maxBlurRadius);
+        m_sharpen = qBound(m_minFilterAmount, m_sharpen, m_maxFilterAmount);
         m_edgeDisplayMode = static_cast<EdgeDisplayMode>(qBound(
             static_cast<qint32>(EdgeDisplayOverlay),
             static_cast<qint32>(m_edgeDisplayMode),
             static_cast<qint32>(EdgeDisplayEdgesOnly)));
-        m_sobelEdge = qBound(0.0, m_sobelEdge, 3.0);
-        m_cannyEdge = qBound(0.0, m_cannyEdge, 3.0);
-        m_lineEnhancement = qBound(0.0, m_lineEnhancement, 3.0);
-        m_ridgeDetection = qBound(0.0, m_ridgeDetection, 3.0);
+        m_sobelEdge = qBound(m_minFilterAmount, m_sobelEdge, m_maxFilterAmount);
+        m_cannyEdge = qBound(m_minFilterAmount, m_cannyEdge, m_maxFilterAmount);
+        m_lineEnhancement = qBound(m_minFilterAmount, m_lineEnhancement, m_maxFilterAmount);
+        m_ridgeDetection = qBound(m_minFilterAmount, m_ridgeDetection, m_maxFilterAmount);
         m_ridgeDetectionKernelSize = (m_ridgeDetectionKernelSize <= 1) ? 1 :
             (m_ridgeDetectionKernelSize <= 3) ? 3 :
             (m_ridgeDetectionKernelSize <= 5) ? 5 : 7;
-        m_ridgeDetectionScale = qBound(0.0, m_ridgeDetectionScale, 16.0);
-        m_ridgeDetectionDelta = qBound(-255.0, m_ridgeDetectionDelta, 255.0);
+        m_ridgeDetectionScale = qBound(m_minRidgeScale, m_ridgeDetectionScale, m_maxRidgeScale);
+        m_ridgeDetectionDelta = qBound(m_minRidgeDelta, m_ridgeDetectionDelta, m_maxRidgeDelta);
 
         d.readDouble(43, &m_brightness, 0.0);
         d.readDouble(44, &m_contrast, 1.0);
@@ -719,13 +719,13 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(51, &m_diffMaskHistoryFrames, 1);
         d.readS32(52, &m_diffMaskCloseSize, 0);
         d.readS32(126, &m_diffMaskOpenSize, 0);
-        m_brightness = qBound(-100.0, m_brightness, 100.0);
-        m_contrast = qBound(0.1, m_contrast, 3.0);
-        m_diffThreshold = qBound(0, m_diffThreshold, 255);
-        m_diffMaskOpenSize = qBound(0, m_diffMaskOpenSize, 20);
-        m_dilationSize = qBound(0, m_dilationSize, 20);
-        m_diffMaskHistoryFrames = qBound(1, m_diffMaskHistoryFrames, 120);
-        m_diffMaskCloseSize = qBound(0, m_diffMaskCloseSize, 20);
+        m_brightness = qBound(m_minBrightness, m_brightness, m_maxBrightness);
+        m_contrast = qBound(m_minWhiteBalanceGain, m_contrast, m_maxFilterAmount);
+        m_diffThreshold = qBound(m_minThreshold8Bit, m_diffThreshold, m_maxThreshold8Bit);
+        m_diffMaskOpenSize = qBound(m_minMorphologyKernel, m_diffMaskOpenSize, m_maxMorphologyKernel);
+        m_dilationSize = qBound(m_minMorphologyKernel, m_dilationSize, m_maxMorphologyKernel);
+        m_diffMaskHistoryFrames = qBound(m_minShortHistoryFrames, m_diffMaskHistoryFrames, m_maxShortHistoryFrames);
+        m_diffMaskCloseSize = qBound(m_minMorphologyKernel, m_diffMaskCloseSize, m_maxMorphologyKernel);
 
         d.readString(53, &m_overlayFontFamily, "");
         d.readDouble(54, &m_overlayFontScale, 12.0);
@@ -790,23 +790,23 @@ bool CameraSettings::deserialize(const QByteArray& data)
             static_cast<qint32>(StreakLineEnhancementOff),
             streakLineEnhancementPlacement,
             static_cast<qint32>(StreakLineEnhancementAfterBackground)));
-        m_overlayFontScale = qBound(4.0, m_overlayFontScale, 144.0);
-        m_detectionRoiX = qBound(0, m_detectionRoiX, 4096);
-        m_detectionRoiY = qBound(0, m_detectionRoiY, 4096);
-        m_detectionRoiWidth = qBound(0, m_detectionRoiWidth, 4096);
-        m_detectionRoiHeight = qBound(0, m_detectionRoiHeight, 4096);
-        m_motionHistory = qBound(1, m_motionHistory, 5000);
-        m_motionVarThreshold = qBound(1.0, m_motionVarThreshold, 200.0);
-        m_motionLearningRate = qBound(-1.0, m_motionLearningRate, 1.0);
-        m_motionConfirmFrames = qBound(1, m_motionConfirmFrames, 60);
+        m_overlayFontScale = qBound(m_minOverlayFontScale, m_overlayFontScale, m_maxOverlayFontScale);
+        m_detectionRoiX = qBound(m_minUiPixelOffset, m_detectionRoiX, m_maxUiPixelOffset);
+        m_detectionRoiY = qBound(m_minUiPixelOffset, m_detectionRoiY, m_maxUiPixelOffset);
+        m_detectionRoiWidth = qBound(m_minUiPixelOffset, m_detectionRoiWidth, m_maxUiPixelOffset);
+        m_detectionRoiHeight = qBound(m_minUiPixelOffset, m_detectionRoiHeight, m_maxUiPixelOffset);
+        m_motionHistory = qBound(m_minMotionHistory, m_motionHistory, m_maxMotionHistory);
+        m_motionVarThreshold = qBound(m_minMotionVarThreshold, m_motionVarThreshold, m_maxMotionVarThreshold);
+        m_motionLearningRate = qBound(m_minLearningRate, m_motionLearningRate, m_maxLearningRate);
+        m_motionConfirmFrames = qBound(m_minMotionConfirmFrames, m_motionConfirmFrames, m_maxMotionConfirmFrames);
         const QList<double> validDownscales{1.0, 0.5, 0.25};
         if (!validDownscales.contains(m_motionDownscale)) {
             m_motionDownscale = 1.0;
         }
-        m_motionOpenSize = qBound(0, m_motionOpenSize, 20);
-        m_motionCloseSize = qBound(0, m_motionCloseSize, 20);
-        m_motionPersistenceFrames = qBound(0, m_motionPersistenceFrames, 120);
-        m_minContourArea = qBound(0, m_minContourArea, 10000);
+        m_motionOpenSize = qBound(m_minMorphologyKernel, m_motionOpenSize, m_maxMorphologyKernel);
+        m_motionCloseSize = qBound(m_minMorphologyKernel, m_motionCloseSize, m_maxMorphologyKernel);
+        m_motionPersistenceFrames = qBound(m_minNonNegative, m_motionPersistenceFrames, m_maxShortHistoryFrames);
+        m_minContourArea = qBound(m_minContourAreaBound, m_minContourArea, m_maxContourAreaBound);
         bool legacyVideoPostProcess = false;
         d.readBool(68, &legacyVideoPostProcess, false);
         qint32 videoPostProcessMode = legacyVideoPostProcess ? static_cast<qint32>(SavedMediaProcessed)
@@ -817,15 +817,15 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(70, &m_spectrumDevice, "");
         d.readS32(71, &m_spectrumOffsetX, 0);
         d.readS32(72, &m_spectrumOffsetY, 0);
-        m_spectrumOffsetX = qBound(-4096, m_spectrumOffsetX, 4096);
-        m_spectrumOffsetY = qBound(-4096, m_spectrumOffsetY, 4096);
+        m_spectrumOffsetX = qBound(m_minSignedUiPixelOffset, m_spectrumOffsetX, m_maxSignedUiPixelOffset);
+        m_spectrumOffsetY = qBound(m_minSignedUiPixelOffset, m_spectrumOffsetY, m_maxSignedUiPixelOffset);
         d.readDouble(73, &m_spectrumScale, 1.0);
-        m_spectrumScale = qBound(0.1, m_spectrumScale, 4.0);
+        m_spectrumScale = qBound(m_minSpectrumScale, m_spectrumScale, m_maxSpectrumScale);
         d.readString(74, &m_dateTimeFormat, "yyyy-MM-dd hh:mm:ss");
         d.readS32(75, &m_dateTimePosX, 4);
         d.readS32(76, &m_dateTimePosY, 0);
-        m_dateTimePosX = qBound(0, m_dateTimePosX, 4096);
-        m_dateTimePosY = qBound(0, m_dateTimePosY, 4096);
+        m_dateTimePosX = qBound(m_minUiPixelOffset, m_dateTimePosX, m_maxUiPixelOffset);
+        m_dateTimePosY = qBound(m_minUiPixelOffset, m_dateTimePosY, m_maxUiPixelOffset);
         d.readBool(145, &m_equatorialGrid, false);
         uint32_t equatorialGridColorRgba = QColor(80, 170, 255).rgba();
         d.readU32(146, &equatorialGridColorRgba, QColor(80, 170, 255).rgba());
@@ -836,15 +836,15 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_altAzGridColor = QColor::fromRgba(altAzGridColorRgba);
         d.readBool(165, &m_trackObjects, false);
         d.readDouble(166, &m_trackObjectMinElevation, 0.0);
-        m_trackObjectMinElevation = qBound(0.0, m_trackObjectMinElevation, 90.0);
+        m_trackObjectMinElevation = qBound(m_minNormalized, m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
         uint32_t trackObjectColorRgba = QColor(80, 255, 80).rgba();
         d.readU32(169, &trackObjectColorRgba, QColor(80, 255, 80).rgba());
         m_trackObjectColor = QColor::fromRgba(trackObjectColorRgba);
         d.readDouble(170, &m_trackObjectFontScale, 9.0);
-        m_trackObjectFontScale = qBound(4.0, m_trackObjectFontScale, 144.0);
+        m_trackObjectFontScale = qBound(m_minOverlayFontScale, m_trackObjectFontScale, m_maxOverlayFontScale);
         d.readString(155, &m_gridLabelFontFamily, "");
         d.readDouble(156, &m_gridLabelFontScale, 9.0);
-        m_gridLabelFontScale = qBound(4.0, m_gridLabelFontScale, 144.0);
+        m_gridLabelFontScale = qBound(m_minOverlayFontScale, m_gridLabelFontScale, m_maxOverlayFontScale);
         d.readBool(77, &m_overlayText, false);
         d.readString(78, &m_overlayTextString, DEFAULT_OVERLAY_TEXT_STRING);
         uint32_t overlayTextColorRgba = QColor(Qt::white).rgba();
@@ -852,23 +852,23 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_overlayTextColor = QColor::fromRgba(overlayTextColorRgba);
         d.readString(80, &m_overlayTextFontFamily, "");
         d.readDouble(81, &m_overlayTextFontScale, 12.0);
-        m_overlayTextFontScale = qBound(4.0, m_overlayTextFontScale, 144.0);
+        m_overlayTextFontScale = qBound(m_minOverlayFontScale, m_overlayTextFontScale, m_maxOverlayFontScale);
         d.readS32(82, &m_overlayTextPosX, 4);
         d.readS32(83, &m_overlayTextPosY, 0);
-        m_overlayTextPosX = qBound(0, m_overlayTextPosX, 4096);
-        m_overlayTextPosY = qBound(0, m_overlayTextPosY, 4096);
+        m_overlayTextPosX = qBound(m_minUiPixelOffset, m_overlayTextPosX, m_maxUiPixelOffset);
+        m_overlayTextPosY = qBound(m_minUiPixelOffset, m_overlayTextPosY, m_maxUiPixelOffset);
         d.readBool(84, &m_yoloEnabled, false);
         d.readString(85, &m_yoloModelPath, "");
         d.readString(86, &m_yoloLabelsPath, "");
         d.readDouble(87, &m_yoloConfThreshold, 0.5);
         d.readDouble(88, &m_yoloNmsThreshold, 0.45);
-        m_yoloConfThreshold = qBound(0.0, m_yoloConfThreshold, 1.0);
-        m_yoloNmsThreshold = qBound(0.0, m_yoloNmsThreshold, 1.0);
+        m_yoloConfThreshold = qBound(m_minNormalized, m_yoloConfThreshold, m_maxNormalized);
+        m_yoloNmsThreshold = qBound(m_minNormalized, m_yoloNmsThreshold, m_maxNormalized);
         uint32_t yoloBoxColorRgba = QColor(Qt::green).rgba();
         d.readU32(89, &yoloBoxColorRgba, QColor(Qt::green).rgba());
         m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
         d.readDouble(90, &m_yoloDisappearDebounce, 0.0);
-        m_yoloDisappearDebounce = qBound(0.0, m_yoloDisappearDebounce, 60.0);
+        m_yoloDisappearDebounce = qBound(m_minYoloDisappearDebounce, m_yoloDisappearDebounce, m_maxYoloDisappearDebounce);
         d.readS32(91, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
         d.readBlob(92, &bytetmp);
         deserializeObjectDeviceSettings(bytetmp, m_objectDeviceSettings);
@@ -876,20 +876,20 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(93, &m_audioMute, true);
         d.readString(94, &m_audioDeviceName, "");
         d.readS32(95, &m_whiteBalanceMode, 0);
-        m_whiteBalanceMode = std::max(0, m_whiteBalanceMode);
+        m_whiteBalanceMode = std::max(m_minNonNegative, m_whiteBalanceMode);
         d.readDouble(96, &m_exposureCompensation, 0.0);
-        m_exposureCompensation = qBound(-2.0, m_exposureCompensation, 2.0);
+        m_exposureCompensation = qBound(m_minExposureCompensation, m_exposureCompensation, m_maxExposureCompensation);
         d.readS32(97, &m_focusMode, 0);
-        m_focusMode = std::max(0, m_focusMode);
+        m_focusMode = std::max(m_minNonNegative, m_focusMode);
         d.readDouble(98, &m_focusDistance, 1.0);
-        m_focusDistance = qBound(0.0, m_focusDistance, 1.0);
+        m_focusDistance = qBound(m_minNormalized, m_focusDistance, m_maxNormalized);
         d.readDouble(99, &m_zoomFactor, 1.0);
-        m_zoomFactor = std::max(1.0, m_zoomFactor);
+        m_zoomFactor = std::max(m_minZoomFactor, m_zoomFactor);
 
         d.readString(115, &m_videoFileCameraPath, "");
         d.readBool(188, &m_videoLoop, false);
         d.readDouble(189, &m_videoPlaybackRate, 1.0);
-        m_videoPlaybackRate = qBound(0.1, m_videoPlaybackRate, 10.0);
+        m_videoPlaybackRate = qBound(m_minVideoPlaybackRate, m_videoPlaybackRate, m_maxVideoPlaybackRate);
 
         d.readBool(116, &m_useReverseAPI);
         d.readString(117, &m_reverseAPIAddress);
@@ -910,26 +910,26 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(124, &m_asiHighSpeedMode, -1);
         d.readS32(125, (qint32 *) &m_asiColorImageType, (qint32) AsiColorImageTypeRgb24);
         d.readBool(168, &m_asiAutoExposureGain, false);
-        m_asiCoolerOn = qBound(-1, m_asiCoolerOn, 1);
-        m_asiUsbBandwidth = std::max(-1, m_asiUsbBandwidth);
-        m_asiHighSpeedMode = qBound(-1, m_asiHighSpeedMode, 1);
+        m_asiCoolerOn = qBound(m_minAsiControl, m_asiCoolerOn, m_maxAsiControl);
+        m_asiUsbBandwidth = std::max(m_minAsiControl, m_asiUsbBandwidth);
+        m_asiHighSpeedMode = qBound(m_minAsiControl, m_asiHighSpeedMode, m_maxAsiControl);
         m_asiColorImageType = qBound(AsiColorImageTypeRgb24, m_asiColorImageType, AsiColorImageTypeRaw16);
-        m_stackFrameCount = qBound(1, m_stackFrameCount, 256);
+        m_stackFrameCount = qBound(m_minStackFrameCount, m_stackFrameCount, m_maxStackFrameCount);
         m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodSigmaClippedAverage);
         m_stackAlignmentMethod = qBound(StackAlignmentNone, m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
-        m_latitude = qBound(-90.0f, m_latitude, 90.0f);
-        m_longitude = qBound(-180.0f, m_longitude, 180.0f);
-        m_altitude = qBound(-1000.0f, m_altitude, 100000.0f);
-        m_azimuth = std::fmod(m_azimuth, 360.0f);
+        m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
+        m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
+        m_altitude = qBound(m_minAltitude, m_altitude, m_maxAltitude);
+        m_azimuth = std::fmod(m_azimuth, m_fullRotationDegrees);
         if (m_azimuth < 0.0f) {
-            m_azimuth += 360.0f;
+            m_azimuth += m_fullRotationDegrees;
         }
-        m_elevation = qBound(-90.0f, m_elevation, 90.0f);
-        m_roll = std::fmod(m_roll, 360.0f);
+        m_elevation = qBound(m_minElevation, m_elevation, m_maxElevation);
+        m_roll = std::fmod(m_roll, m_fullRotationDegrees);
         if (m_roll < 0.0f) {
-            m_roll += 360.0f;
+            m_roll += m_fullRotationDegrees;
         }
-        m_fov = qBound(0.01f, m_fov, 360.0f);
+        m_fov = qBound(m_minFov, m_fov, m_maxFov);
         m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) m_lensProjection, (int) LensProjectionEquisolid);
 
         return true;
@@ -995,28 +995,28 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_cameraDescription = settings.m_cameraDescription;
     }
     if (settingsKeys.contains("resolutionWidth")) {
-        m_resolutionWidth = std::max(16, settings.m_resolutionWidth);
+        m_resolutionWidth = std::max(m_minResolution, settings.m_resolutionWidth);
     }
     if (settingsKeys.contains("resolutionHeight")) {
-        m_resolutionHeight = std::max(16, settings.m_resolutionHeight);
+        m_resolutionHeight = std::max(m_minResolution, settings.m_resolutionHeight);
     }
     if (settingsKeys.contains("framesPerSecond")) {
-        m_framesPerSecond = std::max(1, settings.m_framesPerSecond);
+        m_framesPerSecond = std::max(m_minFramesPerSecond, settings.m_framesPerSecond);
     }
     if (settingsKeys.contains("captureMode")) {
         m_captureMode = qBound(CaptureModeFrameRate, settings.m_captureMode, CaptureModeInterval);
     }
     if (settingsKeys.contains("captureInterval")) {
-        m_captureInterval = std::max(0.1, settings.m_captureInterval);
+        m_captureInterval = std::max(m_minCaptureInterval, settings.m_captureInterval);
     }
     if (settingsKeys.contains("captureIntervalUnits")) {
         m_captureIntervalUnits = qBound(CaptureIntervalSeconds, settings.m_captureIntervalUnits, CaptureIntervalMinutes);
     }
     if (settingsKeys.contains("exposureTimeMs")) {
-        m_exposureTimeMs = std::max(0.001, settings.m_exposureTimeMs);
+        m_exposureTimeMs = std::max(m_minExposureTimeMs, settings.m_exposureTimeMs);
     }
     if (settingsKeys.contains("isoSensitivity")) {
-        m_isoSensitivity = std::max(-1, settings.m_isoSensitivity);
+        m_isoSensitivity = std::max(m_minIsoSensitivity, settings.m_isoSensitivity);
     }
     if (settingsKeys.contains("alpacaDiscoveryEnabled")) {
         m_alpacaDiscoveryEnabled = settings.m_alpacaDiscoveryEnabled;
@@ -1040,13 +1040,13 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_alpacaFocuserPort = settings.m_alpacaFocuserPort;
     }
     if (settingsKeys.contains("alpacaFocuserDeviceNumber")) {
-        m_alpacaFocuserDeviceNumber = std::max(0, settings.m_alpacaFocuserDeviceNumber);
+        m_alpacaFocuserDeviceNumber = std::max(m_minNonNegative, settings.m_alpacaFocuserDeviceNumber);
     }
     if (settingsKeys.contains("alpacaFocusPosition")) {
-        m_alpacaFocusPosition = std::max(0, settings.m_alpacaFocusPosition);
+        m_alpacaFocusPosition = std::max(m_minNonNegative, settings.m_alpacaFocusPosition);
     }
     if (settingsKeys.contains("alpacaFocusStepSize")) {
-        m_alpacaFocusStepSize = std::max(1, settings.m_alpacaFocusStepSize);
+        m_alpacaFocusStepSize = std::max(m_minPositive, settings.m_alpacaFocusStepSize);
     }
     if (settingsKeys.contains("alpacaFilterWheelEnabled")) {
         m_alpacaFilterWheelEnabled = settings.m_alpacaFilterWheelEnabled;
@@ -1058,28 +1058,28 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_alpacaFilterWheelPort = settings.m_alpacaFilterWheelPort;
     }
     if (settingsKeys.contains("alpacaFilterWheelDeviceNumber")) {
-        m_alpacaFilterWheelDeviceNumber = std::max(0, settings.m_alpacaFilterWheelDeviceNumber);
+        m_alpacaFilterWheelDeviceNumber = std::max(m_minNonNegative, settings.m_alpacaFilterWheelDeviceNumber);
     }
     if (settingsKeys.contains("alpacaFilterWheelPosition")) {
-        m_alpacaFilterWheelPosition = std::max(0, settings.m_alpacaFilterWheelPosition);
+        m_alpacaFilterWheelPosition = std::max(m_minNonNegative, settings.m_alpacaFilterWheelPosition);
     }
     if (settingsKeys.contains("cameraBinX") || settingsKeys.contains("alpacaBinX")) {
-        m_cameraBinX = std::max(1, settings.m_cameraBinX);
+        m_cameraBinX = std::max(m_minPositive, settings.m_cameraBinX);
     }
     if (settingsKeys.contains("cameraBinY") || settingsKeys.contains("alpacaBinY")) {
-        m_cameraBinY = std::max(1, settings.m_cameraBinY);
+        m_cameraBinY = std::max(m_minPositive, settings.m_cameraBinY);
     }
     if (settingsKeys.contains("cameraNumX") || settingsKeys.contains("alpacaNumX")) {
-        m_cameraNumX = std::max(0, settings.m_cameraNumX);
+        m_cameraNumX = std::max(m_minNonNegative, settings.m_cameraNumX);
     }
     if (settingsKeys.contains("cameraNumY") || settingsKeys.contains("alpacaNumY")) {
-        m_cameraNumY = std::max(0, settings.m_cameraNumY);
+        m_cameraNumY = std::max(m_minNonNegative, settings.m_cameraNumY);
     }
     if (settingsKeys.contains("cameraStartX") || settingsKeys.contains("alpacaStartX")) {
-        m_cameraStartX = std::max(0, settings.m_cameraStartX);
+        m_cameraStartX = std::max(m_minNonNegative, settings.m_cameraStartX);
     }
     if (settingsKeys.contains("cameraStartY") || settingsKeys.contains("alpacaStartY")) {
-        m_cameraStartY = std::max(0, settings.m_cameraStartY);
+        m_cameraStartY = std::max(m_minNonNegative, settings.m_cameraStartY);
     }
     if (settingsKeys.contains("cameraGain") || settingsKeys.contains("alpacaGain")) {
         m_cameraGain = settings.m_cameraGain;
@@ -1088,19 +1088,19 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_cameraOffset = settings.m_cameraOffset;
     }
     if (settingsKeys.contains("cameraReadoutMode") || settingsKeys.contains("alpacaReadoutMode")) {
-        m_cameraReadoutMode = std::max(0, settings.m_cameraReadoutMode);
+        m_cameraReadoutMode = std::max(m_minNonNegative, settings.m_cameraReadoutMode);
     }
     if (settingsKeys.contains("asiCoolerOn")) {
-        m_asiCoolerOn = qBound(-1, settings.m_asiCoolerOn, 1);
+        m_asiCoolerOn = qBound(m_minAsiControl, settings.m_asiCoolerOn, m_maxAsiControl);
     }
     if (settingsKeys.contains("asiTargetTemp")) {
         m_asiTargetTemp = settings.m_asiTargetTemp;
     }
     if (settingsKeys.contains("asiUsbBandwidth")) {
-        m_asiUsbBandwidth = std::max(-1, settings.m_asiUsbBandwidth);
+        m_asiUsbBandwidth = std::max(m_minAsiControl, settings.m_asiUsbBandwidth);
     }
     if (settingsKeys.contains("asiHighSpeedMode")) {
-        m_asiHighSpeedMode = qBound(-1, settings.m_asiHighSpeedMode, 1);
+        m_asiHighSpeedMode = qBound(m_minAsiControl, settings.m_asiHighSpeedMode, m_maxAsiControl);
     }
     if (settingsKeys.contains("asiAutoExposureGain")) {
         m_asiAutoExposureGain = settings.m_asiAutoExposureGain;
@@ -1127,7 +1127,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_videoLoop = settings.m_videoLoop;
     }
     if (settingsKeys.contains("videoPlaybackRate")) {
-        m_videoPlaybackRate = qBound(0.1, settings.m_videoPlaybackRate, 10.0);
+        m_videoPlaybackRate = qBound(m_minVideoPlaybackRate, settings.m_videoPlaybackRate, m_maxVideoPlaybackRate);
     }
     if (settingsKeys.contains("videoHwAcceleration")) {
         m_videoHwAcceleration = settings.m_videoHwAcceleration;
@@ -1136,7 +1136,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_stackEnabled = settings.m_stackEnabled;
     }
     if (settingsKeys.contains("stackFrameCount")) {
-        m_stackFrameCount = qBound(1, settings.m_stackFrameCount, 256);
+        m_stackFrameCount = qBound(m_minStackFrameCount, settings.m_stackFrameCount, m_maxStackFrameCount);
     }
     if (settingsKeys.contains("stackMethod")) {
         m_stackMethod = qBound(StackMethodAverage, settings.m_stackMethod, StackMethodSigmaClippedAverage);
@@ -1154,13 +1154,13 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_stackBiasFileName = settings.m_stackBiasFileName;
     }
     if (settingsKeys.contains("latitude")) {
-        m_latitude = qBound(-90.0f, settings.m_latitude, 90.0f);
+        m_latitude = qBound(m_minLatitude, settings.m_latitude, m_maxLatitude);
     }
     if (settingsKeys.contains("longitude")) {
-        m_longitude = qBound(-180.0f, settings.m_longitude, 180.0f);
+        m_longitude = qBound(m_minLongitude, settings.m_longitude, m_maxLongitude);
     }
     if (settingsKeys.contains("altitude")) {
-        m_altitude = qBound(-1000.0f, settings.m_altitude, 100000.0f);
+        m_altitude = qBound(m_minAltitude, settings.m_altitude, m_maxAltitude);
     }
     if (settingsKeys.contains("positionSync")) {
         m_positionSync = settings.m_positionSync;
@@ -1169,25 +1169,25 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_owmAPIKey = settings.m_owmAPIKey;
     }
     if (settingsKeys.contains("azimuth")) {
-        m_azimuth = std::fmod(settings.m_azimuth, 360.0f);
+        m_azimuth = std::fmod(settings.m_azimuth, m_fullRotationDegrees);
         if (m_azimuth < 0.0f) {
-            m_azimuth += 360.0f;
+            m_azimuth += m_fullRotationDegrees;
         }
     }
     if (settingsKeys.contains("elevation")) {
-        m_elevation = qBound(-90.0f, settings.m_elevation, 90.0f);
+        m_elevation = qBound(m_minElevation, settings.m_elevation, m_maxElevation);
     }
     if (settingsKeys.contains("roll")) {
-        m_roll = std::fmod(settings.m_roll, 360.0f);
+        m_roll = std::fmod(settings.m_roll, m_fullRotationDegrees);
         if (m_roll < 0.0f) {
-            m_roll += 360.0f;
+            m_roll += m_fullRotationDegrees;
         }
     }
     if (settingsKeys.contains("rotator")) {
         m_rotator = settings.m_rotator;
     }
     if (settingsKeys.contains("fov")) {
-        m_fov = qBound(0.01f, settings.m_fov, 360.0f);
+        m_fov = qBound(m_minFov, settings.m_fov, m_maxFov);
     }
     if (settingsKeys.contains("lensProjection")) {
         m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) settings.m_lensProjection, (int) LensProjectionEquisolid);
@@ -1208,19 +1208,19 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_workspaceIndex = settings.m_workspaceIndex;
     }
     if (settingsKeys.contains("brightness")) {
-        m_brightness = qBound(-100.0, settings.m_brightness, 100.0);
+        m_brightness = qBound(m_minBrightness, settings.m_brightness, m_maxBrightness);
     }
     if (settingsKeys.contains("postProcessWhiteBalanceMode")) {
-        m_postProcessWhiteBalanceMode = qBound(0, settings.m_postProcessWhiteBalanceMode, 2);
+        m_postProcessWhiteBalanceMode = qBound(m_minNonNegative, settings.m_postProcessWhiteBalanceMode, 2);
     }
     if (settingsKeys.contains("postProcessWhiteBalanceRedGain")) {
-        m_postProcessWhiteBalanceRedGain = qBound(0.1, settings.m_postProcessWhiteBalanceRedGain, 8.0);
+        m_postProcessWhiteBalanceRedGain = qBound(m_minWhiteBalanceGain, settings.m_postProcessWhiteBalanceRedGain, m_maxWhiteBalanceGain);
     }
     if (settingsKeys.contains("postProcessWhiteBalanceGreenGain")) {
-        m_postProcessWhiteBalanceGreenGain = qBound(0.1, settings.m_postProcessWhiteBalanceGreenGain, 8.0);
+        m_postProcessWhiteBalanceGreenGain = qBound(m_minWhiteBalanceGain, settings.m_postProcessWhiteBalanceGreenGain, m_maxWhiteBalanceGain);
     }
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain")) {
-        m_postProcessWhiteBalanceBlueGain = qBound(0.1, settings.m_postProcessWhiteBalanceBlueGain, 8.0);
+        m_postProcessWhiteBalanceBlueGain = qBound(m_minWhiteBalanceGain, settings.m_postProcessWhiteBalanceBlueGain, m_maxWhiteBalanceGain);
     }
     if (settingsKeys.contains("postProcessUnwarp")) {
         m_postProcessUnwarp = settings.m_postProcessUnwarp;
@@ -1229,37 +1229,37 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_histogramStretch = qBound(HistogramStretchOff, settings.m_histogramStretch, HistogramStretchCLAHE);
     }
     if (settingsKeys.contains("histogramStretchBlackPoint")) {
-        m_histogramStretchBlackPoint = qBound(0.0, settings.m_histogramStretchBlackPoint, 1.0);
+        m_histogramStretchBlackPoint = qBound(m_minNormalized, settings.m_histogramStretchBlackPoint, m_maxNormalized);
     }
     if (settingsKeys.contains("histogramStretchWhitePoint")) {
-        m_histogramStretchWhitePoint = qBound(m_histogramStretchBlackPoint + 0.001, settings.m_histogramStretchWhitePoint, 1.0);
+        m_histogramStretchWhitePoint = qBound(m_histogramStretchBlackPoint + m_minHistogramWhitePointGap, settings.m_histogramStretchWhitePoint, m_maxNormalized);
     }
     if (settingsKeys.contains("histogramStretchGamma")) {
-        m_histogramStretchGamma = qBound(0.1, settings.m_histogramStretchGamma, 8.0);
+        m_histogramStretchGamma = qBound(m_minHistogramStrength, settings.m_histogramStretchGamma, m_maxWhiteBalanceGain);
     }
     if (settingsKeys.contains("histogramStretchAsinhStrength")) {
-        m_histogramStretchAsinhStrength = qBound(0.1, settings.m_histogramStretchAsinhStrength, 100.0);
+        m_histogramStretchAsinhStrength = qBound(m_minHistogramStrength, settings.m_histogramStretchAsinhStrength, m_maxHistogramStrength);
     }
     if (settingsKeys.contains("histogramStretchLogStrength")) {
-        m_histogramStretchLogStrength = qBound(0.1, settings.m_histogramStretchLogStrength, 100.0);
+        m_histogramStretchLogStrength = qBound(m_minHistogramStrength, settings.m_histogramStretchLogStrength, m_maxHistogramStrength);
     }
     if (settingsKeys.contains("postProcessGreyscale")) {
         m_postProcessGreyscale = settings.m_postProcessGreyscale;
     }
     if (settingsKeys.contains("saturation")) {
-        m_saturation = qBound(0.0, settings.m_saturation, 3.0);
+        m_saturation = qBound(m_minFilterAmount, settings.m_saturation, m_maxFilterAmount);
     }
     if (settingsKeys.contains("gamma")) {
-        m_gamma = qBound(0.1, settings.m_gamma, 3.0);
+        m_gamma = qBound(m_minHistogramStrength, settings.m_gamma, m_maxFilterAmount);
     }
     if (settingsKeys.contains("gaussianBlur")) {
-        m_gaussianBlur = qBound(0, settings.m_gaussianBlur, 15);
+        m_gaussianBlur = qBound(m_minBlurRadius, settings.m_gaussianBlur, m_maxBlurRadius);
     }
     if (settingsKeys.contains("medianBlur")) {
-        m_medianBlur = qBound(0, settings.m_medianBlur, 15);
+        m_medianBlur = qBound(m_minBlurRadius, settings.m_medianBlur, m_maxBlurRadius);
     }
     if (settingsKeys.contains("sharpen")) {
-        m_sharpen = qBound(0.0, settings.m_sharpen, 3.0);
+        m_sharpen = qBound(m_minFilterAmount, settings.m_sharpen, m_maxFilterAmount);
     }
     if (settingsKeys.contains("edgeDisplayMode")) {
         m_edgeDisplayMode = static_cast<EdgeDisplayMode>(qBound(
@@ -1268,16 +1268,16 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             static_cast<qint32>(EdgeDisplayEdgesOnly)));
     }
     if (settingsKeys.contains("sobelEdge")) {
-        m_sobelEdge = qBound(0.0, settings.m_sobelEdge, 3.0);
+        m_sobelEdge = qBound(m_minFilterAmount, settings.m_sobelEdge, m_maxFilterAmount);
     }
     if (settingsKeys.contains("cannyEdge")) {
-        m_cannyEdge = qBound(0.0, settings.m_cannyEdge, 3.0);
+        m_cannyEdge = qBound(m_minFilterAmount, settings.m_cannyEdge, m_maxFilterAmount);
     }
     if (settingsKeys.contains("lineEnhancement")) {
-        m_lineEnhancement = qBound(0.0, settings.m_lineEnhancement, 3.0);
+        m_lineEnhancement = qBound(m_minFilterAmount, settings.m_lineEnhancement, m_maxFilterAmount);
     }
     if (settingsKeys.contains("ridgeDetection")) {
-        m_ridgeDetection = qBound(0.0, settings.m_ridgeDetection, 3.0);
+        m_ridgeDetection = qBound(m_minFilterAmount, settings.m_ridgeDetection, m_maxFilterAmount);
     }
     if (settingsKeys.contains("ridgeDetectionKernelSize")) {
         m_ridgeDetectionKernelSize = (settings.m_ridgeDetectionKernelSize <= 1) ? 1 :
@@ -1285,10 +1285,10 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             (settings.m_ridgeDetectionKernelSize <= 5) ? 5 : 7;
     }
     if (settingsKeys.contains("ridgeDetectionScale")) {
-        m_ridgeDetectionScale = qBound(0.0, settings.m_ridgeDetectionScale, 16.0);
+        m_ridgeDetectionScale = qBound(m_minRidgeScale, settings.m_ridgeDetectionScale, m_maxRidgeScale);
     }
     if (settingsKeys.contains("ridgeDetectionDelta")) {
-        m_ridgeDetectionDelta = qBound(-255.0, settings.m_ridgeDetectionDelta, 255.0);
+        m_ridgeDetectionDelta = qBound(m_minRidgeDelta, settings.m_ridgeDetectionDelta, m_maxRidgeDelta);
     }
     if (settingsKeys.contains("flipX")) {
         m_flipX = settings.m_flipX;
@@ -1297,7 +1297,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_flipY = settings.m_flipY;
     }
     if (settingsKeys.contains("contrast")) {
-        m_contrast = qBound(0.1, settings.m_contrast, 3.0);
+        m_contrast = qBound(m_minWhiteBalanceGain, settings.m_contrast, m_maxFilterAmount);
     }
     if (settingsKeys.contains("invertColors")) {
         m_invertColors = settings.m_invertColors;
@@ -1312,37 +1312,37 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_diffMask = settings.m_diffMask;
     }
     if (settingsKeys.contains("diffThreshold")) {
-        m_diffThreshold = qBound(0, settings.m_diffThreshold, 255);
+        m_diffThreshold = qBound(m_minThreshold8Bit, settings.m_diffThreshold, m_maxThreshold8Bit);
     }
     if (settingsKeys.contains("diffMaskOpenSize")) {
-        m_diffMaskOpenSize = qBound(0, settings.m_diffMaskOpenSize, 20);
+        m_diffMaskOpenSize = qBound(m_minMorphologyKernel, settings.m_diffMaskOpenSize, m_maxMorphologyKernel);
     }
     if (settingsKeys.contains("dilationSize")) {
-        m_dilationSize = qBound(0, settings.m_dilationSize, 20);
+        m_dilationSize = qBound(m_minMorphologyKernel, settings.m_dilationSize, m_maxMorphologyKernel);
     }
     if (settingsKeys.contains("diffMaskHistoryFrames")) {
-        m_diffMaskHistoryFrames = qBound(1, settings.m_diffMaskHistoryFrames, 120);
+        m_diffMaskHistoryFrames = qBound(m_minShortHistoryFrames, settings.m_diffMaskHistoryFrames, m_maxShortHistoryFrames);
     }
     if (settingsKeys.contains("diffMaskCloseSize")) {
-        m_diffMaskCloseSize = qBound(0, settings.m_diffMaskCloseSize, 20);
+        m_diffMaskCloseSize = qBound(m_minMorphologyKernel, settings.m_diffMaskCloseSize, m_maxMorphologyKernel);
     }
     if (settingsKeys.contains("overlayFontFamily")) {
         m_overlayFontFamily = settings.m_overlayFontFamily;
     }
     if (settingsKeys.contains("overlayFontScale")) {
-        m_overlayFontScale = qBound(4.0, settings.m_overlayFontScale, 144.0);
+        m_overlayFontScale = qBound(m_minOverlayFontScale, settings.m_overlayFontScale, m_maxOverlayFontScale);
     }
     if (settingsKeys.contains("detectionRoiX")) {
-        m_detectionRoiX = qBound(0, settings.m_detectionRoiX, 4096);
+        m_detectionRoiX = qBound(m_minUiPixelOffset, settings.m_detectionRoiX, m_maxUiPixelOffset);
     }
     if (settingsKeys.contains("detectionRoiY")) {
-        m_detectionRoiY = qBound(0, settings.m_detectionRoiY, 4096);
+        m_detectionRoiY = qBound(m_minUiPixelOffset, settings.m_detectionRoiY, m_maxUiPixelOffset);
     }
     if (settingsKeys.contains("detectionRoiWidth")) {
-        m_detectionRoiWidth = qBound(0, settings.m_detectionRoiWidth, 4096);
+        m_detectionRoiWidth = qBound(m_minUiPixelOffset, settings.m_detectionRoiWidth, m_maxUiPixelOffset);
     }
     if (settingsKeys.contains("detectionRoiHeight")) {
-        m_detectionRoiHeight = qBound(0, settings.m_detectionRoiHeight, 4096);
+        m_detectionRoiHeight = qBound(m_minUiPixelOffset, settings.m_detectionRoiHeight, m_maxUiPixelOffset);
     }
     if (settingsKeys.contains("motionDetect")) {
         m_motionDetect = settings.m_motionDetect;
@@ -1360,16 +1360,16 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             static_cast<qint32>(MotionMaskViewFinal)));
     }
     if (settingsKeys.contains("motionHistory")) {
-        m_motionHistory = qBound(1, settings.m_motionHistory, 5000);
+        m_motionHistory = qBound(m_minMotionHistory, settings.m_motionHistory, m_maxMotionHistory);
     }
     if (settingsKeys.contains("motionVarThreshold")) {
-        m_motionVarThreshold = qBound(1.0, settings.m_motionVarThreshold, 200.0);
+        m_motionVarThreshold = qBound(m_minMotionVarThreshold, settings.m_motionVarThreshold, m_maxMotionVarThreshold);
     }
     if (settingsKeys.contains("motionLearningRate")) {
-        m_motionLearningRate = qBound(-1.0, settings.m_motionLearningRate, 1.0);
+        m_motionLearningRate = qBound(m_minLearningRate, settings.m_motionLearningRate, m_maxLearningRate);
     }
     if (settingsKeys.contains("motionConfirmFrames")) {
-        m_motionConfirmFrames = qBound(1, settings.m_motionConfirmFrames, 60);
+        m_motionConfirmFrames = qBound(m_minMotionConfirmFrames, settings.m_motionConfirmFrames, m_maxMotionConfirmFrames);
     }
     if (settingsKeys.contains("motionDownscale")) {
         const QList<double> validDownscales{1.0, 0.5, 0.25};
@@ -1379,19 +1379,19 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_motionDetectShadows = settings.m_motionDetectShadows;
     }
     if (settingsKeys.contains("motionOpenSize")) {
-        m_motionOpenSize = qBound(0, settings.m_motionOpenSize, 20);
+        m_motionOpenSize = qBound(m_minMorphologyKernel, settings.m_motionOpenSize, m_maxMorphologyKernel);
     }
     if (settingsKeys.contains("motionCloseSize")) {
-        m_motionCloseSize = qBound(0, settings.m_motionCloseSize, 20);
+        m_motionCloseSize = qBound(m_minMorphologyKernel, settings.m_motionCloseSize, m_maxMorphologyKernel);
     }
     if (settingsKeys.contains("motionPersistenceFrames")) {
-        m_motionPersistenceFrames = qBound(0, settings.m_motionPersistenceFrames, 120);
+        m_motionPersistenceFrames = qBound(m_minNonNegative, settings.m_motionPersistenceFrames, m_maxShortHistoryFrames);
     }
     if (settingsKeys.contains("motionBoxColor")) {
         m_motionBoxColor = settings.m_motionBoxColor;
     }
     if (settingsKeys.contains("minContourArea")) {
-        m_minContourArea = qBound(0, settings.m_minContourArea, 10000);
+        m_minContourArea = qBound(m_minContourAreaBound, settings.m_minContourArea, m_maxContourAreaBound);
     }
     if (settingsKeys.contains("motionExclusionRects")) {
         m_motionExclusionRects = settings.m_motionExclusionRects;
@@ -1403,19 +1403,19 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_streakDetect = settings.m_streakDetect;
     }
     if (settingsKeys.contains("streakThreshold")) {
-        m_streakThreshold = qBound(0, settings.m_streakThreshold, 255);
+        m_streakThreshold = qBound(m_minThreshold8Bit, settings.m_streakThreshold, m_maxThreshold8Bit);
     }
     if (settingsKeys.contains("streakMinLength")) {
-        m_streakMinLength = qBound(1, settings.m_streakMinLength, 4096);
+        m_streakMinLength = qBound(m_minStreakLength, settings.m_streakMinLength, m_maxStreakLength);
     }
     if (settingsKeys.contains("streakHoughThreshold")) {
-        m_streakHoughThreshold = qBound(1, settings.m_streakHoughThreshold, 500);
+        m_streakHoughThreshold = qBound(m_minStreakHoughThreshold, settings.m_streakHoughThreshold, m_maxStreakHoughThreshold);
     }
     if (settingsKeys.contains("streakMaxGap")) {
-        m_streakMaxGap = qBound(0.0, settings.m_streakMaxGap, 1024.0);
+        m_streakMaxGap = qBound(m_minStreakMaxGap, settings.m_streakMaxGap, m_maxStreakMaxGap);
     }
     if (settingsKeys.contains("streakPersistenceFrames")) {
-        m_streakPersistenceFrames = qBound(0, settings.m_streakPersistenceFrames, 120);
+        m_streakPersistenceFrames = qBound(m_minNonNegative, settings.m_streakPersistenceFrames, m_maxShortHistoryFrames);
     }
     if (settingsKeys.contains("streakDownscale")) {
         const QList<double> validDownscales{1.0, 0.5, 0.25};
@@ -1452,22 +1452,22 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_spectrumDevice = settings.m_spectrumDevice;
     }
     if (settingsKeys.contains("spectrumOffsetX")) {
-        m_spectrumOffsetX = qBound(-4096, settings.m_spectrumOffsetX, 4096);
+        m_spectrumOffsetX = qBound(m_minSignedUiPixelOffset, settings.m_spectrumOffsetX, m_maxSignedUiPixelOffset);
     }
     if (settingsKeys.contains("spectrumOffsetY")) {
-        m_spectrumOffsetY = qBound(-4096, settings.m_spectrumOffsetY, 4096);
+        m_spectrumOffsetY = qBound(m_minSignedUiPixelOffset, settings.m_spectrumOffsetY, m_maxSignedUiPixelOffset);
     }
     if (settingsKeys.contains("spectrumScale")) {
-        m_spectrumScale = qBound(0.1, settings.m_spectrumScale, 4.0);
+        m_spectrumScale = qBound(m_minSpectrumScale, settings.m_spectrumScale, m_maxSpectrumScale);
     }
     if (settingsKeys.contains("dateTimeFormat")) {
         m_dateTimeFormat = settings.m_dateTimeFormat;
     }
     if (settingsKeys.contains("dateTimePosX")) {
-        m_dateTimePosX = qBound(0, settings.m_dateTimePosX, 4096);
+        m_dateTimePosX = qBound(m_minUiPixelOffset, settings.m_dateTimePosX, m_maxUiPixelOffset);
     }
     if (settingsKeys.contains("dateTimePosY")) {
-        m_dateTimePosY = qBound(0, settings.m_dateTimePosY, 4096);
+        m_dateTimePosY = qBound(m_minUiPixelOffset, settings.m_dateTimePosY, m_maxUiPixelOffset);
     }
     if (settingsKeys.contains("equatorialGrid")) {
         m_equatorialGrid = settings.m_equatorialGrid;
@@ -1485,19 +1485,19 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_trackObjects = settings.m_trackObjects;
     }
     if (settingsKeys.contains("trackObjectMinElevation")) {
-        m_trackObjectMinElevation = qBound(0.0, settings.m_trackObjectMinElevation, 90.0);
+        m_trackObjectMinElevation = qBound(m_minNormalized, settings.m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
     }
     if (settingsKeys.contains("trackObjectColor")) {
         m_trackObjectColor = settings.m_trackObjectColor;
     }
     if (settingsKeys.contains("trackObjectFontScale")) {
-        m_trackObjectFontScale = qBound(4.0, settings.m_trackObjectFontScale, 144.0);
+        m_trackObjectFontScale = qBound(m_minOverlayFontScale, settings.m_trackObjectFontScale, m_maxOverlayFontScale);
     }
     if (settingsKeys.contains("gridLabelFontFamily")) {
         m_gridLabelFontFamily = settings.m_gridLabelFontFamily;
     }
     if (settingsKeys.contains("gridLabelFontScale")) {
-        m_gridLabelFontScale = qBound(4.0, settings.m_gridLabelFontScale, 144.0);
+        m_gridLabelFontScale = qBound(m_minOverlayFontScale, settings.m_gridLabelFontScale, m_maxOverlayFontScale);
     }
     if (settingsKeys.contains("overlayText")) {
         m_overlayText = settings.m_overlayText;
@@ -1512,13 +1512,13 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_overlayTextFontFamily = settings.m_overlayTextFontFamily;
     }
     if (settingsKeys.contains("overlayTextFontScale")) {
-        m_overlayTextFontScale = qBound(4.0, settings.m_overlayTextFontScale, 144.0);
+        m_overlayTextFontScale = qBound(m_minOverlayFontScale, settings.m_overlayTextFontScale, m_maxOverlayFontScale);
     }
     if (settingsKeys.contains("overlayTextPosX")) {
-        m_overlayTextPosX = qBound(0, settings.m_overlayTextPosX, 4096);
+        m_overlayTextPosX = qBound(m_minUiPixelOffset, settings.m_overlayTextPosX, m_maxUiPixelOffset);
     }
     if (settingsKeys.contains("overlayTextPosY")) {
-        m_overlayTextPosY = qBound(0, settings.m_overlayTextPosY, 4096);
+        m_overlayTextPosY = qBound(m_minUiPixelOffset, settings.m_overlayTextPosY, m_maxUiPixelOffset);
     }
     if (settingsKeys.contains("yoloEnabled")) {
         m_yoloEnabled = settings.m_yoloEnabled;
@@ -1530,16 +1530,16 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_yoloLabelsPath = settings.m_yoloLabelsPath;
     }
     if (settingsKeys.contains("yoloConfThreshold")) {
-        m_yoloConfThreshold = qBound(0.0, settings.m_yoloConfThreshold, 1.0);
+        m_yoloConfThreshold = qBound(m_minNormalized, settings.m_yoloConfThreshold, m_maxNormalized);
     }
     if (settingsKeys.contains("yoloNmsThreshold")) {
-        m_yoloNmsThreshold = qBound(0.0, settings.m_yoloNmsThreshold, 1.0);
+        m_yoloNmsThreshold = qBound(m_minNormalized, settings.m_yoloNmsThreshold, m_maxNormalized);
     }
     if (settingsKeys.contains("yoloBoxColor")) {
         m_yoloBoxColor = settings.m_yoloBoxColor;
     }
     if (settingsKeys.contains("yoloDisappearDebounce")) {
-        m_yoloDisappearDebounce = qBound(0.0, settings.m_yoloDisappearDebounce, 60.0);
+        m_yoloDisappearDebounce = qBound(m_minYoloDisappearDebounce, settings.m_yoloDisappearDebounce, m_maxYoloDisappearDebounce);
     }
     if (settingsKeys.contains("yoloDnnTarget")) {
         m_yoloDnnTarget = settings.m_yoloDnnTarget;
@@ -1554,19 +1554,19 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_audioDeviceName = settings.m_audioDeviceName;
     }
     if (settingsKeys.contains("whiteBalanceMode")) {
-        m_whiteBalanceMode = std::max(0, settings.m_whiteBalanceMode);
+        m_whiteBalanceMode = std::max(m_minNonNegative, settings.m_whiteBalanceMode);
     }
     if (settingsKeys.contains("exposureCompensation")) {
-        m_exposureCompensation = qBound(-2.0, settings.m_exposureCompensation, 2.0);
+        m_exposureCompensation = qBound(m_minExposureCompensation, settings.m_exposureCompensation, m_maxExposureCompensation);
     }
     if (settingsKeys.contains("focusMode")) {
-        m_focusMode = std::max(0, settings.m_focusMode);
+        m_focusMode = std::max(m_minNonNegative, settings.m_focusMode);
     }
     if (settingsKeys.contains("focusDistance")) {
-        m_focusDistance = qBound(0.0, settings.m_focusDistance, 1.0);
+        m_focusDistance = qBound(m_minNormalized, settings.m_focusDistance, m_maxNormalized);
     }
     if (settingsKeys.contains("zoomFactor")) {
-        m_zoomFactor = std::max(1.0, settings.m_zoomFactor);
+        m_zoomFactor = std::max(m_minZoomFactor, settings.m_zoomFactor);
     }
 }
 
@@ -2216,7 +2216,7 @@ bool CameraSettings::isIntervalCaptureMode() const
 
 double CameraSettings::getCaptureIntervalSeconds() const
 {
-    const double interval = std::max(0.1, m_captureInterval);
+    const double interval = std::max(m_minCaptureInterval, m_captureInterval);
     return m_captureIntervalUnits == CaptureIntervalMinutes ? interval * 60.0 : interval;
 }
 
@@ -2228,10 +2228,10 @@ int CameraSettings::getCaptureIntervalMs() const
 double CameraSettings::getCaptureFrameRate() const
 {
     if (!isIntervalCaptureMode()) {
-        return std::max(1, m_framesPerSecond);
+        return std::max(m_minFramesPerSecond, m_framesPerSecond);
     }
 
-    return std::max(0.001, 1.0 / getCaptureIntervalSeconds());
+    return std::max(m_minExposureTimeMs, 1.0 / getCaptureIntervalSeconds());
 }
 
 // Map URL to filename where it will be downloaded

@@ -248,6 +248,7 @@ void CameraSettings::resetToDefaults()
     m_altAzGridColor = QColor(255, 170, 80);
     m_ursaMajorStars = false;
     m_ursaMajorStarsColor = QColor(255, 255, 120);
+    m_constellationOverlay = ConstellationOverlayUrsaMajor;
     m_trackObjects = false;
     m_trackObjectMinElevation = 0.0;
     m_trackObjectColor = QColor(80, 255, 80);
@@ -482,6 +483,7 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(148, m_altAzGridColor.rgba());
     s.writeBool(198, m_ursaMajorStars);
     s.writeU32(199, m_ursaMajorStarsColor.rgba());
+    s.writeS32(200, static_cast<qint32>(m_constellationOverlay));
     s.writeBool(165, m_trackObjects);
     s.writeDouble(166, m_trackObjectMinElevation);
     s.writeU32(169, m_trackObjectColor.rgba());
@@ -842,6 +844,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         uint32_t ursaMajorStarsColorRgba = QColor(255, 255, 120).rgba();
         d.readU32(199, &ursaMajorStarsColorRgba, QColor(255, 255, 120).rgba());
         m_ursaMajorStarsColor = QColor::fromRgba(ursaMajorStarsColorRgba);
+        d.readS32(200, reinterpret_cast<qint32*>(&m_constellationOverlay), static_cast<qint32>(ConstellationOverlayUrsaMajor));
         d.readBool(165, &m_trackObjects, false);
         d.readDouble(166, &m_trackObjectMinElevation, 0.0);
         m_trackObjectMinElevation = qBound(m_minNormalized, m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
@@ -1495,6 +1498,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("ursaMajorStarsColor")) {
         m_ursaMajorStarsColor = settings.m_ursaMajorStarsColor;
     }
+    if (settingsKeys.contains("constellationOverlay")) {
+        m_constellationOverlay = settings.m_constellationOverlay;
+    }
     if (settingsKeys.contains("trackObjects")) {
         m_trackObjects = settings.m_trackObjects;
     }
@@ -2055,6 +2061,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("ursaMajorStarsColor") || force) {
         ostr << " m_ursaMajorStarsColor: " << m_ursaMajorStarsColor.name().toStdString();
+    }
+    if (settingsKeys.contains("constellationOverlay") || force) {
+        ostr << " m_constellationOverlay: " << static_cast<int>(m_constellationOverlay);
     }
     if (settingsKeys.contains("trackObjects") || force) {
         ostr << " m_trackObjects: " << m_trackObjects;

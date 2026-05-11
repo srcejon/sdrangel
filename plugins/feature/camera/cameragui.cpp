@@ -1026,6 +1026,7 @@ void CameraGUI::displaySettings()
     ui->equatorialGridButton->setChecked(m_settings.m_equatorialGrid);
     ui->altAzGridButton->setChecked(m_settings.m_altAzGrid);
     ui->ursaMajorStarsButton->setChecked(m_settings.m_ursaMajorStars);
+    settingsUI()->constellationOverlayCombo->setCurrentIndex(static_cast<int>(m_settings.m_constellationOverlay));
     ui->trackObjectsButton->setChecked(m_settings.m_trackObjects);
     settingsUI()->trackObjectMinElevationSpin->setValue(m_settings.m_trackObjectMinElevation);
     settingsUI()->trackObjectFontScaleSpin->setValue(m_settings.m_trackObjectFontScale);
@@ -1440,6 +1441,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->altAzGridButton, &QToolButton::toggled, this, &CameraGUI::on_altAzGridCheck_toggled);
     QObject::connect(settingsUI()->altAzGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_altAzGridColorButton_clicked);
     QObject::connect(ui->ursaMajorStarsButton, &QToolButton::toggled, this, &CameraGUI::on_ursaMajorStarsCheck_toggled);
+    QObject::connect(settingsUI()->constellationOverlayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_constellationOverlayCombo_currentIndexChanged);
     QObject::connect(settingsUI()->ursaMajorStarsColorButton, &QToolButton::clicked, this, &CameraGUI::on_ursaMajorStarsColorButton_clicked);
     QObject::connect(ui->trackObjectsButton, &QToolButton::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
@@ -4966,9 +4968,15 @@ void CameraGUI::on_ursaMajorStarsCheck_toggled(bool checked)
     applySetting("ursaMajorStars");
 }
 
+void CameraGUI::on_constellationOverlayCombo_currentIndexChanged(int index)
+{
+    m_settings.m_constellationOverlay = static_cast<CameraSettings::ConstellationOverlay>(index);
+    applySetting("constellationOverlay");
+}
+
 void CameraGUI::on_ursaMajorStarsColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_ursaMajorStarsColor, this, tr("Select Ursa Major stars colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_ursaMajorStarsColor, this, tr("Select constellation overlay colour"));
 
     if (color.isValid())
     {

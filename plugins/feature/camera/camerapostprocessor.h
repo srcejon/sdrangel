@@ -251,7 +251,7 @@ private:
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
     void applySkyGridOverlay(QImage& image) const;
-    void applyUrsaMajorOverlay(QImage& image) const;
+    void applyConstellationOverlay(QImage& image) const;
     void applyTrackedObjectOverlay(QImage& image) const;
     void applyDateTimeOverlay(QImage& image) const;
     void applyTextOverlay(QImage& image, const QString& overlayTextHtml) const;

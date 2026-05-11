@@ -521,7 +521,7 @@
       <item>
        <widget class="ButtonSwitch" name="ursaMajorStarsButton">
         <property name="toolTip">
-         <string>Overlay Ursa Major major stars</string>
+         <string>Overlay selected constellation stars</string>
         </property>
         <property name="text">
          <string>UM</string>

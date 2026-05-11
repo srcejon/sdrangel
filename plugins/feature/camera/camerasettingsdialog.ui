@@ -2845,7 +2845,7 @@
           <item row="3" column="6">
            <widget class="QToolButton" name="ursaMajorStarsColorButton">
             <property name="toolTip">
-             <string>Select Ursa Major stars overlay colour</string>
+             <string>Select constellation overlay colour</string>
             </property>
             <property name="text">
              <string/>
@@ -2855,7 +2855,36 @@
           <item row="3" column="0">
            <widget class="QLabel" name="ursaMajorStarsLabel">
             <property name="text">
-             <string>Ursa Major stars</string>
+             <string>Constellation</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="3" colspan="2">
+           <widget class="QComboBox" name="constellationOverlayCombo">
+            <property name="toolTip">
+             <string>Select which constellation major stars to overlay</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Ursa Major</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Orion</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Crux</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QLabel" name="constellationOverlayComboLabel">
+            <property name="text">
+             <string>Stars</string>
             </property>
            </widget>
           </item>

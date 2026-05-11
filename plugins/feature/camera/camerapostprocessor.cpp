@@ -65,6 +65,23 @@ const std::array<EquatorialStar, 7> kUrsaMajorStars = {{
     {206.885000, 49.313333}  // Alkaid
 }};
 
+const std::array<EquatorialStar, 7> kOrionStars = {{
+    {81.282917, 6.349722},   // Betelgeuse
+    {78.634583, -8.201667},  // Rigel
+    {88.792917, 7.406944},   // Bellatrix
+    {86.939167, -9.669722},  // Saiph
+    {84.053333, -1.201944},  // Alnitak
+    {83.001667, -0.299167},  // Alnilam
+    {81.572917, -2.397222}   // Mintaka
+}};
+
+const std::array<EquatorialStar, 4> kCruxStars = {{
+    {186.649583, -63.099167}, // Acrux
+    {191.930000, -59.688889}, // Mimosa
+    {183.786250, -58.748889}, // Gacrux
+    {187.791667, -57.113333}  // Delta Crucis
+}};
+
 struct SkyVector
 {
     double x;
@@ -394,6 +411,41 @@ struct SkyProjector
     }
 };
 
+template<typename StarArray>
+void drawConstellationStars(QPainter& painter,
+                            const QImage& image,
+                            const SkyProjector& projector,
+                            const QDateTime& utcDateTime,
+                            const CameraSettings& settings,
+                            const StarArray& stars)
+{
+    for (const EquatorialStar& star : stars)
+    {
+        double azimuth = 0.0;
+        double elevation = 0.0;
+        QPointF point;
+        if (!equatorialToAltAz(
+                star.rightAscensionDegrees,
+                star.declinationDegrees,
+                settings.m_latitude,
+                settings.m_longitude,
+                utcDateTime,
+                azimuth,
+                elevation)
+            || !projector.projectAltAz(azimuth, elevation, point))
+        {
+            continue;
+        }
+
+        const QPoint centerPoint(static_cast<int>(std::lround(point.x())), static_cast<int>(std::lround(point.y())));
+        if (!image.rect().adjusted(0, 0, -1, -1).contains(centerPoint)) {
+            continue;
+        }
+
+        painter.drawRect(QRectF(point.x() - 3.0, point.y() - 3.0, 6.0, 6.0));
+    }
+}
+
 } // namespace
 
 CameraPostProcessor::CameraPostProcessor() :
@@ -526,7 +578,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
-        "ursaMajorStars", "ursaMajorStarsColor",
+        "ursaMajorStars", "ursaMajorStarsColor", "constellationOverlay",
         "trackObjects", "trackObjectMinElevation", "trackObjectColor", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
@@ -1182,7 +1234,7 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyUrsaMajorOverlay(QImage& image) const
+void CameraPostProcessor::applyConstellationOverlay(QImage& image) const
 {
     PROFILER_START();
 
@@ -1203,30 +1255,17 @@ void CameraPostProcessor::applyUrsaMajorOverlay(QImage& image) const
     painter.setClipRect(image.rect());
     painter.setPen(QPen(m_settings.m_ursaMajorStarsColor, 1.0));
 
-    for (const EquatorialStar& star : kUrsaMajorStars)
+    switch (m_settings.m_constellationOverlay)
     {
-        double azimuth = 0.0;
-        double elevation = 0.0;
-        QPointF point;
-        if (!equatorialToAltAz(
-                star.rightAscensionDegrees,
-                star.declinationDegrees,
-                m_settings.m_latitude,
-                m_settings.m_longitude,
-                utcDateTime,
-                azimuth,
-                elevation)
-            || !projector.projectAltAz(azimuth, elevation, point))
-        {
-            continue;
-        }
-
-        const QPoint centerPoint(static_cast<int>(std::lround(point.x())), static_cast<int>(std::lround(point.y())));
-        if (!image.rect().adjusted(0, 0, -1, -1).contains(centerPoint)) {
-            continue;
-        }
-
-        painter.drawRect(QRectF(point.x() - 3.0, point.y() - 3.0, 6.0, 6.0));
+    case CameraSettings::ConstellationOverlayUrsaMajor:
+        drawConstellationStars(painter, image, projector, utcDateTime, m_settings, kUrsaMajorStars);
+        break;
+    case CameraSettings::ConstellationOverlayOrion:
+        drawConstellationStars(painter, image, projector, utcDateTime, m_settings, kOrionStars);
+        break;
+    case CameraSettings::ConstellationOverlayCrux:
+        drawConstellationStars(painter, image, projector, utcDateTime, m_settings, kCruxStars);
+        break;
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1358,7 +1397,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     if (!frame.m_streakDetections.isEmpty()) { applyStreakOverlay(result, frame.m_streakDetections); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
-    if (m_settings.m_ursaMajorStars) { applyUrsaMajorOverlay(result); }
+    if (m_settings.m_ursaMajorStars) { applyConstellationOverlay(result); }
     if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
     if (needsTextOverlay) { applyTextOverlay(result, expandedOverlayText); }

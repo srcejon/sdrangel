@@ -132,6 +132,13 @@ struct CameraSettings
         StreakLineEnhancementAfterBackground
     };
 
+    enum ConstellationOverlay
+    {
+        ConstellationOverlayUrsaMajor = 0,
+        ConstellationOverlayOrion,
+        ConstellationOverlayCrux
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -346,8 +353,9 @@ struct CameraSettings
     QColor m_equatorialGridColor; ///< Colour for equatorial sky grid
     bool m_altAzGrid;         ///< Draw alt-az sky grid overlay
     QColor m_altAzGridColor;  ///< Colour for alt-az sky grid
-    bool m_ursaMajorStars;    ///< Draw the seven major Ursa Major stars as projected boxes
-    QColor m_ursaMajorStarsColor; ///< Colour for Ursa Major star boxes
+    bool m_ursaMajorStars;    ///< Draw the selected constellation stars as projected boxes
+    QColor m_ursaMajorStarsColor; ///< Colour for constellation star boxes
+    ConstellationOverlay m_constellationOverlay; ///< Which constellation's major stars to project
     bool m_trackObjects;      ///< Draw ADS-B / satellite tracked object overlay
     double m_trackObjectMinElevation; ///< Minimum elevation in degrees for tracked object overlay
     QColor m_trackObjectColor; ///< Colour for tracked object labels

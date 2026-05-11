@@ -474,6 +474,7 @@ private slots:
     void on_altAzGridCheck_toggled(bool checked);
     void on_altAzGridColorButton_clicked();
     void on_ursaMajorStarsCheck_toggled(bool checked);
+    void on_constellationOverlayCombo_currentIndexChanged(int index);
     void on_ursaMajorStarsColorButton_clicked();
     void on_trackObjectsCheck_toggled(bool checked);
     void on_trackObjectMinElevationSpin_valueChanged(double value);

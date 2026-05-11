@@ -71,6 +71,7 @@ struct CameraPipelineFrame
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
     QVector<CameraPipelineStreakDetection> m_streakDetections;
+    bool m_saveCurrentImage = false;
     int m_stackCount = 1;
     BayerPattern m_bayerPattern = BayerNone;
 };

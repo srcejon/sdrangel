@@ -778,7 +778,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
         currentDetectedClasses.insert(detection.m_label);
     }
     const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
-    processObjectDetections(currentDetectedClasses, detectionTime);
+    processObjectDetections(currentDetectedClasses, detectionTime, *frame);
 
     frame->m_image = convertBgrToRgbImage(bgrMat);
 
@@ -1682,7 +1682,7 @@ QImage CameraDetector::convertBgrToRgbImage(const cv::Mat& bgrMat)
     return result;
 }
 
-void CameraDetector::processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now)
+void CameraDetector::processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now, CameraPipelineFrame& frame)
 {
     for (const QString& className : currentDetectedClasses)
     {
@@ -1691,7 +1691,9 @@ void CameraDetector::processObjectDetections(const QSet<QString>& currentDetecte
         if (!m_detectedObjectClasses.contains(className))
         {
             m_detectedObjectClasses.insert(className);
-            applyObjectDetectedSettings(className);
+            if (applyObjectDetectedSettings(className)) {
+                frame.m_saveCurrentImage = true;
+            }
         }
     }
 
@@ -1792,20 +1794,21 @@ void CameraDetector::saySpeech(const QString& speech, const QString& className)
 #endif
 }
 
-void CameraDetector::applyObjectDetectedSettings(const QString& className)
+bool CameraDetector::applyObjectDetectedSettings(const QString& className)
 {
     if (!m_settings.m_objectDeviceSettings.contains(className)) {
-        return;
+        return false;
     }
 
     QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
     if (deviceSettingsList == nullptr) {
-        return;
+        return false;
     }
 
     MainCore *mainCore = MainCore::instance();
     const MainSettings& mainSettings = mainCore->getSettings();
     const std::vector<DeviceSet*>& deviceSets = mainCore->getDeviceSets();
+    bool saveCurrentImage = false;
 
     for (int i = 0; i < deviceSettingsList->size(); ++i)
     {
@@ -1856,6 +1859,10 @@ void CameraDetector::applyObjectDetectedSettings(const QString& className)
             }
         }
 
+        if (devSettings->m_saveCurrentImage) {
+            saveCurrentImage = true;
+        }
+
         if (devSettings->m_recordVideo) {
             setVideoRecordingEnabled(true);
         }
@@ -1887,6 +1894,8 @@ void CameraDetector::applyObjectDetectedSettings(const QString& className)
             }
         }
     });
+
+    return saveCurrentImage;
 }
 
 void CameraDetector::applyObjectDisappearedSettings(const QString& className)

@@ -36,6 +36,7 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     m_startOnDetectWidget(new QCheckBox(this)),
     m_stopOnDisappearWidget(new QCheckBox(this)),
     m_startStopFileSinkWidget(new QCheckBox(this)),
+    m_saveCurrentImageWidget(new QCheckBox(this)),
     m_recordVideoWidget(new QCheckBox(this)),
     m_detectCommandWidget(new QLineEdit(this)),
     m_disappearCommandWidget(new QLineEdit(this)),
@@ -61,6 +62,9 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
 
     m_startStopFileSinkWidget->setToolTip(tr("Start file sinks on detection and stop them on disappearance"));
     formLayout->addRow(tr("Start/stop file sinks"), m_startStopFileSinkWidget);
+
+    m_saveCurrentImageWidget->setToolTip(tr("Save a single current image when the selected object class is detected"));
+    formLayout->addRow(tr("Save current image on detection"), m_saveCurrentImageWidget);
 
     m_recordVideoWidget->setToolTip(tr("Start recording video on detection and stop when the object disappears"));
     formLayout->addRow(tr("Record video on detection"), m_recordVideoWidget);
@@ -97,6 +101,7 @@ CameraObjectDeviceSettingsGUI::CameraObjectDeviceSettingsGUI(
     connect(m_startOnDetectWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_stopOnDisappearWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_startStopFileSinkWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
+    connect(m_saveCurrentImageWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_recordVideoWidget, &QCheckBox::toggled, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_detectCommandWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
     connect(m_disappearCommandWidget, &QLineEdit::editingFinished, this, &CameraObjectDeviceSettingsGUI::settingsChanged);
@@ -224,6 +229,7 @@ void CameraObjectDeviceSettingsGUI::loadFromSettings(const CameraSettings::Objec
     m_startOnDetectWidget->setChecked(settings.m_startOnDetect);
     m_stopOnDisappearWidget->setChecked(settings.m_stopOnDisappear);
     m_startStopFileSinkWidget->setChecked(settings.m_startStopFileSink);
+    m_saveCurrentImageWidget->setChecked(settings.m_saveCurrentImage);
     m_recordVideoWidget->setChecked(settings.m_recordVideo);
     m_detectCommandWidget->setText(settings.m_detectCommand);
     m_disappearCommandWidget->setText(settings.m_disappearCommand);
@@ -257,6 +263,7 @@ void CameraObjectDeviceSettingsGUI::accept()
     m_devSettings->m_startOnDetect = m_startOnDetectWidget->isChecked();
     m_devSettings->m_stopOnDisappear = m_stopOnDisappearWidget->isChecked();
     m_devSettings->m_startStopFileSink = m_startStopFileSinkWidget->isChecked();
+    m_devSettings->m_saveCurrentImage = m_saveCurrentImageWidget->isChecked();
     m_devSettings->m_recordVideo = m_recordVideoWidget->isChecked();
     m_devSettings->m_detectCommand = m_detectCommandWidget->text();
     m_devSettings->m_disappearCommand = m_disappearCommandWidget->text();

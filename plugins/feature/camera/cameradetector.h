@@ -165,8 +165,8 @@ private:
     void applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
     [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
-    void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now);
-    void applyObjectDetectedSettings(const QString& className);
+    void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now, CameraPipelineFrame& frame);
+    bool applyObjectDetectedSettings(const QString& className);
     void applyObjectDisappearedSettings(const QString& className);
     void executeCommand(const QString& command, const QString& className);
     void saySpeech(const QString& speech, const QString& className);

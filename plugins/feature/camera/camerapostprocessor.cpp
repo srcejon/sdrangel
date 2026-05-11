@@ -725,7 +725,7 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     reportFrameToGUI(processed, frame->m_histogramData, frame->m_stackCount);
 
-    if (m_captureActive && m_settings.m_saveImage && !m_settings.m_imageFileName.isEmpty())
+    if (m_captureActive && (m_settings.m_saveImage || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
     {
         if (shouldSaveRawMedia())
         {

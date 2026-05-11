@@ -141,6 +141,7 @@ struct CameraSettings
         bool m_startOnDetect;           //!< Start acquisition when the object class is detected
         bool m_stopOnDisappear;         //!< Stop acquisition when the object class disappears
         bool m_startStopFileSink;       //!< Start/stop file sinks with detection/disappearance
+        bool m_saveCurrentImage;        //!< Save a single image when the object class is detected
         bool m_recordVideo;             //!< Start video recording on detection and stop when the object disappears
         QString m_detectCommand;        //!< Command/script to execute when the object class is detected
         QString m_disappearCommand;     //!< Command/script to execute when the object class disappears

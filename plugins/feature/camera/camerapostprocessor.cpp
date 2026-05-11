@@ -17,6 +17,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include <QDebug>
@@ -47,6 +48,22 @@ const QStringList kTrackedObjectPipeURIs = {
     QStringLiteral("sdrangel.feature.satellitetracker"),
     QStringLiteral("sdrangel.feature.startracker")
 };
+
+struct EquatorialStar
+{
+    double rightAscensionDegrees;
+    double declinationDegrees;
+};
+
+const std::array<EquatorialStar, 7> kUrsaMajorStars = {{
+    {165.932083, 61.750833}, // Dubhe
+    {165.460417, 56.382500}, // Merak
+    {178.457500, 53.694722}, // Phecda
+    {183.856667, 57.032500}, // Megrez
+    {193.507083, 55.959722}, // Alioth
+    {200.981250, 54.925278}, // Mizar
+    {206.885000, 49.313333}  // Alkaid
+}};
 
 struct SkyVector
 {
@@ -509,6 +526,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
+        "ursaMajorStars", "ursaMajorStarsColor",
         "trackObjects", "trackObjectMinElevation", "trackObjectColor", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
@@ -1164,6 +1182,56 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
     PROFILER_STOP(__FUNCTION__);
 }
 
+void CameraPostProcessor::applyUrsaMajorOverlay(QImage& image) const
+{
+    PROFILER_START();
+
+    if (!m_settings.m_ursaMajorStars) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    const SkyProjector projector = SkyProjector::create(m_settings, image.size());
+    if (!projector.valid) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    const QDateTime utcDateTime = (m_captureDateTime.isValid() ? m_captureDateTime : QDateTime::currentDateTime()).toUTC();
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setClipRect(image.rect());
+    painter.setPen(QPen(m_settings.m_ursaMajorStarsColor, 1.0));
+
+    for (const EquatorialStar& star : kUrsaMajorStars)
+    {
+        double azimuth = 0.0;
+        double elevation = 0.0;
+        QPointF point;
+        if (!equatorialToAltAz(
+                star.rightAscensionDegrees,
+                star.declinationDegrees,
+                m_settings.m_latitude,
+                m_settings.m_longitude,
+                utcDateTime,
+                azimuth,
+                elevation)
+            || !projector.projectAltAz(azimuth, elevation, point))
+        {
+            continue;
+        }
+
+        const QPoint centerPoint(static_cast<int>(std::lround(point.x())), static_cast<int>(std::lround(point.y())));
+        if (!image.rect().adjusted(0, 0, -1, -1).contains(centerPoint)) {
+            continue;
+        }
+
+        painter.drawRect(QRectF(point.x() - 3.0, point.y() - 3.0, 6.0, 6.0));
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
 void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
 {
     PROFILER_START();
@@ -1264,6 +1332,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     const bool needsAny = m_settings.m_overlayDateTime
         || m_settings.m_equatorialGrid
         || m_settings.m_altAzGrid
+        || m_settings.m_ursaMajorStars
         || (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty())
         || needsTextOverlay
         || !frame.m_motionBoxes.isEmpty()
@@ -1289,6 +1358,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     if (!frame.m_streakDetections.isEmpty()) { applyStreakOverlay(result, frame.m_streakDetections); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
+    if (m_settings.m_ursaMajorStars) { applyUrsaMajorOverlay(result); }
     if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
     if (needsTextOverlay) { applyTextOverlay(result, expandedOverlayText); }

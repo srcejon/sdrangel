@@ -25,6 +25,7 @@
 #include "cameradetectionhistoryentry.h"
 
 class QTableWidget;
+class QPushButton;
 
 class CameraDetectionHistory : public QDialog
 {
@@ -33,8 +34,16 @@ public:
     explicit CameraDetectionHistory(const QList<CameraDetectionHistoryEntry>& history, QWidget* parent = nullptr);
     void updateHistory(const QList<CameraDetectionHistoryEntry>& history);
 
+signals:
+    void clearHistoryRequested();
+
 private:
+    void saveHistoryToCsv();
+
+    QList<CameraDetectionHistoryEntry> m_history;
     QTableWidget* m_table;
+    QPushButton* m_clearButton;
+    QPushButton* m_saveCsvButton;
 };
 
 #endif // INCLUDE_FEATURE_CAMERADETECTIONHISTORY_H_

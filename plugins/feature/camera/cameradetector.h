@@ -131,6 +131,19 @@ public:
         { }
     };
 
+    class MsgClearObjectDetectionHistory : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgClearObjectDetectionHistory* create()
+        {
+            return new MsgClearObjectDetectionHistory();
+        }
+
+    private:
+        MsgClearObjectDetectionHistory() : Message() {}
+    };
+
     CameraDetector();
     ~CameraDetector();
 
@@ -198,6 +211,7 @@ private:
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
     void clearObjectDetectionState();
+    void clearObjectDetectionHistory();
     void reportObjectDetectionHistoryToGUI() const;
     [[nodiscard]] QList<CameraDetectionHistoryEntry> getObjectDetectionHistorySnapshot() const;
     bool applyObjectDetectedSettings(const QString& className);

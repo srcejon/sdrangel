@@ -16,10 +16,13 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <QFileDialog>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QPushButton>
+#include <QSaveFile>
 #include <QTableWidget>
+#include <QTextStream>
 #include <QVBoxLayout>
 
 #include "cameradetectionhistory.h"
@@ -37,7 +40,9 @@ QString formatDateTime(const QDateTime& dateTime)
 
 CameraDetectionHistory::CameraDetectionHistory(const QList<CameraDetectionHistoryEntry>& history, QWidget* parent) :
     QDialog(parent),
-    m_table(new QTableWidget(this))
+    m_table(new QTableWidget(this)),
+    m_clearButton(new QPushButton(tr("Clear history"), this)),
+    m_saveCsvButton(new QPushButton(tr("Save to CSV"), this))
 {
     setWindowTitle(tr("Detection History"));
     resize(720, 360);
@@ -55,9 +60,13 @@ CameraDetectionHistory::CameraDetectionHistory(const QList<CameraDetectionHistor
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
     auto* closeButton = new QPushButton(tr("Close"), this);
+    connect(m_clearButton, &QPushButton::clicked, this, &CameraDetectionHistory::clearHistoryRequested);
+    connect(m_saveCsvButton, &QPushButton::clicked, this, &CameraDetectionHistory::saveHistoryToCsv);
     connect(closeButton, &QPushButton::clicked, this, &QDialog::close);
 
     auto* buttonLayout = new QHBoxLayout();
+    buttonLayout->addWidget(m_clearButton);
+    buttonLayout->addWidget(m_saveCsvButton);
     buttonLayout->addStretch();
     buttonLayout->addWidget(closeButton);
 
@@ -71,6 +80,7 @@ CameraDetectionHistory::CameraDetectionHistory(const QList<CameraDetectionHistor
 
 void CameraDetectionHistory::updateHistory(const QList<CameraDetectionHistoryEntry>& history)
 {
+    m_history = history;
     m_table->setSortingEnabled(false);
     m_table->setRowCount(history.size());
 
@@ -85,4 +95,40 @@ void CameraDetectionHistory::updateHistory(const QList<CameraDetectionHistoryEnt
 
     m_table->setSortingEnabled(true);
     m_table->sortItems(1, Qt::DescendingOrder);
+}
+
+void CameraDetectionHistory::saveHistoryToCsv()
+{
+    const QString fileName = QFileDialog::getSaveFileName(
+        this,
+        tr("Save Detection History"),
+        QStringLiteral("camera-detection-history.csv"),
+        tr("CSV files (*.csv)"));
+
+    if (fileName.isEmpty()) {
+        return;
+    }
+
+    QSaveFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << "\"Class\",\"First detected\",\"Disappeared\",\"Peak confidence\"\n";
+
+    for (const CameraDetectionHistoryEntry& entry : m_history)
+    {
+        auto escapeCsv = [](QString value) {
+            value.replace('"', QStringLiteral("\"\""));
+            return QStringLiteral("\"%1\"").arg(value);
+        };
+
+        stream << escapeCsv(entry.m_label) << ','
+               << escapeCsv(formatDateTime(entry.m_firstDetected)) << ','
+               << escapeCsv(formatDateTime(entry.m_disappeared)) << ','
+               << escapeCsv(QString::number(entry.m_peakConfidence, 'f', 3)) << '\n';
+    }
+
+    file.commit();
 }

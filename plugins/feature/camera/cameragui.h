@@ -330,6 +330,7 @@ private:
 
 private slots:
     void handleInputMessages();
+    void on_detectionHistoryClearRequested();
     void on_startStop_clicked(bool checked);
     void on_refreshCamerasButton_clicked();
     void on_cameraCombo_currentIndexChanged(int index);

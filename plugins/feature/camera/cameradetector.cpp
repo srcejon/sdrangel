@@ -39,6 +39,7 @@ MESSAGE_CLASS_DEFINITION(CameraDetector::MsgConfigureCameraDetector, Message)
 MESSAGE_CLASS_DEFINITION(CameraDetector::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraDetector::MsgCaptureActive, Message)
 MESSAGE_CLASS_DEFINITION(CameraDetector::MsgReportObjectDetectionHistory, Message)
+MESSAGE_CLASS_DEFINITION(CameraDetector::MsgClearObjectDetectionHistory, Message)
 
 namespace {
 QString substituteObjectClass(QString text, const QString& className)
@@ -416,6 +417,11 @@ bool CameraDetector::handleMessage(const Message& cmd)
         if (!m_captureActive) {
             m_processingFrame = false;
         }
+        return true;
+    }
+    else if (MsgClearObjectDetectionHistory::match(cmd))
+    {
+        clearObjectDetectionHistory();
         return true;
     }
 
@@ -1687,6 +1693,11 @@ void CameraDetector::clearObjectDetectionState()
 {
     m_detectedObjectClasses.clear();
     m_pendingDisappearStates.clear();
+    clearObjectDetectionHistory();
+}
+
+void CameraDetector::clearObjectDetectionHistory()
+{
     m_activeObjectDetectionHistory.clear();
     m_completedObjectDetectionHistory.clear();
     reportObjectDetectionHistoryToGUI();

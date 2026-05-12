@@ -5146,6 +5146,7 @@ void CameraGUI::on_detectionHistoryButton_clicked()
     {
         m_detectionHistoryDialog = new CameraDetectionHistory(m_detectionHistory, this);
         m_detectionHistoryDialog->setAttribute(Qt::WA_DeleteOnClose);
+        connect(m_detectionHistoryDialog, &CameraDetectionHistory::clearHistoryRequested, this, &CameraGUI::on_detectionHistoryClearRequested);
         connect(m_detectionHistoryDialog, &QObject::destroyed, this, [this]() { m_detectionHistoryDialog = nullptr; });
     }
     else
@@ -5156,6 +5157,14 @@ void CameraGUI::on_detectionHistoryButton_clicked()
     m_detectionHistoryDialog->show();
     m_detectionHistoryDialog->raise();
     m_detectionHistoryDialog->activateWindow();
+}
+
+void CameraGUI::on_detectionHistoryClearRequested()
+{
+    MessageQueue *detectorQueue = m_camera ? m_camera->getDetectorInputMessageQueue() : nullptr;
+    if (detectorQueue) {
+        detectorQueue->push(CameraDetector::MsgClearObjectDetectionHistory::create());
+    }
 }
 
 void CameraGUI::on_defaultColorSettingsButton_clicked()

@@ -584,7 +584,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "overlayFontFamily", "overlayFontScale",
-        "motionBoxColor",
+        "motionBoxColor", "streakColor", "streakOverlayStyle",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
         "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov", "lensProjection", "owmAPIKey",
         "yoloBoxColor"

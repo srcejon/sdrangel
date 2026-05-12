@@ -501,7 +501,6 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("detectionRoiWidth")
         || settingsKeys.contains("detectionRoiHeight")) {
         m_previousInputFrame = CameraPipelineFrame();
-        m_lastInputFrame = CameraPipelineFrame();
     }
 
     if (force
@@ -612,6 +611,11 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("streakColor")
         || settingsKeys.contains("streakDebugView")
         || settingsKeys.contains("streakLineEnhancementPlacement")
+        || settingsKeys.contains("yoloEnabled")
+        || settingsKeys.contains("yoloModelPath")
+        || settingsKeys.contains("yoloLabelsPath")
+        || settingsKeys.contains("yoloConfThreshold")
+        || settingsKeys.contains("yoloNmsThreshold")
         || settingsKeys.contains("detectionRoiX")
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")

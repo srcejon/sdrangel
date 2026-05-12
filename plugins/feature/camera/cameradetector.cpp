@@ -1572,17 +1572,37 @@ void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& r
             continue;
         }
 
-        const cv::Moments moments = cv::moments(contour);
-        if (moments.m00 <= 0.0) {
-            continue;
-        }
-
-        const double centerX = moments.m10 / moments.m00;
-        const double centerY = moments.m01 / moments.m00;
         cv::Mat contourMask = cv::Mat::zeros(thresholdMask.size(), CV_8UC1);
         std::vector<std::vector<cv::Point>> singleContour{contour};
         cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED);
 
+        cv::Mat weightedResidual;
+        residual.copyTo(weightedResidual, contourMask);
+        const cv::Scalar residualSum = cv::sum(weightedResidual);
+        const double totalWeight = residualSum[0];
+        if (totalWeight <= 0.0) {
+            continue;
+        }
+
+        double weightedX = 0.0;
+        double weightedY = 0.0;
+        for (int row = box.y; row < box.y + box.height; ++row)
+        {
+            const uchar* residualRow = weightedResidual.ptr<uchar>(row);
+            for (int col = box.x; col < box.x + box.width; ++col)
+            {
+                const double weight = residualRow[col];
+                if (weight <= 0.0) {
+                    continue;
+                }
+
+                weightedX += static_cast<double>(col) * weight;
+                weightedY += static_cast<double>(row) * weight;
+            }
+        }
+
+        const double centerX = weightedX / totalWeight;
+        const double centerY = weightedY / totalWeight;
         double peakValue = 0.0;
         cv::minMaxLoc(residual, nullptr, &peakValue, nullptr, nullptr, contourMask);
 

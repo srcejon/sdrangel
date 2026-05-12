@@ -35,6 +35,8 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client
     ${OpenCV_INCLUDE_DIRS}
     ${ASICAMERA_INCLUDE_DIR}
+    ${ZLIB_INCLUDE_DIRS}
+    ${ZLIB_INCLUDE_DIR}
 )
 
 if(NOT SERVER_MODE)
@@ -97,6 +99,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     ${TARGET_LIB}
     ${OpenCV_LIBS}
     ${ASICAMERA_LIBRARIES}
+    ${ZLIB_LIBRARIES}
     sdrbase
     ${TARGET_LIB_GUI}
 )

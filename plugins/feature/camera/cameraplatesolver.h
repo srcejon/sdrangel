@@ -19,8 +19,10 @@
 #ifndef INCLUDE_FEATURE_CAMERAPLATESOLVER_H_
 #define INCLUDE_FEATURE_CAMERAPLATESOLVER_H_
 
+#include <QByteArray>
 #include <QDateTime>
 #include <QSize>
+#include <QString>
 #include <QVector>
 
 #include "camerapipelineframe.h"
@@ -40,6 +42,9 @@ struct CameraPlateSolveResult
 class CameraPlateSolver
 {
 public:
+    static QString downloadedCatalogArchivePath();
+    static QString downloadedCatalogCsvPath();
+    static bool importDownloadedCatalogArchive(const QString& archivePath, QString* errorMessage = nullptr);
     static CameraPlateSolveResult solve(const CameraSettings& settings,
                                         const QSize& imageSize,
                                         const QDateTime& captureDateTime,

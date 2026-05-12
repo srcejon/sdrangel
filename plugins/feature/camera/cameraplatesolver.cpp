@@ -21,12 +21,22 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QPointF>
 #include <QRectF>
+#include <QStandardPaths>
 #include <QString>
+#include <QStringList>
 #include <QVector>
+
+#include <zlib.h>
 
 #include "util/astronomy.h"
 
@@ -34,7 +44,7 @@ namespace {
 
 struct CatalogStar
 {
-    const char* name;
+    QString name;
     double rightAscensionDegrees;
     double declinationDegrees;
     double magnitude;
@@ -96,55 +106,10 @@ struct SkyProjector
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kVisibleAltitudeFloor = -5.0;
 constexpr int kMaxDetectionsForSolve = 24;
-
-const std::array<CatalogStar, 46> kBrightStarCatalog = {{
-    {"Sirius", 101.287155, -16.716116, -1.46},
-    {"Canopus", 95.987958, -52.695661, -0.74},
-    {"Arcturus", 213.915300, 19.182409, -0.05},
-    {"Alpha Centauri", 219.902058, -60.833993, -0.27},
-    {"Vega", 279.234734, 38.783688, 0.03},
-    {"Capella", 79.172333, 45.997991, 0.08},
-    {"Rigel", 78.634467, -8.201639, 0.13},
-    {"Procyon", 114.825493, 5.224993, 0.34},
-    {"Achernar", 24.428522, -57.236753, 0.46},
-    {"Betelgeuse", 88.792939, 7.407064, 0.50},
-    {"Hadar", 210.955917, -60.373039, 0.61},
-    {"Altair", 297.695827, 8.868322, 0.77},
-    {"Acrux", 186.649563, -63.099092, 0.77},
-    {"Aldebaran", 68.980163, 16.509302, 0.85},
-    {"Spica", 201.298247, -11.161322, 0.98},
-    {"Antares", 247.351915, -26.432002, 1.06},
-    {"Pollux", 116.328958, 28.026183, 1.14},
-    {"Fomalhaut", 344.412750, -29.622236, 1.16},
-    {"Deneb", 310.357979, 45.280338, 1.25},
-    {"Mimosa", 191.930286, -59.688764, 1.25},
-    {"Regulus", 152.092962, 11.967208, 1.35},
-    {"Adhara", 104.656453, -28.972086, 1.50},
-    {"Shaula", 263.402167, -37.103821, 1.62},
-    {"Bellatrix", 81.282764, 6.349703, 1.64},
-    {"Elnath", 81.572971, 28.607451, 1.65},
-    {"Miaplacidus", 138.300833, -69.717208, 1.67},
-    {"Alnilam", 84.053389, -1.201917, 1.69},
-    {"Alnair", 332.058271, -46.960975, 1.74},
-    {"Alioth", 193.507292, 55.959822, 1.76},
-    {"Regor", 122.383125, -47.336586, 1.75},
-    {"Dubhe", 165.932083, 61.750833, 1.79},
-    {"Mirfak", 51.080708, 49.861179, 1.79},
-    {"Wezen", 107.097858, -26.393200, 1.83},
-    {"Sargas", 263.733625, -42.997825, 1.86},
-    {"Kaus Australis", 283.816333, -34.384617, 1.79},
-    {"Avior", 125.628417, -59.509483, 1.86},
-    {"Menkalinan", 89.882208, 44.947433, 1.90},
-    {"Atria", 252.166292, -69.027722, 1.91},
-    {"Alhena", 99.427917, 16.399414, 1.93},
-    {"Peacock", 306.411875, -56.735089, 1.94},
-    {"Mirzam", 95.674939, -17.955918, 1.98},
-    {"Alnitak", 85.189694, -1.942572, 1.74},
-    {"Saiph", 86.939120, -9.669605, 2.07},
-    {"Merak", 165.460417, 56.382500, 2.37},
-    {"Phecda", 178.457500, 53.694722, 2.43},
-    {"Megrez", 183.856667, 57.032500, 3.31}
-}};
+const char* const kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
+const char* const kDownloadedCatalogDir = "camera";
+const char* const kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
+const char* const kDownloadedCatalogCsvFile = "hyg_v42.csv";
 
 double degToRad(double value)
 {
@@ -218,6 +183,285 @@ SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, doubl
         vector.y * cosAngle + axisCrossVector.y * sinAngle + axis.y * axisDotVector * (1.0 - cosAngle),
         vector.z * cosAngle + axisCrossVector.z * sinAngle + axis.z * axisDotVector * (1.0 - cosAngle)
     };
+}
+
+double parseRightAscensionDegrees(const QString& value)
+{
+    const QStringList fields = value.split(' ', Qt::SkipEmptyParts);
+    if (fields.size() != 3) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    bool okHours = false;
+    bool okMinutes = false;
+    bool okSeconds = false;
+    const double hours = fields[0].toDouble(&okHours);
+    const double minutes = fields[1].toDouble(&okMinutes);
+    const double seconds = fields[2].toDouble(&okSeconds);
+    if (!okHours || !okMinutes || !okSeconds) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    return 15.0 * (hours + minutes / 60.0 + seconds / 3600.0);
+}
+
+double parseDeclinationDegrees(const QString& value)
+{
+    const QStringList fields = value.split(' ', Qt::SkipEmptyParts);
+    if (fields.size() != 3) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    bool okDegrees = false;
+    bool okMinutes = false;
+    bool okSeconds = false;
+    const double degreesWithSign = fields[0].toDouble(&okDegrees);
+    const double minutes = fields[1].toDouble(&okMinutes);
+    const double seconds = fields[2].toDouble(&okSeconds);
+    if (!okDegrees || !okMinutes || !okSeconds) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    const double sign = (degreesWithSign < 0.0) ? -1.0 : 1.0;
+    const double absoluteDegrees = std::fabs(degreesWithSign);
+    return sign * (absoluteDegrees + minutes / 60.0 + seconds / 3600.0);
+}
+
+QString stripQuotedField(const QString& value)
+{
+    QString stripped = value.trimmed();
+    if (stripped.startsWith('"') && stripped.endsWith('"') && (stripped.size() >= 2)) {
+        stripped = stripped.mid(1, stripped.size() - 2);
+    }
+    return stripped.replace(QStringLiteral("\"\""), QStringLiteral("\""));
+}
+
+QString downloadedCatalogDir()
+{
+    const QString baseDir = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0);
+    return QDir(baseDir).filePath(QString::fromUtf8(kDownloadedCatalogDir));
+}
+
+QByteArray gunzipData(const QByteArray& compressedData, QString* errorMessage)
+{
+    if (compressedData.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Downloaded catalog archive is empty.");
+        }
+        return QByteArray();
+    }
+
+    z_stream stream;
+    std::memset(&stream, 0, sizeof(stream));
+    stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(compressedData.constData()));
+    stream.avail_in = static_cast<uInt>(compressedData.size());
+
+    const int windowBits = 16 + MAX_WBITS;
+    if (inflateInit2(&stream, windowBits) != Z_OK)
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to initialize gzip decompressor.");
+        }
+        return QByteArray();
+    }
+
+    QByteArray uncompressedData;
+    char buffer[32768];
+    int inflateStatus = Z_OK;
+    do
+    {
+        stream.next_out = reinterpret_cast<Bytef *>(buffer);
+        stream.avail_out = sizeof(buffer);
+        inflateStatus = inflate(&stream, Z_NO_FLUSH);
+        if ((inflateStatus != Z_OK) && (inflateStatus != Z_STREAM_END))
+        {
+            inflateEnd(&stream);
+            if (errorMessage) {
+                *errorMessage = QStringLiteral("Failed to decompress gzip catalog archive.");
+            }
+            return QByteArray();
+        }
+        uncompressedData.append(buffer, sizeof(buffer) - static_cast<int>(stream.avail_out));
+    } while (inflateStatus != Z_STREAM_END);
+
+    inflateEnd(&stream);
+    return uncompressedData;
+}
+
+QVector<CatalogStar> parseBundledCatalog(const QString& text)
+{
+    QVector<CatalogStar> stars;
+    const QStringList lines = text.split('\n');
+    for (const QString& rawLine : lines)
+    {
+        const QString line = rawLine.trimmed();
+        if (line.isEmpty() || line.startsWith('#') || line.startsWith(QStringLiteral("name|"))) {
+            continue;
+        }
+
+        const QStringList fields = line.split('|');
+        if (fields.size() != 4) {
+            continue;
+        }
+
+        bool okMagnitude = false;
+        const double rightAscensionDegrees = parseRightAscensionDegrees(fields[1].trimmed());
+        const double declinationDegrees = parseDeclinationDegrees(fields[2].trimmed());
+        const double magnitude = fields[3].trimmed().toDouble(&okMagnitude);
+        if (!std::isfinite(rightAscensionDegrees) || !std::isfinite(declinationDegrees) || !okMagnitude) {
+            continue;
+        }
+
+        stars.append({fields[0].trimmed(), rightAscensionDegrees, declinationDegrees, magnitude});
+    }
+
+    return stars;
+}
+
+QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text)
+{
+    QVector<CatalogStar> stars;
+    const QStringList lines = text.split('\n');
+    if (lines.isEmpty()) {
+        return stars;
+    }
+
+    const QStringList headers = lines.front().trimmed().split(',');
+    QHash<QString, int> indices;
+    for (int i = 0; i < headers.size(); ++i) {
+        indices.insert(stripQuotedField(headers[i]), i);
+    }
+
+    const int properIndex = indices.value(QStringLiteral("proper"), -1);
+    const int bfIndex = indices.value(QStringLiteral("bf"), -1);
+    const int raIndex = indices.value(QStringLiteral("ra"), -1);
+    const int decIndex = indices.value(QStringLiteral("dec"), -1);
+    const int magIndex = indices.value(QStringLiteral("mag"), -1);
+    const int hipIndex = indices.value(QStringLiteral("hip"), -1);
+    const int hdIndex = indices.value(QStringLiteral("hd"), -1);
+    const int hrIndex = indices.value(QStringLiteral("hr"), -1);
+    const int bayerIndex = indices.value(QStringLiteral("bayer"), -1);
+    const int flamIndex = indices.value(QStringLiteral("flam"), -1);
+    const int conIndex = indices.value(QStringLiteral("con"), -1);
+
+    if ((raIndex < 0) || (decIndex < 0) || (magIndex < 0)) {
+        return stars;
+    }
+
+    stars.reserve(lines.size());
+    for (int lineIndex = 1; lineIndex < lines.size(); ++lineIndex)
+    {
+        const QString line = lines[lineIndex].trimmed();
+        if (line.isEmpty()) {
+            continue;
+        }
+
+        const QStringList fields = line.split(',');
+        if (fields.size() <= std::max({raIndex, decIndex, magIndex})) {
+            continue;
+        }
+
+        bool okRa = false;
+        bool okDec = false;
+        bool okMag = false;
+        const double rightAscensionHours = stripQuotedField(fields[raIndex]).toDouble(&okRa);
+        const double declinationDegrees = stripQuotedField(fields[decIndex]).toDouble(&okDec);
+        const double magnitude = stripQuotedField(fields[magIndex]).toDouble(&okMag);
+        if (!okRa || !okDec || !okMag) {
+            continue;
+        }
+
+        QString name;
+        if ((properIndex >= 0) && (properIndex < fields.size())) {
+            name = stripQuotedField(fields[properIndex]);
+        }
+        if (name.isEmpty() && (bfIndex >= 0) && (bfIndex < fields.size())) {
+            name = stripQuotedField(fields[bfIndex]);
+        }
+        if (name.isEmpty())
+        {
+            const QString bayer = ((bayerIndex >= 0) && (bayerIndex < fields.size())) ? stripQuotedField(fields[bayerIndex]) : QString();
+            const QString flam = ((flamIndex >= 0) && (flamIndex < fields.size())) ? stripQuotedField(fields[flamIndex]) : QString();
+            const QString constellation = ((conIndex >= 0) && (conIndex < fields.size())) ? stripQuotedField(fields[conIndex]) : QString();
+            if (!bayer.isEmpty() && !constellation.isEmpty()) {
+                name = QStringLiteral("%1 %2").arg(bayer, constellation);
+            } else if (!flam.isEmpty() && !constellation.isEmpty()) {
+                name = QStringLiteral("%1 %2").arg(flam, constellation);
+            }
+        }
+        if (name.isEmpty() && (hipIndex >= 0) && (hipIndex < fields.size()))
+        {
+            const QString hip = stripQuotedField(fields[hipIndex]);
+            if (!hip.isEmpty()) {
+                name = QStringLiteral("HIP %1").arg(hip);
+            }
+        }
+        if (name.isEmpty() && (hrIndex >= 0) && (hrIndex < fields.size()))
+        {
+            const QString hr = stripQuotedField(fields[hrIndex]);
+            if (!hr.isEmpty()) {
+                name = QStringLiteral("HR %1").arg(hr);
+            }
+        }
+        if (name.isEmpty() && (hdIndex >= 0) && (hdIndex < fields.size()))
+        {
+            const QString hd = stripQuotedField(fields[hdIndex]);
+            if (!hd.isEmpty()) {
+                name = QStringLiteral("HD %1").arg(hd);
+            }
+        }
+        if (name.isEmpty()) {
+            continue;
+        }
+
+        stars.append({name, rightAscensionHours * 15.0, declinationDegrees, magnitude});
+    }
+
+    return stars;
+}
+
+QVector<CatalogStar> loadCatalogFromTextFile(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+
+    const QString text = QString::fromUtf8(file.readAll());
+    if (path.endsWith(QStringLiteral(".txt"))) {
+        return parseBundledCatalog(text);
+    }
+    return parseDownloadedHygCatalog(text);
+}
+
+QString currentCatalogPath(const CameraSettings& settings)
+{
+    if (settings.m_plateSolveUseDownloadedCatalog && QFileInfo::exists(CameraPlateSolver::downloadedCatalogCsvPath())) {
+        return CameraPlateSolver::downloadedCatalogCsvPath();
+    }
+    return QString::fromUtf8(kBundledCatalogPath);
+}
+
+const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
+{
+    static QMutex s_catalogMutex;
+    static QString s_loadedPath;
+    static QDateTime s_loadedModified;
+    static QVector<CatalogStar> s_catalog;
+
+    const QString path = currentCatalogPath(settings);
+    const bool isResource = path.startsWith(QLatin1String(":/"));
+    const QDateTime modified = isResource ? QDateTime() : QFileInfo(path).lastModified();
+
+    QMutexLocker locker(&s_catalogMutex);
+    if ((path != s_loadedPath) || (!isResource && (modified != s_loadedModified)) || s_catalog.isEmpty())
+    {
+        s_catalog = loadCatalogFromTextFile(path);
+        s_loadedPath = path;
+        s_loadedModified = modified;
+    }
+
+    return s_catalog;
 }
 
 SkyProjector createProjector(const CameraSettings& settings,
@@ -339,10 +583,11 @@ QVector<ProjectedCatalogStar> buildProjectedCatalog(const CameraSettings& settin
                                                     double searchMarginPixels)
 {
     QVector<ProjectedCatalogStar> projectedStars;
+    const QVector<CatalogStar>& catalogStars = brightStarCatalog(settings);
 
-    for (int i = 0; i < static_cast<int>(kBrightStarCatalog.size()); ++i)
+    for (int i = 0; i < catalogStars.size(); ++i)
     {
-        const CatalogStar& star = kBrightStarCatalog[i];
+        const CatalogStar& star = catalogStars[i];
         if (star.magnitude > maxMagnitude) {
             continue;
         }
@@ -379,12 +624,14 @@ QVector<ProjectedCatalogStar> buildProjectedCatalog(const CameraSettings& settin
     return projectedStars;
 }
 
-QVector<Match> buildMatches(const QVector<CameraPipelineStarDetection>& starDetections,
+QVector<Match> buildMatches(const CameraSettings& settings,
+                            const QVector<CameraPipelineStarDetection>& starDetections,
                             const QVector<int>& detectionIndices,
                             const QVector<ProjectedCatalogStar>& projectedStars,
                             double matchRadiusPixels)
 {
     QVector<CandidatePair> candidatePairs;
+    const QVector<CatalogStar>& catalogStars = brightStarCatalog(settings);
     const double maxDistanceSquared = matchRadiusPixels * matchRadiusPixels;
 
     for (int detectionIndex : detectionIndices)
@@ -407,17 +654,17 @@ QVector<Match> buildMatches(const QVector<CameraPipelineStarDetection>& starDete
         }
     }
 
-    std::sort(candidatePairs.begin(), candidatePairs.end(), [](const CandidatePair& lhs, const CandidatePair& rhs) {
+    std::sort(candidatePairs.begin(), candidatePairs.end(), [&catalogStars](const CandidatePair& lhs, const CandidatePair& rhs) {
         if (lhs.distancePixels != rhs.distancePixels) {
             return lhs.distancePixels < rhs.distancePixels;
         }
 
-        return kBrightStarCatalog[lhs.catalogIndex].magnitude < kBrightStarCatalog[rhs.catalogIndex].magnitude;
+        return catalogStars[lhs.catalogIndex].magnitude < catalogStars[rhs.catalogIndex].magnitude;
     });
 
     QVector<Match> matches;
     QVector<bool> detectionMatched(starDetections.size(), false);
-    QVector<bool> catalogMatched(static_cast<int>(kBrightStarCatalog.size()), false);
+    QVector<bool> catalogMatched(catalogStars.size(), false);
 
     for (const CandidatePair& pair : candidatePairs)
     {
@@ -471,6 +718,7 @@ Evaluation evaluatePose(const CameraSettings& settings,
     }
 
     evaluation.matches = buildMatches(
+        settings,
         starDetections,
         detectionIndices,
         projectedStars,
@@ -552,6 +800,32 @@ Evaluation searchBestPose(const CameraSettings& settings,
     }
 
     if (!best.valid) {
+        const std::array<double, 13> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0}};
+        for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
+        {
+            for (double elevationDegrees = -60.0; elevationDegrees <= 75.0; elevationDegrees += 15.0)
+            {
+                for (double rollDegrees : wideRollOffsets)
+                {
+                    const Evaluation candidate = evaluatePose(
+                        settings,
+                        imageSize,
+                        captureDateTimeUtc,
+                        starDetections,
+                        detectionIndices,
+                        azimuthDegrees,
+                        elevationDegrees,
+                        rollDegrees,
+                        static_cast<double>(settings.m_fov));
+                    if (isBetterEvaluation(candidate, best)) {
+                        best = candidate;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!best.valid) {
         return best;
     }
 
@@ -600,6 +874,65 @@ Evaluation searchBestPose(const CameraSettings& settings,
         fovStep *= 0.5;
     }
 
+    const QVector<int> allDetectionIndices = [&starDetections]() {
+        QVector<int> indices;
+        indices.reserve(starDetections.size());
+        for (int i = 0; i < starDetections.size(); ++i) {
+            indices.append(i);
+        }
+        return indices;
+    }();
+
+    azCenter = best.azimuthDegrees;
+    elCenter = best.elevationDegrees;
+    rollCenter = best.rollDegrees;
+    fovCenter = best.fovDegrees;
+    azStep = std::max(0.1, azStep);
+    rollStep = std::max(0.25, rollStep);
+    fovStep = std::max(0.1, fovStep);
+
+    for (int iteration = 0; iteration < 4; ++iteration)
+    {
+        bool improved = false;
+        const std::array<double, 3> refineOffsets = {{-1.0, 0.0, 1.0}};
+        for (double azOffset : refineOffsets)
+        {
+            for (double elOffset : refineOffsets)
+            {
+                for (double rollOffset : refineOffsets)
+                {
+                    for (double fovOffset : refineOffsets)
+                    {
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            allDetectionIndices,
+                            azCenter + azOffset * azStep,
+                            elCenter + elOffset * azStep,
+                            rollCenter + rollOffset * rollStep,
+                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep));
+                        if (isBetterEvaluation(candidate, best)) {
+                            best = candidate;
+                            improved = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        azCenter = best.azimuthDegrees;
+        elCenter = best.elevationDegrees;
+        rollCenter = best.rollDegrees;
+        fovCenter = best.fovDegrees;
+        if (!improved) {
+            azStep *= 0.5;
+            rollStep *= 0.5;
+            fovStep *= 0.5;
+        }
+    }
+
     return best;
 }
 
@@ -615,6 +948,63 @@ void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
 }
 
 } // namespace
+
+QString CameraPlateSolver::downloadedCatalogArchivePath()
+{
+    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kDownloadedCatalogArchiveFile));
+}
+
+QString CameraPlateSolver::downloadedCatalogCsvPath()
+{
+    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kDownloadedCatalogCsvFile));
+}
+
+bool CameraPlateSolver::importDownloadedCatalogArchive(const QString& archivePath, QString* errorMessage)
+{
+    QFile inputFile(archivePath);
+    if (!inputFile.open(QIODevice::ReadOnly))
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to open downloaded catalog archive: %1").arg(archivePath);
+        }
+        return false;
+    }
+
+    const QByteArray compressedData = inputFile.readAll();
+    const QByteArray uncompressedData = gunzipData(compressedData, errorMessage);
+    if (uncompressedData.isEmpty()) {
+        return false;
+    }
+
+    const QString outputDirPath = downloadedCatalogDir();
+    QDir outputDir;
+    if (!outputDir.mkpath(outputDirPath))
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to create plate-solver catalog directory: %1").arg(outputDirPath);
+        }
+        return false;
+    }
+
+    QFile outputFile(downloadedCatalogCsvPath());
+    if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to write imported HYG catalog: %1").arg(downloadedCatalogCsvPath());
+        }
+        return false;
+    }
+
+    if (outputFile.write(uncompressedData) != uncompressedData.size())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to fully write imported HYG catalog: %1").arg(downloadedCatalogCsvPath());
+        }
+        return false;
+    }
+
+    return true;
+}
 
 CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                                                 const QSize& imageSize,
@@ -665,6 +1055,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return indices;
     }();
     const QVector<Match> allMatches = buildMatches(
+        settings,
         starDetections,
         allDetectionIndices,
         projectedStars,
@@ -678,8 +1069,8 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     for (const Match& match : allMatches)
     {
         CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
-        const CatalogStar& catalogStar = kBrightStarCatalog[match.catalogIndex];
-        detection.m_label = QString::fromUtf8(catalogStar.name);
+        const CatalogStar& catalogStar = brightStarCatalog(settings)[match.catalogIndex];
+        detection.m_label = catalogStar.name;
         detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
         detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
         detection.m_solved = true;

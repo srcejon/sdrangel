@@ -941,6 +941,65 @@
              </property>
             </widget>
            </item>
+           <item row="7" column="0">
+            <widget class="QLabel" name="plateSolveStatusTextLabel">
+             <property name="text">
+              <string>Plate solve</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="1">
+            <widget class="QLabel" name="plateSolveStatusLabel">
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="0">
+            <widget class="QLabel" name="plateSolveMatchesTextLabel">
+             <property name="text">
+              <string>Matched stars</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="1">
+            <widget class="QLabel" name="plateSolveMatchesLabel">
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="0">
+            <widget class="QLabel" name="plateSolveRmsTextLabel">
+             <property name="text">
+              <string>RMS error (px)</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="1">
+            <widget class="QLabel" name="plateSolveRmsLabel">
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="0">
+            <widget class="QLabel" name="plateSolvePointingTextLabel">
+             <property name="text">
+              <string>Solved pointing</string>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="1">
+            <widget class="QLabel" name="plateSolvePointingLabel">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
           </layout>
          </item>
         </layout>
@@ -4903,6 +4962,43 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                 <property name="singleStep">
                  <double>0.500000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="2" colspan="2">
+               <widget class="QToolButton" name="plateSolveApplyButton">
+                <property name="toolTip">
+                 <string>Apply the last solved azimuth, elevation, roll and field of view to the camera settings</string>
+                </property>
+                <property name="text">
+                 <string>Apply solved pointing</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="0">
+               <widget class="QLabel" name="plateSolveUseDownloadedCatalogLabel">
+                <property name="text">
+                 <string>Use HYG catalog</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="1">
+               <widget class="QCheckBox" name="plateSolveUseDownloadedCatalogCheck">
+                <property name="toolTip">
+                 <string>Use the downloaded HYG catalog for plate solving when it is available</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="2" colspan="2">
+               <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
+                <property name="toolTip">
+                 <string>Download and import the HYG bright-star catalog for plate solving</string>
+                </property>
+                <property name="text">
+                 <string>Download HYG catalog</string>
                 </property>
                </widget>
               </item>

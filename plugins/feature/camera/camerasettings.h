@@ -443,6 +443,7 @@ struct CameraSettings
     int    m_plateSolveMinMatches; ///< Minimum matches required for a successful solve
     double m_plateSolveMatchRadius; ///< Maximum image-space distance in pixels for a star match
     double m_plateSolveSearchRadius; ///< Search radius in degrees around the current pointing estimate
+    bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 
     // Spectrum overlay settings

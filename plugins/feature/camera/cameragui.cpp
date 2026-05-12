@@ -77,6 +77,7 @@
 #include "feature/featureset.h"
 #include "channel/channelwebapiutils.h"
 
+#include "cameraplatesolver.h"
 #include "ui_cameragui.h"
 #include "camera.h"
 #include "cameradetectionhistory.h"
@@ -363,6 +364,27 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         settingsUI()->pipelineFpsLabel->setText(
             m_lastPipelineFps > 0.0 ? QString::number(m_lastPipelineFps, 'f', 1) : "-");
+        m_lastPlateSolved = report.isPlateSolved();
+        m_lastPlateSolvedMatches = report.getPlateSolvedMatches();
+        m_lastPlateSolveRmsError = report.getPlateSolveRmsError();
+        m_lastPlateSolveAzimuth = report.getPlateSolveAzimuth();
+        m_lastPlateSolveElevation = report.getPlateSolveElevation();
+        m_lastPlateSolveRoll = report.getPlateSolveRoll();
+        m_lastPlateSolveFov = report.getPlateSolveFov();
+        settingsUI()->plateSolveStatusLabel->setText(m_lastPlateSolved ? tr("Solved") : tr("Unsolved"));
+        settingsUI()->plateSolveMatchesLabel->setText(
+            m_lastPlateSolved ? QString::number(m_lastPlateSolvedMatches) : "-");
+        settingsUI()->plateSolveRmsLabel->setText(
+            m_lastPlateSolved ? QString::number(m_lastPlateSolveRmsError, 'f', 1) : "-");
+        settingsUI()->plateSolvePointingLabel->setText(
+            m_lastPlateSolved
+                ? tr("Az %1  El %2  Roll %3  FoV %4")
+                      .arg(QString::number(m_lastPlateSolveAzimuth, 'f', 2))
+                      .arg(QString::number(m_lastPlateSolveElevation, 'f', 2))
+                      .arg(QString::number(m_lastPlateSolveRoll, 'f', 2))
+                      .arg(QString::number(m_lastPlateSolveFov, 'f', 2))
+                : "-");
+        settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
         if (m_histogramDialog) {
             m_histogramDialog->updateHistogram(m_lastHistogramData);
@@ -599,6 +621,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     connect(m_settingsDialog, &QDialog::finished, this, &CameraGUI::onSettingsDialogFinished);
     connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
     connect(&m_dlm, &HttpDownloadManagerGUI::downloadComplete, this, &CameraGUI::handleYoloDownloadComplete);
+    connect(&m_dlm, &HttpDownloadManagerGUI::downloadComplete, this, &CameraGUI::handlePlateSolveCatalogDownloadComplete);
     connect(MainCore::instance(), &MainCore::featureAdded, this, &CameraGUI::onFeatureAdded);
     connect(MainCore::instance(), &MainCore::featureRemoved, this, &CameraGUI::onFeatureRemoved);
     m_qtStillCaptureTimer.setSingleShot(false);
@@ -749,7 +772,19 @@ void CameraGUI::resetCameraStatus()
     m_lastAlpacaErrorMessage.clear();
     m_pipelineFrameTimes.clear();
     m_lastPipelineFps = 0.0;
+    m_lastPlateSolved = false;
+    m_lastPlateSolvedMatches = 0;
+    m_lastPlateSolveRmsError = 0.0;
+    m_lastPlateSolveAzimuth = 0.0;
+    m_lastPlateSolveElevation = 0.0;
+    m_lastPlateSolveRoll = 0.0;
+    m_lastPlateSolveFov = 0.0;
     settingsUI()->pipelineFpsLabel->setText("-");
+    settingsUI()->plateSolveStatusLabel->setText("-");
+    settingsUI()->plateSolveMatchesLabel->setText("-");
+    settingsUI()->plateSolveRmsLabel->setText("-");
+    settingsUI()->plateSolvePointingLabel->setText("-");
+    settingsUI()->plateSolveApplyButton->setEnabled(false);
     m_settingsDialog->clearCameraStatus();
 }
 
@@ -1105,6 +1140,8 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveMinMatchesSpin->setValue(m_settings.m_plateSolveMinMatches);
     settingsUI()->plateSolveMatchRadiusSpin->setValue(m_settings.m_plateSolveMatchRadius);
     settingsUI()->plateSolveSearchRadiusSpin->setValue(m_settings.m_plateSolveSearchRadius);
+    settingsUI()->plateSolveUseDownloadedCatalogCheck->setChecked(m_settings.m_plateSolveUseDownloadedCatalog);
+    settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
     ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
     m_showMotionExclusionRects = m_settings.m_showMotionExclusionRects;
@@ -1538,6 +1575,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveMinMatchesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMinMatchesSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMatchRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveSearchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged);
+    QObject::connect(settingsUI()->plateSolveUseDownloadedCatalogCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled);
+    QObject::connect(settingsUI()->plateSolveDownloadCatalogButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDownloadCatalogButton_clicked);
+    QObject::connect(settingsUI()->plateSolveApplyButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveApplyButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
     QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
     QObject::connect(settingsUI()->motionExclusionShowButton, &QToolButton::toggled, this, &CameraGUI::on_motionExclusionShowButton_toggled);
@@ -5375,6 +5415,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveMinMatches = defaults.m_plateSolveMinMatches;
     m_settings.m_plateSolveMatchRadius = defaults.m_plateSolveMatchRadius;
     m_settings.m_plateSolveSearchRadius = defaults.m_plateSolveSearchRadius;
+    m_settings.m_plateSolveUseDownloadedCatalog = defaults.m_plateSolveUseDownloadedCatalog;
 
     m_settings.m_diffMask = defaults.m_diffMask;
     m_settings.m_diffThreshold = defaults.m_diffThreshold;
@@ -5434,6 +5475,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveMinMatches",
         "plateSolveMatchRadius",
         "plateSolveSearchRadius",
+        "plateSolveUseDownloadedCatalog",
         "diffMask",
         "diffThreshold",
         "diffMaskOpenSize",
@@ -5689,6 +5731,35 @@ void CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged(double value)
     applySetting("plateSolveSearchRadius");
 }
 
+void CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled(bool checked)
+{
+    m_settings.m_plateSolveUseDownloadedCatalog = checked;
+    applySetting("plateSolveUseDownloadedCatalog");
+}
+
+void CameraGUI::on_plateSolveDownloadCatalogButton_clicked()
+{
+    requestPlateSolveCatalogDownload();
+}
+
+void CameraGUI::on_plateSolveApplyButton_clicked()
+{
+    if (!m_lastPlateSolved) {
+        return;
+    }
+
+    m_settings.m_azimuth = static_cast<float>(m_lastPlateSolveAzimuth);
+    m_settings.m_elevation = static_cast<float>(m_lastPlateSolveElevation);
+    m_settings.m_roll = static_cast<float>(m_lastPlateSolveRoll);
+    m_settings.m_fov = static_cast<float>(m_lastPlateSolveFov);
+
+    blockApplySettings(true);
+    displaySettings();
+    blockApplySettings(false);
+
+    applySettings({"azimuth", "elevation", "roll", "fov"});
+}
+
 void CameraGUI::on_motionExclusionAddButton_clicked()
 {
     if (m_lastImage.isNull()) {
@@ -5820,6 +5891,29 @@ void CameraGUI::requestYoloDownload(const QString& settingKey, const QString& pa
     m_dlm.download(QUrl(path), localFilename, this);
 }
 
+void CameraGUI::requestPlateSolveCatalogDownload()
+{
+    static const QString kCatalogUrl = QStringLiteral("https://codeberg.org/astronexus/hyg/media/branch/main/data/hyg/CURRENT/hyg_v42.csv.gz");
+    const QString localArchiveFilename = CameraPlateSolver::downloadedCatalogArchivePath();
+
+    if (m_pendingPlateSolveDownloads.contains(localArchiveFilename)) {
+        return;
+    }
+
+    m_pendingPlateSolveDownloads.insert(localArchiveFilename, kCatalogUrl);
+
+    if (QFileInfo::exists(localArchiveFilename))
+    {
+        if (!HttpDownloadManagerGUI::confirmDownload(localArchiveFilename, this))
+        {
+            handlePlateSolveCatalogDownloadComplete(localArchiveFilename, true, kCatalogUrl, QString());
+            return;
+        }
+    }
+
+    m_dlm.download(QUrl(kCatalogUrl), localArchiveFilename, this);
+}
+
 void CameraGUI::handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage)
 {
     const QString settingKey = m_pendingYoloDownloads.take(filename);
@@ -5844,6 +5938,41 @@ void CameraGUI::handleYoloDownloadComplete(const QString& filename, bool success
     const QSignalBlocker blocker(combo);
     combo->setCurrentText(filename);
     applyYoloPathSetting(settingKey, filename);
+}
+
+void CameraGUI::handlePlateSolveCatalogDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage)
+{
+    const QString requestedUrl = m_pendingPlateSolveDownloads.take(filename);
+    if (requestedUrl.isEmpty()) {
+        return;
+    }
+
+    if (!success)
+    {
+        QString error = errorMessage;
+        if (error.isEmpty()) {
+            error = tr("An unknown error occurred during download from %1 to %2.").arg(url, filename);
+        }
+        QMessageBox::warning(this, tr("Download failed"), error);
+        return;
+    }
+
+    QString importError;
+    if (!CameraPlateSolver::importDownloadedCatalogArchive(filename, &importError))
+    {
+        QMessageBox::warning(this, tr("Catalog import failed"),
+            importError.isEmpty() ? tr("Failed to import downloaded HYG catalog.") : importError);
+        return;
+    }
+
+    m_settings.m_plateSolveUseDownloadedCatalog = true;
+    blockApplySettings(true);
+    displaySettings();
+    blockApplySettings(false);
+    applySetting("plateSolveUseDownloadedCatalog");
+
+    QMessageBox::information(this, tr("Catalog imported"),
+        tr("Imported HYG catalog to %1").arg(CameraPlateSolver::downloadedCatalogCsvPath()));
 }
 
 void CameraGUI::on_yoloModelPathCombo_currentIndexChanged(int index)

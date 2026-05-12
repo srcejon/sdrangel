@@ -315,6 +315,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveMinMatches = 4;
     m_plateSolveMatchRadius = 24.0;
     m_plateSolveSearchRadius = 12.0;
+    m_plateSolveUseDownloadedCatalog = false;
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
@@ -489,6 +490,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(212, m_plateSolveMinMatches);
     s.writeDouble(213, m_plateSolveMatchRadius);
     s.writeDouble(214, m_plateSolveSearchRadius);
+    s.writeBool(215, m_plateSolveUseDownloadedCatalog);
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -845,6 +847,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(212, &m_plateSolveMinMatches, 4);
         d.readDouble(213, &m_plateSolveMatchRadius, 24.0);
         d.readDouble(214, &m_plateSolveSearchRadius, 12.0);
+        d.readBool(215, &m_plateSolveUseDownloadedCatalog, false);
         m_overlayFontScale = qBound(m_minOverlayFontScale, m_overlayFontScale, m_maxOverlayFontScale);
         m_detectionRoiX = qBound(m_minUiPixelOffset, m_detectionRoiX, m_maxUiPixelOffset);
         m_detectionRoiY = qBound(m_minUiPixelOffset, m_detectionRoiY, m_maxUiPixelOffset);
@@ -1556,6 +1559,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveSearchRadius")) {
         m_plateSolveSearchRadius = settings.m_plateSolveSearchRadius;
     }
+    if (settingsKeys.contains("plateSolveUseDownloadedCatalog")) {
+        m_plateSolveUseDownloadedCatalog = settings.m_plateSolveUseDownloadedCatalog;
+    }
     if (settingsKeys.contains("videoPostProcess")) {
         m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
     }
@@ -2161,6 +2167,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveSearchRadius") || force) {
         ostr << " m_plateSolveSearchRadius: " << m_plateSolveSearchRadius;
+    }
+    if (settingsKeys.contains("plateSolveUseDownloadedCatalog") || force) {
+        ostr << " m_plateSolveUseDownloadedCatalog: " << m_plateSolveUseDownloadedCatalog;
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_recordMode;

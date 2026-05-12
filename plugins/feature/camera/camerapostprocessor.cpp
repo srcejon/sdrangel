@@ -638,7 +638,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
         const QImage processed = applyPostProcessing(m_lastFrame);
-        reportFrameToGUI(processed, m_lastFrame.m_histogramData, m_lastFrame.m_stackCount);
+        reportFrameToGUI(processed, m_lastFrame);
     }
 }
 
@@ -678,7 +678,7 @@ void CameraPostProcessor::weatherUpdated(float temperature, float pressure, floa
     if (!m_lastFrame.m_image.isNull())
     {
         const QImage processed = applyPostProcessing(m_lastFrame);
-        reportFrameToGUI(processed, m_lastFrame.m_histogramData, m_lastFrame.m_stackCount);
+        reportFrameToGUI(processed, m_lastFrame);
     }
 }
 
@@ -793,7 +793,7 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     m_lastFrame = *frame;
 
-    reportFrameToGUI(processed, frame->m_histogramData, frame->m_stackCount);
+    reportFrameToGUI(processed, *frame);
 
     if (m_captureActive && (m_settings.m_saveImage || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
     {
@@ -824,10 +824,20 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 }
 
-void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData, int stackCount)
+void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame)
 {
     if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportFrame::create(image, histogramData, stackCount));
+        m_msgQueueToGUI->push(MsgReportFrame::create(
+            image,
+            frame.m_histogramData,
+            frame.m_stackCount,
+            frame.m_plateSolved,
+            frame.m_plateSolvedMatches,
+            frame.m_plateSolveRmsError,
+            frame.m_plateSolveAzimuth,
+            frame.m_plateSolveElevation,
+            frame.m_plateSolveRoll,
+            frame.m_plateSolveFov));
     }
 }
 
@@ -920,9 +930,6 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::TextAntialiasing);
-    QPen pen(m_settings.m_starColor);
-    pen.setWidth(1);
-    painter.setPen(pen);
     QFont font;
     if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
         font.setFamily(m_settings.m_gridLabelFontFamily);
@@ -933,11 +940,17 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
 
     for (const CameraPipelineStarDetection& detection : starDetections)
     {
+        const QColor starColor = detection.m_solved
+            ? m_settings.m_starColor
+            : QColor(160, 160, 160);
+        QPen pen(starColor);
+        pen.setWidth(1);
+        painter.setPen(pen);
         const QRectF box(detection.m_center.x() - 3.0, detection.m_center.y() - 3.0, 6.0, 6.0);
         painter.drawRect(box);
 
         if (detection.m_solved && !detection.m_label.isEmpty()) {
-            drawOutlinedLabel(painter, image.rect(), detection.m_center, detection.m_label, m_settings.m_starColor, fontMetrics);
+            drawOutlinedLabel(painter, image.rect(), detection.m_center, detection.m_label, starColor, fontMetrics);
         }
     }
 

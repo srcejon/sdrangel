@@ -161,6 +161,13 @@ private:
     bool m_showMotionExclusionRects = true;
     QList<qint64> m_pipelineFrameTimes;
     double m_lastPipelineFps = 0.0;
+    bool m_lastPlateSolved = false;
+    int m_lastPlateSolvedMatches = 0;
+    double m_lastPlateSolveRmsError = 0.0;
+    double m_lastPlateSolveAzimuth = 0.0;
+    double m_lastPlateSolveElevation = 0.0;
+    double m_lastPlateSolveRoll = 0.0;
+    double m_lastPlateSolveFov = 0.0;
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
@@ -169,6 +176,7 @@ private:
 
     HttpDownloadManagerGUI m_dlm;
     QHash<QString, QString> m_pendingYoloDownloads;
+    QHash<QString, QString> m_pendingPlateSolveDownloads;
     QStringList m_alpacaFilterWheelNames;
     QList<AlpacaDeviceInfo> m_discoveredAlpacaFocusers;
     QList<AlpacaDeviceInfo> m_discoveredAlpacaFilterWheels;
@@ -311,6 +319,8 @@ private:
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
+    void requestPlateSolveCatalogDownload();
+    void handlePlateSolveCatalogDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
     bool chooseVideoFileCameraFile(int comboIndex, const QString& previousCameraProtocol = QString(),
                                    const QString& previousCameraId = QString(),
                                    const QString& previousAlpacaHost = QString(),
@@ -551,6 +561,9 @@ private slots:
     void on_plateSolveMinMatchesSpin_valueChanged(int value);
     void on_plateSolveMatchRadiusSpin_valueChanged(double value);
     void on_plateSolveSearchRadiusSpin_valueChanged(double value);
+    void on_plateSolveUseDownloadedCatalogCheck_toggled(bool checked);
+    void on_plateSolveDownloadCatalogButton_clicked();
+    void on_plateSolveApplyButton_clicked();
     void on_motionExclusionAddButton_clicked();
     void on_motionExclusionRemoveButton_clicked();
     void on_motionExclusionShowButton_toggled(bool checked);

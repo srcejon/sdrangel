@@ -119,22 +119,71 @@ public:
         const QImage& getImage() const { return m_image; }
         const CameraHistogramData& getHistogramData() const { return m_histogramData; }
         int getStackCount() const { return m_stackCount; }
+        bool isPlateSolved() const { return m_plateSolved; }
+        int getPlateSolvedMatches() const { return m_plateSolvedMatches; }
+        float getPlateSolveRmsError() const { return m_plateSolveRmsError; }
+        float getPlateSolveAzimuth() const { return m_plateSolveAzimuth; }
+        float getPlateSolveElevation() const { return m_plateSolveElevation; }
+        float getPlateSolveRoll() const { return m_plateSolveRoll; }
+        float getPlateSolveFov() const { return m_plateSolveFov; }
 
-        static MsgReportFrame* create(const QImage& image, const CameraHistogramData& histogramData, int stackCount)
+        static MsgReportFrame* create(const QImage& image,
+                                      const CameraHistogramData& histogramData,
+                                      int stackCount,
+                                      bool plateSolved,
+                                      int plateSolvedMatches,
+                                      float plateSolveRmsError,
+                                      float plateSolveAzimuth,
+                                      float plateSolveElevation,
+                                      float plateSolveRoll,
+                                      float plateSolveFov)
         {
-            return new MsgReportFrame(image, histogramData, stackCount);
+            return new MsgReportFrame(
+                image,
+                histogramData,
+                stackCount,
+                plateSolved,
+                plateSolvedMatches,
+                plateSolveRmsError,
+                plateSolveAzimuth,
+                plateSolveElevation,
+                plateSolveRoll,
+                plateSolveFov);
         }
 
     private:
         QImage m_image;
         CameraHistogramData m_histogramData;
         int m_stackCount;
+        bool m_plateSolved;
+        int m_plateSolvedMatches;
+        float m_plateSolveRmsError;
+        float m_plateSolveAzimuth;
+        float m_plateSolveElevation;
+        float m_plateSolveRoll;
+        float m_plateSolveFov;
 
-        MsgReportFrame(const QImage& image, const CameraHistogramData& histogramData, int stackCount) :
+        MsgReportFrame(const QImage& image,
+                       const CameraHistogramData& histogramData,
+                       int stackCount,
+                       bool plateSolved,
+                       int plateSolvedMatches,
+                       float plateSolveRmsError,
+                       float plateSolveAzimuth,
+                       float plateSolveElevation,
+                       float plateSolveRoll,
+                       float plateSolveFov) :
             Message(),
             m_image(image),
             m_histogramData(histogramData),
-            m_stackCount(stackCount)
+            m_stackCount(stackCount),
+            m_plateSolved(plateSolved),
+            m_plateSolvedMatches(plateSolvedMatches),
+            m_plateSolveRmsError(plateSolveRmsError),
+            m_plateSolveAzimuth(plateSolveAzimuth),
+            m_plateSolveElevation(plateSolveElevation),
+            m_plateSolveRoll(plateSolveRoll),
+            m_plateSolveFov(plateSolveFov)
         { }
     };
 
@@ -260,7 +309,7 @@ private:
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void restartWeatherUpdates();
     void setVideoRecordingEnabled(bool enabled);
-    void reportFrameToGUI(const QImage& image, const CameraHistogramData& histogramData, int stackCount);
+    void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame);
     [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant);
     [[nodiscard]] bool shouldSaveRawMedia() const;
     [[nodiscard]] bool shouldSaveProcessedMedia() const;

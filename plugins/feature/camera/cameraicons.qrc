@@ -20,5 +20,6 @@
       <file>icons/aircraft.png</file>
       <file>icons/constellation.png</file>
       <file>icons/az_grid.png</file>
+      <file>brightstarcatalog.txt</file>
     </qresource>
 </RCC>

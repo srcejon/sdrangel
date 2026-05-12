@@ -940,6 +940,18 @@ cv::Mat CameraDetector::buildExclusionMask(const cv::Rect& roi, const cv::Size& 
     return mask;
 }
 
+bool CameraDetector::intersectsExclusionRects(const QRect& rect) const
+{
+    for (const QRect& exclusionRect : m_settings.m_motionExclusionRects)
+    {
+        if (rect.intersects(exclusionRect)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createBackgroundSubtractor() const
 {
     if (m_settings.m_motionBackgroundSubtractor == CameraSettings::MotionBackgroundSubtractorKNN)
@@ -1788,6 +1800,9 @@ void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& ro
 
         CameraPipelineDetection detection;
         detection.m_box = QRect(boxes[idx].x, boxes[idx].y, boxes[idx].width, boxes[idx].height);
+        if (intersectsExclusionRects(detection.m_box)) {
+            continue;
+        }
         detection.m_label = label;
         detection.m_score = scores[idx];
         detections.append(detection);

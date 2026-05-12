@@ -1093,6 +1093,13 @@ void CameraGUI::displaySettings()
     settingsUI()->streakDebugViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakDebugView));
     settingsUI()->streakOverlayStyleCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakOverlayStyle));
     settingsUI()->streakLineEnhancementCombo->setCurrentIndex(static_cast<int>(m_settings.m_streakLineEnhancementPlacement));
+    settingsUI()->starDetectCheck->setChecked(m_settings.m_starDetect);
+    settingsUI()->starThresholdSpin->setValue(m_settings.m_starThreshold);
+    settingsUI()->starBackgroundBlurSpin->setValue(m_settings.m_starBackgroundBlur);
+    settingsUI()->starMinAreaSpin->setValue(m_settings.m_starMinArea);
+    settingsUI()->starMaxAreaSpin->setValue(m_settings.m_starMaxArea);
+    settingsUI()->starMaxAspectRatioSpin->setValue(m_settings.m_starMaxAspectRatio);
+    settingsUI()->starDebugViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_starDebugView));
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
     ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
     m_showMotionExclusionRects = m_settings.m_showMotionExclusionRects;
@@ -1104,6 +1111,7 @@ void CameraGUI::displaySettings()
     updateColorButton(settingsUI()->constellationColorButton, m_settings.m_constellationColor);
     updateColorButton(settingsUI()->trackObjectColorButton, m_settings.m_trackObjectColor);
     updateColorButton(settingsUI()->streakColorButton, m_settings.m_streakColor);
+    updateColorButton(settingsUI()->starColorButton, m_settings.m_starColor);
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
     updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
     ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
@@ -1512,6 +1520,14 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->streakOverlayStyleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_streakOverlayStyleCombo_currentIndexChanged);
     QObject::connect(settingsUI()->streakLineEnhancementCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_streakLineEnhancementCombo_currentIndexChanged);
     QObject::connect(settingsUI()->streakColorButton, &QToolButton::clicked, this, &CameraGUI::on_streakColorButton_clicked);
+    QObject::connect(settingsUI()->starDetectCheck, &QCheckBox::toggled, this, &CameraGUI::on_starDetectCheck_toggled);
+    QObject::connect(settingsUI()->starThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->starBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starBackgroundBlurSpin_valueChanged);
+    QObject::connect(settingsUI()->starMinAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starMinAreaSpin_valueChanged);
+    QObject::connect(settingsUI()->starMaxAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starMaxAreaSpin_valueChanged);
+    QObject::connect(settingsUI()->starMaxAspectRatioSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_starMaxAspectRatioSpin_valueChanged);
+    QObject::connect(settingsUI()->starDebugViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_starDebugViewCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->starColorButton, &QToolButton::clicked, this, &CameraGUI::on_starColorButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
     QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
     QObject::connect(settingsUI()->motionExclusionShowButton, &QToolButton::toggled, this, &CameraGUI::on_motionExclusionShowButton_toggled);
@@ -5336,6 +5352,14 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_streakOverlayStyle = defaults.m_streakOverlayStyle;
     m_settings.m_streakLineEnhancementPlacement = defaults.m_streakLineEnhancementPlacement;
     m_settings.m_streakColor = defaults.m_streakColor;
+    m_settings.m_starDetect = defaults.m_starDetect;
+    m_settings.m_starThreshold = defaults.m_starThreshold;
+    m_settings.m_starBackgroundBlur = defaults.m_starBackgroundBlur;
+    m_settings.m_starMinArea = defaults.m_starMinArea;
+    m_settings.m_starMaxArea = defaults.m_starMaxArea;
+    m_settings.m_starMaxAspectRatio = defaults.m_starMaxAspectRatio;
+    m_settings.m_starDebugView = defaults.m_starDebugView;
+    m_settings.m_starColor = defaults.m_starColor;
 
     m_settings.m_diffMask = defaults.m_diffMask;
     m_settings.m_diffThreshold = defaults.m_diffThreshold;
@@ -5382,6 +5406,14 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "streakOverlayStyle",
         "streakLineEnhancementPlacement",
         "streakColor",
+        "starDetect",
+        "starThreshold",
+        "starBackgroundBlur",
+        "starMinArea",
+        "starMaxArea",
+        "starMaxAspectRatio",
+        "starDebugView",
+        "starColor",
         "diffMask",
         "diffThreshold",
         "diffMaskOpenSize",
@@ -5550,6 +5582,60 @@ void CameraGUI::on_streakColorButton_clicked()
         m_settings.m_streakColor = color;
         updateColorButton(settingsUI()->streakColorButton, color);
         applySetting("streakColor");
+    }
+}
+
+void CameraGUI::on_starDetectCheck_toggled(bool checked)
+{
+    m_settings.m_starDetect = checked;
+    applySetting("starDetect");
+}
+
+void CameraGUI::on_starThresholdSpin_valueChanged(int value)
+{
+    m_settings.m_starThreshold = value;
+    applySetting("starThreshold");
+}
+
+void CameraGUI::on_starBackgroundBlurSpin_valueChanged(int value)
+{
+    m_settings.m_starBackgroundBlur = value;
+    applySetting("starBackgroundBlur");
+}
+
+void CameraGUI::on_starMinAreaSpin_valueChanged(int value)
+{
+    m_settings.m_starMinArea = value;
+    applySetting("starMinArea");
+}
+
+void CameraGUI::on_starMaxAreaSpin_valueChanged(int value)
+{
+    m_settings.m_starMaxArea = value;
+    applySetting("starMaxArea");
+}
+
+void CameraGUI::on_starMaxAspectRatioSpin_valueChanged(double value)
+{
+    m_settings.m_starMaxAspectRatio = value;
+    applySetting("starMaxAspectRatio");
+}
+
+void CameraGUI::on_starDebugViewCombo_currentIndexChanged(int index)
+{
+    m_settings.m_starDebugView = static_cast<CameraSettings::StarDebugView>(index);
+    applySetting("starDebugView");
+}
+
+void CameraGUI::on_starColorButton_clicked()
+{
+    const QColor color = QColorDialog::getColor(m_settings.m_starColor, this, tr("Select star colour"));
+
+    if (color.isValid())
+    {
+        m_settings.m_starColor = color;
+        updateColorButton(settingsUI()->starColorButton, color);
+        applySetting("starColor");
     }
 }
 

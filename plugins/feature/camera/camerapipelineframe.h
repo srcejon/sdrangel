@@ -22,6 +22,7 @@
 #include <QDateTime>
 #include <QImage>
 #include <QLineF>
+#include <QPointF>
 #include <QRect>
 #include <QSharedPointer>
 #include <QString>
@@ -53,6 +54,13 @@ struct CameraPipelineStreakDetection
     float m_score;
 };
 
+struct CameraPipelineStarDetection
+{
+    QPointF m_center;
+    float m_peakValue;
+    float m_radius;
+};
+
 struct CameraPipelineFrame
 {
     enum BayerPattern
@@ -71,6 +79,7 @@ struct CameraPipelineFrame
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
     QVector<CameraPipelineStreakDetection> m_streakDetections;
+    QVector<CameraPipelineStarDetection> m_starDetections;
     bool m_saveCurrentImage = false;
     int m_stackCount = 1;
     BayerPattern m_bayerPattern = BayerNone;

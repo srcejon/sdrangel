@@ -538,6 +538,14 @@ private slots:
     void on_streakOverlayStyleCombo_currentIndexChanged(int index);
     void on_streakLineEnhancementCombo_currentIndexChanged(int index);
     void on_streakColorButton_clicked();
+    void on_starDetectCheck_toggled(bool checked);
+    void on_starThresholdSpin_valueChanged(int value);
+    void on_starBackgroundBlurSpin_valueChanged(int value);
+    void on_starMinAreaSpin_valueChanged(int value);
+    void on_starMaxAreaSpin_valueChanged(int value);
+    void on_starMaxAspectRatioSpin_valueChanged(double value);
+    void on_starDebugViewCombo_currentIndexChanged(int index);
+    void on_starColorButton_clicked();
     void on_motionExclusionAddButton_clicked();
     void on_motionExclusionRemoveButton_clicked();
     void on_motionExclusionShowButton_toggled(bool checked);

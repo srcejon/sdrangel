@@ -302,6 +302,14 @@ void CameraSettings::resetToDefaults()
     m_streakOverlayStyle = StreakOverlayStyleLines;
     m_streakLineEnhancementPlacement = StreakLineEnhancementOff;
     m_streakColor = QColor(255, 255, 80);
+    m_starDetect = false;
+    m_starThreshold = 24;
+    m_starBackgroundBlur = 12;
+    m_starMinArea = 1;
+    m_starMaxArea = 36;
+    m_starMaxAspectRatio = 2.5;
+    m_starDebugView = StarDebugViewOff;
+    m_starColor = QColor(120, 255, 255);
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
@@ -463,6 +471,14 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(185, static_cast<qint32>(m_streakDebugView));
     s.writeS32(187, static_cast<qint32>(m_streakOverlayStyle));
     s.writeS32(194, static_cast<qint32>(m_streakLineEnhancementPlacement));
+    s.writeBool(202, m_starDetect);
+    s.writeS32(203, m_starThreshold);
+    s.writeS32(204, m_starBackgroundBlur);
+    s.writeS32(205, m_starMinArea);
+    s.writeS32(206, m_starMaxArea);
+    s.writeDouble(207, m_starMaxAspectRatio);
+    s.writeS32(208, static_cast<qint32>(m_starDebugView));
+    s.writeU32(209, m_starColor.rgba());
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -799,11 +815,31 @@ bool CameraSettings::deserialize(const QByteArray& data)
             static_cast<qint32>(StreakLineEnhancementOff),
             streakLineEnhancementPlacement,
             static_cast<qint32>(StreakLineEnhancementAfterBackground)));
+        d.readBool(202, &m_starDetect, false);
+        d.readS32(203, &m_starThreshold, 24);
+        d.readS32(204, &m_starBackgroundBlur, 12);
+        d.readS32(205, &m_starMinArea, 1);
+        d.readS32(206, &m_starMaxArea, 36);
+        d.readDouble(207, &m_starMaxAspectRatio, 2.5);
+        qint32 starDebugView = static_cast<qint32>(StarDebugViewOff);
+        d.readS32(208, &starDebugView, static_cast<qint32>(StarDebugViewOff));
+        m_starDebugView = static_cast<StarDebugView>(qBound(
+            static_cast<qint32>(StarDebugViewOff),
+            starDebugView,
+            static_cast<qint32>(StarDebugViewFinal)));
+        uint32_t starColorRgba = QColor(120, 255, 255).rgba();
+        d.readU32(209, &starColorRgba, QColor(120, 255, 255).rgba());
+        m_starColor = QColor::fromRgba(starColorRgba);
         m_overlayFontScale = qBound(m_minOverlayFontScale, m_overlayFontScale, m_maxOverlayFontScale);
         m_detectionRoiX = qBound(m_minUiPixelOffset, m_detectionRoiX, m_maxUiPixelOffset);
         m_detectionRoiY = qBound(m_minUiPixelOffset, m_detectionRoiY, m_maxUiPixelOffset);
         m_detectionRoiWidth = qBound(m_minUiPixelOffset, m_detectionRoiWidth, m_maxUiPixelOffset);
         m_detectionRoiHeight = qBound(m_minUiPixelOffset, m_detectionRoiHeight, m_maxUiPixelOffset);
+        m_starThreshold = qBound(m_minThreshold8Bit, m_starThreshold, m_maxThreshold8Bit);
+        m_starBackgroundBlur = qBound(m_minStarBackgroundBlur, m_starBackgroundBlur, m_maxStarBackgroundBlur);
+        m_starMinArea = qBound(m_minContourAreaBound, m_starMinArea, m_maxContourAreaBound);
+        m_starMaxArea = qBound(m_starMinArea, m_starMaxArea, m_maxContourAreaBound);
+        m_starMaxAspectRatio = qBound(m_minStarAspectRatio, m_starMaxAspectRatio, m_maxStarAspectRatio);
         m_motionHistory = qBound(m_minMotionHistory, m_motionHistory, m_maxMotionHistory);
         m_motionVarThreshold = qBound(m_minMotionVarThreshold, m_motionVarThreshold, m_maxMotionVarThreshold);
         m_motionLearningRate = qBound(m_minLearningRate, m_motionLearningRate, m_maxLearningRate);
@@ -1459,6 +1495,33 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("streakColor")) {
         m_streakColor = settings.m_streakColor;
     }
+    if (settingsKeys.contains("starDetect")) {
+        m_starDetect = settings.m_starDetect;
+    }
+    if (settingsKeys.contains("starThreshold")) {
+        m_starThreshold = qBound(m_minThreshold8Bit, settings.m_starThreshold, m_maxThreshold8Bit);
+    }
+    if (settingsKeys.contains("starBackgroundBlur")) {
+        m_starBackgroundBlur = qBound(m_minStarBackgroundBlur, settings.m_starBackgroundBlur, m_maxStarBackgroundBlur);
+    }
+    if (settingsKeys.contains("starMinArea")) {
+        m_starMinArea = qBound(m_minContourAreaBound, settings.m_starMinArea, m_maxContourAreaBound);
+    }
+    if (settingsKeys.contains("starMaxArea")) {
+        m_starMaxArea = qBound(m_starMinArea, settings.m_starMaxArea, m_maxContourAreaBound);
+    }
+    if (settingsKeys.contains("starMaxAspectRatio")) {
+        m_starMaxAspectRatio = qBound(m_minStarAspectRatio, settings.m_starMaxAspectRatio, m_maxStarAspectRatio);
+    }
+    if (settingsKeys.contains("starDebugView")) {
+        m_starDebugView = static_cast<StarDebugView>(qBound(
+            static_cast<qint32>(StarDebugViewOff),
+            static_cast<qint32>(settings.m_starDebugView),
+            static_cast<qint32>(StarDebugViewFinal)));
+    }
+    if (settingsKeys.contains("starColor")) {
+        m_starColor = settings.m_starColor;
+    }
     if (settingsKeys.contains("videoPostProcess")) {
         m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
     }
@@ -2025,6 +2088,30 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("streakColor") || force) {
         ostr << " m_streakColor: " << m_streakColor.name().toStdString();
+    }
+    if (settingsKeys.contains("starDetect") || force) {
+        ostr << " m_starDetect: " << m_starDetect;
+    }
+    if (settingsKeys.contains("starThreshold") || force) {
+        ostr << " m_starThreshold: " << m_starThreshold;
+    }
+    if (settingsKeys.contains("starBackgroundBlur") || force) {
+        ostr << " m_starBackgroundBlur: " << m_starBackgroundBlur;
+    }
+    if (settingsKeys.contains("starMinArea") || force) {
+        ostr << " m_starMinArea: " << m_starMinArea;
+    }
+    if (settingsKeys.contains("starMaxArea") || force) {
+        ostr << " m_starMaxArea: " << m_starMaxArea;
+    }
+    if (settingsKeys.contains("starMaxAspectRatio") || force) {
+        ostr << " m_starMaxAspectRatio: " << m_starMaxAspectRatio;
+    }
+    if (settingsKeys.contains("starDebugView") || force) {
+        ostr << " m_starDebugView: " << m_starDebugView;
+    }
+    if (settingsKeys.contains("starColor") || force) {
+        ostr << " m_starColor: " << m_starColor.name().toStdString();
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_recordMode;

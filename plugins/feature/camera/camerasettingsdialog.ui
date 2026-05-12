@@ -4434,7 +4434,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </attribute>
           <layout class="QVBoxLayout" name="verticalLayout_10">
            <item>
-            <widget class="QGroupBox" name="streakDetectionGroup">
+           <widget class="QGroupBox" name="streakDetectionGroup">
              <property name="title">
               <string>Streak Detection</string>
              </property>
@@ -4658,6 +4658,158 @@ li.checked::marker { content: &quot;\2612&quot;; }
               </item>
               <item row="5" column="3">
                <widget class="QToolButton" name="streakColorButton">
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="starDetectionGroup">
+             <property name="title">
+              <string>Star Detection</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayout_30">
+              <item row="0" column="0">
+               <widget class="QLabel" name="starDetectLabel">
+                <property name="text">
+                 <string>Enable</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QCheckBox" name="starDetectCheck">
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="starThresholdLabel">
+                <property name="text">
+                 <string>Threshold</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QSpinBox" name="starThresholdSpin">
+                <property name="maximum">
+                 <number>255</number>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="starBackgroundBlurLabel">
+                <property name="text">
+                 <string>Background blur</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QSpinBox" name="starBackgroundBlurSpin">
+                <property name="minimum">
+                 <number>1</number>
+                </property>
+                <property name="maximum">
+                 <number>50</number>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QLabel" name="starDebugViewLabel">
+                <property name="text">
+                 <string>Debug view</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="3">
+               <widget class="QComboBox" name="starDebugViewCombo">
+                <item>
+                 <property name="text">
+                  <string>Off</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Background</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Residual</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Thresholded</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Final</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="starMinAreaLabel">
+                <property name="text">
+                 <string>Min area</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QSpinBox" name="starMinAreaSpin">
+                <property name="maximum">
+                 <number>10000</number>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QLabel" name="starMaxAreaLabel">
+                <property name="text">
+                 <string>Max area</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="3">
+               <widget class="QSpinBox" name="starMaxAreaSpin">
+                <property name="maximum">
+                 <number>10000</number>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="starMaxAspectRatioLabel">
+                <property name="text">
+                 <string>Max aspect ratio</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QDoubleSpinBox" name="starMaxAspectRatioSpin">
+                <property name="minimum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>10.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="2">
+               <widget class="QLabel" name="starColorLabel">
+                <property name="text">
+                 <string>Colour</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="3">
+               <widget class="QToolButton" name="starColorButton">
                 <property name="text">
                  <string/>
                 </property>

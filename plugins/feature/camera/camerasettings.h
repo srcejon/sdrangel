@@ -119,6 +119,15 @@ struct CameraSettings
         StreakDebugViewFinal
     };
 
+    enum StarDebugView
+    {
+        StarDebugViewOff = 0,
+        StarDebugViewBackground,
+        StarDebugViewResidual,
+        StarDebugViewThresholded,
+        StarDebugViewFinal
+    };
+
     enum StreakOverlayStyle
     {
         StreakOverlayStyleLines = 0,
@@ -226,6 +235,10 @@ struct CameraSettings
     static constexpr int m_maxStreakHoughThreshold = 500;
     static constexpr double m_minStreakMaxGap = 0.0;
     static constexpr double m_maxStreakMaxGap = 1024.0;
+    static constexpr int m_minStarBackgroundBlur = 1;
+    static constexpr int m_maxStarBackgroundBlur = 50;
+    static constexpr double m_minStarAspectRatio = 1.0;
+    static constexpr double m_maxStarAspectRatio = 10.0;
     static constexpr double m_minSpectrumScale = 0.1;
     static constexpr double m_maxSpectrumScale = 4.0;
     static constexpr double m_minYoloDisappearDebounce = 0.0;
@@ -409,6 +422,14 @@ struct CameraSettings
     StreakOverlayStyle m_streakOverlayStyle; ///< How detected streaks are rendered on the output image
     StreakLineEnhancementPlacement m_streakLineEnhancementPlacement; ///< Optional line enhancement placement within the streak detector
     QColor m_streakColor;       ///< Overlay colour for streak detections
+    bool   m_starDetect;        ///< Enable star detection
+    int    m_starThreshold;     ///< Threshold on the star residual image
+    int    m_starBackgroundBlur; ///< Radius used to estimate the smooth sky background
+    int    m_starMinArea;       ///< Minimum star blob area in pixels
+    int    m_starMaxArea;       ///< Maximum star blob area in pixels
+    double m_starMaxAspectRatio; ///< Maximum accepted blob aspect ratio
+    StarDebugView m_starDebugView; ///< Optional debug view of star detection stages
+    QColor m_starColor;         ///< Overlay colour for detected stars
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 
     // Spectrum overlay settings

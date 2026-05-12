@@ -909,6 +909,29 @@ void CameraPostProcessor::applyStreakOverlay(QImage& image, const QVector<Camera
     PROFILER_STOP(__FUNCTION__);
 }
 
+void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections) const
+{
+    PROFILER_START();
+
+    if (starDetections.isEmpty()) {
+        return;
+    }
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPen pen(m_settings.m_starColor);
+    pen.setWidth(1);
+    painter.setPen(pen);
+
+    for (const CameraPipelineStarDetection& detection : starDetections)
+    {
+        const QRectF box(detection.m_center.x() - 3.0, detection.m_center.y() - 3.0, 6.0, 6.0);
+        painter.drawRect(box);
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
 void CameraPostProcessor::applySpectrumOverlay(cv::Mat& bgrMat) const
 {
     PROFILER_START();
@@ -1370,6 +1393,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         || !frame.m_motionBoxes.isEmpty()
         || !frame.m_detections.isEmpty()
         || !frame.m_streakDetections.isEmpty()
+        || !frame.m_starDetections.isEmpty()
         || needsSpectrumOverlay;
 
     if (!needsAny) {
@@ -1389,6 +1413,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     QImage result = convertBgrToRgbImage(bgrMat);
 
     if (!frame.m_streakDetections.isEmpty()) { applyStreakOverlay(result, frame.m_streakDetections); }
+    if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
     if (m_settings.m_constellation) { applyConstellationOverlay(result); }
     if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }

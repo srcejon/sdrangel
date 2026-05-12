@@ -618,6 +618,14 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("streakColor")
         || settingsKeys.contains("streakDebugView")
         || settingsKeys.contains("streakLineEnhancementPlacement")
+        || settingsKeys.contains("starDetect")
+        || settingsKeys.contains("starThreshold")
+        || settingsKeys.contains("starBackgroundBlur")
+        || settingsKeys.contains("starMinArea")
+        || settingsKeys.contains("starMaxArea")
+        || settingsKeys.contains("starMaxAspectRatio")
+        || settingsKeys.contains("starDebugView")
+        || settingsKeys.contains("starColor")
         || settingsKeys.contains("yoloEnabled")
         || settingsKeys.contains("yoloModelPath")
         || settingsKeys.contains("yoloLabelsPath")
@@ -720,6 +728,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     frame->m_motionBoxes.clear();
     frame->m_detections.clear();
     frame->m_streakDetections.clear();
+    frame->m_starDetections.clear();
 
     QImage convertedRgb;
     const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
@@ -770,6 +779,30 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
             cv::Mat roiMask = streakDebugMask;
             if (streakDebugMask.size() != detectionRoi.size()) {
                 cv::resize(streakDebugMask, roiMask, detectionRoi.size(), 0.0, 0.0, cv::INTER_NEAREST);
+            }
+            roiMask.copyTo(maskCanvas(detectionRoi));
+            if (maskCanvas.channels() == 1) {
+                cv::cvtColor(maskCanvas, bgrMat, cv::COLOR_GRAY2BGR);
+            } else {
+                bgrMat = maskCanvas;
+            }
+        }
+    }
+
+    if (m_settings.m_starDetect) {
+        cv::Mat starDebugMask;
+        applyStarDetection(
+            bgrMat,
+            detectionRoi,
+            frame->m_starDetections,
+            (m_settings.m_starDebugView != CameraSettings::StarDebugViewOff) ? &starDebugMask : nullptr);
+
+        if (!starDebugMask.empty())
+        {
+            cv::Mat maskCanvas = cv::Mat::zeros(bgrMat.size(), starDebugMask.type());
+            cv::Mat roiMask = starDebugMask;
+            if (starDebugMask.size() != detectionRoi.size()) {
+                cv::resize(starDebugMask, roiMask, detectionRoi.size(), 0.0, 0.0, cv::INTER_NEAREST);
             }
             roiMask.copyTo(maskCanvas(detectionRoi));
             if (maskCanvas.channels() == 1) {
@@ -1425,6 +1458,108 @@ void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect&
     }
 
     streakDetections = detections;
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask) const
+{
+    PROFILER_START();
+
+    cv::Mat gray;
+    cv::cvtColor(bgrMat(roi), gray, cv::COLOR_BGR2GRAY);
+
+    cv::Mat blurredGray;
+    cv::GaussianBlur(gray, blurredGray, cv::Size(3, 3), 0.0, 0.0);
+
+    int maxKernelDimension = std::min(gray.cols, gray.rows);
+    if ((maxKernelDimension % 2) == 0) {
+        --maxKernelDimension;
+    }
+    maxKernelDimension = std::max(1, maxKernelDimension);
+    const int backgroundKernelSize = std::min(2 * m_settings.m_starBackgroundBlur + 1, maxKernelDimension);
+    cv::Mat background;
+    cv::GaussianBlur(blurredGray, background, cv::Size(backgroundKernelSize, backgroundKernelSize), 0.0, 0.0);
+    if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewBackground)) {
+        *debugMask = background.clone();
+    }
+
+    cv::Mat residual;
+    cv::subtract(blurredGray, background, residual);
+    if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))
+    {
+        double minValue = 0.0;
+        double maxValue = 0.0;
+        cv::minMaxLoc(residual, &minValue, &maxValue);
+        if (maxValue > minValue) {
+            cv::normalize(residual, *debugMask, 0, 255, cv::NORM_MINMAX);
+            debugMask->convertTo(*debugMask, CV_8UC1);
+        } else {
+            *debugMask = residual.clone();
+        }
+    }
+
+    cv::Mat thresholdMask;
+    cv::threshold(residual, thresholdMask, m_settings.m_starThreshold, 255, cv::THRESH_BINARY);
+    cv::bitwise_and(thresholdMask, buildExclusionMask(roi, thresholdMask.size()), thresholdMask);
+    if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewThresholded)) {
+        *debugMask = thresholdMask.clone();
+    }
+
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(thresholdMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+    cv::Mat finalMask;
+    if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewFinal)) {
+        finalMask = cv::Mat::zeros(thresholdMask.size(), CV_8UC1);
+    }
+
+    starDetections.clear();
+    starDetections.reserve(static_cast<qsizetype>(contours.size()));
+
+    for (const std::vector<cv::Point>& contour : contours)
+    {
+        const double area = cv::contourArea(contour);
+        if ((area < m_settings.m_starMinArea) || (area > m_settings.m_starMaxArea)) {
+            continue;
+        }
+
+        const cv::Rect box = cv::boundingRect(contour);
+        const double width = std::max(1, box.width);
+        const double height = std::max(1, box.height);
+        const double aspectRatio = std::max(width / height, height / width);
+        if (aspectRatio > m_settings.m_starMaxAspectRatio) {
+            continue;
+        }
+
+        const cv::Moments moments = cv::moments(contour);
+        if (moments.m00 <= 0.0) {
+            continue;
+        }
+
+        const double centerX = moments.m10 / moments.m00;
+        const double centerY = moments.m01 / moments.m00;
+        cv::Mat contourMask = cv::Mat::zeros(thresholdMask.size(), CV_8UC1);
+        std::vector<std::vector<cv::Point>> singleContour{contour};
+        cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED);
+
+        double peakValue = 0.0;
+        cv::minMaxLoc(residual, nullptr, &peakValue, nullptr, nullptr, contourMask);
+
+        CameraPipelineStarDetection detection;
+        detection.m_center = QPointF(centerX + roi.x, centerY + roi.y);
+        detection.m_peakValue = static_cast<float>(peakValue);
+        detection.m_radius = static_cast<float>(std::max(1.0, std::sqrt(area / CV_PI)));
+        starDetections.append(detection);
+
+        if (!finalMask.empty()) {
+            cv::rectangle(finalMask, box, cv::Scalar(255), 1);
+        }
+    }
+
+    if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewFinal)) {
+        *debugMask = finalMask;
+    }
+
     PROFILER_STOP(__FUNCTION__);
 }
 

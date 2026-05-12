@@ -207,6 +207,7 @@ private:
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
     void applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
+    void applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask = nullptr) const;
     [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);

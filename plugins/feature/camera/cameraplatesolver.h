@@ -32,11 +32,17 @@ struct CameraPlateSolveResult
 {
     bool m_solved = false;
     int m_matchedStars = 0;
+    int m_detectedStarsConsidered = 0;
+    int m_catalogStarsLoaded = 0;
+    int m_catalogCandidateStars = 0;
+    int m_outlierStars = 0;
     double m_rmsErrorPixels = 0.0;
+    double m_maxErrorPixels = 0.0;
     double m_azimuthDegrees = 0.0;
     double m_elevationDegrees = 0.0;
     double m_rollDegrees = 0.0;
     double m_fovDegrees = 0.0;
+    QString m_catalogSource;
 };
 
 class CameraPlateSolver

@@ -27,6 +27,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QPointF>
@@ -106,10 +107,12 @@ struct SkyProjector
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kVisibleAltitudeFloor = -5.0;
 constexpr int kMaxDetectionsForSolve = 24;
+constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
 const char* const kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 const char* const kDownloadedCatalogDir = "camera";
 const char* const kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
 const char* const kDownloadedCatalogCsvFile = "hyg_v42.csv";
+const char* const kDownloadedCatalogReducedFile = "hyg_v42_reduced.txt";
 
 double degToRad(double value)
 {
@@ -240,6 +243,11 @@ QString downloadedCatalogDir()
 {
     const QString baseDir = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0);
     return QDir(baseDir).filePath(QString::fromUtf8(kDownloadedCatalogDir));
+}
+
+QString downloadedCatalogReducedPath()
+{
+    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kDownloadedCatalogReducedFile));
 }
 
 QByteArray gunzipData(const QByteArray& compressedData, QString* errorMessage)
@@ -420,6 +428,123 @@ QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text)
     return stars;
 }
 
+bool isGenericCatalogName(const QString& name)
+{
+    return name.startsWith(QStringLiteral("HIP "))
+        || name.startsWith(QStringLiteral("HR "))
+        || name.startsWith(QStringLiteral("HD "));
+}
+
+QVector<CatalogStar> filterCatalogStars(const QVector<CatalogStar>& stars)
+{
+    QVector<CatalogStar> filtered;
+    filtered.reserve(stars.size());
+    QHash<QString, int> bestByName;
+
+    for (const CatalogStar& star : stars)
+    {
+        if (!std::isfinite(star.rightAscensionDegrees)
+            || !std::isfinite(star.declinationDegrees)
+            || !std::isfinite(star.magnitude)
+            || star.name.trimmed().isEmpty()
+            || (star.magnitude > CameraSettings::m_maxPlateSolveMagnitude))
+        {
+            continue;
+        }
+
+        if (isGenericCatalogName(star.name) && (star.magnitude > kUnnamedCatalogMagnitudeLimit)) {
+            continue;
+        }
+
+        const QString normalizedName = star.name.trimmed().toUpper();
+        const auto existingIt = bestByName.constFind(normalizedName);
+        if (existingIt != bestByName.constEnd())
+        {
+            CatalogStar& existing = filtered[*existingIt];
+            if (star.magnitude < existing.magnitude) {
+                existing = star;
+            }
+            continue;
+        }
+
+        bestByName.insert(normalizedName, filtered.size());
+        filtered.append(star);
+    }
+
+    std::sort(filtered.begin(), filtered.end(), [](const CatalogStar& lhs, const CatalogStar& rhs) {
+        if (!qFuzzyCompare(lhs.magnitude + 1.0, rhs.magnitude + 1.0)) {
+            return lhs.magnitude < rhs.magnitude;
+        }
+        return lhs.name < rhs.name;
+    });
+
+    return filtered;
+}
+
+QString formatRightAscensionHours(double rightAscensionDegrees)
+{
+    const double totalHours = normalizeDegrees(rightAscensionDegrees) / 15.0;
+    const int hours = static_cast<int>(std::floor(totalHours));
+    const double totalMinutes = (totalHours - hours) * 60.0;
+    const int minutes = static_cast<int>(std::floor(totalMinutes));
+    const double seconds = (totalMinutes - minutes) * 60.0;
+    return QStringLiteral("%1 %2 %3")
+        .arg(hours, 2, 10, QLatin1Char('0'))
+        .arg(minutes, 2, 10, QLatin1Char('0'))
+        .arg(seconds, 0, 'f', 5);
+}
+
+QString formatDeclinationDegrees(double declinationDegrees)
+{
+    const QChar sign = (declinationDegrees < 0.0) ? QLatin1Char('-') : QLatin1Char('+');
+    const double absoluteDegrees = std::fabs(declinationDegrees);
+    const int degrees = static_cast<int>(std::floor(absoluteDegrees));
+    const double totalMinutes = (absoluteDegrees - degrees) * 60.0;
+    const int minutes = static_cast<int>(std::floor(totalMinutes));
+    const double seconds = (totalMinutes - minutes) * 60.0;
+    return QStringLiteral("%1%2 %3 %4")
+        .arg(sign)
+        .arg(degrees, 2, 10, QLatin1Char('0'))
+        .arg(minutes, 2, 10, QLatin1Char('0'))
+        .arg(seconds, 0, 'f', 4);
+}
+
+bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path, QString* errorMessage)
+{
+    QFile outputFile(path);
+    if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to write reduced HYG catalog: %1").arg(path);
+        }
+        return false;
+    }
+
+    QByteArray data;
+    data.append("name|ra_hms|dec_dms|magnitude\n");
+    for (const CatalogStar& star : stars)
+    {
+        data.append(star.name.toUtf8());
+        data.append('|');
+        data.append(formatRightAscensionHours(star.rightAscensionDegrees).toUtf8());
+        data.append('|');
+        data.append(formatDeclinationDegrees(star.declinationDegrees).toUtf8());
+        data.append('|');
+        data.append(QByteArray::number(star.magnitude, 'f', 2));
+        data.append('\n');
+    }
+
+    if (outputFile.write(data) != data.size())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to fully write reduced HYG catalog: %1").arg(path);
+        }
+        return false;
+    }
+
+    return true;
+}
+
 QVector<CatalogStar> loadCatalogFromTextFile(const QString& path)
 {
     QFile file(path);
@@ -436,10 +561,17 @@ QVector<CatalogStar> loadCatalogFromTextFile(const QString& path)
 
 QString currentCatalogPath(const CameraSettings& settings)
 {
-    if (settings.m_plateSolveUseDownloadedCatalog && QFileInfo::exists(CameraPlateSolver::downloadedCatalogCsvPath())) {
-        return CameraPlateSolver::downloadedCatalogCsvPath();
+    if (settings.m_plateSolveUseDownloadedCatalog && QFileInfo::exists(downloadedCatalogReducedPath())) {
+        return downloadedCatalogReducedPath();
     }
     return QString::fromUtf8(kBundledCatalogPath);
+}
+
+QString currentCatalogSource(const CameraSettings& settings)
+{
+    return (settings.m_plateSolveUseDownloadedCatalog && QFileInfo::exists(downloadedCatalogReducedPath()))
+        ? QStringLiteral("HYG")
+        : QStringLiteral("Bundled");
 }
 
 const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
@@ -580,16 +712,17 @@ QVector<ProjectedCatalogStar> buildProjectedCatalog(const CameraSettings& settin
                                                     const SkyProjector& projector,
                                                     const QDateTime& captureDateTimeUtc,
                                                     double maxMagnitude,
-                                                    double searchMarginPixels)
+                                                    double searchMarginPixels,
+                                                    const QVector<int>* allowedCatalogIndices = nullptr)
 {
     QVector<ProjectedCatalogStar> projectedStars;
     const QVector<CatalogStar>& catalogStars = brightStarCatalog(settings);
 
-    for (int i = 0; i < catalogStars.size(); ++i)
+    const auto appendProjectedStar = [&](int i)
     {
         const CatalogStar& star = catalogStars[i];
         if (star.magnitude > maxMagnitude) {
-            continue;
+            return;
         }
 
         const RADec raDec{star.rightAscensionDegrees / 15.0, star.declinationDegrees};
@@ -601,12 +734,12 @@ QVector<ProjectedCatalogStar> buildProjectedCatalog(const CameraSettings& settin
             true);
 
         if (!std::isfinite(azAlt.az) || !std::isfinite(azAlt.alt) || (azAlt.alt < kVisibleAltitudeFloor)) {
-            continue;
+            return;
         }
 
         QPointF point;
         if (!projectAltAz(projector, azAlt.az, azAlt.alt, point)) {
-            continue;
+            return;
         }
 
         const QRectF expandedBounds(
@@ -615,10 +748,27 @@ QVector<ProjectedCatalogStar> buildProjectedCatalog(const CameraSettings& settin
             projector.width + 2.0 * searchMarginPixels,
             projector.height + 2.0 * searchMarginPixels);
         if (!expandedBounds.contains(point)) {
-            continue;
+            return;
         }
 
         projectedStars.append({i, point});
+    };
+
+    if (allowedCatalogIndices)
+    {
+        projectedStars.reserve(allowedCatalogIndices->size());
+        for (int catalogIndex : *allowedCatalogIndices)
+        {
+            if ((catalogIndex >= 0) && (catalogIndex < catalogStars.size())) {
+                appendProjectedStar(catalogIndex);
+            }
+        }
+    }
+    else
+    {
+        for (int i = 0; i < catalogStars.size(); ++i) {
+            appendProjectedStar(i);
+        }
     }
 
     return projectedStars;
@@ -688,7 +838,8 @@ Evaluation evaluatePose(const CameraSettings& settings,
                         double azimuthDegrees,
                         double elevationDegrees,
                         double rollDegrees,
-                        double fovDegrees)
+                        double fovDegrees,
+                        const QVector<int>* allowedCatalogIndices = nullptr)
 {
     Evaluation evaluation;
     evaluation.azimuthDegrees = normalizeDegrees(azimuthDegrees);
@@ -712,7 +863,8 @@ Evaluation evaluatePose(const CameraSettings& settings,
         projector,
         captureDateTimeUtc,
         settings.m_plateSolveMaxMagnitude,
-        settings.m_plateSolveMatchRadius);
+        settings.m_plateSolveMatchRadius,
+        allowedCatalogIndices);
     if (projectedStars.isEmpty()) {
         return evaluation;
     }
@@ -735,6 +887,68 @@ Evaluation evaluatePose(const CameraSettings& settings,
     evaluation.rmsErrorPixels = std::sqrt(sumSquaredError / evaluation.matchCount);
     evaluation.valid = true;
     return evaluation;
+}
+
+double medianDistancePixels(const QVector<Match>& matches)
+{
+    if (matches.isEmpty()) {
+        return 0.0;
+    }
+
+    QVector<double> distances;
+    distances.reserve(matches.size());
+    for (const Match& match : matches) {
+        distances.append(match.distancePixels);
+    }
+
+    std::sort(distances.begin(), distances.end());
+    const int middle = distances.size() / 2;
+    if ((distances.size() % 2) == 0) {
+        return 0.5 * (distances[middle - 1] + distances[middle]);
+    }
+    return distances[middle];
+}
+
+QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
+                                    int minMatches,
+                                    double matchRadiusPixels,
+                                    int* outlierCount = nullptr)
+{
+    if (outlierCount) {
+        *outlierCount = 0;
+    }
+
+    if (matches.size() <= minMatches) {
+        return matches;
+    }
+
+    double sumSquaredError = 0.0;
+    for (const Match& match : matches) {
+        sumSquaredError += match.distancePixels * match.distancePixels;
+    }
+
+    const double rmsError = std::sqrt(sumSquaredError / matches.size());
+    const double medianError = medianDistancePixels(matches);
+    const double threshold = std::min(
+        matchRadiusPixels,
+        std::max(2.0, std::max(medianError * 2.5, rmsError * 1.75)));
+
+    QVector<Match> inliers;
+    inliers.reserve(matches.size());
+    for (const Match& match : matches) {
+        if (match.distancePixels <= threshold) {
+            inliers.append(match);
+        }
+    }
+
+    if (inliers.size() < minMatches) {
+        return matches;
+    }
+
+    if (outlierCount) {
+        *outlierCount = matches.size() - inliers.size();
+    }
+    return inliers;
 }
 
 bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
@@ -936,6 +1150,102 @@ Evaluation searchBestPose(const CameraSettings& settings,
     return best;
 }
 
+Evaluation refinePoseFromMatches(const CameraSettings& settings,
+                                 const QSize& imageSize,
+                                 const QDateTime& captureDateTimeUtc,
+                                 const QVector<CameraPipelineStarDetection>& starDetections,
+                                 const Evaluation& initialEvaluation)
+{
+    if (!initialEvaluation.valid || initialEvaluation.matches.isEmpty()) {
+        return initialEvaluation;
+    }
+
+    int initialOutlierCount = 0;
+    const QVector<Match> inlierMatches = rejectOutlierMatches(
+        initialEvaluation.matches,
+        settings.m_plateSolveMinMatches,
+        settings.m_plateSolveMatchRadius,
+        &initialOutlierCount);
+
+    QVector<int> detectionIndices;
+    QVector<int> catalogIndices;
+    detectionIndices.reserve(inlierMatches.size());
+    catalogIndices.reserve(inlierMatches.size());
+    for (const Match& match : inlierMatches)
+    {
+        detectionIndices.append(match.detectionIndex);
+        catalogIndices.append(match.catalogIndex);
+    }
+
+    Evaluation best = evaluatePose(
+        settings,
+        imageSize,
+        captureDateTimeUtc,
+        starDetections,
+        detectionIndices,
+        initialEvaluation.azimuthDegrees,
+        initialEvaluation.elevationDegrees,
+        initialEvaluation.rollDegrees,
+        initialEvaluation.fovDegrees,
+        &catalogIndices);
+    if (!best.valid) {
+        best = initialEvaluation;
+    }
+
+    double azCenter = best.azimuthDegrees;
+    double elCenter = best.elevationDegrees;
+    double rollCenter = best.rollDegrees;
+    double fovCenter = best.fovDegrees;
+    double azStep = std::max(0.05, settings.m_plateSolveSearchRadius * 0.05);
+    double rollStep = std::max(0.10, std::max(1.0, static_cast<double>(settings.m_fov) * 0.02));
+    double fovStep = std::max(0.05, std::max(0.5, static_cast<double>(settings.m_fov) * 0.01));
+    const std::array<double, 3> offsets = {{-1.0, 0.0, 1.0}};
+
+    for (int iteration = 0; iteration < 5; ++iteration)
+    {
+        bool improved = false;
+        for (double azOffset : offsets)
+        {
+            for (double elOffset : offsets)
+            {
+                for (double rollOffset : offsets)
+                {
+                    for (double fovOffset : offsets)
+                    {
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            azCenter + azOffset * azStep,
+                            elCenter + elOffset * azStep,
+                            rollCenter + rollOffset * rollStep,
+                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
+                            &catalogIndices);
+                        if (isBetterEvaluation(candidate, best)) {
+                            best = candidate;
+                            improved = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        azCenter = best.azimuthDegrees;
+        elCenter = best.elevationDegrees;
+        rollCenter = best.rollDegrees;
+        fovCenter = best.fovDegrees;
+        if (!improved) {
+            azStep *= 0.5;
+            rollStep *= 0.5;
+            fovStep *= 0.5;
+        }
+    }
+
+    return best;
+}
+
 void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
 {
     for (CameraPipelineStarDetection& detection : starDetections)
@@ -1003,6 +1313,19 @@ bool CameraPlateSolver::importDownloadedCatalogArchive(const QString& archivePat
         return false;
     }
 
+    const QVector<CatalogStar> reducedCatalog = filterCatalogStars(parseDownloadedHygCatalog(QString::fromUtf8(uncompressedData)));
+    if (reducedCatalog.isEmpty())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Imported HYG catalog did not yield any usable plate-solver stars.");
+        }
+        return false;
+    }
+
+    if (!writeReducedCatalog(reducedCatalog, downloadedCatalogReducedPath(), errorMessage)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -1013,12 +1336,15 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
 {
     CameraPlateSolveResult result;
     clearSolvedStars(starDetections);
+    result.m_catalogSource = currentCatalogSource(settings);
+    result.m_catalogStarsLoaded = brightStarCatalog(settings).size();
 
     if (!settings.m_plateSolve || (starDetections.size() < settings.m_plateSolveMinMatches)) {
         return result;
     }
 
     const QVector<int> detectionIndices = selectDetectionIndicesForSolve(starDetections);
+    result.m_detectedStarsConsidered = detectionIndices.size();
     if (detectionIndices.size() < settings.m_plateSolveMinMatches) {
         return result;
     }
@@ -1027,7 +1353,11 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         ? QDateTime::currentDateTime()
         : (settings.m_plateSolveDateTime.isValid() ? settings.m_plateSolveDateTime : captureDateTime);
     const QDateTime captureDateTimeUtc = (solveDateTime.isValid() ? solveDateTime : QDateTime::currentDateTime()).toUTC();
-    const Evaluation best = searchBestPose(settings, imageSize, captureDateTimeUtc, starDetections, detectionIndices);
+    Evaluation best = searchBestPose(settings, imageSize, captureDateTimeUtc, starDetections, detectionIndices);
+    if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
+        return result;
+    }
+    best = refinePoseFromMatches(settings, imageSize, captureDateTimeUtc, starDetections, best);
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
         return result;
     }
@@ -1049,6 +1379,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         captureDateTimeUtc,
         settings.m_plateSolveMaxMagnitude,
         settings.m_plateSolveMatchRadius);
+    result.m_catalogCandidateStars = projectedStars.size();
     const QVector<int> allDetectionIndices = [&starDetections]() {
         QVector<int> indices;
         indices.reserve(starDetections.size());
@@ -1064,12 +1395,21 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         projectedStars,
         settings.m_plateSolveMatchRadius);
 
-    if (allMatches.size() < settings.m_plateSolveMinMatches) {
+    int outlierCount = 0;
+    const QVector<Match> finalMatches = rejectOutlierMatches(
+        allMatches,
+        settings.m_plateSolveMinMatches,
+        settings.m_plateSolveMatchRadius,
+        &outlierCount);
+    result.m_outlierStars = outlierCount;
+
+    if (finalMatches.size() < settings.m_plateSolveMinMatches) {
         return result;
     }
 
     double sumSquaredError = 0.0;
-    for (const Match& match : allMatches)
+    double maxError = 0.0;
+    for (const Match& match : finalMatches)
     {
         CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
         const CatalogStar& catalogStar = brightStarCatalog(settings)[match.catalogIndex];
@@ -1078,11 +1418,13 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
         detection.m_solved = true;
         sumSquaredError += match.distancePixels * match.distancePixels;
+        maxError = std::max(maxError, match.distancePixels);
     }
 
     result.m_solved = true;
-    result.m_matchedStars = allMatches.size();
-    result.m_rmsErrorPixels = std::sqrt(sumSquaredError / allMatches.size());
+    result.m_matchedStars = finalMatches.size();
+    result.m_rmsErrorPixels = std::sqrt(sumSquaredError / finalMatches.size());
+    result.m_maxErrorPixels = maxError;
     result.m_azimuthDegrees = best.azimuthDegrees;
     result.m_elevationDegrees = best.elevationDegrees;
     result.m_rollDegrees = best.rollDegrees;

@@ -86,11 +86,17 @@ struct CameraPipelineFrame
     QVector<CameraPipelineStarDetection> m_starDetections;
     bool m_plateSolved = false;
     int m_plateSolvedMatches = 0;
+    int m_plateSolveDetectedStarsConsidered = 0;
+    int m_plateSolveCatalogStarsLoaded = 0;
+    int m_plateSolveCatalogCandidateStars = 0;
+    int m_plateSolveOutlierStars = 0;
     float m_plateSolveRmsError = 0.0f;
+    float m_plateSolveMaxError = 0.0f;
     float m_plateSolveAzimuth = 0.0f;
     float m_plateSolveElevation = 0.0f;
     float m_plateSolveRoll = 0.0f;
     float m_plateSolveFov = 0.0f;
+    QString m_plateSolveCatalogSource;
     bool m_saveCurrentImage = false;
     int m_stackCount = 1;
     BayerPattern m_bayerPattern = BayerNone;

@@ -163,11 +163,17 @@ private:
     double m_lastPipelineFps = 0.0;
     bool m_lastPlateSolved = false;
     int m_lastPlateSolvedMatches = 0;
+    int m_lastPlateSolveDetectedStarsConsidered = 0;
+    int m_lastPlateSolveCatalogStarsLoaded = 0;
+    int m_lastPlateSolveCatalogCandidateStars = 0;
+    int m_lastPlateSolveOutlierStars = 0;
     double m_lastPlateSolveRmsError = 0.0;
+    double m_lastPlateSolveMaxError = 0.0;
     double m_lastPlateSolveAzimuth = 0.0;
     double m_lastPlateSolveElevation = 0.0;
     double m_lastPlateSolveRoll = 0.0;
     double m_lastPlateSolveFov = 0.0;
+    QString m_lastPlateSolveCatalogSource;
 
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;

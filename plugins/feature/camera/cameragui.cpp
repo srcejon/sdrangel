@@ -367,11 +367,17 @@ bool CameraGUI::handleMessage(const Message& message)
             m_lastPipelineFps > 0.0 ? QString::number(m_lastPipelineFps, 'f', 1) : "-");
         m_lastPlateSolved = report.isPlateSolved();
         m_lastPlateSolvedMatches = report.getPlateSolvedMatches();
+        m_lastPlateSolveDetectedStarsConsidered = report.getPlateSolveDetectedStarsConsidered();
+        m_lastPlateSolveCatalogStarsLoaded = report.getPlateSolveCatalogStarsLoaded();
+        m_lastPlateSolveCatalogCandidateStars = report.getPlateSolveCatalogCandidateStars();
+        m_lastPlateSolveOutlierStars = report.getPlateSolveOutlierStars();
         m_lastPlateSolveRmsError = report.getPlateSolveRmsError();
+        m_lastPlateSolveMaxError = report.getPlateSolveMaxError();
         m_lastPlateSolveAzimuth = report.getPlateSolveAzimuth();
         m_lastPlateSolveElevation = report.getPlateSolveElevation();
         m_lastPlateSolveRoll = report.getPlateSolveRoll();
         m_lastPlateSolveFov = report.getPlateSolveFov();
+        m_lastPlateSolveCatalogSource = report.getPlateSolveCatalogSource();
         settingsUI()->plateSolveStatusLabel->setText(m_lastPlateSolved ? tr("Solved") : tr("Unsolved"));
         settingsUI()->plateSolveMatchesLabel->setText(
             m_lastPlateSolved ? QString::number(m_lastPlateSolvedMatches) : "-");
@@ -387,13 +393,19 @@ bool CameraGUI::handleMessage(const Message& message)
                 : "-");
         settingsUI()->plateSolveSolutionLabel->setText(
             m_lastPlateSolved
-                ? tr("Az %1  El %2  Roll %3  FoV %4  RMS %5 px  Matches %6")
+                ? tr("Az %1  El %2  Roll %3  FoV %4  RMS %5 px  Max %6 px  Matches %7/%8  Outliers %9  Catalog %10 (%11/%12)")
                       .arg(QString::number(m_lastPlateSolveAzimuth, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveElevation, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveRoll, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveFov, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveRmsError, 'f', 1))
+                      .arg(QString::number(m_lastPlateSolveMaxError, 'f', 1))
                       .arg(QString::number(m_lastPlateSolvedMatches))
+                      .arg(QString::number(m_lastPlateSolveDetectedStarsConsidered))
+                      .arg(QString::number(m_lastPlateSolveOutlierStars))
+                      .arg(m_lastPlateSolveCatalogSource.isEmpty() ? tr("Bundled") : m_lastPlateSolveCatalogSource)
+                      .arg(QString::number(m_lastPlateSolveCatalogCandidateStars))
+                      .arg(QString::number(m_lastPlateSolveCatalogStarsLoaded))
                 : tr("No solution"));
         settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
@@ -785,11 +797,17 @@ void CameraGUI::resetCameraStatus()
     m_lastPipelineFps = 0.0;
     m_lastPlateSolved = false;
     m_lastPlateSolvedMatches = 0;
+    m_lastPlateSolveDetectedStarsConsidered = 0;
+    m_lastPlateSolveCatalogStarsLoaded = 0;
+    m_lastPlateSolveCatalogCandidateStars = 0;
+    m_lastPlateSolveOutlierStars = 0;
     m_lastPlateSolveRmsError = 0.0;
+    m_lastPlateSolveMaxError = 0.0;
     m_lastPlateSolveAzimuth = 0.0;
     m_lastPlateSolveElevation = 0.0;
     m_lastPlateSolveRoll = 0.0;
     m_lastPlateSolveFov = 0.0;
+    m_lastPlateSolveCatalogSource.clear();
     settingsUI()->pipelineFpsLabel->setText("-");
     settingsUI()->plateSolveStatusLabel->setText("-");
     settingsUI()->plateSolveMatchesLabel->setText("-");

@@ -740,11 +740,17 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     frame->m_starDetections.clear();
     frame->m_plateSolved = false;
     frame->m_plateSolvedMatches = 0;
+    frame->m_plateSolveDetectedStarsConsidered = 0;
+    frame->m_plateSolveCatalogStarsLoaded = 0;
+    frame->m_plateSolveCatalogCandidateStars = 0;
+    frame->m_plateSolveOutlierStars = 0;
     frame->m_plateSolveRmsError = 0.0f;
+    frame->m_plateSolveMaxError = 0.0f;
     frame->m_plateSolveAzimuth = 0.0f;
     frame->m_plateSolveElevation = 0.0f;
     frame->m_plateSolveRoll = 0.0f;
     frame->m_plateSolveFov = 0.0f;
+    frame->m_plateSolveCatalogSource.clear();
 
     QImage convertedRgb;
     const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
@@ -838,11 +844,17 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
             frame->m_starDetections);
         frame->m_plateSolved = plateSolveResult.m_solved;
         frame->m_plateSolvedMatches = plateSolveResult.m_matchedStars;
+        frame->m_plateSolveDetectedStarsConsidered = plateSolveResult.m_detectedStarsConsidered;
+        frame->m_plateSolveCatalogStarsLoaded = plateSolveResult.m_catalogStarsLoaded;
+        frame->m_plateSolveCatalogCandidateStars = plateSolveResult.m_catalogCandidateStars;
+        frame->m_plateSolveOutlierStars = plateSolveResult.m_outlierStars;
         frame->m_plateSolveRmsError = static_cast<float>(plateSolveResult.m_rmsErrorPixels);
+        frame->m_plateSolveMaxError = static_cast<float>(plateSolveResult.m_maxErrorPixels);
         frame->m_plateSolveAzimuth = static_cast<float>(plateSolveResult.m_azimuthDegrees);
         frame->m_plateSolveElevation = static_cast<float>(plateSolveResult.m_elevationDegrees);
         frame->m_plateSolveRoll = static_cast<float>(plateSolveResult.m_rollDegrees);
         frame->m_plateSolveFov = static_cast<float>(plateSolveResult.m_fovDegrees);
+        frame->m_plateSolveCatalogSource = plateSolveResult.m_catalogSource;
     }
 
     if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {

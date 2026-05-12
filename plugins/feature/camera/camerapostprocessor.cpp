@@ -833,11 +833,17 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_stackCount,
             frame.m_plateSolved,
             frame.m_plateSolvedMatches,
+            frame.m_plateSolveDetectedStarsConsidered,
+            frame.m_plateSolveCatalogStarsLoaded,
+            frame.m_plateSolveCatalogCandidateStars,
+            frame.m_plateSolveOutlierStars,
             frame.m_plateSolveRmsError,
+            frame.m_plateSolveMaxError,
             frame.m_plateSolveAzimuth,
             frame.m_plateSolveElevation,
             frame.m_plateSolveRoll,
-            frame.m_plateSolveFov));
+            frame.m_plateSolveFov,
+            frame.m_plateSolveCatalogSource));
     }
 }
 

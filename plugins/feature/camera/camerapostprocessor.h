@@ -121,22 +121,34 @@ public:
         int getStackCount() const { return m_stackCount; }
         bool isPlateSolved() const { return m_plateSolved; }
         int getPlateSolvedMatches() const { return m_plateSolvedMatches; }
+        int getPlateSolveDetectedStarsConsidered() const { return m_plateSolveDetectedStarsConsidered; }
+        int getPlateSolveCatalogStarsLoaded() const { return m_plateSolveCatalogStarsLoaded; }
+        int getPlateSolveCatalogCandidateStars() const { return m_plateSolveCatalogCandidateStars; }
+        int getPlateSolveOutlierStars() const { return m_plateSolveOutlierStars; }
         float getPlateSolveRmsError() const { return m_plateSolveRmsError; }
+        float getPlateSolveMaxError() const { return m_plateSolveMaxError; }
         float getPlateSolveAzimuth() const { return m_plateSolveAzimuth; }
         float getPlateSolveElevation() const { return m_plateSolveElevation; }
         float getPlateSolveRoll() const { return m_plateSolveRoll; }
         float getPlateSolveFov() const { return m_plateSolveFov; }
+        const QString& getPlateSolveCatalogSource() const { return m_plateSolveCatalogSource; }
 
         static MsgReportFrame* create(const QImage& image,
                                       const CameraHistogramData& histogramData,
                                       int stackCount,
                                       bool plateSolved,
                                       int plateSolvedMatches,
+                                      int plateSolveDetectedStarsConsidered,
+                                      int plateSolveCatalogStarsLoaded,
+                                      int plateSolveCatalogCandidateStars,
+                                      int plateSolveOutlierStars,
                                       float plateSolveRmsError,
+                                      float plateSolveMaxError,
                                       float plateSolveAzimuth,
                                       float plateSolveElevation,
                                       float plateSolveRoll,
-                                      float plateSolveFov)
+                                      float plateSolveFov,
+                                      const QString& plateSolveCatalogSource)
         {
             return new MsgReportFrame(
                 image,
@@ -144,11 +156,17 @@ public:
                 stackCount,
                 plateSolved,
                 plateSolvedMatches,
+                plateSolveDetectedStarsConsidered,
+                plateSolveCatalogStarsLoaded,
+                plateSolveCatalogCandidateStars,
+                plateSolveOutlierStars,
                 plateSolveRmsError,
+                plateSolveMaxError,
                 plateSolveAzimuth,
                 plateSolveElevation,
                 plateSolveRoll,
-                plateSolveFov);
+                plateSolveFov,
+                plateSolveCatalogSource);
         }
 
     private:
@@ -157,33 +175,51 @@ public:
         int m_stackCount;
         bool m_plateSolved;
         int m_plateSolvedMatches;
+        int m_plateSolveDetectedStarsConsidered;
+        int m_plateSolveCatalogStarsLoaded;
+        int m_plateSolveCatalogCandidateStars;
+        int m_plateSolveOutlierStars;
         float m_plateSolveRmsError;
+        float m_plateSolveMaxError;
         float m_plateSolveAzimuth;
         float m_plateSolveElevation;
         float m_plateSolveRoll;
         float m_plateSolveFov;
+        QString m_plateSolveCatalogSource;
 
         MsgReportFrame(const QImage& image,
                        const CameraHistogramData& histogramData,
                        int stackCount,
                        bool plateSolved,
                        int plateSolvedMatches,
+                       int plateSolveDetectedStarsConsidered,
+                       int plateSolveCatalogStarsLoaded,
+                       int plateSolveCatalogCandidateStars,
+                       int plateSolveOutlierStars,
                        float plateSolveRmsError,
+                       float plateSolveMaxError,
                        float plateSolveAzimuth,
                        float plateSolveElevation,
                        float plateSolveRoll,
-                       float plateSolveFov) :
+                       float plateSolveFov,
+                       const QString& plateSolveCatalogSource) :
             Message(),
             m_image(image),
             m_histogramData(histogramData),
             m_stackCount(stackCount),
             m_plateSolved(plateSolved),
             m_plateSolvedMatches(plateSolvedMatches),
+            m_plateSolveDetectedStarsConsidered(plateSolveDetectedStarsConsidered),
+            m_plateSolveCatalogStarsLoaded(plateSolveCatalogStarsLoaded),
+            m_plateSolveCatalogCandidateStars(plateSolveCatalogCandidateStars),
+            m_plateSolveOutlierStars(plateSolveOutlierStars),
             m_plateSolveRmsError(plateSolveRmsError),
+            m_plateSolveMaxError(plateSolveMaxError),
             m_plateSolveAzimuth(plateSolveAzimuth),
             m_plateSolveElevation(plateSolveElevation),
             m_plateSolveRoll(plateSolveRoll),
-            m_plateSolveFov(plateSolveFov)
+            m_plateSolveFov(plateSolveFov),
+            m_plateSolveCatalogSource(plateSolveCatalogSource)
         { }
     };
 

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>724</width>
-    <height>844</height>
+    <width>838</width>
+    <height>1192</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -2709,60 +2709,13 @@
           <string>Sky Grid</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_skyGridOverlay">
-          <item row="0" column="4">
-           <widget class="QFontComboBox" name="gridLabelFontCombo">
-            <property name="toolTip">
-             <string>Select font to use for sky grid labels</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="6">
-           <widget class="QToolButton" name="equatorialGridColorButton">
-            <property name="toolTip">
-             <string>Select equatorial grid colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="5">
-           <widget class="QDoubleSpinBox" name="gridLabelFontScaleSpin">
-            <property name="toolTip">
-             <string>Font point size for sky grid labels</string>
-            </property>
-            <property name="decimals">
-             <number>0</number>
-            </property>
-            <property name="minimum">
-             <double>4.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>144.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="6">
+          <item row="1" column="5">
            <widget class="QToolButton" name="altAzGridColorButton">
             <property name="toolTip">
              <string>Select alt-az grid colour</string>
             </property>
             <property name="text">
              <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QLabel" name="gridLabelFontLabel">
-            <property name="text">
-             <string>Font</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="equatorialGridLabel">
-            <property name="text">
-             <string>Equatorial grid</string>
             </property>
            </widget>
           </item>
@@ -2780,14 +2733,24 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="3">
+          <item row="2" column="2">
            <widget class="QLabel" name="trackObjectMinElevationLabel">
             <property name="text">
              <string>Min elevation</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="4">
+          <item row="0" column="5">
+           <widget class="QToolButton" name="equatorialGridColorButton">
+            <property name="toolTip">
+             <string>Select equatorial grid colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="3">
            <widget class="QDoubleSpinBox" name="trackObjectMinElevationSpin">
             <property name="toolTip">
              <string>Minimum elevation in degrees for tracked object overlays</string>
@@ -2809,46 +2772,34 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="5">
-           <widget class="QLabel" name="trackObjectFontScaleLabel">
+          <item row="0" column="2">
+           <widget class="QLabel" name="gridLabelFontLabel">
             <property name="text">
-             <string>Label size</string>
+             <string>Font</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="6">
-           <widget class="QDoubleSpinBox" name="trackObjectFontScaleSpin">
-            <property name="toolTip">
-             <string>Font point size for tracked object labels</string>
-            </property>
-            <property name="decimals">
-             <number>0</number>
-            </property>
-            <property name="minimum">
-             <double>4.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>144.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="7">
-           <widget class="QToolButton" name="trackObjectColorButton">
-            <property name="toolTip">
-             <string>Select tracked object label colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="6">
-           <widget class="QToolButton" name="ursaMajorStarsColorButton">
+          <item row="3" column="5">
+           <widget class="QToolButton" name="constellationColorButton">
             <property name="toolTip">
              <string>Select constellation overlay colour</string>
             </property>
             <property name="text">
              <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="equatorialGridLabel">
+            <property name="text">
+             <string>Equatorial grid</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QFontComboBox" name="gridLabelFontCombo">
+            <property name="toolTip">
+             <string>Select font to use for sky grid labels</string>
             </property>
            </widget>
           </item>
@@ -2859,7 +2810,7 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="3" colspan="2">
+          <item row="3" column="2" colspan="2">
            <widget class="QComboBox" name="constellationOverlayCombo">
             <property name="toolTip">
              <string>Select which constellation major stars to overlay</string>
@@ -2881,23 +2832,51 @@
             </item>
            </widget>
           </item>
-          <item row="3" column="2">
-           <widget class="QLabel" name="constellationOverlayComboLabel">
-            <property name="text">
-             <string>Stars</string>
+          <item row="0" column="4">
+           <widget class="QDoubleSpinBox" name="gridLabelFontScaleSpin">
+            <property name="toolTip">
+             <string>Font point size for sky grid labels</string>
+            </property>
+            <property name="decimals">
+             <number>0</number>
+            </property>
+            <property name="minimum">
+             <double>4.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>144.000000000000000</double>
             </property>
            </widget>
           </item>
-          <item row="3" column="5">
-           <widget class="QLabel" name="ursaMajorStarsColorLabel">
-            <property name="text">
-             <string>Colour</string>
+          <item row="2" column="4">
+           <widget class="QDoubleSpinBox" name="trackObjectFontScaleSpin">
+            <property name="toolTip">
+             <string>Font point size for tracked object labels</string>
+            </property>
+            <property name="decimals">
+             <number>0</number>
+            </property>
+            <property name="minimum">
+             <double>4.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>144.000000000000000</double>
             </property>
            </widget>
           </item>
-        </layout>
-       </widget>
-      </item>
+          <item row="2" column="5">
+           <widget class="QToolButton" name="trackObjectColorButton">
+            <property name="toolTip">
+             <string>Select tracked object label colour</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
        <item>
         <widget class="QGroupBox" name="dateTimeOverlay">
          <property name="title">
@@ -4623,15 +4602,15 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </item>
                </widget>
               </item>
-                <item row="4" column="2">
-                 <widget class="QLabel" name="streakOverlayStyleLabel">
-                  <property name="text">
-                   <string>Overlay</string>
-                  </property>
-                 </widget>
-                </item>
-                <item row="4" column="3">
-                 <widget class="QComboBox" name="streakOverlayStyleCombo">
+              <item row="4" column="2">
+               <widget class="QLabel" name="streakOverlayStyleLabel">
+                <property name="text">
+                 <string>Overlay</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="3">
+               <widget class="QComboBox" name="streakOverlayStyleCombo">
                 <item>
                  <property name="text">
                   <string>Lines</string>
@@ -4641,40 +4620,40 @@ li.checked::marker { content: &quot;\2612&quot;; }
                  <property name="text">
                   <string>Bounding boxes</string>
                  </property>
-                  </item>
-                 </widget>
                 </item>
-                <item row="4" column="0">
-                 <widget class="QLabel" name="streakLineEnhancementLabel">
-                  <property name="text">
-                   <string>Line enhancement</string>
-                  </property>
-                 </widget>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="streakLineEnhancementLabel">
+                <property name="text">
+                 <string>Line enhancement</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QComboBox" name="streakLineEnhancementCombo">
+                <item>
+                 <property name="text">
+                  <string>Off</string>
+                 </property>
                 </item>
-                <item row="4" column="1">
-                 <widget class="QComboBox" name="streakLineEnhancementCombo">
-                  <item>
-                   <property name="text">
-                    <string>Off</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>Before background</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>After background</string>
-                   </property>
-                  </item>
-                 </widget>
+                <item>
+                 <property name="text">
+                  <string>Before background</string>
+                 </property>
                 </item>
-                <item row="5" column="2">
-                 <widget class="QLabel" name="streakColorLabel">
-                  <property name="text">
-                   <string>Colour</string>
-                  </property>
+                <item>
+                 <property name="text">
+                  <string>After background</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="5" column="2">
+               <widget class="QLabel" name="streakColorLabel">
+                <property name="text">
+                 <string>Colour</string>
+                </property>
                </widget>
               </item>
               <item row="5" column="3">

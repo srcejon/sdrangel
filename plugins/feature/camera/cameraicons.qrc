@@ -18,5 +18,7 @@
       <file>icons/grid.png</file>
       <file>icons/layers.png</file>
       <file>icons/aircraft.png</file>
+      <file>icons/constellation.png</file>
+      <file>icons/az_grid.png</file>
     </qresource>
 </RCC>

@@ -874,7 +874,6 @@ void CameraPostProcessor::applyStreakOverlay(QImage& image, const QVector<Camera
     PROFILER_START();
 
     if (streakDetections.isEmpty()) {
-        PROFILER_STOP(__FUNCTION__);
         return;
     }
 
@@ -1060,13 +1059,11 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
     const bool drawEquatorial = m_settings.m_equatorialGrid;
     const bool drawAltAz = m_settings.m_altAzGrid;
     if (!drawEquatorial && !drawAltAz) {
-        PROFILER_STOP(__FUNCTION__);
         return;
     }
 
     const SkyProjector projector = SkyProjector::create(m_settings, image.size());
     if (!projector.valid) {
-        PROFILER_STOP(__FUNCTION__);
         return;
     }
 
@@ -1238,14 +1235,12 @@ void CameraPostProcessor::applyConstellationOverlay(QImage& image) const
 {
     PROFILER_START();
 
-    if (!m_settings.m_ursaMajorStars) {
-        PROFILER_STOP(__FUNCTION__);
+    if (!m_settings.m_constellation) {
         return;
     }
 
     const SkyProjector projector = SkyProjector::create(m_settings, image.size());
     if (!projector.valid) {
-        PROFILER_STOP(__FUNCTION__);
         return;
     }
 
@@ -1253,7 +1248,7 @@ void CameraPostProcessor::applyConstellationOverlay(QImage& image) const
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setClipRect(image.rect());
-    painter.setPen(QPen(m_settings.m_ursaMajorStarsColor, 1.0));
+    painter.setPen(QPen(m_settings.m_constellationColor, 1.0));
 
     switch (m_settings.m_constellationOverlay)
     {
@@ -1276,13 +1271,11 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
     PROFILER_START();
 
     if (!m_settings.m_trackObjects || m_trackedMapObjects.isEmpty()) {
-        PROFILER_STOP(__FUNCTION__);
         return;
     }
 
     const SkyProjector projector = SkyProjector::create(m_settings, image.size());
     if (!projector.valid) {
-        PROFILER_STOP(__FUNCTION__);
         return;
     }
 
@@ -1371,7 +1364,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     const bool needsAny = m_settings.m_overlayDateTime
         || m_settings.m_equatorialGrid
         || m_settings.m_altAzGrid
-        || m_settings.m_ursaMajorStars
+        || m_settings.m_constellation
         || (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty())
         || needsTextOverlay
         || !frame.m_motionBoxes.isEmpty()
@@ -1397,7 +1390,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     if (!frame.m_streakDetections.isEmpty()) { applyStreakOverlay(result, frame.m_streakDetections); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
-    if (m_settings.m_ursaMajorStars) { applyConstellationOverlay(result); }
+    if (m_settings.m_constellation) { applyConstellationOverlay(result); }
     if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
     if (needsTextOverlay) { applyTextOverlay(result, expandedOverlayText); }

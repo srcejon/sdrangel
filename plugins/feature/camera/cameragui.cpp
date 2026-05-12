@@ -1025,7 +1025,7 @@ void CameraGUI::displaySettings()
     settingsUI()->dateTimePosYValue->setText(QString::number(m_settings.m_dateTimePosY));
     ui->equatorialGridButton->setChecked(m_settings.m_equatorialGrid);
     ui->altAzGridButton->setChecked(m_settings.m_altAzGrid);
-    ui->ursaMajorStarsButton->setChecked(m_settings.m_ursaMajorStars);
+    ui->constellationButton->setChecked(m_settings.m_constellation);
     settingsUI()->constellationOverlayCombo->setCurrentIndex(static_cast<int>(m_settings.m_constellationOverlay));
     ui->trackObjectsButton->setChecked(m_settings.m_trackObjects);
     settingsUI()->trackObjectMinElevationSpin->setValue(m_settings.m_trackObjectMinElevation);
@@ -1089,7 +1089,7 @@ void CameraGUI::displaySettings()
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
     updateColorButton(settingsUI()->altAzGridColorButton, m_settings.m_altAzGridColor);
-    updateColorButton(settingsUI()->ursaMajorStarsColorButton, m_settings.m_ursaMajorStarsColor);
+    updateColorButton(settingsUI()->constellationColorButton, m_settings.m_constellationColor);
     updateColorButton(settingsUI()->trackObjectColorButton, m_settings.m_trackObjectColor);
     updateColorButton(settingsUI()->streakColorButton, m_settings.m_streakColor);
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
@@ -1440,9 +1440,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->equatorialGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_equatorialGridColorButton_clicked);
     QObject::connect(ui->altAzGridButton, &QToolButton::toggled, this, &CameraGUI::on_altAzGridCheck_toggled);
     QObject::connect(settingsUI()->altAzGridColorButton, &QToolButton::clicked, this, &CameraGUI::on_altAzGridColorButton_clicked);
-    QObject::connect(ui->ursaMajorStarsButton, &QToolButton::toggled, this, &CameraGUI::on_ursaMajorStarsCheck_toggled);
+    QObject::connect(ui->constellationButton, &QToolButton::toggled, this, &CameraGUI::on_constellationCheck_toggled);
     QObject::connect(settingsUI()->constellationOverlayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_constellationOverlayCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->ursaMajorStarsColorButton, &QToolButton::clicked, this, &CameraGUI::on_ursaMajorStarsColorButton_clicked);
+    QObject::connect(settingsUI()->constellationColorButton, &QToolButton::clicked, this, &CameraGUI::on_constellationColorButton_clicked);
     QObject::connect(ui->trackObjectsButton, &QToolButton::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
     QObject::connect(settingsUI()->trackObjectColorButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectColorButton_clicked);
@@ -4962,10 +4962,10 @@ void CameraGUI::on_altAzGridColorButton_clicked()
     }
 }
 
-void CameraGUI::on_ursaMajorStarsCheck_toggled(bool checked)
+void CameraGUI::on_constellationCheck_toggled(bool checked)
 {
-    m_settings.m_ursaMajorStars = checked;
-    applySetting("ursaMajorStars");
+    m_settings.m_constellation = checked;
+    applySetting("constellation");
 }
 
 void CameraGUI::on_constellationOverlayCombo_currentIndexChanged(int index)
@@ -4974,15 +4974,15 @@ void CameraGUI::on_constellationOverlayCombo_currentIndexChanged(int index)
     applySetting("constellationOverlay");
 }
 
-void CameraGUI::on_ursaMajorStarsColorButton_clicked()
+void CameraGUI::on_constellationColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_ursaMajorStarsColor, this, tr("Select constellation overlay colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_constellationColor, this, tr("Select constellation overlay colour"));
 
     if (color.isValid())
     {
-        m_settings.m_ursaMajorStarsColor = color;
-        updateColorButton(settingsUI()->ursaMajorStarsColorButton, m_settings.m_ursaMajorStarsColor);
-        applySetting("ursaMajorStarsColor");
+        m_settings.m_constellationColor = color;
+        updateColorButton(settingsUI()->constellationColorButton, m_settings.m_constellationColor);
+        applySetting("constellationColor");
     }
 }
 

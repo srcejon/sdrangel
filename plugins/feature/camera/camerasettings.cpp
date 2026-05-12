@@ -246,8 +246,8 @@ void CameraSettings::resetToDefaults()
     m_equatorialGridColor = QColor(80, 170, 255);
     m_altAzGrid = false;
     m_altAzGridColor = QColor(255, 170, 80);
-    m_ursaMajorStars = false;
-    m_ursaMajorStarsColor = QColor(255, 255, 120);
+    m_constellation  = false;
+    m_constellationColor = QColor(255, 255, 120);
     m_constellationOverlay = ConstellationOverlayUrsaMajor;
     m_trackObjects = false;
     m_trackObjectMinElevation = 0.0;
@@ -481,8 +481,8 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(146, m_equatorialGridColor.rgba());
     s.writeBool(147, m_altAzGrid);
     s.writeU32(148, m_altAzGridColor.rgba());
-    s.writeBool(198, m_ursaMajorStars);
-    s.writeU32(199, m_ursaMajorStarsColor.rgba());
+    s.writeBool(198, m_constellation);
+    s.writeU32(199, m_constellationColor.rgba());
     s.writeS32(200, static_cast<qint32>(m_constellationOverlay));
     s.writeBool(165, m_trackObjects);
     s.writeDouble(166, m_trackObjectMinElevation);
@@ -840,10 +840,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         uint32_t altAzGridColorRgba = QColor(255, 170, 80).rgba();
         d.readU32(148, &altAzGridColorRgba, QColor(255, 170, 80).rgba());
         m_altAzGridColor = QColor::fromRgba(altAzGridColorRgba);
-        d.readBool(198, &m_ursaMajorStars, false);
-        uint32_t ursaMajorStarsColorRgba = QColor(255, 255, 120).rgba();
-        d.readU32(199, &ursaMajorStarsColorRgba, QColor(255, 255, 120).rgba());
-        m_ursaMajorStarsColor = QColor::fromRgba(ursaMajorStarsColorRgba);
+        d.readBool(198, &m_constellation, false);
+        uint32_t constellationColorRgba = QColor(255, 255, 120).rgba();
+        d.readU32(199, &constellationColorRgba, QColor(255, 255, 120).rgba());
+        m_constellationColor = QColor::fromRgba(constellationColorRgba);
         d.readS32(200, reinterpret_cast<qint32*>(&m_constellationOverlay), static_cast<qint32>(ConstellationOverlayUrsaMajor));
         d.readBool(165, &m_trackObjects, false);
         d.readDouble(166, &m_trackObjectMinElevation, 0.0);
@@ -1492,11 +1492,11 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("altAzGridColor")) {
         m_altAzGridColor = settings.m_altAzGridColor;
     }
-    if (settingsKeys.contains("ursaMajorStars")) {
-        m_ursaMajorStars = settings.m_ursaMajorStars;
+    if (settingsKeys.contains("constellation")) {
+        m_constellation = settings.m_constellation;
     }
-    if (settingsKeys.contains("ursaMajorStarsColor")) {
-        m_ursaMajorStarsColor = settings.m_ursaMajorStarsColor;
+    if (settingsKeys.contains("constellationColor")) {
+        m_constellationColor = settings.m_constellationColor;
     }
     if (settingsKeys.contains("constellationOverlay")) {
         m_constellationOverlay = settings.m_constellationOverlay;
@@ -2056,11 +2056,11 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("altAzGridColor") || force) {
         ostr << " m_altAzGridColor: " << m_altAzGridColor.name().toStdString();
     }
-    if (settingsKeys.contains("ursaMajorStars") || force) {
-        ostr << " m_ursaMajorStars: " << m_ursaMajorStars;
+    if (settingsKeys.contains("constellation") || force) {
+        ostr << " m_constellation: " << m_constellation;
     }
-    if (settingsKeys.contains("ursaMajorStarsColor") || force) {
-        ostr << " m_ursaMajorStarsColor: " << m_ursaMajorStarsColor.name().toStdString();
+    if (settingsKeys.contains("constellationColor") || force) {
+        ostr << " m_constellationColor: " << m_constellationColor.name().toStdString();
     }
     if (settingsKeys.contains("constellationOverlay") || force) {
         ostr << " m_constellationOverlay: " << static_cast<int>(m_constellationOverlay);

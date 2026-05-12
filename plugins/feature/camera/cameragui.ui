@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>431</width>
-    <height>364</height>
+    <width>689</width>
+    <height>496</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -24,7 +24,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>421</width>
+     <width>641</width>
      <height>71</height>
     </rect>
    </property>
@@ -495,16 +495,6 @@
        </widget>
       </item>
       <item>
-       <widget class="ButtonSwitch" name="equatorialGridButton">
-        <property name="toolTip">
-         <string>Overlay equatorial grid</string>
-        </property>
-        <property name="text">
-         <string>EQ</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="ButtonSwitch" name="altAzGridButton">
         <property name="toolTip">
          <string>Overlay azimuthal grid</string>
@@ -514,17 +504,35 @@
         </property>
         <property name="icon">
          <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/az_grid.png</normaloff>:/camera/icons/az_grid.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="equatorialGridButton">
+        <property name="toolTip">
+         <string>Overlay equatorial grid</string>
+        </property>
+        <property name="text">
+         <string>EQ</string>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
           <normaloff>:/camera/icons/grid.png</normaloff>:/camera/icons/grid.png</iconset>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="ButtonSwitch" name="ursaMajorStarsButton">
+       <widget class="ButtonSwitch" name="constellationButton">
         <property name="toolTip">
          <string>Overlay selected constellation stars</string>
         </property>
         <property name="text">
-         <string>UM</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/constellation.png</normaloff>:/camera/icons/constellation.png</iconset>
         </property>
        </widget>
       </item>

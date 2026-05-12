@@ -108,3 +108,4 @@ To start capturing:
 - media player icons by Ranah Pixel Studio from Noun Project (CC BY 3.0)
 - meteor by Color Combo from Noun Project (CC BY 3.0)
 - stack image by I Putu Dicky Adi Pranatha from Noun Project (CC BY 3.0)
+- constellation by BomSymbols from Noun Project (CC BY 3.0)

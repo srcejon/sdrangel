@@ -38,6 +38,7 @@
 MESSAGE_CLASS_DEFINITION(CameraDetector::MsgConfigureCameraDetector, Message)
 MESSAGE_CLASS_DEFINITION(CameraDetector::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraDetector::MsgCaptureActive, Message)
+MESSAGE_CLASS_DEFINITION(CameraDetector::MsgReportObjectDetectionHistory, Message)
 
 namespace {
 QString substituteObjectClass(QString text, const QString& className)
@@ -348,6 +349,7 @@ cv::Size readOnnxInputSize(const QString& modelPath)
 }
 
 CameraDetector::CameraDetector() :
+    m_msgQueueToGUI(nullptr),
     m_nextStage(nullptr),
     m_captureActive(false),
     m_motionPersistenceRemaining(0),
@@ -407,8 +409,7 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_motionConfirmCount = 0;
             m_lastStreakDetections.clear();
             m_streakPersistenceRemaining = 0;
-            m_detectedObjectClasses.clear();
-            m_pendingDisappearDeadlines.clear();
+            clearObjectDetectionState();
         }
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrame.reset();
@@ -477,6 +478,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_motionConfirmCount = 0;
         m_lastStreakDetections.clear();
         m_streakPersistenceRemaining = 0;
+        clearObjectDetectionState();
     }
 
     if (force
@@ -577,8 +579,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("yoloLabelsPath")
         || settingsKeys.contains("objectDeviceSettings"))
     {
-        m_detectedObjectClasses.clear();
-        m_pendingDisappearDeadlines.clear();
+        clearObjectDetectionState();
     }
 
     const bool detectorVisualsChanged = force
@@ -777,12 +778,8 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
         runYoloDetections(bgrMat, detectionRoi, frame->m_detections);
     }
 
-    QSet<QString> currentDetectedClasses;
-    for (const CameraPipelineDetection& detection : frame->m_detections) {
-        currentDetectedClasses.insert(detection.m_label);
-    }
     const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
-    processObjectDetections(currentDetectedClasses, detectionTime, *frame);
+    processObjectDetections(frame->m_detections, detectionTime, *frame);
 
     frame->m_image = convertBgrToRgbImage(bgrMat);
 
@@ -1686,11 +1683,78 @@ QImage CameraDetector::convertBgrToRgbImage(const cv::Mat& bgrMat)
     return result;
 }
 
-void CameraDetector::processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now, CameraPipelineFrame& frame)
+void CameraDetector::clearObjectDetectionState()
 {
+    m_detectedObjectClasses.clear();
+    m_pendingDisappearStates.clear();
+    m_activeObjectDetectionHistory.clear();
+    m_completedObjectDetectionHistory.clear();
+    reportObjectDetectionHistoryToGUI();
+}
+
+QList<CameraDetectionHistoryEntry> CameraDetector::getObjectDetectionHistorySnapshot() const
+{
+    QList<CameraDetectionHistoryEntry> history = m_completedObjectDetectionHistory;
+    for (auto it = m_activeObjectDetectionHistory.cbegin(); it != m_activeObjectDetectionHistory.cend(); ++it) {
+        history.append(it.value());
+    }
+
+    std::sort(history.begin(), history.end(), [](const CameraDetectionHistoryEntry& lhs, const CameraDetectionHistoryEntry& rhs) {
+        if (lhs.m_firstDetected != rhs.m_firstDetected) {
+            return lhs.m_firstDetected > rhs.m_firstDetected;
+        }
+
+        return lhs.m_label < rhs.m_label;
+    });
+
+    return history;
+}
+
+void CameraDetector::reportObjectDetectionHistoryToGUI() const
+{
+    if (m_msgQueueToGUI) {
+        m_msgQueueToGUI->push(MsgReportObjectDetectionHistory::create(getObjectDetectionHistorySnapshot()));
+    }
+}
+
+void CameraDetector::processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame)
+{
+    QHash<QString, float> currentDetectedScores;
+    QSet<QString> currentDetectedClasses;
+    bool historyChanged = false;
+
+    for (const CameraPipelineDetection& detection : detections)
+    {
+        if (detection.m_label.isEmpty()) {
+            continue;
+        }
+
+        currentDetectedClasses.insert(detection.m_label);
+        float& peakScore = currentDetectedScores[detection.m_label];
+        peakScore = std::max(peakScore, detection.m_score);
+    }
+
     for (const QString& className : currentDetectedClasses)
     {
-        m_pendingDisappearDeadlines.remove(className);
+        m_pendingDisappearStates.remove(className);
+
+        const float currentPeakScore = currentDetectedScores.value(className);
+
+        auto activeHistoryIt = m_activeObjectDetectionHistory.find(className);
+        if (activeHistoryIt == m_activeObjectDetectionHistory.end())
+        {
+            CameraDetectionHistoryEntry entry;
+            entry.m_label = className;
+            entry.m_firstDetected = now;
+            entry.m_peakConfidence = currentPeakScore;
+            activeHistoryIt = m_activeObjectDetectionHistory.insert(className, entry);
+            historyChanged = true;
+        }
+        else if (currentPeakScore > activeHistoryIt->m_peakConfidence)
+        {
+            activeHistoryIt->m_peakConfidence = currentPeakScore;
+            historyChanged = true;
+        }
 
         if (!m_detectedObjectClasses.contains(className))
         {
@@ -1703,12 +1767,16 @@ void CameraDetector::processObjectDetections(const QSet<QString>& currentDetecte
 
     for (const QString& className : m_detectedObjectClasses)
     {
-        if (!currentDetectedClasses.contains(className) && !m_pendingDisappearDeadlines.contains(className)) {
-            m_pendingDisappearDeadlines.insert(className, now.addMSecs(static_cast<qint64>(m_settings.m_yoloDisappearDebounce * 1000.0)));
+        if (!currentDetectedClasses.contains(className) && !m_pendingDisappearStates.contains(className))
+        {
+            PendingDisappearState state;
+            state.m_firstMissing = now;
+            state.m_deadline = now.addMSecs(static_cast<qint64>(m_settings.m_yoloDisappearDebounce * 1000.0));
+            m_pendingDisappearStates.insert(className, state);
         }
     }
 
-    QMutableHashIterator<QString, QDateTime> it(m_pendingDisappearDeadlines);
+    QMutableHashIterator<QString, PendingDisappearState> it(m_pendingDisappearStates);
     while (it.hasNext())
     {
         it.next();
@@ -1718,12 +1786,24 @@ void CameraDetector::processObjectDetections(const QSet<QString>& currentDetecte
             continue;
         }
 
-        if (it.value() <= now)
+        if (it.value().m_deadline <= now)
         {
             m_detectedObjectClasses.remove(it.key());
+            auto activeHistoryIt = m_activeObjectDetectionHistory.find(it.key());
+            if (activeHistoryIt != m_activeObjectDetectionHistory.end())
+            {
+                activeHistoryIt->m_disappeared = it.value().m_firstMissing;
+                m_completedObjectDetectionHistory.append(activeHistoryIt.value());
+                m_activeObjectDetectionHistory.erase(activeHistoryIt);
+                historyChanged = true;
+            }
             applyObjectDisappearedSettings(it.key());
             it.remove();
         }
+    }
+
+    if (historyChanged) {
+        reportObjectDetectionHistoryToGUI();
     }
 }
 

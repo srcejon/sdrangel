@@ -432,6 +432,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QToolButton" name="detectionHistoryButton">
+        <property name="toolTip">
+         <string>Show object detection history</string>
+        </property>
+        <property name="text">
+         <string>Hist</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="ButtonSwitch" name="trackObjectsButton">
         <property name="toolTip">
          <string>Overlay ADS-B / satellite / star tracked objects</string>

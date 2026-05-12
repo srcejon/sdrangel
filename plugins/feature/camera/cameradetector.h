@@ -35,6 +35,7 @@
 
 #include "util/message.h"
 #include "util/messagequeue.h"
+#include "cameradetectionhistoryentry.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
@@ -110,6 +111,26 @@ public:
         { }
     };
 
+    class MsgReportObjectDetectionHistory : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QList<CameraDetectionHistoryEntry>& getHistory() const { return m_history; }
+
+        static MsgReportObjectDetectionHistory* create(const QList<CameraDetectionHistoryEntry>& history)
+        {
+            return new MsgReportObjectDetectionHistory(history);
+        }
+
+    private:
+        QList<CameraDetectionHistoryEntry> m_history;
+
+        MsgReportObjectDetectionHistory(const QList<CameraDetectionHistoryEntry>& history) :
+            Message(),
+            m_history(history)
+        { }
+    };
+
     CameraDetector();
     ~CameraDetector();
 
@@ -118,9 +139,17 @@ public:
     void submitFrame(const CameraPipelineFramePtr& frame);
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setNextStage(CameraPostProcessor *nextStage) { m_nextStage = nextStage; }
+    void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
 
 private:
+    struct PendingDisappearState
+    {
+        QDateTime m_firstMissing;
+        QDateTime m_deadline;
+    };
+
     MessageQueue m_inputMessageQueue;
+    MessageQueue *m_msgQueueToGUI;
     CameraPostProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
@@ -143,7 +172,9 @@ private:
     QStringList m_yoloLabels;
     QString m_yoloLoadedLabelsPath;
     QSet<QString> m_detectedObjectClasses;
-    QHash<QString, QDateTime> m_pendingDisappearDeadlines;
+    QHash<QString, PendingDisappearState> m_pendingDisappearStates;
+    QHash<QString, CameraDetectionHistoryEntry> m_activeObjectDetectionHistory;
+    QList<CameraDetectionHistoryEntry> m_completedObjectDetectionHistory;
 #ifdef QT_TEXTTOSPEECH_FOUND
     QTextToSpeech *m_speech;
 #endif
@@ -165,7 +196,10 @@ private:
     void applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
     [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
-    void processObjectDetections(const QSet<QString>& currentDetectedClasses, const QDateTime& now, CameraPipelineFrame& frame);
+    void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
+    void clearObjectDetectionState();
+    void reportObjectDetectionHistoryToGUI() const;
+    [[nodiscard]] QList<CameraDetectionHistoryEntry> getObjectDetectionHistorySnapshot() const;
     bool applyObjectDetectedSettings(const QString& className);
     void applyObjectDisappearedSettings(const QString& className);
     void executeCommand(const QString& command, const QString& className);

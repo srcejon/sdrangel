@@ -79,6 +79,7 @@
 
 #include "ui_cameragui.h"
 #include "camera.h"
+#include "cameradetectionhistory.h"
 #include "cameraframestacker.h"
 #include "camerahistogramdialog.h"
 #include "camerasettingsdialog.h"
@@ -372,6 +373,15 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         return true;
     }
+    else if (CameraDetector::MsgReportObjectDetectionHistory::match(message))
+    {
+        const CameraDetector::MsgReportObjectDetectionHistory& report = (CameraDetector::MsgReportObjectDetectionHistory&) message;
+        m_detectionHistory = report.getHistory();
+        if (m_detectionHistoryDialog) {
+            m_detectionHistoryDialog->updateHistory(m_detectionHistory);
+        }
+        return true;
+    }
     else if (CameraPostProcessor::MsgReportSaveVideoState::match(message))
     {
         const CameraPostProcessor::MsgReportSaveVideoState& report = (CameraPostProcessor::MsgReportSaveVideoState&) message;
@@ -486,6 +496,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_lastFeatureState(0),
     m_dlm(this),
     m_settingsDialog(nullptr),
+    m_detectionHistoryDialog(nullptr),
     m_histogramDialog(nullptr),
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
@@ -1460,6 +1471,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->dilationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_dilationSpin_valueChanged);
     QObject::connect(settingsUI()->diffMaskHistoryFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffMaskHistoryFramesSpin_valueChanged);
     QObject::connect(settingsUI()->diffMaskCloseSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffMaskCloseSizeSpin_valueChanged);
+    QObject::connect(ui->detectionHistoryButton, &QToolButton::clicked, this, &CameraGUI::on_detectionHistoryButton_clicked);
     QObject::connect(ui->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
     QObject::connect(settingsUI()->defaultColorSettingsButton, &QToolButton::clicked, this, &CameraGUI::on_defaultColorSettingsButton_clicked);
     QObject::connect(settingsUI()->overlayFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayFontCombo_currentFontChanged);
@@ -5121,6 +5133,24 @@ void CameraGUI::on_histogramButton_clicked()
         m_histogramDialog->raise();
         m_histogramDialog->activateWindow();
     }
+}
+
+void CameraGUI::on_detectionHistoryButton_clicked()
+{
+    if (!m_detectionHistoryDialog)
+    {
+        m_detectionHistoryDialog = new CameraDetectionHistory(m_detectionHistory, this);
+        m_detectionHistoryDialog->setAttribute(Qt::WA_DeleteOnClose);
+        connect(m_detectionHistoryDialog, &QObject::destroyed, this, [this]() { m_detectionHistoryDialog = nullptr; });
+    }
+    else
+    {
+        m_detectionHistoryDialog->updateHistory(m_detectionHistory);
+    }
+
+    m_detectionHistoryDialog->show();
+    m_detectionHistoryDialog->raise();
+    m_detectionHistoryDialog->activateWindow();
 }
 
 void CameraGUI::on_defaultColorSettingsButton_clicked()

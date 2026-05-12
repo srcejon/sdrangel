@@ -98,6 +98,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_detectorThread, &QThread::finished, m_detector, &QObject::deleteLater);
     QObject::connect(m_detectorThread, &QThread::finished, m_detectorThread, &QThread::deleteLater);
     m_detector->setNextStage(m_postProcessor);
+    m_detector->setMessageQueueToGUI(getMessageQueueToGUI());
     m_detectorThread->start();
     m_detector->getInputMessageQueue()->push(CameraDetector::MsgConfigureCameraDetector::create(m_settings, QList<QString>(), true));
 
@@ -244,7 +245,7 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
         (void) queue;
     }
     if (m_detector) {
-        (void) queue;
+        m_detector->setMessageQueueToGUI(queue);
     }
     if (m_postProcessor) {
         m_postProcessor->setMessageQueueToGUI(queue);

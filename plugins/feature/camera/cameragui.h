@@ -42,6 +42,7 @@
 #include "util/messagequeue.h"
 #include "settings/rollupstate.h"
 #include "camerainfo.h"
+#include "cameradetectionhistoryentry.h"
 #include "cameraobjectdevicesettingsgui.h"
 #include "camerasettings.h"
 #include "camerapostprocessor.h"
@@ -53,6 +54,7 @@ class FeatureUISet;
 class Camera;
 class Feature;
 class CameraSettingsDialog;
+class CameraDetectionHistory;
 class CameraHistogramDialog;
 class Message;
 class QDoubleSpinBox;
@@ -180,8 +182,10 @@ private:
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
+    QList<CameraDetectionHistoryEntry> m_detectionHistory;
     int m_lastStackCount = 1;
     CameraSettingsDialog *m_settingsDialog;
+    CameraDetectionHistory *m_detectionHistoryDialog;
     CameraHistogramDialog *m_histogramDialog;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
@@ -493,6 +497,7 @@ private slots:
     void on_dilationSpin_valueChanged(int value);
     void on_diffMaskHistoryFramesSpin_valueChanged(int value);
     void on_diffMaskCloseSizeSpin_valueChanged(int value);
+    void on_detectionHistoryButton_clicked();
     void on_histogramButton_clicked();
     void on_defaultColorSettingsButton_clicked();
     void on_overlayFontCombo_currentFontChanged(const QFont& font);

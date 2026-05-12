@@ -919,14 +919,26 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
 
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
     QPen pen(m_settings.m_starColor);
     pen.setWidth(1);
     painter.setPen(pen);
+    QFont font;
+    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_gridLabelFontFamily);
+    }
+    font.setPointSizeF(std::max(6.0, m_settings.m_gridLabelFontScale));
+    painter.setFont(font);
+    const QFontMetrics fontMetrics(font);
 
     for (const CameraPipelineStarDetection& detection : starDetections)
     {
         const QRectF box(detection.m_center.x() - 3.0, detection.m_center.y() - 3.0, 6.0, 6.0);
         painter.drawRect(box);
+
+        if (detection.m_solved && !detection.m_label.isEmpty()) {
+            drawOutlinedLabel(painter, image.rect(), detection.m_center, detection.m_label, m_settings.m_starColor, fontMetrics);
+        }
     }
 
     PROFILER_STOP(__FUNCTION__);

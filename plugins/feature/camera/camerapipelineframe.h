@@ -59,6 +59,10 @@ struct CameraPipelineStarDetection
     QPointF m_center;
     float m_peakValue;
     float m_radius;
+    QString m_label;
+    float m_matchDistancePixels = 0.0f;
+    float m_catalogMagnitude = 0.0f;
+    bool m_solved = false;
 };
 
 struct CameraPipelineFrame
@@ -80,6 +84,13 @@ struct CameraPipelineFrame
     QVector<CameraPipelineDetection> m_detections;
     QVector<CameraPipelineStreakDetection> m_streakDetections;
     QVector<CameraPipelineStarDetection> m_starDetections;
+    bool m_plateSolved = false;
+    int m_plateSolvedMatches = 0;
+    float m_plateSolveRmsError = 0.0f;
+    float m_plateSolveAzimuth = 0.0f;
+    float m_plateSolveElevation = 0.0f;
+    float m_plateSolveRoll = 0.0f;
+    float m_plateSolveFov = 0.0f;
     bool m_saveCurrentImage = false;
     int m_stackCount = 1;
     BayerPattern m_bayerPattern = BayerNone;

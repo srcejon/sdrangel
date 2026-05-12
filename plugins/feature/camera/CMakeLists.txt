@@ -6,6 +6,7 @@ set(camera_SOURCES
     cameraframealigner.cpp
     cameraframestacker.cpp
     cameraimageprocessor.cpp
+    cameraplatesolver.cpp
     camerapostprocessor.cpp
     camerafinder.cpp
     camerasettings.cpp
@@ -20,6 +21,7 @@ set(camera_HEADERS
     cameraframealigner.h
     cameraframestacker.h
     cameraimageprocessor.h
+    cameraplatesolver.h
     camerapipelineframe.h
     camerapostprocessor.h
     camerafinder.h

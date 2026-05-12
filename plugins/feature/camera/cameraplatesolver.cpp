@@ -1,0 +1,697 @@
+///////////////////////////////////////////////////////////////////////////////////
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Some code by AI                                                               //
+//                                                                               //
+// This program is free software; you can redistribute it and/or modify          //
+// it under the terms of the GNU General Public License as published by          //
+// the Free Software Foundation as version 3 of the License, or                  //
+// (at your option) any later version.                                           //
+//                                                                               //
+// This program is distributed in the hope that it will be useful,               //
+// but WITHOUT ANY WARRANTY; without even the implied warranty of                //
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                  //
+// GNU General Public License V3 for more details.                               //
+//                                                                               //
+// You should have received a copy of the GNU General Public License             //
+// along with this program. If not, see <http://www.gnu.org/licenses/>.          //
+///////////////////////////////////////////////////////////////////////////////////
+
+#include "cameraplatesolver.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
+
+#include <QPointF>
+#include <QRectF>
+#include <QString>
+#include <QVector>
+
+#include "util/astronomy.h"
+
+namespace {
+
+struct CatalogStar
+{
+    const char* name;
+    double rightAscensionDegrees;
+    double declinationDegrees;
+    double magnitude;
+};
+
+struct SkyVector
+{
+    double x;
+    double y;
+    double z;
+};
+
+struct ProjectedCatalogStar
+{
+    int catalogIndex = -1;
+    QPointF point;
+};
+
+struct CandidatePair
+{
+    int detectionIndex = -1;
+    int catalogIndex = -1;
+    double distancePixels = 0.0;
+};
+
+struct Match
+{
+    int detectionIndex = -1;
+    int catalogIndex = -1;
+    double distancePixels = 0.0;
+};
+
+struct Evaluation
+{
+    bool valid = false;
+    int matchCount = 0;
+    double rmsErrorPixels = std::numeric_limits<double>::infinity();
+    double azimuthDegrees = 0.0;
+    double elevationDegrees = 0.0;
+    double rollDegrees = 0.0;
+    double fovDegrees = 0.0;
+    QVector<Match> matches;
+};
+
+struct SkyProjector
+{
+    bool valid = false;
+    CameraSettings::LensProjection lensProjection = CameraSettings::LensProjectionRectilinear;
+    SkyVector center;
+    SkyVector right;
+    SkyVector up;
+    double halfHorizontalFov = 0.0;
+    double horizontalScale = 1.0;
+    double verticalScale = 1.0;
+    int width = 0;
+    int height = 0;
+};
+
+constexpr double kPi = 3.14159265358979323846;
+constexpr double kVisibleAltitudeFloor = -5.0;
+constexpr int kMaxDetectionsForSolve = 24;
+
+const std::array<CatalogStar, 46> kBrightStarCatalog = {{
+    {"Sirius", 101.287155, -16.716116, -1.46},
+    {"Canopus", 95.987958, -52.695661, -0.74},
+    {"Arcturus", 213.915300, 19.182409, -0.05},
+    {"Alpha Centauri", 219.902058, -60.833993, -0.27},
+    {"Vega", 279.234734, 38.783688, 0.03},
+    {"Capella", 79.172333, 45.997991, 0.08},
+    {"Rigel", 78.634467, -8.201639, 0.13},
+    {"Procyon", 114.825493, 5.224993, 0.34},
+    {"Achernar", 24.428522, -57.236753, 0.46},
+    {"Betelgeuse", 88.792939, 7.407064, 0.50},
+    {"Hadar", 210.955917, -60.373039, 0.61},
+    {"Altair", 297.695827, 8.868322, 0.77},
+    {"Acrux", 186.649563, -63.099092, 0.77},
+    {"Aldebaran", 68.980163, 16.509302, 0.85},
+    {"Spica", 201.298247, -11.161322, 0.98},
+    {"Antares", 247.351915, -26.432002, 1.06},
+    {"Pollux", 116.328958, 28.026183, 1.14},
+    {"Fomalhaut", 344.412750, -29.622236, 1.16},
+    {"Deneb", 310.357979, 45.280338, 1.25},
+    {"Mimosa", 191.930286, -59.688764, 1.25},
+    {"Regulus", 152.092962, 11.967208, 1.35},
+    {"Adhara", 104.656453, -28.972086, 1.50},
+    {"Shaula", 263.402167, -37.103821, 1.62},
+    {"Bellatrix", 81.282764, 6.349703, 1.64},
+    {"Elnath", 81.572971, 28.607451, 1.65},
+    {"Miaplacidus", 138.300833, -69.717208, 1.67},
+    {"Alnilam", 84.053389, -1.201917, 1.69},
+    {"Alnair", 332.058271, -46.960975, 1.74},
+    {"Alioth", 193.507292, 55.959822, 1.76},
+    {"Regor", 122.383125, -47.336586, 1.75},
+    {"Dubhe", 165.932083, 61.750833, 1.79},
+    {"Mirfak", 51.080708, 49.861179, 1.79},
+    {"Wezen", 107.097858, -26.393200, 1.83},
+    {"Sargas", 263.733625, -42.997825, 1.86},
+    {"Kaus Australis", 283.816333, -34.384617, 1.79},
+    {"Avior", 125.628417, -59.509483, 1.86},
+    {"Menkalinan", 89.882208, 44.947433, 1.90},
+    {"Atria", 252.166292, -69.027722, 1.91},
+    {"Alhena", 99.427917, 16.399414, 1.93},
+    {"Peacock", 306.411875, -56.735089, 1.94},
+    {"Mirzam", 95.674939, -17.955918, 1.98},
+    {"Alnitak", 85.189694, -1.942572, 1.74},
+    {"Saiph", 86.939120, -9.669605, 2.07},
+    {"Merak", 165.460417, 56.382500, 2.37},
+    {"Phecda", 178.457500, 53.694722, 2.43},
+    {"Megrez", 183.856667, 57.032500, 3.31}
+}};
+
+double degToRad(double value)
+{
+    return value * kPi / 180.0;
+}
+
+double normalizeDegrees(double value)
+{
+    value = std::fmod(value, 360.0);
+    if (value < 0.0) {
+        value += 360.0;
+    }
+    return value;
+}
+
+SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
+{
+    const double azimuth = degToRad(azimuthDegrees);
+    const double elevation = degToRad(elevationDegrees);
+    const double cosElevation = std::cos(elevation);
+
+    return {
+        cosElevation * std::sin(azimuth),
+        cosElevation * std::cos(azimuth),
+        std::sin(elevation)
+    };
+}
+
+double dot(const SkyVector& lhs, const SkyVector& rhs)
+{
+    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+SkyVector cross(const SkyVector& lhs, const SkyVector& rhs)
+{
+    return {
+        lhs.y * rhs.z - lhs.z * rhs.y,
+        lhs.z * rhs.x - lhs.x * rhs.z,
+        lhs.x * rhs.y - lhs.y * rhs.x
+    };
+}
+
+double length(const SkyVector& vector)
+{
+    return std::sqrt(dot(vector, vector));
+}
+
+SkyVector normalize(const SkyVector& vector)
+{
+    const double vectorLength = length(vector);
+    if (vectorLength <= 0.0) {
+        return {0.0, 0.0, 0.0};
+    }
+
+    return {
+        vector.x / vectorLength,
+        vector.y / vectorLength,
+        vector.z / vectorLength
+    };
+}
+
+SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians)
+{
+    const double cosAngle = std::cos(angleRadians);
+    const double sinAngle = std::sin(angleRadians);
+    const SkyVector axisCrossVector = cross(axis, vector);
+    const double axisDotVector = dot(axis, vector);
+
+    return {
+        vector.x * cosAngle + axisCrossVector.x * sinAngle + axis.x * axisDotVector * (1.0 - cosAngle),
+        vector.y * cosAngle + axisCrossVector.y * sinAngle + axis.y * axisDotVector * (1.0 - cosAngle),
+        vector.z * cosAngle + axisCrossVector.z * sinAngle + axis.z * axisDotVector * (1.0 - cosAngle)
+    };
+}
+
+SkyProjector createProjector(const CameraSettings& settings,
+                             const QSize& size,
+                             double azimuthDegrees,
+                             double elevationDegrees,
+                             double rollDegrees,
+                             double fovDegrees)
+{
+    SkyProjector projector;
+    projector.width = size.width();
+    projector.height = size.height();
+    projector.lensProjection = settings.m_lensProjection;
+
+    if ((projector.width <= 0) || (projector.height <= 0) || (fovDegrees <= 0.0)) {
+        return projector;
+    }
+
+    const double azimuthRadians = degToRad(azimuthDegrees);
+    projector.center = normalize(vectorFromAltAz(azimuthDegrees, elevationDegrees));
+    projector.right = normalize({std::cos(azimuthRadians), -std::sin(azimuthRadians), 0.0});
+    projector.up = normalize(cross(projector.right, projector.center));
+    if ((length(projector.right) <= 0.0) || (length(projector.up) <= 0.0)) {
+        return projector;
+    }
+
+    const double rollRadians = degToRad(rollDegrees);
+    if (std::fabs(rollRadians) > 1e-9)
+    {
+        projector.right = normalize(rotateAroundAxis(projector.right, projector.center, rollRadians));
+        projector.up = normalize(rotateAroundAxis(projector.up, projector.center, rollRadians));
+    }
+
+    const double halfHorizontalFov = degToRad(fovDegrees) * 0.5;
+    if ((halfHorizontalFov <= 0.0) || (halfHorizontalFov >= (kPi * 0.5))) {
+        return projector;
+    }
+
+    projector.halfHorizontalFov = halfHorizontalFov;
+    const double aspect = static_cast<double>(projector.height) / static_cast<double>(projector.width);
+    projector.horizontalScale = 1.0;
+    projector.verticalScale = aspect;
+    projector.valid = projector.verticalScale > 0.0;
+    return projector;
+}
+
+bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double elevationDegrees, QPointF& point)
+{
+    if (!projector.valid) {
+        return false;
+    }
+
+    const SkyVector vector = vectorFromAltAz(azimuthDegrees, elevationDegrees);
+    const double depth = dot(vector, projector.center);
+    if (depth <= 0.0) {
+        return false;
+    }
+
+    const double planeX = dot(vector, projector.right);
+    const double planeY = dot(vector, projector.up);
+    if (!std::isfinite(planeX) || !std::isfinite(planeY)) {
+        return false;
+    }
+
+    const double theta = std::acos(std::clamp(depth, -1.0, 1.0));
+    const double phi = std::atan2(planeY, planeX);
+    const double projectionRadius = [&]() -> double
+    {
+        switch (projector.lensProjection)
+        {
+        case CameraSettings::LensProjectionEquidistant:
+            return theta / projector.halfHorizontalFov;
+        case CameraSettings::LensProjectionEquisolid:
+            return std::sin(theta * 0.5) / std::sin(projector.halfHorizontalFov * 0.5);
+        case CameraSettings::LensProjectionRectilinear:
+        default:
+            return std::tan(theta) / std::tan(projector.halfHorizontalFov);
+        }
+    }();
+
+    const double normalizedX = std::cos(phi) * projectionRadius / projector.horizontalScale;
+    const double normalizedY = std::sin(phi) * projectionRadius / projector.verticalScale;
+    if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY)) {
+        return false;
+    }
+
+    point.setX((normalizedX + 1.0) * 0.5 * static_cast<double>(projector.width));
+    point.setY((1.0 - normalizedY) * 0.5 * static_cast<double>(projector.height));
+    return true;
+}
+
+QVector<int> selectDetectionIndicesForSolve(const QVector<CameraPipelineStarDetection>& starDetections)
+{
+    QVector<int> indices;
+    indices.reserve(starDetections.size());
+    for (int i = 0; i < starDetections.size(); ++i) {
+        indices.append(i);
+    }
+
+    std::sort(indices.begin(), indices.end(), [&starDetections](int lhs, int rhs) {
+        if (starDetections[lhs].m_peakValue != starDetections[rhs].m_peakValue) {
+            return starDetections[lhs].m_peakValue > starDetections[rhs].m_peakValue;
+        }
+
+        return starDetections[lhs].m_radius > starDetections[rhs].m_radius;
+    });
+
+    if (indices.size() > kMaxDetectionsForSolve) {
+        indices.resize(kMaxDetectionsForSolve);
+    }
+
+    return indices;
+}
+
+QVector<ProjectedCatalogStar> buildProjectedCatalog(const CameraSettings& settings,
+                                                    const SkyProjector& projector,
+                                                    const QDateTime& captureDateTimeUtc,
+                                                    double maxMagnitude,
+                                                    double searchMarginPixels)
+{
+    QVector<ProjectedCatalogStar> projectedStars;
+
+    for (int i = 0; i < static_cast<int>(kBrightStarCatalog.size()); ++i)
+    {
+        const CatalogStar& star = kBrightStarCatalog[i];
+        if (star.magnitude > maxMagnitude) {
+            continue;
+        }
+
+        const RADec raDec{star.rightAscensionDegrees / 15.0, star.declinationDegrees};
+        const AzAlt azAlt = Astronomy::raDecToAzAlt(
+            raDec,
+            settings.m_latitude,
+            settings.m_longitude,
+            captureDateTimeUtc,
+            true);
+
+        if (!std::isfinite(azAlt.az) || !std::isfinite(azAlt.alt) || (azAlt.alt < kVisibleAltitudeFloor)) {
+            continue;
+        }
+
+        QPointF point;
+        if (!projectAltAz(projector, azAlt.az, azAlt.alt, point)) {
+            continue;
+        }
+
+        const QRectF expandedBounds(
+            -searchMarginPixels,
+            -searchMarginPixels,
+            projector.width + 2.0 * searchMarginPixels,
+            projector.height + 2.0 * searchMarginPixels);
+        if (!expandedBounds.contains(point)) {
+            continue;
+        }
+
+        projectedStars.append({i, point});
+    }
+
+    return projectedStars;
+}
+
+QVector<Match> buildMatches(const QVector<CameraPipelineStarDetection>& starDetections,
+                            const QVector<int>& detectionIndices,
+                            const QVector<ProjectedCatalogStar>& projectedStars,
+                            double matchRadiusPixels)
+{
+    QVector<CandidatePair> candidatePairs;
+    const double maxDistanceSquared = matchRadiusPixels * matchRadiusPixels;
+
+    for (int detectionIndex : detectionIndices)
+    {
+        const QPointF detectionPoint = starDetections[detectionIndex].m_center;
+        for (const ProjectedCatalogStar& projected : projectedStars)
+        {
+            const double dx = detectionPoint.x() - projected.point.x();
+            const double dy = detectionPoint.y() - projected.point.y();
+            const double distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared > maxDistanceSquared) {
+                continue;
+            }
+
+            candidatePairs.append({
+                detectionIndex,
+                projected.catalogIndex,
+                std::sqrt(distanceSquared)
+            });
+        }
+    }
+
+    std::sort(candidatePairs.begin(), candidatePairs.end(), [](const CandidatePair& lhs, const CandidatePair& rhs) {
+        if (lhs.distancePixels != rhs.distancePixels) {
+            return lhs.distancePixels < rhs.distancePixels;
+        }
+
+        return kBrightStarCatalog[lhs.catalogIndex].magnitude < kBrightStarCatalog[rhs.catalogIndex].magnitude;
+    });
+
+    QVector<Match> matches;
+    QVector<bool> detectionMatched(starDetections.size(), false);
+    QVector<bool> catalogMatched(static_cast<int>(kBrightStarCatalog.size()), false);
+
+    for (const CandidatePair& pair : candidatePairs)
+    {
+        if (detectionMatched[pair.detectionIndex] || catalogMatched[pair.catalogIndex]) {
+            continue;
+        }
+
+        detectionMatched[pair.detectionIndex] = true;
+        catalogMatched[pair.catalogIndex] = true;
+        matches.append({pair.detectionIndex, pair.catalogIndex, pair.distancePixels});
+    }
+
+    return matches;
+}
+
+Evaluation evaluatePose(const CameraSettings& settings,
+                        const QSize& imageSize,
+                        const QDateTime& captureDateTimeUtc,
+                        const QVector<CameraPipelineStarDetection>& starDetections,
+                        const QVector<int>& detectionIndices,
+                        double azimuthDegrees,
+                        double elevationDegrees,
+                        double rollDegrees,
+                        double fovDegrees)
+{
+    Evaluation evaluation;
+    evaluation.azimuthDegrees = normalizeDegrees(azimuthDegrees);
+    evaluation.elevationDegrees = elevationDegrees;
+    evaluation.rollDegrees = rollDegrees;
+    evaluation.fovDegrees = fovDegrees;
+
+    const SkyProjector projector = createProjector(
+        settings,
+        imageSize,
+        evaluation.azimuthDegrees,
+        evaluation.elevationDegrees,
+        evaluation.rollDegrees,
+        evaluation.fovDegrees);
+    if (!projector.valid) {
+        return evaluation;
+    }
+
+    const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
+        settings,
+        projector,
+        captureDateTimeUtc,
+        settings.m_plateSolveMaxMagnitude,
+        settings.m_plateSolveMatchRadius);
+    if (projectedStars.isEmpty()) {
+        return evaluation;
+    }
+
+    evaluation.matches = buildMatches(
+        starDetections,
+        detectionIndices,
+        projectedStars,
+        settings.m_plateSolveMatchRadius);
+    evaluation.matchCount = evaluation.matches.size();
+    if (evaluation.matchCount <= 0) {
+        return evaluation;
+    }
+
+    double sumSquaredError = 0.0;
+    for (const Match& match : evaluation.matches) {
+        sumSquaredError += match.distancePixels * match.distancePixels;
+    }
+    evaluation.rmsErrorPixels = std::sqrt(sumSquaredError / evaluation.matchCount);
+    evaluation.valid = true;
+    return evaluation;
+}
+
+bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
+{
+    if (!candidate.valid) {
+        return false;
+    }
+    if (!best.valid) {
+        return true;
+    }
+    if (candidate.matchCount != best.matchCount) {
+        return candidate.matchCount > best.matchCount;
+    }
+    if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
+        return candidate.rmsErrorPixels < best.rmsErrorPixels;
+    }
+
+    return candidate.fovDegrees == best.fovDegrees
+        ? candidate.rollDegrees < best.rollDegrees
+        : candidate.fovDegrees < best.fovDegrees;
+}
+
+Evaluation searchBestPose(const CameraSettings& settings,
+                          const QSize& imageSize,
+                          const QDateTime& captureDateTimeUtc,
+                          const QVector<CameraPipelineStarDetection>& starDetections,
+                          const QVector<int>& detectionIndices)
+{
+    Evaluation best;
+
+    const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveSearchRadius);
+    const double coarseRollRadius = std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
+    const double coarseFovRadius = std::max(2.0, std::min(12.0, static_cast<double>(settings.m_fov) * 0.10));
+
+    const std::array<double, 5> coarseOffsets = {{-1.0, -0.5, 0.0, 0.5, 1.0}};
+    const std::array<double, 3> coarseFovOffsets = {{-1.0, 0.0, 1.0}};
+
+    for (double azFactor : coarseOffsets)
+    {
+        for (double elFactor : coarseOffsets)
+        {
+            for (double rollFactor : coarseOffsets)
+            {
+                for (double fovFactor : coarseFovOffsets)
+                {
+                    const Evaluation candidate = evaluatePose(
+                        settings,
+                        imageSize,
+                        captureDateTimeUtc,
+                        starDetections,
+                        detectionIndices,
+                        settings.m_azimuth + azFactor * coarseSearchRadius,
+                        settings.m_elevation + elFactor * coarseSearchRadius,
+                        settings.m_roll + rollFactor * coarseRollRadius,
+                        std::max(static_cast<double>(CameraSettings::m_minFov),
+                                 static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius));
+                    if (isBetterEvaluation(candidate, best)) {
+                        best = candidate;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!best.valid) {
+        return best;
+    }
+
+    double azCenter = best.azimuthDegrees;
+    double elCenter = best.elevationDegrees;
+    double rollCenter = best.rollDegrees;
+    double fovCenter = best.fovDegrees;
+    double azStep = std::max(0.5, coarseSearchRadius * 0.25);
+    double rollStep = std::max(1.0, coarseRollRadius * 0.25);
+    double fovStep = std::max(0.5, coarseFovRadius * 0.25);
+
+    for (int iteration = 0; iteration < 2; ++iteration)
+    {
+        for (double azOffset : coarseFovOffsets)
+        {
+            for (double elOffset : coarseFovOffsets)
+            {
+                for (double rollOffset : coarseFovOffsets)
+                {
+                    for (double fovOffset : coarseFovOffsets)
+                    {
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            azCenter + azOffset * azStep,
+                            elCenter + elOffset * azStep,
+                            rollCenter + rollOffset * rollStep,
+                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep));
+                        if (isBetterEvaluation(candidate, best)) {
+                            best = candidate;
+                        }
+                    }
+                }
+            }
+        }
+
+        azCenter = best.azimuthDegrees;
+        elCenter = best.elevationDegrees;
+        rollCenter = best.rollDegrees;
+        fovCenter = best.fovDegrees;
+        azStep *= 0.5;
+        rollStep *= 0.5;
+        fovStep *= 0.5;
+    }
+
+    return best;
+}
+
+void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
+{
+    for (CameraPipelineStarDetection& detection : starDetections)
+    {
+        detection.m_label.clear();
+        detection.m_matchDistancePixels = 0.0f;
+        detection.m_catalogMagnitude = 0.0f;
+        detection.m_solved = false;
+    }
+}
+
+} // namespace
+
+CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
+                                                const QSize& imageSize,
+                                                const QDateTime& captureDateTime,
+                                                QVector<CameraPipelineStarDetection>& starDetections)
+{
+    CameraPlateSolveResult result;
+    clearSolvedStars(starDetections);
+
+    if (!settings.m_plateSolve || (starDetections.size() < settings.m_plateSolveMinMatches)) {
+        return result;
+    }
+
+    const QVector<int> detectionIndices = selectDetectionIndicesForSolve(starDetections);
+    if (detectionIndices.size() < settings.m_plateSolveMinMatches) {
+        return result;
+    }
+
+    const QDateTime captureDateTimeUtc = (captureDateTime.isValid() ? captureDateTime : QDateTime::currentDateTime()).toUTC();
+    const Evaluation best = searchBestPose(settings, imageSize, captureDateTimeUtc, starDetections, detectionIndices);
+    if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
+        return result;
+    }
+
+    const SkyProjector finalProjector = createProjector(
+        settings,
+        imageSize,
+        best.azimuthDegrees,
+        best.elevationDegrees,
+        best.rollDegrees,
+        best.fovDegrees);
+    if (!finalProjector.valid) {
+        return result;
+    }
+
+    const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
+        settings,
+        finalProjector,
+        captureDateTimeUtc,
+        settings.m_plateSolveMaxMagnitude,
+        settings.m_plateSolveMatchRadius);
+    const QVector<int> allDetectionIndices = [&starDetections]() {
+        QVector<int> indices;
+        indices.reserve(starDetections.size());
+        for (int i = 0; i < starDetections.size(); ++i) {
+            indices.append(i);
+        }
+        return indices;
+    }();
+    const QVector<Match> allMatches = buildMatches(
+        starDetections,
+        allDetectionIndices,
+        projectedStars,
+        settings.m_plateSolveMatchRadius);
+
+    if (allMatches.size() < settings.m_plateSolveMinMatches) {
+        return result;
+    }
+
+    double sumSquaredError = 0.0;
+    for (const Match& match : allMatches)
+    {
+        CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
+        const CatalogStar& catalogStar = kBrightStarCatalog[match.catalogIndex];
+        detection.m_label = QString::fromUtf8(catalogStar.name);
+        detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
+        detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
+        detection.m_solved = true;
+        sumSquaredError += match.distancePixels * match.distancePixels;
+    }
+
+    result.m_solved = true;
+    result.m_matchedStars = allMatches.size();
+    result.m_rmsErrorPixels = std::sqrt(sumSquaredError / allMatches.size());
+    result.m_azimuthDegrees = best.azimuthDegrees;
+    result.m_elevationDegrees = best.elevationDegrees;
+    result.m_rollDegrees = best.rollDegrees;
+    result.m_fovDegrees = best.fovDegrees;
+    return result;
+}

@@ -32,6 +32,7 @@
 #include "settings/mainsettings.h"
 #include "settings/preset.h"
 #include "util/profiler.h"
+#include "cameraplatesolver.h"
 #include "cameradetector.h"
 #include "camerapostprocessor.h"
 
@@ -626,6 +627,11 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("starMaxAspectRatio")
         || settingsKeys.contains("starDebugView")
         || settingsKeys.contains("starColor")
+        || settingsKeys.contains("plateSolve")
+        || settingsKeys.contains("plateSolveMaxMagnitude")
+        || settingsKeys.contains("plateSolveMinMatches")
+        || settingsKeys.contains("plateSolveMatchRadius")
+        || settingsKeys.contains("plateSolveSearchRadius")
         || settingsKeys.contains("yoloEnabled")
         || settingsKeys.contains("yoloModelPath")
         || settingsKeys.contains("yoloLabelsPath")
@@ -729,6 +735,13 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     frame->m_detections.clear();
     frame->m_streakDetections.clear();
     frame->m_starDetections.clear();
+    frame->m_plateSolved = false;
+    frame->m_plateSolvedMatches = 0;
+    frame->m_plateSolveRmsError = 0.0f;
+    frame->m_plateSolveAzimuth = 0.0f;
+    frame->m_plateSolveElevation = 0.0f;
+    frame->m_plateSolveRoll = 0.0f;
+    frame->m_plateSolveFov = 0.0f;
 
     QImage convertedRgb;
     const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
@@ -811,6 +824,22 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
                 bgrMat = maskCanvas;
             }
         }
+    }
+
+    if (!frame->m_starDetections.isEmpty() && m_settings.m_plateSolve)
+    {
+        const CameraPlateSolveResult plateSolveResult = CameraPlateSolver::solve(
+            m_settings,
+            frame->m_image.size(),
+            frame->m_captureDateTime,
+            frame->m_starDetections);
+        frame->m_plateSolved = plateSolveResult.m_solved;
+        frame->m_plateSolvedMatches = plateSolveResult.m_matchedStars;
+        frame->m_plateSolveRmsError = static_cast<float>(plateSolveResult.m_rmsErrorPixels);
+        frame->m_plateSolveAzimuth = static_cast<float>(plateSolveResult.m_azimuthDegrees);
+        frame->m_plateSolveElevation = static_cast<float>(plateSolveResult.m_elevationDegrees);
+        frame->m_plateSolveRoll = static_cast<float>(plateSolveResult.m_rollDegrees);
+        frame->m_plateSolveFov = static_cast<float>(plateSolveResult.m_fovDegrees);
     }
 
     if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {

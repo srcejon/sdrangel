@@ -239,6 +239,14 @@ struct CameraSettings
     static constexpr int m_maxStarBackgroundBlur = 50;
     static constexpr double m_minStarAspectRatio = 1.0;
     static constexpr double m_maxStarAspectRatio = 10.0;
+    static constexpr double m_minPlateSolveMagnitude = -2.0;
+    static constexpr double m_maxPlateSolveMagnitude = 8.0;
+    static constexpr int m_minPlateSolveMatches = 2;
+    static constexpr int m_maxPlateSolveMatches = 32;
+    static constexpr double m_minPlateSolveMatchRadius = 1.0;
+    static constexpr double m_maxPlateSolveMatchRadius = 256.0;
+    static constexpr double m_minPlateSolveSearchRadius = 0.0;
+    static constexpr double m_maxPlateSolveSearchRadius = 45.0;
     static constexpr double m_minSpectrumScale = 0.1;
     static constexpr double m_maxSpectrumScale = 4.0;
     static constexpr double m_minYoloDisappearDebounce = 0.0;
@@ -430,6 +438,11 @@ struct CameraSettings
     double m_starMaxAspectRatio; ///< Maximum accepted blob aspect ratio
     StarDebugView m_starDebugView; ///< Optional debug view of star detection stages
     QColor m_starColor;         ///< Overlay colour for detected stars
+    bool   m_plateSolve;        ///< Attempt to identify detected stars from a built-in bright-star catalog
+    double m_plateSolveMaxMagnitude; ///< Faintest catalog star to consider during plate solving
+    int    m_plateSolveMinMatches; ///< Minimum matches required for a successful solve
+    double m_plateSolveMatchRadius; ///< Maximum image-space distance in pixels for a star match
+    double m_plateSolveSearchRadius; ///< Search radius in degrees around the current pointing estimate
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 
     // Spectrum overlay settings

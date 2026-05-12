@@ -310,6 +310,11 @@ void CameraSettings::resetToDefaults()
     m_starMaxAspectRatio = 2.5;
     m_starDebugView = StarDebugViewOff;
     m_starColor = QColor(120, 255, 255);
+    m_plateSolve = false;
+    m_plateSolveMaxMagnitude = 3.5;
+    m_plateSolveMinMatches = 4;
+    m_plateSolveMatchRadius = 24.0;
+    m_plateSolveSearchRadius = 12.0;
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
@@ -479,6 +484,11 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(207, m_starMaxAspectRatio);
     s.writeS32(208, static_cast<qint32>(m_starDebugView));
     s.writeU32(209, m_starColor.rgba());
+    s.writeBool(210, m_plateSolve);
+    s.writeDouble(211, m_plateSolveMaxMagnitude);
+    s.writeS32(212, m_plateSolveMinMatches);
+    s.writeDouble(213, m_plateSolveMatchRadius);
+    s.writeDouble(214, m_plateSolveSearchRadius);
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -830,6 +840,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         uint32_t starColorRgba = QColor(120, 255, 255).rgba();
         d.readU32(209, &starColorRgba, QColor(120, 255, 255).rgba());
         m_starColor = QColor::fromRgba(starColorRgba);
+        d.readBool(210, &m_plateSolve, false);
+        d.readDouble(211, &m_plateSolveMaxMagnitude, 3.5);
+        d.readS32(212, &m_plateSolveMinMatches, 4);
+        d.readDouble(213, &m_plateSolveMatchRadius, 24.0);
+        d.readDouble(214, &m_plateSolveSearchRadius, 12.0);
         m_overlayFontScale = qBound(m_minOverlayFontScale, m_overlayFontScale, m_maxOverlayFontScale);
         m_detectionRoiX = qBound(m_minUiPixelOffset, m_detectionRoiX, m_maxUiPixelOffset);
         m_detectionRoiY = qBound(m_minUiPixelOffset, m_detectionRoiY, m_maxUiPixelOffset);
@@ -840,6 +855,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_starMinArea = qBound(m_minContourAreaBound, m_starMinArea, m_maxContourAreaBound);
         m_starMaxArea = qBound(m_starMinArea, m_starMaxArea, m_maxContourAreaBound);
         m_starMaxAspectRatio = qBound(m_minStarAspectRatio, m_starMaxAspectRatio, m_maxStarAspectRatio);
+        m_plateSolveMaxMagnitude = qBound(m_minPlateSolveMagnitude, m_plateSolveMaxMagnitude, m_maxPlateSolveMagnitude);
+        m_plateSolveMinMatches = qBound(m_minPlateSolveMatches, m_plateSolveMinMatches, m_maxPlateSolveMatches);
+        m_plateSolveMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveMatchRadius, m_maxPlateSolveMatchRadius);
+        m_plateSolveSearchRadius = qBound(m_minPlateSolveSearchRadius, m_plateSolveSearchRadius, m_maxPlateSolveSearchRadius);
         m_motionHistory = qBound(m_minMotionHistory, m_motionHistory, m_maxMotionHistory);
         m_motionVarThreshold = qBound(m_minMotionVarThreshold, m_motionVarThreshold, m_maxMotionVarThreshold);
         m_motionLearningRate = qBound(m_minLearningRate, m_motionLearningRate, m_maxLearningRate);
@@ -1522,6 +1541,21 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("starColor")) {
         m_starColor = settings.m_starColor;
     }
+    if (settingsKeys.contains("plateSolve")) {
+        m_plateSolve = settings.m_plateSolve;
+    }
+    if (settingsKeys.contains("plateSolveMaxMagnitude")) {
+        m_plateSolveMaxMagnitude = settings.m_plateSolveMaxMagnitude;
+    }
+    if (settingsKeys.contains("plateSolveMinMatches")) {
+        m_plateSolveMinMatches = settings.m_plateSolveMinMatches;
+    }
+    if (settingsKeys.contains("plateSolveMatchRadius")) {
+        m_plateSolveMatchRadius = settings.m_plateSolveMatchRadius;
+    }
+    if (settingsKeys.contains("plateSolveSearchRadius")) {
+        m_plateSolveSearchRadius = settings.m_plateSolveSearchRadius;
+    }
     if (settingsKeys.contains("videoPostProcess")) {
         m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
     }
@@ -2112,6 +2146,21 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("starColor") || force) {
         ostr << " m_starColor: " << m_starColor.name().toStdString();
+    }
+    if (settingsKeys.contains("plateSolve") || force) {
+        ostr << " m_plateSolve: " << m_plateSolve;
+    }
+    if (settingsKeys.contains("plateSolveMaxMagnitude") || force) {
+        ostr << " m_plateSolveMaxMagnitude: " << m_plateSolveMaxMagnitude;
+    }
+    if (settingsKeys.contains("plateSolveMinMatches") || force) {
+        ostr << " m_plateSolveMinMatches: " << m_plateSolveMinMatches;
+    }
+    if (settingsKeys.contains("plateSolveMatchRadius") || force) {
+        ostr << " m_plateSolveMatchRadius: " << m_plateSolveMatchRadius;
+    }
+    if (settingsKeys.contains("plateSolveSearchRadius") || force) {
+        ostr << " m_plateSolveSearchRadius: " << m_plateSolveSearchRadius;
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_recordMode;

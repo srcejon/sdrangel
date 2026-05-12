@@ -546,6 +546,11 @@ private slots:
     void on_starMaxAspectRatioSpin_valueChanged(double value);
     void on_starDebugViewCombo_currentIndexChanged(int index);
     void on_starColorButton_clicked();
+    void on_plateSolveCheck_toggled(bool checked);
+    void on_plateSolveMaxMagnitudeSpin_valueChanged(double value);
+    void on_plateSolveMinMatchesSpin_valueChanged(int value);
+    void on_plateSolveMatchRadiusSpin_valueChanged(double value);
+    void on_plateSolveSearchRadiusSpin_valueChanged(double value);
     void on_motionExclusionAddButton_clicked();
     void on_motionExclusionRemoveButton_clicked();
     void on_motionExclusionShowButton_toggled(bool checked);

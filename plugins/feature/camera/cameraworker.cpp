@@ -584,16 +584,7 @@ void CameraWorker::startWork()
     }
 
     // Notify GUI of already-known spectrum-view devices
-    if (m_msgQueueToGUI)
-    {
-        const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
-        QStringList longIds;
-        longIds.reserve(devices.size());
-        for (const auto& device : devices) {
-            longIds.append(device.getLongId());
-        }
-        m_msgQueueToGUI->push(MsgReportAvailableDevices::create(longIds));
-    }
+    reportAvailableDevicesToGUI();
 
     // Handle any messages already on the queue
     handleInputMessages();
@@ -606,6 +597,8 @@ void CameraWorker::setMessageQueueToGUI(MessageQueue *messageQueue)
     if (m_cameraFinder) {
         m_cameraFinder->setMessageQueueToGUI(messageQueue);
     }
+
+    reportAvailableDevicesToGUI();
 }
 
 void CameraWorker::stopWork()
@@ -709,6 +702,11 @@ void CameraWorker::onAvailableDevicesChanged(const QStringList& renameFrom, cons
         }
     }
 
+    reportAvailableDevicesToGUI();
+}
+
+void CameraWorker::reportAvailableDevicesToGUI() const
+{
     if (!m_msgQueueToGUI) {
         return;
     }
@@ -719,6 +717,7 @@ void CameraWorker::onAvailableDevicesChanged(const QStringList& renameFrom, cons
     for (const auto& device : devices) {
         longIds.append(device.getLongId());
     }
+
     m_msgQueueToGUI->push(MsgReportAvailableDevices::create(longIds));
 }
 

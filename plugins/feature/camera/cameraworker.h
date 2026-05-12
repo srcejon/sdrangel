@@ -576,6 +576,7 @@ private:
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
+    void reportAvailableDevicesToGUI() const;
     void startCapture();
     void stopCapture();
     QImage createPlaceholderFrame() const;

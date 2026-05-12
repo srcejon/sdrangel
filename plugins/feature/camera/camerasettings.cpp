@@ -274,6 +274,7 @@ void CameraSettings::resetToDefaults()
     m_detectionRoiY = 0;
     m_detectionRoiWidth = 0;
     m_detectionRoiHeight = 0;
+    m_showDetectionRoi = true;
     m_motionDetect = false;
     m_motionBackgroundSubtractor = MotionBackgroundSubtractorMOG2;
     m_motionMaskView = MotionMaskViewOff;
@@ -434,6 +435,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(56, m_detectionRoiY);
     s.writeS32(57, m_detectionRoiWidth);
     s.writeS32(58, m_detectionRoiHeight);
+    s.writeBool(201, m_showDetectionRoi);
     s.writeBool(59, m_motionDetect);
     s.writeS32(175, static_cast<qint32>(m_motionBackgroundSubtractor));
     s.writeS32(176, static_cast<qint32>(m_motionMaskView));
@@ -739,6 +741,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(56, &m_detectionRoiY, 0);
         d.readS32(57, &m_detectionRoiWidth, 0);
         d.readS32(58, &m_detectionRoiHeight, 0);
+        d.readBool(201, &m_showDetectionRoi, true);
         d.readBool(59, &m_motionDetect, false);
         qint32 motionBackgroundSubtractor = static_cast<qint32>(MotionBackgroundSubtractorMOG2);
         d.readS32(175, &motionBackgroundSubtractor, static_cast<qint32>(MotionBackgroundSubtractorMOG2));
@@ -1355,6 +1358,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("detectionRoiHeight")) {
         m_detectionRoiHeight = qBound(m_minUiPixelOffset, settings.m_detectionRoiHeight, m_maxUiPixelOffset);
     }
+    if (settingsKeys.contains("showDetectionRoi")) {
+        m_showDetectionRoi = settings.m_showDetectionRoi;
+    }
     if (settingsKeys.contains("motionDetect")) {
         m_motionDetect = settings.m_motionDetect;
     }
@@ -1938,6 +1944,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("detectionRoiHeight") || force) {
         ostr << " m_detectionRoiHeight: " << m_detectionRoiHeight;
+    }
+    if (settingsKeys.contains("showDetectionRoi") || force) {
+        ostr << " m_showDetectionRoi: " << m_showDetectionRoi;
     }
     if (settingsKeys.contains("motionDetect") || force) {
         ostr << " m_motionDetect: " << m_motionDetect;

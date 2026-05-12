@@ -1065,6 +1065,7 @@ void CameraGUI::displaySettings()
     settingsUI()->detectionRoiYSpin->setValue(m_settings.m_detectionRoiY);
     settingsUI()->detectionRoiWidthSpin->setValue(m_settings.m_detectionRoiWidth);
     settingsUI()->detectionRoiHeightSpin->setValue(m_settings.m_detectionRoiHeight);
+    settingsUI()->detectionRoiShowButton->setChecked(m_settings.m_showDetectionRoi);
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
     settingsUI()->motionBackgroundSubtractorCombo->setCurrentIndex(static_cast<int>(m_settings.m_motionBackgroundSubtractor));
     settingsUI()->motionMaskViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_motionMaskView));
@@ -1482,7 +1483,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->detectionRoiYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiYSpin_valueChanged);
     QObject::connect(settingsUI()->detectionRoiWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiWidthSpin_valueChanged);
     QObject::connect(settingsUI()->detectionRoiHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_detectionRoiHeightSpin_valueChanged);
+    QObject::connect(settingsUI()->detectionRoiShowButton, &QToolButton::toggled, this, &CameraGUI::on_detectionRoiShowButton_toggled);
     QObject::connect(settingsUI()->detectionRoiDrawButton, &QToolButton::clicked, this, &CameraGUI::on_detectionRoiDrawButton_clicked);
+    QObject::connect(settingsUI()->detectionRoiDeleteButton, &QToolButton::clicked, this, &CameraGUI::on_detectionRoiDeleteButton_clicked);
     QObject::connect(settingsUI()->detectionResetDefaultsButton, &QToolButton::clicked, this, &CameraGUI::on_detectionResetDefaultsButton_clicked);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
     QObject::connect(settingsUI()->motionBackgroundSubtractorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged);
@@ -4402,7 +4405,9 @@ void CameraGUI::updateMotionExclusionPreview()
         }
     }
 
-    if ((m_settings.m_detectionRoiWidth > 0) && (m_settings.m_detectionRoiHeight > 0))
+    if (m_settings.m_showDetectionRoi
+        && (m_settings.m_detectionRoiWidth > 0)
+        && (m_settings.m_detectionRoiHeight > 0))
     {
         const QRect clipped = QRect(
             m_settings.m_detectionRoiX,
@@ -5246,9 +5251,42 @@ void CameraGUI::on_detectionRoiHeightSpin_valueChanged(int value)
     applySetting("detectionRoiHeight");
 }
 
+void CameraGUI::on_detectionRoiShowButton_toggled(bool checked)
+{
+    m_settings.m_showDetectionRoi = checked;
+    updateMotionExclusionPreview();
+    applySetting("showDetectionRoi");
+}
+
 void CameraGUI::on_detectionRoiDrawButton_clicked()
 {
     setDetectionRoiDrawMode(true);
+}
+
+void CameraGUI::on_detectionRoiDeleteButton_clicked()
+{
+    setDetectionRoiDrawMode(false);
+
+    m_settings.m_detectionRoiX = 0;
+    m_settings.m_detectionRoiY = 0;
+    m_settings.m_detectionRoiWidth = 0;
+    m_settings.m_detectionRoiHeight = 0;
+
+    settingsUI()->detectionRoiXSpin->blockSignals(true);
+    settingsUI()->detectionRoiYSpin->blockSignals(true);
+    settingsUI()->detectionRoiWidthSpin->blockSignals(true);
+    settingsUI()->detectionRoiHeightSpin->blockSignals(true);
+    settingsUI()->detectionRoiXSpin->setValue(0);
+    settingsUI()->detectionRoiYSpin->setValue(0);
+    settingsUI()->detectionRoiWidthSpin->setValue(0);
+    settingsUI()->detectionRoiHeightSpin->setValue(0);
+    settingsUI()->detectionRoiXSpin->blockSignals(false);
+    settingsUI()->detectionRoiYSpin->blockSignals(false);
+    settingsUI()->detectionRoiWidthSpin->blockSignals(false);
+    settingsUI()->detectionRoiHeightSpin->blockSignals(false);
+
+    updateMotionExclusionPreview();
+    applySettings({"detectionRoiX", "detectionRoiY", "detectionRoiWidth", "detectionRoiHeight"});
 }
 
 void CameraGUI::on_detectionResetDefaultsButton_clicked()
@@ -5259,6 +5297,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_detectionRoiY = defaults.m_detectionRoiY;
     m_settings.m_detectionRoiWidth = defaults.m_detectionRoiWidth;
     m_settings.m_detectionRoiHeight = defaults.m_detectionRoiHeight;
+    m_settings.m_showDetectionRoi = defaults.m_showDetectionRoi;
 
     m_settings.m_motionDetect = defaults.m_motionDetect;
     m_settings.m_motionBackgroundSubtractor = defaults.m_motionBackgroundSubtractor;
@@ -5306,6 +5345,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "detectionRoiY",
         "detectionRoiWidth",
         "detectionRoiHeight",
+        "showDetectionRoi",
         "motionDetect",
         "motionBackgroundSubtractor",
         "motionMaskView",

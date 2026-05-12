@@ -4942,14 +4942,38 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </widget>
           </item>
           <item row="4" column="0" colspan="4">
-           <widget class="QToolButton" name="detectionRoiDrawButton">
-            <property name="toolTip">
-             <string>Draw the detection ROI directly on the preview image</string>
-            </property>
-            <property name="text">
-             <string>Draw On Preview</string>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="detectionRoiButtonsLayout">
+            <item>
+             <widget class="ButtonSwitch" name="detectionRoiShowButton">
+              <property name="toolTip">
+               <string>Show the detection ROI on the preview image</string>
+              </property>
+              <property name="text">
+               <string>Show</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="detectionRoiDrawButton">
+              <property name="toolTip">
+               <string>Draw the detection ROI directly on the preview image</string>
+              </property>
+              <property name="text">
+               <string>Draw On Preview</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="detectionRoiDeleteButton">
+              <property name="toolTip">
+               <string>Delete the detection ROI and reset its bounds to 0</string>
+              </property>
+              <property name="text">
+               <string>Delete ROI</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>
@@ -5477,10 +5501,17 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>actionsClassCombo</tabstop>
   <tabstop>actionsDisappearDebounceSpin</tabstop>
   <tabstop>actionsAddButton</tabstop>
-  <tabstop>actionsTabWidget</tabstop>
-  <tabstop>fpsSpin</tabstop>
-  <tabstop>intervalSpin</tabstop>
+ <tabstop>actionsTabWidget</tabstop>
+ <tabstop>fpsSpin</tabstop>
+ <tabstop>intervalSpin</tabstop>
  </tabstops>
+ <customwidgets>
+  <customwidget>
+   <class>ButtonSwitch</class>
+   <extends>QToolButton</extends>
+   <header>gui/buttonswitch.h</header>
+  </customwidget>
+ </customwidgets>
  <resources>
   <include location="cameraicons.qrc"/>
   <include location="../../../sdrgui/resources/res.qrc"/>

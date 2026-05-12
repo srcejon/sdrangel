@@ -381,6 +381,7 @@ struct CameraSettings
     int    m_detectionRoiY;     ///< Detection ROI Y origin in pixels; 0..4096
     int    m_detectionRoiWidth; ///< Detection ROI width in pixels; 0 disables ROI/full width
     int    m_detectionRoiHeight; ///< Detection ROI height in pixels; 0 disables ROI/full height
+    bool   m_showDetectionRoi;  ///< Show detection ROI rectangle on the preview image
     bool   m_motionDetect;      ///< Enable motion background subtraction
     MotionBackgroundSubtractor m_motionBackgroundSubtractor; ///< Background subtractor algorithm
     MotionMaskView m_motionMaskView; ///< Optional debug view of motion fgMask stages

@@ -21,6 +21,7 @@
 
 #include <QByteArray>
 #include <QColor>
+#include <QDateTime>
 #include <QHash>
 #include <QList>
 #include <QRect>
@@ -247,6 +248,7 @@ struct CameraSettings
     static constexpr double m_maxPlateSolveMatchRadius = 256.0;
     static constexpr double m_minPlateSolveSearchRadius = 0.0;
     static constexpr double m_maxPlateSolveSearchRadius = 45.0;
+    static constexpr qint64 m_minPlateSolveDateTimeMs = 0;
     static constexpr double m_minSpectrumScale = 0.1;
     static constexpr double m_maxSpectrumScale = 4.0;
     static constexpr double m_minYoloDisappearDebounce = 0.0;
@@ -443,6 +445,8 @@ struct CameraSettings
     int    m_plateSolveMinMatches; ///< Minimum matches required for a successful solve
     double m_plateSolveMatchRadius; ///< Maximum image-space distance in pixels for a star match
     double m_plateSolveSearchRadius; ///< Search radius in degrees around the current pointing estimate
+    bool   m_plateSolveUseCurrentDateTime; ///< Use the current system date/time for plate solving instead of a fixed timestamp
+    QDateTime m_plateSolveDateTime; ///< User-specified local date/time for plate solving recorded media
     bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 

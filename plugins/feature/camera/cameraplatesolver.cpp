@@ -1023,7 +1023,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return result;
     }
 
-    const QDateTime captureDateTimeUtc = (captureDateTime.isValid() ? captureDateTime : QDateTime::currentDateTime()).toUTC();
+    const QDateTime solveDateTime = settings.m_plateSolveUseCurrentDateTime
+        ? QDateTime::currentDateTime()
+        : (settings.m_plateSolveDateTime.isValid() ? settings.m_plateSolveDateTime : captureDateTime);
+    const QDateTime captureDateTimeUtc = (solveDateTime.isValid() ? solveDateTime : QDateTime::currentDateTime()).toUTC();
     const Evaluation best = searchBestPose(settings, imageSize, captureDateTimeUtc, starDetections, detectionIndices);
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
         return result;

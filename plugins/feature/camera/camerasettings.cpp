@@ -315,6 +315,8 @@ void CameraSettings::resetToDefaults()
     m_plateSolveMinMatches = 4;
     m_plateSolveMatchRadius = 24.0;
     m_plateSolveSearchRadius = 12.0;
+    m_plateSolveUseCurrentDateTime = true;
+    m_plateSolveDateTime = QDateTime::currentDateTime();
     m_plateSolveUseDownloadedCatalog = false;
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
@@ -491,6 +493,8 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(213, m_plateSolveMatchRadius);
     s.writeDouble(214, m_plateSolveSearchRadius);
     s.writeBool(215, m_plateSolveUseDownloadedCatalog);
+    s.writeBool(216, m_plateSolveUseCurrentDateTime);
+    s.writeS64(217, m_plateSolveDateTime.isValid() ? m_plateSolveDateTime.toMSecsSinceEpoch() : 0);
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -848,6 +852,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(213, &m_plateSolveMatchRadius, 24.0);
         d.readDouble(214, &m_plateSolveSearchRadius, 12.0);
         d.readBool(215, &m_plateSolveUseDownloadedCatalog, false);
+        d.readBool(216, &m_plateSolveUseCurrentDateTime, true);
+        qint64 plateSolveDateTimeMs = QDateTime::currentDateTime().toMSecsSinceEpoch();
+        d.readS64(217, &plateSolveDateTimeMs, plateSolveDateTimeMs);
+        m_plateSolveDateTime = QDateTime::fromMSecsSinceEpoch(std::max(plateSolveDateTimeMs, m_minPlateSolveDateTimeMs));
         m_overlayFontScale = qBound(m_minOverlayFontScale, m_overlayFontScale, m_maxOverlayFontScale);
         m_detectionRoiX = qBound(m_minUiPixelOffset, m_detectionRoiX, m_maxUiPixelOffset);
         m_detectionRoiY = qBound(m_minUiPixelOffset, m_detectionRoiY, m_maxUiPixelOffset);
@@ -862,6 +870,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_plateSolveMinMatches = qBound(m_minPlateSolveMatches, m_plateSolveMinMatches, m_maxPlateSolveMatches);
         m_plateSolveMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveMatchRadius, m_maxPlateSolveMatchRadius);
         m_plateSolveSearchRadius = qBound(m_minPlateSolveSearchRadius, m_plateSolveSearchRadius, m_maxPlateSolveSearchRadius);
+        if (!m_plateSolveDateTime.isValid()) {
+            m_plateSolveDateTime = QDateTime::currentDateTime();
+        }
         m_motionHistory = qBound(m_minMotionHistory, m_motionHistory, m_maxMotionHistory);
         m_motionVarThreshold = qBound(m_minMotionVarThreshold, m_motionVarThreshold, m_maxMotionVarThreshold);
         m_motionLearningRate = qBound(m_minLearningRate, m_motionLearningRate, m_maxLearningRate);
@@ -1559,6 +1570,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveSearchRadius")) {
         m_plateSolveSearchRadius = settings.m_plateSolveSearchRadius;
     }
+    if (settingsKeys.contains("plateSolveUseCurrentDateTime")) {
+        m_plateSolveUseCurrentDateTime = settings.m_plateSolveUseCurrentDateTime;
+    }
+    if (settingsKeys.contains("plateSolveDateTime")) {
+        m_plateSolveDateTime = settings.m_plateSolveDateTime;
+    }
     if (settingsKeys.contains("plateSolveUseDownloadedCatalog")) {
         m_plateSolveUseDownloadedCatalog = settings.m_plateSolveUseDownloadedCatalog;
     }
@@ -2167,6 +2184,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveSearchRadius") || force) {
         ostr << " m_plateSolveSearchRadius: " << m_plateSolveSearchRadius;
+    }
+    if (settingsKeys.contains("plateSolveUseCurrentDateTime") || force) {
+        ostr << " m_plateSolveUseCurrentDateTime: " << m_plateSolveUseCurrentDateTime;
+    }
+    if (settingsKeys.contains("plateSolveDateTime") || force) {
+        ostr << " m_plateSolveDateTime: " << m_plateSolveDateTime.toString(Qt::ISODateWithMs).toStdString();
     }
     if (settingsKeys.contains("plateSolveUseDownloadedCatalog") || force) {
         ostr << " m_plateSolveUseDownloadedCatalog: " << m_plateSolveUseDownloadedCatalog;

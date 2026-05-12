@@ -23,6 +23,7 @@
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QDateTime>
+#include <QDateTimeEdit>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
@@ -384,6 +385,16 @@ bool CameraGUI::handleMessage(const Message& message)
                       .arg(QString::number(m_lastPlateSolveRoll, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveFov, 'f', 2))
                 : "-");
+        settingsUI()->plateSolveSolutionLabel->setText(
+            m_lastPlateSolved
+                ? tr("Az %1  El %2  Roll %3  FoV %4  RMS %5 px  Matches %6")
+                      .arg(QString::number(m_lastPlateSolveAzimuth, 'f', 2))
+                      .arg(QString::number(m_lastPlateSolveElevation, 'f', 2))
+                      .arg(QString::number(m_lastPlateSolveRoll, 'f', 2))
+                      .arg(QString::number(m_lastPlateSolveFov, 'f', 2))
+                      .arg(QString::number(m_lastPlateSolveRmsError, 'f', 1))
+                      .arg(QString::number(m_lastPlateSolvedMatches))
+                : tr("No solution"));
         settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
         if (m_histogramDialog) {
@@ -784,6 +795,7 @@ void CameraGUI::resetCameraStatus()
     settingsUI()->plateSolveMatchesLabel->setText("-");
     settingsUI()->plateSolveRmsLabel->setText("-");
     settingsUI()->plateSolvePointingLabel->setText("-");
+    settingsUI()->plateSolveSolutionLabel->setText(tr("No solution"));
     settingsUI()->plateSolveApplyButton->setEnabled(false);
     m_settingsDialog->clearCameraStatus();
 }
@@ -1140,6 +1152,9 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveMinMatchesSpin->setValue(m_settings.m_plateSolveMinMatches);
     settingsUI()->plateSolveMatchRadiusSpin->setValue(m_settings.m_plateSolveMatchRadius);
     settingsUI()->plateSolveSearchRadiusSpin->setValue(m_settings.m_plateSolveSearchRadius);
+    settingsUI()->plateSolveUseCurrentDateTimeCheck->setChecked(m_settings.m_plateSolveUseCurrentDateTime);
+    settingsUI()->plateSolveDateTimeEdit->setDateTime(m_settings.m_plateSolveDateTime.isValid() ? m_settings.m_plateSolveDateTime : QDateTime::currentDateTime());
+    settingsUI()->plateSolveDateTimeEdit->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
     settingsUI()->plateSolveUseDownloadedCatalogCheck->setChecked(m_settings.m_plateSolveUseDownloadedCatalog);
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
@@ -1575,6 +1590,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveMinMatchesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMinMatchesSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMatchRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveSearchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged);
+    QObject::connect(settingsUI()->plateSolveUseCurrentDateTimeCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled);
+    QObject::connect(settingsUI()->plateSolveDateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, &CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged);
     QObject::connect(settingsUI()->plateSolveUseDownloadedCatalogCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled);
     QObject::connect(settingsUI()->plateSolveDownloadCatalogButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDownloadCatalogButton_clicked);
     QObject::connect(settingsUI()->plateSolveApplyButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveApplyButton_clicked);
@@ -5415,6 +5432,8 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveMinMatches = defaults.m_plateSolveMinMatches;
     m_settings.m_plateSolveMatchRadius = defaults.m_plateSolveMatchRadius;
     m_settings.m_plateSolveSearchRadius = defaults.m_plateSolveSearchRadius;
+    m_settings.m_plateSolveUseCurrentDateTime = defaults.m_plateSolveUseCurrentDateTime;
+    m_settings.m_plateSolveDateTime = defaults.m_plateSolveDateTime;
     m_settings.m_plateSolveUseDownloadedCatalog = defaults.m_plateSolveUseDownloadedCatalog;
 
     m_settings.m_diffMask = defaults.m_diffMask;
@@ -5475,6 +5494,8 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveMinMatches",
         "plateSolveMatchRadius",
         "plateSolveSearchRadius",
+        "plateSolveUseCurrentDateTime",
+        "plateSolveDateTime",
         "plateSolveUseDownloadedCatalog",
         "diffMask",
         "diffThreshold",
@@ -5729,6 +5750,19 @@ void CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged(double value)
 {
     m_settings.m_plateSolveSearchRadius = value;
     applySetting("plateSolveSearchRadius");
+}
+
+void CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled(bool checked)
+{
+    m_settings.m_plateSolveUseCurrentDateTime = checked;
+    settingsUI()->plateSolveDateTimeEdit->setEnabled(!checked);
+    applySetting("plateSolveUseCurrentDateTime");
+}
+
+void CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged(const QDateTime& dateTime)
+{
+    m_settings.m_plateSolveDateTime = dateTime;
+    applySetting("plateSolveDateTime");
 }
 
 void CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled(bool checked)

@@ -32,6 +32,28 @@
 
 #define DEFAULT_OVERLAY_TEXT_STRING "<img src=\":/sdrangel_icon.png\"><h1 style=\"color:blue\">SDRangel</h1>\n<p>\nText overlay "
 
+namespace {
+float normalizePositiveDegrees(float value)
+{
+    value = std::fmod(value, CameraSettings::m_fullRotationDegrees);
+    if (value < 0.0f) {
+        value += CameraSettings::m_fullRotationDegrees;
+    }
+    return value;
+}
+
+float normalizeSignedDegrees(float value)
+{
+    value = std::fmod(value, CameraSettings::m_fullRotationDegrees);
+    if (value <= CameraSettings::m_minRoll) {
+        value += CameraSettings::m_fullRotationDegrees;
+    } else if (value > CameraSettings::m_maxRoll) {
+        value -= CameraSettings::m_fullRotationDegrees;
+    }
+    return value;
+}
+}
+
 QDataStream& operator<<(QDataStream& out, const CameraSettings::ObjectDeviceSettings* settings)
 {
     out << settings->m_deviceSetIndex;
@@ -992,15 +1014,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
         m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
         m_altitude = qBound(m_minAltitude, m_altitude, m_maxAltitude);
-        m_azimuth = std::fmod(m_azimuth, m_fullRotationDegrees);
-        if (m_azimuth < 0.0f) {
-            m_azimuth += m_fullRotationDegrees;
-        }
+        m_azimuth = normalizePositiveDegrees(m_azimuth);
         m_elevation = qBound(m_minElevation, m_elevation, m_maxElevation);
-        m_roll = std::fmod(m_roll, m_fullRotationDegrees);
-        if (m_roll < 0.0f) {
-            m_roll += m_fullRotationDegrees;
-        }
+        m_roll = normalizeSignedDegrees(m_roll);
         m_fov = qBound(m_minFov, m_fov, m_maxFov);
         m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) m_lensProjection, (int) LensProjectionEquisolid);
 
@@ -1241,19 +1257,13 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_owmAPIKey = settings.m_owmAPIKey;
     }
     if (settingsKeys.contains("azimuth")) {
-        m_azimuth = std::fmod(settings.m_azimuth, m_fullRotationDegrees);
-        if (m_azimuth < 0.0f) {
-            m_azimuth += m_fullRotationDegrees;
-        }
+        m_azimuth = normalizePositiveDegrees(settings.m_azimuth);
     }
     if (settingsKeys.contains("elevation")) {
         m_elevation = qBound(m_minElevation, settings.m_elevation, m_maxElevation);
     }
     if (settingsKeys.contains("roll")) {
-        m_roll = std::fmod(settings.m_roll, m_fullRotationDegrees);
-        if (m_roll < 0.0f) {
-            m_roll += m_fullRotationDegrees;
-        }
+        m_roll = normalizeSignedDegrees(settings.m_roll);
     }
     if (settingsKeys.contains("rotator")) {
         m_rotator = settings.m_rotator;

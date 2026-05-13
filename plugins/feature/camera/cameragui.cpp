@@ -626,6 +626,29 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_settingsDialog = new CameraSettingsDialog(this);
     new DialogPositioner(m_settingsDialog, false);
 
+    settingsUI()->azimuthSpin->setRange(
+        static_cast<double>(CameraSettings::m_minAzimuth),
+        static_cast<double>(CameraSettings::m_maxAzimuth));
+    settingsUI()->elevationSpin->setRange(
+        static_cast<double>(CameraSettings::m_minElevation),
+        static_cast<double>(CameraSettings::m_maxElevation));
+    settingsUI()->rollSpin->setRange(
+        static_cast<double>(CameraSettings::m_minRoll),
+        static_cast<double>(CameraSettings::m_maxRoll));
+    settingsUI()->fovSpin->setDecimals(2);
+    settingsUI()->fovSpin->setRange(
+        static_cast<double>(CameraSettings::m_minFov),
+        static_cast<double>(CameraSettings::m_maxFov));
+    settingsUI()->lensCenterOffsetXSpin->setRange(
+        CameraSettings::m_minLensCenterOffset,
+        CameraSettings::m_maxLensCenterOffset);
+    settingsUI()->lensCenterOffsetYSpin->setRange(
+        CameraSettings::m_minLensCenterOffset,
+        CameraSettings::m_maxLensCenterOffset);
+    settingsUI()->lensDistortionK1Spin->setRange(
+        CameraSettings::m_minLensDistortionK1,
+        CameraSettings::m_maxLensDistortionK1);
+
     CRightClickEnabler *audioMuteRightClickEnabler = new CRightClickEnabler(ui->audioMute);
     connect(audioMuteRightClickEnabler, SIGNAL(rightClick(const QPoint &)), this, SLOT(audioSelect(const QPoint &)));
     CRightClickEnabler *useMyPositionRightClickEnabler = new CRightClickEnabler(settingsUI()->useMyPositionButton);

@@ -188,11 +188,15 @@ struct CameraSettings
     static constexpr float m_maxLongitude = 180.0f;
     static constexpr float m_minAltitude = -1000.0f;
     static constexpr float m_maxAltitude = 100000.0f;
+    static constexpr float m_minAzimuth = 0.0f;
+    static constexpr float m_maxAzimuth = 360.0f;
     static constexpr float m_fullRotationDegrees = 360.0f;
+    static constexpr float m_minRoll = -180.0f;
+    static constexpr float m_maxRoll = 180.0f;
     static constexpr float m_minElevation = -90.0f;
     static constexpr float m_maxElevation = 90.0f;
     static constexpr float m_minFov = 0.01f;
-    static constexpr float m_maxFov = 360.0f;
+    static constexpr float m_maxFov = 180.0f;
     static constexpr double m_minNormalized = 0.0;
     static constexpr double m_maxNormalized = 1.0;
     static constexpr double m_minWhiteBalanceGain = 0.1;

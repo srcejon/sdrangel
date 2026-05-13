@@ -383,7 +383,9 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastPlateSolveCatalogSource = report.getPlateSolveCatalogSource();
         settingsUI()->plateSolveStatusLabel->setText(m_lastPlateSolved ? tr("Solved") : tr("Unsolved"));
         settingsUI()->plateSolveMatchesLabel->setText(
-            m_lastPlateSolved ? tr("%1 / %2").arg(m_lastPlateSolvedMatches).arg(m_lastPlateSolveDetectedStarsConsidered) : "-");
+            m_lastPlateSolved ? QString::number(m_lastPlateSolvedMatches) : "-");
+        settingsUI()->plateSolveDetectedLabel->setText(
+            m_lastPlateSolved ? QString::number(m_lastPlateSolveDetectedStarsConsidered) : "-");
         settingsUI()->plateSolveRmsLabel->setText(
             m_lastPlateSolved ? tr("%1 / %2").arg(QString::number(m_lastPlateSolveRmsError, 'f', 1)).arg(QString::number(m_lastPlateSolveMaxError, 'f', 1)) : "-");
         settingsUI()->plateSolvePointingLabel->setText(
@@ -826,6 +828,7 @@ void CameraGUI::resetCameraStatus()
     settingsUI()->pipelineFpsLabel->setText("-");
     settingsUI()->plateSolveStatusLabel->setText("-");
     settingsUI()->plateSolveMatchesLabel->setText("-");
+    settingsUI()->plateSolveDetectedLabel->setText("-");
     settingsUI()->plateSolveRmsLabel->setText("-");
     settingsUI()->plateSolvePointingLabel->setText("-");
     settingsUI()->plateSolveCatalogLabel->setText("-");
@@ -5877,7 +5880,7 @@ void CameraGUI::on_plateSolveApplyButton_clicked()
         m_settings.m_fov = static_cast<float>(m_lastPlateSolveFov);
         settingsToApply.append("fov");
     }
-    if (m_settings.m_plateSolveLensMode == CameraSettings::PlateSolveLensModeCalibrate) {
+    if (m_settings.m_plateSolveApplyMode >= CameraSettings::PlateSolveApplyAzElRollFovLens) {
         m_settings.m_lensCenterOffsetX = m_lastPlateSolveCenterOffsetX;
         m_settings.m_lensCenterOffsetY = m_lastPlateSolveCenterOffsetY;
         m_settings.m_lensDistortionK1 = m_lastPlateSolveDistortionK1;

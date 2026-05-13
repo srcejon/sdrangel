@@ -153,7 +153,8 @@ struct CameraSettings
     {
         PlateSolveApplyAzEl = 0,
         PlateSolveApplyAzElRoll,
-        PlateSolveApplyAzElRollFov
+        PlateSolveApplyAzElRollFov,
+        PlateSolveApplyAzElRollFovLens
     };
 
     enum PlateSolveLensMode

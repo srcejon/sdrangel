@@ -1461,14 +1461,14 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 c.catalogIndex
             };
 
-            // Narrower FoV scale sweep is valid now that the scale estimate uses the correct longest edge.
-            for (double fovScale : {0.93, 1.0, 1.07})
+            // For very wide fields, allow a broader but still bounded FoV sweep around the seed estimate.
+            for (double fovScale : {0.85, 0.93, 1.0, 1.07, 1.15})
             {
                 if (earlyExit) break;
                 const double seedFov = std::clamp(
                     baseSeedFov * fovScale,
                     static_cast<double>(CameraSettings::m_minFov),
-                    static_cast<double>(CameraSettings::m_maxFov));
+                    180.0);
                 const SkyProjector rollProjector = createProjector(settings, imageSize, seedAzimuth, seedElevation, 0.0, seedFov);
                 if (!rollProjector.valid) {
                     continue;
@@ -1662,13 +1662,13 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                 d.catalogIndex
             };
 
-            for (double fovScale : {0.90, 1.0, 1.10})
+            for (double fovScale : {0.85, 0.95, 1.0, 1.10, 1.20})
             {
                 if (earlyExit) break;
                 const double seedFov = std::clamp(
                     baseSeedFov * fovScale,
                     static_cast<double>(CameraSettings::m_minFov),
-                    static_cast<double>(CameraSettings::m_maxFov));
+                    180.0);
                 const SkyProjector rollProjector = createProjector(settings, imageSize, seedAzimuth, seedElevation, 0.0, seedFov);
                 if (!rollProjector.valid) {
                     continue;
@@ -2334,7 +2334,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         && (!useStartDirection || !best.valid))
     {
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
-        const std::array<double, 6> wideBlindFovs = {{15.0, 25.0, 40.0, 60.0, 90.0, 130.0}};
+        const std::array<double, 8> wideBlindFovs = {{15.0, 25.0, 40.0, 60.0, 90.0, 130.0, 160.0, 180.0}};
         for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
         {
             for (double elevationDegrees = -60.0; elevationDegrees <= 75.0; elevationDegrees += 15.0)
@@ -2366,7 +2366,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                                 rollDegrees,
                                 std::clamp(fovDegrees,
                                     static_cast<double>(CameraSettings::m_minFov),
-                                    static_cast<double>(CameraSettings::m_maxFov)));
+                                    180.0));
                         }
                     }
                 }

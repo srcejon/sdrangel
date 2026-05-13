@@ -134,10 +134,13 @@ struct CameraSettings
         PlateSolveApplyAzElRollFovLens
     };
 
-    enum PlateSolveLensMode
+    enum PlateSolveStartMode
     {
-        PlateSolveLensModeFixed = 0,
-        PlateSolveLensModeCalibrate
+        PlateSolveStartBlind = 0,
+        PlateSolveStartFov,
+        PlateSolveStartFovElevation,
+        PlateSolveStartFovAzElRoll,
+        PlateSolveStartFovAzElRollLens
     };
 
     enum PlateSolveLabelMode
@@ -432,14 +435,13 @@ struct CameraSettings
     double m_plateSolveMaxMagnitude; ///< Faintest catalog star to consider during plate solving
     int    m_plateSolveMinMatches; ///< Minimum matches required for a successful solve
     double m_plateSolveMatchRadius; ///< Maximum image-space distance in pixels for a star match
-    double m_plateSolveSearchRadius; ///< Search radius in degrees around the current pointing estimate
-    bool   m_plateSolveUseCurrentDirection; ///< Use the current camera pointing estimate to seed the plate solve
+    double m_plateSolveSearchRadius; ///< Search radius in degrees around the current pointing estimate when the chosen start mode uses it
+    PlateSolveStartMode m_plateSolveStartMode; ///< Which current camera settings should be used as starting inputs for plate solving
     PlateSolveLabelMode m_plateSolveLabelMode; ///< Which catalog metadata should be shown for solved stars
     bool   m_plateSolveUseCurrentDateTime; ///< Use the current system date/time for plate solving instead of a fixed timestamp
     QDateTime m_plateSolveDateTime; ///< User-specified local date/time for plate solving recorded media
     bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
-    PlateSolveLensMode m_plateSolveLensMode; ///< Whether plate solving should keep lens calibration fixed or refine it
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 
     // Spectrum overlay settings

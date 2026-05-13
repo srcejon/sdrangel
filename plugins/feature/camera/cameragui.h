@@ -271,6 +271,7 @@ private:
     void updateMotionExclusionRectsTable();
     void applyMotionExclusionRectsFromTable();
     void updateMotionExclusionPreview();
+    void updatePlateSolveStartModeUi();
     void setPreviewDrawMode(PreviewDrawMode mode);
     void setMotionExclusionDrawMode(bool enabled);
     void setDetectionRoiDrawMode(bool enabled);
@@ -564,12 +565,11 @@ private slots:
     void on_plateSolveMinMatchesSpin_valueChanged(int value);
     void on_plateSolveMatchRadiusSpin_valueChanged(double value);
     void on_plateSolveSearchRadiusSpin_valueChanged(double value);
-    void on_plateSolveUseCurrentDirectionCheck_toggled(bool checked);
+    void on_plateSolveStartModeCombo_currentIndexChanged(int index);
     void on_plateSolveUseCurrentDateTimeCheck_toggled(bool checked);
     void on_plateSolveDateTimeEdit_dateTimeChanged(const QDateTime& dateTime);
     void on_plateSolveUseDownloadedCatalogCheck_toggled(bool checked);
     void on_plateSolveApplyModeCombo_currentIndexChanged(int index);
-    void on_plateSolveLensModeCombo_currentIndexChanged(int index);
     void on_plateSolveDownloadCatalogButton_clicked();
     void on_plateSolveApplyButton_clicked();
     void on_motionExclusionAddButton_clicked();

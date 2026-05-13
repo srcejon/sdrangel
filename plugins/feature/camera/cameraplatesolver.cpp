@@ -670,9 +670,29 @@ QString currentCatalogSource(const CameraSettings& settings)
         : QStringLiteral("Bundled");
 }
 
+bool plateSolveStartUsesFov(const CameraSettings& settings)
+{
+    return settings.m_plateSolveStartMode != CameraSettings::PlateSolveStartBlind;
+}
+
+bool plateSolveStartUsesElevation(const CameraSettings& settings)
+{
+    return settings.m_plateSolveStartMode >= CameraSettings::PlateSolveStartFovElevation;
+}
+
+bool plateSolveStartUsesDirection(const CameraSettings& settings)
+{
+    return settings.m_plateSolveStartMode >= CameraSettings::PlateSolveStartFovAzElRoll;
+}
+
+bool plateSolveStartUsesLens(const CameraSettings& settings)
+{
+    return settings.m_plateSolveStartMode >= CameraSettings::PlateSolveStartFovAzElRollLens;
+}
+
 bool canCalibrateLens(const CameraSettings& settings)
 {
-    return settings.m_plateSolveLensMode == CameraSettings::PlateSolveLensModeCalibrate;
+    return plateSolveStartUsesLens(settings);
 }
 
 const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
@@ -1919,9 +1939,13 @@ Evaluation searchBestPose(const CameraSettings& settings,
 {
     Evaluation best;
     const int minMatchCount = std::max(1, settings.m_plateSolveMinMatches);
-    const double fixedCenterOffsetX = settings.m_lensCenterOffsetX;
-    const double fixedCenterOffsetY = settings.m_lensCenterOffsetY;
-    const double fixedDistortionK1 = settings.m_lensDistortionK1;
+    const bool useStartFov = plateSolveStartUsesFov(settings);
+    const bool useStartElevation = plateSolveStartUsesElevation(settings);
+    const bool useStartDirection = plateSolveStartUsesDirection(settings);
+    const bool useStartLens = plateSolveStartUsesLens(settings);
+    const double fixedCenterOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
+    const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
+    const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
 
     const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveSearchRadius);
     const double coarseRollRadius = std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
@@ -1929,8 +1953,32 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     const std::array<double, 5> coarseOffsets = {{-1.0, -0.5, 0.0, 0.5, 1.0}};
     const std::array<double, 3> coarseFovOffsets = {{-1.0, 0.0, 1.0}};
+    const std::array<double, 13> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0}};
 
-    if (settings.m_plateSolveUseCurrentDirection)
+    auto evaluateSeed = [&](double azimuthDegrees,
+                            double elevationDegrees,
+                            double rollDegrees,
+                            double fovDegrees) {
+        const Evaluation candidate = evaluatePose(
+            settings,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices,
+            azimuthDegrees,
+            elevationDegrees,
+            rollDegrees,
+            fovDegrees,
+            nullptr,
+            fixedCenterOffsetX,
+            fixedCenterOffsetY,
+            fixedDistortionK1);
+        if (isBetterEvaluation(candidate, best)) {
+            best = candidate;
+        }
+    };
+
+    if (useStartDirection)
     {
         for (double azFactor : coarseOffsets)
         {
@@ -1940,31 +1988,61 @@ Evaluation searchBestPose(const CameraSettings& settings,
                 {
                     for (double fovFactor : coarseFovOffsets)
                     {
-                        const Evaluation candidate = evaluatePose(
-                            settings,
-                            imageSize,
-                            captureDateTimeUtc,
-                            starDetections,
-                            detectionIndices,
+                        evaluateSeed(
                             settings.m_azimuth + azFactor * coarseSearchRadius,
                             settings.m_elevation + elFactor * coarseSearchRadius,
                             settings.m_roll + rollFactor * coarseRollRadius,
                             std::max(static_cast<double>(CameraSettings::m_minFov),
-                                     static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius),
-                            nullptr,
-                            fixedCenterOffsetX,
-                            fixedCenterOffsetY,
-                            fixedDistortionK1);
-                        if (isBetterEvaluation(candidate, best)) {
-                            best = candidate;
-                        }
+                                     static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius));
+                    }
+                }
+            }
+        }
+    }
+    else if (useStartElevation)
+    {
+        for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
+        {
+            for (double elFactor : coarseOffsets)
+            {
+                for (double rollDegrees : wideRollOffsets)
+                {
+                    for (double fovFactor : coarseFovOffsets)
+                    {
+                        evaluateSeed(
+                            azimuthDegrees,
+                            settings.m_elevation + elFactor * coarseSearchRadius,
+                            rollDegrees,
+                            std::max(static_cast<double>(CameraSettings::m_minFov),
+                                     static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius));
+                    }
+                }
+            }
+        }
+    }
+    else if (useStartFov)
+    {
+        for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
+        {
+            for (double elevationDegrees = -60.0; elevationDegrees <= 75.0; elevationDegrees += 15.0)
+            {
+                for (double rollDegrees : wideRollOffsets)
+                {
+                    for (double fovFactor : coarseFovOffsets)
+                    {
+                        evaluateSeed(
+                            azimuthDegrees,
+                            elevationDegrees,
+                            rollDegrees,
+                            std::max(static_cast<double>(CameraSettings::m_minFov),
+                                     static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius));
                     }
                 }
             }
         }
     }
 
-    const bool needBlindSearch = !settings.m_plateSolveUseCurrentDirection
+    const bool needBlindSearch = !useStartFov
         || !isStrongGuidedSolve(settings, minMatchCount, best);
 
     if (needBlindSearch)
@@ -1997,36 +2075,40 @@ Evaluation searchBestPose(const CameraSettings& settings,
     }
 
     if ((!best.valid || (best.matchCount < minMatchCount))
-        && (!settings.m_plateSolveUseCurrentDirection || !best.valid))
+        && (!useStartDirection || !best.valid))
     {
-        const std::array<double, 13> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0}};
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
+        const std::array<double, 4> wideBlindFovs = {{20.0, 40.0, 80.0, 120.0}};
         for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
         {
             for (double elevationDegrees = -60.0; elevationDegrees <= 75.0; elevationDegrees += 15.0)
             {
                 for (double rollDegrees : wideRollOffsets)
                 {
-                    for (double fovScale : wideFovScales)
+                    if (useStartFov)
                     {
-                        const Evaluation candidate = evaluatePose(
-                            settings,
-                            imageSize,
-                            captureDateTimeUtc,
-                            starDetections,
-                            detectionIndices,
-                            azimuthDegrees,
-                            elevationDegrees,
-                            rollDegrees,
-                            std::clamp(static_cast<double>(settings.m_fov) * fovScale,
-                                static_cast<double>(CameraSettings::m_minFov),
-                                static_cast<double>(CameraSettings::m_maxFov)),
-                            nullptr,
-                            fixedCenterOffsetX,
-                            fixedCenterOffsetY,
-                            fixedDistortionK1);
-                        if (isBetterEvaluation(candidate, best)) {
-                            best = candidate;
+                        for (double fovScale : wideFovScales)
+                        {
+                            evaluateSeed(
+                                azimuthDegrees,
+                                elevationDegrees,
+                                rollDegrees,
+                                std::clamp(static_cast<double>(settings.m_fov) * fovScale,
+                                    static_cast<double>(CameraSettings::m_minFov),
+                                    static_cast<double>(CameraSettings::m_maxFov)));
+                        }
+                    }
+                    else
+                    {
+                        for (double fovDegrees : wideBlindFovs)
+                        {
+                            evaluateSeed(
+                                azimuthDegrees,
+                                elevationDegrees,
+                                rollDegrees,
+                                std::clamp(fovDegrees,
+                                    static_cast<double>(CameraSettings::m_minFov),
+                                    static_cast<double>(CameraSettings::m_maxFov)));
                         }
                     }
                 }
@@ -2566,7 +2648,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     result.m_matchedStars = finalMatches.size();
     result.m_rmsErrorPixels = std::sqrt(sumSquaredError / finalMatches.size());
     result.m_maxErrorPixels = maxError;
-    if (!settings.m_plateSolveUseCurrentDirection
+    if (!plateSolveStartUsesDirection(settings)
         && !isAcceptableBlindSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
         clearSolvedStars(starDetections);

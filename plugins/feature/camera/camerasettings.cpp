@@ -307,13 +307,12 @@ void CameraSettings::resetToDefaults()
     m_plateSolveMinMatches = 4;
     m_plateSolveMatchRadius = 24.0;
     m_plateSolveSearchRadius = 12.0;
-    m_plateSolveUseCurrentDirection = true;
+    m_plateSolveStartMode = PlateSolveStartFovAzElRoll;
     m_plateSolveLabelMode = PlateSolveLabelName;
     m_plateSolveUseCurrentDateTime = true;
     m_plateSolveDateTime = QDateTime::currentDateTime();
     m_plateSolveUseDownloadedCatalog = false;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
-    m_plateSolveLensMode = PlateSolveLensModeFixed;
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
@@ -480,12 +479,11 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(212, m_plateSolveMinMatches);
     s.writeDouble(213, m_plateSolveMatchRadius);
     s.writeDouble(214, m_plateSolveSearchRadius);
-    s.writeBool(224, m_plateSolveUseCurrentDirection);
+    s.writeS32(225, static_cast<qint32>(m_plateSolveStartMode));
     s.writeBool(215, m_plateSolveUseDownloadedCatalog);
     s.writeBool(216, m_plateSolveUseCurrentDateTime);
     s.writeS64(217, m_plateSolveDateTime.isValid() ? m_plateSolveDateTime.toMSecsSinceEpoch() : 0);
     s.writeS32(218, static_cast<qint32>(m_plateSolveApplyMode));
-    s.writeS32(222, static_cast<qint32>(m_plateSolveLensMode));
     s.writeS32(223, static_cast<qint32>(m_plateSolveLabelMode));
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
@@ -818,7 +816,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(212, &m_plateSolveMinMatches, 4);
         d.readDouble(213, &m_plateSolveMatchRadius, 24.0);
         d.readDouble(214, &m_plateSolveSearchRadius, 12.0);
-        d.readBool(224, &m_plateSolveUseCurrentDirection, true);
+        bool legacyPlateSolveUseCurrentDirection = true;
+        d.readBool(224, &legacyPlateSolveUseCurrentDirection, true);
         d.readBool(215, &m_plateSolveUseDownloadedCatalog, false);
         d.readBool(216, &m_plateSolveUseCurrentDateTime, true);
         qint64 plateSolveDateTimeMs = QDateTime::currentDateTime().toMSecsSinceEpoch();
@@ -827,9 +826,16 @@ bool CameraSettings::deserialize(const QByteArray& data)
         qint32 plateSolveApplyMode = static_cast<qint32>(PlateSolveApplyAzElRollFov);
         d.readS32(218, &plateSolveApplyMode, static_cast<qint32>(PlateSolveApplyAzElRollFov));
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(plateSolveApplyMode);
-        qint32 plateSolveLensMode = static_cast<qint32>(PlateSolveLensModeFixed);
-        d.readS32(222, &plateSolveLensMode, static_cast<qint32>(PlateSolveLensModeFixed));
-        m_plateSolveLensMode = static_cast<PlateSolveLensMode>(plateSolveLensMode);
+        qint32 legacyPlateSolveLensMode = 0;
+        d.readS32(222, &legacyPlateSolveLensMode, 0);
+        qint32 plateSolveStartMode = static_cast<qint32>(
+            legacyPlateSolveUseCurrentDirection
+                ? (legacyPlateSolveLensMode > 0
+                    ? PlateSolveStartFovAzElRollLens
+                    : PlateSolveStartFovAzElRoll)
+                : PlateSolveStartBlind);
+        d.readS32(225, &plateSolveStartMode, plateSolveStartMode);
+        m_plateSolveStartMode = static_cast<PlateSolveStartMode>(plateSolveStartMode);
         qint32 plateSolveLabelMode = static_cast<qint32>(PlateSolveLabelName);
         d.readS32(223, &plateSolveLabelMode, static_cast<qint32>(PlateSolveLabelName));
         m_plateSolveLabelMode = static_cast<PlateSolveLabelMode>(plateSolveLabelMode);
@@ -848,7 +854,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_plateSolveMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveMatchRadius, m_maxPlateSolveMatchRadius);
         m_plateSolveSearchRadius = qBound(m_minPlateSolveSearchRadius, m_plateSolveSearchRadius, m_maxPlateSolveSearchRadius);
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(qBound(0, static_cast<int>(m_plateSolveApplyMode), 3));
-        m_plateSolveLensMode = static_cast<PlateSolveLensMode>(qBound(0, static_cast<int>(m_plateSolveLensMode), 1));
+        m_plateSolveStartMode = static_cast<PlateSolveStartMode>(qBound(0, static_cast<int>(m_plateSolveStartMode), 4));
         m_plateSolveLabelMode = static_cast<PlateSolveLabelMode>(qBound(0, static_cast<int>(m_plateSolveLabelMode), 2));
         m_lensCenterOffsetX = qBound(m_minLensCenterOffset, m_lensCenterOffsetX, m_maxLensCenterOffset);
         m_lensCenterOffsetY = qBound(m_minLensCenterOffset, m_lensCenterOffsetY, m_maxLensCenterOffset);
@@ -1519,8 +1525,8 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveSearchRadius")) {
         m_plateSolveSearchRadius = settings.m_plateSolveSearchRadius;
     }
-    if (settingsKeys.contains("plateSolveUseCurrentDirection")) {
-        m_plateSolveUseCurrentDirection = settings.m_plateSolveUseCurrentDirection;
+    if (settingsKeys.contains("plateSolveStartMode")) {
+        m_plateSolveStartMode = settings.m_plateSolveStartMode;
     }
     if (settingsKeys.contains("plateSolveLabelMode")) {
         m_plateSolveLabelMode = settings.m_plateSolveLabelMode;
@@ -1536,9 +1542,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("plateSolveApplyMode")) {
         m_plateSolveApplyMode = settings.m_plateSolveApplyMode;
-    }
-    if (settingsKeys.contains("plateSolveLensMode")) {
-        m_plateSolveLensMode = settings.m_plateSolveLensMode;
     }
     if (settingsKeys.contains("videoPostProcess")) {
         m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
@@ -2122,8 +2125,8 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("plateSolveSearchRadius") || force) {
         ostr << " m_plateSolveSearchRadius: " << m_plateSolveSearchRadius;
     }
-    if (settingsKeys.contains("plateSolveUseCurrentDirection") || force) {
-        ostr << " m_plateSolveUseCurrentDirection: " << m_plateSolveUseCurrentDirection;
+    if (settingsKeys.contains("plateSolveStartMode") || force) {
+        ostr << " m_plateSolveStartMode: " << static_cast<int>(m_plateSolveStartMode);
     }
     if (settingsKeys.contains("plateSolveUseCurrentDateTime") || force) {
         ostr << " m_plateSolveUseCurrentDateTime: " << m_plateSolveUseCurrentDateTime;
@@ -2139,9 +2142,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveApplyMode") || force) {
         ostr << " m_plateSolveApplyMode: " << static_cast<int>(m_plateSolveApplyMode);
-    }
-    if (settingsKeys.contains("plateSolveLensMode") || force) {
-        ostr << " m_plateSolveLensMode: " << static_cast<int>(m_plateSolveLensMode);
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_recordMode;

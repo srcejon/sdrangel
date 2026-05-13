@@ -1182,15 +1182,13 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveMinMatchesSpin->setValue(m_settings.m_plateSolveMinMatches);
     settingsUI()->plateSolveMatchRadiusSpin->setValue(m_settings.m_plateSolveMatchRadius);
     settingsUI()->plateSolveSearchRadiusSpin->setValue(m_settings.m_plateSolveSearchRadius);
-    settingsUI()->plateSolveUseCurrentDirectionCheck->setChecked(m_settings.m_plateSolveUseCurrentDirection);
-    settingsUI()->plateSolveSearchRadiusLabel->setEnabled(m_settings.m_plateSolveUseCurrentDirection);
-    settingsUI()->plateSolveSearchRadiusSpin->setEnabled(m_settings.m_plateSolveUseCurrentDirection);
+    settingsUI()->plateSolveStartModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveStartMode));
+    updatePlateSolveStartModeUi();
     settingsUI()->plateSolveUseCurrentDateTimeCheck->setChecked(m_settings.m_plateSolveUseCurrentDateTime);
     settingsUI()->plateSolveDateTimeEdit->setDateTime(m_settings.m_plateSolveDateTime.isValid() ? m_settings.m_plateSolveDateTime : QDateTime::currentDateTime());
     settingsUI()->plateSolveDateTimeEdit->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
     settingsUI()->plateSolveUseDownloadedCatalogCheck->setChecked(m_settings.m_plateSolveUseDownloadedCatalog);
     settingsUI()->plateSolveApplyModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveApplyMode));
-    settingsUI()->plateSolveLensModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveLensMode));
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
     ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
@@ -1616,12 +1614,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveMinMatchesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMinMatchesSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMatchRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveSearchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged);
-    QObject::connect(settingsUI()->plateSolveUseCurrentDirectionCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseCurrentDirectionCheck_toggled);
+    QObject::connect(settingsUI()->plateSolveStartModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveStartModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveUseCurrentDateTimeCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled);
     QObject::connect(settingsUI()->plateSolveDateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, &CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged);
     QObject::connect(settingsUI()->plateSolveUseDownloadedCatalogCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled);
     QObject::connect(settingsUI()->plateSolveApplyModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->plateSolveLensModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveLensModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveDownloadCatalogButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDownloadCatalogButton_clicked);
     QObject::connect(settingsUI()->plateSolveApplyButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveApplyButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
@@ -4582,6 +4579,16 @@ void CameraGUI::updateMotionExclusionPreview()
     }
 }
 
+void CameraGUI::updatePlateSolveStartModeUi()
+{
+    const bool usesSearchRadius =
+        m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovElevation
+        || m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll
+        || m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens;
+    settingsUI()->plateSolveSearchRadiusLabel->setEnabled(usesSearchRadius);
+    settingsUI()->plateSolveSearchRadiusSpin->setEnabled(usesSearchRadius);
+}
+
 void CameraGUI::setPreviewDrawMode(PreviewDrawMode mode)
 {
     m_previewDrawMode = mode;
@@ -5495,12 +5502,11 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveMinMatches = defaults.m_plateSolveMinMatches;
     m_settings.m_plateSolveMatchRadius = defaults.m_plateSolveMatchRadius;
     m_settings.m_plateSolveSearchRadius = defaults.m_plateSolveSearchRadius;
-    m_settings.m_plateSolveUseCurrentDirection = defaults.m_plateSolveUseCurrentDirection;
+    m_settings.m_plateSolveStartMode = defaults.m_plateSolveStartMode;
     m_settings.m_plateSolveUseCurrentDateTime = defaults.m_plateSolveUseCurrentDateTime;
     m_settings.m_plateSolveDateTime = defaults.m_plateSolveDateTime;
     m_settings.m_plateSolveUseDownloadedCatalog = defaults.m_plateSolveUseDownloadedCatalog;
     m_settings.m_plateSolveApplyMode = defaults.m_plateSolveApplyMode;
-    m_settings.m_plateSolveLensMode = defaults.m_plateSolveLensMode;
 
     m_settings.m_diffMask = defaults.m_diffMask;
     m_settings.m_diffThreshold = defaults.m_diffThreshold;
@@ -5549,12 +5555,11 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveMinMatches",
         "plateSolveMatchRadius",
         "plateSolveSearchRadius",
-        "plateSolveUseCurrentDirection",
+        "plateSolveStartMode",
         "plateSolveUseCurrentDateTime",
         "plateSolveDateTime",
         "plateSolveUseDownloadedCatalog",
         "plateSolveApplyMode",
-        "plateSolveLensMode",
         "diffMask",
         "diffThreshold",
         "diffMaskOpenSize",
@@ -5739,12 +5744,11 @@ void CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged(double value)
     applySetting("plateSolveSearchRadius");
 }
 
-void CameraGUI::on_plateSolveUseCurrentDirectionCheck_toggled(bool checked)
+void CameraGUI::on_plateSolveStartModeCombo_currentIndexChanged(int index)
 {
-    m_settings.m_plateSolveUseCurrentDirection = checked;
-    settingsUI()->plateSolveSearchRadiusLabel->setEnabled(checked);
-    settingsUI()->plateSolveSearchRadiusSpin->setEnabled(checked);
-    applySetting("plateSolveUseCurrentDirection");
+    m_settings.m_plateSolveStartMode = static_cast<CameraSettings::PlateSolveStartMode>(index);
+    updatePlateSolveStartModeUi();
+    applySetting("plateSolveStartMode");
 }
 
 void CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled(bool checked)
@@ -5770,12 +5774,6 @@ void CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_plateSolveApplyMode = static_cast<CameraSettings::PlateSolveApplyMode>(index);
     applySetting("plateSolveApplyMode");
-}
-
-void CameraGUI::on_plateSolveLensModeCombo_currentIndexChanged(int index)
-{
-    m_settings.m_plateSolveLensMode = static_cast<CameraSettings::PlateSolveLensMode>(index);
-    applySetting("plateSolveLensMode");
 }
 
 void CameraGUI::on_plateSolveDownloadCatalogButton_clicked()

@@ -358,7 +358,6 @@ CameraDetector::CameraDetector() :
     m_captureActive(false),
     m_motionPersistenceRemaining(0),
     m_motionConfirmCount(0),
-    m_streakPersistenceRemaining(0),
     m_yoloInputSize(640, 640),
     m_processingFrame(false)
 #ifdef QT_TEXTTOSPEECH_FOUND
@@ -404,15 +403,10 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_lastInputFrame = CameraPipelineFrame();
             m_diffMaskHistory.clear();
             m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
-            m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
             m_motionLastFgMaskRaw.release();
-            m_streakLastBackgroundGray.release();
-            m_streakLastForegroundMask.release();
             m_lastMotionBoxes.clear();
             m_motionPersistenceRemaining = 0;
             m_motionConfirmCount = 0;
-            m_lastStreakDetections.clear();
-            m_streakPersistenceRemaining = 0;
             clearObjectDetectionState();
         }
         QMutexLocker locker(&m_frameMutex);
@@ -478,15 +472,10 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_lastInputFrame = CameraPipelineFrame();
         m_diffMaskHistory.clear();
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
-        m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
         m_motionLastFgMaskRaw.release();
-        m_streakLastBackgroundGray.release();
-        m_streakLastForegroundMask.release();
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
         m_motionConfirmCount = 0;
-        m_lastStreakDetections.clear();
-        m_streakPersistenceRemaining = 0;
         clearObjectDetectionState();
     }
 
@@ -555,22 +544,6 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_motionConfirmCount = 0;
     }
 
-    if (force
-        || settingsKeys.contains("streakDetect")
-        || settingsKeys.contains("streakDownscale")
-        || settingsKeys.contains("streakLineEnhancementPlacement")
-        || settingsKeys.contains("detectionRoiX")
-        || settingsKeys.contains("detectionRoiY")
-        || settingsKeys.contains("detectionRoiWidth")
-        || settingsKeys.contains("detectionRoiHeight"))
-    {
-        m_streakBgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
-        m_streakLastBackgroundGray.release();
-        m_streakLastForegroundMask.release();
-        m_lastStreakDetections.clear();
-        m_streakPersistenceRemaining = 0;
-    }
-
     if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
     {
         m_yoloNet = cv::dnn::Net();
@@ -613,16 +586,6 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("motionPersistenceFrames")
         || settingsKeys.contains("minContourArea")
         || settingsKeys.contains("motionExclusionRects")
-        || settingsKeys.contains("streakDetect")
-        || settingsKeys.contains("streakThreshold")
-        || settingsKeys.contains("streakMinLength")
-        || settingsKeys.contains("streakHoughThreshold")
-        || settingsKeys.contains("streakMaxGap")
-        || settingsKeys.contains("streakPersistenceFrames")
-        || settingsKeys.contains("streakDownscale")
-        || settingsKeys.contains("streakColor")
-        || settingsKeys.contains("streakDebugView")
-        || settingsKeys.contains("streakLineEnhancementPlacement")
         || settingsKeys.contains("starDetect")
         || settingsKeys.contains("starThreshold")
         || settingsKeys.contains("starBackgroundBlur")
@@ -744,7 +707,6 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     CameraPipelineFrame inputFrameSnapshot(*frame);
     frame->m_motionBoxes.clear();
     frame->m_detections.clear();
-    frame->m_streakDetections.clear();
     frame->m_starDetections.clear();
     frame->m_plateSolved = false;
     frame->m_plateSolvedMatches = 0;
@@ -794,31 +756,6 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
             }
             roiMask.copyTo(maskCanvas(detectionRoi));
             cv::cvtColor(maskCanvas, bgrMat, cv::COLOR_GRAY2BGR);
-        }
-    }
-
-    if (m_settings.m_streakDetect) {
-        cv::Mat streakDebugMask;
-        applyStreakDetection(
-            bgrMat,
-            detectionRoi,
-            frame->m_streakDetections,
-            updateInputHistory,
-            (m_settings.m_streakDebugView != CameraSettings::StreakDebugViewOff) ? &streakDebugMask : nullptr);
-
-        if (!streakDebugMask.empty())
-        {
-            cv::Mat maskCanvas = cv::Mat::zeros(bgrMat.size(), streakDebugMask.type());
-            cv::Mat roiMask = streakDebugMask;
-            if (streakDebugMask.size() != detectionRoi.size()) {
-                cv::resize(streakDebugMask, roiMask, detectionRoi.size(), 0.0, 0.0, cv::INTER_NEAREST);
-            }
-            roiMask.copyTo(maskCanvas(detectionRoi));
-            if (maskCanvas.channels() == 1) {
-                cv::cvtColor(maskCanvas, bgrMat, cv::COLOR_GRAY2BGR);
-            } else {
-                bgrMat = maskCanvas;
-            }
         }
     }
 
@@ -1026,54 +963,6 @@ cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createBackgroundSubtractor() c
         m_settings.m_motionDetectShadows);
 }
 
-cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createStreakBackgroundSubtractor() const
-{
-    constexpr int streakHistory = 4;
-    constexpr double streakVarThreshold = 16.0;
-    constexpr bool streakDetectShadows = false;
-    return cv::createBackgroundSubtractorMOG2(streakHistory, streakVarThreshold, streakDetectShadows);
-}
-
-cv::Mat CameraDetector::applyStreakLineEnhancement(const cv::Mat& grayMat) const
-{
-    cv::Mat response = cv::Mat::zeros(grayMat.size(), CV_8U);
-
-    auto updateResponse = [&](const cv::Mat& kernel)
-    {
-        cv::Mat enhanced;
-        cv::morphologyEx(grayMat, enhanced, cv::MORPH_TOPHAT, kernel);
-        cv::max(response, enhanced, response);
-    };
-
-    const std::array<int, 2> kernelSizes{5, 7};
-    for (int kernelSize : kernelSizes)
-    {
-        cv::Mat kernelHorizontal = cv::Mat::ones(1, kernelSize, CV_8U);
-        cv::Mat kernelVertical = cv::Mat::ones(kernelSize, 1, CV_8U);
-        cv::Mat kernelDiag1 = cv::Mat::zeros(kernelSize, kernelSize, CV_8U);
-        cv::Mat kernelDiag2 = cv::Mat::zeros(kernelSize, kernelSize, CV_8U);
-
-        for (int i = 0; i < kernelSize; ++i)
-        {
-            kernelDiag1.at<uchar>(i, i) = 1;
-            kernelDiag2.at<uchar>(i, kernelSize - 1 - i) = 1;
-        }
-
-        updateResponse(kernelHorizontal);
-        updateResponse(kernelVertical);
-        updateResponse(kernelDiag1);
-        updateResponse(kernelDiag2);
-    }
-
-    double maxValue = 0.0;
-    cv::minMaxLoc(response, nullptr, &maxValue);
-    if (maxValue > 0.0) {
-        response.convertTo(response, CV_8U, 255.0 / maxValue);
-    }
-
-    return response;
-}
-
 void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
@@ -1183,351 +1072,6 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
     }
 
     motionBoxes = boxes;
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraDetector::applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, bool updateBackgroundModel, cv::Mat* debugMask)
-{
-    PROFILER_START();
-
-    cv::Mat currentGray;
-    cv::cvtColor(bgrMat(roi), currentGray, cv::COLOR_BGR2GRAY);
-
-    const double downscale = m_settings.m_streakDownscale;
-    if (downscale < 0.999)
-    {
-        const cv::Size downscaledSize(
-            std::max(1, static_cast<int>(std::lround(roi.width * downscale))),
-            std::max(1, static_cast<int>(std::lround(roi.height * downscale))));
-        cv::resize(currentGray, currentGray, downscaledSize, 0.0, 0.0, cv::INTER_AREA);
-    }
-
-    const bool enhanceBeforeBackground =
-        m_settings.m_streakLineEnhancementPlacement == CameraSettings::StreakLineEnhancementBeforeBackground;
-    const bool enhanceAfterBackground =
-        m_settings.m_streakLineEnhancementPlacement == CameraSettings::StreakLineEnhancementAfterBackground;
-
-    if (enhanceBeforeBackground) {
-        currentGray = applyStreakLineEnhancement(currentGray);
-    }
-
-    if (!m_streakBgSubtractor) {
-        m_streakBgSubtractor = createStreakBackgroundSubtractor();
-    }
-
-    cv::Mat backgroundGray;
-    cv::Mat foregroundMask;
-    if (updateBackgroundModel)
-    {
-        m_streakBgSubtractor->getBackgroundImage(backgroundGray);
-        const double streakLearningRate = 0.25;
-        m_streakBgSubtractor->apply(currentGray, foregroundMask, streakLearningRate);
-        if (!backgroundGray.empty() && (backgroundGray.size() == currentGray.size())) {
-            m_streakLastBackgroundGray = backgroundGray.clone();
-        } else {
-            m_streakLastBackgroundGray.release();
-        }
-        m_streakLastForegroundMask = foregroundMask.clone();
-    }
-    else
-    {
-        backgroundGray = m_streakLastBackgroundGray.clone();
-        foregroundMask = m_streakLastForegroundMask.clone();
-    }
-
-    cv::Mat diff;
-    if (!backgroundGray.empty() && (backgroundGray.size() == currentGray.size()))
-    {
-        if (backgroundGray.type() != currentGray.type()) {
-            backgroundGray.convertTo(backgroundGray, currentGray.type());
-        }
-        cv::absdiff(currentGray, backgroundGray, diff);
-    }
-    else
-    {
-        diff = foregroundMask.clone();
-    }
-
-    if (enhanceAfterBackground && !diff.empty()) {
-        diff = applyStreakLineEnhancement(diff);
-    }
-
-    if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewDiff)) {
-        double minValue = 0.0;
-        double maxValue = 0.0;
-        cv::minMaxLoc(diff, &minValue, &maxValue);
-        if (maxValue > minValue) {
-            cv::normalize(diff, *debugMask, 0, 255, cv::NORM_MINMAX);
-            debugMask->convertTo(*debugMask, CV_8UC1);
-        } else {
-            *debugMask = diff.clone();
-        }
-    }
-    cv::threshold(diff, diff, m_settings.m_streakThreshold, 255, cv::THRESH_BINARY);
-    if (!foregroundMask.empty())
-    {
-        cv::threshold(foregroundMask, foregroundMask, 126, 255, cv::THRESH_BINARY);
-        cv::bitwise_and(diff, foregroundMask, diff);
-    }
-
-    cv::Mat exclusionMask = buildExclusionMask(roi, diff.size());
-    cv::bitwise_and(diff, exclusionMask, diff);
-    if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewThresholded)) {
-        *debugMask = diff.clone();
-    }
-
-    cv::Mat edges;
-    cv::Canny(diff, edges, std::max(1, m_settings.m_streakThreshold / 2), std::max(2, m_settings.m_streakThreshold));
-    if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewEdges)) {
-        *debugMask = edges.clone();
-    }
-
-    std::vector<cv::Vec4i> lines;
-    cv::HoughLinesP(
-        edges,
-        lines,
-        1.0,
-        CV_PI / 180.0,
-        std::max(1, m_settings.m_streakHoughThreshold),
-        std::max(1, m_settings.m_streakMinLength),
-        std::max(0.0, m_settings.m_streakMaxGap));
-
-    cv::Mat lineMask;
-    if (debugMask && ((m_settings.m_streakDebugView == CameraSettings::StreakDebugViewLines)
-        || (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewFinal)))
-    {
-        lineMask = cv::Mat::zeros(edges.size(), CV_8UC1);
-        for (const cv::Vec4i& line : lines) {
-            cv::line(
-                lineMask,
-                cv::Point(line[0], line[1]),
-                cv::Point(line[2], line[3]),
-                cv::Scalar(255),
-                2,
-                cv::LINE_AA);
-        }
-        if (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewLines) {
-            *debugMask = lineMask.clone();
-        }
-    }
-
-    QVector<CameraPipelineStreakDetection> detections;
-    detections.reserve(static_cast<qsizetype>(lines.size()));
-
-    for (const cv::Vec4i& line : lines)
-    {
-        QPointF p1(line[0], line[1]);
-        QPointF p2(line[2], line[3]);
-
-        if (downscale < 0.999)
-        {
-            p1 = p1 / downscale;
-            p2 = p2 / downscale;
-        }
-
-        p1 += QPointF(roi.x, roi.y);
-        p2 += QPointF(roi.x, roi.y);
-
-        const QLineF qline(p1, p2);
-        if (qline.length() < m_settings.m_streakMinLength) {
-            continue;
-        }
-
-        CameraPipelineStreakDetection detection;
-        detection.m_line = qline;
-        detection.m_label = QStringLiteral("Streak");
-        detection.m_score = static_cast<float>(qline.length());
-        detections.append(detection);
-    }
-
-    if (detections.size() > 1)
-    {
-        const double angleToleranceDegrees = 8.0;
-        const double angleToleranceRadians = angleToleranceDegrees * CV_PI / 180.0;
-        const double maxPerpendicularDistance = std::max(4.0, m_settings.m_streakMaxGap);
-        const double strongOverlapPerpendicularDistance = std::max(12.0, m_settings.m_streakMaxGap * 2.0);
-        const double maxProjectedGap = std::max(12.0, m_settings.m_streakMaxGap * 2.0);
-
-        auto canonicalDirection = [](const QLineF& line) -> QPointF
-        {
-            const double length = line.length();
-            if (length <= 0.0) {
-                return QPointF(1.0, 0.0);
-            }
-
-            QPointF direction = (line.p2() - line.p1()) / length;
-            if ((direction.x() < 0.0) || ((std::abs(direction.x()) < 1e-9) && (direction.y() < 0.0))) {
-                direction = -direction;
-            }
-            return direction;
-        };
-
-        auto dotProduct = [](const QPointF& a, const QPointF& b) -> double
-        {
-            return a.x() * b.x() + a.y() * b.y();
-        };
-
-        auto perpendicularDistance = [&](const QLineF& a, const QLineF& b) -> double
-        {
-            const QPointF direction = canonicalDirection(a);
-            const QPointF normal(-direction.y(), direction.x());
-            const QPointF delta = b.center() - a.center();
-            return std::abs(dotProduct(delta, normal));
-        };
-
-        auto projectedGap = [&](const QLineF& a, const QLineF& b) -> double
-        {
-            const QPointF direction = canonicalDirection(a);
-            const QPointF origin = a.p1();
-            const double a0 = dotProduct(a.p1() - origin, direction);
-            const double a1 = dotProduct(a.p2() - origin, direction);
-            const double b0 = dotProduct(b.p1() - origin, direction);
-            const double b1 = dotProduct(b.p2() - origin, direction);
-            const double aMin = std::min(a0, a1);
-            const double aMax = std::max(a0, a1);
-            const double bMin = std::min(b0, b1);
-            const double bMax = std::max(b0, b1);
-
-            if ((aMax >= bMin) && (bMax >= aMin)) {
-                return 0.0;
-            }
-
-            return (bMin > aMax) ? (bMin - aMax) : (aMin - bMax);
-        };
-
-        auto projectedOverlap = [&](const QLineF& a, const QLineF& b) -> double
-        {
-            const QPointF direction = canonicalDirection(a);
-            const QPointF origin = a.p1();
-            const double a0 = dotProduct(a.p1() - origin, direction);
-            const double a1 = dotProduct(a.p2() - origin, direction);
-            const double b0 = dotProduct(b.p1() - origin, direction);
-            const double b1 = dotProduct(b.p2() - origin, direction);
-            const double aMin = std::min(a0, a1);
-            const double aMax = std::max(a0, a1);
-            const double bMin = std::min(b0, b1);
-            const double bMax = std::max(b0, b1);
-            return std::max(0.0, std::min(aMax, bMax) - std::max(aMin, bMin));
-        };
-
-        auto mergePair = [&](const CameraPipelineStreakDetection& first, const CameraPipelineStreakDetection& second) -> CameraPipelineStreakDetection
-        {
-            const QPointF firstDirection = canonicalDirection(first.m_line);
-            const QPointF secondDirection = canonicalDirection(second.m_line);
-            QPointF mergedDirection = firstDirection + secondDirection;
-            const double mergedDirLength = std::hypot(mergedDirection.x(), mergedDirection.y());
-            if (mergedDirLength <= 1e-9) {
-                mergedDirection = firstDirection;
-            } else {
-                mergedDirection /= mergedDirLength;
-            }
-
-            const QPointF normal(-mergedDirection.y(), mergedDirection.x());
-            const QPointF points[] = { first.m_line.p1(), first.m_line.p2(), second.m_line.p1(), second.m_line.p2() };
-
-            double minProjection = std::numeric_limits<double>::max();
-            double maxProjection = -std::numeric_limits<double>::max();
-            double normalSum = 0.0;
-            for (const QPointF& point : points)
-            {
-                const double parallel = dotProduct(point, mergedDirection);
-                minProjection = std::min(minProjection, parallel);
-                maxProjection = std::max(maxProjection, parallel);
-                normalSum += dotProduct(point, normal);
-            }
-
-            const double averageNormal = normalSum / 4.0;
-            const QPointF start = mergedDirection * minProjection + normal * averageNormal;
-            const QPointF end = mergedDirection * maxProjection + normal * averageNormal;
-
-            CameraPipelineStreakDetection merged = first;
-            merged.m_line = QLineF(start, end);
-            merged.m_score = static_cast<float>(merged.m_line.length());
-            return merged;
-        };
-
-        bool mergedAny = true;
-        while (mergedAny)
-        {
-            mergedAny = false;
-            for (int i = 0; i < detections.size() && !mergedAny; ++i)
-            {
-                for (int j = i + 1; j < detections.size(); ++j)
-                {
-                    const QLineF& first = detections[i].m_line;
-                    const QLineF& second = detections[j].m_line;
-                    const QPointF dirA = canonicalDirection(first);
-                    const QPointF dirB = canonicalDirection(second);
-                    const double cosine = std::clamp(dotProduct(dirA, dirB), -1.0, 1.0);
-                    const double angle = std::acos(cosine);
-
-                    if (angle > angleToleranceRadians) {
-                        continue;
-                    }
-
-                    const double perpendicular = perpendicularDistance(first, second);
-                    const double overlap = projectedOverlap(first, second);
-                    const double minLength = std::min(first.length(), second.length());
-                    const bool stronglyOverlapping = (minLength > 0.0) && (overlap >= minLength * 0.5);
-
-                    if (perpendicular > (stronglyOverlapping ? strongOverlapPerpendicularDistance : maxPerpendicularDistance)) {
-                        continue;
-                    }
-
-                    if (projectedGap(first, second) > maxProjectedGap) {
-                        continue;
-                    }
-
-                    detections[i] = mergePair(detections[i], detections[j]);
-                    detections.removeAt(j);
-                    mergedAny = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (!detections.isEmpty()) {
-        m_lastStreakDetections = detections;
-        m_streakPersistenceRemaining = m_settings.m_streakPersistenceFrames;
-    } else if ((m_streakPersistenceRemaining > 0) && !m_lastStreakDetections.isEmpty()) {
-        detections = m_lastStreakDetections;
-        --m_streakPersistenceRemaining;
-    } else {
-        m_lastStreakDetections.clear();
-        m_streakPersistenceRemaining = 0;
-    }
-
-    if (debugMask && (m_settings.m_streakDebugView == CameraSettings::StreakDebugViewFinal))
-    {
-        if (lineMask.empty()) {
-            lineMask = cv::Mat::zeros(edges.size(), CV_8UC1);
-        } else {
-            lineMask = lineMask.clone();
-        }
-
-        for (const CameraPipelineStreakDetection& detection : detections)
-        {
-            QPointF p1 = detection.m_line.p1() - QPointF(roi.x, roi.y);
-            QPointF p2 = detection.m_line.p2() - QPointF(roi.x, roi.y);
-            if (downscale < 0.999) {
-                p1 *= downscale;
-                p2 *= downscale;
-            }
-
-            cv::line(
-                lineMask,
-                cv::Point(cvRound(p1.x()), cvRound(p1.y())),
-                cv::Point(cvRound(p2.x()), cvRound(p2.y())),
-                cv::Scalar(255),
-                3,
-                cv::LINE_AA);
-        }
-
-        *debugMask = lineMask;
-    }
-
-    streakDetections = detections;
     PROFILER_STOP(__FUNCTION__);
 }
 

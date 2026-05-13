@@ -619,7 +619,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "overlayFontFamily", "overlayFontScale",
-        "motionBoxColor", "streakColor", "streakOverlayStyle", "starColor", "plateSolveLabelMode",
+        "motionBoxColor", "starColor", "plateSolveLabelMode",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
         "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov",
         "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1", "owmAPIKey",
@@ -921,46 +921,6 @@ void CameraPostProcessor::applyDetectionOverlay(cv::Mat& bgrMat, const QVector<C
                       textBg, cv::FILLED);
         cv::putText(bgrMat, labelStd, cv::Point(box.x, labelY), cv::FONT_HERSHEY_SIMPLEX, 0.5, boxColor, 1, cv::LINE_AA);
     }
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraPostProcessor::applyStreakOverlay(QImage& image, const QVector<CameraPipelineStreakDetection>& streakDetections) const
-{
-    PROFILER_START();
-
-    if (streakDetections.isEmpty()) {
-        return;
-    }
-
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    QPen pen(m_settings.m_streakColor);
-    pen.setWidth(2);
-    painter.setPen(pen);
-
-    QFont font;
-    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
-        font.setFamily(m_settings.m_gridLabelFontFamily);
-    }
-    font.setPointSizeF(m_settings.m_gridLabelFontScale);
-    painter.setFont(font);
-    const QFontMetrics fontMetrics(font);
-
-    for (const CameraPipelineStreakDetection& detection : streakDetections)
-    {
-        if (m_settings.m_streakOverlayStyle == CameraSettings::StreakOverlayStyleBoundingBoxes)
-        {
-            const QRectF box = QRectF(detection.m_line.p1(), detection.m_line.p2()).normalized();
-            painter.drawRect(box);
-        }
-        else
-        {
-            painter.drawLine(detection.m_line);
-        }
-        const QPoint labelPoint = detection.m_line.p2().toPoint();
-        drawOutlinedLabel(painter, image.rect(), labelPoint, detection.m_label, m_settings.m_streakColor, fontMetrics);
-    }
-
     PROFILER_STOP(__FUNCTION__);
 }
 
@@ -1473,7 +1433,6 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         || needsTextOverlay
         || !frame.m_motionBoxes.isEmpty()
         || !frame.m_detections.isEmpty()
-        || !frame.m_streakDetections.isEmpty()
         || !frame.m_starDetections.isEmpty()
         || needsSpectrumOverlay;
 
@@ -1493,7 +1452,6 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     QImage result = convertBgrToRgbImage(bgrMat);
 
-    if (!frame.m_streakDetections.isEmpty()) { applyStreakOverlay(result, frame.m_streakDetections); }
     if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
     if (m_settings.m_constellation) { applyConstellationOverlay(result); }

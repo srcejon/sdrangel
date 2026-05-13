@@ -551,17 +551,6 @@ private slots:
     void on_motionPersistenceFramesSpin_valueChanged(int value);
     void on_minContourAreaSpin_valueChanged(int value);
     void on_motionBoxColorButton_clicked();
-    void on_streakDetectCheck_toggled(bool checked);
-    void on_streakThresholdSpin_valueChanged(int value);
-    void on_streakMinLengthSpin_valueChanged(int value);
-    void on_streakHoughThresholdSpin_valueChanged(int value);
-    void on_streakMaxGapSpin_valueChanged(double value);
-    void on_streakPersistenceFramesSpin_valueChanged(int value);
-    void on_streakDownscaleCombo_currentIndexChanged(int index);
-    void on_streakDebugViewCombo_currentIndexChanged(int index);
-    void on_streakOverlayStyleCombo_currentIndexChanged(int index);
-    void on_streakLineEnhancementCombo_currentIndexChanged(int index);
-    void on_streakColorButton_clicked();
     void on_starDetectCheck_toggled(bool checked);
     void on_starThresholdSpin_valueChanged(int value);
     void on_starBackgroundBlurSpin_valueChanged(int value);

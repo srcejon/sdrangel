@@ -172,15 +172,10 @@ private:
     CameraPipelineFrame m_lastInputFrame;
     std::deque<cv::Mat> m_diffMaskHistory;
     cv::Ptr<cv::BackgroundSubtractor> m_bgSubtractor;
-    cv::Ptr<cv::BackgroundSubtractor> m_streakBgSubtractor;
     cv::Mat m_motionLastFgMaskRaw;
-    cv::Mat m_streakLastBackgroundGray;
-    cv::Mat m_streakLastForegroundMask;
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;
     int m_motionConfirmCount;
-    QVector<CameraPipelineStreakDetection> m_lastStreakDetections;
-    int m_streakPersistenceRemaining;
     cv::dnn::Net m_yoloNet;
     cv::Size m_yoloInputSize;
     QString m_yoloLoadedModelPath;
@@ -205,11 +200,8 @@ private:
     void processFrame(const CameraPipelineFramePtr& frame, const CameraPipelineFrame& diffReferenceFrame, bool updateInputHistory);
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
     [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createBackgroundSubtractor() const;
-    [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createStreakBackgroundSubtractor() const;
-    [[nodiscard]] cv::Mat applyStreakLineEnhancement(const cv::Mat& grayMat) const;
     void applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
-    void applyStreakDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStreakDetection>& streakDetections, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
     void applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask = nullptr) const;
     [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     [[nodiscard]] bool intersectsExclusionRects(const QRect& rect) const;

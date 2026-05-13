@@ -110,16 +110,6 @@ struct CameraSettings
         MotionMaskViewFinal
     };
 
-    enum StreakDebugView
-    {
-        StreakDebugViewOff = 0,
-        StreakDebugViewDiff,
-        StreakDebugViewThresholded,
-        StreakDebugViewEdges,
-        StreakDebugViewLines,
-        StreakDebugViewFinal
-    };
-
     enum StarDebugView
     {
         StarDebugViewOff = 0,
@@ -127,19 +117,6 @@ struct CameraSettings
         StarDebugViewResidual,
         StarDebugViewThresholded,
         StarDebugViewFinal
-    };
-
-    enum StreakOverlayStyle
-    {
-        StreakOverlayStyleLines = 0,
-        StreakOverlayStyleBoundingBoxes
-    };
-
-    enum StreakLineEnhancementPlacement
-    {
-        StreakLineEnhancementOff = 0,
-        StreakLineEnhancementBeforeBackground,
-        StreakLineEnhancementAfterBackground
     };
 
     enum ConstellationOverlay
@@ -251,12 +228,6 @@ struct CameraSettings
     static constexpr int m_maxMotionConfirmFrames = 60;
     static constexpr int m_minContourAreaBound = 0;
     static constexpr int m_maxContourAreaBound = 10000;
-    static constexpr int m_minStreakLength = 1;
-    static constexpr int m_maxStreakLength = 4096;
-    static constexpr int m_minStreakHoughThreshold = 1;
-    static constexpr int m_maxStreakHoughThreshold = 500;
-    static constexpr double m_minStreakMaxGap = 0.0;
-    static constexpr double m_maxStreakMaxGap = 1024.0;
     static constexpr int m_minStarBackgroundBlur = 1;
     static constexpr int m_maxStarBackgroundBlur = 50;
     static constexpr double m_minStarAspectRatio = 1.0;
@@ -449,17 +420,6 @@ struct CameraSettings
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
     bool   m_showMotionExclusionRects; ///< Show motion exclusion rectangles on the preview image
     QList<QRect> m_motionExclusionRects; ///< Full-resolution exclusion rectangles for diff/motion detection
-    bool   m_streakDetect;      ///< Enable streak detection for meteors/contrails
-    int    m_streakThreshold;   ///< Binary threshold on frame-difference grayscale image
-    int    m_streakMinLength;   ///< Minimum detected streak length in pixels
-    int    m_streakHoughThreshold; ///< Hough line accumulator threshold
-    double m_streakMaxGap;      ///< Maximum line gap in pixels for HoughLinesP
-    int    m_streakPersistenceFrames; ///< Keep last streaks for this many frames after they disappear
-    double m_streakDownscale;   ///< Downscale factor for streak detection path: 1.0, 0.5, 0.25
-    StreakDebugView m_streakDebugView; ///< Optional debug view of streak detection stages
-    StreakOverlayStyle m_streakOverlayStyle; ///< How detected streaks are rendered on the output image
-    StreakLineEnhancementPlacement m_streakLineEnhancementPlacement; ///< Optional line enhancement placement within the streak detector
-    QColor m_streakColor;       ///< Overlay colour for streak detections
     bool   m_starDetect;        ///< Enable star detection
     int    m_starThreshold;     ///< Threshold on the star residual image
     int    m_starBackgroundBlur; ///< Radius used to estimate the smooth sky background

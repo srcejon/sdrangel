@@ -21,7 +21,6 @@
 
 #include <QDateTime>
 #include <QImage>
-#include <QLineF>
 #include <QPointF>
 #include <QRect>
 #include <QSharedPointer>
@@ -45,13 +44,6 @@ struct CameraHistogramData
     {
         return !m_redBins.isEmpty() && (m_redBins.size() == m_greenBins.size()) && (m_redBins.size() == m_blueBins.size());
     }
-};
-
-struct CameraPipelineStreakDetection
-{
-    QLineF m_line;
-    QString m_label;
-    float m_score;
 };
 
 struct CameraPipelineStarDetection
@@ -89,7 +81,6 @@ struct CameraPipelineFrame
     QDateTime m_captureDateTime;
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
-    QVector<CameraPipelineStreakDetection> m_streakDetections;
     QVector<CameraPipelineStarDetection> m_starDetections;
     bool m_plateSolved = false;
     int m_plateSolvedMatches = 0;

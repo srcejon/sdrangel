@@ -77,10 +77,18 @@ struct VisibleCatalogStar
     SkyVector vector;
 };
 
+struct PlateSolveCatalogContext
+{
+    const QVector<CatalogStar>* catalogStars = nullptr;
+    QVector<VisibleCatalogStar> visibleStars;
+    QHash<int, int> visibleStarIndexByCatalogIndex;
+};
+
 struct CandidatePair
 {
     int detectionIndex = -1;
     int catalogIndex = -1;
+    int projectedIndex = -1;
     double distancePixels = 0.0;
     int geometricSupport = 0;
 };
@@ -168,6 +176,7 @@ constexpr double kBlindSeedRatioTolerance = 0.035;
 constexpr double kBlindSeedMaxRmsPixels = 18.0;
 constexpr double kBlindSeedMaxMedianPixels = 14.0;
 constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
+constexpr bool kLogPlateSolveCandidates = false;
 const char* const kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 const char* const kDownloadedCatalogDir = "camera";
 const char* const kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
@@ -175,6 +184,7 @@ const char* const kDownloadedCatalogCsvFile = "hyg_v42.csv";
 const char* const kDownloadedCatalogReducedFile = "hyg_v42_reduced.txt";
 
 Evaluation evaluatePose(const CameraSettings& settings,
+                        const PlateSolveCatalogContext& catalogContext,
                         const QSize& imageSize,
                         const QDateTime& captureDateTimeUtc,
                         const QVector<CameraPipelineStarDetection>& starDetections,
@@ -189,6 +199,7 @@ Evaluation evaluatePose(const CameraSettings& settings,
                         double distortionK1 = 0.0);
 
 Evaluation refinePoseFromMatches(const CameraSettings& settings,
+                                 const PlateSolveCatalogContext& catalogContext,
                                  const QSize& imageSize,
                                  const QDateTime& captureDateTimeUtc,
                                  const QVector<CameraPipelineStarDetection>& starDetections,
@@ -768,13 +779,12 @@ SkyProjector createProjector(const CameraSettings& settings,
     return projector;
 }
 
-bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double elevationDegrees, QPointF& point)
+bool projectVector(const SkyProjector& projector, const SkyVector& vector, QPointF& point)
 {
     if (!projector.valid) {
         return false;
     }
 
-    const SkyVector vector = vectorFromAltAz(azimuthDegrees, elevationDegrees);
     const double depth = dot(vector, projector.center);
     if (depth <= 0.0) {
         return false;
@@ -823,8 +833,13 @@ bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double e
     return true;
 }
 
+bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double elevationDegrees, QPointF& point)
+{
+    return projectVector(projector, vectorFromAltAz(azimuthDegrees, elevationDegrees), point);
+}
+
 QVector<int> selectDetectionIndicesForSolve(const QVector<CameraPipelineStarDetection>& starDetections,
-                                             const QSize& imageSize)
+                                            const QSize& imageSize)
 {
     QVector<int> indices;
     indices.reserve(starDetections.size());
@@ -877,50 +892,29 @@ QVector<int> selectDetectionIndicesForSolve(const QVector<CameraPipelineStarDete
     return indices;
 }
 
-QVector<ProjectedCatalogStar> buildProjectedCatalog(const CameraSettings& settings,
+QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatalogContext& catalogContext,
                                                     const SkyProjector& projector,
-                                                    const QDateTime& captureDateTimeUtc,
-                                                    double maxMagnitude,
                                                     double searchMarginPixels,
                                                     const QVector<int>* allowedCatalogIndices = nullptr)
 {
     QVector<ProjectedCatalogStar> projectedStars;
-    const QVector<CatalogStar>& catalogStars = brightStarCatalog(settings);
+    const QRectF expandedBounds(
+        -searchMarginPixels,
+        -searchMarginPixels,
+        projector.width + 2.0 * searchMarginPixels,
+        projector.height + 2.0 * searchMarginPixels);
 
-    const auto appendProjectedStar = [&](int i)
+    const auto appendProjectedStar = [&](const VisibleCatalogStar& visibleStar)
     {
-        const CatalogStar& star = catalogStars[i];
-        if (star.magnitude > maxMagnitude) {
-            return;
-        }
-
-        const RADec raDec{star.rightAscensionDegrees / 15.0, star.declinationDegrees};
-        const AzAlt azAlt = Astronomy::raDecToAzAlt(
-            raDec,
-            settings.m_latitude,
-            settings.m_longitude,
-            captureDateTimeUtc,
-            true);
-
-        if (!std::isfinite(azAlt.az) || !std::isfinite(azAlt.alt) || (azAlt.alt < kVisibleAltitudeFloor)) {
-            return;
-        }
-
         QPointF point;
-        if (!projectAltAz(projector, azAlt.az, azAlt.alt, point)) {
+        if (!projectVector(projector, visibleStar.vector, point)) {
             return;
         }
-
-        const QRectF expandedBounds(
-            -searchMarginPixels,
-            -searchMarginPixels,
-            projector.width + 2.0 * searchMarginPixels,
-            projector.height + 2.0 * searchMarginPixels);
         if (!expandedBounds.contains(point)) {
             return;
         }
 
-        projectedStars.append({i, point, star.magnitude});
+        projectedStars.append({visibleStar.catalogIndex, point, visibleStar.magnitude});
     };
 
     if (allowedCatalogIndices)
@@ -928,15 +922,17 @@ QVector<ProjectedCatalogStar> buildProjectedCatalog(const CameraSettings& settin
         projectedStars.reserve(allowedCatalogIndices->size());
         for (int catalogIndex : *allowedCatalogIndices)
         {
-            if ((catalogIndex >= 0) && (catalogIndex < catalogStars.size())) {
-                appendProjectedStar(catalogIndex);
+            const auto it = catalogContext.visibleStarIndexByCatalogIndex.constFind(catalogIndex);
+            if (it != catalogContext.visibleStarIndexByCatalogIndex.cend()) {
+                appendProjectedStar(catalogContext.visibleStars[*it]);
             }
         }
     }
     else
     {
-        for (int i = 0; i < catalogStars.size(); ++i) {
-            appendProjectedStar(i);
+        projectedStars.reserve(catalogContext.visibleStars.size());
+        for (const VisibleCatalogStar& visibleStar : catalogContext.visibleStars) {
+            appendProjectedStar(visibleStar);
         }
     }
 
@@ -983,6 +979,20 @@ QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& settings,
     });
 
     return visibleStars;
+}
+
+PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& settings,
+                                                       const QDateTime& captureDateTimeUtc,
+                                                       double maxMagnitude)
+{
+    PlateSolveCatalogContext context;
+    context.catalogStars = &brightStarCatalog(settings);
+    context.visibleStars = buildVisibleCatalog(settings, captureDateTimeUtc, maxMagnitude);
+    context.visibleStarIndexByCatalogIndex.reserve(context.visibleStars.size());
+    for (int i = 0; i < context.visibleStars.size(); ++i) {
+        context.visibleStarIndexByCatalogIndex.insert(context.visibleStars[i].catalogIndex, i);
+    }
+    return context;
 }
 
 TriangleSignature buildTriangleSignature(const std::array<QPointF, 3>& points)
@@ -1117,6 +1127,7 @@ bool isStrongBlindSeedEvaluation(const CameraSettings& settings,
 }
 
 Evaluation verifyBlindSeedCandidate(const CameraSettings& settings,
+                                    const PlateSolveCatalogContext& catalogContext,
                                     const QSize& imageSize,
                                     const QDateTime& captureDateTimeUtc,
                                     const QVector<CameraPipelineStarDetection>& starDetections,
@@ -1151,6 +1162,7 @@ Evaluation verifyBlindSeedCandidate(const CameraSettings& settings,
 
     Evaluation refinedCandidate = refinePoseFromMatches(
         settings,
+        catalogContext,
         imageSize,
         captureDateTimeUtc,
         starDetections,
@@ -1234,10 +1246,9 @@ QVector<TriangleSignature> buildCatalogTriangleSignatures(const CameraSettings& 
                 const std::array<int, 3> starIndices {{i, j, k}};
                 for (int pointIndex = 0; pointIndex < 3; ++pointIndex)
                 {
-                    if (!projectAltAz(localProjector,
-                                      visibleStars[starIndices[pointIndex]].azimuthDegrees,
-                                      visibleStars[starIndices[pointIndex]].elevationDegrees,
-                                      points[pointIndex]))
+                    if (!projectVector(localProjector,
+                                       visibleStars[starIndices[pointIndex]].vector,
+                                       points[pointIndex]))
                     {
                         allProjected = false;
                         break;
@@ -1337,10 +1348,9 @@ QVector<QuadSignature> buildCatalogQuadSignatures(const CameraSettings& settings
                     const std::array<int, 4> starIndices {{i, j, k, l}};
                     for (int pointIndex = 0; pointIndex < 4; ++pointIndex)
                     {
-                        if (!projectAltAz(localProjector,
-                                          visibleStars[starIndices[pointIndex]].azimuthDegrees,
-                                          visibleStars[starIndices[pointIndex]].elevationDegrees,
-                                          points[pointIndex]))
+                        if (!projectVector(localProjector,
+                                           visibleStars[starIndices[pointIndex]].vector,
+                                           points[pointIndex]))
                         {
                             allProjected = false;
                             break;
@@ -1364,6 +1374,7 @@ QVector<QuadSignature> buildCatalogQuadSignatures(const CameraSettings& settings
 }
 
 QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
+                                            const PlateSolveCatalogContext& catalogContext,
                                             const QSize& imageSize,
                                             const QDateTime& captureDateTimeUtc,
                                             const QVector<CameraPipelineStarDetection>& starDetections,
@@ -1478,7 +1489,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 bool projected = true;
                 for (int idx = 0; idx < 3; ++idx)
                 {
-                    if (!projectAltAz(rollProjector, triangleStars[idx].azimuthDegrees, triangleStars[idx].elevationDegrees, projectedPoints[idx]))
+                    if (!projectVector(rollProjector, triangleStars[idx].vector, projectedPoints[idx]))
                     {
                         projected = false;
                         break;
@@ -1506,6 +1517,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
 
                         const Evaluation candidate = evaluatePose(
                             settings,
+                            catalogContext,
                             imageSize,
                             captureDateTimeUtc,
                             starDetections,
@@ -1520,6 +1532,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                             settings.m_lensDistortionK1);
                         const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
                             settings,
+                            catalogContext,
                             imageSize,
                             captureDateTimeUtc,
                             starDetections,
@@ -1553,6 +1566,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
 }
 
 QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
+                                        const PlateSolveCatalogContext& catalogContext,
                                         const QSize& imageSize,
                                         const QDateTime& captureDateTimeUtc,
                                         const QVector<CameraPipelineStarDetection>& starDetections,
@@ -1678,7 +1692,7 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                 bool projected = true;
                 for (int idx = 0; idx < 4; ++idx)
                 {
-                    if (!projectAltAz(rollProjector, quadStars[idx].azimuthDegrees, quadStars[idx].elevationDegrees, projectedPoints[idx]))
+                    if (!projectVector(rollProjector, quadStars[idx].vector, projectedPoints[idx]))
                     {
                         projected = false;
                         break;
@@ -1706,6 +1720,7 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
 
                         const Evaluation candidate = evaluatePose(
                             settings,
+                            catalogContext,
                             imageSize,
                             captureDateTimeUtc,
                             starDetections,
@@ -1720,6 +1735,7 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                             settings.m_lensDistortionK1);
                         const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
                             settings,
+                            catalogContext,
                             imageSize,
                             captureDateTimeUtc,
                             starDetections,
@@ -1752,39 +1768,65 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
     return seeds;
 }
 
-QVector<Match> buildMatches(const CameraSettings& settings,
+quint64 spatialCellKey(int x, int y)
+{
+    return (static_cast<quint64>(static_cast<quint32>(x)) << 32)
+        | static_cast<quint32>(y);
+}
+
+QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
                             const QVector<CameraPipelineStarDetection>& starDetections,
                             const QVector<int>& detectionIndices,
                             const QVector<ProjectedCatalogStar>& projectedStars,
                             double matchRadiusPixels)
 {
     QVector<CandidatePair> candidatePairs;
-    const QVector<CatalogStar>& catalogStars = brightStarCatalog(settings);
+    const QVector<CatalogStar>& catalogStars = *catalogContext.catalogStars;
     const double maxDistanceSquared = matchRadiusPixels * matchRadiusPixels;
-    QHash<int, QPointF> projectedPointByCatalogIndex;
-    projectedPointByCatalogIndex.reserve(projectedStars.size());
-    for (const ProjectedCatalogStar& projected : projectedStars) {
-        projectedPointByCatalogIndex.insert(projected.catalogIndex, projected.point);
+    const double cellSize = std::max(1.0, matchRadiusPixels);
+    QHash<quint64, QVector<int>> projectedStarGrid;
+    projectedStarGrid.reserve(projectedStars.size());
+    for (int projectedIndex = 0; projectedIndex < projectedStars.size(); ++projectedIndex)
+    {
+        const QPointF& point = projectedStars[projectedIndex].point;
+        const int cellX = static_cast<int>(std::floor(point.x() / cellSize));
+        const int cellY = static_cast<int>(std::floor(point.y() / cellSize));
+        projectedStarGrid[spatialCellKey(cellX, cellY)].append(projectedIndex);
     }
 
     for (int detectionIndex : detectionIndices)
     {
         const QPointF detectionPoint = starDetections[detectionIndex].m_center;
-        for (const ProjectedCatalogStar& projected : projectedStars)
+        const int cellX = static_cast<int>(std::floor(detectionPoint.x() / cellSize));
+        const int cellY = static_cast<int>(std::floor(detectionPoint.y() / cellSize));
+        for (int dy = -1; dy <= 1; ++dy)
         {
-            const double dx = detectionPoint.x() - projected.point.x();
-            const double dy = detectionPoint.y() - projected.point.y();
-            const double distanceSquared = dx * dx + dy * dy;
-            if (distanceSquared > maxDistanceSquared) {
-                continue;
-            }
+            for (int dx = -1; dx <= 1; ++dx)
+            {
+                const auto it = projectedStarGrid.constFind(spatialCellKey(cellX + dx, cellY + dy));
+                if (it == projectedStarGrid.cend()) {
+                    continue;
+                }
 
-            candidatePairs.append({
-                detectionIndex,
-                projected.catalogIndex,
-                std::sqrt(distanceSquared),
-                0
-            });
+                for (int projectedIndex : it.value())
+                {
+                    const ProjectedCatalogStar& projected = projectedStars[projectedIndex];
+                    const double deltaX = detectionPoint.x() - projected.point.x();
+                    const double deltaY = detectionPoint.y() - projected.point.y();
+                    const double distanceSquared = deltaX * deltaX + deltaY * deltaY;
+                    if (distanceSquared > maxDistanceSquared) {
+                        continue;
+                    }
+
+                    candidatePairs.append({
+                        detectionIndex,
+                        projected.catalogIndex,
+                        projectedIndex,
+                        std::sqrt(distanceSquared),
+                        0
+                    });
+                }
+            }
         }
     }
 
@@ -1826,8 +1868,8 @@ QVector<Match> buildMatches(const CameraSettings& settings,
 
             const QPointF detectionDelta = starDetections[lhs.detectionIndex].m_center - starDetections[rhs.detectionIndex].m_center;
             const double detectionDistance = std::hypot(detectionDelta.x(), detectionDelta.y());
-            const QPointF lhsCatalogPoint = projectedPointByCatalogIndex.value(lhs.catalogIndex);
-            const QPointF rhsCatalogPoint = projectedPointByCatalogIndex.value(rhs.catalogIndex);
+            const QPointF& lhsCatalogPoint = projectedStars[lhs.projectedIndex].point;
+            const QPointF& rhsCatalogPoint = projectedStars[rhs.projectedIndex].point;
             const QPointF catalogDelta = lhsCatalogPoint - rhsCatalogPoint;
             const double catalogDistance = std::hypot(catalogDelta.x(), catalogDelta.y());
             const double tolerance = std::max(2.0, 0.15 * std::max(detectionDistance, catalogDistance));
@@ -2014,6 +2056,7 @@ void logUnmatchedDetections(const CameraSettings& settings,
 }
 
 Evaluation evaluatePose(const CameraSettings& settings,
+                        const PlateSolveCatalogContext& catalogContext,
                         const QSize& imageSize,
                         const QDateTime& captureDateTimeUtc,
                         const QVector<CameraPipelineStarDetection>& starDetections,
@@ -2051,10 +2094,8 @@ Evaluation evaluatePose(const CameraSettings& settings,
     }
 
     const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
-        settings,
+        catalogContext,
         projector,
-        captureDateTimeUtc,
-        settings.m_plateSolveMaxMagnitude,
         settings.m_plateSolveMatchRadius,
         allowedCatalogIndices);
     if (projectedStars.isEmpty()) {
@@ -2062,7 +2103,7 @@ Evaluation evaluatePose(const CameraSettings& settings,
     }
 
     evaluation.matches = buildMatches(
-        settings,
+        catalogContext,
         starDetections,
         detectionIndices,
         projectedStars,
@@ -2259,7 +2300,7 @@ void logPlateSolveEvaluation(const char *stage,
                              const Evaluation& evaluation,
                              bool isNewBest = false)
 {
-    if (!evaluation.valid) {
+    if (!evaluation.valid || (!isNewBest && !kLogPlateSolveCandidates)) {
         return;
     }
 
@@ -2278,6 +2319,7 @@ void logPlateSolveEvaluation(const char *stage,
 }
 
 Evaluation searchBestPose(const CameraSettings& settings,
+                          const PlateSolveCatalogContext& catalogContext,
                           const QSize& imageSize,
                           const QDateTime& captureDateTimeUtc,
                           const QVector<CameraPipelineStarDetection>& starDetections,
@@ -2319,6 +2361,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             double fovDegrees) {
         const Evaluation candidate = evaluatePose(
             settings,
+            catalogContext,
             imageSize,
             captureDateTimeUtc,
             starDetections,
@@ -2470,10 +2513,11 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     if (needBlindSearch)
     {
-        const QVector<VisibleCatalogStar> visibleStars = buildVisibleCatalog(settings, captureDateTimeUtc, settings.m_plateSolveMaxMagnitude);
+        const QVector<VisibleCatalogStar>& visibleStars = catalogContext.visibleStars;
 
         const QVector<Evaluation> blindTriangleSeeds = buildBlindTriangleSeeds(
             settings,
+            catalogContext,
             imageSize,
             captureDateTimeUtc,
             starDetections,
@@ -2490,6 +2534,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
         const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
             settings,
+            catalogContext,
             imageSize,
             captureDateTimeUtc,
             starDetections,
@@ -2574,6 +2619,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     {
                         const Evaluation candidate = evaluatePose(
                             settings,
+                            catalogContext,
                             imageSize,
                             captureDateTimeUtc,
                             starDetections,
@@ -2638,6 +2684,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     {
                         const Evaluation candidate = evaluatePose(
                             settings,
+                            catalogContext,
                             imageSize,
                             captureDateTimeUtc,
                             starDetections,
@@ -2677,6 +2724,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
 }
 
 Evaluation refinePoseFromMatches(const CameraSettings& settings,
+                                 const PlateSolveCatalogContext& catalogContext,
                                  const QSize& imageSize,
                                  const QDateTime& captureDateTimeUtc,
                                  const QVector<CameraPipelineStarDetection>& starDetections,
@@ -2706,6 +2754,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
 
     Evaluation best = evaluatePose(
         settings,
+        catalogContext,
         imageSize,
         captureDateTimeUtc,
         starDetections,
@@ -2751,6 +2800,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                     {
                         const Evaluation candidate = evaluatePose(
                             settings,
+                            catalogContext,
                             imageSize,
                             captureDateTimeUtc,
                             starDetections,
@@ -2805,6 +2855,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                     {
                         const Evaluation candidate = evaluatePose(
                             settings,
+                            catalogContext,
                             imageSize,
                             captureDateTimeUtc,
                             starDetections,
@@ -2863,6 +2914,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                     {
                         const Evaluation candidate = evaluatePose(
                             settings,
+                            catalogContext,
                             imageSize,
                             captureDateTimeUtc,
                             starDetections,
@@ -3013,11 +3065,15 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         ? QDateTime::currentDateTime()
         : (settings.m_plateSolveDateTime.isValid() ? settings.m_plateSolveDateTime : captureDateTime);
     const QDateTime captureDateTimeUtc = (solveDateTime.isValid() ? solveDateTime : QDateTime::currentDateTime()).toUTC();
-    Evaluation best = searchBestPose(settings, imageSize, captureDateTimeUtc, starDetections, detectionIndices);
+    const PlateSolveCatalogContext catalogContext = buildPlateSolveCatalogContext(
+        settings,
+        captureDateTimeUtc,
+        settings.m_plateSolveMaxMagnitude);
+    Evaluation best = searchBestPose(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, detectionIndices);
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
         return result;
     }
-    best = refinePoseFromMatches(settings, imageSize, captureDateTimeUtc, starDetections, best);
+    best = refinePoseFromMatches(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, best);
     logPlateSolveEvaluation("refine-from-matches", best, true);
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
         qDebug() << "CameraPlateSolver: refinePoseFromMatches failed to keep a valid solution";
@@ -3039,10 +3095,8 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     }
 
     const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
-        settings,
+        catalogContext,
         finalProjector,
-        captureDateTimeUtc,
-        settings.m_plateSolveMaxMagnitude,
         settings.m_plateSolveMatchRadius);
     result.m_catalogCandidateStars = projectedStars.size();
     const QVector<int> allDetectionIndices = [&starDetections]() {
@@ -3054,7 +3108,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return indices;
     }();
     const QVector<Match> allMatches = buildMatches(
-        settings,
+        catalogContext,
         starDetections,
         allDetectionIndices,
         projectedStars,

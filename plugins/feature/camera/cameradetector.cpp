@@ -35,6 +35,7 @@
 #include "cameraplatesolver.h"
 #include "cameradetector.h"
 #include "camerapostprocessor.h"
+#include "camera.h"
 
 MESSAGE_CLASS_DEFINITION(CameraDetector::MsgConfigureCameraDetector, Message)
 MESSAGE_CLASS_DEFINITION(CameraDetector::MsgProcessFrame, Message)
@@ -352,6 +353,7 @@ cv::Size readOnnxInputSize(const QString& modelPath)
 
 CameraDetector::CameraDetector() :
     m_msgQueueToGUI(nullptr),
+    m_msgQueueToFeature(nullptr),
     m_nextStage(nullptr),
     m_captureActive(false),
     m_motionPersistenceRemaining(0),
@@ -573,12 +575,14 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
     {
         m_yoloNet = cv::dnn::Net();
         m_yoloLoadedModelPath.clear();
+        m_reportedErrorKeys.clear();
     }
 
     if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath))
     {
         m_yoloLabels.clear();
         m_yoloLoadedLabelsPath.clear();
+        m_reportedErrorKeys.clear();
     }
 
     if ((force && !m_settings.m_yoloEnabled)
@@ -1702,6 +1706,10 @@ void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& ro
             else
             {
                 qWarning() << "CameraDetector::runYoloDetections: cannot open labels file:" << m_settings.m_yoloLabelsPath;
+                reportErrorToFeature(
+                    QStringLiteral("yoloLabels:%1").arg(m_settings.m_yoloLabelsPath),
+                    tr("YOLO labels file load failed"),
+                    tr("Failed to open YOLO labels file:\n%1").arg(m_settings.m_yoloLabelsPath));
             }
         }
     }
@@ -1714,10 +1722,9 @@ void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& ro
 
         if (!m_settings.m_yoloModelPath.isEmpty() && !(m_settings.m_yoloModelPath.startsWith("http://") || m_settings.m_yoloModelPath.startsWith("https://")))
         {
+            const QString localFile = m_settings.m_yoloModelPath;
             try
             {
-                const QString localFile = m_settings.m_yoloModelPath;
-
                 m_yoloNet = cv::dnn::readNetFromONNX(localFile.toStdString());
 
                 const cv::Size modelInputSize = readOnnxInputSize(localFile);
@@ -1739,6 +1746,10 @@ void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& ro
             catch (const cv::Exception& e)
             {
                 qWarning() << "CameraDetector::runYoloDetections: failed to load model:" << e.what();
+                reportErrorToFeature(
+                    QStringLiteral("yoloModelLoad:%1").arg(localFile),
+                    tr("YOLO model load failed"),
+                    tr("Failed to load YOLO model:\n%1\n\n%2").arg(localFile, QString::fromUtf8(e.what())));
                 return;
             }
         }
@@ -1976,6 +1987,16 @@ void CameraDetector::reportObjectDetectionHistoryToGUI() const
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportObjectDetectionHistory::create(getObjectDetectionHistorySnapshot()));
     }
+}
+
+void CameraDetector::reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage)
+{
+    if (!m_msgQueueToFeature || m_reportedErrorKeys.contains(errorKey)) {
+        return;
+    }
+
+    m_reportedErrorKeys.insert(errorKey);
+    m_msgQueueToFeature->push(Camera::MsgReportError::create(title, errorMessage));
 }
 
 void CameraDetector::processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame)

@@ -485,18 +485,21 @@ MESSAGE_CLASS_DECLARATION
     void stopWork();
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setMessageQueueToGUI(MessageQueue *messageQueue);
+    void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
     void setFrameAligner(CameraFrameAligner *frameAligner) { m_frameAligner = frameAligner; }
     void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
 
 private:
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_msgQueueToFeature;
     CameraFrameAligner *m_frameAligner;
     MessageQueue *m_postProcessorInputMessageQueue;
     QRecursiveMutex m_mutex;
     CameraSettings m_settings;
     AvailableDeviceHandler m_availableDeviceHandler;
     AvailableDeviceList m_availableDevices;
+    QSet<QString> m_reportedFeatureErrorKeys;
     bool m_capturing;
     bool m_capturingAudio;
     QTimer m_captureTimer;
@@ -577,6 +580,7 @@ private:
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void reportAvailableDevicesToGUI() const;
+    void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     void startCapture();
     void stopCapture();
     QImage createPlaceholderFrame() const;

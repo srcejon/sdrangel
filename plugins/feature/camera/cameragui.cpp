@@ -2461,6 +2461,7 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 void CameraGUI::setupQtCapture()
 {
     cleanupQtCapture();
+    m_reportedFeatureErrorKeys.clear();
     m_qtStillCaptureTimer.stop();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -2545,6 +2546,13 @@ void CameraGUI::setupQtCapture()
             << m_settings.m_resolutionWidth
             << m_settings.m_resolutionHeight
             << m_settings.m_framesPerSecond;
+        reportFeatureError(
+            QStringLiteral("qtNoMatchingFormat"),
+            tr("Qt camera format not available"),
+            tr("No matching Qt camera format was found for %1x%2 at %3 FPS.")
+                .arg(m_settings.m_resolutionWidth)
+                .arg(m_settings.m_resolutionHeight)
+                .arg(m_settings.m_framesPerSecond));
     }
 
     m_qtCamera->setExposureMode(QCamera::ExposureManual);
@@ -2568,6 +2576,10 @@ void CameraGUI::setupQtCapture()
                     Q_UNUSED(id)
                     Q_UNUSED(error)
                     qWarning() << "CameraGUI::setupQtCapture: image capture error:" << errorString;
+                    reportFeatureError(
+                        QStringLiteral("qtImageCaptureError"),
+                        tr("Qt image capture failed"),
+                        errorString.isEmpty() ? tr("The Qt camera reported an image capture error.") : errorString);
                 });
     }
     else
@@ -2699,6 +2711,10 @@ void CameraGUI::setupQtCapture()
                     Q_UNUSED(id)
                     Q_UNUSED(error)
                     qWarning() << "CameraGUI::setupQtCapture: image capture error:" << errorString;
+                    reportFeatureError(
+                        QStringLiteral("qtImageCaptureError"),
+                        tr("Qt image capture failed"),
+                        errorString.isEmpty() ? tr("The Qt camera reported an image capture error.") : errorString);
                 });
     }
     else
@@ -2783,6 +2799,7 @@ void CameraGUI::setupQtCapture()
 
 void CameraGUI::cleanupQtCapture()
 {
+    m_reportedFeatureErrorKeys.clear();
     m_qtStillCaptureTimer.stop();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     m_pendingQtVideoFrame = QVideoFrame();
@@ -2850,6 +2867,16 @@ void CameraGUI::cleanupQtCapture()
         m_qtCamera = nullptr;
     }
 #endif
+}
+
+void CameraGUI::reportFeatureError(const QString& errorKey, const QString& title, const QString& errorMessage)
+{
+    if (!m_camera || m_reportedFeatureErrorKeys.contains(errorKey)) {
+        return;
+    }
+
+    m_reportedFeatureErrorKeys.insert(errorKey);
+    m_camera->getInputMessageQueue()->push(Camera::MsgReportError::create(title, errorMessage));
 }
 
 void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool force)

@@ -161,6 +161,7 @@ private:
     bool m_showMotionExclusionRects = true;
     QList<qint64> m_pipelineFrameTimes;
     double m_lastPipelineFps = 0.0;
+    QSet<QString> m_reportedFeatureErrorKeys;
     bool m_lastPlateSolved = false;
     int m_lastPlateSolvedMatches = 0;
     int m_lastPlateSolveDetectedStarsConsidered = 0;
@@ -305,6 +306,7 @@ private:
     static void updateColorButton(QToolButton* btn, const QColor& color);
     void setupQtCapture();
     void cleanupQtCapture();
+    void reportFeatureError(const QString& errorKey, const QString& title, const QString& errorMessage);
     void applyQtCameraSettings(const QList<QString>& settingsKeys, bool force);
     void applyImageToolTip();
     void applyVideoToolTip();

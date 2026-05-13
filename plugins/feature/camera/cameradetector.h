@@ -153,6 +153,7 @@ public:
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setNextStage(CameraPostProcessor *nextStage) { m_nextStage = nextStage; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
 
 private:
     struct PendingDisappearState
@@ -163,6 +164,7 @@ private:
 
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_msgQueueToFeature;
     CameraPostProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
@@ -182,6 +184,7 @@ private:
     cv::dnn::Net m_yoloNet;
     cv::Size m_yoloInputSize;
     QString m_yoloLoadedModelPath;
+    QSet<QString> m_reportedErrorKeys;
     QStringList m_yoloLabels;
     QString m_yoloLoadedLabelsPath;
     QSet<QString> m_detectedObjectClasses;
@@ -215,6 +218,7 @@ private:
     void clearObjectDetectionState();
     void clearObjectDetectionHistory();
     void reportObjectDetectionHistoryToGUI() const;
+    void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     [[nodiscard]] QList<CameraDetectionHistoryEntry> getObjectDetectionHistorySnapshot() const;
     bool applyObjectDetectedSettings(const QString& className);
     void applyObjectDisappearedSettings(const QString& className);

@@ -58,6 +58,7 @@
 #include "dsp/dspengine.h"
 #include "audio/audiodevicemanager.h"
 #include "util/profiler.h"
+#include "camera.h"
 #include "camerafinder.h"
 #include "cameraframealigner.h"
 #include "camerapostprocessor.h"
@@ -464,6 +465,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
+    m_msgQueueToFeature(nullptr),
     m_frameAligner(nullptr),
     m_postProcessorInputMessageQueue(nullptr),
     m_availableDeviceHandler({}, QStringList{"spectrumview"}),
@@ -721,6 +723,16 @@ void CameraWorker::reportAvailableDevicesToGUI() const
     m_msgQueueToGUI->push(MsgReportAvailableDevices::create(longIds));
 }
 
+void CameraWorker::reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage)
+{
+    if (!m_msgQueueToFeature || m_reportedFeatureErrorKeys.contains(errorKey)) {
+        return;
+    }
+
+    m_reportedFeatureErrorKeys.insert(errorKey);
+    m_msgQueueToFeature->push(Camera::MsgReportError::create(title, errorMessage));
+}
+
 bool CameraWorker::handleMessage(const Message& cmd)
 {
     if (MsgConfigureCameraWorker::match(cmd))
@@ -733,6 +745,7 @@ bool CameraWorker::handleMessage(const Message& cmd)
     else if (MsgStartStop::match(cmd))
     {
         MsgStartStop& cfg = (MsgStartStop&) cmd;
+        m_reportedFeatureErrorKeys.clear();
 
         if (cfg.getStartStop()) {
             startCapture();
@@ -781,6 +794,15 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
+    }
+
+    if (force
+        || settingsKeys.contains("cameraProtocol")
+        || settingsKeys.contains("cameraId")
+        || settingsKeys.contains("cameraDescription")
+        || settingsKeys.contains("yoloLabelsPath"))
+    {
+        m_reportedFeatureErrorKeys.clear();
     }
 
     if ((force
@@ -2854,6 +2876,10 @@ bool CameraWorker::asiOpenCamera()
     if (openError != ASI_SUCCESS) {
         setLastAsiError(openError, asiErrorCodeToString(openError));
         qDebug() << "CameraWorker: ASIOpenCamera failed:" << openError << asiErrorCodeToString(openError);
+        reportErrorToFeature(
+            QStringLiteral("asiOpen:%1").arg(cameraId),
+            tr("ASI camera open failed"),
+            tr("Failed to open ASI camera %1:\n%2").arg(cameraId).arg(asiErrorCodeToString(openError)));
         return false;
     }
 
@@ -2862,6 +2888,10 @@ bool CameraWorker::asiOpenCamera()
     {
         setLastAsiError(initError, asiErrorCodeToString(initError));
         qDebug() << "CameraWorker: ASIInitCamera failed:" << initError << asiErrorCodeToString(initError);
+        reportErrorToFeature(
+            QStringLiteral("asiInit:%1").arg(cameraId),
+            tr("ASI camera initialization failed"),
+            tr("Failed to initialize ASI camera %1:\n%2").arg(cameraId).arg(asiErrorCodeToString(initError)));
         const ASI_ERROR_CODE closeError = ASICloseCamera(cameraId);
         if (closeError != ASI_SUCCESS) {
             qDebug() << "CameraWorker: ASICloseCamera failed after init error:" << closeError << asiErrorCodeToString(closeError);
@@ -2883,6 +2913,10 @@ bool CameraWorker::asiOpenCamera()
         {
             setLastAsiError(modeError, asiErrorCodeToString(modeError));
             qDebug() << "CameraWorker: ASISetCameraMode failed:" << modeError << asiErrorCodeToString(modeError);
+            reportErrorToFeature(
+                QStringLiteral("asiMode:%1").arg(cameraId),
+                tr("ASI camera mode setup failed"),
+                tr("Failed to set ASI camera %1 to normal mode:\n%2").arg(cameraId).arg(asiErrorCodeToString(modeError)));
             const ASI_ERROR_CODE closeError = ASICloseCamera(cameraId);
             if (closeError != ASI_SUCCESS) {
                 qDebug() << "CameraWorker: ASICloseCamera failed after mode error:" << closeError << asiErrorCodeToString(closeError);
@@ -3260,6 +3294,10 @@ void CameraWorker::asiCaptureExposureFrame()
     {
         setLastAsiError(startExposureError, asiErrorCodeToString(startExposureError));
         qDebug() << "CameraWorker: ASIStartExposure failed:" << startExposureError << asiErrorCodeToString(startExposureError);
+        reportErrorToFeature(
+            QStringLiteral("asiStartExposure:%1").arg(cameraId),
+            tr("ASI exposure start failed"),
+            tr("Failed to start ASI exposure on camera %1:\n%2").arg(cameraId).arg(asiErrorCodeToString(startExposureError)));
         return;
     }
 
@@ -3333,6 +3371,10 @@ void CameraWorker::asiCaptureVideoFrame()
         if (startCaptureError != ASI_SUCCESS) {
             setLastAsiError(startCaptureError, asiErrorCodeToString(startCaptureError));
             qDebug() << "CameraWorker: ASIStartVideoCapture failed:" << startCaptureError << asiErrorCodeToString(startCaptureError);
+            reportErrorToFeature(
+                QStringLiteral("asiStartVideo:%1").arg(cameraId),
+                tr("ASI video capture start failed"),
+                tr("Failed to start ASI video capture on camera %1:\n%2").arg(cameraId).arg(asiErrorCodeToString(startCaptureError)));
             return;
         }
         setLastAsiError(ASI_SUCCESS, QString());

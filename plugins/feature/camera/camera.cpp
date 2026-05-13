@@ -35,6 +35,7 @@
 MESSAGE_CLASS_DEFINITION(Camera::MsgConfigureCamera, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgRefreshCameraList, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgReportError, Message)
 
 const char* const Camera::m_featureIdURI = "sdrangel.feature.camera";
 const char* const Camera::m_featureId = "Camera";
@@ -64,6 +65,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
     QObject::connect(m_workerThread, &QThread::finished, m_workerThread, &QThread::deleteLater);
     m_worker->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_worker->setMessageQueueToFeature(getInputMessageQueue());
     m_worker->setFrameAligner(getFrameAligner());
     m_worker->setPostProcessorInputMessageQueue(getPostProcessorInputMessageQueue());
     m_workerThread->start();
@@ -99,6 +101,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_detectorThread, &QThread::finished, m_detectorThread, &QThread::deleteLater);
     m_detector->setNextStage(m_postProcessor);
     m_detector->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_detector->setMessageQueueToFeature(getInputMessageQueue());
     m_detectorThread->start();
     m_detector->getInputMessageQueue()->push(CameraDetector::MsgConfigureCameraDetector::create(m_settings, QList<QString>(), true));
 
@@ -234,6 +237,7 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
     Feature::setMessageQueueToGUI(queue);
     if (m_worker) {
         m_worker->setMessageQueueToGUI(queue);
+        m_worker->setMessageQueueToFeature(getInputMessageQueue());
     }
     if (m_frameAligner) {
         (void) queue;
@@ -246,6 +250,7 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
     }
     if (m_detector) {
         m_detector->setMessageQueueToGUI(queue);
+        m_detector->setMessageQueueToFeature(getInputMessageQueue());
     }
     if (m_postProcessor) {
         m_postProcessor->setMessageQueueToGUI(queue);
@@ -278,6 +283,15 @@ bool Camera::handleMessage(const Message& cmd)
             m_worker->getInputMessageQueue()->push(CameraWorker::MsgRefreshCameraList::create());
         }
 
+        return true;
+    }
+    else if (MsgReportError::match(cmd))
+    {
+        const MsgReportError& report = (const MsgReportError&) cmd;
+        m_errorMessage = report.getTitle().isEmpty()
+            ? report.getErrorMessage()
+            : QStringLiteral("%1\n\n%2").arg(report.getTitle(), report.getErrorMessage());
+        m_state = StError;
         return true;
     }
 

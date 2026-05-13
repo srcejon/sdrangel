@@ -103,6 +103,29 @@ public:
         MsgRefreshCameraList() : Message() {}
     };
 
+    class MsgReportError : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QString& getTitle() const { return m_title; }
+        const QString& getErrorMessage() const { return m_errorMessage; }
+
+        static MsgReportError* create(const QString& title, const QString& errorMessage)
+        {
+            return new MsgReportError(title, errorMessage);
+        }
+
+    private:
+        QString m_title;
+        QString m_errorMessage;
+
+        MsgReportError(const QString& title, const QString& errorMessage) :
+            Message(),
+            m_title(title),
+            m_errorMessage(errorMessage)
+        { }
+    };
+
     Camera(WebAPIAdapterInterface *webAPIAdapterInterface);
     ~Camera() override;
     void destroy() override { delete this; }

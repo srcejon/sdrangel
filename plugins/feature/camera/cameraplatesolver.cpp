@@ -687,24 +687,53 @@ bool plateSolveStartUsesFov(const CameraSettings& settings)
     return settings.m_plateSolveStartMode != CameraSettings::PlateSolveStartBlind;
 }
 
+bool plateSolveStartUsesCurrentSettingsOnly(const CameraSettings& settings)
+{
+    return settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartCurrentSettingsOnly;
+}
+
 bool plateSolveStartUsesElevation(const CameraSettings& settings)
 {
-    return settings.m_plateSolveStartMode >= CameraSettings::PlateSolveStartFovElevation;
+    switch (settings.m_plateSolveStartMode)
+    {
+    case CameraSettings::PlateSolveStartFovElevation:
+    case CameraSettings::PlateSolveStartFovAzElRoll:
+    case CameraSettings::PlateSolveStartFovAzElRollLens:
+    case CameraSettings::PlateSolveStartCurrentSettingsOnly:
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool plateSolveStartUsesDirection(const CameraSettings& settings)
 {
-    return settings.m_plateSolveStartMode >= CameraSettings::PlateSolveStartFovAzElRoll;
+    switch (settings.m_plateSolveStartMode)
+    {
+    case CameraSettings::PlateSolveStartFovAzElRoll:
+    case CameraSettings::PlateSolveStartFovAzElRollLens:
+    case CameraSettings::PlateSolveStartCurrentSettingsOnly:
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool plateSolveStartUsesLens(const CameraSettings& settings)
 {
-    return settings.m_plateSolveStartMode >= CameraSettings::PlateSolveStartFovAzElRollLens;
+    switch (settings.m_plateSolveStartMode)
+    {
+    case CameraSettings::PlateSolveStartFovAzElRollLens:
+    case CameraSettings::PlateSolveStartCurrentSettingsOnly:
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool canCalibrateLens(const CameraSettings& settings)
 {
-    return plateSolveStartUsesLens(settings);
+    return settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens;
 }
 
 const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
@@ -3048,16 +3077,12 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     result.m_catalogSource = currentCatalogSource(settings);
     result.m_catalogStarsLoaded = brightStarCatalog(settings).size();
     result.m_detectedStarsConsidered = starDetections.size();
+    const bool useCurrentSettingsOnly = plateSolveStartUsesCurrentSettingsOnly(settings);
     const bool useStartElevation = plateSolveStartUsesElevation(settings);
     const bool useStartDirection = plateSolveStartUsesDirection(settings);
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
 
-    if ((starDetections.size() < settings.m_plateSolveMinMatches)) {
-        return result;
-    }
-
-    const QVector<int> detectionIndices = selectDetectionIndicesForSolve(starDetections, imageSize);
-    if (detectionIndices.size() < settings.m_plateSolveMinMatches) {
+    if (starDetections.isEmpty()) {
         return result;
     }
 
@@ -3069,6 +3094,117 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         settings,
         captureDateTimeUtc,
         settings.m_plateSolveMaxMagnitude);
+
+    const QVector<int> allDetectionIndices = [&starDetections]() {
+        QVector<int> indices;
+        indices.reserve(starDetections.size());
+        for (int i = 0; i < starDetections.size(); ++i) {
+            indices.append(i);
+        }
+        return indices;
+    }();
+
+    if (useCurrentSettingsOnly)
+    {
+        const SkyProjector currentSettingsProjector = createProjector(
+            settings,
+            imageSize,
+            settings.m_azimuth,
+            settings.m_elevation,
+            settings.m_roll,
+            settings.m_fov,
+            settings.m_lensCenterOffsetX,
+            settings.m_lensCenterOffsetY,
+            settings.m_lensDistortionK1);
+        if (!currentSettingsProjector.valid) {
+            PROFILER_STOP(__FUNCTION__ ": invalid current-settings projector");
+            return result;
+        }
+
+        const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
+            catalogContext,
+            currentSettingsProjector,
+            settings.m_plateSolveMatchRadius);
+        result.m_catalogCandidateStars = projectedStars.size();
+
+        const QVector<Match> allMatches = buildMatches(
+            catalogContext,
+            starDetections,
+            allDetectionIndices,
+            projectedStars,
+            settings.m_plateSolveMatchRadius);
+
+        int outlierCount = 0;
+        QVector<Match> finalMatches = rejectOutlierMatches(
+            allMatches,
+            settings.m_plateSolveMinMatches,
+            settings.m_plateSolveMatchRadius,
+            &outlierCount);
+        result.m_outlierStars = outlierCount;
+
+        appendSupplementalMatches(
+            starDetections,
+            projectedStars,
+            settings.m_plateSolveMatchRadius,
+            finalMatches);
+
+        if (finalMatches.isEmpty()) {
+            PROFILER_STOP(__FUNCTION__ ": no current-settings matches");
+            return result;
+        }
+
+        double sumSquaredError = 0.0;
+        double maxError = 0.0;
+        QHash<int, QPointF> projectedPointsByCatalogIndex;
+        for (const ProjectedCatalogStar& projectedStar : projectedStars) {
+            projectedPointsByCatalogIndex.insert(projectedStar.catalogIndex, projectedStar.point);
+        }
+        for (const Match& match : finalMatches)
+        {
+            CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
+            const CatalogStar& catalogStar = brightStarCatalog(settings)[match.catalogIndex];
+            detection.m_label = catalogStar.name;
+            detection.m_projectedCenter = projectedPointsByCatalogIndex.value(match.catalogIndex);
+            detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
+            detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
+            detection.m_catalogSpectralType = catalogStar.spectralType;
+            detection.m_solved = true;
+            sumSquaredError += match.distancePixels * match.distancePixels;
+            maxError = std::max(maxError, match.distancePixels);
+        }
+
+        result.m_matchedStars = finalMatches.size();
+        result.m_rmsErrorPixels = std::sqrt(sumSquaredError / finalMatches.size());
+        result.m_maxErrorPixels = maxError;
+        result.m_solved = finalMatches.size() >= settings.m_plateSolveMinMatches;
+        result.m_azimuthDegrees = settings.m_azimuth;
+        result.m_elevationDegrees = settings.m_elevation;
+        result.m_rollDegrees = settings.m_roll;
+        result.m_fovDegrees = settings.m_fov;
+        result.m_centerOffsetXPixels = settings.m_lensCenterOffsetX;
+        result.m_centerOffsetYPixels = settings.m_lensCenterOffsetY;
+        result.m_distortionK1 = settings.m_lensDistortionK1;
+
+        logUnmatchedDetections(
+            settings,
+            starDetections,
+            projectedStars,
+            finalMatches,
+            settings.m_plateSolveMatchRadius);
+
+        PROFILER_STOP(__FUNCTION__ ": current-settings-only");
+        return result;
+    }
+
+    if ((starDetections.size() < settings.m_plateSolveMinMatches)) {
+        return result;
+    }
+
+    const QVector<int> detectionIndices = selectDetectionIndicesForSolve(starDetections, imageSize);
+    if (detectionIndices.size() < settings.m_plateSolveMinMatches) {
+        return result;
+    }
+
     Evaluation best = searchBestPose(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, detectionIndices);
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
         return result;
@@ -3099,14 +3235,6 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         finalProjector,
         settings.m_plateSolveMatchRadius);
     result.m_catalogCandidateStars = projectedStars.size();
-    const QVector<int> allDetectionIndices = [&starDetections]() {
-        QVector<int> indices;
-        indices.reserve(starDetections.size());
-        for (int i = 0; i < starDetections.size(); ++i) {
-            indices.append(i);
-        }
-        return indices;
-    }();
     const QVector<Match> allMatches = buildMatches(
         catalogContext,
         starDetections,

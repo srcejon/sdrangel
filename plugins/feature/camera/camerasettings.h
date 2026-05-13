@@ -140,7 +140,8 @@ struct CameraSettings
         PlateSolveStartFov,
         PlateSolveStartFovElevation,
         PlateSolveStartFovAzElRoll,
-        PlateSolveStartFovAzElRollLens
+        PlateSolveStartFovAzElRollLens,
+        PlateSolveStartCurrentSettingsOnly
     };
 
     enum PlateSolveLabelMode

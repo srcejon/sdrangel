@@ -4836,6 +4836,11 @@ li.checked::marker { content: &quot;\2612&quot;; }
                   <string>FoV + Az/El/Roll + Lens Distortion</string>
                  </property>
                 </item>
+                <item>
+                 <property name="text">
+                  <string>Current settings only</string>
+                 </property>
+                </item>
                </widget>
               </item>
               <item row="2" column="0">

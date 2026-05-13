@@ -854,7 +854,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_plateSolveMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveMatchRadius, m_maxPlateSolveMatchRadius);
         m_plateSolveSearchRadius = qBound(m_minPlateSolveSearchRadius, m_plateSolveSearchRadius, m_maxPlateSolveSearchRadius);
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(qBound(0, static_cast<int>(m_plateSolveApplyMode), 3));
-        m_plateSolveStartMode = static_cast<PlateSolveStartMode>(qBound(0, static_cast<int>(m_plateSolveStartMode), 4));
+        m_plateSolveStartMode = static_cast<PlateSolveStartMode>(qBound(0, static_cast<int>(m_plateSolveStartMode), 5));
         m_plateSolveLabelMode = static_cast<PlateSolveLabelMode>(qBound(0, static_cast<int>(m_plateSolveLabelMode), 2));
         m_lensCenterOffsetX = qBound(m_minLensCenterOffset, m_lensCenterOffsetX, m_maxLensCenterOffset);
         m_lensCenterOffsetY = qBound(m_minLensCenterOffset, m_lensCenterOffsetY, m_maxLensCenterOffset);

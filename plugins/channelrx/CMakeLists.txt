@@ -10,6 +10,12 @@ if (ENABLE_CHANNELRX_CHANNELPOWER)
     add_subdirectory(channelpower)
 endif()
 
+if (ENABLE_CHANNELRX_METEOR AND (SERVER_MODE OR Qt${QT_DEFAULT_MAJOR_VERSION}Charts_FOUND))
+    add_subdirectory(meteor)
+else()
+    message(STATUS "Not building meteor (ENABLE_CHANNELRX_METEOR=${ENABLE_CHANNELRX_METEOR} Qt${QT_DEFAULT_MAJOR_VERSION}Charts_FOUND=${Qt${QT_DEFAULT_MAJOR_VERSION}Charts_FOUND})")
+endif()
+
 if (ENABLE_CHANNELRX_ENDOFTRAIN)
     add_subdirectory(demodendoftrain)
 endif()

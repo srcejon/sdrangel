@@ -164,6 +164,7 @@ option(ENABLE_CHANNELRX_HEATMAP "Enable channelrx heatmap plugin" ON)
 option(ENABLE_CHANNELRX_FREQSCANNER "Enable channelrx freqscanner plugin" ON)
 option(ENABLE_CHANNELRX_ENDOFTRAIN "Enable channelrx end-of-train plugin" ON)
 option(ENABLE_CHANNELRX_CHANNELPOWER "Enable channelrx channel power plugin" ON)
+option(ENABLE_CHANNELRX_METEOR "Enable channelrx meteor detector plugin" ON)
 option(ENABLE_CHANNELRX_WDSPRX "Enable channelrx WDSP receiver plugin" ON)
 option(ENABLE_CHANNELRX_DEMODINMARSAT "Enable channelrx demodinmarsat plugin" ON)
 

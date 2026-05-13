@@ -1170,7 +1170,7 @@ void CameraGUI::displaySettings()
     settingsUI()->motionCloseSizeSpin->setValue(m_settings.m_motionCloseSize);
     settingsUI()->motionPersistenceFramesSpin->setValue(m_settings.m_motionPersistenceFrames);
     settingsUI()->minContourAreaSpin->setValue(m_settings.m_minContourArea);
-    settingsUI()->starDetectCheck->setChecked(m_settings.m_starDetect);
+    ui->starDetectButton->setChecked(m_settings.m_starDetect);
     settingsUI()->starThresholdSpin->setValue(m_settings.m_starThreshold);
     settingsUI()->starBackgroundBlurSpin->setValue(m_settings.m_starBackgroundBlur);
     settingsUI()->starMinAreaSpin->setValue(m_settings.m_starMinArea);
@@ -1178,7 +1178,6 @@ void CameraGUI::displaySettings()
     settingsUI()->starMaxAspectRatioSpin->setValue(m_settings.m_starMaxAspectRatio);
     settingsUI()->starDebugViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_starDebugView));
     settingsUI()->plateSolveLabelModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveLabelMode));
-    settingsUI()->plateSolveCheck->setChecked(m_settings.m_plateSolve);
     settingsUI()->plateSolveMaxMagnitudeSpin->setValue(m_settings.m_plateSolveMaxMagnitude);
     settingsUI()->plateSolveMinMatchesSpin->setValue(m_settings.m_plateSolveMinMatches);
     settingsUI()->plateSolveMatchRadiusSpin->setValue(m_settings.m_plateSolveMatchRadius);
@@ -1588,6 +1587,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->detectionRoiDeleteButton, &QToolButton::clicked, this, &CameraGUI::on_detectionRoiDeleteButton_clicked);
     QObject::connect(settingsUI()->detectionResetDefaultsButton, &QToolButton::clicked, this, &CameraGUI::on_detectionResetDefaultsButton_clicked);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
+    QObject::connect(ui->starDetectButton, &QToolButton::toggled, this, &CameraGUI::on_starDetectButton_toggled);
     QObject::connect(settingsUI()->motionBackgroundSubtractorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged);
     QObject::connect(settingsUI()->motionMaskViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionMaskViewCombo_currentIndexChanged);
     QObject::connect(settingsUI()->motionHistorySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionHistorySpin_valueChanged);
@@ -1601,7 +1601,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->motionPersistenceFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionPersistenceFramesSpin_valueChanged);
     QObject::connect(settingsUI()->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
     QObject::connect(settingsUI()->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
-    QObject::connect(settingsUI()->starDetectCheck, &QCheckBox::toggled, this, &CameraGUI::on_starDetectCheck_toggled);
     QObject::connect(settingsUI()->starThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->starBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starBackgroundBlurSpin_valueChanged);
     QObject::connect(settingsUI()->starMinAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starMinAreaSpin_valueChanged);
@@ -1610,7 +1609,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->starDebugViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_starDebugViewCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveLabelModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveLabelModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->starColorButton, &QToolButton::clicked, this, &CameraGUI::on_starColorButton_clicked);
-    QObject::connect(settingsUI()->plateSolveCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveCheck_toggled);
     QObject::connect(settingsUI()->plateSolveMaxMagnitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMaxMagnitudeSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveMinMatchesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMinMatchesSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMatchRadiusSpin_valueChanged);
@@ -5489,7 +5487,6 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_starDebugView = defaults.m_starDebugView;
     m_settings.m_starColor = defaults.m_starColor;
     m_settings.m_plateSolveLabelMode = defaults.m_plateSolveLabelMode;
-    m_settings.m_plateSolve = defaults.m_plateSolve;
     m_settings.m_plateSolveMaxMagnitude = defaults.m_plateSolveMaxMagnitude;
     m_settings.m_plateSolveMinMatches = defaults.m_plateSolveMinMatches;
     m_settings.m_plateSolveMatchRadius = defaults.m_plateSolveMatchRadius;
@@ -5543,7 +5540,6 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "starDebugView",
         "starColor",
         "plateSolveLabelMode",
-        "plateSolve",
         "plateSolveMaxMagnitude",
         "plateSolveMinMatches",
         "plateSolveMatchRadius",
@@ -5652,9 +5648,10 @@ void CameraGUI::on_motionBoxColorButton_clicked()
     }
 }
 
-void CameraGUI::on_starDetectCheck_toggled(bool checked)
+void CameraGUI::on_starDetectButton_toggled(bool checked)
 {
     m_settings.m_starDetect = checked;
+    m_settings.m_plateSolve = checked;
     applySetting("starDetect");
 }
 
@@ -5710,12 +5707,6 @@ void CameraGUI::on_starColorButton_clicked()
         updateColorButton(settingsUI()->starColorButton, color);
         applySetting("starColor");
     }
-}
-
-void CameraGUI::on_plateSolveCheck_toggled(bool checked)
-{
-    m_settings.m_plateSolve = checked;
-    applySetting("plateSolve");
 }
 
 void CameraGUI::on_plateSolveMaxMagnitudeSpin_valueChanged(double value)

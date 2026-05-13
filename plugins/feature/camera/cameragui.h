@@ -551,7 +551,7 @@ private slots:
     void on_motionPersistenceFramesSpin_valueChanged(int value);
     void on_minContourAreaSpin_valueChanged(int value);
     void on_motionBoxColorButton_clicked();
-    void on_starDetectCheck_toggled(bool checked);
+    void on_starDetectButton_toggled(bool checked);
     void on_starThresholdSpin_valueChanged(int value);
     void on_starBackgroundBlurSpin_valueChanged(int value);
     void on_starMinAreaSpin_valueChanged(int value);
@@ -560,7 +560,6 @@ private slots:
     void on_starDebugViewCombo_currentIndexChanged(int index);
     void on_plateSolveLabelModeCombo_currentIndexChanged(int index);
     void on_starColorButton_clicked();
-    void on_plateSolveCheck_toggled(bool checked);
     void on_plateSolveMaxMagnitudeSpin_valueChanged(double value);
     void on_plateSolveMinMatchesSpin_valueChanged(int value);
     void on_plateSolveMatchRadiusSpin_valueChanged(double value);

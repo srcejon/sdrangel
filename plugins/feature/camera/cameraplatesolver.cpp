@@ -1938,7 +1938,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     result.m_catalogStarsLoaded = brightStarCatalog(settings).size();
     result.m_detectedStarsConsidered = starDetections.size();
 
-    if (!settings.m_plateSolve || (starDetections.size() < settings.m_plateSolveMinMatches)) {
+    if ((starDetections.size() < settings.m_plateSolveMinMatches)) {
         return result;
     }
 

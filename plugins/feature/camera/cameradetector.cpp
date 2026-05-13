@@ -783,7 +783,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
         }
     }
 
-    if (!frame->m_starDetections.isEmpty() && m_settings.m_plateSolve)
+    if (!frame->m_starDetections.isEmpty())
     {
         const CameraPlateSolveResult plateSolveResult = CameraPlateSolver::solve(
             m_settings,

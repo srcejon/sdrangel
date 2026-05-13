@@ -630,7 +630,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
-        "ursaMajorStars", "ursaMajorStarsColor", "constellationOverlay",
+        "constellation", "constellationColor", "constellationOverlay",
         "trackObjects", "trackObjectMinElevation", "trackObjectColor", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",

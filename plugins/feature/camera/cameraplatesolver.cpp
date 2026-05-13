@@ -25,6 +25,7 @@
 #include <limits>
 
 #include <QDir>
+#include <QDebug>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -1979,6 +1980,28 @@ bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
         : candidate.fovDegrees < best.fovDegrees;
 }
 
+void logPlateSolveEvaluation(const char *stage,
+                             const Evaluation& evaluation,
+                             bool isNewBest = false)
+{
+    if (!evaluation.valid) {
+        return;
+    }
+
+    qDebug().noquote().nospace()
+        << "CameraPlateSolver[" << stage << "] "
+        << (isNewBest ? "best " : "candidate ")
+        << "Az=" << evaluation.azimuthDegrees
+        << " El=" << evaluation.elevationDegrees
+        << " Roll=" << evaluation.rollDegrees
+        << " FoV=" << evaluation.fovDegrees
+        << " matches=" << evaluation.matchCount
+        << " RMS=" << evaluation.rmsErrorPixels
+        << " Cx=" << evaluation.centerOffsetXPixels
+        << " Cy=" << evaluation.centerOffsetYPixels
+        << " K1=" << evaluation.distortionK1;
+}
+
 Evaluation searchBestPose(const CameraSettings& settings,
                           const QSize& imageSize,
                           const QDateTime& captureDateTimeUtc,
@@ -2004,7 +2027,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const std::array<double, 3> coarseFovOffsets = {{-1.0, 0.0, 1.0}};
     const std::array<double, 13> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0}};
 
-    auto evaluateSeed = [&](double azimuthDegrees,
+    auto evaluateSeed = [&](const char *stage,
+                            double azimuthDegrees,
                             double elevationDegrees,
                             double rollDegrees,
                             double fovDegrees) {
@@ -2022,8 +2046,10 @@ Evaluation searchBestPose(const CameraSettings& settings,
             fixedCenterOffsetX,
             fixedCenterOffsetY,
             fixedDistortionK1);
+        logPlateSolveEvaluation(stage, candidate);
         if (isBetterEvaluation(candidate, best)) {
             best = candidate;
+            logPlateSolveEvaluation(stage, best, true);
         }
     };
 
@@ -2038,6 +2064,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     for (double fovFactor : coarseFovOffsets)
                     {
                         evaluateSeed(
+                            "guided-direction",
                             settings.m_azimuth + azFactor * coarseSearchRadius,
                             settings.m_elevation + elFactor * coarseSearchRadius,
                             settings.m_roll + rollFactor * coarseRollRadius,
@@ -2060,6 +2087,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     for (double fovScale : elevationSeedFovScales)
                     {
                         evaluateSeed(
+                            "guided-elevation",
                             azimuthDegrees,
                             settings.m_elevation + elFactor * coarseSearchRadius,
                             rollDegrees,
@@ -2090,6 +2118,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                         for (double fovScale : refineFovScales)
                         {
                             evaluateSeed(
+                                "guided-elevation-refine",
                                 best.azimuthDegrees + azimuthOffset * azimuthRefineStep,
                                 best.elevationDegrees + elevationOffset * elevationRefineStep,
                                 best.rollDegrees + rollOffset * rollRefineStep,
@@ -2113,6 +2142,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     for (double fovFactor : coarseFovOffsets)
                     {
                         evaluateSeed(
+                            "guided-fov",
                             azimuthDegrees,
                             elevationDegrees,
                             rollDegrees,
@@ -2141,8 +2171,10 @@ Evaluation searchBestPose(const CameraSettings& settings,
             detectionIndices);
         for (const Evaluation& seed : blindTriangleSeeds)
         {
+            logPlateSolveEvaluation("blind-triangle-seed", seed);
             if (isBetterEvaluation(seed, best)) {
                 best = seed;
+                logPlateSolveEvaluation("blind-triangle-seed", best, true);
             }
         }
 
@@ -2154,8 +2186,10 @@ Evaluation searchBestPose(const CameraSettings& settings,
             detectionIndices);
         for (const Evaluation& seed : blindQuadSeeds)
         {
+            logPlateSolveEvaluation("blind-quad-seed", seed);
             if (isBetterEvaluation(seed, best)) {
                 best = seed;
+                logPlateSolveEvaluation("blind-quad-seed", best, true);
             }
         }
     }
@@ -2176,6 +2210,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                         for (double fovScale : wideFovScales)
                         {
                             evaluateSeed(
+                                "wide-fallback-fov",
                                 azimuthDegrees,
                                 elevationDegrees,
                                 rollDegrees,
@@ -2189,6 +2224,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                         for (double fovDegrees : wideBlindFovs)
                         {
                             evaluateSeed(
+                                "wide-fallback-blind",
                                 azimuthDegrees,
                                 elevationDegrees,
                                 rollDegrees,
@@ -2238,8 +2274,10 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             fixedCenterOffsetX,
                             fixedCenterOffsetY,
                             fixedDistortionK1);
+                        logPlateSolveEvaluation("coarse-refine", candidate);
                         if (isBetterEvaluation(candidate, best)) {
                             best = candidate;
+                            logPlateSolveEvaluation("coarse-refine", best, true);
                         }
                     }
                 }
@@ -2298,8 +2336,10 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             fixedCenterOffsetX,
                             fixedCenterOffsetY,
                             fixedDistortionK1);
+                        logPlateSolveEvaluation("full-refine", candidate);
                         if (isBetterEvaluation(candidate, best)) {
                             best = candidate;
+                            logPlateSolveEvaluation("full-refine", best, true);
                             improved = true;
                         }
                     }
@@ -2660,7 +2700,9 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return result;
     }
     best = refinePoseFromMatches(settings, imageSize, captureDateTimeUtc, starDetections, best);
+    logPlateSolveEvaluation("refine-from-matches", best, true);
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
+        qDebug() << "CameraPlateSolver: refinePoseFromMatches failed to keep a valid solution";
         return result;
     }
 
@@ -2740,6 +2782,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     if (useElevationSeedOnly
         && !isAcceptableElevationSeedSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
+        qDebug() << "CameraPlateSolver: rejecting elevation-seeded solution"
+                 << "matches=" << finalMatches.size()
+                 << "rms=" << result.m_rmsErrorPixels
+                 << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
         PROFILER_STOP(__FUNCTION__ ": unacceptable elevation-seeded solve");
         return CameraPlateSolveResult();
@@ -2749,6 +2795,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         && !useStartDirection
         && !isAcceptableBlindSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
+        qDebug() << "CameraPlateSolver: rejecting blind solution"
+                 << "matches=" << finalMatches.size()
+                 << "rms=" << result.m_rmsErrorPixels
+                 << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
         PROFILER_STOP(__FUNCTION__ ": unacceptable blind solve");
         return CameraPlateSolveResult();

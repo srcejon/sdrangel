@@ -207,7 +207,7 @@ private:
     [[nodiscard]] bool intersectsExclusionRects(const QRect& rect) const;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
-    void clearObjectDetectionState();
+    void clearObjectDetectionState(bool clearHistory = true);
     void clearObjectDetectionHistory();
     void reportObjectDetectionHistoryToGUI() const;
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);

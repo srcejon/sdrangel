@@ -563,7 +563,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("yoloLabelsPath")
         || settingsKeys.contains("objectDeviceSettings"))
     {
-        clearObjectDetectionState();
+        clearObjectDetectionState(false);
     }
 
     const bool detectorVisualsChanged = force
@@ -1500,11 +1500,13 @@ QImage CameraDetector::convertBgrToRgbImage(const cv::Mat& bgrMat)
     return result;
 }
 
-void CameraDetector::clearObjectDetectionState()
+void CameraDetector::clearObjectDetectionState(bool clearHistory)
 {
     m_detectedObjectClasses.clear();
     m_pendingDisappearStates.clear();
-    clearObjectDetectionHistory();
+    if (clearHistory) {
+        clearObjectDetectionHistory();
+    }
 }
 
 void CameraDetector::clearObjectDetectionHistory()

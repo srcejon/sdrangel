@@ -99,6 +99,9 @@ struct Evaluation
     double elevationDegrees = 0.0;
     double rollDegrees = 0.0;
     double fovDegrees = 0.0;
+    double centerOffsetXPixels = 0.0;
+    double centerOffsetYPixels = 0.0;
+    double distortionK1 = 0.0;
     QVector<Match> matches;
 };
 
@@ -121,6 +124,9 @@ struct SkyProjector
     double halfHorizontalFov = 0.0;
     double horizontalScale = 1.0;
     double verticalScale = 1.0;
+    double principalPointX = 0.0;
+    double principalPointY = 0.0;
+    double distortionK1 = 0.0;
     int width = 0;
     int height = 0;
 };
@@ -144,7 +150,10 @@ Evaluation evaluatePose(const CameraSettings& settings,
                         double elevationDegrees,
                         double rollDegrees,
                         double fovDegrees,
-                        const QVector<int>* allowedCatalogIndices = nullptr);
+                        const QVector<int>* allowedCatalogIndices = nullptr,
+                        double centerOffsetXPixels = 0.0,
+                        double centerOffsetYPixels = 0.0,
+                        double distortionK1 = 0.0);
 
 double degToRad(double value)
 {
@@ -633,7 +642,10 @@ SkyProjector createProjector(const CameraSettings& settings,
                              double azimuthDegrees,
                              double elevationDegrees,
                              double rollDegrees,
-                             double fovDegrees)
+                             double fovDegrees,
+                             double centerOffsetXPixels = 0.0,
+                             double centerOffsetYPixels = 0.0,
+                             double distortionK1 = 0.0)
 {
     SkyProjector projector;
     projector.width = size.width();
@@ -668,6 +680,9 @@ SkyProjector createProjector(const CameraSettings& settings,
     const double aspect = static_cast<double>(projector.height) / static_cast<double>(projector.width);
     projector.horizontalScale = 1.0;
     projector.verticalScale = aspect;
+    projector.principalPointX = static_cast<double>(projector.width) * 0.5 + centerOffsetXPixels;
+    projector.principalPointY = static_cast<double>(projector.height) * 0.5 + centerOffsetYPixels;
+    projector.distortionK1 = distortionK1;
     projector.valid = projector.verticalScale > 0.0;
     return projector;
 }
@@ -706,14 +721,24 @@ bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double e
         }
     }();
 
-    const double normalizedX = std::cos(phi) * projectionRadius / projector.horizontalScale;
-    const double normalizedY = std::sin(phi) * projectionRadius / projector.verticalScale;
+    double projectedX = std::cos(phi) * projectionRadius;
+    double projectedY = std::sin(phi) * projectionRadius;
+    if (std::fabs(projector.distortionK1) > 1e-9)
+    {
+        const double radiusSquared = projectedX * projectedX + projectedY * projectedY;
+        const double distortionScale = std::max(0.1, 1.0 + projector.distortionK1 * radiusSquared);
+        projectedX *= distortionScale;
+        projectedY *= distortionScale;
+    }
+
+    const double normalizedX = projectedX / projector.horizontalScale;
+    const double normalizedY = projectedY / projector.verticalScale;
     if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY)) {
         return false;
     }
 
-    point.setX((normalizedX + 1.0) * 0.5 * static_cast<double>(projector.width));
-    point.setY((1.0 - normalizedY) * 0.5 * static_cast<double>(projector.height));
+    point.setX(projector.principalPointX + normalizedX * 0.5 * static_cast<double>(projector.width));
+    point.setY(projector.principalPointY - normalizedY * 0.5 * static_cast<double>(projector.height));
     return true;
 }
 
@@ -1212,13 +1237,19 @@ Evaluation evaluatePose(const CameraSettings& settings,
                         double elevationDegrees,
                         double rollDegrees,
                         double fovDegrees,
-                        const QVector<int>* allowedCatalogIndices)
+                        const QVector<int>* allowedCatalogIndices,
+                        double centerOffsetXPixels,
+                        double centerOffsetYPixels,
+                        double distortionK1)
 {
     Evaluation evaluation;
     evaluation.azimuthDegrees = normalizeDegrees(azimuthDegrees);
     evaluation.elevationDegrees = elevationDegrees;
     evaluation.rollDegrees = rollDegrees;
     evaluation.fovDegrees = fovDegrees;
+    evaluation.centerOffsetXPixels = centerOffsetXPixels;
+    evaluation.centerOffsetYPixels = centerOffsetYPixels;
+    evaluation.distortionK1 = distortionK1;
 
     const SkyProjector projector = createProjector(
         settings,
@@ -1226,7 +1257,10 @@ Evaluation evaluatePose(const CameraSettings& settings,
         evaluation.azimuthDegrees,
         evaluation.elevationDegrees,
         evaluation.rollDegrees,
-        evaluation.fovDegrees);
+        evaluation.fovDegrees,
+        evaluation.centerOffsetXPixels,
+        evaluation.centerOffsetYPixels,
+        evaluation.distortionK1);
     if (!projector.valid) {
         return evaluation;
     }
@@ -1337,6 +1371,15 @@ bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
     }
     if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
         return candidate.rmsErrorPixels < best.rmsErrorPixels;
+    }
+    const double candidateCalibrationMagnitude = std::fabs(candidate.centerOffsetXPixels)
+        + std::fabs(candidate.centerOffsetYPixels)
+        + 100.0 * std::fabs(candidate.distortionK1);
+    const double bestCalibrationMagnitude = std::fabs(best.centerOffsetXPixels)
+        + std::fabs(best.centerOffsetYPixels)
+        + 100.0 * std::fabs(best.distortionK1);
+    if (!qFuzzyCompare(candidateCalibrationMagnitude + 1.0, bestCalibrationMagnitude + 1.0)) {
+        return candidateCalibrationMagnitude < bestCalibrationMagnitude;
     }
 
     return candidate.fovDegrees == best.fovDegrees
@@ -1574,7 +1617,10 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
         initialEvaluation.elevationDegrees,
         initialEvaluation.rollDegrees,
         initialEvaluation.fovDegrees,
-        &catalogIndices);
+        &catalogIndices,
+        initialEvaluation.centerOffsetXPixels,
+        initialEvaluation.centerOffsetYPixels,
+        initialEvaluation.distortionK1);
     if (!best.valid) {
         best = initialEvaluation;
     }
@@ -1583,9 +1629,15 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     double elCenter = best.elevationDegrees;
     double rollCenter = best.rollDegrees;
     double fovCenter = best.fovDegrees;
+    double centerOffsetXCenter = best.centerOffsetXPixels;
+    double centerOffsetYCenter = best.centerOffsetYPixels;
+    double distortionCenter = best.distortionK1;
     double azStep = std::max(0.05, settings.m_plateSolveSearchRadius * 0.05);
     double rollStep = std::max(0.10, std::max(1.0, static_cast<double>(settings.m_fov) * 0.02));
     double fovStep = std::max(0.05, std::max(0.5, static_cast<double>(settings.m_fov) * 0.01));
+    double centerOffsetXStep = std::max(1.0, static_cast<double>(imageSize.width()) * 0.01);
+    double centerOffsetYStep = std::max(1.0, static_cast<double>(imageSize.height()) * 0.01);
+    double distortionStep = 0.05;
     const std::array<double, 3> offsets = {{-1.0, 0.0, 1.0}};
 
     for (int iteration = 0; iteration < 5; ++iteration)
@@ -1609,7 +1661,112 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                             elCenter + elOffset * azStep,
                             rollCenter + rollOffset * rollStep,
                             std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
-                            &catalogIndices);
+                            &catalogIndices,
+                            centerOffsetXCenter,
+                            centerOffsetYCenter,
+                            distortionCenter);
+                        if (isBetterEvaluation(candidate, best)) {
+                            best = candidate;
+                            improved = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        azCenter = best.azimuthDegrees;
+        elCenter = best.elevationDegrees;
+        rollCenter = best.rollDegrees;
+        fovCenter = best.fovDegrees;
+        if (!improved) {
+            azStep *= 0.5;
+            rollStep *= 0.5;
+            fovStep *= 0.5;
+        }
+    }
+
+    azCenter = best.azimuthDegrees;
+    elCenter = best.elevationDegrees;
+    rollCenter = best.rollDegrees;
+    fovCenter = best.fovDegrees;
+    centerOffsetXCenter = best.centerOffsetXPixels;
+    centerOffsetYCenter = best.centerOffsetYPixels;
+    distortionCenter = best.distortionK1;
+
+    for (int iteration = 0; iteration < 4; ++iteration)
+    {
+        bool improved = false;
+        for (double centerOffsetXOffset : offsets)
+        {
+            for (double centerOffsetYOffset : offsets)
+            {
+                for (double distortionOffset : offsets)
+                {
+                    const Evaluation candidate = evaluatePose(
+                        settings,
+                        imageSize,
+                        captureDateTimeUtc,
+                        starDetections,
+                        detectionIndices,
+                        azCenter,
+                        elCenter,
+                        rollCenter,
+                        fovCenter,
+                        &catalogIndices,
+                        centerOffsetXCenter + centerOffsetXOffset * centerOffsetXStep,
+                        centerOffsetYCenter + centerOffsetYOffset * centerOffsetYStep,
+                        std::clamp(distortionCenter + distortionOffset * distortionStep, -0.75, 0.75));
+                    if (isBetterEvaluation(candidate, best)) {
+                        best = candidate;
+                        improved = true;
+                    }
+                }
+            }
+        }
+
+        centerOffsetXCenter = best.centerOffsetXPixels;
+        centerOffsetYCenter = best.centerOffsetYPixels;
+        distortionCenter = best.distortionK1;
+        if (!improved) {
+            centerOffsetXStep *= 0.5;
+            centerOffsetYStep *= 0.5;
+            distortionStep *= 0.5;
+        }
+    }
+
+    azCenter = best.azimuthDegrees;
+    elCenter = best.elevationDegrees;
+    rollCenter = best.rollDegrees;
+    fovCenter = best.fovDegrees;
+    centerOffsetXCenter = best.centerOffsetXPixels;
+    centerOffsetYCenter = best.centerOffsetYPixels;
+    distortionCenter = best.distortionK1;
+
+    for (int iteration = 0; iteration < 2; ++iteration)
+    {
+        bool improved = false;
+        for (double azOffset : offsets)
+        {
+            for (double elOffset : offsets)
+            {
+                for (double rollOffset : offsets)
+                {
+                    for (double fovOffset : offsets)
+                    {
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            azCenter + azOffset * azStep,
+                            elCenter + elOffset * azStep,
+                            rollCenter + rollOffset * rollStep,
+                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
+                            &catalogIndices,
+                            centerOffsetXCenter,
+                            centerOffsetYCenter,
+                            distortionCenter);
                         if (isBetterEvaluation(candidate, best)) {
                             best = candidate;
                             improved = true;
@@ -1758,7 +1915,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         best.azimuthDegrees,
         best.elevationDegrees,
         best.rollDegrees,
-        best.fovDegrees);
+        best.fovDegrees,
+        best.centerOffsetXPixels,
+        best.centerOffsetYPixels,
+        best.distortionK1);
     if (!finalProjector.valid) {
         return result;
     }
@@ -1824,6 +1984,9 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     result.m_elevationDegrees = best.elevationDegrees;
     result.m_rollDegrees = best.rollDegrees;
     result.m_fovDegrees = best.fovDegrees;
+    result.m_centerOffsetXPixels = best.centerOffsetXPixels;
+    result.m_centerOffsetYPixels = best.centerOffsetYPixels;
+    result.m_distortionK1 = best.distortionK1;
 
     PROFILER_STOP(__FUNCTION__);
 

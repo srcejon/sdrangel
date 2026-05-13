@@ -42,6 +42,9 @@ struct CameraPlateSolveResult
     double m_elevationDegrees = 0.0;
     double m_rollDegrees = 0.0;
     double m_fovDegrees = 0.0;
+    double m_centerOffsetXPixels = 0.0;
+    double m_centerOffsetYPixels = 0.0;
+    double m_distortionK1 = 0.0;
     QString m_catalogSource;
 };
 

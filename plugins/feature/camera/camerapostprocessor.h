@@ -131,6 +131,9 @@ public:
         float getPlateSolveElevation() const { return m_plateSolveElevation; }
         float getPlateSolveRoll() const { return m_plateSolveRoll; }
         float getPlateSolveFov() const { return m_plateSolveFov; }
+        float getPlateSolveCenterOffsetX() const { return m_plateSolveCenterOffsetX; }
+        float getPlateSolveCenterOffsetY() const { return m_plateSolveCenterOffsetY; }
+        float getPlateSolveDistortionK1() const { return m_plateSolveDistortionK1; }
         const QString& getPlateSolveCatalogSource() const { return m_plateSolveCatalogSource; }
 
         static MsgReportFrame* create(const QImage& image,
@@ -148,6 +151,9 @@ public:
                                       float plateSolveElevation,
                                       float plateSolveRoll,
                                       float plateSolveFov,
+                                      float plateSolveCenterOffsetX,
+                                      float plateSolveCenterOffsetY,
+                                      float plateSolveDistortionK1,
                                       const QString& plateSolveCatalogSource)
         {
             return new MsgReportFrame(
@@ -166,6 +172,9 @@ public:
                 plateSolveElevation,
                 plateSolveRoll,
                 plateSolveFov,
+                plateSolveCenterOffsetX,
+                plateSolveCenterOffsetY,
+                plateSolveDistortionK1,
                 plateSolveCatalogSource);
         }
 
@@ -185,6 +194,9 @@ public:
         float m_plateSolveElevation;
         float m_plateSolveRoll;
         float m_plateSolveFov;
+        float m_plateSolveCenterOffsetX;
+        float m_plateSolveCenterOffsetY;
+        float m_plateSolveDistortionK1;
         QString m_plateSolveCatalogSource;
 
         MsgReportFrame(const QImage& image,
@@ -202,6 +214,9 @@ public:
                        float plateSolveElevation,
                        float plateSolveRoll,
                        float plateSolveFov,
+                       float plateSolveCenterOffsetX,
+                       float plateSolveCenterOffsetY,
+                       float plateSolveDistortionK1,
                        const QString& plateSolveCatalogSource) :
             Message(),
             m_image(image),
@@ -219,6 +234,9 @@ public:
             m_plateSolveElevation(plateSolveElevation),
             m_plateSolveRoll(plateSolveRoll),
             m_plateSolveFov(plateSolveFov),
+            m_plateSolveCenterOffsetX(plateSolveCenterOffsetX),
+            m_plateSolveCenterOffsetY(plateSolveCenterOffsetY),
+            m_plateSolveDistortionK1(plateSolveDistortionK1),
             m_plateSolveCatalogSource(plateSolveCatalogSource)
         { }
     };

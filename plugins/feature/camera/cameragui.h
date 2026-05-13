@@ -173,6 +173,9 @@ private:
     double m_lastPlateSolveElevation = 0.0;
     double m_lastPlateSolveRoll = 0.0;
     double m_lastPlateSolveFov = 0.0;
+    double m_lastPlateSolveCenterOffsetX = 0.0;
+    double m_lastPlateSolveCenterOffsetY = 0.0;
+    double m_lastPlateSolveDistortionK1 = 0.0;
     QString m_lastPlateSolveCatalogSource;
 
     Camera* m_camera;

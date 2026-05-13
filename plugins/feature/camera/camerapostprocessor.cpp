@@ -843,6 +843,9 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_plateSolveElevation,
             frame.m_plateSolveRoll,
             frame.m_plateSolveFov,
+            frame.m_plateSolveCenterOffsetX,
+            frame.m_plateSolveCenterOffsetY,
+            frame.m_plateSolveDistortionK1,
             frame.m_plateSolveCatalogSource));
     }
 }

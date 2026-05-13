@@ -102,6 +102,9 @@ struct CameraPipelineFrame
     float m_plateSolveElevation = 0.0f;
     float m_plateSolveRoll = 0.0f;
     float m_plateSolveFov = 0.0f;
+    float m_plateSolveCenterOffsetX = 0.0f;
+    float m_plateSolveCenterOffsetY = 0.0f;
+    float m_plateSolveDistortionK1 = 0.0f;
     QString m_plateSolveCatalogSource;
     bool m_saveCurrentImage = false;
     int m_stackCount = 1;

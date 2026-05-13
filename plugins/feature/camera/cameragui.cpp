@@ -377,6 +377,9 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastPlateSolveElevation = report.getPlateSolveElevation();
         m_lastPlateSolveRoll = report.getPlateSolveRoll();
         m_lastPlateSolveFov = report.getPlateSolveFov();
+        m_lastPlateSolveCenterOffsetX = report.getPlateSolveCenterOffsetX();
+        m_lastPlateSolveCenterOffsetY = report.getPlateSolveCenterOffsetY();
+        m_lastPlateSolveDistortionK1 = report.getPlateSolveDistortionK1();
         m_lastPlateSolveCatalogSource = report.getPlateSolveCatalogSource();
         settingsUI()->plateSolveStatusLabel->setText(m_lastPlateSolved ? tr("Solved") : tr("Unsolved"));
         settingsUI()->plateSolveMatchesLabel->setText(
@@ -385,19 +388,25 @@ bool CameraGUI::handleMessage(const Message& message)
             m_lastPlateSolved ? tr("%1 / %2").arg(QString::number(m_lastPlateSolveRmsError, 'f', 1)).arg(QString::number(m_lastPlateSolveMaxError, 'f', 1)) : "-");
         settingsUI()->plateSolvePointingLabel->setText(
             m_lastPlateSolved
-                ? tr("Az %1  El %2  Roll %3  FoV %4")
+                ? tr("Az %1  El %2  Roll %3  FoV %4  Cx %5  Cy %6  K1 %7")
                       .arg(QString::number(m_lastPlateSolveAzimuth, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveElevation, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveRoll, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveFov, 'f', 2))
+                      .arg(QString::number(m_lastPlateSolveCenterOffsetX, 'f', 1))
+                      .arg(QString::number(m_lastPlateSolveCenterOffsetY, 'f', 1))
+                      .arg(QString::number(m_lastPlateSolveDistortionK1, 'f', 3))
                 : "-");
         settingsUI()->plateSolveSolutionLabel->setText(
             m_lastPlateSolved
-                ? tr("Az %1  El %2  Roll %3  FoV %4  RMS %5 px  Max %6 px  Matches %7/%8  Outliers %9  Catalog %10 (%11/%12)")
+                ? tr("Az %1  El %2  Roll %3  FoV %4  Cx %5  Cy %6  K1 %7  RMS %8 px  Max %9 px  Matches %10/%11  Outliers %12  Catalog %13 (%14/%15)")
                       .arg(QString::number(m_lastPlateSolveAzimuth, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveElevation, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveRoll, 'f', 2))
                       .arg(QString::number(m_lastPlateSolveFov, 'f', 2))
+                      .arg(QString::number(m_lastPlateSolveCenterOffsetX, 'f', 1))
+                      .arg(QString::number(m_lastPlateSolveCenterOffsetY, 'f', 1))
+                      .arg(QString::number(m_lastPlateSolveDistortionK1, 'f', 3))
                       .arg(QString::number(m_lastPlateSolveRmsError, 'f', 1))
                       .arg(QString::number(m_lastPlateSolveMaxError, 'f', 1))
                       .arg(QString::number(m_lastPlateSolvedMatches))
@@ -810,6 +819,9 @@ void CameraGUI::resetCameraStatus()
     m_lastPlateSolveElevation = 0.0;
     m_lastPlateSolveRoll = 0.0;
     m_lastPlateSolveFov = 0.0;
+    m_lastPlateSolveCenterOffsetX = 0.0;
+    m_lastPlateSolveCenterOffsetY = 0.0;
+    m_lastPlateSolveDistortionK1 = 0.0;
     m_lastPlateSolveCatalogSource.clear();
     settingsUI()->pipelineFpsLabel->setText("-");
     settingsUI()->plateSolveStatusLabel->setText("-");

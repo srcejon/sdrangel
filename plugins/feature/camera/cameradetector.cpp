@@ -750,6 +750,9 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     frame->m_plateSolveElevation = 0.0f;
     frame->m_plateSolveRoll = 0.0f;
     frame->m_plateSolveFov = 0.0f;
+    frame->m_plateSolveCenterOffsetX = 0.0f;
+    frame->m_plateSolveCenterOffsetY = 0.0f;
+    frame->m_plateSolveDistortionK1 = 0.0f;
     frame->m_plateSolveCatalogSource.clear();
 
     QImage convertedRgb;
@@ -854,6 +857,9 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
         frame->m_plateSolveElevation = static_cast<float>(plateSolveResult.m_elevationDegrees);
         frame->m_plateSolveRoll = static_cast<float>(plateSolveResult.m_rollDegrees);
         frame->m_plateSolveFov = static_cast<float>(plateSolveResult.m_fovDegrees);
+        frame->m_plateSolveCenterOffsetX = static_cast<float>(plateSolveResult.m_centerOffsetXPixels);
+        frame->m_plateSolveCenterOffsetY = static_cast<float>(plateSolveResult.m_centerOffsetYPixels);
+        frame->m_plateSolveDistortionK1 = static_cast<float>(plateSolveResult.m_distortionK1);
         frame->m_plateSolveCatalogSource = plateSolveResult.m_catalogSource;
     }
 

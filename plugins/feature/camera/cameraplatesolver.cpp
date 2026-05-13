@@ -1902,6 +1902,19 @@ bool isStrongGuidedSolve(const CameraSettings& settings,
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
+bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
+                                    int minMatchCount,
+                                    const Evaluation& evaluation)
+{
+    if (!evaluation.valid) {
+        return false;
+    }
+
+    const int minAcceptedMatches = std::max(minMatchCount, 4);
+    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.75, 20.0);
+    return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
+}
+
 bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
 {
     if (!candidate.valid) {
@@ -2043,7 +2056,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
     }
 
     const bool needBlindSearch = !useStartFov
-        || !isStrongGuidedSolve(settings, minMatchCount, best);
+        || (useStartDirection
+            ? !isAcceptableDirectionSeedSolve(settings, minMatchCount, best)
+            : !isStrongGuidedSolve(settings, minMatchCount, best));
 
     if (needBlindSearch)
     {

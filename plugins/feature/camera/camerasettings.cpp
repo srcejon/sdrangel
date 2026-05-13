@@ -201,6 +201,9 @@ void CameraSettings::resetToDefaults()
     m_rotator.clear();
     m_fov = 60.0f;
     m_lensProjection = LensProjectionRectilinear;
+    m_lensCenterOffsetX = 0.0;
+    m_lensCenterOffsetY = 0.0;
+    m_lensDistortionK1 = 0.0;
     m_scheduleEnabled = false;
     m_scheduleStartTime = QStringLiteral("20:00:00");
     m_scheduleEndTime = QStringLiteral("06:00:00");
@@ -319,6 +322,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveDateTime = QDateTime::currentDateTime();
     m_plateSolveUseDownloadedCatalog = false;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
+    m_plateSolveLensMode = PlateSolveLensModeFixed;
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
@@ -389,6 +393,9 @@ QByteArray CameraSettings::serialize() const
     s.writeString(143, m_rotator);
     s.writeFloat(144, m_fov);
     s.writeS32(149, m_lensProjection);
+    s.writeDouble(219, m_lensCenterOffsetX);
+    s.writeDouble(220, m_lensCenterOffsetY);
+    s.writeDouble(221, m_lensDistortionK1);
     s.writeBool(151, m_scheduleEnabled);
     s.writeString(152, m_scheduleStartTime);
     s.writeString(153, m_scheduleEndTime);
@@ -497,6 +504,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(216, m_plateSolveUseCurrentDateTime);
     s.writeS64(217, m_plateSolveDateTime.isValid() ? m_plateSolveDateTime.toMSecsSinceEpoch() : 0);
     s.writeS32(218, static_cast<qint32>(m_plateSolveApplyMode));
+    s.writeS32(222, static_cast<qint32>(m_plateSolveLensMode));
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -658,6 +666,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(143, &m_rotator, "");
         d.readFloat(144, &m_fov, 60.0f);
         d.readS32(149, (int *) &m_lensProjection, LensProjectionRectilinear);
+        d.readDouble(219, &m_lensCenterOffsetX, 0.0);
+        d.readDouble(220, &m_lensCenterOffsetY, 0.0);
+        d.readDouble(221, &m_lensDistortionK1, 0.0);
         d.readBool(151, &m_scheduleEnabled, false);
         d.readString(152, &m_scheduleStartTime, "20:00:00");
         d.readString(153, &m_scheduleEndTime, "06:00:00");
@@ -861,6 +872,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         qint32 plateSolveApplyMode = static_cast<qint32>(PlateSolveApplyAzElRollFov);
         d.readS32(218, &plateSolveApplyMode, static_cast<qint32>(PlateSolveApplyAzElRollFov));
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(plateSolveApplyMode);
+        qint32 plateSolveLensMode = static_cast<qint32>(PlateSolveLensModeFixed);
+        d.readS32(222, &plateSolveLensMode, static_cast<qint32>(PlateSolveLensModeFixed));
+        m_plateSolveLensMode = static_cast<PlateSolveLensMode>(plateSolveLensMode);
         m_overlayFontScale = qBound(m_minOverlayFontScale, m_overlayFontScale, m_maxOverlayFontScale);
         m_detectionRoiX = qBound(m_minUiPixelOffset, m_detectionRoiX, m_maxUiPixelOffset);
         m_detectionRoiY = qBound(m_minUiPixelOffset, m_detectionRoiY, m_maxUiPixelOffset);
@@ -876,6 +890,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_plateSolveMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveMatchRadius, m_maxPlateSolveMatchRadius);
         m_plateSolveSearchRadius = qBound(m_minPlateSolveSearchRadius, m_plateSolveSearchRadius, m_maxPlateSolveSearchRadius);
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(qBound(0, static_cast<int>(m_plateSolveApplyMode), 2));
+        m_plateSolveLensMode = static_cast<PlateSolveLensMode>(qBound(0, static_cast<int>(m_plateSolveLensMode), 1));
+        m_lensCenterOffsetX = qBound(m_minLensCenterOffset, m_lensCenterOffsetX, m_maxLensCenterOffset);
+        m_lensCenterOffsetY = qBound(m_minLensCenterOffset, m_lensCenterOffsetY, m_maxLensCenterOffset);
+        m_lensDistortionK1 = qBound(m_minLensDistortionK1, m_lensDistortionK1, m_maxLensDistortionK1);
         if (!m_plateSolveDateTime.isValid()) {
             m_plateSolveDateTime = QDateTime::currentDateTime();
         }
@@ -1281,6 +1299,15 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("lensProjection")) {
         m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) settings.m_lensProjection, (int) LensProjectionEquisolid);
     }
+    if (settingsKeys.contains("lensCenterOffsetX")) {
+        m_lensCenterOffsetX = qBound(m_minLensCenterOffset, settings.m_lensCenterOffsetX, m_maxLensCenterOffset);
+    }
+    if (settingsKeys.contains("lensCenterOffsetY")) {
+        m_lensCenterOffsetY = qBound(m_minLensCenterOffset, settings.m_lensCenterOffsetY, m_maxLensCenterOffset);
+    }
+    if (settingsKeys.contains("lensDistortionK1")) {
+        m_lensDistortionK1 = qBound(m_minLensDistortionK1, settings.m_lensDistortionK1, m_maxLensDistortionK1);
+    }
     if (settingsKeys.contains("scheduleEnabled")) {
         m_scheduleEnabled = settings.m_scheduleEnabled;
     }
@@ -1587,6 +1614,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("plateSolveApplyMode")) {
         m_plateSolveApplyMode = settings.m_plateSolveApplyMode;
+    }
+    if (settingsKeys.contains("plateSolveLensMode")) {
+        m_plateSolveLensMode = settings.m_plateSolveLensMode;
     }
     if (settingsKeys.contains("videoPostProcess")) {
         m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
@@ -1930,6 +1960,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("lensProjection") || force) {
         ostr << " m_lensProjection: " << m_lensProjection;
     }
+    if (settingsKeys.contains("lensCenterOffsetX") || force) {
+        ostr << " m_lensCenterOffsetX: " << m_lensCenterOffsetX;
+    }
+    if (settingsKeys.contains("lensCenterOffsetY") || force) {
+        ostr << " m_lensCenterOffsetY: " << m_lensCenterOffsetY;
+    }
+    if (settingsKeys.contains("lensDistortionK1") || force) {
+        ostr << " m_lensDistortionK1: " << m_lensDistortionK1;
+    }
     if (settingsKeys.contains("scheduleEnabled") || force) {
         ostr << " m_scheduleEnabled: " << m_scheduleEnabled;
     }
@@ -2205,6 +2244,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveApplyMode") || force) {
         ostr << " m_plateSolveApplyMode: " << static_cast<int>(m_plateSolveApplyMode);
+    }
+    if (settingsKeys.contains("plateSolveLensMode") || force) {
+        ostr << " m_plateSolveLensMode: " << static_cast<int>(m_plateSolveLensMode);
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_recordMode;

@@ -435,6 +435,9 @@ private slots:
     void on_rotatorControllerCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);
     void on_lensProjectionCombo_currentIndexChanged(int index);
+    void on_lensCenterOffsetXSpin_valueChanged(double value);
+    void on_lensCenterOffsetYSpin_valueChanged(double value);
+    void on_lensDistortionK1Spin_valueChanged(double value);
     void on_scheduleEnabledCheck_toggled(bool checked);
     void on_scheduleStartTimeEdit_timeChanged(const QTime& time);
     void on_scheduleEndTimeEdit_timeChanged(const QTime& time);
@@ -574,6 +577,7 @@ private slots:
     void on_plateSolveDateTimeEdit_dateTimeChanged(const QDateTime& dateTime);
     void on_plateSolveUseDownloadedCatalogCheck_toggled(bool checked);
     void on_plateSolveApplyModeCombo_currentIndexChanged(int index);
+    void on_plateSolveLensModeCombo_currentIndexChanged(int index);
     void on_plateSolveDownloadCatalogButton_clicked();
     void on_plateSolveApplyButton_clicked();
     void on_motionExclusionAddButton_clicked();

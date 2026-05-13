@@ -156,6 +156,12 @@ struct CameraSettings
         PlateSolveApplyAzElRollFov
     };
 
+    enum PlateSolveLensMode
+    {
+        PlateSolveLensModeFixed = 0,
+        PlateSolveLensModeCalibrate
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -256,6 +262,10 @@ struct CameraSettings
     static constexpr double m_minPlateSolveSearchRadius = 0.0;
     static constexpr double m_maxPlateSolveSearchRadius = 45.0;
     static constexpr qint64 m_minPlateSolveDateTimeMs = 0;
+    static constexpr double m_minLensCenterOffset = -2048.0;
+    static constexpr double m_maxLensCenterOffset = 2048.0;
+    static constexpr double m_minLensDistortionK1 = -1.0;
+    static constexpr double m_maxLensDistortionK1 = 1.0;
     static constexpr double m_minSpectrumScale = 0.1;
     static constexpr double m_maxSpectrumScale = 4.0;
     static constexpr double m_minYoloDisappearDebounce = 0.0;
@@ -335,6 +345,9 @@ struct CameraSettings
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
     float m_fov;                   ///< Camera field of view in degrees
     LensProjection m_lensProjection; ///< Lens projection model used for sky overlays
+    double m_lensCenterOffsetX;    ///< Principal point X offset in pixels from image center
+    double m_lensCenterOffsetY;    ///< Principal point Y offset in pixels from image center
+    double m_lensDistortionK1;     ///< Radial distortion coefficient for plate solving / overlays
     bool m_scheduleEnabled;        ///< Enable daily capture schedule
     QString m_scheduleStartTime;   ///< Daily schedule start time in HH:mm:ss
     QString m_scheduleEndTime;     ///< Daily schedule end time in HH:mm:ss
@@ -456,6 +469,7 @@ struct CameraSettings
     QDateTime m_plateSolveDateTime; ///< User-specified local date/time for plate solving recorded media
     bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
+    PlateSolveLensMode m_plateSolveLensMode; ///< Whether plate solving should keep lens calibration fixed or refine it
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 
     // Spectrum overlay settings

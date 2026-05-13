@@ -957,10 +957,10 @@
            </item>
            <item row="8" column="0">
             <widget class="QLabel" name="plateSolveMatchesTextLabel">
-              <property name="text">
-               <string>Matches / considered</string>
-              </property>
-             </widget>
+               <property name="text">
+                <string>Matches / detected</string>
+               </property>
+              </widget>
             </item>
            <item row="8" column="1">
             <widget class="QLabel" name="plateSolveMatchesLabel">
@@ -4987,30 +4987,51 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="6" column="0">
-               <widget class="QLabel" name="plateSolveSearchRadiusLabel">
-                <property name="text">
-                 <string>Search radius</string>
-                </property>
+                <item row="6" column="0">
+                <widget class="QLabel" name="plateSolveSearchRadiusLabel">
+                  <property name="text">
+                   <string>Search radius</string>
+                  </property>
                </widget>
               </item>
-              <item row="6" column="1">
-               <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
-                <property name="minimum">
-                 <double>0.000000000000000</double>
-                </property>
+                <item row="6" column="1">
+                <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
+                  <property name="minimum">
+                   <double>0.000000000000000</double>
+                  </property>
                 <property name="maximum">
                  <double>45.000000000000000</double>
                 </property>
-                <property name="singleStep">
-                 <double>0.500000000000000</double>
-                </property>
-               </widget>
-              </item>
-                <item row="6" column="2" colspan="2">
-                <layout class="QHBoxLayout" name="plateSolveApplyLayout">
-                 <item>
-                  <widget class="QComboBox" name="plateSolveApplyModeCombo">
+                  <property name="singleStep">
+                   <double>0.500000000000000</double>
+                  </property>
+                 </widget>
+                </item>
+                <item row="6" column="2">
+                 <widget class="QLabel" name="plateSolveLensModeLabel">
+                  <property name="text">
+                   <string>Lens mode</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="6" column="3">
+                 <widget class="QComboBox" name="plateSolveLensModeCombo">
+                  <item>
+                   <property name="text">
+                    <string>Fixed</string>
+                   </property>
+                  </item>
+                  <item>
+                   <property name="text">
+                    <string>Calibrate</string>
+                   </property>
+                  </item>
+                 </widget>
+                </item>
+                  <item row="7" column="2" colspan="2">
+                 <layout class="QHBoxLayout" name="plateSolveApplyLayout">
+                   <item>
+                    <widget class="QComboBox" name="plateSolveApplyModeCombo">
                    <property name="toolTip">
                     <string>Choose which solved pointing values to copy back into camera settings</string>
                    </property>
@@ -5040,71 +5061,71 @@ li.checked::marker { content: &quot;\2612&quot;; }
                     <string>Apply solved pointing</string>
                    </property>
                   </widget>
-                 </item>
-                </layout>
+                   </item>
+                  </layout>
+                  </item>
+                <item row="8" column="0">
+                <widget class="QLabel" name="plateSolveUseCurrentDateTimeLabel">
+                  <property name="text">
+                   <string>Use current date/time</string>
+                  </property>
+                 </widget>
                 </item>
-              <item row="7" column="0">
-               <widget class="QLabel" name="plateSolveUseCurrentDateTimeLabel">
-                <property name="text">
-                 <string>Use current date/time</string>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="1">
-               <widget class="QCheckBox" name="plateSolveUseCurrentDateTimeCheck">
-                <property name="text">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="2">
-               <widget class="QLabel" name="plateSolveDateTimeLabel">
-                <property name="text">
-                 <string>Solve date/time</string>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="3">
-               <widget class="QDateTimeEdit" name="plateSolveDateTimeEdit">
-                <property name="displayFormat">
-                 <string>yyyy-MM-dd HH:mm:ss</string>
+                <item row="8" column="1">
+                <widget class="QCheckBox" name="plateSolveUseCurrentDateTimeCheck">
+                  <property name="text">
+                   <string/>
+                  </property>
+                 </widget>
+                </item>
+                <item row="8" column="2">
+                <widget class="QLabel" name="plateSolveDateTimeLabel">
+                  <property name="text">
+                   <string>Solve date/time</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="8" column="3">
+                <widget class="QDateTimeEdit" name="plateSolveDateTimeEdit">
+                  <property name="displayFormat">
+                   <string>yyyy-MM-dd HH:mm:ss</string>
                 </property>
                 <property name="calendarPopup">
                  <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-              <item row="8" column="0" colspan="4">
-               <widget class="QLabel" name="plateSolveSolutionLabel">
-                <property name="text">
-                 <string>No solution</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="9" column="0" colspan="4">
+                <widget class="QLabel" name="plateSolveSolutionLabel">
+                  <property name="text">
+                   <string>No solution</string>
                 </property>
                 <property name="wordWrap">
                  <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-              <item row="9" column="0">
-               <widget class="QLabel" name="plateSolveUseDownloadedCatalogLabel">
-                <property name="text">
-                 <string>Use HYG catalog</string>
-                </property>
-               </widget>
-              </item>
-              <item row="9" column="1">
-               <widget class="QCheckBox" name="plateSolveUseDownloadedCatalogCheck">
-                <property name="toolTip">
-                 <string>Use the downloaded HYG catalog for plate solving when it is available</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="10" column="0">
+                <widget class="QLabel" name="plateSolveUseDownloadedCatalogLabel">
+                  <property name="text">
+                   <string>Use HYG catalog</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="10" column="1">
+                <widget class="QCheckBox" name="plateSolveUseDownloadedCatalogCheck">
+                  <property name="toolTip">
+                   <string>Use the downloaded HYG catalog for plate solving when it is available</string>
                 </property>
                 <property name="text">
                  <string/>
-                </property>
-               </widget>
-              </item>
-              <item row="9" column="2" colspan="2">
-               <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
-                <property name="toolTip">
-                 <string>Download and import the HYG bright-star catalog for plate solving</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="10" column="2" colspan="2">
+                <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
+                  <property name="toolTip">
+                   <string>Download and import the HYG bright-star catalog for plate solving</string>
                 </property>
                 <property name="text">
                  <string>Download HYG catalog</string>
@@ -5754,11 +5775,11 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="1">
-           <widget class="QComboBox" name="lensProjectionCombo">
-            <item>
-             <property name="text">
-              <string>Rectilinear</string>
+            <item row="5" column="1">
+             <widget class="QComboBox" name="lensProjectionCombo">
+              <item>
+               <property name="text">
+                <string>Rectilinear</string>
              </property>
             </item>
             <item>
@@ -5770,12 +5791,81 @@ Right-click: toggle continual synchronization from My Position.</string>
              <property name="text">
               <string>Equisolid fisheye</string>
              </property>
+              </item>
+             </widget>
             </item>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
+            <item row="6" column="0">
+             <widget class="QLabel" name="lensCenterOffsetXLabel">
+              <property name="text">
+               <string>Center offset X</string>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="1">
+             <widget class="QDoubleSpinBox" name="lensCenterOffsetXSpin">
+              <property name="decimals">
+               <number>1</number>
+              </property>
+              <property name="minimum">
+               <double>-2048.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>2048.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.500000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="0">
+             <widget class="QLabel" name="lensCenterOffsetYLabel">
+              <property name="text">
+               <string>Center offset Y</string>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="1">
+             <widget class="QDoubleSpinBox" name="lensCenterOffsetYSpin">
+              <property name="decimals">
+               <number>1</number>
+              </property>
+              <property name="minimum">
+               <double>-2048.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>2048.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.500000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="0">
+             <widget class="QLabel" name="lensDistortionK1Label">
+              <property name="text">
+               <string>Distortion K1</string>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="1">
+             <widget class="QDoubleSpinBox" name="lensDistortionK1Spin">
+              <property name="decimals">
+               <number>4</number>
+              </property>
+              <property name="minimum">
+               <double>-1.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.001000000000000</double>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
        <item>
         <widget class="QGroupBox" name="groupBox">
          <property name="title">

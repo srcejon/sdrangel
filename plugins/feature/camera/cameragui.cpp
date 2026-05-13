@@ -1039,6 +1039,9 @@ void CameraGUI::displaySettings()
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
     settingsUI()->lensProjectionCombo->setCurrentIndex(static_cast<int>(m_settings.m_lensProjection));
+    settingsUI()->lensCenterOffsetXSpin->setValue(m_settings.m_lensCenterOffsetX);
+    settingsUI()->lensCenterOffsetYSpin->setValue(m_settings.m_lensCenterOffsetY);
+    settingsUI()->lensDistortionK1Spin->setValue(m_settings.m_lensDistortionK1);
     settingsUI()->scheduleEnabledCheck->setChecked(m_settings.m_scheduleEnabled);
     settingsUI()->scheduleStartTimeEdit->setTime(parseScheduleTime(m_settings.m_scheduleStartTime, QTime(20, 0, 0)));
     settingsUI()->scheduleEndTimeEdit->setTime(parseScheduleTime(m_settings.m_scheduleEndTime, QTime(6, 0, 0)));
@@ -1193,6 +1196,7 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveDateTimeEdit->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
     settingsUI()->plateSolveUseDownloadedCatalogCheck->setChecked(m_settings.m_plateSolveUseDownloadedCatalog);
     settingsUI()->plateSolveApplyModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveApplyMode));
+    settingsUI()->plateSolveLensModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveLensMode));
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
     ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
@@ -1486,6 +1490,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->rotatorControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_rotatorControllerCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
     QObject::connect(settingsUI()->lensProjectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_lensProjectionCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->lensCenterOffsetXSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensCenterOffsetXSpin_valueChanged);
+    QObject::connect(settingsUI()->lensCenterOffsetYSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensCenterOffsetYSpin_valueChanged);
+    QObject::connect(settingsUI()->lensDistortionK1Spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensDistortionK1Spin_valueChanged);
     QObject::connect(settingsUI()->scheduleEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleEnabledCheck_toggled);
     QObject::connect(settingsUI()->scheduleStartTimeEdit, &QTimeEdit::timeChanged, this, &CameraGUI::on_scheduleStartTimeEdit_timeChanged);
     QObject::connect(settingsUI()->scheduleEndTimeEdit, &QTimeEdit::timeChanged, this, &CameraGUI::on_scheduleEndTimeEdit_timeChanged);
@@ -1631,6 +1638,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveDateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, &CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged);
     QObject::connect(settingsUI()->plateSolveUseDownloadedCatalogCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled);
     QObject::connect(settingsUI()->plateSolveApplyModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->plateSolveLensModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveLensModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveDownloadCatalogButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDownloadCatalogButton_clicked);
     QObject::connect(settingsUI()->plateSolveApplyButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveApplyButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
@@ -4362,6 +4370,24 @@ void CameraGUI::on_lensProjectionCombo_currentIndexChanged(int index)
     applySetting("lensProjection");
 }
 
+void CameraGUI::on_lensCenterOffsetXSpin_valueChanged(double value)
+{
+    m_settings.m_lensCenterOffsetX = value;
+    applySetting("lensCenterOffsetX");
+}
+
+void CameraGUI::on_lensCenterOffsetYSpin_valueChanged(double value)
+{
+    m_settings.m_lensCenterOffsetY = value;
+    applySetting("lensCenterOffsetY");
+}
+
+void CameraGUI::on_lensDistortionK1Spin_valueChanged(double value)
+{
+    m_settings.m_lensDistortionK1 = value;
+    applySetting("lensDistortionK1");
+}
+
 void CameraGUI::on_scheduleEnabledCheck_toggled(bool checked)
 {
     m_settings.m_scheduleEnabled = checked;
@@ -5474,6 +5500,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveDateTime = defaults.m_plateSolveDateTime;
     m_settings.m_plateSolveUseDownloadedCatalog = defaults.m_plateSolveUseDownloadedCatalog;
     m_settings.m_plateSolveApplyMode = defaults.m_plateSolveApplyMode;
+    m_settings.m_plateSolveLensMode = defaults.m_plateSolveLensMode;
 
     m_settings.m_diffMask = defaults.m_diffMask;
     m_settings.m_diffThreshold = defaults.m_diffThreshold;
@@ -5537,6 +5564,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveDateTime",
         "plateSolveUseDownloadedCatalog",
         "plateSolveApplyMode",
+        "plateSolveLensMode",
         "diffMask",
         "diffThreshold",
         "diffMaskOpenSize",
@@ -5817,6 +5845,12 @@ void CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged(int index)
     applySetting("plateSolveApplyMode");
 }
 
+void CameraGUI::on_plateSolveLensModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_plateSolveLensMode = static_cast<CameraSettings::PlateSolveLensMode>(index);
+    applySetting("plateSolveLensMode");
+}
+
 void CameraGUI::on_plateSolveDownloadCatalogButton_clicked()
 {
     requestPlateSolveCatalogDownload();
@@ -5842,6 +5876,14 @@ void CameraGUI::on_plateSolveApplyButton_clicked()
     if (m_settings.m_plateSolveApplyMode >= CameraSettings::PlateSolveApplyAzElRollFov) {
         m_settings.m_fov = static_cast<float>(m_lastPlateSolveFov);
         settingsToApply.append("fov");
+    }
+    if (m_settings.m_plateSolveLensMode == CameraSettings::PlateSolveLensModeCalibrate) {
+        m_settings.m_lensCenterOffsetX = m_lastPlateSolveCenterOffsetX;
+        m_settings.m_lensCenterOffsetY = m_lastPlateSolveCenterOffsetY;
+        m_settings.m_lensDistortionK1 = m_lastPlateSolveDistortionK1;
+        settingsToApply.append("lensCenterOffsetX");
+        settingsToApply.append("lensCenterOffsetY");
+        settingsToApply.append("lensDistortionK1");
     }
 
     blockApplySettings(true);

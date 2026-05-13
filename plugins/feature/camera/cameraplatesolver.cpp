@@ -615,6 +615,11 @@ QString currentCatalogSource(const CameraSettings& settings)
         : QStringLiteral("Bundled");
 }
 
+bool canCalibrateLens(const CameraSettings& settings)
+{
+    return settings.m_plateSolveLensMode == CameraSettings::PlateSolveLensModeCalibrate;
+}
+
 const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
 {
     static QMutex s_catalogMutex;
@@ -1116,7 +1121,10 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 seedElevation,
                 seedRoll,
                 seedFov,
-                &allowedCatalogIndices);
+                &allowedCatalogIndices,
+                settings.m_lensCenterOffsetX,
+                settings.m_lensCenterOffsetY,
+                settings.m_lensDistortionK1);
             if (candidate.valid) {
                 seeds.append(candidate);
             }
@@ -1395,6 +1403,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
 {
     Evaluation best;
     const int minMatchCount = std::max(1, settings.m_plateSolveMinMatches);
+    const double fixedCenterOffsetX = settings.m_lensCenterOffsetX;
+    const double fixedCenterOffsetY = settings.m_lensCenterOffsetY;
+    const double fixedDistortionK1 = settings.m_lensDistortionK1;
 
     const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveSearchRadius);
     const double coarseRollRadius = std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
@@ -1421,7 +1432,11 @@ Evaluation searchBestPose(const CameraSettings& settings,
                         settings.m_elevation + elFactor * coarseSearchRadius,
                         settings.m_roll + rollFactor * coarseRollRadius,
                         std::max(static_cast<double>(CameraSettings::m_minFov),
-                                 static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius));
+                                 static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius),
+                        nullptr,
+                        fixedCenterOffsetX,
+                        fixedCenterOffsetY,
+                        fixedDistortionK1);
                     if (isBetterEvaluation(candidate, best)) {
                         best = candidate;
                     }
@@ -1460,7 +1475,11 @@ Evaluation searchBestPose(const CameraSettings& settings,
                         azimuthDegrees,
                         elevationDegrees,
                         rollDegrees,
-                        static_cast<double>(settings.m_fov));
+                        static_cast<double>(settings.m_fov),
+                        nullptr,
+                        fixedCenterOffsetX,
+                        fixedCenterOffsetY,
+                        fixedDistortionK1);
                     if (isBetterEvaluation(candidate, best)) {
                         best = candidate;
                     }
@@ -1500,7 +1519,11 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             azCenter + azOffset * azStep,
                             elCenter + elOffset * azStep,
                             rollCenter + rollOffset * rollStep,
-                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep));
+                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
+                            nullptr,
+                            fixedCenterOffsetX,
+                            fixedCenterOffsetY,
+                            fixedDistortionK1);
                         if (isBetterEvaluation(candidate, best)) {
                             best = candidate;
                         }
@@ -1556,7 +1579,11 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             azCenter + azOffset * azStep,
                             elCenter + elOffset * azStep,
                             rollCenter + rollOffset * rollStep,
-                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep));
+                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
+                            nullptr,
+                            fixedCenterOffsetX,
+                            fixedCenterOffsetY,
+                            fixedDistortionK1);
                         if (isBetterEvaluation(candidate, best)) {
                             best = candidate;
                             improved = true;
@@ -1589,6 +1616,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     if (!initialEvaluation.valid || initialEvaluation.matches.isEmpty()) {
         return initialEvaluation;
     }
+    const bool calibrateLens = canCalibrateLens(settings);
 
     int initialOutlierCount = 0;
     const QVector<Match> inlierMatches = rejectOutlierMatches(
@@ -1618,9 +1646,9 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
         initialEvaluation.rollDegrees,
         initialEvaluation.fovDegrees,
         &catalogIndices,
-        initialEvaluation.centerOffsetXPixels,
-        initialEvaluation.centerOffsetYPixels,
-        initialEvaluation.distortionK1);
+        calibrateLens ? initialEvaluation.centerOffsetXPixels : settings.m_lensCenterOffsetX,
+        calibrateLens ? initialEvaluation.centerOffsetYPixels : settings.m_lensCenterOffsetY,
+        calibrateLens ? initialEvaluation.distortionK1 : settings.m_lensDistortionK1);
     if (!best.valid) {
         best = initialEvaluation;
     }
@@ -1685,53 +1713,62 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
         }
     }
 
-    azCenter = best.azimuthDegrees;
-    elCenter = best.elevationDegrees;
-    rollCenter = best.rollDegrees;
-    fovCenter = best.fovDegrees;
-    centerOffsetXCenter = best.centerOffsetXPixels;
-    centerOffsetYCenter = best.centerOffsetYPixels;
-    distortionCenter = best.distortionK1;
-
-    for (int iteration = 0; iteration < 4; ++iteration)
+    if (calibrateLens)
     {
-        bool improved = false;
-        for (double centerOffsetXOffset : offsets)
-        {
-            for (double centerOffsetYOffset : offsets)
-            {
-                for (double distortionOffset : offsets)
-                {
-                    const Evaluation candidate = evaluatePose(
-                        settings,
-                        imageSize,
-                        captureDateTimeUtc,
-                        starDetections,
-                        detectionIndices,
-                        azCenter,
-                        elCenter,
-                        rollCenter,
-                        fovCenter,
-                        &catalogIndices,
-                        centerOffsetXCenter + centerOffsetXOffset * centerOffsetXStep,
-                        centerOffsetYCenter + centerOffsetYOffset * centerOffsetYStep,
-                        std::clamp(distortionCenter + distortionOffset * distortionStep, -0.75, 0.75));
-                    if (isBetterEvaluation(candidate, best)) {
-                        best = candidate;
-                        improved = true;
-                    }
-                }
-            }
-        }
-
+        azCenter = best.azimuthDegrees;
+        elCenter = best.elevationDegrees;
+        rollCenter = best.rollDegrees;
+        fovCenter = best.fovDegrees;
         centerOffsetXCenter = best.centerOffsetXPixels;
         centerOffsetYCenter = best.centerOffsetYPixels;
         distortionCenter = best.distortionK1;
-        if (!improved) {
-            centerOffsetXStep *= 0.5;
-            centerOffsetYStep *= 0.5;
-            distortionStep *= 0.5;
+
+        for (int iteration = 0; iteration < 4; ++iteration)
+        {
+            bool improved = false;
+            for (double centerOffsetXOffset : offsets)
+            {
+                for (double centerOffsetYOffset : offsets)
+                {
+                    for (double distortionOffset : offsets)
+                    {
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            azCenter,
+                            elCenter,
+                            rollCenter,
+                            fovCenter,
+                            &catalogIndices,
+                            centerOffsetXCenter + centerOffsetXOffset * centerOffsetXStep,
+                            centerOffsetYCenter + centerOffsetYOffset * centerOffsetYStep,
+                            std::clamp(distortionCenter + distortionOffset * distortionStep, -0.75, 0.75));
+                        if (isBetterEvaluation(candidate, best)) {
+                            best = candidate;
+                            improved = true;
+                        }
+                    }
+                }
+            }
+
+            centerOffsetXCenter = best.centerOffsetXPixels;
+            centerOffsetYCenter = best.centerOffsetYPixels;
+            distortionCenter = best.distortionK1;
+            if (!improved) {
+                centerOffsetXStep *= 0.5;
+                centerOffsetYStep *= 0.5;
+                distortionStep *= 0.5;
+            }
         }
+    }
+    else
+    {
+        best.centerOffsetXPixels = settings.m_lensCenterOffsetX;
+        best.centerOffsetYPixels = settings.m_lensCenterOffsetY;
+        best.distortionK1 = settings.m_lensDistortionK1;
     }
 
     azCenter = best.azimuthDegrees;
@@ -1885,13 +1922,13 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     clearSolvedStars(starDetections);
     result.m_catalogSource = currentCatalogSource(settings);
     result.m_catalogStarsLoaded = brightStarCatalog(settings).size();
+    result.m_detectedStarsConsidered = starDetections.size();
 
     if (!settings.m_plateSolve || (starDetections.size() < settings.m_plateSolveMinMatches)) {
         return result;
     }
 
     const QVector<int> detectionIndices = selectDetectionIndicesForSolve(starDetections);
-    result.m_detectedStarsConsidered = detectionIndices.size();
     if (detectionIndices.size() < settings.m_plateSolveMinMatches) {
         return result;
     }

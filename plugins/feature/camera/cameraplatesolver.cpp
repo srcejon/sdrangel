@@ -168,6 +168,17 @@ Evaluation evaluatePose(const CameraSettings& settings,
                         double centerOffsetYPixels = 0.0,
                         double distortionK1 = 0.0);
 
+Evaluation refinePoseFromMatches(const CameraSettings& settings,
+                                 const QSize& imageSize,
+                                 const QDateTime& captureDateTimeUtc,
+                                 const QVector<CameraPipelineStarDetection>& starDetections,
+                                 const Evaluation& initialEvaluation);
+
+QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
+                                    int minMatches,
+                                    double matchRadiusPixels,
+                                    int* outlierCount);
+
 double degToRad(double value)
 {
     return value * kPi / 180.0;
@@ -985,6 +996,53 @@ bool isStrongBlindSeedEvaluation(const CameraSettings& settings,
     return (candidate.rmsErrorPixels <= maxRmsError) && (medianError <= maxMedianError);
 }
 
+Evaluation verifyBlindSeedCandidate(const CameraSettings& settings,
+                                    const QSize& imageSize,
+                                    const QDateTime& captureDateTimeUtc,
+                                    const QVector<CameraPipelineStarDetection>& starDetections,
+                                    const QVector<int>& detectionIndices,
+                                    const Evaluation& candidate)
+{
+    if (!isStrongBlindSeedEvaluation(settings, detectionIndices, candidate)) {
+        return Evaluation{};
+    }
+
+    int outlierCount = 0;
+    const QVector<Match> inlierMatches = rejectOutlierMatches(
+        candidate.matches,
+        std::max(settings.m_plateSolveMinMatches, 4),
+        std::min(settings.m_plateSolveMatchRadius, 12.0),
+        &outlierCount);
+
+    const int minConsensusMatches = std::max(settings.m_plateSolveMinMatches + 1, std::min(6, static_cast<int>(detectionIndices.size())));
+    if (inlierMatches.size() < minConsensusMatches) {
+        return Evaluation{};
+    }
+
+    Evaluation consensusCandidate = candidate;
+    consensusCandidate.matches = inlierMatches;
+    consensusCandidate.matchCount = inlierMatches.size();
+    double sumSquaredError = 0.0;
+    for (const Match& match : inlierMatches) {
+        sumSquaredError += match.distancePixels * match.distancePixels;
+    }
+    consensusCandidate.rmsErrorPixels = std::sqrt(sumSquaredError / consensusCandidate.matchCount);
+    consensusCandidate.valid = true;
+
+    Evaluation refinedCandidate = refinePoseFromMatches(
+        settings,
+        imageSize,
+        captureDateTimeUtc,
+        starDetections,
+        consensusCandidate);
+
+    if (!isStrongBlindSeedEvaluation(settings, detectionIndices, refinedCandidate)) {
+        return Evaluation{};
+    }
+
+    return refinedCandidate;
+}
+
 QVector<TriangleSignature> buildDetectionTriangleSignatures(const QVector<CameraPipelineStarDetection>& starDetections,
                                                             const QVector<int>& detectionIndices)
 {
@@ -1199,8 +1257,15 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                         settings.m_lensCenterOffsetX,
                         settings.m_lensCenterOffsetY,
                         settings.m_lensDistortionK1);
-                    if (isStrongBlindSeedEvaluation(settings, detectionIndices, candidate)) {
-                        seeds.append(candidate);
+                    const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
+                        settings,
+                        imageSize,
+                        captureDateTimeUtc,
+                        starDetections,
+                        detectionIndices,
+                        candidate);
+                    if (verifiedCandidate.valid) {
+                        seeds.append(verifiedCandidate);
                     }
                 }
             }

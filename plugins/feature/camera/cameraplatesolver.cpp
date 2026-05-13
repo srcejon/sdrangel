@@ -2185,6 +2185,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     result.m_outlierStars = outlierCount;
 
     if (finalMatches.size() < settings.m_plateSolveMinMatches) {
+        PROFILER_STOP(__FUNCTION__ ": insufficient matches");
         return result;
     }
 
@@ -2216,6 +2217,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         && !isAcceptableBlindSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
         clearSolvedStars(starDetections);
+        PROFILER_STOP(__FUNCTION__ ": unacceptable blind solve");
         return CameraPlateSolveResult();
     }
     result.m_azimuthDegrees = best.azimuthDegrees;

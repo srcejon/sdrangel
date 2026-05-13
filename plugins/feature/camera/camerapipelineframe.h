@@ -68,6 +68,7 @@ struct CameraPipelineStarDetection
     QString m_label;
     float m_matchDistancePixels = 0.0f;
     float m_catalogMagnitude = 0.0f;
+    QString m_catalogSpectralType;
     bool m_solved = false;
 };
 

@@ -4931,27 +4931,53 @@ li.checked::marker { content: &quot;\2612&quot;; }
                </widget>
               </item>
               <item row="4" column="0">
+               <widget class="QLabel" name="plateSolveLabelModeLabel">
+                <property name="text">
+                 <string>Plate solve labels</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QComboBox" name="plateSolveLabelModeCombo">
+                <item>
+                 <property name="text">
+                  <string>Name</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Name + mag</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Name + mag + spect</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="5" column="0">
                <widget class="QLabel" name="plateSolveLabel">
                 <property name="text">
                  <string>Plate solve</string>
                 </property>
                </widget>
               </item>
-              <item row="4" column="1">
+              <item row="5" column="1">
                <widget class="QCheckBox" name="plateSolveCheck">
                 <property name="text">
                  <string/>
                 </property>
                </widget>
               </item>
-              <item row="4" column="2">
+              <item row="5" column="2">
                <widget class="QLabel" name="plateSolveMaxMagnitudeLabel">
                 <property name="text">
                  <string>Max magnitude</string>
                 </property>
                </widget>
               </item>
-              <item row="4" column="3">
+              <item row="5" column="3">
                <widget class="QDoubleSpinBox" name="plateSolveMaxMagnitudeSpin">
                 <property name="minimum">
                  <double>-2.000000000000000</double>
@@ -4964,14 +4990,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="5" column="0">
+              <item row="6" column="0">
                <widget class="QLabel" name="plateSolveMinMatchesLabel">
                 <property name="text">
                  <string>Min matches</string>
                 </property>
                </widget>
               </item>
-              <item row="5" column="1">
+              <item row="6" column="1">
                <widget class="QSpinBox" name="plateSolveMinMatchesSpin">
                 <property name="minimum">
                  <number>2</number>
@@ -4981,14 +5007,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="5" column="2">
+              <item row="6" column="2">
                <widget class="QLabel" name="plateSolveMatchRadiusLabel">
                 <property name="text">
                  <string>Match radius</string>
                 </property>
                </widget>
               </item>
-              <item row="5" column="3">
+              <item row="6" column="3">
                <widget class="QDoubleSpinBox" name="plateSolveMatchRadiusSpin">
                 <property name="minimum">
                  <double>1.000000000000000</double>
@@ -5001,14 +5027,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-                <item row="6" column="0">
+                <item row="7" column="0">
                 <widget class="QLabel" name="plateSolveSearchRadiusLabel">
                   <property name="text">
                    <string>Search radius</string>
                   </property>
                </widget>
               </item>
-                <item row="6" column="1">
+                <item row="7" column="1">
                 <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
                   <property name="minimum">
                    <double>0.000000000000000</double>
@@ -5021,14 +5047,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
                   </property>
                  </widget>
                 </item>
-                <item row="6" column="2">
+                <item row="7" column="2">
                  <widget class="QLabel" name="plateSolveLensModeLabel">
                   <property name="text">
                    <string>Lens mode</string>
                   </property>
                  </widget>
                 </item>
-                <item row="6" column="3">
+                <item row="7" column="3">
                  <widget class="QComboBox" name="plateSolveLensModeCombo">
                   <item>
                    <property name="text">
@@ -5042,7 +5068,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                   </item>
                  </widget>
                 </item>
-                  <item row="7" column="2" colspan="2">
+                  <item row="8" column="2" colspan="2">
                  <layout class="QHBoxLayout" name="plateSolveApplyLayout">
                    <item>
                     <widget class="QComboBox" name="plateSolveApplyModeCombo">
@@ -5083,28 +5109,28 @@ li.checked::marker { content: &quot;\2612&quot;; }
                    </item>
                   </layout>
                   </item>
-                <item row="8" column="0">
+                <item row="9" column="0">
                 <widget class="QLabel" name="plateSolveUseCurrentDateTimeLabel">
                   <property name="text">
                    <string>Use current date/time</string>
                   </property>
                  </widget>
                 </item>
-                <item row="8" column="1">
+                <item row="9" column="1">
                 <widget class="QCheckBox" name="plateSolveUseCurrentDateTimeCheck">
                   <property name="text">
                    <string/>
                   </property>
                  </widget>
                 </item>
-                <item row="8" column="2">
+                <item row="9" column="2">
                 <widget class="QLabel" name="plateSolveDateTimeLabel">
                   <property name="text">
                    <string>Solve date/time</string>
                   </property>
                  </widget>
                 </item>
-                <item row="8" column="3">
+                <item row="9" column="3">
                 <widget class="QDateTimeEdit" name="plateSolveDateTimeEdit">
                   <property name="displayFormat">
                    <string>yyyy-MM-dd HH:mm:ss</string>
@@ -5114,7 +5140,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                   </property>
                  </widget>
                 </item>
-                <item row="9" column="0" colspan="4">
+                <item row="10" column="0" colspan="4">
                 <widget class="QLabel" name="plateSolveSolutionLabel">
                   <property name="text">
                    <string>No solution</string>
@@ -5124,14 +5150,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
                   </property>
                  </widget>
                 </item>
-                <item row="10" column="0">
+                <item row="11" column="0">
                 <widget class="QLabel" name="plateSolveUseDownloadedCatalogLabel">
                   <property name="text">
                    <string>Use HYG catalog</string>
                   </property>
                  </widget>
                 </item>
-                <item row="10" column="1">
+                <item row="11" column="1">
                 <widget class="QCheckBox" name="plateSolveUseDownloadedCatalogCheck">
                   <property name="toolTip">
                    <string>Use the downloaded HYG catalog for plate solving when it is available</string>
@@ -5141,7 +5167,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                   </property>
                  </widget>
                 </item>
-                <item row="10" column="2" colspan="2">
+                <item row="11" column="2" colspan="2">
                 <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
                   <property name="toolTip">
                    <string>Download and import the HYG bright-star catalog for plate solving</string>

@@ -50,6 +50,7 @@ struct CatalogStar
     double rightAscensionDegrees;
     double declinationDegrees;
     double magnitude;
+    QString spectralType;
 };
 
 struct SkyVector
@@ -349,7 +350,7 @@ QVector<CatalogStar> parseBundledCatalog(const QString& text)
         }
 
         const QStringList fields = line.split('|');
-        if (fields.size() != 4) {
+        if ((fields.size() != 4) && (fields.size() != 5)) {
             continue;
         }
 
@@ -361,7 +362,13 @@ QVector<CatalogStar> parseBundledCatalog(const QString& text)
             continue;
         }
 
-        stars.append({fields[0].trimmed(), rightAscensionDegrees, declinationDegrees, magnitude});
+        stars.append({
+            fields[0].trimmed(),
+            rightAscensionDegrees,
+            declinationDegrees,
+            magnitude,
+            (fields.size() >= 5) ? fields[4].trimmed() : QString()
+        });
     }
 
     return stars;
@@ -389,6 +396,7 @@ QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text)
     const int hipIndex = indices.value(QStringLiteral("hip"), -1);
     const int hdIndex = indices.value(QStringLiteral("hd"), -1);
     const int hrIndex = indices.value(QStringLiteral("hr"), -1);
+    const int spectIndex = indices.value(QStringLiteral("spect"), -1);
     const int bayerIndex = indices.value(QStringLiteral("bayer"), -1);
     const int flamIndex = indices.value(QStringLiteral("flam"), -1);
     const int conIndex = indices.value(QStringLiteral("con"), -1);
@@ -463,7 +471,10 @@ QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text)
             continue;
         }
 
-        stars.append({name, rightAscensionHours * 15.0, declinationDegrees, magnitude});
+        const QString spectralType = ((spectIndex >= 0) && (spectIndex < fields.size()))
+            ? stripQuotedField(fields[spectIndex]) : QString();
+
+        stars.append({name, rightAscensionHours * 15.0, declinationDegrees, magnitude, spectralType});
     }
 
     return stars;
@@ -562,7 +573,7 @@ bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path,
     }
 
     QByteArray data;
-    data.append("name|ra_hms|dec_dms|magnitude\n");
+    data.append("name|ra_hms|dec_dms|magnitude|spect\n");
     for (const CatalogStar& star : stars)
     {
         data.append(star.name.toUtf8());
@@ -572,6 +583,8 @@ bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path,
         data.append(formatDeclinationDegrees(star.declinationDegrees).toUtf8());
         data.append('|');
         data.append(QByteArray::number(star.magnitude, 'f', 2));
+        data.append('|');
+        data.append(star.spectralType.toUtf8());
         data.append('\n');
     }
 
@@ -1835,6 +1848,7 @@ void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
         detection.m_projectedCenter = QPointF();
         detection.m_matchDistancePixels = 0.0f;
         detection.m_catalogMagnitude = 0.0f;
+        detection.m_catalogSpectralType.clear();
         detection.m_solved = false;
     }
 }
@@ -2008,6 +2022,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         detection.m_projectedCenter = projectedPointsByCatalogIndex.value(match.catalogIndex);
         detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
         detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
+        detection.m_catalogSpectralType = catalogStar.spectralType;
         detection.m_solved = true;
         sumSquaredError += match.distancePixels * match.distancePixels;
         maxError = std::max(maxError, match.distancePixels);

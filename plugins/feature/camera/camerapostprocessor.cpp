@@ -159,6 +159,25 @@ static QString formatRightAscensionDegrees(double value)
     return QStringLiteral("%1h").arg(hours, 2, 10, QLatin1Char('0'));
 }
 
+static QString formatSolvedStarLabel(const CameraSettings& settings, const CameraPipelineStarDetection& detection)
+{
+    if (!detection.m_solved || detection.m_label.isEmpty()) {
+        return QString();
+    }
+
+    QString label = detection.m_label;
+    if (settings.m_plateSolveLabelMode >= CameraSettings::PlateSolveLabelNameMagnitude) {
+        label += QStringLiteral("\nmag %1").arg(detection.m_catalogMagnitude, 0, 'f', 1);
+    }
+    if ((settings.m_plateSolveLabelMode >= CameraSettings::PlateSolveLabelNameMagnitudeSpectralType)
+        && !detection.m_catalogSpectralType.trimmed().isEmpty())
+    {
+        label += QStringLiteral("\n%1").arg(detection.m_catalogSpectralType.trimmed());
+    }
+
+    return label;
+}
+
 static void drawOutlinedLabel(QPainter& painter,
                               const QRect& imageRect,
                               const QPointF& point,
@@ -600,9 +619,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "overlayFontFamily", "overlayFontScale",
-        "motionBoxColor", "streakColor", "streakOverlayStyle",
+        "motionBoxColor", "streakColor", "streakOverlayStyle", "starColor", "plateSolveLabelMode",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
-        "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov", "lensProjection", "owmAPIKey",
+        "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov",
+        "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1", "owmAPIKey",
         "yoloBoxColor"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
@@ -984,8 +1004,9 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
             painter.setPen(pen);
         }
 
-        if (detection.m_solved && !detection.m_label.isEmpty()) {
-            drawOutlinedLabel(painter, image.rect(), detection.m_center, detection.m_label, starColor, fontMetrics);
+        const QString solvedStarLabel = formatSolvedStarLabel(m_settings, detection);
+        if (!solvedStarLabel.isEmpty()) {
+            drawOutlinedLabel(painter, image.rect(), detection.m_center, solvedStarLabel, starColor, fontMetrics);
         }
     }
 

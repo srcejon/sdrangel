@@ -1189,6 +1189,7 @@ void CameraGUI::displaySettings()
     settingsUI()->starMaxAreaSpin->setValue(m_settings.m_starMaxArea);
     settingsUI()->starMaxAspectRatioSpin->setValue(m_settings.m_starMaxAspectRatio);
     settingsUI()->starDebugViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_starDebugView));
+    settingsUI()->plateSolveLabelModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveLabelMode));
     settingsUI()->plateSolveCheck->setChecked(m_settings.m_plateSolve);
     settingsUI()->plateSolveMaxMagnitudeSpin->setValue(m_settings.m_plateSolveMaxMagnitude);
     settingsUI()->plateSolveMinMatchesSpin->setValue(m_settings.m_plateSolveMinMatches);
@@ -1631,6 +1632,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->starMaxAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starMaxAreaSpin_valueChanged);
     QObject::connect(settingsUI()->starMaxAspectRatioSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_starMaxAspectRatioSpin_valueChanged);
     QObject::connect(settingsUI()->starDebugViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_starDebugViewCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->plateSolveLabelModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveLabelModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->starColorButton, &QToolButton::clicked, this, &CameraGUI::on_starColorButton_clicked);
     QObject::connect(settingsUI()->plateSolveCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveCheck_toggled);
     QObject::connect(settingsUI()->plateSolveMaxMagnitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMaxMagnitudeSpin_valueChanged);
@@ -5521,6 +5523,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_starMaxAspectRatio = defaults.m_starMaxAspectRatio;
     m_settings.m_starDebugView = defaults.m_starDebugView;
     m_settings.m_starColor = defaults.m_starColor;
+    m_settings.m_plateSolveLabelMode = defaults.m_plateSolveLabelMode;
     m_settings.m_plateSolve = defaults.m_plateSolve;
     m_settings.m_plateSolveMaxMagnitude = defaults.m_plateSolveMaxMagnitude;
     m_settings.m_plateSolveMinMatches = defaults.m_plateSolveMinMatches;
@@ -5585,6 +5588,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "starMaxAspectRatio",
         "starDebugView",
         "starColor",
+        "plateSolveLabelMode",
         "plateSolve",
         "plateSolveMaxMagnitude",
         "plateSolveMinMatches",
@@ -5806,6 +5810,12 @@ void CameraGUI::on_starDebugViewCombo_currentIndexChanged(int index)
 {
     m_settings.m_starDebugView = static_cast<CameraSettings::StarDebugView>(index);
     applySetting("starDebugView");
+}
+
+void CameraGUI::on_plateSolveLabelModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_plateSolveLabelMode = static_cast<CameraSettings::PlateSolveLabelMode>(index);
+    applySetting("plateSolveLabelMode");
 }
 
 void CameraGUI::on_starColorButton_clicked()

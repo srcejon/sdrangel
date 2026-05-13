@@ -1464,6 +1464,19 @@ bool isAcceptableBlindSolve(const CameraSettings& settings,
         && (maxErrorPixels <= maxWorstError);
 }
 
+bool isStrongGuidedSolve(const CameraSettings& settings,
+                         int minMatchCount,
+                         const Evaluation& evaluation)
+{
+    if (!evaluation.valid) {
+        return false;
+    }
+
+    const int minAcceptedMatches = std::max(minMatchCount + 2, 6);
+    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.45, 12.0);
+    return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
+}
+
 bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
 {
     if (!candidate.valid) {
@@ -1546,20 +1559,28 @@ Evaluation searchBestPose(const CameraSettings& settings,
         }
     }
 
-    const QVector<Evaluation> blindSeeds = buildBlindTriangleSeeds(
-        settings,
-        imageSize,
-        captureDateTimeUtc,
-        starDetections,
-        detectionIndices);
-    for (const Evaluation& seed : blindSeeds)
+    const bool needBlindSearch = !settings.m_plateSolveUseCurrentDirection
+        || !isStrongGuidedSolve(settings, minMatchCount, best);
+
+    if (needBlindSearch)
     {
-        if (isBetterEvaluation(seed, best)) {
-            best = seed;
+        const QVector<Evaluation> blindSeeds = buildBlindTriangleSeeds(
+            settings,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices);
+        for (const Evaluation& seed : blindSeeds)
+        {
+            if (isBetterEvaluation(seed, best)) {
+                best = seed;
+            }
         }
     }
 
-    if (!best.valid || (best.matchCount < minMatchCount)) {
+    if ((!best.valid || (best.matchCount < minMatchCount))
+        && (!settings.m_plateSolveUseCurrentDirection || !best.valid))
+    {
         const std::array<double, 13> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0}};
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
         for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)

@@ -2298,6 +2298,13 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const double coarseRollRadius = std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
     const double coarseFovRadius = std::max(2.0, std::min(12.0, static_cast<double>(settings.m_fov) * 0.10));
 
+    const double minAzimuthDegrees = 0.0;
+    const double maxAzimuthDegrees = 360.0;
+    const double azimuthStepDegrees = 5.0;
+    const double minElevationDegrees = 0.0;
+    const double maxElevationDegrees = 90.0;
+    const double elevationStepDegrees = 15.0;
+
     const std::array<double, 5> coarseOffsets = {{-1.0, -0.5, 0.0, 0.5, 1.0}};
     const std::array<double, 3> coarseFovOffsets = {{-1.0, 0.0, 1.0}};
     const std::array<double, 5> coarseOffsetsOrdered = {{0.0, -0.5, 0.5, -1.0, 1.0}};
@@ -2381,7 +2388,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         {
             for (double elFactor : coarseOffsetsOrdered)
             {
-                for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 15.0)
+                for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += azimuthStepDegrees)
                 {
                     for (double rollDegrees : wideRollOffsetsOrdered)
                     {
@@ -2434,9 +2441,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
     {
         for (double fovFactor : coarseFovOffsetsOrdered)
         {
-            for (double elevationDegrees = -60.0; elevationDegrees <= 75.0; elevationDegrees += 15.0)
+            for (double elevationDegrees = minAzimuthDegrees; elevationDegrees <= maxAzimuthDegrees; elevationDegrees += elevationStepDegrees)
             {
-                for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
+                for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += azimuthStepDegrees)
                 {
                     for (double rollDegrees : wideRollOffsetsOrdered)
                     {
@@ -2503,9 +2510,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
     {
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
         const std::array<double, 8> wideBlindFovs = {{15.0, 25.0, 40.0, 60.0, 90.0, 130.0, 160.0, 180.0}};
-        for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
+        for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += azimuthStepDegrees)
         {
-            for (double elevationDegrees = -60.0; elevationDegrees <= 75.0; elevationDegrees += 15.0)
+            for (double elevationDegrees = minElevationDegrees; elevationDegrees <= maxElevationDegrees; elevationDegrees += elevationStepDegrees)
             {
                 for (double rollDegrees : wideRollOffsets)
                 {

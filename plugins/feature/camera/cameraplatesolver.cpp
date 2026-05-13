@@ -2615,52 +2615,6 @@ Evaluation searchBestPose(const CameraSettings& settings,
         fovStep *= 0.5;
     }
 
-    if (!useStartDirection && (best.matchCount >= std::max(2, minMatchCount - 1)))
-    {
-        const std::array<double, 5> fineOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
-        const std::array<double, 3> fineFovOffsets = {{-1.0, 0.0, 1.0}};
-        azCenter = best.azimuthDegrees;
-        elCenter = best.elevationDegrees;
-        rollCenter = best.rollDegrees;
-        fovCenter = best.fovDegrees;
-        azStep = std::min(azStep, 2.0);
-        elStep = std::min(elStep, useElevationSeedOnly ? std::max(0.5, coarseSearchRadius * 0.10) : 2.0);
-        rollStep = std::min(rollStep, 2.0);
-        fovStep = std::min(fovStep, std::max(0.5, fovCenter * 0.04));
-
-        for (double azOffset : fineOffsets)
-        {
-            for (double elOffset : fineOffsets)
-            {
-                for (double rollOffset : fineOffsets)
-                {
-                    for (double fovOffset : fineFovOffsets)
-                    {
-                        const Evaluation candidate = evaluatePose(
-                            settings,
-                            imageSize,
-                            captureDateTimeUtc,
-                            starDetections,
-                            detectionIndices,
-                            azCenter + azOffset * azStep,
-                            elCenter + elOffset * elStep,
-                            rollCenter + rollOffset * rollStep,
-                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
-                            nullptr,
-                            fixedCenterOffsetX,
-                            fixedCenterOffsetY,
-                            fixedDistortionK1);
-                        logPlateSolveEvaluation("guided-nondirection-refine-fine", candidate);
-                        if (isBetterEvaluation(candidate, best)) {
-                            best = candidate;
-                            logPlateSolveEvaluation("guided-nondirection-refine-fine", best, true);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     const QVector<int> allDetectionIndices = [&starDetections]() {
         QVector<int> indices;
         indices.reserve(starDetections.size());

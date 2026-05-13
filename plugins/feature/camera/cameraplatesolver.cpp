@@ -1870,6 +1870,149 @@ QVector<Match> buildMatches(const CameraSettings& settings,
     return matches;
 }
 
+void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starDetections,
+                               const QVector<ProjectedCatalogStar>& projectedStars,
+                               double matchRadiusPixels,
+                               QVector<Match>& matches)
+{
+    QVector<bool> detectionMatched(starDetections.size(), false);
+    QHash<int, bool> catalogMatched;
+    catalogMatched.reserve(matches.size());
+    for (const Match& match : matches)
+    {
+        detectionMatched[match.detectionIndex] = true;
+        catalogMatched.insert(match.catalogIndex, true);
+    }
+
+    const double maxDistanceSquared = matchRadiusPixels * matchRadiusPixels;
+    for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex)
+    {
+        if (detectionMatched[detectionIndex]) {
+            continue;
+        }
+
+        const QPointF detectionPoint = starDetections[detectionIndex].m_center;
+        double bestDistanceSquared = std::numeric_limits<double>::max();
+        int bestCatalogIndex = -1;
+
+        for (const ProjectedCatalogStar& projected : projectedStars)
+        {
+            if (catalogMatched.contains(projected.catalogIndex)) {
+                continue;
+            }
+
+            const double dx = detectionPoint.x() - projected.point.x();
+            const double dy = detectionPoint.y() - projected.point.y();
+            const double distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared > maxDistanceSquared) {
+                continue;
+            }
+            if (distanceSquared < bestDistanceSquared)
+            {
+                bestDistanceSquared = distanceSquared;
+                bestCatalogIndex = projected.catalogIndex;
+            }
+        }
+
+        if (bestCatalogIndex >= 0)
+        {
+            const double distancePixels = std::sqrt(bestDistanceSquared);
+            matches.append({detectionIndex, bestCatalogIndex, distancePixels});
+            detectionMatched[detectionIndex] = true;
+            catalogMatched.insert(bestCatalogIndex, true);
+            qDebug() << "CameraPlateSolver: supplemental final match"
+                     << "detection=" << detectionIndex
+                     << "catalog=" << bestCatalogIndex
+                     << "distance=" << distancePixels;
+        }
+    }
+}
+
+void logUnmatchedDetections(const CameraSettings& settings,
+                            const QVector<CameraPipelineStarDetection>& starDetections,
+                            const QVector<ProjectedCatalogStar>& projectedStars,
+                            const QVector<Match>& matches,
+                            double matchRadiusPixels)
+{
+    QVector<bool> detectionMatched(starDetections.size(), false);
+    QHash<int, bool> catalogMatched;
+    catalogMatched.reserve(matches.size());
+    for (const Match& match : matches)
+    {
+        detectionMatched[match.detectionIndex] = true;
+        catalogMatched.insert(match.catalogIndex, true);
+    }
+
+    const QVector<CatalogStar>& catalogStars = brightStarCatalog(settings);
+    for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex)
+    {
+        if (detectionMatched[detectionIndex]) {
+            continue;
+        }
+
+        const CameraPipelineStarDetection& detection = starDetections[detectionIndex];
+        double nearestAnyDistance = std::numeric_limits<double>::max();
+        int nearestAnyCatalogIndex = -1;
+        bool nearestAnyCatalogMatched = false;
+        double nearestUnmatchedDistance = std::numeric_limits<double>::max();
+        int nearestUnmatchedCatalogIndex = -1;
+
+        for (const ProjectedCatalogStar& projected : projectedStars)
+        {
+            const double dx = detection.m_center.x() - projected.point.x();
+            const double dy = detection.m_center.y() - projected.point.y();
+            const double distancePixels = std::hypot(dx, dy);
+            if (distancePixels < nearestAnyDistance)
+            {
+                nearestAnyDistance = distancePixels;
+                nearestAnyCatalogIndex = projected.catalogIndex;
+                nearestAnyCatalogMatched = catalogMatched.contains(projected.catalogIndex);
+            }
+            if (!catalogMatched.contains(projected.catalogIndex) && (distancePixels < nearestUnmatchedDistance))
+            {
+                nearestUnmatchedDistance = distancePixels;
+                nearestUnmatchedCatalogIndex = projected.catalogIndex;
+            }
+        }
+
+        QString reason = QStringLiteral("no nearby catalog candidate");
+        if (nearestAnyCatalogIndex >= 0)
+        {
+            if (nearestAnyDistance <= matchRadiusPixels) {
+                reason = nearestAnyCatalogMatched
+                    ? QStringLiteral("closest catalog star already matched")
+                    : QStringLiteral("candidate within radius was not selected");
+            } else if (nearestAnyDistance <= (matchRadiusPixels * 1.5)) {
+                reason = QStringLiteral("just outside match radius");
+            }
+        }
+
+        const QString nearestAnyName =
+            ((nearestAnyCatalogIndex >= 0) && (nearestAnyCatalogIndex < catalogStars.size()))
+                ? catalogStars[nearestAnyCatalogIndex].name
+                : QString();
+        const QString nearestUnmatchedName =
+            ((nearestUnmatchedCatalogIndex >= 0) && (nearestUnmatchedCatalogIndex < catalogStars.size()))
+                ? catalogStars[nearestUnmatchedCatalogIndex].name
+                : QString();
+
+        qDebug().noquote()
+            << "CameraPlateSolver: unmatched detection"
+            << "index=" << detectionIndex
+            << "center=" << detection.m_center
+            << "quality=" << detection.m_qualityScore
+            << "peak=" << detection.m_peakValue
+            << "nearestAnyDistance=" << (std::isfinite(nearestAnyDistance) ? nearestAnyDistance : -1.0)
+            << "nearestAnyCatalog=" << nearestAnyCatalogIndex
+            << "nearestAnyName=" << nearestAnyName
+            << "nearestAnyMatched=" << nearestAnyCatalogMatched
+            << "nearestUnmatchedDistance=" << (std::isfinite(nearestUnmatchedDistance) ? nearestUnmatchedDistance : -1.0)
+            << "nearestUnmatchedCatalog=" << nearestUnmatchedCatalogIndex
+            << "nearestUnmatchedName=" << nearestUnmatchedName
+            << "reason=" << reason;
+    }
+}
+
 Evaluation evaluatePose(const CameraSettings& settings,
                         const QSize& imageSize,
                         const QDateTime& captureDateTimeUtc,
@@ -2923,12 +3066,18 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         settings.m_plateSolveMatchRadius);
 
     int outlierCount = 0;
-    const QVector<Match> finalMatches = rejectOutlierMatches(
+    QVector<Match> finalMatches = rejectOutlierMatches(
         allMatches,
         settings.m_plateSolveMinMatches,
         settings.m_plateSolveMatchRadius,
         &outlierCount);
     result.m_outlierStars = outlierCount;
+
+    appendSupplementalMatches(
+        starDetections,
+        projectedStars,
+        settings.m_plateSolveMatchRadius,
+        finalMatches);
 
     if (finalMatches.size() < settings.m_plateSolveMinMatches) {
         PROFILER_STOP(__FUNCTION__ ": insufficient matches");
@@ -2990,6 +3139,13 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     result.m_centerOffsetXPixels = best.centerOffsetXPixels;
     result.m_centerOffsetYPixels = best.centerOffsetYPixels;
     result.m_distortionK1 = best.distortionK1;
+
+    logUnmatchedDetections(
+        settings,
+        starDetections,
+        projectedStars,
+        finalMatches,
+        settings.m_plateSolveMatchRadius);
 
     PROFILER_STOP(__FUNCTION__);
 

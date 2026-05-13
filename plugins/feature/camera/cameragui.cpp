@@ -4581,10 +4581,15 @@ void CameraGUI::updateMotionExclusionPreview()
 
 void CameraGUI::updatePlateSolveStartModeUi()
 {
+    QString searchRadiusLabelText = tr("Search radius");
     const bool usesSearchRadius =
         m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovElevation
         || m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll
         || m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens;
+    if (m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovElevation) {
+        searchRadiusLabelText = tr("Elevation search radius");
+    }
+    settingsUI()->plateSolveSearchRadiusLabel->setText(searchRadiusLabelText);
     settingsUI()->plateSolveSearchRadiusLabel->setEnabled(usesSearchRadius);
     settingsUI()->plateSolveSearchRadiusSpin->setEnabled(usesSearchRadius);
 }

@@ -957,11 +957,11 @@
            </item>
            <item row="8" column="0">
             <widget class="QLabel" name="plateSolveMatchesTextLabel">
-               <property name="text">
-                <string>Matched stars</string>
-               </property>
-              </widget>
-            </item>
+             <property name="text">
+              <string>Matched stars</string>
+             </property>
+            </widget>
+           </item>
            <item row="8" column="1">
             <widget class="QLabel" name="plateSolveMatchesLabel">
              <property name="text">
@@ -971,11 +971,11 @@
            </item>
            <item row="9" column="0">
             <widget class="QLabel" name="plateSolveDetectedTextLabel">
-              <property name="text">
-               <string>Detected stars</string>
-              </property>
-             </widget>
-            </item>
+             <property name="text">
+              <string>Detected stars</string>
+             </property>
+            </widget>
+           </item>
            <item row="9" column="1">
             <widget class="QLabel" name="plateSolveDetectedLabel">
              <property name="text">
@@ -985,11 +985,11 @@
            </item>
            <item row="10" column="0">
             <widget class="QLabel" name="plateSolveRmsTextLabel">
-              <property name="text">
-               <string>RMS / max (px)</string>
-              </property>
-             </widget>
-            </item>
+             <property name="text">
+              <string>RMS / max (px)</string>
+             </property>
+            </widget>
+           </item>
            <item row="10" column="1">
             <widget class="QLabel" name="plateSolveRmsLabel">
              <property name="text">
@@ -999,13 +999,13 @@
            </item>
            <item row="11" column="0">
             <widget class="QLabel" name="plateSolvePointingTextLabel">
-              <property name="text">
-               <string>Solved pointing</string>
-              </property>
-             </widget>
-            </item>
-            <item row="11" column="1">
-             <widget class="QLabel" name="plateSolvePointingLabel">
+             <property name="text">
+              <string>Solved pointing</string>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="1">
+            <widget class="QLabel" name="plateSolvePointingLabel">
              <property name="text">
               <string>-</string>
              </property>
@@ -1249,42 +1249,42 @@
               </property>
              </widget>
             </item>
-            <item row="12" column="0">
+            <item>
              <widget class="QLabel" name="plateSolveCatalogTextLabel">
               <property name="text">
                <string>Catalog</string>
               </property>
              </widget>
             </item>
-            <item row="12" column="1">
+            <item>
              <widget class="QLabel" name="plateSolveCatalogLabel">
               <property name="text">
                <string>-</string>
               </property>
              </widget>
             </item>
-            <item row="13" column="0">
+            <item>
              <widget class="QLabel" name="plateSolveCandidatesTextLabel">
               <property name="text">
                <string>Catalog candidates</string>
               </property>
              </widget>
             </item>
-            <item row="13" column="1">
+            <item>
              <widget class="QLabel" name="plateSolveCandidatesLabel">
               <property name="text">
                <string>-</string>
               </property>
              </widget>
             </item>
-            <item row="14" column="0">
+            <item>
              <widget class="QLabel" name="plateSolveOutliersTextLabel">
               <property name="text">
                <string>Outliers</string>
               </property>
              </widget>
             </item>
-            <item row="14" column="1">
+            <item>
              <widget class="QLabel" name="plateSolveOutliersLabel">
               <property name="text">
                <string>-</string>
@@ -3668,6 +3668,248 @@ li.checked::marker { content: &quot;\2612&quot;; }
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_5">
        <item>
+        <widget class="QGroupBox" name="detectionRoiGroup">
+         <property name="title">
+          <string>Detection ROI</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_5">
+          <item row="0" column="1">
+           <widget class="QSpinBox" name="detectionRoiXSpin">
+            <property name="toolTip">
+             <string>Left edge of the detection region of interest</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>4096</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QLabel" name="detectionRoiHeightLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>ROI Height</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="detectionRoiWidthLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>ROI Width</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="3">
+           <widget class="QSpinBox" name="detectionRoiHeightSpin">
+            <property name="toolTip">
+             <string>Height of the detection region of interest. 0 uses the full frame height.</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>4096</number>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="detectionRoiXLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>ROI X</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0" colspan="4">
+           <layout class="QHBoxLayout" name="detectionRoiButtonsLayout">
+            <item>
+             <widget class="ButtonSwitch" name="detectionRoiShowButton">
+              <property name="toolTip">
+               <string>Show the detection ROI on the preview image</string>
+              </property>
+              <property name="text">
+               <string>Show</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="detectionRoiDrawButton">
+              <property name="toolTip">
+               <string>Draw the detection ROI directly on the preview image</string>
+              </property>
+              <property name="text">
+               <string>Draw On Preview</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="detectionRoiDeleteButton">
+              <property name="toolTip">
+               <string>Delete the detection ROI and reset its bounds to 0</string>
+              </property>
+              <property name="text">
+               <string>Delete ROI</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="detectionRoiYLabel">
+            <property name="minimumSize">
+             <size>
+              <width>130</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>ROI Y</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="detectionRoiWidthSpin">
+            <property name="toolTip">
+             <string>Width of the detection region of interest. 0 uses the full frame width.</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>4096</number>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QSpinBox" name="detectionRoiYSpin">
+            <property name="toolTip">
+             <string>Top edge of the detection region of interest</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>4096</number>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0" colspan="4">
+           <widget class="QGroupBox" name="groupBox_2">
+            <property name="title">
+             <string>Exclusion areas</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_4">
+             <item>
+              <layout class="QHBoxLayout" name="motionExclusionButtonsLayout">
+               <item>
+                <widget class="QToolButton" name="motionExclusionAddButton">
+                 <property name="toolTip">
+                  <string>Add an exclusion rectangle for diff/motion detection</string>
+                 </property>
+                 <property name="text">
+                  <string>Add</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QToolButton" name="motionExclusionRemoveButton">
+                 <property name="toolTip">
+                  <string>Remove the selected exclusion rectangle</string>
+                 </property>
+                 <property name="text">
+                  <string>Remove</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QToolButton" name="motionExclusionShowButton">
+                 <property name="toolTip">
+                  <string>Show or hide exclusion rectangles on the preview image</string>
+                 </property>
+                 <property name="text">
+                  <string>Show</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="motionExclusionButtonsSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QTableWidget" name="motionExclusionTable">
+               <property name="toolTip">
+                <string>Full-resolution exclusion rectangles for diff/motion detection</string>
+               </property>
+               <property name="columnCount">
+                <number>4</number>
+               </property>
+               <attribute name="horizontalHeaderStretchLastSection">
+                <bool>true</bool>
+               </attribute>
+               <column>
+                <property name="text">
+                 <string>X</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Y</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>W</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>H</string>
+                </property>
+               </column>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QTabWidget" name="detectionTabWidget">
          <property name="currentIndex">
           <number>0</number>
@@ -3690,71 +3932,10 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="4" column="0">
-               <widget class="QLabel" name="yoloBoxColorLabel">
-                <property name="text">
-                 <string>BBox Colour</string>
-                </property>
-               </widget>
-              </item>
-              <item row="4" column="1">
-               <widget class="QToolButton" name="yoloBoxColorButton">
-                <property name="toolTip">
-                 <string>Select bounding box colour</string>
-                </property>
-                <property name="text">
-                 <string/>
-                </property>
-               </widget>
-              </item>
               <item row="1" column="0">
                <widget class="QLabel" name="yoloLabelsLabel">
                 <property name="text">
                  <string>Labels</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="1" colspan="2">
-               <widget class="QDoubleSpinBox" name="yoloConfSpin">
-                <property name="toolTip">
-                 <string>Minimum confidence threshold for detections (0-1)</string>
-                </property>
-                <property name="decimals">
-                 <number>2</number>
-                </property>
-                <property name="minimum">
-                 <double>0.010000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>1.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>0.050000000000000</double>
-                </property>
-                <property name="value">
-                 <double>0.500000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="3" column="1" colspan="2">
-               <widget class="QDoubleSpinBox" name="yoloNmsSpin">
-                <property name="toolTip">
-                 <string>Non-maximum suppression IoU threshold (0-1)</string>
-                </property>
-                <property name="decimals">
-                 <number>2</number>
-                </property>
-                <property name="minimum">
-                 <double>0.010000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>1.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>0.050000000000000</double>
-                </property>
-                <property name="value">
-                 <double>0.450000000000000</double>
                 </property>
                </widget>
               </item>
@@ -3776,40 +3957,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
                  <iconset resource="../../../sdrgui/resources/res.qrc">
                   <normaloff>:/load.png</normaloff>:/load.png</iconset>
                 </property>
-               </widget>
-              </item>
-              <item row="0" column="0">
-               <widget class="QLabel" name="yoloModelPathLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>YOLO ONNX model</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QComboBox" name="yoloLabelsPathCombo">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="toolTip">
-                 <string>Path to plain-text class labels file (one name per line)</string>
-                </property>
-                <property name="editable">
-                 <bool>true</bool>
-                </property>
-                <item>
-                 <property name="text">
-                  <string>https://huggingface.co/sdrangel/object_detection/resolve/main/coco_classes.txt</string>
-                 </property>
-                </item>
                </widget>
               </item>
               <item row="0" column="1">
@@ -3953,6 +4100,56 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </item>
                </widget>
               </item>
+              <item row="3" column="1" colspan="2">
+               <widget class="QDoubleSpinBox" name="yoloNmsSpin">
+                <property name="toolTip">
+                 <string>Non-maximum suppression IoU threshold (0-1)</string>
+                </property>
+                <property name="decimals">
+                 <number>2</number>
+                </property>
+                <property name="minimum">
+                 <double>0.010000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.050000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.450000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="yoloConfLabel">
+                <property name="text">
+                 <string>Confidence</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QComboBox" name="yoloLabelsPathCombo">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="toolTip">
+                 <string>Path to plain-text class labels file (one name per line)</string>
+                </property>
+                <property name="editable">
+                 <bool>true</bool>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>https://huggingface.co/sdrangel/object_detection/resolve/main/coco_classes.txt</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
               <item row="5" column="1" colspan="2">
                <widget class="QComboBox" name="yoloTargetCombo">
                 <property name="sizePolicy">
@@ -3981,6 +4178,58 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </item>
                </widget>
               </item>
+              <item row="4" column="1">
+               <widget class="QToolButton" name="yoloBoxColorButton">
+                <property name="toolTip">
+                 <string>Select bounding box colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="yoloNmsLabel">
+                <property name="text">
+                 <string>NMS</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="yoloModelPathLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>YOLO ONNX model</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1" colspan="2">
+               <widget class="QDoubleSpinBox" name="yoloConfSpin">
+                <property name="toolTip">
+                 <string>Minimum confidence threshold for detections (0-1)</string>
+                </property>
+                <property name="decimals">
+                 <number>2</number>
+                </property>
+                <property name="minimum">
+                 <double>0.010000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.050000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.500000000000000</double>
+                </property>
+               </widget>
+              </item>
               <item row="1" column="2">
                <widget class="QPushButton" name="yoloLabelsPathButton">
                 <property name="maximumSize">
@@ -4001,19 +4250,25 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="yoloConfLabel">
+              <item row="4" column="0">
+               <widget class="QLabel" name="yoloBoxColorLabel">
                 <property name="text">
-                 <string>Confidence</string>
+                 <string>BBox Colour</string>
                 </property>
                </widget>
               </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="yoloNmsLabel">
-                <property name="text">
-                 <string>NMS</string>
+              <item row="6" column="0">
+               <spacer name="verticalSpacer_8">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Vertical</enum>
                 </property>
-               </widget>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
               </item>
              </layout>
             </widget>
@@ -4031,6 +4286,197 @@ li.checked::marker { content: &quot;\2612&quot;; }
               <string>Motion Detection</string>
              </property>
              <layout class="QGridLayout" name="gridLayout_8">
+              <item row="6" column="0">
+               <widget class="QLabel" name="motionConfirmFramesLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Confirm frames</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="2">
+               <widget class="QLabel" name="motionPersistenceFramesLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Persistence</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="motionHistoryLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>History</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="2">
+               <widget class="QLabel" name="motionCloseSizeLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Close size</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="motionMaskViewLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Mask view</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="1">
+               <widget class="QToolButton" name="motionBoxColorButton">
+                <property name="toolTip">
+                 <string>Select bounding box colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QSpinBox" name="motionHistorySpin">
+                <property name="toolTip">
+                 <string>Background history length for motion detection</string>
+                </property>
+                <property name="minimum">
+                 <number>1</number>
+                </property>
+                <property name="maximum">
+                 <number>5000</number>
+                </property>
+                <property name="value">
+                 <number>500</number>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="1">
+               <widget class="QSpinBox" name="minContourAreaSpin">
+                <property name="toolTip">
+                 <string>Minimum contour area (px²)</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>1000</number>
+                </property>
+                <property name="value">
+                 <number>100</number>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="3">
+               <widget class="QSpinBox" name="motionPersistenceFramesSpin">
+                <property name="toolTip">
+                 <string>Keep the last motion boxes for this many frames after motion disappears</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>120</number>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QLabel" name="motionDetectShadowsLabel">
+                <property name="text">
+                 <string>Detect shadows</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="motionOpenSizeLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Open size</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="1">
+               <widget class="QSpinBox" name="motionConfirmFramesSpin">
+                <property name="toolTip">
+                 <string>Motion must persist for this many consecutive frames before it is reported</string>
+                </property>
+                <property name="minimum">
+                 <number>1</number>
+                </property>
+                <property name="maximum">
+                 <number>60</number>
+                </property>
+                <property name="value">
+                 <number>1</number>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QSpinBox" name="motionOpenSizeSpin">
+                <property name="toolTip">
+                 <string>Kernel radius for motion-mask morphological open (0 disables)</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>20</number>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QComboBox" name="motionDownscaleCombo">
+                <property name="toolTip">
+                 <string>Optional downscaled path for motion detection</string>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>100%</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>50%</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>25%</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
               <item row="2" column="3">
                <widget class="QCheckBox" name="motionDetectShadowsCheck">
                 <property name="toolTip">
@@ -4041,69 +4487,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                 <property name="checked">
                  <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QComboBox" name="motionBackgroundSubtractorCombo">
-                <property name="minimumSize">
-                 <size>
-                  <width>180</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="toolTip">
-                 <string>Background subtractor used for motion detection</string>
-                </property>
-                <item>
-                 <property name="text">
-                  <string>MOG2</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>KNN</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
-              <item row="1" column="2">
-               <widget class="QLabel" name="motionVarThresholdLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Sensitivity</string>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="0">
-               <widget class="QLabel" name="motionBoxColorLabel">
-                <property name="text">
-                 <string>BBox Colour</string>
-                </property>
-               </widget>
-              </item>
-              <item row="4" column="3">
-               <widget class="QSpinBox" name="motionCloseSizeSpin">
-                <property name="toolTip">
-                 <string>Kernel radius for motion-mask morphological close (0 disables)</string>
-                </property>
-                <property name="minimum">
-                 <number>0</number>
-                </property>
-                <property name="maximum">
-                 <number>20</number>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="2">
-               <widget class="QLabel" name="motionDetectShadowsLabel">
-                <property name="text">
-                 <string>Detect shadows</string>
                 </property>
                </widget>
               </item>
@@ -4132,8 +4515,15 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="6" column="2">
-               <widget class="QLabel" name="motionPersistenceFramesLabel">
+              <item row="7" column="0">
+               <widget class="QLabel" name="motionBoxColorLabel">
+                <property name="text">
+                 <string>BBox Colour</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QLabel" name="motionVarThresholdLabel">
                 <property name="minimumSize">
                  <size>
                   <width>130</width>
@@ -4141,76 +4531,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
                  </size>
                 </property>
                 <property name="text">
-                 <string>Persistence</string>
+                 <string>Sensitivity</string>
                 </property>
                </widget>
               </item>
-              <item row="4" column="1">
-               <widget class="QSpinBox" name="motionOpenSizeSpin">
-                <property name="toolTip">
-                 <string>Kernel radius for motion-mask morphological open (0 disables)</string>
-                </property>
-                <property name="minimum">
-                 <number>0</number>
-                </property>
-                <property name="maximum">
-                 <number>20</number>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="3">
-               <widget class="QSpinBox" name="motionPersistenceFramesSpin">
-                <property name="toolTip">
-                 <string>Keep the last motion boxes for this many frames after motion disappears</string>
-                </property>
-                <property name="minimum">
-                 <number>0</number>
-                </property>
-                <property name="maximum">
-                 <number>120</number>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="1">
-               <widget class="QSpinBox" name="motionConfirmFramesSpin">
-                <property name="toolTip">
-                 <string>Motion must persist for this many consecutive frames before it is reported</string>
-                </property>
-                <property name="minimum">
-                 <number>1</number>
-                </property>
-                <property name="maximum">
-                 <number>60</number>
-                </property>
-                <property name="value">
-                 <number>1</number>
-                </property>
-               </widget>
-              </item>
-              <item row="3" column="1">
-               <widget class="QComboBox" name="motionDownscaleCombo">
-                <property name="toolTip">
-                 <string>Optional downscaled path for motion detection</string>
-                </property>
-                <item>
-                 <property name="text">
-                  <string>100%</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>50%</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>25%</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
-              <item row="6" column="0">
-               <widget class="QLabel" name="motionConfirmFramesLabel">
+              <item row="3" column="0">
+               <widget class="QLabel" name="motionDownscaleLabel">
                 <property name="minimumSize">
                  <size>
                   <width>130</width>
@@ -4218,36 +4544,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                  </size>
                 </property>
                 <property name="text">
-                 <string>Confirm frames</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QSpinBox" name="motionHistorySpin">
-                <property name="toolTip">
-                 <string>Background history length for motion detection</string>
-                </property>
-                <property name="minimum">
-                 <number>1</number>
-                </property>
-                <property name="maximum">
-                 <number>5000</number>
-                </property>
-                <property name="value">
-                 <number>500</number>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="2">
-               <widget class="QLabel" name="motionMaskViewLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Mask view</string>
+                 <string>Downscale</string>
                 </property>
                </widget>
               </item>
@@ -4294,8 +4591,8 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </item>
                </widget>
               </item>
-              <item row="4" column="0">
-               <widget class="QLabel" name="motionOpenSizeLabel">
+              <item row="5" column="0">
+               <widget class="QLabel" name="minContourAreaLabel">
                 <property name="minimumSize">
                  <size>
                   <width>130</width>
@@ -4303,7 +4600,56 @@ li.checked::marker { content: &quot;\2612&quot;; }
                  </size>
                 </property>
                 <property name="text">
-                 <string>Open size</string>
+                 <string>Min area</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QComboBox" name="motionBackgroundSubtractorCombo">
+                <property name="minimumSize">
+                 <size>
+                  <width>180</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="toolTip">
+                 <string>Background subtractor used for motion detection</string>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>MOG2</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>KNN</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="4" column="3">
+               <widget class="QSpinBox" name="motionCloseSizeSpin">
+                <property name="toolTip">
+                 <string>Kernel radius for motion-mask morphological close (0 disables)</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>20</number>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="motionBackgroundSubtractorLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Subtractor</string>
                 </property>
                </widget>
               </item>
@@ -4329,169 +4675,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="4" column="2">
-               <widget class="QLabel" name="motionCloseSizeLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Close size</string>
-                </property>
-               </widget>
-              </item>
-              <item row="5" column="1">
-               <widget class="QSpinBox" name="minContourAreaSpin">
-                <property name="toolTip">
-                 <string>Minimum contour area (px²)</string>
-                </property>
-                <property name="minimum">
-                 <number>0</number>
-                </property>
-                <property name="maximum">
-                 <number>1000</number>
-                </property>
-                <property name="value">
-                 <number>100</number>
-                </property>
-               </widget>
-              </item>
-              <item row="8" column="0" colspan="4">
-               <widget class="QGroupBox" name="groupBox_2">
-                <property name="title">
-                 <string>Exclusion areas</string>
-                </property>
-                <layout class="QVBoxLayout" name="verticalLayout_4">
-                 <item>
-                  <layout class="QHBoxLayout" name="motionExclusionButtonsLayout">
-                   <item>
-                    <widget class="QToolButton" name="motionExclusionAddButton">
-                     <property name="toolTip">
-                      <string>Add an exclusion rectangle for diff/motion detection</string>
-                     </property>
-                     <property name="text">
-                      <string>Add</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QToolButton" name="motionExclusionRemoveButton">
-                     <property name="toolTip">
-                      <string>Remove the selected exclusion rectangle</string>
-                     </property>
-                     <property name="text">
-                      <string>Remove</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QToolButton" name="motionExclusionShowButton">
-                     <property name="toolTip">
-                      <string>Show or hide exclusion rectangles on the preview image</string>
-                     </property>
-                     <property name="text">
-                      <string>Show</string>
-                     </property>
-                     <property name="checkable">
-                      <bool>true</bool>
-                     </property>
-                     <property name="checked">
-                      <bool>true</bool>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <spacer name="motionExclusionButtonsSpacer">
-                     <property name="orientation">
-                      <enum>Qt::Orientation::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                    </spacer>
-                   </item>
-                  </layout>
-                 </item>
-                 <item>
-                  <widget class="QTableWidget" name="motionExclusionTable">
-                   <property name="toolTip">
-                    <string>Full-resolution exclusion rectangles for diff/motion detection</string>
-                   </property>
-                   <property name="columnCount">
-                    <number>4</number>
-                   </property>
-                   <attribute name="horizontalHeaderStretchLastSection">
-                    <bool>true</bool>
-                   </attribute>
-                   <column>
-                    <property name="text">
-                     <string>X</string>
-                    </property>
-                   </column>
-                   <column>
-                    <property name="text">
-                     <string>Y</string>
-                    </property>
-                   </column>
-                   <column>
-                    <property name="text">
-                     <string>W</string>
-                    </property>
-                   </column>
-                   <column>
-                    <property name="text">
-                     <string>H</string>
-                    </property>
-                   </column>
-                  </widget>
-                 </item>
-                </layout>
-               </widget>
-              </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="motionDownscaleLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Downscale</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="0">
-               <widget class="QLabel" name="motionBackgroundSubtractorLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Subtractor</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="motionHistoryLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>History</string>
-                </property>
-               </widget>
-              </item>
               <item row="2" column="0">
                <widget class="QLabel" name="motionLearningRateLabel">
                 <property name="minimumSize">
@@ -4505,40 +4688,30 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="5" column="0">
-               <widget class="QLabel" name="minContourAreaLabel">
-                <property name="minimumSize">
+              <item row="10" column="0">
+               <spacer name="verticalSpacer_9">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
                  <size>
-                  <width>130</width>
-                  <height>0</height>
+                  <width>20</width>
+                  <height>40</height>
                  </size>
                 </property>
-                <property name="text">
-                 <string>Min area</string>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="1">
-               <widget class="QToolButton" name="motionBoxColorButton">
-                <property name="toolTip">
-                 <string>Select bounding box colour</string>
-                </property>
-                <property name="text">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-              <item row="9" column="0" colspan="4">
-               <widget class="QToolButton" name="detectionResetDefaultsButton">
-                <property name="toolTip">
-                 <string>Reset motion, star, difference, plate solve, and ROI detection settings to their defaults</string>
-                </property>
-                <property name="text">
-                 <string>Reset Defaults</string>
-                </property>
-               </widget>
+               </spacer>
               </item>
              </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="detectionResetDefaultsButton">
+             <property name="toolTip">
+              <string>Reset motion, star, difference, plate solve, and ROI detection settings to their defaults</string>
+             </property>
+             <property name="text">
+              <string>Reset Defaults</string>
+             </property>
             </widget>
            </item>
           </layout>
@@ -4554,55 +4727,56 @@ li.checked::marker { content: &quot;\2612&quot;; }
               <string>Star Detection</string>
              </property>
              <layout class="QGridLayout" name="gridLayout_30">
-              <item row="0" column="0">
-               <widget class="QLabel" name="starDetectLabel">
+              <item row="8" column="0">
+               <widget class="QLabel" name="plateSolveUseDownloadedCatalogLabel">
                 <property name="text">
-                 <string>Enable</string>
+                 <string>Use HYG catalog</string>
                 </property>
                </widget>
               </item>
-              <item row="0" column="1">
-               <widget class="QCheckBox" name="starDetectCheck">
-                <property name="text">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="2">
-               <widget class="QLabel" name="starThresholdLabel">
-                <property name="text">
-                 <string>Threshold</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="3">
-               <widget class="QSpinBox" name="starThresholdSpin">
-                <property name="maximum">
-                 <number>255</number>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="starBackgroundBlurLabel">
-                <property name="text">
-                 <string>Background blur</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QSpinBox" name="starBackgroundBlurSpin">
+              <item row="3" column="1">
+               <widget class="QDoubleSpinBox" name="starMaxAspectRatioSpin">
                 <property name="minimum">
-                 <number>1</number>
+                 <double>1.000000000000000</double>
                 </property>
                 <property name="maximum">
-                 <number>50</number>
+                 <double>10.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
                 </property>
                </widget>
               </item>
-              <item row="1" column="2">
-               <widget class="QLabel" name="starDebugViewLabel">
+              <item row="4" column="1">
+               <widget class="QComboBox" name="plateSolveLabelModeCombo">
+                <item>
+                 <property name="text">
+                  <string>Name</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Name + mag</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Name + mag + spect</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="6" column="0">
+               <widget class="QLabel" name="plateSolveMinMatchesLabel">
                 <property name="text">
-                 <string>Debug view</string>
+                 <string>Min matches</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="2">
+               <widget class="QLabel" name="starColorLabel">
+                <property name="text">
+                 <string>Colour</string>
                 </property>
                </widget>
               </item>
@@ -4635,6 +4809,20 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </item>
                </widget>
               </item>
+              <item row="7" column="3">
+               <widget class="QComboBox" name="plateSolveLensModeCombo">
+                <item>
+                 <property name="text">
+                  <string>Fixed</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Calibrate</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
               <item row="2" column="0">
                <widget class="QLabel" name="starMinAreaLabel">
                 <property name="text">
@@ -4642,17 +4830,17 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="2" column="1">
-               <widget class="QSpinBox" name="starMinAreaSpin">
-                <property name="maximum">
-                 <number>10000</number>
+              <item row="5" column="2">
+               <widget class="QLabel" name="plateSolveMaxMagnitudeLabel">
+                <property name="text">
+                 <string>Max magnitude</string>
                 </property>
                </widget>
               </item>
-              <item row="2" column="2">
-               <widget class="QLabel" name="starMaxAreaLabel">
+              <item row="1" column="0">
+               <widget class="QLabel" name="starBackgroundBlurLabel">
                 <property name="text">
-                 <string>Max area</string>
+                 <string>Background blur</string>
                 </property>
                </widget>
               </item>
@@ -4663,35 +4851,25 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="starMaxAspectRatioLabel">
+              <item row="11" column="0" colspan="4">
+               <widget class="QLabel" name="plateSolveSolutionLabel">
                 <property name="text">
-                 <string>Max aspect ratio</string>
+                 <string>No solution</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
                 </property>
                </widget>
               </item>
-              <item row="3" column="1">
-               <widget class="QDoubleSpinBox" name="starMaxAspectRatioSpin">
-                <property name="minimum">
-                 <double>1.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>10.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>0.100000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="3" column="2">
-               <widget class="QLabel" name="starColorLabel">
+              <item row="1" column="2">
+               <widget class="QLabel" name="starDebugViewLabel">
                 <property name="text">
-                 <string>Colour</string>
+                 <string>Debug view</string>
                 </property>
                </widget>
               </item>
-              <item row="3" column="3">
-               <widget class="QToolButton" name="starColorButton">
+              <item row="0" column="1">
+               <widget class="QCheckBox" name="starDetectCheck">
                 <property name="text">
                  <string/>
                 </property>
@@ -4704,23 +4882,58 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="4" column="1">
-               <widget class="QComboBox" name="plateSolveLabelModeCombo">
+              <item row="7" column="1">
+               <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>45.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.500000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="12" column="0">
+               <widget class="QComboBox" name="plateSolveApplyModeCombo">
+                <property name="toolTip">
+                 <string>Choose which solved pointing values to copy back into camera settings</string>
+                </property>
                 <item>
                  <property name="text">
-                  <string>Name</string>
+                  <string>Apply Az/El</string>
                  </property>
                 </item>
                 <item>
                  <property name="text">
-                  <string>Name + mag</string>
+                  <string>Apply Az/El/Roll</string>
                  </property>
                 </item>
                 <item>
                  <property name="text">
-                  <string>Name + mag + spect</string>
+                  <string>Apply Az/El/Roll/FoV</string>
                  </property>
                 </item>
+                <item>
+                 <property name="text">
+                  <string>Apply Az/El/Roll/FoV/Lens</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="starThresholdLabel">
+                <property name="text">
+                 <string>Threshold</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QSpinBox" name="starThresholdSpin">
+                <property name="maximum">
+                 <number>255</number>
+                </property>
                </widget>
               </item>
               <item row="5" column="0">
@@ -4730,54 +4943,20 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
+              <item row="10" column="3">
+               <widget class="QDateTimeEdit" name="plateSolveDateTimeEdit">
+                <property name="displayFormat">
+                 <string>yyyy-MM-dd HH:mm:ss</string>
+                </property>
+                <property name="calendarPopup">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
               <item row="5" column="1">
                <widget class="QCheckBox" name="plateSolveCheck">
                 <property name="text">
                  <string/>
-                </property>
-               </widget>
-              </item>
-              <item row="5" column="2">
-               <widget class="QLabel" name="plateSolveMaxMagnitudeLabel">
-                <property name="text">
-                 <string>Max magnitude</string>
-                </property>
-               </widget>
-              </item>
-              <item row="5" column="3">
-               <widget class="QDoubleSpinBox" name="plateSolveMaxMagnitudeSpin">
-                <property name="minimum">
-                 <double>-2.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>8.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>0.100000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="0">
-               <widget class="QLabel" name="plateSolveMinMatchesLabel">
-                <property name="text">
-                 <string>Min matches</string>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="1">
-               <widget class="QSpinBox" name="plateSolveMinMatchesSpin">
-                <property name="minimum">
-                 <number>2</number>
-                </property>
-                <property name="maximum">
-                 <number>32</number>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="2">
-               <widget class="QLabel" name="plateSolveMatchRadiusLabel">
-                <property name="text">
-                 <string>Match radius</string>
                 </property>
                </widget>
               </item>
@@ -4794,153 +4973,156 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-                <item row="7" column="0">
-                <widget class="QLabel" name="plateSolveSearchRadiusLabel">
-                  <property name="text">
-                   <string>Search radius</string>
-                  </property>
-               </widget>
-              </item>
-                <item row="7" column="1">
-                <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
-                  <property name="minimum">
-                   <double>0.000000000000000</double>
-                  </property>
-                <property name="maximum">
-                 <double>45.000000000000000</double>
-                </property>
-                  <property name="singleStep">
-                   <double>0.500000000000000</double>
-                  </property>
-                 </widget>
-                </item>
-                <item row="7" column="2">
-                 <widget class="QLabel" name="plateSolveLensModeLabel">
-                  <property name="text">
-                   <string>Lens mode</string>
-                  </property>
-                 </widget>
-                </item>
-                <item row="7" column="3">
-                 <widget class="QComboBox" name="plateSolveLensModeCombo">
-                  <item>
-                   <property name="text">
-                    <string>Fixed</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>Calibrate</string>
-                   </property>
-                  </item>
-                 </widget>
-                </item>
-                  <item row="8" column="2" colspan="2">
-                 <layout class="QHBoxLayout" name="plateSolveApplyLayout">
-                   <item>
-                    <widget class="QComboBox" name="plateSolveApplyModeCombo">
-                   <property name="toolTip">
-                    <string>Choose which solved pointing values to copy back into camera settings</string>
-                   </property>
-                   <item>
-                    <property name="text">
-                     <string>Apply Az/El</string>
-                    </property>
-                   </item>
-                   <item>
-                    <property name="text">
-                     <string>Apply Az/El/Roll</string>
-                    </property>
-                   </item>
-                    <item>
-                     <property name="text">
-                      <string>Apply Az/El/Roll/FoV</string>
-                     </property>
-                    </item>
-                    <item>
-                     <property name="text">
-                      <string>Apply Az/El/Roll/FoV/Lens</string>
-                     </property>
-                    </item>
-                   </widget>
-                  </item>
-                 <item>
-                  <widget class="QToolButton" name="plateSolveApplyButton">
-                   <property name="toolTip">
-                    <string>Apply the last solved pointing values to the camera settings using the selected apply mode</string>
-                   </property>
-                   <property name="text">
-                    <string>Apply solved pointing</string>
-                   </property>
-                  </widget>
-                   </item>
-                  </layout>
-                  </item>
-                <item row="9" column="0">
-                <widget class="QLabel" name="plateSolveUseCurrentDateTimeLabel">
-                  <property name="text">
-                   <string>Use current date/time</string>
-                  </property>
-                 </widget>
-                </item>
-                <item row="9" column="1">
-                <widget class="QCheckBox" name="plateSolveUseCurrentDateTimeCheck">
-                  <property name="text">
-                   <string/>
-                  </property>
-                 </widget>
-                </item>
-                <item row="9" column="2">
-                <widget class="QLabel" name="plateSolveDateTimeLabel">
-                  <property name="text">
-                   <string>Solve date/time</string>
-                  </property>
-                 </widget>
-                </item>
-                <item row="9" column="3">
-                <widget class="QDateTimeEdit" name="plateSolveDateTimeEdit">
-                  <property name="displayFormat">
-                   <string>yyyy-MM-dd HH:mm:ss</string>
-                </property>
-                <property name="calendarPopup">
-                 <bool>true</bool>
-                  </property>
-                 </widget>
-                </item>
-                <item row="10" column="0" colspan="4">
-                <widget class="QLabel" name="plateSolveSolutionLabel">
-                  <property name="text">
-                   <string>No solution</string>
-                </property>
-                <property name="wordWrap">
-                 <bool>true</bool>
-                  </property>
-                 </widget>
-                </item>
-                <item row="11" column="0">
-                <widget class="QLabel" name="plateSolveUseDownloadedCatalogLabel">
-                  <property name="text">
-                   <string>Use HYG catalog</string>
-                  </property>
-                 </widget>
-                </item>
-                <item row="11" column="1">
-                <widget class="QCheckBox" name="plateSolveUseDownloadedCatalogCheck">
-                  <property name="toolTip">
-                   <string>Use the downloaded HYG catalog for plate solving when it is available</string>
+              <item row="8" column="1">
+               <widget class="QCheckBox" name="plateSolveUseDownloadedCatalogCheck">
+                <property name="toolTip">
+                 <string>Use the downloaded HYG catalog for plate solving when it is available</string>
                 </property>
                 <property name="text">
                  <string/>
-                  </property>
-                 </widget>
-                </item>
-                <item row="11" column="2" colspan="2">
-                <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
-                  <property name="toolTip">
-                   <string>Download and import the HYG bright-star catalog for plate solving</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="1">
+               <widget class="QSpinBox" name="plateSolveMinMatchesSpin">
+                <property name="minimum">
+                 <number>2</number>
+                </property>
+                <property name="maximum">
+                 <number>32</number>
+                </property>
+               </widget>
+              </item>
+              <item row="13" column="0">
+               <spacer name="verticalSpacer_10">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="3" column="3">
+               <widget class="QToolButton" name="starColorButton">
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="0">
+               <widget class="QLabel" name="plateSolveSearchRadiusLabel">
+                <property name="text">
+                 <string>Search radius</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="2">
+               <widget class="QLabel" name="plateSolveMatchRadiusLabel">
+                <property name="text">
+                 <string>Match radius</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="3">
+               <widget class="QDoubleSpinBox" name="plateSolveMaxMagnitudeSpin">
+                <property name="minimum">
+                 <double>-2.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>8.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="starMaxAspectRatioLabel">
+                <property name="text">
+                 <string>Max aspect ratio</string>
+                </property>
+               </widget>
+              </item>
+              <item row="8" column="2">
+               <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
+                <property name="toolTip">
+                 <string>Download and import the HYG bright-star catalog for plate solving</string>
                 </property>
                 <property name="text">
                  <string>Download HYG catalog</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="starDetectLabel">
+                <property name="text">
+                 <string>Enable</string>
+                </property>
+               </widget>
+              </item>
+              <item row="10" column="1">
+               <widget class="QCheckBox" name="plateSolveUseCurrentDateTimeCheck">
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="10" column="0">
+               <widget class="QLabel" name="plateSolveUseCurrentDateTimeLabel">
+                <property name="text">
+                 <string>Use current date/time</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QLabel" name="starMaxAreaLabel">
+                <property name="text">
+                 <string>Max area</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QSpinBox" name="starMinAreaSpin">
+                <property name="maximum">
+                 <number>10000</number>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="2">
+               <widget class="QLabel" name="plateSolveLensModeLabel">
+                <property name="text">
+                 <string>Lens mode</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QSpinBox" name="starBackgroundBlurSpin">
+                <property name="minimum">
+                 <number>1</number>
+                </property>
+                <property name="maximum">
+                 <number>50</number>
+                </property>
+               </widget>
+              </item>
+              <item row="10" column="2">
+               <widget class="QLabel" name="plateSolveDateTimeLabel">
+                <property name="text">
+                 <string>Solve date/time</string>
+                </property>
+               </widget>
+              </item>
+              <item row="12" column="1">
+               <widget class="QToolButton" name="plateSolveApplyButton">
+                <property name="toolTip">
+                 <string>Apply the last solved pointing values to the camera settings using the selected apply mode</string>
+                </property>
+                <property name="text">
+                 <string>Apply solved pointing</string>
                 </property>
                </widget>
               </item>
@@ -4960,6 +5142,19 @@ li.checked::marker { content: &quot;\2612&quot;; }
               <string>Difference Detection</string>
              </property>
              <layout class="QGridLayout" name="gridLayout_7">
+              <item row="1" column="0">
+               <widget class="QLabel" name="diffMaskOpenSizeLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Open size</string>
+                </property>
+               </widget>
+              </item>
               <item row="2" column="1">
                <widget class="QSpinBox" name="diffMaskHistoryFramesSpin">
                 <property name="toolTip">
@@ -4973,32 +5168,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                 <property name="value">
                  <number>1</number>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="2">
-               <widget class="QLabel" name="diffThresholdLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Threshold</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="diffMaskHistoryFramesLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Mask history</string>
                 </property>
                </widget>
               </item>
@@ -5018,8 +5187,8 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="0" column="0">
-               <widget class="QLabel" name="dilationLabel">
+              <item row="2" column="0">
+               <widget class="QLabel" name="diffMaskHistoryFramesLabel">
                 <property name="minimumSize">
                  <size>
                   <width>130</width>
@@ -5027,36 +5196,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                  </size>
                 </property>
                 <property name="text">
-                 <string>Dilation</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="3">
-               <widget class="QSpinBox" name="diffThresholdSpin">
-                <property name="toolTip">
-                 <string>Pixel difference threshold for the diff mask</string>
-                </property>
-                <property name="minimum">
-                 <number>0</number>
-                </property>
-                <property name="maximum">
-                 <number>255</number>
-                </property>
-                <property name="value">
-                 <number>30</number>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="diffMaskOpenSizeLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>130</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Open size</string>
+                 <string>Mask history</string>
                 </property>
                </widget>
               </item>
@@ -5076,7 +5216,62 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="2" column="2">
+              <item row="0" column="2">
+               <widget class="QLabel" name="diffThresholdLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Threshold</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QSpinBox" name="diffThresholdSpin">
+                <property name="toolTip">
+                 <string>Pixel difference threshold for the diff mask</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>255</number>
+                </property>
+                <property name="value">
+                 <number>30</number>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="dilationLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Dilation</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <spacer name="verticalSpacer_7">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="1" column="2">
                <widget class="QLabel" name="diffMaskCloseSizeLabel">
                 <property name="minimumSize">
                  <size>
@@ -5089,7 +5284,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="2" column="3">
+              <item row="1" column="3">
                <widget class="QSpinBox" name="diffMaskCloseSizeSpin">
                 <property name="toolTip">
                  <string>Kernel radius for morphological close after accumulated bitwise OR (0 disables)</string>
@@ -5110,153 +5305,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </item>
           </layout>
          </widget>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="detectionRoiGroup">
-         <property name="title">
-          <string>Detection ROI</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_5">
-          <item row="0" column="2">
-           <widget class="QLabel" name="detectionRoiYLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ROI Y</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QSpinBox" name="detectionRoiWidthSpin">
-            <property name="toolTip">
-             <string>Width of the detection region of interest. 0 uses the full frame width.</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>4096</number>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QSpinBox" name="detectionRoiXSpin">
-            <property name="toolTip">
-             <string>Left edge of the detection region of interest</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>4096</number>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="detectionRoiWidthLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ROI Width</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="detectionRoiXLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ROI X</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QSpinBox" name="detectionRoiYSpin">
-            <property name="toolTip">
-             <string>Top edge of the detection region of interest</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>4096</number>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="2">
-           <widget class="QLabel" name="detectionRoiHeightLabel">
-            <property name="minimumSize">
-             <size>
-              <width>130</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ROI Height</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="3">
-           <widget class="QSpinBox" name="detectionRoiHeightSpin">
-            <property name="toolTip">
-             <string>Height of the detection region of interest. 0 uses the full frame height.</string>
-            </property>
-            <property name="minimum">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <number>4096</number>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0" colspan="4">
-           <layout class="QHBoxLayout" name="detectionRoiButtonsLayout">
-            <item>
-             <widget class="ButtonSwitch" name="detectionRoiShowButton">
-              <property name="toolTip">
-               <string>Show the detection ROI on the preview image</string>
-              </property>
-              <property name="text">
-               <string>Show</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QToolButton" name="detectionRoiDrawButton">
-              <property name="toolTip">
-               <string>Draw the detection ROI directly on the preview image</string>
-              </property>
-              <property name="text">
-               <string>Draw On Preview</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QToolButton" name="detectionRoiDeleteButton">
-              <property name="toolTip">
-               <string>Delete the detection ROI and reset its bounds to 0</string>
-              </property>
-              <property name="text">
-               <string>Delete ROI</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-         </layout>
         </widget>
        </item>
        <item>
@@ -5587,11 +5635,11 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-            <item row="5" column="1">
-             <widget class="QComboBox" name="lensProjectionCombo">
-              <item>
-               <property name="text">
-                <string>Rectilinear</string>
+          <item row="5" column="1">
+           <widget class="QComboBox" name="lensProjectionCombo">
+            <item>
+             <property name="text">
+              <string>Rectilinear</string>
              </property>
             </item>
             <item>
@@ -5603,81 +5651,81 @@ Right-click: toggle continual synchronization from My Position.</string>
              <property name="text">
               <string>Equisolid fisheye</string>
              </property>
-              </item>
-             </widget>
             </item>
-            <item row="6" column="0">
-             <widget class="QLabel" name="lensCenterOffsetXLabel">
-              <property name="text">
-               <string>Center offset X</string>
-              </property>
-             </widget>
-            </item>
-            <item row="6" column="1">
-             <widget class="QDoubleSpinBox" name="lensCenterOffsetXSpin">
-              <property name="decimals">
-               <number>1</number>
-              </property>
-              <property name="minimum">
-               <double>-2048.000000000000000</double>
-              </property>
-              <property name="maximum">
-               <double>2048.000000000000000</double>
-              </property>
-              <property name="singleStep">
-               <double>0.500000000000000</double>
-              </property>
-             </widget>
-            </item>
-            <item row="7" column="0">
-             <widget class="QLabel" name="lensCenterOffsetYLabel">
-              <property name="text">
-               <string>Center offset Y</string>
-              </property>
-             </widget>
-            </item>
-            <item row="7" column="1">
-             <widget class="QDoubleSpinBox" name="lensCenterOffsetYSpin">
-              <property name="decimals">
-               <number>1</number>
-              </property>
-              <property name="minimum">
-               <double>-2048.000000000000000</double>
-              </property>
-              <property name="maximum">
-               <double>2048.000000000000000</double>
-              </property>
-              <property name="singleStep">
-               <double>0.500000000000000</double>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="0">
-             <widget class="QLabel" name="lensDistortionK1Label">
-              <property name="text">
-               <string>Distortion K1</string>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="1">
-             <widget class="QDoubleSpinBox" name="lensDistortionK1Spin">
-              <property name="decimals">
-               <number>4</number>
-              </property>
-              <property name="minimum">
-               <double>-1.000000000000000</double>
-              </property>
-              <property name="maximum">
-               <double>1.000000000000000</double>
-              </property>
-              <property name="singleStep">
-               <double>0.001000000000000</double>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-         </item>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="lensCenterOffsetXLabel">
+            <property name="text">
+             <string>Center offset X</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QDoubleSpinBox" name="lensCenterOffsetXSpin">
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>-2048.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>2048.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.500000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="lensCenterOffsetYLabel">
+            <property name="text">
+             <string>Center offset Y</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QDoubleSpinBox" name="lensCenterOffsetYSpin">
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>-2048.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>2048.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.500000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="lensDistortionK1Label">
+            <property name="text">
+             <string>Distortion K1</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <widget class="QDoubleSpinBox" name="lensDistortionK1Spin">
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="minimum">
+             <double>-1.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.001000000000000</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
        <item>
         <widget class="QGroupBox" name="groupBox">
          <property name="title">
@@ -5727,6 +5775,13 @@ Right-click: toggle continual synchronization from My Position.</string>
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ButtonSwitch</class>
+   <extends>QToolButton</extends>
+   <header>gui/buttonswitch.h</header>
+  </customwidget>
+ </customwidgets>
  <tabstops>
   <tabstop>tabWidget</tabstop>
   <tabstop>resolutionCombo</tabstop>
@@ -5843,7 +5898,6 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>diffThresholdSpin</tabstop>
   <tabstop>diffMaskOpenSizeSpin</tabstop>
   <tabstop>diffMaskHistoryFramesSpin</tabstop>
-  <tabstop>diffMaskCloseSizeSpin</tabstop>
   <tabstop>detectionRoiXSpin</tabstop>
   <tabstop>detectionRoiYSpin</tabstop>
   <tabstop>detectionRoiWidthSpin</tabstop>
@@ -5851,17 +5905,10 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>actionsClassCombo</tabstop>
   <tabstop>actionsDisappearDebounceSpin</tabstop>
   <tabstop>actionsAddButton</tabstop>
- <tabstop>actionsTabWidget</tabstop>
- <tabstop>fpsSpin</tabstop>
- <tabstop>intervalSpin</tabstop>
+  <tabstop>actionsTabWidget</tabstop>
+  <tabstop>fpsSpin</tabstop>
+  <tabstop>intervalSpin</tabstop>
  </tabstops>
- <customwidgets>
-  <customwidget>
-   <class>ButtonSwitch</class>
-   <extends>QToolButton</extends>
-   <header>gui/buttonswitch.h</header>
-  </customwidget>
- </customwidgets>
  <resources>
   <include location="cameraicons.qrc"/>
   <include location="../../../sdrgui/resources/res.qrc"/>

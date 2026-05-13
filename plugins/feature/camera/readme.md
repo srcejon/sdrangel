@@ -100,6 +100,9 @@ To start capturing:
 
 <h2>Attribution</h2>
 
+- Coded using AI. Thanks to all the open source code and documentation that made this possible!
+- Hipparcos Catalog by ESA (CC BY-NC 3.0 IGO)
+- HYG Catalog by astronexus (CC-BY-SA 4.0)
 - Object detection by Lars Meiertoberens from Noun Project (CC BY 3.0)
 - html by wira wianda from Noun Project (CC BY 3.0)
 - clock by Alv Jørgen Bovolden from Noun Project (CC BY 3.0)

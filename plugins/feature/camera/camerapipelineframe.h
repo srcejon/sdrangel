@@ -57,8 +57,14 @@ struct CameraPipelineStreakDetection
 struct CameraPipelineStarDetection
 {
     QPointF m_center;
+    QPointF m_projectedCenter;
     float m_peakValue;
     float m_radius;
+    float m_qualityScore = 0.0f;
+    float m_roundness = 0.0f;
+    float m_fillRatio = 0.0f;
+    float m_aspectRatio = 0.0f;
+    bool m_saturated = false;
     QString m_label;
     float m_matchDistancePixels = 0.0f;
     float m_catalogMagnitude = 0.0f;

@@ -62,6 +62,7 @@ struct ProjectedCatalogStar
 {
     int catalogIndex = -1;
     QPointF point;
+    double magnitude = 0.0;
 };
 
 struct CandidatePair
@@ -69,6 +70,7 @@ struct CandidatePair
     int detectionIndex = -1;
     int catalogIndex = -1;
     double distancePixels = 0.0;
+    int geometricSupport = 0;
 };
 
 struct Match
@@ -694,11 +696,16 @@ QVector<int> selectDetectionIndicesForSolve(const QVector<CameraPipelineStarDete
     }
 
     std::sort(indices.begin(), indices.end(), [&starDetections](int lhs, int rhs) {
+        if (!qFuzzyCompare(starDetections[lhs].m_qualityScore + 1.0f, starDetections[rhs].m_qualityScore + 1.0f)) {
+            return starDetections[lhs].m_qualityScore > starDetections[rhs].m_qualityScore;
+        }
         if (starDetections[lhs].m_peakValue != starDetections[rhs].m_peakValue) {
             return starDetections[lhs].m_peakValue > starDetections[rhs].m_peakValue;
         }
-
-        return starDetections[lhs].m_radius > starDetections[rhs].m_radius;
+        if (starDetections[lhs].m_saturated != starDetections[rhs].m_saturated) {
+            return !starDetections[lhs].m_saturated;
+        }
+        return starDetections[lhs].m_roundness > starDetections[rhs].m_roundness;
     });
 
     if (indices.size() > kMaxDetectionsForSolve) {
@@ -751,7 +758,7 @@ QVector<ProjectedCatalogStar> buildProjectedCatalog(const CameraSettings& settin
             return;
         }
 
-        projectedStars.append({i, point});
+        projectedStars.append({i, point, star.magnitude});
     };
 
     if (allowedCatalogIndices)
@@ -783,6 +790,11 @@ QVector<Match> buildMatches(const CameraSettings& settings,
     QVector<CandidatePair> candidatePairs;
     const QVector<CatalogStar>& catalogStars = brightStarCatalog(settings);
     const double maxDistanceSquared = matchRadiusPixels * matchRadiusPixels;
+    QHash<int, QPointF> projectedPointByCatalogIndex;
+    projectedPointByCatalogIndex.reserve(projectedStars.size());
+    for (const ProjectedCatalogStar& projected : projectedStars) {
+        projectedPointByCatalogIndex.insert(projected.catalogIndex, projected.point);
+    }
 
     for (int detectionIndex : detectionIndices)
     {
@@ -799,14 +811,45 @@ QVector<Match> buildMatches(const CameraSettings& settings,
             candidatePairs.append({
                 detectionIndex,
                 projected.catalogIndex,
-                std::sqrt(distanceSquared)
+                std::sqrt(distanceSquared),
+                0
             });
         }
     }
 
-    std::sort(candidatePairs.begin(), candidatePairs.end(), [&catalogStars](const CandidatePair& lhs, const CandidatePair& rhs) {
+    for (int i = 0; i < candidatePairs.size(); ++i)
+    {
+        for (int j = i + 1; j < candidatePairs.size(); ++j)
+        {
+            const CandidatePair& lhs = candidatePairs[i];
+            const CandidatePair& rhs = candidatePairs[j];
+            if ((lhs.detectionIndex == rhs.detectionIndex) || (lhs.catalogIndex == rhs.catalogIndex)) {
+                continue;
+            }
+
+            const QPointF detectionDelta = starDetections[lhs.detectionIndex].m_center - starDetections[rhs.detectionIndex].m_center;
+            const double detectionDistance = std::hypot(detectionDelta.x(), detectionDelta.y());
+            const QPointF lhsCatalogPoint = projectedPointByCatalogIndex.value(lhs.catalogIndex);
+            const QPointF rhsCatalogPoint = projectedPointByCatalogIndex.value(rhs.catalogIndex);
+            const QPointF catalogDelta = lhsCatalogPoint - rhsCatalogPoint;
+            const double catalogDistance = std::hypot(catalogDelta.x(), catalogDelta.y());
+            const double tolerance = std::max(2.0, 0.15 * std::max(detectionDistance, catalogDistance));
+            if (std::fabs(detectionDistance - catalogDistance) <= tolerance) {
+                ++candidatePairs[i].geometricSupport;
+                ++candidatePairs[j].geometricSupport;
+            }
+        }
+    }
+
+    std::sort(candidatePairs.begin(), candidatePairs.end(), [&catalogStars, &starDetections](const CandidatePair& lhs, const CandidatePair& rhs) {
+        if (lhs.geometricSupport != rhs.geometricSupport) {
+            return lhs.geometricSupport > rhs.geometricSupport;
+        }
         if (lhs.distancePixels != rhs.distancePixels) {
             return lhs.distancePixels < rhs.distancePixels;
+        }
+        if (!qFuzzyCompare(starDetections[lhs.detectionIndex].m_qualityScore + 1.0f, starDetections[rhs.detectionIndex].m_qualityScore + 1.0f)) {
+            return starDetections[lhs.detectionIndex].m_qualityScore > starDetections[rhs.detectionIndex].m_qualityScore;
         }
 
         return catalogStars[lhs.catalogIndex].magnitude < catalogStars[rhs.catalogIndex].magnitude;
@@ -1251,6 +1294,7 @@ void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
     for (CameraPipelineStarDetection& detection : starDetections)
     {
         detection.m_label.clear();
+        detection.m_projectedCenter = QPointF();
         detection.m_matchDistancePixels = 0.0f;
         detection.m_catalogMagnitude = 0.0f;
         detection.m_solved = false;
@@ -1409,11 +1453,16 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
 
     double sumSquaredError = 0.0;
     double maxError = 0.0;
+    QHash<int, QPointF> projectedPointsByCatalogIndex;
+    for (const ProjectedCatalogStar& projectedStar : projectedStars) {
+        projectedPointsByCatalogIndex.insert(projectedStar.catalogIndex, projectedStar.point);
+    }
     for (const Match& match : finalMatches)
     {
         CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
         const CatalogStar& catalogStar = brightStarCatalog(settings)[match.catalogIndex];
         detection.m_label = catalogStar.name;
+        detection.m_projectedCenter = projectedPointsByCatalogIndex.value(match.catalogIndex);
         detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
         detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
         detection.m_solved = true;

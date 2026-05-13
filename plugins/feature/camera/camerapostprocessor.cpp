@@ -955,6 +955,16 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
         const QRectF box(detection.m_center.x() - 3.0, detection.m_center.y() - 3.0, 6.0, 6.0);
         painter.drawRect(box);
 
+        if (detection.m_solved && !detection.m_projectedCenter.isNull())
+        {
+            QPen residualPen(starColor.lighter(125));
+            residualPen.setStyle(Qt::DashLine);
+            residualPen.setWidth(1);
+            painter.setPen(residualPen);
+            painter.drawLine(detection.m_center, detection.m_projectedCenter);
+            painter.setPen(pen);
+        }
+
         if (detection.m_solved && !detection.m_label.isEmpty()) {
             drawOutlinedLabel(painter, image.rect(), detection.m_center, detection.m_label, starColor, fontMetrics);
         }

@@ -570,6 +570,7 @@ private slots:
     void on_plateSolveUseCurrentDateTimeCheck_toggled(bool checked);
     void on_plateSolveDateTimeEdit_dateTimeChanged(const QDateTime& dateTime);
     void on_plateSolveUseDownloadedCatalogCheck_toggled(bool checked);
+    void on_plateSolveApplyModeCombo_currentIndexChanged(int index);
     void on_plateSolveDownloadCatalogButton_clicked();
     void on_plateSolveApplyButton_clicked();
     void on_motionExclusionAddButton_clicked();

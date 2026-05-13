@@ -380,9 +380,9 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastPlateSolveCatalogSource = report.getPlateSolveCatalogSource();
         settingsUI()->plateSolveStatusLabel->setText(m_lastPlateSolved ? tr("Solved") : tr("Unsolved"));
         settingsUI()->plateSolveMatchesLabel->setText(
-            m_lastPlateSolved ? QString::number(m_lastPlateSolvedMatches) : "-");
+            m_lastPlateSolved ? tr("%1 / %2").arg(m_lastPlateSolvedMatches).arg(m_lastPlateSolveDetectedStarsConsidered) : "-");
         settingsUI()->plateSolveRmsLabel->setText(
-            m_lastPlateSolved ? QString::number(m_lastPlateSolveRmsError, 'f', 1) : "-");
+            m_lastPlateSolved ? tr("%1 / %2").arg(QString::number(m_lastPlateSolveRmsError, 'f', 1)).arg(QString::number(m_lastPlateSolveMaxError, 'f', 1)) : "-");
         settingsUI()->plateSolvePointingLabel->setText(
             m_lastPlateSolved
                 ? tr("Az %1  El %2  Roll %3  FoV %4")
@@ -407,6 +407,9 @@ bool CameraGUI::handleMessage(const Message& message)
                       .arg(QString::number(m_lastPlateSolveCatalogCandidateStars))
                       .arg(QString::number(m_lastPlateSolveCatalogStarsLoaded))
                 : tr("No solution"));
+        settingsUI()->plateSolveCatalogLabel->setText(m_lastPlateSolved ? (m_lastPlateSolveCatalogSource.isEmpty() ? tr("Bundled") : m_lastPlateSolveCatalogSource) : "-");
+        settingsUI()->plateSolveCandidatesLabel->setText(m_lastPlateSolved ? QString::number(m_lastPlateSolveCatalogCandidateStars) : "-");
+        settingsUI()->plateSolveOutliersLabel->setText(m_lastPlateSolved ? QString::number(m_lastPlateSolveOutlierStars) : "-");
         settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
         if (m_histogramDialog) {
@@ -813,6 +816,9 @@ void CameraGUI::resetCameraStatus()
     settingsUI()->plateSolveMatchesLabel->setText("-");
     settingsUI()->plateSolveRmsLabel->setText("-");
     settingsUI()->plateSolvePointingLabel->setText("-");
+    settingsUI()->plateSolveCatalogLabel->setText("-");
+    settingsUI()->plateSolveCandidatesLabel->setText("-");
+    settingsUI()->plateSolveOutliersLabel->setText("-");
     settingsUI()->plateSolveSolutionLabel->setText(tr("No solution"));
     settingsUI()->plateSolveApplyButton->setEnabled(false);
     m_settingsDialog->clearCameraStatus();
@@ -1174,6 +1180,7 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveDateTimeEdit->setDateTime(m_settings.m_plateSolveDateTime.isValid() ? m_settings.m_plateSolveDateTime : QDateTime::currentDateTime());
     settingsUI()->plateSolveDateTimeEdit->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
     settingsUI()->plateSolveUseDownloadedCatalogCheck->setChecked(m_settings.m_plateSolveUseDownloadedCatalog);
+    settingsUI()->plateSolveApplyModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveApplyMode));
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
     ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
@@ -1611,6 +1618,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveUseCurrentDateTimeCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled);
     QObject::connect(settingsUI()->plateSolveDateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, &CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged);
     QObject::connect(settingsUI()->plateSolveUseDownloadedCatalogCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled);
+    QObject::connect(settingsUI()->plateSolveApplyModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveDownloadCatalogButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDownloadCatalogButton_clicked);
     QObject::connect(settingsUI()->plateSolveApplyButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveApplyButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
@@ -5453,6 +5461,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveUseCurrentDateTime = defaults.m_plateSolveUseCurrentDateTime;
     m_settings.m_plateSolveDateTime = defaults.m_plateSolveDateTime;
     m_settings.m_plateSolveUseDownloadedCatalog = defaults.m_plateSolveUseDownloadedCatalog;
+    m_settings.m_plateSolveApplyMode = defaults.m_plateSolveApplyMode;
 
     m_settings.m_diffMask = defaults.m_diffMask;
     m_settings.m_diffThreshold = defaults.m_diffThreshold;
@@ -5515,6 +5524,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveUseCurrentDateTime",
         "plateSolveDateTime",
         "plateSolveUseDownloadedCatalog",
+        "plateSolveApplyMode",
         "diffMask",
         "diffThreshold",
         "diffMaskOpenSize",
@@ -5789,6 +5799,12 @@ void CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled(bool checked)
     applySetting("plateSolveUseDownloadedCatalog");
 }
 
+void CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_plateSolveApplyMode = static_cast<CameraSettings::PlateSolveApplyMode>(index);
+    applySetting("plateSolveApplyMode");
+}
+
 void CameraGUI::on_plateSolveDownloadCatalogButton_clicked()
 {
     requestPlateSolveCatalogDownload();
@@ -5802,14 +5818,25 @@ void CameraGUI::on_plateSolveApplyButton_clicked()
 
     m_settings.m_azimuth = static_cast<float>(m_lastPlateSolveAzimuth);
     m_settings.m_elevation = static_cast<float>(m_lastPlateSolveElevation);
-    m_settings.m_roll = static_cast<float>(m_lastPlateSolveRoll);
-    m_settings.m_fov = static_cast<float>(m_lastPlateSolveFov);
+
+    QStringList settingsToApply {
+        "azimuth", "elevation"
+    };
+
+    if (m_settings.m_plateSolveApplyMode >= CameraSettings::PlateSolveApplyAzElRoll) {
+        m_settings.m_roll = static_cast<float>(m_lastPlateSolveRoll);
+        settingsToApply.append("roll");
+    }
+    if (m_settings.m_plateSolveApplyMode >= CameraSettings::PlateSolveApplyAzElRollFov) {
+        m_settings.m_fov = static_cast<float>(m_lastPlateSolveFov);
+        settingsToApply.append("fov");
+    }
 
     blockApplySettings(true);
     displaySettings();
     blockApplySettings(false);
 
-    applySettings({"azimuth", "elevation", "roll", "fov"});
+    applySettings(settingsToApply);
 }
 
 void CameraGUI::on_motionExclusionAddButton_clicked()

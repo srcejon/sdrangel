@@ -1587,6 +1587,18 @@ void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& r
             continue;
         }
 
+        const double boundingArea = std::max(1.0, width * height);
+        const double fillRatio = area / boundingArea;
+        if (fillRatio < 0.2) {
+            continue;
+        }
+
+        const double perimeter = std::max(1.0, cv::arcLength(contour, true));
+        const double roundness = std::clamp((4.0 * CV_PI * area) / (perimeter * perimeter), 0.0, 1.0);
+        if (roundness < 0.2) {
+            continue;
+        }
+
         cv::Mat contourMask = cv::Mat::zeros(thresholdMask.size(), CV_8UC1);
         std::vector<std::vector<cv::Point>> singleContour{contour};
         cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED);
@@ -1620,11 +1632,25 @@ void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& r
         const double centerY = weightedY / totalWeight;
         double peakValue = 0.0;
         cv::minMaxLoc(residual, nullptr, &peakValue, nullptr, nullptr, contourMask);
+        double grayPeak = 0.0;
+        cv::minMaxLoc(gray, nullptr, &grayPeak, nullptr, nullptr, contourMask);
+        const bool saturated = grayPeak >= 250.0;
+
+        const double qualityScore = peakValue
+            * std::max(0.25, roundness)
+            * std::max(0.25, fillRatio)
+            / std::max(1.0, aspectRatio)
+            * (saturated ? 0.85 : 1.0);
 
         CameraPipelineStarDetection detection;
         detection.m_center = QPointF(centerX + roi.x, centerY + roi.y);
         detection.m_peakValue = static_cast<float>(peakValue);
         detection.m_radius = static_cast<float>(std::max(1.0, std::sqrt(area / CV_PI)));
+        detection.m_qualityScore = static_cast<float>(qualityScore);
+        detection.m_roundness = static_cast<float>(roundness);
+        detection.m_fillRatio = static_cast<float>(fillRatio);
+        detection.m_aspectRatio = static_cast<float>(aspectRatio);
+        detection.m_saturated = saturated;
         starDetections.append(detection);
 
         if (!finalMask.empty()) {

@@ -318,6 +318,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveUseCurrentDateTime = true;
     m_plateSolveDateTime = QDateTime::currentDateTime();
     m_plateSolveUseDownloadedCatalog = false;
+    m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
@@ -495,6 +496,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(215, m_plateSolveUseDownloadedCatalog);
     s.writeBool(216, m_plateSolveUseCurrentDateTime);
     s.writeS64(217, m_plateSolveDateTime.isValid() ? m_plateSolveDateTime.toMSecsSinceEpoch() : 0);
+    s.writeS32(218, static_cast<qint32>(m_plateSolveApplyMode));
     s.writeBool(68, m_recordMode != SavedMediaRaw);
     s.writeBool(69, m_overlaySpectrum);
     s.writeString(70, m_spectrumDevice);
@@ -856,6 +858,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         qint64 plateSolveDateTimeMs = QDateTime::currentDateTime().toMSecsSinceEpoch();
         d.readS64(217, &plateSolveDateTimeMs, plateSolveDateTimeMs);
         m_plateSolveDateTime = QDateTime::fromMSecsSinceEpoch(std::max(plateSolveDateTimeMs, m_minPlateSolveDateTimeMs));
+        qint32 plateSolveApplyMode = static_cast<qint32>(PlateSolveApplyAzElRollFov);
+        d.readS32(218, &plateSolveApplyMode, static_cast<qint32>(PlateSolveApplyAzElRollFov));
+        m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(plateSolveApplyMode);
         m_overlayFontScale = qBound(m_minOverlayFontScale, m_overlayFontScale, m_maxOverlayFontScale);
         m_detectionRoiX = qBound(m_minUiPixelOffset, m_detectionRoiX, m_maxUiPixelOffset);
         m_detectionRoiY = qBound(m_minUiPixelOffset, m_detectionRoiY, m_maxUiPixelOffset);
@@ -870,6 +875,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_plateSolveMinMatches = qBound(m_minPlateSolveMatches, m_plateSolveMinMatches, m_maxPlateSolveMatches);
         m_plateSolveMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveMatchRadius, m_maxPlateSolveMatchRadius);
         m_plateSolveSearchRadius = qBound(m_minPlateSolveSearchRadius, m_plateSolveSearchRadius, m_maxPlateSolveSearchRadius);
+        m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(qBound(0, static_cast<int>(m_plateSolveApplyMode), 2));
         if (!m_plateSolveDateTime.isValid()) {
             m_plateSolveDateTime = QDateTime::currentDateTime();
         }
@@ -1579,6 +1585,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveUseDownloadedCatalog")) {
         m_plateSolveUseDownloadedCatalog = settings.m_plateSolveUseDownloadedCatalog;
     }
+    if (settingsKeys.contains("plateSolveApplyMode")) {
+        m_plateSolveApplyMode = settings.m_plateSolveApplyMode;
+    }
     if (settingsKeys.contains("videoPostProcess")) {
         m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
     }
@@ -2193,6 +2202,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveUseDownloadedCatalog") || force) {
         ostr << " m_plateSolveUseDownloadedCatalog: " << m_plateSolveUseDownloadedCatalog;
+    }
+    if (settingsKeys.contains("plateSolveApplyMode") || force) {
+        ostr << " m_plateSolveApplyMode: " << static_cast<int>(m_plateSolveApplyMode);
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_recordMode;

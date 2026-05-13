@@ -481,6 +481,23 @@ void drawConstellationStars(QPainter& painter,
     }
 }
 
+QDateTime plateSolveOverlayDateTime(const CameraSettings& settings, const QDateTime& captureDateTime)
+{
+    if (settings.m_plateSolveUseCurrentDateTime) {
+        return QDateTime::currentDateTime();
+    }
+
+    if (settings.m_plateSolveDateTime.isValid()) {
+        return settings.m_plateSolveDateTime;
+    }
+
+    if (captureDateTime.isValid()) {
+        return captureDateTime;
+    }
+
+    return QDateTime::currentDateTime();
+}
+
 } // namespace
 
 CameraPostProcessor::CameraPostProcessor() :
@@ -1308,7 +1325,7 @@ void CameraPostProcessor::applyConstellationOverlay(QImage& image) const
         return;
     }
 
-    const QDateTime utcDateTime = (m_captureDateTime.isValid() ? m_captureDateTime : QDateTime::currentDateTime()).toUTC();
+    const QDateTime utcDateTime = plateSolveOverlayDateTime(m_settings, m_captureDateTime).toUTC();
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setClipRect(image.rect());

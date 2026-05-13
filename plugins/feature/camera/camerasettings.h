@@ -433,6 +433,7 @@ struct CameraSettings
     int    m_plateSolveMinMatches; ///< Minimum matches required for a successful solve
     double m_plateSolveMatchRadius; ///< Maximum image-space distance in pixels for a star match
     double m_plateSolveSearchRadius; ///< Search radius in degrees around the current pointing estimate
+    bool   m_plateSolveUseCurrentDirection; ///< Use the current camera pointing estimate to seed the plate solve
     PlateSolveLabelMode m_plateSolveLabelMode; ///< Which catalog metadata should be shown for solved stars
     bool   m_plateSolveUseCurrentDateTime; ///< Use the current system date/time for plate solving instead of a fixed timestamp
     QDateTime m_plateSolveDateTime; ///< User-specified local date/time for plate solving recorded media

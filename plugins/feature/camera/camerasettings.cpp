@@ -307,6 +307,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveMinMatches = 4;
     m_plateSolveMatchRadius = 24.0;
     m_plateSolveSearchRadius = 12.0;
+    m_plateSolveUseCurrentDirection = true;
     m_plateSolveLabelMode = PlateSolveLabelName;
     m_plateSolveUseCurrentDateTime = true;
     m_plateSolveDateTime = QDateTime::currentDateTime();
@@ -479,6 +480,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(212, m_plateSolveMinMatches);
     s.writeDouble(213, m_plateSolveMatchRadius);
     s.writeDouble(214, m_plateSolveSearchRadius);
+    s.writeBool(224, m_plateSolveUseCurrentDirection);
     s.writeBool(215, m_plateSolveUseDownloadedCatalog);
     s.writeBool(216, m_plateSolveUseCurrentDateTime);
     s.writeS64(217, m_plateSolveDateTime.isValid() ? m_plateSolveDateTime.toMSecsSinceEpoch() : 0);
@@ -816,6 +818,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(212, &m_plateSolveMinMatches, 4);
         d.readDouble(213, &m_plateSolveMatchRadius, 24.0);
         d.readDouble(214, &m_plateSolveSearchRadius, 12.0);
+        d.readBool(224, &m_plateSolveUseCurrentDirection, true);
         d.readBool(215, &m_plateSolveUseDownloadedCatalog, false);
         d.readBool(216, &m_plateSolveUseCurrentDateTime, true);
         qint64 plateSolveDateTimeMs = QDateTime::currentDateTime().toMSecsSinceEpoch();
@@ -1516,6 +1519,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveSearchRadius")) {
         m_plateSolveSearchRadius = settings.m_plateSolveSearchRadius;
     }
+    if (settingsKeys.contains("plateSolveUseCurrentDirection")) {
+        m_plateSolveUseCurrentDirection = settings.m_plateSolveUseCurrentDirection;
+    }
     if (settingsKeys.contains("plateSolveLabelMode")) {
         m_plateSolveLabelMode = settings.m_plateSolveLabelMode;
     }
@@ -2115,6 +2121,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveSearchRadius") || force) {
         ostr << " m_plateSolveSearchRadius: " << m_plateSolveSearchRadius;
+    }
+    if (settingsKeys.contains("plateSolveUseCurrentDirection") || force) {
+        ostr << " m_plateSolveUseCurrentDirection: " << m_plateSolveUseCurrentDirection;
     }
     if (settingsKeys.contains("plateSolveUseCurrentDateTime") || force) {
         ostr << " m_plateSolveUseCurrentDateTime: " << m_plateSolveUseCurrentDateTime;

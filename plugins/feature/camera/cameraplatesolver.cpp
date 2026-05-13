@@ -1427,31 +1427,34 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const std::array<double, 5> coarseOffsets = {{-1.0, -0.5, 0.0, 0.5, 1.0}};
     const std::array<double, 3> coarseFovOffsets = {{-1.0, 0.0, 1.0}};
 
-    for (double azFactor : coarseOffsets)
+    if (settings.m_plateSolveUseCurrentDirection)
     {
-        for (double elFactor : coarseOffsets)
+        for (double azFactor : coarseOffsets)
         {
-            for (double rollFactor : coarseOffsets)
+            for (double elFactor : coarseOffsets)
             {
-                for (double fovFactor : coarseFovOffsets)
+                for (double rollFactor : coarseOffsets)
                 {
-                    const Evaluation candidate = evaluatePose(
-                        settings,
-                        imageSize,
-                        captureDateTimeUtc,
-                        starDetections,
-                        detectionIndices,
-                        settings.m_azimuth + azFactor * coarseSearchRadius,
-                        settings.m_elevation + elFactor * coarseSearchRadius,
-                        settings.m_roll + rollFactor * coarseRollRadius,
-                        std::max(static_cast<double>(CameraSettings::m_minFov),
-                                 static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius),
-                        nullptr,
-                        fixedCenterOffsetX,
-                        fixedCenterOffsetY,
-                        fixedDistortionK1);
-                    if (isBetterEvaluation(candidate, best)) {
-                        best = candidate;
+                    for (double fovFactor : coarseFovOffsets)
+                    {
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            settings.m_azimuth + azFactor * coarseSearchRadius,
+                            settings.m_elevation + elFactor * coarseSearchRadius,
+                            settings.m_roll + rollFactor * coarseRollRadius,
+                            std::max(static_cast<double>(CameraSettings::m_minFov),
+                                     static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius),
+                            nullptr,
+                            fixedCenterOffsetX,
+                            fixedCenterOffsetY,
+                            fixedDistortionK1);
+                        if (isBetterEvaluation(candidate, best)) {
+                            best = candidate;
+                        }
                     }
                 }
             }

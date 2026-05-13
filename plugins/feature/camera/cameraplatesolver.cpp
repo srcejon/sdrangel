@@ -115,6 +115,15 @@ struct TriangleSignature
     std::array<int, 3> indices{{-1, -1, -1}};
 };
 
+constexpr std::array<std::array<int, 3>, 6> kTrianglePermutations {{
+    {{0, 1, 2}},
+    {{0, 2, 1}},
+    {{1, 0, 2}},
+    {{1, 2, 0}},
+    {{2, 0, 1}},
+    {{2, 1, 0}}
+}};
+
 struct SkyProjector
 {
     bool valid = false;
@@ -135,6 +144,9 @@ struct SkyProjector
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kVisibleAltitudeFloor = -5.0;
 constexpr int kMaxDetectionsForSolve = 24;
+constexpr double kBlindSeedRatioTolerance = 0.035;
+constexpr double kBlindSeedMaxRmsPixels = 18.0;
+constexpr double kBlindSeedMaxMedianPixels = 14.0;
 constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
 const char* const kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 const char* const kDownloadedCatalogDir = "camera";
@@ -932,11 +944,52 @@ TriangleSignature buildTriangleSignature(const std::array<QPointF, 3>& points)
     return signature;
 }
 
+double medianCandidateDistancePixels(const QVector<Match>& matches)
+{
+    if (matches.isEmpty()) {
+        return 0.0;
+    }
+
+    QVector<double> distances;
+    distances.reserve(matches.size());
+    for (const Match& match : matches) {
+        distances.append(match.distancePixels);
+    }
+
+    std::sort(distances.begin(), distances.end());
+    const int middle = distances.size() / 2;
+    if ((distances.size() % 2) == 0) {
+        return 0.5 * (distances[middle - 1] + distances[middle]);
+    }
+    return distances[middle];
+}
+
+bool isStrongBlindSeedEvaluation(const CameraSettings& settings,
+                                 const QVector<int>& detectionIndices,
+                                 const Evaluation& candidate)
+{
+    if (!candidate.valid) {
+        return false;
+    }
+
+    const int minBlindSeedMatches = std::max(
+        settings.m_plateSolveMinMatches + 1,
+        std::min(6, static_cast<int>(detectionIndices.size())));
+    if (candidate.matchCount < minBlindSeedMatches) {
+        return false;
+    }
+
+    const double medianError = medianCandidateDistancePixels(candidate.matches);
+    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.60, kBlindSeedMaxRmsPixels);
+    const double maxMedianError = std::min(settings.m_plateSolveMatchRadius * 0.50, kBlindSeedMaxMedianPixels);
+    return (candidate.rmsErrorPixels <= maxRmsError) && (medianError <= maxMedianError);
+}
+
 QVector<TriangleSignature> buildDetectionTriangleSignatures(const QVector<CameraPipelineStarDetection>& starDetections,
                                                             const QVector<int>& detectionIndices)
 {
     QVector<TriangleSignature> signatures;
-    const int maxDetections = std::min<int>(8, static_cast<int>(detectionIndices.size()));
+    const int maxDetections = std::min<int>(10, static_cast<int>(detectionIndices.size()));
     for (int i = 0; i < maxDetections; ++i)
     {
         for (int j = i + 1; j < maxDetections; ++j)
@@ -969,7 +1022,7 @@ QVector<TriangleSignature> buildCatalogTriangleSignatures(const CameraSettings& 
                                                           const QVector<VisibleCatalogStar>& visibleStars)
 {
     QVector<TriangleSignature> signatures;
-    const int maxCatalogStars = std::min<int>(24, static_cast<int>(visibleStars.size()));
+    const int maxCatalogStars = std::min<int>(32, static_cast<int>(visibleStars.size()));
     for (int i = 0; i < maxCatalogStars; ++i)
     {
         for (int j = i + 1; j < maxCatalogStars; ++j)
@@ -1050,9 +1103,8 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
     {
         for (const TriangleSignature& catalogTriangle : catalogTriangles)
         {
-            const double ratioTolerance = 0.05;
-            if (std::fabs(detectionTriangle.ratioShortToLong - catalogTriangle.ratioShortToLong) > ratioTolerance
-                || std::fabs(detectionTriangle.ratioMidToLong - catalogTriangle.ratioMidToLong) > ratioTolerance)
+            if (std::fabs(detectionTriangle.ratioShortToLong - catalogTriangle.ratioShortToLong) > kBlindSeedRatioTolerance
+                || std::fabs(detectionTriangle.ratioMidToLong - catalogTriangle.ratioMidToLong) > kBlindSeedRatioTolerance)
             {
                 continue;
             }
@@ -1081,7 +1133,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 continue;
             }
 
-            const double seedFov = std::clamp(
+            const double baseSeedFov = std::clamp(
                 catalogAngularDistance * static_cast<double>(imageSize.width()) / std::max(1.0, detectionTriangle.longestDistance),
                 static_cast<double>(CameraSettings::m_minFov),
                 static_cast<double>(CameraSettings::m_maxFov));
@@ -1091,32 +1143,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 starDetections[detectionTriangle.indices[1]].m_center,
                 starDetections[detectionTriangle.indices[2]].m_center
             }};
-            const SkyProjector rollProjector = createProjector(settings, imageSize, seedAzimuth, seedElevation, 0.0, seedFov);
-            if (!rollProjector.valid) {
-                continue;
-            }
-
-            std::array<QPointF, 3> projectedPoints;
-            bool projected = true;
             const std::array<VisibleCatalogStar, 3> triangleStars {{a, b, c}};
-            for (int idx = 0; idx < 3; ++idx)
-            {
-                if (!projectAltAz(rollProjector, triangleStars[idx].azimuthDegrees, triangleStars[idx].elevationDegrees, projectedPoints[idx]))
-                {
-                    projected = false;
-                    break;
-                }
-            }
-            if (!projected) {
-                continue;
-            }
-
-            const QLineF detectionBase(detectionPoints[0], detectionPoints[1]);
-            const QLineF projectedBase(projectedPoints[0], projectedPoints[1]);
-            double seedRoll = projectedBase.angleTo(detectionBase);
-            if (!std::isfinite(seedRoll)) {
-                seedRoll = 0.0;
-            }
 
             QVector<int> allowedCatalogIndices {
                 a.catalogIndex,
@@ -1124,22 +1151,58 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 c.catalogIndex
             };
 
-            const Evaluation candidate = evaluatePose(
-                settings,
-                imageSize,
-                captureDateTimeUtc,
-                starDetections,
-                detectionIndices,
-                seedAzimuth,
-                seedElevation,
-                seedRoll,
-                seedFov,
-                &allowedCatalogIndices,
-                settings.m_lensCenterOffsetX,
-                settings.m_lensCenterOffsetY,
-                settings.m_lensDistortionK1);
-            if (candidate.valid) {
-                seeds.append(candidate);
+            for (double fovScale : {0.85, 1.0, 1.15})
+            {
+                const double seedFov = std::clamp(
+                    baseSeedFov * fovScale,
+                    static_cast<double>(CameraSettings::m_minFov),
+                    static_cast<double>(CameraSettings::m_maxFov));
+                const SkyProjector rollProjector = createProjector(settings, imageSize, seedAzimuth, seedElevation, 0.0, seedFov);
+                if (!rollProjector.valid) {
+                    continue;
+                }
+
+                std::array<QPointF, 3> projectedPoints;
+                bool projected = true;
+                for (int idx = 0; idx < 3; ++idx)
+                {
+                    if (!projectAltAz(rollProjector, triangleStars[idx].azimuthDegrees, triangleStars[idx].elevationDegrees, projectedPoints[idx]))
+                    {
+                        projected = false;
+                        break;
+                    }
+                }
+                if (!projected) {
+                    continue;
+                }
+
+                for (const std::array<int, 3>& permutation : kTrianglePermutations)
+                {
+                    const QLineF detectionBase(detectionPoints[0], detectionPoints[1]);
+                    const QLineF projectedBase(projectedPoints[permutation[0]], projectedPoints[permutation[1]]);
+                    double seedRoll = projectedBase.angleTo(detectionBase);
+                    if (!std::isfinite(seedRoll)) {
+                        seedRoll = 0.0;
+                    }
+
+                    const Evaluation candidate = evaluatePose(
+                        settings,
+                        imageSize,
+                        captureDateTimeUtc,
+                        starDetections,
+                        detectionIndices,
+                        seedAzimuth,
+                        seedElevation,
+                        seedRoll,
+                        seedFov,
+                        &allowedCatalogIndices,
+                        settings.m_lensCenterOffsetX,
+                        settings.m_lensCenterOffsetY,
+                        settings.m_lensDistortionK1);
+                    if (isStrongBlindSeedEvaluation(settings, detectionIndices, candidate)) {
+                        seeds.append(candidate);
+                    }
+                }
             }
         }
     }
@@ -1379,6 +1442,28 @@ QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
     return inliers;
 }
 
+bool isAcceptableBlindSolve(const CameraSettings& settings,
+                            const QVector<CameraPipelineStarDetection>& starDetections,
+                            const QVector<Match>& matches,
+                            double rmsErrorPixels,
+                            double maxErrorPixels)
+{
+    const int minAcceptedMatches = std::max(settings.m_plateSolveMinMatches + 2,
+        std::min(10, std::max(6, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.20)))));
+    if (matches.size() < minAcceptedMatches) {
+        return false;
+    }
+
+    const double medianError = medianDistancePixels(matches);
+    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.70, 20.0);
+    const double maxMedianError = std::min(settings.m_plateSolveMatchRadius * 0.55, 15.0);
+    const double maxWorstError = std::min(settings.m_plateSolveMatchRadius * 1.10, 45.0);
+
+    return (rmsErrorPixels <= maxRmsError)
+        && (medianError <= maxMedianError)
+        && (maxErrorPixels <= maxWorstError);
+}
+
 bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
 {
     if (!candidate.valid) {
@@ -1476,28 +1561,34 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     if (!best.valid || (best.matchCount < minMatchCount)) {
         const std::array<double, 13> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0}};
+        const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
         for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
         {
             for (double elevationDegrees = -60.0; elevationDegrees <= 75.0; elevationDegrees += 15.0)
             {
                 for (double rollDegrees : wideRollOffsets)
                 {
-                    const Evaluation candidate = evaluatePose(
-                        settings,
-                        imageSize,
-                        captureDateTimeUtc,
-                        starDetections,
-                        detectionIndices,
-                        azimuthDegrees,
-                        elevationDegrees,
-                        rollDegrees,
-                        static_cast<double>(settings.m_fov),
-                        nullptr,
-                        fixedCenterOffsetX,
-                        fixedCenterOffsetY,
-                        fixedDistortionK1);
-                    if (isBetterEvaluation(candidate, best)) {
-                        best = candidate;
+                    for (double fovScale : wideFovScales)
+                    {
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            azimuthDegrees,
+                            elevationDegrees,
+                            rollDegrees,
+                            std::clamp(static_cast<double>(settings.m_fov) * fovScale,
+                                static_cast<double>(CameraSettings::m_minFov),
+                                static_cast<double>(CameraSettings::m_maxFov)),
+                            nullptr,
+                            fixedCenterOffsetX,
+                            fixedCenterOffsetY,
+                            fixedDistortionK1);
+                        if (isBetterEvaluation(candidate, best)) {
+                            best = candidate;
+                        }
                     }
                 }
             }
@@ -2035,6 +2126,12 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     result.m_matchedStars = finalMatches.size();
     result.m_rmsErrorPixels = std::sqrt(sumSquaredError / finalMatches.size());
     result.m_maxErrorPixels = maxError;
+    if (!settings.m_plateSolveUseCurrentDirection
+        && !isAcceptableBlindSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
+    {
+        clearSolvedStars(starDetections);
+        return CameraPlateSolveResult();
+    }
     result.m_azimuthDegrees = best.azimuthDegrees;
     result.m_elevationDegrees = best.elevationDegrees;
     result.m_rollDegrees = best.rollDegrees;

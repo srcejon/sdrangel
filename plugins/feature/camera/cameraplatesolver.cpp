@@ -2441,7 +2441,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     {
         for (double fovFactor : coarseFovOffsetsOrdered)
         {
-            for (double elevationDegrees = minAzimuthDegrees; elevationDegrees <= maxAzimuthDegrees; elevationDegrees += elevationStepDegrees)
+            for (double elevationDegrees = minElevationDegrees; elevationDegrees <= maxElevationDegrees; elevationDegrees += elevationStepDegrees)
             {
                 for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += azimuthStepDegrees)
                 {
@@ -2730,6 +2730,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     double centerOffsetYCenter = best.centerOffsetYPixels;
     double distortionCenter = best.distortionK1;
     double azStep = std::max(0.05, settings.m_plateSolveSearchRadius * 0.05);
+    double elStep = azStep;
     double rollStep = std::max(0.10, std::max(1.0, static_cast<double>(settings.m_fov) * 0.02));
     double fovStep = std::max(0.05, std::max(0.5, static_cast<double>(settings.m_fov) * 0.01));
     double centerOffsetXStep = std::max(1.0, static_cast<double>(imageSize.width()) * 0.01);
@@ -2755,7 +2756,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                             starDetections,
                             detectionIndices,
                             azCenter + azOffset * azStep,
-                            elCenter + elOffset * azStep,
+                            elCenter + elOffset * elStep,
                             rollCenter + rollOffset * rollStep,
                             std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
                             &catalogIndices,
@@ -2777,6 +2778,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
         fovCenter = best.fovDegrees;
         if (!improved) {
             azStep *= 0.5;
+            elStep *= 0.5;
             rollStep *= 0.5;
             fovStep *= 0.5;
         }
@@ -2866,7 +2868,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                             starDetections,
                             detectionIndices,
                             azCenter + azOffset * azStep,
-                            elCenter + elOffset * azStep,
+                            elCenter + elOffset * elStep,
                             rollCenter + rollOffset * rollStep,
                             std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
                             &catalogIndices,
@@ -2888,6 +2890,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
         fovCenter = best.fovDegrees;
         if (!improved) {
             azStep *= 0.5;
+            elStep *= 0.5;
             rollStep *= 0.5;
             fovStep *= 0.5;
         }

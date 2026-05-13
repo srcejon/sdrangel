@@ -115,6 +115,14 @@ struct TriangleSignature
     std::array<int, 3> indices{{-1, -1, -1}};
 };
 
+struct QuadSignature
+{
+    std::array<double, 5> edgeRatios{{0.0, 0.0, 0.0, 0.0, 0.0}};
+    double orientation = 0.0;
+    double longestDistance = 0.0;
+    std::array<int, 4> indices{{-1, -1, -1, -1}};
+};
+
 constexpr std::array<std::array<int, 3>, 6> kTrianglePermutations {{
     {{0, 1, 2}},
     {{0, 2, 1}},
@@ -122,6 +130,17 @@ constexpr std::array<std::array<int, 3>, 6> kTrianglePermutations {{
     {{1, 2, 0}},
     {{2, 0, 1}},
     {{2, 1, 0}}
+}};
+
+constexpr std::array<std::array<int, 4>, 8> kQuadPermutations {{
+    {{0, 1, 2, 3}},
+    {{1, 2, 3, 0}},
+    {{2, 3, 0, 1}},
+    {{3, 0, 1, 2}},
+    {{0, 3, 2, 1}},
+    {{3, 2, 1, 0}},
+    {{2, 1, 0, 3}},
+    {{1, 0, 3, 2}}
 }};
 
 struct SkyProjector
@@ -955,6 +974,60 @@ TriangleSignature buildTriangleSignature(const std::array<QPointF, 3>& points)
     return signature;
 }
 
+std::array<QPointF, 4> orderQuadPoints(const std::array<QPointF, 4>& points)
+{
+    QPointF centroid;
+    for (const QPointF& point : points) {
+        centroid += point;
+    }
+    centroid /= 4.0;
+
+    std::array<int, 4> order{{0, 1, 2, 3}};
+    std::sort(order.begin(), order.end(), [&points, &centroid](int lhs, int rhs) {
+        return std::atan2(points[lhs].y() - centroid.y(), points[lhs].x() - centroid.x())
+            < std::atan2(points[rhs].y() - centroid.y(), points[rhs].x() - centroid.x());
+    });
+
+    std::array<QPointF, 4> orderedPoints;
+    for (int i = 0; i < 4; ++i) {
+        orderedPoints[i] = points[order[i]];
+    }
+    return orderedPoints;
+}
+
+QuadSignature buildQuadSignature(const std::array<QPointF, 4>& unorderedPoints)
+{
+    QuadSignature signature;
+    const std::array<QPointF, 4> points = orderQuadPoints(unorderedPoints);
+
+    std::array<double, 6> distances{{
+        QLineF(points[0], points[1]).length(),
+        QLineF(points[0], points[2]).length(),
+        QLineF(points[0], points[3]).length(),
+        QLineF(points[1], points[2]).length(),
+        QLineF(points[1], points[3]).length(),
+        QLineF(points[2], points[3]).length()
+    }};
+    std::sort(distances.begin(), distances.end());
+    if (distances[5] <= 1e-6) {
+        return signature;
+    }
+
+    signature.longestDistance = distances[5];
+    for (int i = 0; i < 5; ++i) {
+        signature.edgeRatios[i] = distances[i] / distances[5];
+    }
+
+    double twiceArea = 0.0;
+    for (int i = 0; i < 4; ++i) {
+        const QPointF& a = points[i];
+        const QPointF& b = points[(i + 1) % 4];
+        twiceArea += (a.x() * b.y()) - (a.y() * b.x());
+    }
+    signature.orientation = twiceArea;
+    return signature;
+}
+
 double medianCandidateDistancePixels(const QVector<Match>& matches)
 {
     if (matches.isEmpty()) {
@@ -1139,6 +1212,110 @@ QVector<TriangleSignature> buildCatalogTriangleSignatures(const CameraSettings& 
     return signatures;
 }
 
+QVector<QuadSignature> buildDetectionQuadSignatures(const QVector<CameraPipelineStarDetection>& starDetections,
+                                                    const QVector<int>& detectionIndices)
+{
+    QVector<QuadSignature> signatures;
+    const int maxDetections = std::min<int>(8, static_cast<int>(detectionIndices.size()));
+    for (int i = 0; i < maxDetections; ++i)
+    {
+        for (int j = i + 1; j < maxDetections; ++j)
+        {
+            for (int k = j + 1; k < maxDetections; ++k)
+            {
+                for (int l = k + 1; l < maxDetections; ++l)
+                {
+                    const std::array<int, 4> indices {{
+                        detectionIndices[i],
+                        detectionIndices[j],
+                        detectionIndices[k],
+                        detectionIndices[l]
+                    }};
+                    const std::array<QPointF, 4> points {{
+                        starDetections[indices[0]].m_center,
+                        starDetections[indices[1]].m_center,
+                        starDetections[indices[2]].m_center,
+                        starDetections[indices[3]].m_center
+                    }};
+                    QuadSignature signature = buildQuadSignature(points);
+                    if (signature.longestDistance < 30.0) {
+                        continue;
+                    }
+                    signature.indices = indices;
+                    signatures.append(signature);
+                }
+            }
+        }
+    }
+    return signatures;
+}
+
+QVector<QuadSignature> buildCatalogQuadSignatures(const CameraSettings& settings,
+                                                  const QVector<VisibleCatalogStar>& visibleStars)
+{
+    QVector<QuadSignature> signatures;
+    const int maxCatalogStars = std::min<int>(24, static_cast<int>(visibleStars.size()));
+    for (int i = 0; i < maxCatalogStars; ++i)
+    {
+        for (int j = i + 1; j < maxCatalogStars; ++j)
+        {
+            for (int k = j + 1; k < maxCatalogStars; ++k)
+            {
+                for (int l = k + 1; l < maxCatalogStars; ++l)
+                {
+                    const SkyVector center = normalize({
+                        visibleStars[i].vector.x + visibleStars[j].vector.x + visibleStars[k].vector.x + visibleStars[l].vector.x,
+                        visibleStars[i].vector.y + visibleStars[j].vector.y + visibleStars[k].vector.y + visibleStars[l].vector.y,
+                        visibleStars[i].vector.z + visibleStars[j].vector.z + visibleStars[k].vector.z + visibleStars[l].vector.z
+                    });
+                    if (length(center) <= 0.0) {
+                        continue;
+                    }
+
+                    const double centerAzimuth = normalizeDegrees(std::atan2(center.x, center.y) * 180.0 / kPi);
+                    const double centerElevation = std::asin(std::clamp(center.z, -1.0, 1.0)) * 180.0 / kPi;
+                    const SkyProjector localProjector = createProjector(
+                        settings,
+                        QSize(1000, 1000),
+                        centerAzimuth,
+                        centerElevation,
+                        0.0,
+                        std::max(20.0, static_cast<double>(settings.m_fov)));
+                    if (!localProjector.valid) {
+                        continue;
+                    }
+
+                    std::array<QPointF, 4> points;
+                    bool allProjected = true;
+                    const std::array<int, 4> starIndices {{i, j, k, l}};
+                    for (int pointIndex = 0; pointIndex < 4; ++pointIndex)
+                    {
+                        if (!projectAltAz(localProjector,
+                                          visibleStars[starIndices[pointIndex]].azimuthDegrees,
+                                          visibleStars[starIndices[pointIndex]].elevationDegrees,
+                                          points[pointIndex]))
+                        {
+                            allProjected = false;
+                            break;
+                        }
+                    }
+                    if (!allProjected) {
+                        continue;
+                    }
+
+                    QuadSignature signature = buildQuadSignature(points);
+                    if (signature.longestDistance < 15.0) {
+                        continue;
+                    }
+                    signature.indices = {{i, j, k, l}};
+                    signatures.append(signature);
+                }
+            }
+        }
+    }
+    return signatures;
+}
+
 QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                                             const QSize& imageSize,
                                             const QDateTime& captureDateTimeUtc,
@@ -1280,6 +1457,169 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
     });
     if (seeds.size() > 16) {
         seeds.resize(16);
+    }
+
+    return seeds;
+}
+
+QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
+                                        const QSize& imageSize,
+                                        const QDateTime& captureDateTimeUtc,
+                                        const QVector<CameraPipelineStarDetection>& starDetections,
+                                        const QVector<int>& detectionIndices)
+{
+    QVector<Evaluation> seeds;
+    const QVector<VisibleCatalogStar> visibleStars = buildVisibleCatalog(settings, captureDateTimeUtc, settings.m_plateSolveMaxMagnitude);
+    if (visibleStars.size() < settings.m_plateSolveMinMatches) {
+        return seeds;
+    }
+
+    const QVector<QuadSignature> detectionQuads = buildDetectionQuadSignatures(starDetections, detectionIndices);
+    const QVector<QuadSignature> catalogQuads = buildCatalogQuadSignatures(settings, visibleStars);
+    if (detectionQuads.isEmpty() || catalogQuads.isEmpty()) {
+        return seeds;
+    }
+
+    for (const QuadSignature& detectionQuad : detectionQuads)
+    {
+        for (const QuadSignature& catalogQuad : catalogQuads)
+        {
+            bool ratiosMatch = true;
+            for (int idx = 0; idx < 5; ++idx)
+            {
+                if (std::fabs(detectionQuad.edgeRatios[idx] - catalogQuad.edgeRatios[idx]) > 0.03)
+                {
+                    ratiosMatch = false;
+                    break;
+                }
+            }
+            if (!ratiosMatch) {
+                continue;
+            }
+
+            if ((detectionQuad.orientation * catalogQuad.orientation) < 0.0) {
+                continue;
+            }
+
+            const VisibleCatalogStar& a = visibleStars[catalogQuad.indices[0]];
+            const VisibleCatalogStar& b = visibleStars[catalogQuad.indices[1]];
+            const VisibleCatalogStar& c = visibleStars[catalogQuad.indices[2]];
+            const VisibleCatalogStar& d = visibleStars[catalogQuad.indices[3]];
+            const SkyVector center = normalize({
+                a.vector.x + b.vector.x + c.vector.x + d.vector.x,
+                a.vector.y + b.vector.y + c.vector.y + d.vector.y,
+                a.vector.z + b.vector.z + c.vector.z + d.vector.z
+            });
+            if (length(center) <= 0.0) {
+                continue;
+            }
+
+            const double seedAzimuth = normalizeDegrees(std::atan2(center.x, center.y) * 180.0 / kPi);
+            const double seedElevation = std::asin(std::clamp(center.z, -1.0, 1.0)) * 180.0 / kPi;
+
+            std::array<double, 6> angularDistances{{
+                std::acos(std::clamp(dot(a.vector, b.vector), -1.0, 1.0)) * 180.0 / kPi,
+                std::acos(std::clamp(dot(a.vector, c.vector), -1.0, 1.0)) * 180.0 / kPi,
+                std::acos(std::clamp(dot(a.vector, d.vector), -1.0, 1.0)) * 180.0 / kPi,
+                std::acos(std::clamp(dot(b.vector, c.vector), -1.0, 1.0)) * 180.0 / kPi,
+                std::acos(std::clamp(dot(b.vector, d.vector), -1.0, 1.0)) * 180.0 / kPi,
+                std::acos(std::clamp(dot(c.vector, d.vector), -1.0, 1.0)) * 180.0 / kPi
+            }};
+            const double maxAngularDistance = *std::max_element(angularDistances.begin(), angularDistances.end());
+            if (maxAngularDistance <= 0.01) {
+                continue;
+            }
+
+            const double baseSeedFov = std::clamp(
+                maxAngularDistance * static_cast<double>(imageSize.width()) / std::max(1.0, detectionQuad.longestDistance),
+                static_cast<double>(CameraSettings::m_minFov),
+                static_cast<double>(CameraSettings::m_maxFov));
+
+            const std::array<QPointF, 4> detectionPoints {{
+                starDetections[detectionQuad.indices[0]].m_center,
+                starDetections[detectionQuad.indices[1]].m_center,
+                starDetections[detectionQuad.indices[2]].m_center,
+                starDetections[detectionQuad.indices[3]].m_center
+            }};
+            const std::array<VisibleCatalogStar, 4> quadStars {{a, b, c, d}};
+            QVector<int> allowedCatalogIndices {
+                a.catalogIndex,
+                b.catalogIndex,
+                c.catalogIndex,
+                d.catalogIndex
+            };
+
+            for (double fovScale : {0.90, 1.0, 1.10})
+            {
+                const double seedFov = std::clamp(
+                    baseSeedFov * fovScale,
+                    static_cast<double>(CameraSettings::m_minFov),
+                    static_cast<double>(CameraSettings::m_maxFov));
+                const SkyProjector rollProjector = createProjector(settings, imageSize, seedAzimuth, seedElevation, 0.0, seedFov);
+                if (!rollProjector.valid) {
+                    continue;
+                }
+
+                std::array<QPointF, 4> projectedPoints;
+                bool projected = true;
+                for (int idx = 0; idx < 4; ++idx)
+                {
+                    if (!projectAltAz(rollProjector, quadStars[idx].azimuthDegrees, quadStars[idx].elevationDegrees, projectedPoints[idx]))
+                    {
+                        projected = false;
+                        break;
+                    }
+                }
+                if (!projected) {
+                    continue;
+                }
+
+                for (const std::array<int, 4>& permutation : kQuadPermutations)
+                {
+                    const QLineF detectionBase(detectionPoints[0], detectionPoints[1]);
+                    const QLineF projectedBase(projectedPoints[permutation[0]], projectedPoints[permutation[1]]);
+                    double seedRoll = projectedBase.angleTo(detectionBase);
+                    if (!std::isfinite(seedRoll)) {
+                        seedRoll = 0.0;
+                    }
+
+                    const Evaluation candidate = evaluatePose(
+                        settings,
+                        imageSize,
+                        captureDateTimeUtc,
+                        starDetections,
+                        detectionIndices,
+                        seedAzimuth,
+                        seedElevation,
+                        seedRoll,
+                        seedFov,
+                        &allowedCatalogIndices,
+                        settings.m_lensCenterOffsetX,
+                        settings.m_lensCenterOffsetY,
+                        settings.m_lensDistortionK1);
+                    const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
+                        settings,
+                        imageSize,
+                        captureDateTimeUtc,
+                        starDetections,
+                        detectionIndices,
+                        candidate);
+                    if (verifiedCandidate.valid) {
+                        seeds.append(verifiedCandidate);
+                    }
+                }
+            }
+        }
+    }
+
+    std::sort(seeds.begin(), seeds.end(), [](const Evaluation& lhs, const Evaluation& rhs) {
+        if (lhs.matchCount != rhs.matchCount) {
+            return lhs.matchCount > rhs.matchCount;
+        }
+        return lhs.rmsErrorPixels < rhs.rmsErrorPixels;
+    });
+    if (seeds.size() > 12) {
+        seeds.resize(12);
     }
 
     return seeds;
@@ -1629,13 +1969,26 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     if (needBlindSearch)
     {
-        const QVector<Evaluation> blindSeeds = buildBlindTriangleSeeds(
+        const QVector<Evaluation> blindTriangleSeeds = buildBlindTriangleSeeds(
             settings,
             imageSize,
             captureDateTimeUtc,
             starDetections,
             detectionIndices);
-        for (const Evaluation& seed : blindSeeds)
+        for (const Evaluation& seed : blindTriangleSeeds)
+        {
+            if (isBetterEvaluation(seed, best)) {
+                best = seed;
+            }
+        }
+
+        const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
+            settings,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices);
+        for (const Evaluation& seed : blindQuadSeeds)
         {
             if (isBetterEvaluation(seed, best)) {
                 best = seed;

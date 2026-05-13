@@ -322,6 +322,9 @@ struct SkyProjector
     double halfHorizontalFov = 0.0;
     double horizontalScale = 1.0;
     double verticalScale = 1.0;
+    double principalPointX = 0.0;
+    double principalPointY = 0.0;
+    double distortionK1 = 0.0;
     int width = 0;
     int height = 0;
 
@@ -361,6 +364,9 @@ struct SkyProjector
         const double aspect = static_cast<double>(projector.height) / static_cast<double>(projector.width);
         projector.horizontalScale = 1.0;
         projector.verticalScale = aspect;
+        projector.principalPointX = static_cast<double>(projector.width) * 0.5 + settings.m_lensCenterOffsetX;
+        projector.principalPointY = static_cast<double>(projector.height) * 0.5 + settings.m_lensCenterOffsetY;
+        projector.distortionK1 = settings.m_lensDistortionK1;
         projector.valid = projector.verticalScale > 0.0;
         return projector;
     }
@@ -399,14 +405,24 @@ struct SkyProjector
             }
         }();
 
-        const double normalizedX = std::cos(phi) * projectionRadius / horizontalScale;
-        const double normalizedY = std::sin(phi) * projectionRadius / verticalScale;
+        double projectedX = std::cos(phi) * projectionRadius;
+        double projectedY = std::sin(phi) * projectionRadius;
+        if (std::fabs(distortionK1) > 1e-9)
+        {
+            const double radiusSquared = projectedX * projectedX + projectedY * projectedY;
+            const double distortionScale = std::max(0.1, 1.0 + distortionK1 * radiusSquared);
+            projectedX *= distortionScale;
+            projectedY *= distortionScale;
+        }
+
+        const double normalizedX = projectedX / horizontalScale;
+        const double normalizedY = projectedY / verticalScale;
         if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY)) {
             return false;
         }
 
-        point.setX((normalizedX + 1.0) * 0.5 * static_cast<double>(width));
-        point.setY((1.0 - normalizedY) * 0.5 * static_cast<double>(height));
+        point.setX(principalPointX + normalizedX * 0.5 * static_cast<double>(width));
+        point.setY(principalPointY - normalizedY * 0.5 * static_cast<double>(height));
         return true;
     }
 };

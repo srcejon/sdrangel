@@ -40,6 +40,7 @@
 #include <zlib.h>
 
 #include "util/astronomy.h"
+#include "util/profiler.h"
 
 namespace {
 
@@ -1721,6 +1722,8 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                                                 const QDateTime& captureDateTime,
                                                 QVector<CameraPipelineStarDetection>& starDetections)
 {
+    PROFILER_START();
+
     CameraPlateSolveResult result;
     clearSolvedStars(starDetections);
     result.m_catalogSource = currentCatalogSource(settings);
@@ -1821,5 +1824,8 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     result.m_elevationDegrees = best.elevationDegrees;
     result.m_rollDegrees = best.rollDegrees;
     result.m_fovDegrees = best.fovDegrees;
+
+    PROFILER_STOP(__FUNCTION__);
+
     return result;
 }

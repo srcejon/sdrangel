@@ -2344,6 +2344,45 @@ Evaluation searchBestPose(const CameraSettings& settings,
         return false;
     };
 
+    auto refineBestSeedNeighborhood = [&](const char *stage,
+                                          double azimuthStep,
+                                          double elevationStep,
+                                          double rollStep,
+                                          const auto& azimuthOffsets,
+                                          const auto& elevationOffsets,
+                                          const auto& rollOffsets,
+                                          const auto& fovScales) {
+        if (!best.valid) {
+            return;
+        }
+
+        const double centerAzimuth = best.azimuthDegrees;
+        const double centerElevation = best.elevationDegrees;
+        const double centerRoll = best.rollDegrees;
+        const double centerFov = best.fovDegrees;
+
+        for (double azimuthOffset : azimuthOffsets)
+        {
+            for (double elevationOffset : elevationOffsets)
+            {
+                for (double rollOffset : rollOffsets)
+                {
+                    for (double fovScale : fovScales)
+                    {
+                        evaluateSeed(
+                            stage,
+                            centerAzimuth + azimuthOffset * azimuthStep,
+                            centerElevation + elevationOffset * elevationStep,
+                            centerRoll + rollOffset * rollStep,
+                            std::clamp(centerFov * fovScale,
+                                static_cast<double>(CameraSettings::m_minFov),
+                                static_cast<double>(CameraSettings::m_maxFov)));
+                    }
+                }
+            }
+        }
+    };
+
     if (useStartDirection)
     {
         bool guidedSatisfied = false;
@@ -2436,6 +2475,38 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     }
                 }
             }
+
+            if (best.valid && (best.matchCount >= minMatchCount))
+            {
+                const std::array<double, 5> fineAzimuthOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
+                const std::array<double, 3> fineElevationOffsets = {{-1.0, 0.0, 1.0}};
+                const std::array<double, 5> fineRollOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
+                const std::array<double, 3> fineFovScales = {{0.96, 1.00, 1.04}};
+                const double fineAzimuthStep = 2.0;
+                const double fineElevationStep = std::max(0.5, coarseSearchRadius * 0.10);
+                const double fineRollStep = 2.0;
+
+                for (double azimuthOffset : fineAzimuthOffsets)
+                {
+                    for (double elevationOffset : fineElevationOffsets)
+                    {
+                        for (double rollOffset : fineRollOffsets)
+                        {
+                            for (double fovScale : fineFovScales)
+                            {
+                                evaluateSeed(
+                                    "guided-elevation-refine-fine",
+                                    best.azimuthDegrees + azimuthOffset * fineAzimuthStep,
+                                    best.elevationDegrees + elevationOffset * fineElevationStep,
+                                    best.rollDegrees + rollOffset * fineRollStep,
+                                    std::clamp(best.fovDegrees * fovScale,
+                                        static_cast<double>(CameraSettings::m_minFov),
+                                        static_cast<double>(CameraSettings::m_maxFov)));
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
     else if (useStartFov)
@@ -2466,6 +2537,23 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     }
                 }
             }
+        }
+
+        if (best.valid && (best.matchCount >= std::max(2, minMatchCount - 1)))
+        {
+            const std::array<double, 5> fineAzimuthOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
+            const std::array<double, 5> fineElevationOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
+            const std::array<double, 5> fineRollOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
+            const std::array<double, 3> fineFovScales = {{0.96, 1.00, 1.04}};
+            refineBestSeedNeighborhood(
+                "guided-fov-refine-fine",
+                2.0,
+                2.0,
+                2.0,
+                fineAzimuthOffsets,
+                fineElevationOffsets,
+                fineRollOffsets,
+                fineFovScales);
         }
     }
 
@@ -2555,6 +2643,23 @@ Evaluation searchBestPose(const CameraSettings& settings,
                 }
             }
         }
+    }
+
+    if (!useStartDirection && best.valid && (best.matchCount >= std::max(2, minMatchCount - 2)))
+    {
+        const std::array<double, 5> fineAzimuthOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
+        const std::array<double, 5> fineElevationOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
+        const std::array<double, 5> fineRollOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
+        const std::array<double, 3> fineFovScales = {{0.96, 1.00, 1.04}};
+        refineBestSeedNeighborhood(
+            useStartFov ? "guided-fov-postblind-refine-fine" : "blind-refine-fine",
+            2.0,
+            2.0,
+            2.0,
+            fineAzimuthOffsets,
+            fineElevationOffsets,
+            fineRollOffsets,
+            fineFovScales);
     }
 
     if (!best.valid) {

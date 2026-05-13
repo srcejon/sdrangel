@@ -163,7 +163,7 @@ struct SkyProjector
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kVisibleAltitudeFloor = -5.0;
-constexpr int kMaxDetectionsForSolve = 24;
+constexpr int kMaxDetectionsForSolve = 32;
 constexpr double kBlindSeedRatioTolerance = 0.035;
 constexpr double kBlindSeedMaxRmsPixels = 18.0;
 constexpr double kBlindSeedMaxMedianPixels = 14.0;
@@ -823,7 +823,8 @@ bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double e
     return true;
 }
 
-QVector<int> selectDetectionIndicesForSolve(const QVector<CameraPipelineStarDetection>& starDetections)
+QVector<int> selectDetectionIndicesForSolve(const QVector<CameraPipelineStarDetection>& starDetections,
+                                             const QSize& imageSize)
 {
     QVector<int> indices;
     indices.reserve(starDetections.size());
@@ -846,6 +847,31 @@ QVector<int> selectDetectionIndicesForSolve(const QVector<CameraPipelineStarDete
 
     if (indices.size() > kMaxDetectionsForSolve) {
         indices.resize(kMaxDetectionsForSolve);
+    }
+
+    // Prefer stars spread across the image: reject candidates too close to already-selected ones.
+    // This improves the geometric diversity of triangle/quad patterns used for blind matching.
+    const double minSpreadPixels = std::min(imageSize.width(), imageSize.height()) / (kMaxDetectionsForSolve * 0.75);
+    const double minSpreadSquared = minSpreadPixels * minSpreadPixels;
+    QVector<int> spread;
+    spread.reserve(indices.size());
+    for (int candidate : indices) {
+        const QPointF& candidatePos = starDetections[candidate].m_center;
+        bool tooClose = false;
+        for (int selected : spread) {
+            const double dx = candidatePos.x() - starDetections[selected].m_center.x();
+            const double dy = candidatePos.y() - starDetections[selected].m_center.y();
+            if ((dx * dx + dy * dy) < minSpreadSquared) {
+                tooClose = true;
+                break;
+            }
+        }
+        if (!tooClose) {
+            spread.append(candidate);
+        }
+    }
+    if (spread.size() >= 4) {
+        indices = spread;
     }
 
     return indices;
@@ -1341,10 +1367,10 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                                             const QSize& imageSize,
                                             const QDateTime& captureDateTimeUtc,
                                             const QVector<CameraPipelineStarDetection>& starDetections,
-                                            const QVector<int>& detectionIndices)
+                                            const QVector<int>& detectionIndices,
+                                            const QVector<VisibleCatalogStar>& visibleStars)
 {
     QVector<Evaluation> seeds;
-    const QVector<VisibleCatalogStar> visibleStars = buildVisibleCatalog(settings, captureDateTimeUtc, settings.m_plateSolveMaxMagnitude);
     if (visibleStars.size() < settings.m_plateSolveMinMatches) {
         return seeds;
     }
@@ -1355,10 +1381,20 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
         return seeds;
     }
 
+    const int minBlindSeedMatches = std::max(
+        settings.m_plateSolveMinMatches + 1,
+        std::min(6, static_cast<int>(detectionIndices.size())));
+
+    struct TriedDirection { double azimuthDegrees; double elevationDegrees; };
+    QVector<TriedDirection> triedDirections;
+    bool earlyExit = false;
+
     for (const TriangleSignature& detectionTriangle : detectionTriangles)
     {
+        if (earlyExit) break;
         for (const TriangleSignature& catalogTriangle : catalogTriangles)
         {
+            if (earlyExit) break;
             if (std::fabs(detectionTriangle.ratioShortToLong - catalogTriangle.ratioShortToLong) > kBlindSeedRatioTolerance
                 || std::fabs(detectionTriangle.ratioMidToLong - catalogTriangle.ratioMidToLong) > kBlindSeedRatioTolerance)
             {
@@ -1384,7 +1420,25 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
             const double seedAzimuth = normalizeDegrees(std::atan2(center.x, center.y) * 180.0 / kPi);
             const double seedElevation = std::asin(std::clamp(center.z, -1.0, 1.0)) * 180.0 / kPi;
 
-            const double catalogAngularDistance = std::acos(std::clamp(dot(a.vector, b.vector), -1.0, 1.0)) * 180.0 / kPi;
+            // Skip sky directions already tried by a previous triangle match.
+            bool alreadyTried = false;
+            for (const TriedDirection& tried : triedDirections) {
+                if (std::fabs(seedAzimuth - tried.azimuthDegrees) < 3.0
+                    && std::fabs(seedElevation - tried.elevationDegrees) < 3.0)
+                {
+                    alreadyTried = true;
+                    break;
+                }
+            }
+            if (alreadyTried) continue;
+            triedDirections.append({seedAzimuth, seedElevation});
+
+            // Use the longest pairwise angular distance so the scale estimate matches
+            // detectionTriangle.longestDistance regardless of which edge is longest.
+            const double abAngle = std::acos(std::clamp(dot(a.vector, b.vector), -1.0, 1.0)) * 180.0 / kPi;
+            const double acAngle = std::acos(std::clamp(dot(a.vector, c.vector), -1.0, 1.0)) * 180.0 / kPi;
+            const double bcAngle = std::acos(std::clamp(dot(b.vector, c.vector), -1.0, 1.0)) * 180.0 / kPi;
+            const double catalogAngularDistance = std::max({abAngle, acAngle, bcAngle});
             if (catalogAngularDistance <= 0.01) {
                 continue;
             }
@@ -1407,8 +1461,10 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 c.catalogIndex
             };
 
-            for (double fovScale : {0.85, 1.0, 1.15})
+            // Narrower FoV scale sweep is valid now that the scale estimate uses the correct longest edge.
+            for (double fovScale : {0.93, 1.0, 1.07})
             {
+                if (earlyExit) break;
                 const double seedFov = std::clamp(
                     baseSeedFov * fovScale,
                     static_cast<double>(CameraSettings::m_minFov),
@@ -1434,36 +1490,49 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
 
                 for (const std::array<int, 3>& permutation : kTrianglePermutations)
                 {
+                    if (earlyExit) break;
                     const QLineF detectionBase(detectionPoints[0], detectionPoints[1]);
                     const QLineF projectedBase(projectedPoints[permutation[0]], projectedPoints[permutation[1]]);
-                    double seedRoll = projectedBase.angleTo(detectionBase);
-                    if (!std::isfinite(seedRoll)) {
-                        seedRoll = 0.0;
+                    double baseRoll = projectedBase.angleTo(detectionBase);
+                    if (!std::isfinite(baseRoll)) {
+                        baseRoll = 0.0;
                     }
 
-                    const Evaluation candidate = evaluatePose(
-                        settings,
-                        imageSize,
-                        captureDateTimeUtc,
-                        starDetections,
-                        detectionIndices,
-                        seedAzimuth,
-                        seedElevation,
-                        seedRoll,
-                        seedFov,
-                        &allowedCatalogIndices,
-                        settings.m_lensCenterOffsetX,
-                        settings.m_lensCenterOffsetY,
-                        settings.m_lensDistortionK1);
-                    const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
-                        settings,
-                        imageSize,
-                        captureDateTimeUtc,
-                        starDetections,
-                        detectionIndices,
-                        candidate);
-                    if (verifiedCandidate.valid) {
-                        seeds.append(verifiedCandidate);
+                    // Sweep small roll perturbations to tolerate centroiding noise on the reference edge.
+                    for (double rollDelta : {-10.0, -5.0, 0.0, 5.0, 10.0})
+                    {
+                        if (earlyExit) break;
+                        const double seedRoll = baseRoll + rollDelta;
+
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            seedAzimuth,
+                            seedElevation,
+                            seedRoll,
+                            seedFov,
+                            &allowedCatalogIndices,
+                            settings.m_lensCenterOffsetX,
+                            settings.m_lensCenterOffsetY,
+                            settings.m_lensDistortionK1);
+                        const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            candidate);
+                        if (verifiedCandidate.valid) {
+                            seeds.append(verifiedCandidate);
+                            if (verifiedCandidate.matchCount >= minBlindSeedMatches + 3
+                                && verifiedCandidate.rmsErrorPixels < kBlindSeedMaxRmsPixels * 0.5)
+                            {
+                                earlyExit = true;
+                            }
+                        }
                     }
                 }
             }
@@ -1487,10 +1556,10 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                                         const QSize& imageSize,
                                         const QDateTime& captureDateTimeUtc,
                                         const QVector<CameraPipelineStarDetection>& starDetections,
-                                        const QVector<int>& detectionIndices)
+                                        const QVector<int>& detectionIndices,
+                                        const QVector<VisibleCatalogStar>& visibleStars)
 {
     QVector<Evaluation> seeds;
-    const QVector<VisibleCatalogStar> visibleStars = buildVisibleCatalog(settings, captureDateTimeUtc, settings.m_plateSolveMaxMagnitude);
     if (visibleStars.size() < settings.m_plateSolveMinMatches) {
         return seeds;
     }
@@ -1501,10 +1570,20 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
         return seeds;
     }
 
+    const int minBlindSeedMatches = std::max(
+        settings.m_plateSolveMinMatches + 1,
+        std::min(6, static_cast<int>(detectionIndices.size())));
+
+    struct TriedDirection { double azimuthDegrees; double elevationDegrees; };
+    QVector<TriedDirection> triedDirections;
+    bool earlyExit = false;
+
     for (const QuadSignature& detectionQuad : detectionQuads)
     {
+        if (earlyExit) break;
         for (const QuadSignature& catalogQuad : catalogQuads)
         {
+            if (earlyExit) break;
             bool ratiosMatch = true;
             for (int idx = 0; idx < 5; ++idx)
             {
@@ -1537,6 +1616,19 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
 
             const double seedAzimuth = normalizeDegrees(std::atan2(center.x, center.y) * 180.0 / kPi);
             const double seedElevation = std::asin(std::clamp(center.z, -1.0, 1.0)) * 180.0 / kPi;
+
+            // Skip sky directions already tried by a previous quad match.
+            bool alreadyTried = false;
+            for (const TriedDirection& tried : triedDirections) {
+                if (std::fabs(seedAzimuth - tried.azimuthDegrees) < 3.0
+                    && std::fabs(seedElevation - tried.elevationDegrees) < 3.0)
+                {
+                    alreadyTried = true;
+                    break;
+                }
+            }
+            if (alreadyTried) continue;
+            triedDirections.append({seedAzimuth, seedElevation});
 
             std::array<double, 6> angularDistances{{
                 std::acos(std::clamp(dot(a.vector, b.vector), -1.0, 1.0)) * 180.0 / kPi,
@@ -1572,6 +1664,7 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
 
             for (double fovScale : {0.90, 1.0, 1.10})
             {
+                if (earlyExit) break;
                 const double seedFov = std::clamp(
                     baseSeedFov * fovScale,
                     static_cast<double>(CameraSettings::m_minFov),
@@ -1597,36 +1690,49 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
 
                 for (const std::array<int, 4>& permutation : kQuadPermutations)
                 {
+                    if (earlyExit) break;
                     const QLineF detectionBase(detectionPoints[0], detectionPoints[1]);
                     const QLineF projectedBase(projectedPoints[permutation[0]], projectedPoints[permutation[1]]);
-                    double seedRoll = projectedBase.angleTo(detectionBase);
-                    if (!std::isfinite(seedRoll)) {
-                        seedRoll = 0.0;
+                    double baseRoll = projectedBase.angleTo(detectionBase);
+                    if (!std::isfinite(baseRoll)) {
+                        baseRoll = 0.0;
                     }
 
-                    const Evaluation candidate = evaluatePose(
-                        settings,
-                        imageSize,
-                        captureDateTimeUtc,
-                        starDetections,
-                        detectionIndices,
-                        seedAzimuth,
-                        seedElevation,
-                        seedRoll,
-                        seedFov,
-                        &allowedCatalogIndices,
-                        settings.m_lensCenterOffsetX,
-                        settings.m_lensCenterOffsetY,
-                        settings.m_lensDistortionK1);
-                    const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
-                        settings,
-                        imageSize,
-                        captureDateTimeUtc,
-                        starDetections,
-                        detectionIndices,
-                        candidate);
-                    if (verifiedCandidate.valid) {
-                        seeds.append(verifiedCandidate);
+                    // Sweep small roll perturbations to tolerate centroiding noise on the reference edge.
+                    for (double rollDelta : {-10.0, -5.0, 0.0, 5.0, 10.0})
+                    {
+                        if (earlyExit) break;
+                        const double seedRoll = baseRoll + rollDelta;
+
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            seedAzimuth,
+                            seedElevation,
+                            seedRoll,
+                            seedFov,
+                            &allowedCatalogIndices,
+                            settings.m_lensCenterOffsetX,
+                            settings.m_lensCenterOffsetY,
+                            settings.m_lensDistortionK1);
+                        const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
+                            settings,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            candidate);
+                        if (verifiedCandidate.valid) {
+                            seeds.append(verifiedCandidate);
+                            if (verifiedCandidate.matchCount >= minBlindSeedMatches + 3
+                                && verifiedCandidate.rmsErrorPixels < kBlindSeedMaxRmsPixels * 0.5)
+                            {
+                                earlyExit = true;
+                            }
+                        }
                     }
                 }
             }
@@ -1680,6 +1786,32 @@ QVector<Match> buildMatches(const CameraSettings& settings,
                 0
             });
         }
+    }
+
+    // Limit to the closest few candidates per detection to keep geometric support computation O(1) per detection.
+    constexpr int kMaxCandidatesPerDetection = 4;
+    std::sort(candidatePairs.begin(), candidatePairs.end(), [](const CandidatePair& lhs, const CandidatePair& rhs) {
+        if (lhs.detectionIndex != rhs.detectionIndex) {
+            return lhs.detectionIndex < rhs.detectionIndex;
+        }
+        return lhs.distancePixels < rhs.distancePixels;
+    });
+    {
+        QVector<CandidatePair> cappedPairs;
+        cappedPairs.reserve(candidatePairs.size());
+        int lastDetectionIndex = -1;
+        int countForDetection = 0;
+        for (const CandidatePair& pair : candidatePairs) {
+            if (pair.detectionIndex != lastDetectionIndex) {
+                lastDetectionIndex = pair.detectionIndex;
+                countForDetection = 0;
+            }
+            if (countForDetection < kMaxCandidatesPerDetection) {
+                cappedPairs.append(pair);
+                ++countForDetection;
+            }
+        }
+        candidatePairs = std::move(cappedPairs);
     }
 
     for (int i = 0; i < candidatePairs.size(); ++i)
@@ -2163,12 +2295,15 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     if (needBlindSearch)
     {
+        const QVector<VisibleCatalogStar> visibleStars = buildVisibleCatalog(settings, captureDateTimeUtc, settings.m_plateSolveMaxMagnitude);
+
         const QVector<Evaluation> blindTriangleSeeds = buildBlindTriangleSeeds(
             settings,
             imageSize,
             captureDateTimeUtc,
             starDetections,
-            detectionIndices);
+            detectionIndices,
+            visibleStars);
         for (const Evaluation& seed : blindTriangleSeeds)
         {
             logPlateSolveEvaluation("blind-triangle-seed", seed);
@@ -2183,7 +2318,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
             imageSize,
             captureDateTimeUtc,
             starDetections,
-            detectionIndices);
+            detectionIndices,
+            visibleStars);
         for (const Evaluation& seed : blindQuadSeeds)
         {
             logPlateSolveEvaluation("blind-quad-seed", seed);
@@ -2198,7 +2334,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         && (!useStartDirection || !best.valid))
     {
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
-        const std::array<double, 4> wideBlindFovs = {{20.0, 40.0, 80.0, 120.0}};
+        const std::array<double, 6> wideBlindFovs = {{15.0, 25.0, 40.0, 60.0, 90.0, 130.0}};
         for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
         {
             for (double elevationDegrees = -60.0; elevationDegrees <= 75.0; elevationDegrees += 15.0)
@@ -2247,6 +2383,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     double rollCenter = best.rollDegrees;
     double fovCenter = best.fovDegrees;
     double azStep = std::max(0.5, coarseSearchRadius * 0.25);
+    double elStep = azStep;
     double rollStep = std::max(1.0, coarseRollRadius * 0.25);
     double fovStep = std::max(0.5, coarseFovRadius * 0.25);
 
@@ -2267,7 +2404,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             starDetections,
                             detectionIndices,
                             azCenter + azOffset * azStep,
-                            elCenter + elOffset * azStep,
+                            elCenter + elOffset * elStep,
                             rollCenter + rollOffset * rollStep,
                             std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
                             nullptr,
@@ -2289,6 +2426,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         rollCenter = best.rollDegrees;
         fovCenter = best.fovDegrees;
         azStep *= 0.5;
+        elStep *= 0.5;
         rollStep *= 0.5;
         fovStep *= 0.5;
     }
@@ -2307,6 +2445,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     rollCenter = best.rollDegrees;
     fovCenter = best.fovDegrees;
     azStep = std::max(0.1, azStep);
+    elStep = std::max(0.1, elStep);
     rollStep = std::max(0.25, rollStep);
     fovStep = std::max(0.1, fovStep);
 
@@ -2329,7 +2468,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             starDetections,
                             allDetectionIndices,
                             azCenter + azOffset * azStep,
-                            elCenter + elOffset * azStep,
+                            elCenter + elOffset * elStep,
                             rollCenter + rollOffset * rollStep,
                             std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
                             nullptr,
@@ -2353,6 +2492,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         fovCenter = best.fovDegrees;
         if (!improved) {
             azStep *= 0.5;
+            elStep *= 0.5;
             rollStep *= 0.5;
             fovStep *= 0.5;
         }
@@ -2686,7 +2826,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return result;
     }
 
-    const QVector<int> detectionIndices = selectDetectionIndicesForSolve(starDetections);
+    const QVector<int> detectionIndices = selectDetectionIndicesForSolve(starDetections, imageSize);
     if (detectionIndices.size() < settings.m_plateSolveMinMatches) {
         return result;
     }

@@ -2377,16 +2377,12 @@ Evaluation searchBestPose(const CameraSettings& settings,
     else if (useStartElevation)
     {
         const std::array<double, 5> elevationSeedFovScales = {{0.70, 0.85, 1.00, 1.15, 1.30}};
-        bool guidedSatisfied = false;
         for (double fovScale : elevationSeedFovScales)
         {
-            if (guidedSatisfied) break;
             for (double elFactor : coarseOffsetsOrdered)
             {
-                if (guidedSatisfied) break;
                 for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 15.0)
                 {
-                    if (guidedSatisfied) break;
                     for (double rollDegrees : wideRollOffsetsOrdered)
                     {
                         evaluateSeed(
@@ -2397,10 +2393,6 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             std::clamp(static_cast<double>(settings.m_fov) * fovScale,
                                 static_cast<double>(CameraSettings::m_minFov),
                                 static_cast<double>(CameraSettings::m_maxFov)));
-                        if (hasGoodGuidedSeed()) {
-                            guidedSatisfied = true;
-                            break;
-                        }
                     }
                 }
             }
@@ -2440,16 +2432,12 @@ Evaluation searchBestPose(const CameraSettings& settings,
     }
     else if (useStartFov)
     {
-        bool guidedSatisfied = false;
         for (double fovFactor : coarseFovOffsetsOrdered)
         {
-            if (guidedSatisfied) break;
             for (double elevationDegrees = -60.0; elevationDegrees <= 75.0; elevationDegrees += 15.0)
             {
-                if (guidedSatisfied) break;
                 for (double azimuthDegrees = 0.0; azimuthDegrees < 360.0; azimuthDegrees += 30.0)
                 {
-                    if (guidedSatisfied) break;
                     for (double rollDegrees : wideRollOffsetsOrdered)
                     {
                         evaluateSeed(
@@ -2459,10 +2447,6 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             rollDegrees,
                             std::max(static_cast<double>(CameraSettings::m_minFov),
                                      static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius));
-                        if (hasGoodGuidedSeed()) {
-                            guidedSatisfied = true;
-                            break;
-                        }
                     }
                 }
             }

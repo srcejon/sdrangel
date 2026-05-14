@@ -191,6 +191,7 @@ constexpr double kBlindSeedMaxMedianPixels = 14.0;
 constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
 constexpr bool kLogPlateSolveCandidates = false;
 constexpr bool kLogWeakModeCandidatePools = true;
+constexpr bool kLogWeakModeTailRejects = false;
 
 // Normalisation radius (pixels) used by the weak-mode scoring comparator and coarse
 // candidate-pool admission. Set once at the start of CameraPlateSolver::solve() so weak
@@ -3008,6 +3009,9 @@ void logWeakModePoolDecision(const char *stage,
                              const Evaluation *other)
 {
     if (!kLogWeakModeCandidatePools || !candidate.valid) {
+        return;
+    }
+    if (!kLogWeakModeTailRejects && (qstrcmp(decision, "reject-below-tail") == 0)) {
         return;
     }
 

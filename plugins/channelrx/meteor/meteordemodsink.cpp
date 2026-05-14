@@ -28,6 +28,13 @@
 
 MESSAGE_CLASS_DEFINITION(MeteorDemodSink::MsgMeteorDetected, Message)
 
+namespace {
+    Real powerToDB(double power)
+    {
+        return (Real) (10.0 * std::log10(std::max(power, 1e-20)));
+    }
+}
+
 MeteorDemodSink::MeteorDemodSink() :
     m_scopeSink(nullptr),
     m_spectrumSink(nullptr),
@@ -327,9 +334,10 @@ void MeteorDemodSink::sampleToScope(const Complex& sample, double power, double 
     }
 
     m_scopeSampleBuffer[0][m_scopeSampleBufferIndex] = sample;
-    m_scopeSampleBuffer[1][m_scopeSampleBufferIndex] = Complex((Real) power, 0.0f);
-    m_scopeSampleBuffer[2][m_scopeSampleBufferIndex] = Complex((Real) filteredPower, 0.0f);
+    m_scopeSampleBuffer[1][m_scopeSampleBufferIndex] = Complex(powerToDB(power), 0.0f);
+    m_scopeSampleBuffer[2][m_scopeSampleBufferIndex] = Complex(powerToDB(filteredPower), 0.0f);
     m_scopeSampleBuffer[3][m_scopeSampleBufferIndex] = Complex(detected ? 1.0f : 0.0f, 0.0f);
+    m_scopeSampleBuffer[4][m_scopeSampleBufferIndex] = Complex(powerToDB(m_noiseFloor), 0.0f);
     m_scopeSampleBufferIndex++;
 
     if (m_scopeSampleBufferIndex == m_scopeSampleBufferSize)

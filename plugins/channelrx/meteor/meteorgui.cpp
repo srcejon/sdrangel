@@ -328,7 +328,7 @@ void MeteorGUI::setupScope()
     m_scopeVis->setSpectrumVis(m_spectrumVis);
     m_glScope->connectTimer(MainCore::instance()->getMasterTimer());
     m_scopeGUI->setBuddies(m_scopeVis->getInputMessageQueue(), m_scopeVis, m_glScope);
-    m_scopeGUI->setStreams(QStringList({"IQ", "Power", "LPF power", "Meteor"}));
+    m_scopeGUI->setStreams(QStringList({"IQ", "Power dB", "LPF power dB", "Meteor", "Noise floor dB"}));
     m_scopeGUI->setPreTrigger(1);
     m_scopeGUI->setDisplayMode(GLScopeSettings::DisplayX);
 
@@ -349,14 +349,16 @@ void MeteorGUI::setupScope()
     GLScopeSettings::TraceData traceDataPower;
     traceDataPower.m_streamIndex = 1;
     traceDataPower.m_projectionType = Projector::ProjectionReal;
-    traceDataPower.m_amp = 2.0f;
+    traceDataPower.m_amp = 0.02f;
+    traceDataPower.m_ofs = -50.0f;
     traceDataPower.setColor(Qt::green);
     m_scopeGUI->addTrace(traceDataPower);
 
     GLScopeSettings::TraceData traceDataFiltered;
     traceDataFiltered.m_streamIndex = 2;
     traceDataFiltered.m_projectionType = Projector::ProjectionReal;
-    traceDataFiltered.m_amp = 2.0f;
+    traceDataFiltered.m_amp = 0.02f;
+    traceDataFiltered.m_ofs = -50.0f;
     traceDataFiltered.setColor(QColor(255, 128, 0));
     m_scopeGUI->addTrace(traceDataFiltered);
 
@@ -367,6 +369,14 @@ void MeteorGUI::setupScope()
     traceDataMeteor.m_ofs = -0.5f;
     traceDataMeteor.setColor(Qt::red);
     m_scopeGUI->addTrace(traceDataMeteor);
+
+    GLScopeSettings::TraceData traceDataNoiseFloor;
+    traceDataNoiseFloor.m_streamIndex = 4;
+    traceDataNoiseFloor.m_projectionType = Projector::ProjectionReal;
+    traceDataNoiseFloor.m_amp = 0.02f;
+    traceDataNoiseFloor.m_ofs = -50.0f;
+    traceDataNoiseFloor.setColor(QColor(180, 120, 255));
+    m_scopeGUI->addTrace(traceDataNoiseFloor);
 
     GLScopeSettings::TriggerData triggerData;
     triggerData.m_streamIndex = 3;

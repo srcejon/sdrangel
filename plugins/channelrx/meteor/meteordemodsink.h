@@ -37,7 +37,7 @@ class SpectrumVis;
 class MeteorDemodSink : public ChannelSampleSink {
 public:
     enum {
-        m_scopeStreams = 4
+        m_scopeStreams = 5
     };
 
     class MsgMeteorDetected : public Message {

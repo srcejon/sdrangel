@@ -3089,7 +3089,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
     const bool useStartLens = plateSolveStartUsesLens(settings);
     const bool useWeakModeScoring = !useStartDirection && !useElevationSeedOnly;
-    const bool keepMultipleCandidates = candidatePool && !useStartDirection && !useElevationSeedOnly;
+    const bool keepMultipleCandidates = candidatePool && !useStartDirection;
     const int interestingWeakModeMatchCount = std::max(3, minMatchCount - 1);
     const int weakModeCandidatePoolMinMatches = std::max(3, minMatchCount - 2);
     const double fixedCenterOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
@@ -3951,7 +3951,8 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     const bool useStartDirection = plateSolveStartUsesDirection(settings);
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
     const double finalMatchRadius = settings.m_plateSolveFinalMatchRadius;
-    const bool useMultiHypothesisRefine = !useCurrentSettingsOnly && !useStartDirection && !useElevationSeedOnly;
+    const bool useMultiHypothesisRefine = !useCurrentSettingsOnly && !useStartDirection;
+    const bool useWeakModeScoring = !useStartDirection && !useElevationSeedOnly;
 
     // Configure weak-mode scoring normalisation for this solve. Weak FoV/Blind searches need
     // to rank and preserve coarse basins using the loose acquisition geometry; the tighter
@@ -4113,7 +4114,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             coarseCandidates,
             best,
             10,
-            true,
+            useWeakModeScoring,
             "coarse-candidate-pool",
             std::max(3, settings.m_plateSolveMinMatches - 1),
             weakModeCandidatePoolMinMatches);
@@ -4135,7 +4136,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 rescoredCandidates,
                 rescoredCandidate,
                 10,
-                true,
+                useWeakModeScoring,
                 "rescored-candidate-pool",
                 std::max(3, settings.m_plateSolveMinMatches - 1),
                 weakModeCandidatePoolMinMatches);

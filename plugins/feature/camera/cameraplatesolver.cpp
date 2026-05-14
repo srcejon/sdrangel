@@ -177,6 +177,7 @@ constexpr double kBlindSeedMaxRmsPixels = 18.0;
 constexpr double kBlindSeedMaxMedianPixels = 14.0;
 constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
 constexpr bool kLogPlateSolveCandidates = false;
+constexpr bool kLogWeakModeCandidatePools = true;
 
 // Normalisation radius (pixels) used by the weak-mode scoring comparator and coarse
 // candidate-pool admission. Set once at the start of CameraPlateSolver::solve() so weak
@@ -221,6 +222,15 @@ bool isBetterWeakModeEvaluation(const Evaluation& candidate, const Evaluation& b
 bool isBetterEvaluationForMode(const Evaluation& candidate,
                                const Evaluation& best,
                                bool useWeakModeScoring);
+double weakModeEvaluationScore(const Evaluation& evaluation,
+                               double normalizationRadius = g_weakModeNormalizationPixels);
+bool sameEvaluationIdentity(const Evaluation& lhs, const Evaluation& rhs);
+void logWeakModePoolDecision(const char *stage,
+                             const char *decision,
+                             const Evaluation& candidate,
+                             double poolQualityRadius,
+                             const Evaluation *other = nullptr);
+void logWeakModeCandidatePool(const char *stage, const QVector<Evaluation>& candidates);
 
 double degToRad(double value)
 {
@@ -2496,7 +2506,7 @@ bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
 }
 
 double weakModeEvaluationScore(const Evaluation& evaluation,
-                               double normalizationRadius = g_weakModeNormalizationPixels)
+                               double normalizationRadius)
 {
     if (!evaluation.valid) {
         return -std::numeric_limits<double>::infinity();
@@ -2581,7 +2591,9 @@ bool sameEvaluationBasin(const Evaluation& lhs, const Evaluation& rhs)
 void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
                                        const Evaluation& candidate,
                                        int maxCandidates,
-                                       bool useWeakModeScoring = false)
+                                       bool useWeakModeScoring = false,
+                                       const char *stage = nullptr,
+                                       int interestingMatchCount = 0)
 {
     if (!candidate.valid) {
         return;
@@ -2593,10 +2605,16 @@ void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
     // acceptance radius, so rough-but-promising weak-mode basins survive long enough to be
     // rescored and refined.
     if (candidate.matchCount < 3) {
+        if (useWeakModeScoring && stage && (candidate.matchCount >= interestingMatchCount)) {
+            logWeakModePoolDecision(stage, "reject-too-few-matches", candidate, 0.0);
+        }
         return;
     }
     const double poolQualityRadius = std::max(2.0, g_weakModeNormalizationPixels * 0.95);
     if (candidate.rmsErrorPixels > poolQualityRadius) {
+        if (useWeakModeScoring && stage && (candidate.matchCount >= interestingMatchCount)) {
+            logWeakModePoolDecision(stage, "reject-rms-floor", candidate, poolQualityRadius);
+        }
         return;
     }
 
@@ -2605,7 +2623,12 @@ void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
         if (sameEvaluationBasin(candidate, existing))
         {
             if (isBetterEvaluationForMode(candidate, existing, useWeakModeScoring)) {
+                if (useWeakModeScoring && stage && (candidate.matchCount >= interestingMatchCount)) {
+                    logWeakModePoolDecision(stage, "replace-same-basin", candidate, poolQualityRadius, &existing);
+                }
                 existing = candidate;
+            } else if (useWeakModeScoring && stage && (candidate.matchCount >= interestingMatchCount)) {
+                logWeakModePoolDecision(stage, "keep-existing-basin", candidate, poolQualityRadius, &existing);
             }
             return;
         }
@@ -2615,8 +2638,19 @@ void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
     std::sort(candidates.begin(), candidates.end(), [useWeakModeScoring](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterEvaluationForMode(lhs, rhs, useWeakModeScoring);
     });
+    bool candidateKept = true;
     if (candidates.size() > maxCandidates) {
         candidates.resize(maxCandidates);
+        candidateKept = std::any_of(candidates.cbegin(), candidates.cend(), [&candidate](const Evaluation& existing) {
+            return sameEvaluationIdentity(existing, candidate);
+        });
+    }
+    if (useWeakModeScoring && stage && (candidate.matchCount >= interestingMatchCount)) {
+        if (candidateKept) {
+            logWeakModePoolDecision(stage, "add-distinct-basin", candidate, poolQualityRadius);
+        } else {
+            logWeakModePoolDecision(stage, "drop-pool-full", candidate, poolQualityRadius);
+        }
     }
 }
 
@@ -2676,9 +2710,10 @@ Evaluation rescoreWeakModeCandidateWithDistortionSweep(const CameraSettings& set
 
 void logPlateSolveEvaluation(const char *stage,
                              const Evaluation& evaluation,
-                             bool isNewBest = false)
+                             bool isNewBest = false,
+                             bool forceLog = false)
 {
-    if (!evaluation.valid || (!isNewBest && !kLogPlateSolveCandidates)) {
+    if (!evaluation.valid || (!isNewBest && !kLogPlateSolveCandidates && !forceLog)) {
         return;
     }
 
@@ -2694,6 +2729,84 @@ void logPlateSolveEvaluation(const char *stage,
         << " Cx=" << evaluation.centerOffsetXPixels
         << " Cy=" << evaluation.centerOffsetYPixels
         << " K1=" << evaluation.distortionK1;
+}
+
+bool sameEvaluationIdentity(const Evaluation& lhs, const Evaluation& rhs)
+{
+    return lhs.valid == rhs.valid
+        && lhs.matchCount == rhs.matchCount
+        && qFuzzyCompare(lhs.azimuthDegrees + 1.0, rhs.azimuthDegrees + 1.0)
+        && qFuzzyCompare(lhs.elevationDegrees + 1.0, rhs.elevationDegrees + 1.0)
+        && qFuzzyCompare(lhs.rollDegrees + 1.0, rhs.rollDegrees + 1.0)
+        && qFuzzyCompare(lhs.fovDegrees + 1.0, rhs.fovDegrees + 1.0)
+        && qFuzzyCompare(lhs.rmsErrorPixels + 1.0, rhs.rmsErrorPixels + 1.0)
+        && qFuzzyCompare(lhs.centerOffsetXPixels + 1.0, rhs.centerOffsetXPixels + 1.0)
+        && qFuzzyCompare(lhs.centerOffsetYPixels + 1.0, rhs.centerOffsetYPixels + 1.0)
+        && qFuzzyCompare(lhs.distortionK1 + 1.0, rhs.distortionK1 + 1.0);
+}
+
+void logWeakModePoolDecision(const char *stage,
+                             const char *decision,
+                             const Evaluation& candidate,
+                             double poolQualityRadius,
+                             const Evaluation *other)
+{
+    if (!kLogWeakModeCandidatePools || !candidate.valid) {
+        return;
+    }
+
+    qDebug().noquote().nospace()
+        << "CameraPlateSolver[" << stage << "] "
+        << decision
+        << " score=" << weakModeEvaluationScore(candidate)
+        << " matches=" << candidate.matchCount
+        << " RMS=" << candidate.rmsErrorPixels
+        << " poolRmsCap=" << poolQualityRadius
+        << " Az=" << candidate.azimuthDegrees
+        << " El=" << candidate.elevationDegrees
+        << " Roll=" << candidate.rollDegrees
+        << " FoV=" << candidate.fovDegrees
+        << " K1=" << candidate.distortionK1;
+
+    if (other && other->valid) {
+        qDebug().noquote().nospace()
+            << "CameraPlateSolver[" << stage << "] "
+            << "compared-to"
+            << " score=" << weakModeEvaluationScore(*other)
+            << " matches=" << other->matchCount
+            << " RMS=" << other->rmsErrorPixels
+            << " Az=" << other->azimuthDegrees
+            << " El=" << other->elevationDegrees
+            << " Roll=" << other->rollDegrees
+            << " FoV=" << other->fovDegrees
+            << " K1=" << other->distortionK1;
+    }
+}
+
+void logWeakModeCandidatePool(const char *stage, const QVector<Evaluation>& candidates)
+{
+    if (!kLogWeakModeCandidatePools) {
+        return;
+    }
+
+    qDebug().noquote().nospace()
+        << "CameraPlateSolver[" << stage << "] pool-size=" << candidates.size();
+    for (int i = 0; i < candidates.size(); ++i)
+    {
+        const Evaluation& candidate = candidates.at(i);
+        qDebug().noquote().nospace()
+            << "CameraPlateSolver[" << stage << "] #"<< i
+            << " score=" << weakModeEvaluationScore(candidate)
+            << " matches=" << candidate.matchCount
+            << " RMS=" << candidate.rmsErrorPixels
+            << " Az=" << candidate.azimuthDegrees
+            << " El=" << candidate.elevationDegrees
+            << " Roll=" << candidate.rollDegrees
+            << " FoV=" << candidate.fovDegrees
+            << " Cx=" << candidate.centerOffsetXPixels
+            << " Cy=" << candidate.centerOffsetYPixels
+            << " K1=" << candidate.distortionK1;
+    }
 }
 
 Evaluation searchBestPose(const CameraSettings& settings,
@@ -2714,6 +2827,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const bool useStartLens = plateSolveStartUsesLens(settings);
     const bool useWeakModeScoring = !useStartDirection && !useElevationSeedOnly;
     const bool keepMultipleCandidates = candidatePool && !useStartDirection && !useElevationSeedOnly;
+    const int interestingWeakModeMatchCount = std::max(3, minMatchCount - 1);
     const double fixedCenterOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
     const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
     const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
@@ -2758,7 +2872,13 @@ Evaluation searchBestPose(const CameraSettings& settings,
             fixedDistortionK1);
         logPlateSolveEvaluation(stage, candidate);
         if (keepMultipleCandidates) {
-            insertDistinctEvaluationCandidate(*candidatePool, candidate, kMaxMultiHypothesisCandidates, useWeakModeScoring);
+            insertDistinctEvaluationCandidate(
+                *candidatePool,
+                candidate,
+                kMaxMultiHypothesisCandidates,
+                useWeakModeScoring,
+                stage,
+                interestingWeakModeMatchCount);
         }
         if (isBetterEvaluationForMode(candidate, best, useWeakModeScoring)) {
             best = candidate;
@@ -2811,7 +2931,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     }
     else if (useStartElevation)
     {
-        const std::array<double, 5> elevationSeedFovScales = {{0.70, 0.85, 1.00, 1.15, 1.30}};
+        const std::array<double, 5> elevationSeedFovScales = {{1.00, 0.85, 1.15, 0.70, 1.30}};
         for (double fovScale : elevationSeedFovScales)
         {
             for (double elFactor : coarseOffsetsOrdered)
@@ -2912,7 +3032,13 @@ Evaluation searchBestPose(const CameraSettings& settings,
         {
             logPlateSolveEvaluation("blind-triangle-seed", seed);
             if (candidatePool) {
-                insertDistinctEvaluationCandidate(*candidatePool, seed, kMaxMultiHypothesisCandidates, useWeakModeScoring);
+                insertDistinctEvaluationCandidate(
+                    *candidatePool,
+                    seed,
+                    kMaxMultiHypothesisCandidates,
+                    useWeakModeScoring,
+                    "blind-triangle-seed",
+                    interestingWeakModeMatchCount);
             }
             if (isBetterEvaluationForMode(seed, best, useWeakModeScoring)) {
                 best = seed;
@@ -2932,7 +3058,13 @@ Evaluation searchBestPose(const CameraSettings& settings,
         {
             logPlateSolveEvaluation("blind-quad-seed", seed);
             if (candidatePool) {
-                insertDistinctEvaluationCandidate(*candidatePool, seed, kMaxMultiHypothesisCandidates, useWeakModeScoring);
+                insertDistinctEvaluationCandidate(
+                    *candidatePool,
+                    seed,
+                    kMaxMultiHypothesisCandidates,
+                    useWeakModeScoring,
+                    "blind-quad-seed",
+                    interestingWeakModeMatchCount);
             }
             if (isBetterEvaluationForMode(seed, best, useWeakModeScoring)) {
                 best = seed;
@@ -3038,7 +3170,13 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             fixedDistortionK1);
                         logPlateSolveEvaluation("coarse-refine", candidate);
                         if (keepMultipleCandidates) {
-                            insertDistinctEvaluationCandidate(*candidatePool, candidate, kMaxMultiHypothesisCandidates, useWeakModeScoring);
+                            insertDistinctEvaluationCandidate(
+                                *candidatePool,
+                                candidate,
+                                kMaxMultiHypothesisCandidates,
+                                useWeakModeScoring,
+                                "coarse-refine",
+                                interestingWeakModeMatchCount);
                         }
                         if (isBetterEvaluationForMode(candidate, best, useWeakModeScoring)) {
                             best = candidate;
@@ -3106,7 +3244,13 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             fixedDistortionK1);
                         logPlateSolveEvaluation("full-refine", candidate);
                         if (keepMultipleCandidates) {
-                            insertDistinctEvaluationCandidate(*candidatePool, candidate, kMaxMultiHypothesisCandidates, useWeakModeScoring);
+                            insertDistinctEvaluationCandidate(
+                                *candidatePool,
+                                candidate,
+                                kMaxMultiHypothesisCandidates,
+                                useWeakModeScoring,
+                                "full-refine",
+                                interestingWeakModeMatchCount);
                         }
                         if (isBetterEvaluationForMode(candidate, best, useWeakModeScoring)) {
                             best = candidate;
@@ -3638,7 +3782,8 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return result;
     }
     if (useMultiHypothesisRefine) {
-        insertDistinctEvaluationCandidate(coarseCandidates, best, 10, true);
+        insertDistinctEvaluationCandidate(coarseCandidates, best, 10, true, "coarse-candidate-pool", std::max(3, settings.m_plateSolveMinMatches - 1));
+        logWeakModeCandidatePool("coarse-candidate-pool", coarseCandidates);
         QVector<Evaluation> rescoredCandidates;
         rescoredCandidates.reserve(coarseCandidates.size());
         for (const Evaluation& candidate : coarseCandidates)
@@ -3651,9 +3796,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 starDetections,
                 detectionIndices,
                 candidate);
-            logPlateSolveEvaluation("rescore-distortion-sweep", rescoredCandidate);
-            insertDistinctEvaluationCandidate(rescoredCandidates, rescoredCandidate, 10, true);
+            logPlateSolveEvaluation("rescore-distortion-sweep", rescoredCandidate, false, true);
+            insertDistinctEvaluationCandidate(rescoredCandidates, rescoredCandidate, 10, true, "rescored-candidate-pool", std::max(3, settings.m_plateSolveMinMatches - 1));
         }
+        logWeakModeCandidatePool("rescored-candidate-pool", rescoredCandidates);
 
         Evaluation refinedBest;
         for (const Evaluation& candidate : rescoredCandidates)
@@ -3669,7 +3815,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 captureDateTimeUtc,
                 starDetections,
                 candidate);
-            logPlateSolveEvaluation("refine-from-matches-multi", refinedCandidate);
+            logPlateSolveEvaluation("refine-from-matches-multi", refinedCandidate, false, true);
             if (isBetterWeakModeEvaluation(refinedCandidate, refinedBest)) {
                 refinedBest = refinedCandidate;
                 logPlateSolveEvaluation("refine-from-matches-multi", refinedBest, true);

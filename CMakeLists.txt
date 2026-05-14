@@ -850,7 +850,7 @@ endif()
 
 # unfortunately OpenCV library from windows doesn't set the cache option
 if(WIN32)
-  find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn ximgproc)
+  find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn photo ximgproc)
 
   set(OpenCV_INCLUDE_DIRS "${OpenCV_INCLUDE_DIRS}" CACHE INTERNAL "")
   set(OpenCV_LIBS "${OpenCV_LIBS}" CACHE INTERNAL "")
@@ -892,7 +892,7 @@ elseif(ENABLE_EXTERNAL_LIBRARIES STREQUAL "AUTO")
 endif()
 
 if (NOT ENABLE_EXTERNAL_LIBRARIES OR (ENABLE_EXTERNAL_LIBRARIES STREQUAL "AUTO"))
-    find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn) # modatv & camera
+    find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn photo) # modatv & camera
     find_package(LibSigMF) # SigMF recording files support
     find_package(ZLIB) # For DAB
     find_package(FAAD) # For DAB

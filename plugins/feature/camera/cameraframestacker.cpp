@@ -24,6 +24,8 @@
 #include <QFileInfo>
 #include <QTimer>
 
+#include <opencv2/photo.hpp>
+
 #include "util/profiler.h"
 #include "util/fits.h"
 #include "cameraframestacker.h"
@@ -613,49 +615,47 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
 
         try
         {
-            cv::Mat radianceSum = cv::Mat::zeros(frameMat.size(), CV_32FC3);
-            cv::Mat weightSum = cv::Mat::zeros(frameMat.size(), CV_32FC3);
+            std::vector<cv::Mat> ldrFrames;
+            std::vector<float> exposureTimesSeconds;
+            ldrFrames.reserve(m_hdrFrameSamples.size());
+            exposureTimesSeconds.reserve(m_hdrFrameSamples.size());
 
             for (const HdrFrameSample& sample : m_hdrFrameSamples)
             {
-                cv::Mat ldrFrameFloat;
-                const double inputScale = sample.m_frameMat.depth() == CV_16U ? (1.0 / 65535.0) : (1.0 / 255.0);
-                sample.m_frameMat.convertTo(ldrFrameFloat, CV_32FC3, inputScale);
+                cv::Mat ldrFrame8u;
 
-                cv::Mat nonNegativeLdrFrame;
-                cv::Mat clampedLdrFrame;
-                cv::max(ldrFrameFloat, cv::Scalar::all(0.0f), nonNegativeLdrFrame);
-                cv::min(nonNegativeLdrFrame, cv::Scalar::all(1.0f), clampedLdrFrame);
+                if (sample.m_frameMat.depth() == CV_16U) {
+                    sample.m_frameMat.convertTo(ldrFrame8u, CV_8UC3, 255.0 / 65535.0);
+                } else if (sample.m_frameMat.depth() == CV_8U) {
+                    ldrFrame8u = sample.m_frameMat;
+                } else {
+                    sample.m_frameMat.convertTo(ldrFrame8u, CV_8UC3);
+                }
 
-                cv::Mat centered;
-                cv::absdiff(clampedLdrFrame, cv::Scalar::all(0.5f), centered);
-
-                cv::Mat weights;
-                weights = cv::Scalar::all(1.0f) - (centered * 2.0f);
-                cv::max(weights, cv::Scalar::all(0.05f), weights);
-
-                cv::Mat radianceEstimate;
-                clampedLdrFrame.convertTo(radianceEstimate, CV_32FC3, 1.0 / std::max(1.0e-6, sample.m_exposureTimeMs / 1000.0));
-
-                radianceSum += radianceEstimate.mul(weights);
-                weightSum += weights;
+                ldrFrames.push_back(ldrFrame8u);
+                exposureTimesSeconds.push_back(static_cast<float>(std::max(1.0e-6, sample.m_exposureTimeMs / 1000.0)));
             }
 
-            cv::Mat safeWeights;
-            cv::max(weightSum, cv::Scalar::all(1.0e-6f), safeWeights);
+            cv::Mat timesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, exposureTimesSeconds.data());
+
+            cv::Mat responseCurve;
+            cv::Ptr<cv::CalibrateDebevec> calibrateDebevec = cv::createCalibrateDebevec();
+            calibrateDebevec->process(ldrFrames, responseCurve, timesMat);
 
             cv::Mat hdrRadiance;
-            cv::divide(radianceSum, safeWeights, hdrRadiance);
+            cv::Ptr<cv::MergeDebevec> mergeDebevec = cv::createMergeDebevec();
+            mergeDebevec->process(ldrFrames, hdrRadiance, timesMat, responseCurve);
 
-            cv::Mat tonemapDenominator = hdrRadiance + cv::Scalar::all(1.0f);
             cv::Mat tonemapped;
-            cv::divide(hdrRadiance, tonemapDenominator, tonemapped);
-            cv::pow(tonemapped, 1.0 / 2.2, tonemapped);
+            cv::Ptr<cv::TonemapReinhard> tonemap = cv::createTonemapReinhard(2.2f, 0.0f, 1.0f, 0.0f);
+            tonemap->process(hdrRadiance, tonemapped);
+
+            cv::Mat clampedTonemapped;
+            cv::max(tonemapped, cv::Scalar::all(0.0f), clampedTonemapped);
+            cv::min(clampedTonemapped, cv::Scalar::all(1.0f), clampedTonemapped);
 
             cv::Mat ldr8u;
-            tonemapped.convertTo(ldr8u, CV_8UC3, 255.0);
-            cv::max(ldr8u, cv::Scalar::all(0), ldr8u);
-            cv::min(ldr8u, cv::Scalar::all(255), ldr8u);
+            clampedTonemapped.convertTo(ldr8u, CV_8UC3, 255.0);
             outputImage = workingMatToImage(ldr8u);
         }
         catch (const cv::Exception& error)

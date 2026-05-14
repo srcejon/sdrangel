@@ -2041,7 +2041,7 @@ void CameraGUI::updateHdrStackingControls()
         applySetting("stackMethod");
     }
 
-    const bool hdrSelected = m_settings.isHdrStackingEnabled();
+    const bool hdrSelected = (m_settings.m_stackMethod == CameraSettings::StackMethodHDR);
     const bool hdrControlsEnabled = hdrSelected && isHdrStackingSupported();
     const int visibleExposureRows = hdrSelected ? m_settings.getHdrExposureCount() : 0;
     const auto labels = hdrExposureLabels(settingsUI());

@@ -219,6 +219,7 @@ QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
                                     int* outlierCount);
 
 bool isBetterWeakModeEvaluation(const Evaluation& candidate, const Evaluation& best);
+bool isBetterWeakModeRefinedEvaluation(const Evaluation& candidate, const Evaluation& best);
 bool isBetterEvaluationForMode(const Evaluation& candidate,
                                const Evaluation& best,
                                bool useWeakModeScoring);
@@ -2559,6 +2560,31 @@ bool isBetterWeakModeEvaluation(const Evaluation& candidate, const Evaluation& b
         : candidate.fovDegrees < best.fovDegrees;
 }
 
+bool isBetterWeakModeRefinedEvaluation(const Evaluation& candidate, const Evaluation& best)
+{
+    if (!candidate.valid) {
+        return false;
+    }
+    if (!best.valid) {
+        return true;
+    }
+
+    const int matchDelta = candidate.matchCount - best.matchCount;
+    if (std::abs(matchDelta) <= 1)
+    {
+        const double candidateMedian = medianDistancePixels(candidate.matches);
+        const double bestMedian = medianDistancePixels(best.matches);
+        if (!qFuzzyCompare(candidateMedian + 1.0, bestMedian + 1.0)) {
+            return candidateMedian < bestMedian;
+        }
+        if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
+            return candidate.rmsErrorPixels < best.rmsErrorPixels;
+        }
+    }
+
+    return isBetterWeakModeEvaluation(candidate, best);
+}
+
 bool isBetterEvaluationForMode(const Evaluation& candidate,
                                const Evaluation& best,
                                bool useWeakModeScoring)
@@ -3816,7 +3842,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 starDetections,
                 candidate);
             logPlateSolveEvaluation("refine-from-matches-multi", refinedCandidate, false, true);
-            if (isBetterWeakModeEvaluation(refinedCandidate, refinedBest)) {
+            if (isBetterWeakModeRefinedEvaluation(refinedCandidate, refinedBest)) {
                 refinedBest = refinedCandidate;
                 logPlateSolveEvaluation("refine-from-matches-multi", refinedBest, true);
             }

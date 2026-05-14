@@ -115,6 +115,19 @@ struct Evaluation
     QVector<Match> matches;
 };
 
+struct FinalMatchPassEvaluation
+{
+    bool projectorValid = false;
+    Evaluation pose;
+    QVector<ProjectedCatalogStar> projectedStars;
+    QVector<Match> finalMatches;
+    int rawMatchCount = 0;
+    int outlierCount = 0;
+    double rmsErrorPixels = std::numeric_limits<double>::infinity();
+    double medianErrorPixels = std::numeric_limits<double>::infinity();
+    double maxErrorPixels = std::numeric_limits<double>::infinity();
+};
+
 struct TriangleSignature
 {
     double ratioShortToLong = 0.0;
@@ -2585,6 +2598,98 @@ bool isBetterWeakModeRefinedEvaluation(const Evaluation& candidate, const Evalua
     return isBetterWeakModeEvaluation(candidate, best);
 }
 
+FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
+                                                const PlateSolveCatalogContext& catalogContext,
+                                                const QSize& imageSize,
+                                                const QVector<CameraPipelineStarDetection>& starDetections,
+                                                const QVector<int>& allDetectionIndices,
+                                                const Evaluation& candidate,
+                                                double finalMatchRadius)
+{
+    FinalMatchPassEvaluation finalPass;
+    finalPass.pose = candidate;
+
+    const SkyProjector projector = createProjector(
+        settings,
+        imageSize,
+        candidate.azimuthDegrees,
+        candidate.elevationDegrees,
+        candidate.rollDegrees,
+        candidate.fovDegrees,
+        candidate.centerOffsetXPixels,
+        candidate.centerOffsetYPixels,
+        candidate.distortionK1);
+    if (!projector.valid) {
+        return finalPass;
+    }
+
+    finalPass.projectorValid = true;
+    finalPass.projectedStars = buildProjectedCatalog(
+        catalogContext,
+        projector,
+        finalMatchRadius);
+
+    const QVector<Match> allMatches = buildMatches(
+        catalogContext,
+        starDetections,
+        allDetectionIndices,
+        finalPass.projectedStars,
+        finalMatchRadius);
+    finalPass.rawMatchCount = allMatches.size();
+
+    finalPass.finalMatches = rejectOutlierMatches(
+        allMatches,
+        settings.m_plateSolveMinMatches,
+        finalMatchRadius,
+        &finalPass.outlierCount);
+
+    appendSupplementalMatches(
+        starDetections,
+        finalPass.projectedStars,
+        finalMatchRadius,
+        finalPass.finalMatches);
+
+    if (!finalPass.finalMatches.isEmpty())
+    {
+        double sumSquaredError = 0.0;
+        double maxError = 0.0;
+        for (const Match& match : finalPass.finalMatches)
+        {
+            sumSquaredError += match.distancePixels * match.distancePixels;
+            maxError = std::max(maxError, match.distancePixels);
+        }
+        finalPass.rmsErrorPixels = std::sqrt(sumSquaredError / finalPass.finalMatches.size());
+        finalPass.medianErrorPixels = medianDistancePixels(finalPass.finalMatches);
+        finalPass.maxErrorPixels = maxError;
+    }
+
+    return finalPass;
+}
+
+void logFinalMatchPassEvaluation(const char *stage,
+                                 const FinalMatchPassEvaluation& evaluation,
+                                 bool best = false)
+{
+    if (!evaluation.projectorValid) {
+        return;
+    }
+
+    qDebug().noquote().nospace()
+        << "CameraPlateSolver[" << stage << "] "
+        << (best ? "best " : "candidate ")
+        << "Az=" << evaluation.pose.azimuthDegrees
+        << " El=" << evaluation.pose.elevationDegrees
+        << " Roll=" << evaluation.pose.rollDegrees
+        << " FoV=" << evaluation.pose.fovDegrees
+        << " finalMatches=" << evaluation.finalMatches.size()
+        << " rawMatches=" << evaluation.rawMatchCount
+        << " RMS=" << evaluation.rmsErrorPixels
+        << " Median=" << evaluation.medianErrorPixels
+        << " Max=" << evaluation.maxErrorPixels
+        << " projectedStars=" << evaluation.projectedStars.size()
+        << " K1=" << evaluation.pose.distortionK1;
+}
+
 bool isBetterFinalPassEvaluation(const Evaluation& candidate,
                                  const Evaluation& best,
                                  int retainedMatchThreshold)
@@ -2639,6 +2744,56 @@ int minimumRetainedMatchesForFinalPass(const Evaluation& reference,
     // correspondences, not collapse to a tiny high-confidence subset that hijacks the solve.
     const int relativeFloor = static_cast<int>(std::ceil(static_cast<double>(reference.matchCount) * 0.70));
     return std::min(reference.matchCount, std::max(minMatchCount, std::max(3, relativeFloor)));
+}
+
+bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
+                                    const QVector<CameraPipelineStarDetection>& starDetections,
+                                    bool blindMode,
+                                    const FinalMatchPassEvaluation& candidate,
+                                    const FinalMatchPassEvaluation& best)
+{
+    if (!candidate.projectorValid) {
+        return false;
+    }
+    if (!best.projectorValid) {
+        return true;
+    }
+
+    const bool candidateMeetsMinMatches = candidate.finalMatches.size() >= settings.m_plateSolveMinMatches;
+    const bool bestMeetsMinMatches = best.finalMatches.size() >= settings.m_plateSolveMinMatches;
+    const bool candidateBlindAccepted = blindMode
+        && candidateMeetsMinMatches
+        && isAcceptableBlindSolve(settings, starDetections, candidate.finalMatches, candidate.rmsErrorPixels, candidate.maxErrorPixels);
+    const bool bestBlindAccepted = blindMode
+        && bestMeetsMinMatches
+        && isAcceptableBlindSolve(settings, starDetections, best.finalMatches, best.rmsErrorPixels, best.maxErrorPixels);
+
+    if (blindMode && (candidateBlindAccepted != bestBlindAccepted)) {
+        return candidateBlindAccepted;
+    }
+    if (candidateMeetsMinMatches != bestMeetsMinMatches) {
+        return candidateMeetsMinMatches;
+    }
+
+    const int finalMatchDelta = static_cast<int>(candidate.finalMatches.size()) - static_cast<int>(best.finalMatches.size());
+    if (std::abs(finalMatchDelta) <= 1)
+    {
+        if (!qFuzzyCompare(candidate.medianErrorPixels + 1.0, best.medianErrorPixels + 1.0)) {
+            return candidate.medianErrorPixels < best.medianErrorPixels;
+        }
+        if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
+            return candidate.rmsErrorPixels < best.rmsErrorPixels;
+        }
+    }
+
+    if (finalMatchDelta != 0) {
+        return finalMatchDelta > 0;
+    }
+    if (candidate.rawMatchCount != best.rawMatchCount) {
+        return candidate.rawMatchCount > best.rawMatchCount;
+    }
+
+    return isBetterWeakModeRefinedEvaluation(candidate.pose, best.pose);
 }
 
 bool isBetterEvaluationForMode(const Evaluation& candidate,
@@ -3915,6 +4070,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     }
 
     QVector<Evaluation> coarseCandidates;
+    FinalMatchPassEvaluation selectedFinalPass;
     Evaluation best = searchBestPose(
         settings,
         catalogContext,
@@ -3928,6 +4084,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     }
     if (useMultiHypothesisRefine) {
         const int weakModeCandidatePoolMinMatches = std::max(3, settings.m_plateSolveMinMatches - 2);
+        const int weakModeRefineMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
         insertDistinctEvaluationCandidate(
             coarseCandidates,
             best,
@@ -3962,9 +4119,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         logWeakModeCandidatePool("rescored-candidate-pool", rescoredCandidates);
 
         Evaluation refinedBest;
+        FinalMatchPassEvaluation refinedBestFinalPass;
         for (const Evaluation& candidate : rescoredCandidates)
         {
-            if (!candidate.valid || (candidate.matchCount < settings.m_plateSolveMinMatches)) {
+            if (!candidate.valid || (candidate.matchCount < weakModeRefineMinMatches)) {
                 continue;
             }
 
@@ -3976,14 +4134,37 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 starDetections,
                 candidate);
             logPlateSolveEvaluation("refine-from-matches-multi", refinedCandidate, false, true);
-            if (isBetterWeakModeRefinedEvaluation(refinedCandidate, refinedBest)) {
+            if (!refinedCandidate.valid || (refinedCandidate.matchCount < weakModeRefineMinMatches)) {
+                continue;
+            }
+
+            const FinalMatchPassEvaluation finalPassEvaluation = evaluateFinalMatchPass(
+                settings,
+                catalogContext,
+                imageSize,
+                starDetections,
+                allDetectionIndices,
+                refinedCandidate,
+                finalMatchRadius);
+            logFinalMatchPassEvaluation("final-match-pass-multi", finalPassEvaluation);
+
+            if (isBetterWeakModeFinalMatchPass(
+                    settings,
+                    starDetections,
+                    !useStartFov,
+                    finalPassEvaluation,
+                    refinedBestFinalPass))
+            {
                 refinedBest = refinedCandidate;
+                refinedBestFinalPass = finalPassEvaluation;
                 logPlateSolveEvaluation("refine-from-matches-multi", refinedBest, true);
+                logFinalMatchPassEvaluation("final-match-pass-multi", refinedBestFinalPass, true);
             }
         }
 
         if (refinedBest.valid) {
             best = refinedBest;
+            selectedFinalPass = refinedBestFinalPass;
         } else {
             best = refinePoseFromMatches(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, best);
             logPlateSolveEvaluation("refine-from-matches", best, true);
@@ -3992,7 +4173,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         best = refinePoseFromMatches(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, best);
         logPlateSolveEvaluation("refine-from-matches", best, true);
     }
-    if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
+    if (!best.valid || (!selectedFinalPass.projectorValid && (best.matchCount < settings.m_plateSolveMinMatches))) {
         qDebug().noquote().nospace()
             << "CameraPlateSolver: refine stage rejected candidate"
             << " valid=" << best.valid
@@ -4007,66 +4188,43 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return result;
     }
 
-    const SkyProjector finalProjector = createProjector(
-        settings,
-        imageSize,
-        best.azimuthDegrees,
-        best.elevationDegrees,
-        best.rollDegrees,
-        best.fovDegrees,
-        best.centerOffsetXPixels,
-        best.centerOffsetYPixels,
-        best.distortionK1);
-    if (!finalProjector.valid) {
+    if (!selectedFinalPass.projectorValid) {
+        selectedFinalPass = evaluateFinalMatchPass(
+            settings,
+            catalogContext,
+            imageSize,
+            starDetections,
+            allDetectionIndices,
+            best,
+            finalMatchRadius);
+    }
+    if (!selectedFinalPass.projectorValid) {
         return result;
     }
 
-    const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
-        catalogContext,
-        finalProjector,
-        finalMatchRadius);
+    const QVector<ProjectedCatalogStar>& projectedStars = selectedFinalPass.projectedStars;
+    const QVector<Match>& finalMatches = selectedFinalPass.finalMatches;
     result.m_catalogCandidateStars = projectedStars.size();
-    const QVector<Match> allMatches = buildMatches(
-        catalogContext,
-        starDetections,
-        allDetectionIndices,
-        projectedStars,
-        finalMatchRadius);
-
-    int outlierCount = 0;
-    QVector<Match> finalMatches = rejectOutlierMatches(
-        allMatches,
-        settings.m_plateSolveMinMatches,
-        finalMatchRadius,
-        &outlierCount);
-    result.m_outlierStars = outlierCount;
-
-    appendSupplementalMatches(
-        starDetections,
-        projectedStars,
-        finalMatchRadius,
-        finalMatches);
+    result.m_outlierStars = selectedFinalPass.outlierCount;
 
     if (finalMatches.size() < settings.m_plateSolveMinMatches) {
         qDebug().noquote().nospace()
             << "CameraPlateSolver: final match pass rejected candidate"
             << " finalMatches=" << finalMatches.size()
             << " minMatches=" << settings.m_plateSolveMinMatches
-            << " rawMatches=" << allMatches.size()
-            << " outliers=" << outlierCount
+            << " rawMatches=" << selectedFinalPass.rawMatchCount
+            << " outliers=" << selectedFinalPass.outlierCount
             << " finalRadius=" << finalMatchRadius
             << " projectedStars=" << projectedStars.size()
-            << " Az=" << best.azimuthDegrees
-            << " El=" << best.elevationDegrees
-            << " Roll=" << best.rollDegrees
-            << " FoV=" << best.fovDegrees
-            << " K1=" << best.distortionK1;
+            << " Az=" << selectedFinalPass.pose.azimuthDegrees
+            << " El=" << selectedFinalPass.pose.elevationDegrees
+            << " Roll=" << selectedFinalPass.pose.rollDegrees
+            << " FoV=" << selectedFinalPass.pose.fovDegrees
+            << " K1=" << selectedFinalPass.pose.distortionK1;
         PROFILER_STOP(__FUNCTION__ ": insufficient matches");
         return result;
     }
 
-    double sumSquaredError = 0.0;
-    double maxError = 0.0;
     QHash<int, QPointF> projectedPointsByCatalogIndex;
     for (const ProjectedCatalogStar& projectedStar : projectedStars) {
         projectedPointsByCatalogIndex.insert(projectedStar.catalogIndex, projectedStar.point);
@@ -4081,14 +4239,12 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
         detection.m_catalogSpectralType = catalogStar.spectralType;
         detection.m_solved = true;
-        sumSquaredError += match.distancePixels * match.distancePixels;
-        maxError = std::max(maxError, match.distancePixels);
     }
 
     result.m_solved = true;
     result.m_matchedStars = finalMatches.size();
-    result.m_rmsErrorPixels = std::sqrt(sumSquaredError / finalMatches.size());
-    result.m_maxErrorPixels = maxError;
+    result.m_rmsErrorPixels = selectedFinalPass.rmsErrorPixels;
+    result.m_maxErrorPixels = selectedFinalPass.maxErrorPixels;
     if (useElevationSeedOnly
         && !isAcceptableElevationSeedSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
@@ -4114,13 +4270,13 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         PROFILER_STOP(__FUNCTION__ ": unacceptable blind solve");
         return CameraPlateSolveResult();
     }
-    result.m_azimuthDegrees = best.azimuthDegrees;
-    result.m_elevationDegrees = best.elevationDegrees;
-    result.m_rollDegrees = best.rollDegrees;
-    result.m_fovDegrees = best.fovDegrees;
-    result.m_centerOffsetXPixels = best.centerOffsetXPixels;
-    result.m_centerOffsetYPixels = best.centerOffsetYPixels;
-    result.m_distortionK1 = best.distortionK1;
+    result.m_azimuthDegrees = selectedFinalPass.pose.azimuthDegrees;
+    result.m_elevationDegrees = selectedFinalPass.pose.elevationDegrees;
+    result.m_rollDegrees = selectedFinalPass.pose.rollDegrees;
+    result.m_fovDegrees = selectedFinalPass.pose.fovDegrees;
+    result.m_centerOffsetXPixels = selectedFinalPass.pose.centerOffsetXPixels;
+    result.m_centerOffsetYPixels = selectedFinalPass.pose.centerOffsetYPixels;
+    result.m_distortionK1 = selectedFinalPass.pose.distortionK1;
 
     logUnmatchedDetections(
         settings,

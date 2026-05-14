@@ -2325,6 +2325,54 @@ bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
         : candidate.fovDegrees < best.fovDegrees;
 }
 
+double angularDistanceDegrees(double lhs, double rhs)
+{
+    double delta = std::fabs(lhs - rhs);
+    while (delta > 360.0) {
+        delta -= 360.0;
+    }
+    if (delta > 180.0) {
+        delta = 360.0 - delta;
+    }
+    return delta;
+}
+
+bool sameEvaluationBasin(const Evaluation& lhs, const Evaluation& rhs)
+{
+    return angularDistanceDegrees(lhs.azimuthDegrees, rhs.azimuthDegrees) <= 20.0
+        && std::fabs(lhs.elevationDegrees - rhs.elevationDegrees) <= 10.0
+        && angularDistanceDegrees(lhs.rollDegrees, rhs.rollDegrees) <= 20.0
+        && std::fabs(lhs.fovDegrees - rhs.fovDegrees) <= 10.0;
+}
+
+void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
+                                       const Evaluation& candidate,
+                                       int maxCandidates)
+{
+    if (!candidate.valid) {
+        return;
+    }
+
+    for (Evaluation& existing : candidates)
+    {
+        if (sameEvaluationBasin(candidate, existing))
+        {
+            if (isBetterEvaluation(candidate, existing)) {
+                existing = candidate;
+            }
+            return;
+        }
+    }
+
+    candidates.append(candidate);
+    std::sort(candidates.begin(), candidates.end(), [](const Evaluation& lhs, const Evaluation& rhs) {
+        return isBetterEvaluation(lhs, rhs);
+    });
+    if (candidates.size() > maxCandidates) {
+        candidates.resize(maxCandidates);
+    }
+}
+
 void logPlateSolveEvaluation(const char *stage,
                              const Evaluation& evaluation,
                              bool isNewBest = false)
@@ -2352,15 +2400,18 @@ Evaluation searchBestPose(const CameraSettings& settings,
                           const QSize& imageSize,
                           const QDateTime& captureDateTimeUtc,
                           const QVector<CameraPipelineStarDetection>& starDetections,
-                          const QVector<int>& detectionIndices)
+                          const QVector<int>& detectionIndices,
+                          QVector<Evaluation>* candidatePool = nullptr)
 {
     Evaluation best;
+    constexpr int kMaxMultiHypothesisCandidates = 5;
     const int minMatchCount = std::max(1, settings.m_plateSolveMinMatches);
     const bool useStartFov = plateSolveStartUsesFov(settings);
     const bool useStartElevation = plateSolveStartUsesElevation(settings);
     const bool useStartDirection = plateSolveStartUsesDirection(settings);
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
     const bool useStartLens = plateSolveStartUsesLens(settings);
+    const bool keepMultipleCandidates = candidatePool && !useStartDirection && !useElevationSeedOnly;
     const double fixedCenterOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
     const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
     const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
@@ -2404,6 +2455,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
             fixedCenterOffsetY,
             fixedDistortionK1);
         logPlateSolveEvaluation(stage, candidate);
+        if (keepMultipleCandidates) {
+            insertDistinctEvaluationCandidate(*candidatePool, candidate, kMaxMultiHypothesisCandidates);
+        }
         if (isBetterEvaluation(candidate, best)) {
             best = candidate;
             logPlateSolveEvaluation(stage, best, true);
@@ -2555,6 +2609,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
         for (const Evaluation& seed : blindTriangleSeeds)
         {
             logPlateSolveEvaluation("blind-triangle-seed", seed);
+            if (candidatePool) {
+                insertDistinctEvaluationCandidate(*candidatePool, seed, kMaxMultiHypothesisCandidates);
+            }
             if (isBetterEvaluation(seed, best)) {
                 best = seed;
                 logPlateSolveEvaluation("blind-triangle-seed", best, true);
@@ -2572,6 +2629,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
         for (const Evaluation& seed : blindQuadSeeds)
         {
             logPlateSolveEvaluation("blind-quad-seed", seed);
+            if (candidatePool) {
+                insertDistinctEvaluationCandidate(*candidatePool, seed, kMaxMultiHypothesisCandidates);
+            }
             if (isBetterEvaluation(seed, best)) {
                 best = seed;
                 logPlateSolveEvaluation("blind-quad-seed", best, true);
@@ -2662,6 +2722,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             fixedCenterOffsetY,
                             fixedDistortionK1);
                         logPlateSolveEvaluation("coarse-refine", candidate);
+                        if (keepMultipleCandidates) {
+                            insertDistinctEvaluationCandidate(*candidatePool, candidate, kMaxMultiHypothesisCandidates);
+                        }
                         if (isBetterEvaluation(candidate, best)) {
                             best = candidate;
                             logPlateSolveEvaluation("coarse-refine", best, true);
@@ -2727,6 +2790,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             fixedCenterOffsetY,
                             fixedDistortionK1);
                         logPlateSolveEvaluation("full-refine", candidate);
+                        if (keepMultipleCandidates) {
+                            insertDistinctEvaluationCandidate(*candidatePool, candidate, kMaxMultiHypothesisCandidates);
+                        }
                         if (isBetterEvaluation(candidate, best)) {
                             best = candidate;
                             logPlateSolveEvaluation("full-refine", best, true);
@@ -3082,6 +3148,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     const bool useStartDirection = plateSolveStartUsesDirection(settings);
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
     const double finalMatchRadius = settings.m_plateSolveFinalMatchRadius;
+    const bool useMultiHypothesisRefine = !useCurrentSettingsOnly && !useStartDirection && !useElevationSeedOnly;
 
     if (starDetections.isEmpty()) {
         return result;
@@ -3206,12 +3273,51 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return result;
     }
 
-    Evaluation best = searchBestPose(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, detectionIndices);
+    QVector<Evaluation> coarseCandidates;
+    Evaluation best = searchBestPose(
+        settings,
+        catalogContext,
+        imageSize,
+        captureDateTimeUtc,
+        starDetections,
+        detectionIndices,
+        useMultiHypothesisRefine ? &coarseCandidates : nullptr);
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
         return result;
     }
-    best = refinePoseFromMatches(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, best);
-    logPlateSolveEvaluation("refine-from-matches", best, true);
+    if (useMultiHypothesisRefine) {
+        insertDistinctEvaluationCandidate(coarseCandidates, best, 5);
+        Evaluation refinedBest;
+        for (const Evaluation& candidate : coarseCandidates)
+        {
+            if (!candidate.valid || (candidate.matchCount < settings.m_plateSolveMinMatches)) {
+                continue;
+            }
+
+            Evaluation refinedCandidate = refinePoseFromMatches(
+                settings,
+                catalogContext,
+                imageSize,
+                captureDateTimeUtc,
+                starDetections,
+                candidate);
+            logPlateSolveEvaluation("refine-from-matches-multi", refinedCandidate);
+            if (isBetterEvaluation(refinedCandidate, refinedBest)) {
+                refinedBest = refinedCandidate;
+                logPlateSolveEvaluation("refine-from-matches-multi", refinedBest, true);
+            }
+        }
+
+        if (refinedBest.valid) {
+            best = refinedBest;
+        } else {
+            best = refinePoseFromMatches(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, best);
+            logPlateSolveEvaluation("refine-from-matches", best, true);
+        }
+    } else {
+        best = refinePoseFromMatches(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, best);
+        logPlateSolveEvaluation("refine-from-matches", best, true);
+    }
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
         qDebug() << "CameraPlateSolver: refinePoseFromMatches failed to keep a valid solution";
         return result;

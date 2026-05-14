@@ -178,10 +178,10 @@ constexpr double kBlindSeedMaxMedianPixels = 14.0;
 constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
 constexpr bool kLogPlateSolveCandidates = false;
 
-// Normalisation radius (pixels) used by the weak-mode scoring comparator. Set once at the
-// start of CameraPlateSolver::solve() so that all candidate comparisons within a single
-// solve agree on how aggressively RMS error penalises match count. Defaults to a sensible
-// value for the typical 24 px acquisition radius.
+// Normalisation radius (pixels) used by the weak-mode scoring comparator and coarse
+// candidate-pool admission. Set once at the start of CameraPlateSolver::solve() so weak
+// FoV/Blind searches compare basins against the loose acquisition geometry rather than the
+// tighter final acceptance radius.
 thread_local double g_weakModeNormalizationPixels = 24.0;
 const char* const kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 const char* const kDownloadedCatalogDir = "camera";
@@ -2588,9 +2588,10 @@ void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
     }
 
     // Quality floor: don't admit obvious noise into the multi-hypothesis pool. A candidate
-    // must have at least 3 matches *and* an RMS well inside the acquisition radius. Without
-    // this, the bounded pool fills with high-FoV shotgun poses (many spurious matches near
-    // the radius) and crowds out a tighter real solution that surfaces later.
+    // must have at least 3 matches *and* an RMS well inside the acquisition radius. This is
+    // intentionally based on the coarse acquisition geometry, not the much tighter final
+    // acceptance radius, so rough-but-promising weak-mode basins survive long enough to be
+    // rescored and refined.
     if (candidate.matchCount < 3) {
         return;
     }
@@ -3484,10 +3485,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     const double finalMatchRadius = settings.m_plateSolveFinalMatchRadius;
     const bool useMultiHypothesisRefine = !useCurrentSettingsOnly && !useStartDirection && !useElevationSeedOnly;
 
-    // Configure weak-mode scoring normalisation for this solve. Using the final (tighter)
-    // radius means RMS values near the acceptable limit yield ~half-credit per match, which
-    // prevents shotgun poses (many loose coincidences) from outranking tight clusters.
-    g_weakModeNormalizationPixels = std::max(1.0, finalMatchRadius);
+    // Configure weak-mode scoring normalisation for this solve. Weak FoV/Blind searches need
+    // to rank and preserve coarse basins using the loose acquisition geometry; the tighter
+    // final-match radius is reserved for the late refinement/acceptance stages.
+    g_weakModeNormalizationPixels = std::max(1.0, static_cast<double>(settings.m_plateSolveMatchRadius));
 
     if (starDetections.isEmpty()) {
         return result;

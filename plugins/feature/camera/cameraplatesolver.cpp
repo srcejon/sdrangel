@@ -2373,6 +2373,45 @@ void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
     }
 }
 
+Evaluation rescoreWeakModeCandidateWithDistortionSweep(const CameraSettings& settings,
+                                                       const PlateSolveCatalogContext& catalogContext,
+                                                       const QSize& imageSize,
+                                                       const QDateTime& captureDateTimeUtc,
+                                                       const QVector<CameraPipelineStarDetection>& starDetections,
+                                                       const QVector<int>& detectionIndices,
+                                                       const Evaluation& candidate)
+{
+    if (!candidate.valid) {
+        return candidate;
+    }
+
+    Evaluation best = candidate;
+    const std::array<double, 4> distortionSweep = {{-0.05, -0.025, 0.0, 0.025}};
+    for (double distortionK1 : distortionSweep)
+    {
+        const Evaluation rescored = evaluatePose(
+            settings,
+            catalogContext,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices,
+            candidate.azimuthDegrees,
+            candidate.elevationDegrees,
+            candidate.rollDegrees,
+            candidate.fovDegrees,
+            nullptr,
+            0.0,
+            0.0,
+            distortionK1);
+        if (isBetterEvaluation(rescored, best)) {
+            best = rescored;
+        }
+    }
+
+    return best;
+}
+
 void logPlateSolveEvaluation(const char *stage,
                              const Evaluation& evaluation,
                              bool isNewBest = false)
@@ -2404,7 +2443,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                           QVector<Evaluation>* candidatePool = nullptr)
 {
     Evaluation best;
-    constexpr int kMaxMultiHypothesisCandidates = 5;
+    constexpr int kMaxMultiHypothesisCandidates = 10;
     const int minMatchCount = std::max(1, settings.m_plateSolveMinMatches);
     const bool useStartFov = plateSolveStartUsesFov(settings);
     const bool useStartElevation = plateSolveStartUsesElevation(settings);
@@ -3286,9 +3325,25 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return result;
     }
     if (useMultiHypothesisRefine) {
-        insertDistinctEvaluationCandidate(coarseCandidates, best, 5);
-        Evaluation refinedBest;
+        insertDistinctEvaluationCandidate(coarseCandidates, best, 10);
+        QVector<Evaluation> rescoredCandidates;
+        rescoredCandidates.reserve(coarseCandidates.size());
         for (const Evaluation& candidate : coarseCandidates)
+        {
+            const Evaluation rescoredCandidate = rescoreWeakModeCandidateWithDistortionSweep(
+                settings,
+                catalogContext,
+                imageSize,
+                captureDateTimeUtc,
+                starDetections,
+                detectionIndices,
+                candidate);
+            logPlateSolveEvaluation("rescore-distortion-sweep", rescoredCandidate);
+            insertDistinctEvaluationCandidate(rescoredCandidates, rescoredCandidate, 10);
+        }
+
+        Evaluation refinedBest;
+        for (const Evaluation& candidate : rescoredCandidates)
         {
             if (!candidate.valid || (candidate.matchCount < settings.m_plateSolveMinMatches)) {
                 continue;

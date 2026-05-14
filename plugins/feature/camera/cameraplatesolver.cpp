@@ -198,6 +198,11 @@ constexpr bool kLogWeakModeTailRejects = false;
 // FoV/Blind searches compare basins against the loose acquisition geometry rather than the
 // tighter final acceptance radius.
 thread_local double g_weakModeNormalizationPixels = 24.0;
+thread_local bool g_useElevationSeedPreference = false;
+thread_local double g_elevationSeedReferenceDegrees = 0.0;
+thread_local double g_elevationSeedReferenceFovDegrees = 0.0;
+thread_local double g_elevationSeedScaleDegrees = 1.0;
+thread_local double g_elevationSeedFovScaleDegrees = 1.0;
 const char* const kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 const char* const kDownloadedCatalogDir = "camera";
 const char* const kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
@@ -2534,7 +2539,23 @@ double weakModeEvaluationScore(const Evaluation& evaluation,
     const double normalizedRms = evaluation.rmsErrorPixels / safeRadius;
     const double clampedRms = std::min(1.0, std::max(0.0, normalizedRms));
     const double perMatchQuality = 1.0 - 0.5 * clampedRms * clampedRms;
-    return static_cast<double>(evaluation.matchCount) * perMatchQuality;
+    double score = static_cast<double>(evaluation.matchCount) * perMatchQuality;
+
+    if (g_useElevationSeedPreference)
+    {
+        const double safeElevationScale = std::max(1.0, g_elevationSeedScaleDegrees);
+        const double safeFovScale = std::max(1.0, g_elevationSeedFovScaleDegrees);
+        const double normalizedElevationDelta = std::fabs(
+            evaluation.elevationDegrees - g_elevationSeedReferenceDegrees) / safeElevationScale;
+        const double normalizedFovDelta = std::fabs(
+            evaluation.fovDegrees - g_elevationSeedReferenceFovDegrees) / safeFovScale;
+        const double seedAffinity = 1.0 / (1.0
+            + 0.5 * normalizedElevationDelta * normalizedElevationDelta
+            + 1.5 * normalizedFovDelta * normalizedFovDelta);
+        score *= seedAffinity;
+    }
+
+    return score;
 }
 
 bool isBetterWeakModeEvaluation(const Evaluation& candidate, const Evaluation& best)
@@ -3088,7 +3109,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const bool useStartDirection = plateSolveStartUsesDirection(settings);
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
     const bool useStartLens = plateSolveStartUsesLens(settings);
-    const bool useWeakModeScoring = !useStartDirection && !useElevationSeedOnly;
+    const bool useWeakModeScoring = !useStartDirection;
     const bool keepMultipleCandidates = candidatePool && !useStartDirection;
     const int interestingWeakModeMatchCount = std::max(3, minMatchCount - 1);
     const int weakModeCandidatePoolMinMatches = std::max(3, minMatchCount - 2);
@@ -3952,12 +3973,17 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
     const double finalMatchRadius = settings.m_plateSolveFinalMatchRadius;
     const bool useMultiHypothesisRefine = !useCurrentSettingsOnly && !useStartDirection;
-    const bool useWeakModeScoring = !useStartDirection && !useElevationSeedOnly;
+    const bool useWeakModeScoring = !useStartDirection;
 
     // Configure weak-mode scoring normalisation for this solve. Weak FoV/Blind searches need
     // to rank and preserve coarse basins using the loose acquisition geometry; the tighter
     // final-match radius is reserved for the late refinement/acceptance stages.
     g_weakModeNormalizationPixels = std::max(1.0, static_cast<double>(settings.m_plateSolveMatchRadius));
+    g_useElevationSeedPreference = useElevationSeedOnly;
+    g_elevationSeedReferenceDegrees = settings.m_elevation;
+    g_elevationSeedReferenceFovDegrees = settings.m_fov;
+    g_elevationSeedScaleDegrees = std::max(2.0, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35);
+    g_elevationSeedFovScaleDegrees = std::max(4.0, static_cast<double>(settings.m_fov) * 0.05);
 
     if (starDetections.isEmpty()) {
         return result;

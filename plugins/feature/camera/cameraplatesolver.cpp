@@ -3882,9 +3882,17 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         logPlateSolveEvaluation("refine-from-matches", best, true);
     }
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
-        if (kLogPlateSolveCandidates) {
-            qDebug() << "CameraPlateSolver: refinePoseFromMatches failed to keep a valid solution";
-        }
+        qDebug().noquote().nospace()
+            << "CameraPlateSolver: refine stage rejected candidate"
+            << " valid=" << best.valid
+            << " matches=" << best.matchCount
+            << " minMatches=" << settings.m_plateSolveMinMatches
+            << " RMS=" << best.rmsErrorPixels
+            << " Az=" << best.azimuthDegrees
+            << " El=" << best.elevationDegrees
+            << " Roll=" << best.rollDegrees
+            << " FoV=" << best.fovDegrees
+            << " K1=" << best.distortionK1;
         return result;
     }
 
@@ -3929,6 +3937,19 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         finalMatches);
 
     if (finalMatches.size() < settings.m_plateSolveMinMatches) {
+        qDebug().noquote().nospace()
+            << "CameraPlateSolver: final match pass rejected candidate"
+            << " finalMatches=" << finalMatches.size()
+            << " minMatches=" << settings.m_plateSolveMinMatches
+            << " rawMatches=" << allMatches.size()
+            << " outliers=" << outlierCount
+            << " finalRadius=" << finalMatchRadius
+            << " projectedStars=" << projectedStars.size()
+            << " Az=" << best.azimuthDegrees
+            << " El=" << best.elevationDegrees
+            << " Roll=" << best.rollDegrees
+            << " FoV=" << best.fovDegrees
+            << " K1=" << best.distortionK1;
         PROFILER_STOP(__FUNCTION__ ": insufficient matches");
         return result;
     }

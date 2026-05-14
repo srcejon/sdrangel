@@ -2587,7 +2587,7 @@ bool isBetterWeakModeRefinedEvaluation(const Evaluation& candidate, const Evalua
 
 bool isBetterFinalPassEvaluation(const Evaluation& candidate,
                                  const Evaluation& best,
-                                 int minMatchCount)
+                                 int retainedMatchThreshold)
 {
     if (!candidate.valid) {
         return false;
@@ -2596,14 +2596,13 @@ bool isBetterFinalPassEvaluation(const Evaluation& candidate,
         return true;
     }
 
-    const bool candidateMeetsThreshold = candidate.matchCount >= minMatchCount;
-    const bool bestMeetsThreshold = best.matchCount >= minMatchCount;
+    const bool candidateMeetsThreshold = candidate.matchCount >= retainedMatchThreshold;
+    const bool bestMeetsThreshold = best.matchCount >= retainedMatchThreshold;
     if (candidateMeetsThreshold != bestMeetsThreshold) {
         return candidateMeetsThreshold;
     }
 
-    const int matchDelta = candidate.matchCount - best.matchCount;
-    if (std::abs(matchDelta) <= 1)
+    if (candidateMeetsThreshold)
     {
         const double candidateMedian = medianDistancePixels(candidate.matches);
         const double bestMedian = medianDistancePixels(best.matches);
@@ -2613,9 +2612,33 @@ bool isBetterFinalPassEvaluation(const Evaluation& candidate,
         if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
             return candidate.rmsErrorPixels < best.rmsErrorPixels;
         }
+        if (candidate.matchCount != best.matchCount) {
+            return candidate.matchCount > best.matchCount;
+        }
+        return isBetterEvaluation(candidate, best);
+    }
+
+    if (candidate.matchCount != best.matchCount) {
+        return candidate.matchCount > best.matchCount;
+    }
+    if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
+        return candidate.rmsErrorPixels < best.rmsErrorPixels;
     }
 
     return isBetterEvaluation(candidate, best);
+}
+
+int minimumRetainedMatchesForFinalPass(const Evaluation& reference,
+                                       int minMatchCount)
+{
+    if (!reference.valid) {
+        return std::max(3, minMatchCount);
+    }
+
+    // Keep the tightening pass honest: it should preserve most of the coarse/refined
+    // correspondences, not collapse to a tiny high-confidence subset that hijacks the solve.
+    const int relativeFloor = static_cast<int>(std::ceil(static_cast<double>(reference.matchCount) * 0.70));
+    return std::min(reference.matchCount, std::max(minMatchCount, std::max(3, relativeFloor)));
 }
 
 bool isBetterEvaluationForMode(const Evaluation& candidate,
@@ -3544,9 +3567,12 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     }
     tighteningPassRadii.append(finalPassRadius);
 
-    const int finalPassMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
     for (double tighteningRadius : tighteningPassRadii)
     {
+        const Evaluation preTighteningBest = best;
+        const int retainedMatchThreshold = minimumRetainedMatchesForFinalPass(
+            preTighteningBest,
+            settings.m_plateSolveMinMatches);
         Evaluation tighteningBest = evaluatePose(
             settings,
             catalogContext,
@@ -3594,7 +3620,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                                 centerOffsetYCenter,
                                 distortionCenter,
                                 tighteningRadius);
-                            if (isBetterFinalPassEvaluation(candidate, tighteningBest, finalPassMinMatches)) {
+                            if (isBetterFinalPassEvaluation(candidate, tighteningBest, retainedMatchThreshold)) {
                                 tighteningBest = candidate;
                                 if (azOffset != 0.0) improvedAz = true;
                                 if (elOffset != 0.0) improvedEl = true;
@@ -3618,7 +3644,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
             if (!improvedFov)  fovStep  *= 0.5;
         }
 
-        if (tighteningBest.valid && (tighteningBest.matchCount >= finalPassMinMatches)) {
+        if (tighteningBest.valid && (tighteningBest.matchCount >= retainedMatchThreshold)) {
             best = tighteningBest;
             azCenter = best.azimuthDegrees;
             elCenter = best.elevationDegrees;
@@ -3627,6 +3653,16 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
             centerOffsetXCenter = best.centerOffsetXPixels;
             centerOffsetYCenter = best.centerOffsetYPixels;
             distortionCenter = best.distortionK1;
+        } else {
+            best = preTighteningBest;
+            azCenter = best.azimuthDegrees;
+            elCenter = best.elevationDegrees;
+            rollCenter = best.rollDegrees;
+            fovCenter = best.fovDegrees;
+            centerOffsetXCenter = best.centerOffsetXPixels;
+            centerOffsetYCenter = best.centerOffsetYPixels;
+            distortionCenter = best.distortionK1;
+            break;
         }
     }
 

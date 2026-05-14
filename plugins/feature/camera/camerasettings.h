@@ -19,6 +19,8 @@
 #ifndef INCLUDE_FEATURE_CAMERASETTINGS_H_
 #define INCLUDE_FEATURE_CAMERASETTINGS_H_
 
+#include <array>
+
 #include <QByteArray>
 #include <QColor>
 #include <QDateTime>
@@ -48,7 +50,8 @@ struct CameraSettings
     {
         StackMethodAverage = 0,
         StackMethodMedian,
-        StackMethodSigmaClippedAverage
+        StackMethodSigmaClippedAverage,
+        StackMethodHDR
     };
 
     enum StackAlignmentMethod
@@ -170,6 +173,28 @@ struct CameraSettings
         ObjectDeviceSettings();
         void getDebugString(std::ostringstream& ostr) const;
     };
+
+    static constexpr int m_minHdrExposureCount = 2;
+    static constexpr int m_maxHdrExposureCount = 4;
+
+    bool isHdrStackingEnabled() const
+    {
+        return m_stackEnabled && (m_stackMethod == StackMethodHDR);
+    }
+
+    int getHdrExposureCount() const
+    {
+        return qBound(m_minHdrExposureCount, m_stackHdrExposureCount, m_maxHdrExposureCount);
+    }
+
+    double getHdrExposureTimeMs(int index) const
+    {
+        if ((index < 0) || (index >= static_cast<int>(m_stackHdrExposureTimesMs.size()))) {
+            return m_minExposureTimeMs;
+        }
+
+        return std::max(m_minExposureTimeMs, m_stackHdrExposureTimesMs[static_cast<size_t>(index)]);
+    }
 
     static constexpr int m_minResolution = 16;
     static constexpr int m_minFramesPerSecond = 1;
@@ -317,6 +342,8 @@ struct CameraSettings
     bool m_stackEnabled;
     int m_stackFrameCount;
     StackMethod m_stackMethod;
+    int m_stackHdrExposureCount;
+    std::array<double, 4> m_stackHdrExposureTimesMs;
     StackAlignmentMethod m_stackAlignmentMethod;
     QString m_stackDarkFileName;
     QString m_stackFlatFileName;

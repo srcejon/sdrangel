@@ -208,6 +208,8 @@ void CameraSettings::resetToDefaults()
     m_stackEnabled = false;
     m_stackFrameCount = 4;
     m_stackMethod = StackMethodAverage;
+    m_stackHdrExposureCount = 3;
+    m_stackHdrExposureTimesMs = {{12.5, 50.0, 200.0, 800.0}};
     m_stackAlignmentMethod = StackAlignmentNone;
     m_stackDarkFileName.clear();
     m_stackFlatFileName.clear();
@@ -366,7 +368,7 @@ void CameraSettings::resetToDefaults()
 
 QByteArray CameraSettings::serialize() const
 {
-    SimpleSerializer s(1);
+    SimpleSerializer s(2);
 
     s.writeString(1, m_title);
     s.writeU32(2, m_rgbColor);
@@ -391,6 +393,11 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(130, m_stackEnabled);
     s.writeS32(131, m_stackFrameCount);
     s.writeS32(132, m_stackMethod);
+    s.writeS32(227, m_stackHdrExposureCount);
+    s.writeDouble(228, m_stackHdrExposureTimesMs[0]);
+    s.writeDouble(229, m_stackHdrExposureTimesMs[1]);
+    s.writeDouble(230, m_stackHdrExposureTimesMs[2]);
+    s.writeDouble(231, m_stackHdrExposureTimesMs[3]);
     s.writeS32(133, m_stackAlignmentMethod);
     s.writeString(134, m_stackDarkFileName);
     s.writeString(135, m_stackFlatFileName);
@@ -655,6 +662,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(130, &m_stackEnabled, false);
         d.readS32(131, &m_stackFrameCount, 4);
         d.readS32(132, (qint32 *) &m_stackMethod, (qint32) StackMethodAverage);
+        d.readS32(227, &m_stackHdrExposureCount, 3);
+        d.readDouble(228, &m_stackHdrExposureTimesMs[0], 12.5);
+        d.readDouble(229, &m_stackHdrExposureTimesMs[1], 50.0);
+        d.readDouble(230, &m_stackHdrExposureTimesMs[2], 200.0);
+        d.readDouble(231, &m_stackHdrExposureTimesMs[3], 800.0);
         d.readS32(133, (qint32 *) &m_stackAlignmentMethod, (qint32) StackAlignmentNone);
         d.readString(134, &m_stackDarkFileName, "");
         d.readString(135, &m_stackFlatFileName, "");
@@ -1013,7 +1025,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_asiHighSpeedMode = qBound(m_minAsiControl, m_asiHighSpeedMode, m_maxAsiControl);
         m_asiColorImageType = qBound(AsiColorImageTypeRgb24, m_asiColorImageType, AsiColorImageTypeRaw16);
         m_stackFrameCount = qBound(m_minStackFrameCount, m_stackFrameCount, m_maxStackFrameCount);
-        m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodSigmaClippedAverage);
+        m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodHDR);
+        m_stackHdrExposureCount = qBound(m_minHdrExposureCount, m_stackHdrExposureCount, m_maxHdrExposureCount);
+        for (double& exposureTimeMs : m_stackHdrExposureTimesMs) {
+            exposureTimeMs = std::max(m_minExposureTimeMs, exposureTimeMs);
+        }
         m_stackAlignmentMethod = qBound(StackAlignmentNone, m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
         m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
         m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
@@ -1231,7 +1247,22 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_stackFrameCount = qBound(m_minStackFrameCount, settings.m_stackFrameCount, m_maxStackFrameCount);
     }
     if (settingsKeys.contains("stackMethod")) {
-        m_stackMethod = qBound(StackMethodAverage, settings.m_stackMethod, StackMethodSigmaClippedAverage);
+        m_stackMethod = qBound(StackMethodAverage, settings.m_stackMethod, StackMethodHDR);
+    }
+    if (settingsKeys.contains("stackHdrExposureCount")) {
+        m_stackHdrExposureCount = qBound(m_minHdrExposureCount, settings.m_stackHdrExposureCount, m_maxHdrExposureCount);
+    }
+    if (settingsKeys.contains("stackHdrExposure1Ms")) {
+        m_stackHdrExposureTimesMs[0] = std::max(m_minExposureTimeMs, settings.m_stackHdrExposureTimesMs[0]);
+    }
+    if (settingsKeys.contains("stackHdrExposure2Ms")) {
+        m_stackHdrExposureTimesMs[1] = std::max(m_minExposureTimeMs, settings.m_stackHdrExposureTimesMs[1]);
+    }
+    if (settingsKeys.contains("stackHdrExposure3Ms")) {
+        m_stackHdrExposureTimesMs[2] = std::max(m_minExposureTimeMs, settings.m_stackHdrExposureTimesMs[2]);
+    }
+    if (settingsKeys.contains("stackHdrExposure4Ms")) {
+        m_stackHdrExposureTimesMs[3] = std::max(m_minExposureTimeMs, settings.m_stackHdrExposureTimesMs[3]);
     }
     if (settingsKeys.contains("stackAlignmentMethod")) {
         m_stackAlignmentMethod = qBound(StackAlignmentNone, settings.m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
@@ -1856,6 +1887,21 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("stackMethod") || force) {
         ostr << " m_stackMethod: " << m_stackMethod;
+    }
+    if (settingsKeys.contains("stackHdrExposureCount") || force) {
+        ostr << " m_stackHdrExposureCount: " << m_stackHdrExposureCount;
+    }
+    if (settingsKeys.contains("stackHdrExposure1Ms") || force) {
+        ostr << " m_stackHdrExposure1Ms: " << m_stackHdrExposureTimesMs[0];
+    }
+    if (settingsKeys.contains("stackHdrExposure2Ms") || force) {
+        ostr << " m_stackHdrExposure2Ms: " << m_stackHdrExposureTimesMs[1];
+    }
+    if (settingsKeys.contains("stackHdrExposure3Ms") || force) {
+        ostr << " m_stackHdrExposure3Ms: " << m_stackHdrExposureTimesMs[2];
+    }
+    if (settingsKeys.contains("stackHdrExposure4Ms") || force) {
+        ostr << " m_stackHdrExposure4Ms: " << m_stackHdrExposureTimesMs[3];
     }
     if (settingsKeys.contains("stackAlignmentMethod") || force) {
         ostr << " m_stackAlignmentMethod: " << m_stackAlignmentMethod;

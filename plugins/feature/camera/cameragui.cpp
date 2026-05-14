@@ -17,6 +17,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -87,6 +88,40 @@
 #include "camerasettingsdialog.h"
 #include "cameraworker.h"
 #include "cameragui.h"
+
+namespace {
+
+std::array<QLabel*, 4> hdrExposureLabels(Ui::CameraSettingsDialog *ui)
+{
+    return {{
+        ui->stackHdrExposure1Label,
+        ui->stackHdrExposure2Label,
+        ui->stackHdrExposure3Label,
+        ui->stackHdrExposure4Label
+    }};
+}
+
+std::array<QSlider*, 4> hdrExposureSliders(Ui::CameraSettingsDialog *ui)
+{
+    return {{
+        ui->stackHdrExposure1Slider,
+        ui->stackHdrExposure2Slider,
+        ui->stackHdrExposure3Slider,
+        ui->stackHdrExposure4Slider
+    }};
+}
+
+std::array<QDoubleSpinBox*, 4> hdrExposureSpins(Ui::CameraSettingsDialog *ui)
+{
+    return {{
+        ui->stackHdrExposure1Spin,
+        ui->stackHdrExposure2Spin,
+        ui->stackHdrExposure3Spin,
+        ui->stackHdrExposure4Spin
+    }};
+}
+
+}
 
 CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
@@ -1052,10 +1087,13 @@ void CameraGUI::displaySettings()
     ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
     settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
+    settingsUI()->stackHdrExposureCountSpin->setValue(m_settings.getHdrExposureCount());
     settingsUI()->stackAlignmentCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackAlignmentMethod));
     settingsUI()->stackDarkFileEdit->setText(m_settings.m_stackDarkFileName);
     settingsUI()->stackFlatFileEdit->setText(m_settings.m_stackFlatFileName);
     settingsUI()->stackBiasFileEdit->setText(m_settings.m_stackBiasFileName);
+    updateHdrExposureControls();
+    updateHdrStackingControls();
     settingsUI()->latitudeSpin->setValue(m_settings.m_latitude);
     settingsUI()->longitudeSpin->setValue(m_settings.m_longitude);
     settingsUI()->altitudeSpin->setValue(m_settings.m_altitude);
@@ -1487,6 +1525,20 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->stackHdrExposureCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
+        [this](int value)
+        {
+            m_settings.m_stackHdrExposureCount = value;
+            updateHdrStackingControls();
+            applySetting("stackHdrExposureCount");
+        });
+    for (int exposureIndex = 0; exposureIndex < CameraSettings::m_maxHdrExposureCount; ++exposureIndex)
+    {
+        QObject::connect(hdrExposureSliders(settingsUI())[exposureIndex], &QSlider::valueChanged, this,
+            [this, exposureIndex](int sliderValue) { handleHdrExposureSliderChanged(exposureIndex, sliderValue); });
+        QObject::connect(hdrExposureSpins(settingsUI())[exposureIndex], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            [this, exposureIndex](double value) { handleHdrExposureSpinChanged(exposureIndex, value); });
+    }
     QObject::connect(settingsUI()->stackAlignmentCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackAlignmentCombo_currentIndexChanged);
     QObject::connect(settingsUI()->stackDarkFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackDarkFileEdit_editingFinished);
     QObject::connect(settingsUI()->stackDarkFileButton, &QToolButton::clicked, this, &CameraGUI::on_stackDarkFileButton_clicked);
@@ -1879,6 +1931,8 @@ void CameraGUI::updateExposureControls()
         settingsUI()->exposureSlider->setMaximum(1000);
         settingsUI()->exposureSlider->setValue(exposureValueToSlider(settingsUI()->exposureSpin, value));
     }
+
+    updateHdrExposureControls();
 }
 
 void CameraGUI::updateVideoFileControls()
@@ -1900,6 +1954,213 @@ void CameraGUI::updateVideoFileControls()
     ui->playbackPositionSlider->setVisible(fileCameraSelected);
     ui->playbackPositionSlider->setEnabled(hasPlaybackPosition);
     ui->videoLine->setVisible(fileCameraSelected);
+}
+
+void CameraGUI::updateHdrExposureControls()
+{
+    if (!m_settingsDialog) {
+        return;
+    }
+
+    const double minimum = m_exposureMinimumMs;
+    const double maximum = std::max(minimum, m_exposureMaximumMs);
+    const double singleStep = std::max(0.000001, m_exposureStepMs);
+    const int decimals = decimalsForStepSize(singleStep);
+    const auto labels = hdrExposureLabels(settingsUI());
+    const auto sliders = hdrExposureSliders(settingsUI());
+    const auto spins = hdrExposureSpins(settingsUI());
+
+    for (int exposureIndex = 0; exposureIndex < CameraSettings::m_maxHdrExposureCount; ++exposureIndex)
+    {
+        const double value = qBound(minimum, m_settings.getHdrExposureTimeMs(exposureIndex), maximum);
+        m_settings.m_stackHdrExposureTimesMs[static_cast<size_t>(exposureIndex)] = value;
+
+        labels[exposureIndex]->setText(tr("Exposure %1").arg(exposureIndex + 1));
+
+        {
+            QSignalBlocker blocker(spins[exposureIndex]);
+            spins[exposureIndex]->setDecimals(decimals);
+            spins[exposureIndex]->setSingleStep(singleStep);
+            spins[exposureIndex]->setMinimum(minimum);
+            spins[exposureIndex]->setMaximum(maximum);
+            spins[exposureIndex]->setValue(value);
+        }
+
+        {
+            QSignalBlocker blocker(sliders[exposureIndex]);
+            sliders[exposureIndex]->setMinimum(0);
+            sliders[exposureIndex]->setMaximum(1000);
+            sliders[exposureIndex]->setValue(exposureValueToSlider(spins[exposureIndex], value));
+        }
+    }
+}
+
+bool CameraGUI::isHdrStackingSupported() const
+{
+    if (m_settings.isFileCamera()) {
+        return false;
+    }
+
+    if (m_settings.isQtCamera()) {
+        return m_qtManualExposureSupported && m_settings.isIntervalCaptureMode();
+    }
+
+    if (m_settings.isAsiCamera()) {
+        return m_settings.isIntervalCaptureMode();
+    }
+
+    if (m_settings.isAlpacaCamera()) {
+        return true;
+    }
+
+    return false;
+}
+
+void CameraGUI::updateHdrStackingControls()
+{
+    if (!m_settingsDialog) {
+        return;
+    }
+
+    QStandardItemModel *stackMethodModel = qobject_cast<QStandardItemModel*>(settingsUI()->stackMethodCombo->model());
+    if (stackMethodModel)
+    {
+        QStandardItem *hdrItem = stackMethodModel->item(static_cast<int>(CameraSettings::StackMethodHDR));
+        if (hdrItem) {
+            hdrItem->setEnabled(isHdrStackingSupported());
+        }
+    }
+
+    if ((m_settings.m_stackMethod == CameraSettings::StackMethodHDR) && !isHdrStackingSupported())
+    {
+        {
+            QSignalBlocker blocker(settingsUI()->stackMethodCombo);
+            settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(CameraSettings::StackMethodAverage));
+        }
+        m_settings.m_stackMethod = CameraSettings::StackMethodAverage;
+        applySetting("stackMethod");
+    }
+
+    const bool hdrSelected = m_settings.isHdrStackingEnabled();
+    const bool hdrControlsEnabled = hdrSelected && isHdrStackingSupported();
+    const int visibleExposureRows = hdrSelected ? m_settings.getHdrExposureCount() : 0;
+    const auto labels = hdrExposureLabels(settingsUI());
+    const auto sliders = hdrExposureSliders(settingsUI());
+    const auto spins = hdrExposureSpins(settingsUI());
+
+    settingsUI()->stackFrameCountLabel->setVisible(!hdrSelected);
+    settingsUI()->stackFrameCountSpin->setVisible(!hdrSelected);
+    settingsUI()->stackHdrExposureCountLabel->setVisible(hdrSelected);
+    settingsUI()->stackHdrExposureCountSpin->setVisible(hdrSelected);
+    settingsUI()->stackHdrExposureCountLabel->setEnabled(hdrControlsEnabled);
+    settingsUI()->stackHdrExposureCountSpin->setEnabled(hdrControlsEnabled);
+
+    for (int exposureIndex = 0; exposureIndex < CameraSettings::m_maxHdrExposureCount; ++exposureIndex)
+    {
+        const bool visible = hdrSelected && (exposureIndex < visibleExposureRows);
+        labels[exposureIndex]->setVisible(visible);
+        sliders[exposureIndex]->setVisible(visible);
+        spins[exposureIndex]->setVisible(visible);
+        labels[exposureIndex]->setEnabled(hdrControlsEnabled);
+        sliders[exposureIndex]->setEnabled(hdrControlsEnabled);
+        spins[exposureIndex]->setEnabled(hdrControlsEnabled);
+    }
+}
+
+bool CameraGUI::isHdrStackingActiveForQt() const
+{
+    return m_settings.isHdrStackingEnabled() && isHdrStackingSupported() && m_settings.isQtCamera();
+}
+
+void CameraGUI::resetQtHdrBracketState()
+{
+    m_qtHdrExposureIndex = 0;
+}
+
+double CameraGUI::currentQtCaptureExposureTimeMs() const
+{
+    return isHdrStackingActiveForQt()
+        ? m_settings.getHdrExposureTimeMs(currentQtHdrExposureIndex())
+        : std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_exposureTimeMs);
+}
+
+int CameraGUI::currentQtHdrExposureIndex() const
+{
+    return isHdrStackingActiveForQt() ? qBound(0, m_qtHdrExposureIndex, currentQtHdrExposureCount() - 1) : -1;
+}
+
+int CameraGUI::currentQtHdrExposureCount() const
+{
+    return isHdrStackingActiveForQt() ? m_settings.getHdrExposureCount() : 0;
+}
+
+void CameraGUI::advanceQtHdrBracketState()
+{
+    if (!isHdrStackingActiveForQt()) {
+        return;
+    }
+
+    const int hdrExposureCount = currentQtHdrExposureCount();
+    m_qtHdrExposureIndex = (m_qtHdrExposureIndex + 1) % std::max(1, hdrExposureCount);
+}
+
+void CameraGUI::applyQtExposureTimeMs(double exposureTimeMs)
+{
+    const double clampedExposureMs = qBound(m_exposureMinimumMs, exposureTimeMs, m_exposureMaximumMs);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_qtCamera) {
+        m_qtCamera->setExposureMode(QCamera::ExposureManual);
+        m_qtCamera->setManualExposureTime(static_cast<float>(clampedExposureMs) / 1000.0f);
+    }
+#else
+    if (m_qtCamera)
+    {
+        QCameraExposure *exposure = m_qtCamera->exposure();
+        if (exposure)
+        {
+            exposure->setExposureMode(QCameraExposure::ExposureManual);
+            exposure->setManualShutterSpeed(static_cast<qreal>(clampedExposureMs) / 1000.0);
+        }
+    }
+#endif
+}
+
+void CameraGUI::populateFrameExposureMetadata(CameraPipelineFrame& frame, double exposureTimeMs, int hdrExposureIndex, int hdrExposureCount) const
+{
+    frame.m_captureDateTime = QDateTime::currentDateTime();
+    frame.m_exposureTimeMs = std::max(CameraSettings::m_minExposureTimeMs, exposureTimeMs);
+    frame.m_hdrExposureIndex = hdrExposureIndex;
+    frame.m_hdrExposureCount = hdrExposureCount;
+}
+
+void CameraGUI::handleHdrExposureSliderChanged(int exposureIndex, int sliderValue)
+{
+    const auto spins = hdrExposureSpins(settingsUI());
+    const double exposureTimeMs = sliderToExposureValue(spins[exposureIndex], sliderValue);
+
+    {
+        QSignalBlocker blocker(spins[exposureIndex]);
+        spins[exposureIndex]->setValue(exposureTimeMs);
+    }
+
+    m_settings.m_stackHdrExposureTimesMs[static_cast<size_t>(exposureIndex)] = exposureTimeMs;
+    applySetting(QStringLiteral("stackHdrExposure%1Ms").arg(exposureIndex + 1));
+}
+
+void CameraGUI::handleHdrExposureSpinChanged(int exposureIndex, double value)
+{
+    const auto spins = hdrExposureSpins(settingsUI());
+    const auto sliders = hdrExposureSliders(settingsUI());
+    const double exposureTimeMs = qBound(m_exposureMinimumMs, value, m_exposureMaximumMs);
+
+    {
+        QSignalBlocker blocker(sliders[exposureIndex]);
+        sliders[exposureIndex]->setValue(exposureValueToSlider(spins[exposureIndex], exposureTimeMs));
+    }
+
+    m_settings.m_stackHdrExposureTimesMs[static_cast<size_t>(exposureIndex)] = exposureTimeMs;
+    applySetting(QStringLiteral("stackHdrExposure%1Ms").arg(exposureIndex + 1));
 }
 
 void CameraGUI::populateGs232ControllerCombo()
@@ -2463,6 +2724,7 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 void CameraGUI::setupQtCapture()
 {
     cleanupQtCapture();
+    resetQtHdrBracketState();
     m_reportedFeatureErrorKeys.clear();
     m_qtStillCaptureTimer.stop();
 
@@ -2558,7 +2820,7 @@ void CameraGUI::setupQtCapture()
     }
 
     m_qtCamera->setExposureMode(QCamera::ExposureManual);
-    m_qtCamera->setManualExposureTime(static_cast<float>(m_settings.m_exposureTimeMs) / 1000.0f);
+    applyQtExposureTimeMs(currentQtCaptureExposureTimeMs());
     m_qtCamera->setManualIsoSensitivity(m_settings.m_isoSensitivity);
     m_qtCamera->setWhiteBalanceMode(static_cast<QCamera::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
     m_qtCamera->setExposureCompensation(static_cast<float>(m_settings.m_exposureCompensation));
@@ -2736,8 +2998,7 @@ void CameraGUI::setupQtCapture()
     QCameraExposure *exposure = m_qtCamera->exposure();
     if (exposure)
     {
-        exposure->setExposureMode(QCameraExposure::ExposureManual);
-        exposure->setManualShutterSpeed(static_cast<qreal>(m_settings.m_exposureTimeMs) / 1000.0);
+        applyQtExposureTimeMs(currentQtCaptureExposureTimeMs());
         exposure->setManualIsoSensitivity(m_settings.m_isoSensitivity);
     }
 
@@ -2803,6 +3064,7 @@ void CameraGUI::cleanupQtCapture()
 {
     m_reportedFeatureErrorKeys.clear();
     m_qtStillCaptureTimer.stop();
+    resetQtHdrBracketState();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     m_pendingQtVideoFrame = QVideoFrame();
     m_processingQtVideoFrame = false;
@@ -2883,6 +3145,19 @@ void CameraGUI::reportFeatureError(const QString& errorKey, const QString& title
 
 void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool force)
 {
+    const bool hdrSettingsChanged = force
+        || settingsKeys.contains("stackEnabled")
+        || settingsKeys.contains("stackMethod")
+        || settingsKeys.contains("stackHdrExposureCount")
+        || settingsKeys.contains("stackHdrExposure1Ms")
+        || settingsKeys.contains("stackHdrExposure2Ms")
+        || settingsKeys.contains("stackHdrExposure3Ms")
+        || settingsKeys.contains("stackHdrExposure4Ms");
+
+    if (hdrSettingsChanged) {
+        resetQtHdrBracketState();
+    }
+
     if (!m_settings.isQtCamera() && !m_settings.isFileCamera())
     {
         // Camera type switched away from Qt — stop any running Qt camera
@@ -2946,6 +3221,9 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
     else if (m_qtCamera)
     {
         // Apply inline settings that don't require a camera restart
+        if (force || hdrSettingsChanged) {
+            applyQtExposureTimeMs(currentQtCaptureExposureTimeMs());
+        }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         if (force || settingsKeys.contains("whiteBalanceMode")) {
             m_qtCamera->setWhiteBalanceMode(static_cast<QCamera::WhiteBalanceMode>(m_settings.m_whiteBalanceMode));
@@ -3038,12 +3316,20 @@ void CameraGUI::onQtImageCaptured(int id, const QImage& image)
         return;
     }
 
+    const double exposureTimeMs = currentQtCaptureExposureTimeMs();
+    const int hdrExposureIndex = currentQtHdrExposureIndex();
+    const int hdrExposureCount = currentQtHdrExposureCount();
+
     CameraFrameAligner *frameAligner = m_camera->getFrameAligner();
     if (frameAligner) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
-        frame->m_captureDateTime = QDateTime::currentDateTime();
+        populateFrameExposureMetadata(*frame, exposureTimeMs, hdrExposureIndex, hdrExposureCount);
         frameAligner->submitFrame(frame);
+    }
+
+    if (isHdrStackingActiveForQt()) {
+        advanceQtHdrBracketState();
     }
 }
 
@@ -3051,6 +3337,10 @@ void CameraGUI::triggerQtStillCapture()
 {
     if (!m_settings.isQtCamera() || !m_settings.isIntervalCaptureMode() || !m_qtCamera || !m_imageCapture) {
         return;
+    }
+
+    if (isHdrStackingActiveForQt()) {
+        applyQtExposureTimeMs(currentQtCaptureExposureTimeMs());
     }
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -3071,6 +3361,8 @@ void CameraGUI::updateCameraSettingsVisibility()
     const bool fileCamera = m_settings.isFileCamera();
     const bool qtCamera = m_settings.isQtCamera();
     const bool sharedHardwareCamera = alpaca || asi;
+    updateHdrStackingControls();
+    const bool hdrExposureOverrideActive = m_settings.isHdrStackingEnabled() && isHdrStackingSupported();
 
     settingsUI()->resolutionLabel->setVisible(qtCamera);
     settingsUI()->resolutionCombo->setVisible(qtCamera);
@@ -3174,10 +3466,10 @@ void CameraGUI::updateCameraSettingsVisibility()
 
     if (alpaca || asi)
     {
-        settingsUI()->exposureLabel->setEnabled(asiManualExposureGainEnabled);
-        settingsUI()->exposureSlider->setEnabled(asiManualExposureGainEnabled);
-        settingsUI()->exposureSpin->setEnabled(asiManualExposureGainEnabled);
-        settingsUI()->exposureUnitsCombo->setEnabled(asiManualExposureGainEnabled);
+        settingsUI()->exposureLabel->setEnabled(asiManualExposureGainEnabled && !hdrExposureOverrideActive);
+        settingsUI()->exposureSlider->setEnabled(asiManualExposureGainEnabled && !hdrExposureOverrideActive);
+        settingsUI()->exposureSpin->setEnabled(asiManualExposureGainEnabled && !hdrExposureOverrideActive);
+        settingsUI()->exposureUnitsCombo->setEnabled(asiManualExposureGainEnabled && !hdrExposureOverrideActive);
         settingsUI()->cameraGainLabel->setEnabled(asiManualExposureGainEnabled);
         settingsUI()->cameraGainCombo->setEnabled((alpaca && m_alpacaHasNamedGains) ? true : asiManualExposureGainEnabled);
         settingsUI()->cameraGainSlider->setEnabled(asiManualExposureGainEnabled);
@@ -3191,10 +3483,10 @@ void CameraGUI::updateCameraSettingsVisibility()
     {
         settingsUI()->zoomLabel->setEnabled(m_qtZoomSupported);
         settingsUI()->zoomSpin->setEnabled(m_qtZoomSupported);
-        settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported);
-        settingsUI()->exposureSlider->setEnabled(m_qtManualExposureSupported);
-        settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported);
-        settingsUI()->exposureUnitsCombo->setEnabled(m_qtManualExposureSupported);
+        settingsUI()->exposureLabel->setEnabled(m_qtManualExposureSupported && !hdrExposureOverrideActive);
+        settingsUI()->exposureSlider->setEnabled(m_qtManualExposureSupported && !hdrExposureOverrideActive);
+        settingsUI()->exposureSpin->setEnabled(m_qtManualExposureSupported && !hdrExposureOverrideActive);
+        settingsUI()->exposureUnitsCombo->setEnabled(m_qtManualExposureSupported && !hdrExposureOverrideActive);
         settingsUI()->isoLabel->setEnabled(m_qtIsoSensitivitySupported);
         settingsUI()->isoSpin->setEnabled(m_qtIsoSensitivitySupported);
         settingsUI()->whiteBalanceLabel->setEnabled(m_qtWhiteBalanceModeSupported);
@@ -4237,6 +4529,7 @@ void CameraGUI::on_recordModeCombo_currentIndexChanged(int index)
 void CameraGUI::on_stackEnabledCheck_toggled(bool checked)
 {
     m_settings.m_stackEnabled = checked;
+    updateCameraSettingsVisibility();
     applySetting("stackEnabled");
 }
 
@@ -4249,6 +4542,7 @@ void CameraGUI::on_stackFrameCountSpin_valueChanged(int value)
 void CameraGUI::on_stackMethodCombo_currentIndexChanged(int index)
 {
     m_settings.m_stackMethod = static_cast<CameraSettings::StackMethod>(index);
+    updateCameraSettingsVisibility();
     applySetting("stackMethod");
 }
 

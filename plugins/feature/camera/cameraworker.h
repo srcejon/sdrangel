@@ -505,6 +505,7 @@ private:
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
     CameraFinder *m_cameraFinder;
+    int m_hdrExposureIndex;
     bool m_alpacaFrameRequestPending;
     quint32 m_alpacaClientId;
     quint32 m_alpacaClientTransactionId;
@@ -581,6 +582,13 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void reportAvailableDevicesToGUI() const;
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
+    bool isHdrBracketingActive() const;
+    void resetHdrBracketState();
+    int currentHdrExposureCount() const;
+    int currentHdrExposureIndex() const;
+    double currentCaptureExposureTimeMs() const;
+    void advanceHdrBracketState();
+    void populateFrameExposureMetadata(CameraPipelineFrame& frame) const;
     void startCapture();
     void stopCapture();
     QImage createPlaceholderFrame() const;

@@ -79,6 +79,9 @@ struct CameraPipelineFrame
     QImage m_unprocessedImage;
     CameraHistogramData m_histogramData;
     QDateTime m_captureDateTime;
+    double m_exposureTimeMs = 0.0;
+    int m_hdrExposureIndex = -1;
+    int m_hdrExposureCount = 0;
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
     QVector<CameraPipelineStarDetection> m_starDetections;

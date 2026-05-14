@@ -55,6 +55,7 @@ void CameraFrameStacker::stopWork()
 void CameraFrameStacker::resetFrameHistoryState()
 {
     m_stackFrameHistory.clear();
+    m_hdrFrameSamples.clear();
     m_stackAccumulator.release();
 }
 
@@ -414,6 +415,11 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("stackEnabled")
         || settingsKeys.contains("stackMethod")
+        || settingsKeys.contains("stackHdrExposureCount")
+        || settingsKeys.contains("stackHdrExposure1Ms")
+        || settingsKeys.contains("stackHdrExposure2Ms")
+        || settingsKeys.contains("stackHdrExposure3Ms")
+        || settingsKeys.contains("stackHdrExposure4Ms")
         || settingsKeys.contains("stackAlignmentMethod")
         || settingsKeys.contains("stackDarkFileName")
         || settingsKeys.contains("stackFlatFileName")
@@ -504,39 +510,164 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    frame->m_image = applyFrameStacking(frame->m_image, frame->m_bayerPattern);
+    QImage stackedImage;
+    int stackCount = 1;
+
+    if (!applyFrameStacking(*frame, stackedImage, stackCount)) {
+        return;
+    }
+
+    frame->m_image = stackedImage;
     frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
     frame->m_unprocessedImage = frame->m_image;
-    frame->m_stackCount = std::max(1, static_cast<int>(m_stackFrameHistory.size()));
+    frame->m_stackCount = std::max(1, stackCount);
 
     if (m_nextStage) {
         m_nextStage->submitFrame(frame);
     }
 }
 
-QImage CameraFrameStacker::applyFrameStacking(const QImage& input, CameraPipelineFrame::BayerPattern bayerPattern)
+bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount)
 {
     PROFILER_START();
-    const bool stackEnabled = m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1);
+    const bool hdrStackingEnabled = m_settings.isHdrStackingEnabled() && (m_settings.getHdrExposureCount() > 1);
+    const bool stackEnabled = hdrStackingEnabled
+        || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1));
 
     const bool calibrationEnabled = !m_darkCalibrationFrame.empty()
         || !m_flatCalibrationFrame.empty()
         || !m_biasCalibrationFrame.empty();
 
-    if (!stackEnabled && !calibrationEnabled && (bayerPattern == CameraPipelineFrame::BayerNone)) {
-        return input;
+    if (!stackEnabled && !calibrationEnabled && (inputFrame.m_bayerPattern == CameraPipelineFrame::BayerNone))
+    {
+        outputImage = inputFrame.m_image;
+        stackCount = 1;
+        return true;
     }
 
     bool highBitDepthInput = false;
-    cv::Mat frameMat = imageToWorkingMat(input, highBitDepthInput);
+    cv::Mat frameMat = imageToWorkingMat(inputFrame.m_image, highBitDepthInput);
 
     frameMat = applyCalibration(frameMat);
-    frameMat = debayerRawMat(frameMat, bayerPattern);
+    frameMat = debayerRawMat(frameMat, inputFrame.m_bayerPattern);
 
     if (!stackEnabled)
     {
         PROFILER_STOP(__FUNCTION__);
-        return workingMatToImage(frameMat);
+        outputImage = workingMatToImage(frameMat);
+        stackCount = 1;
+        return true;
+    }
+
+    if (hdrStackingEnabled)
+    {
+        if (frameMat.channels() == 1) {
+            cv::cvtColor(frameMat, frameMat, cv::COLOR_GRAY2RGB);
+        }
+
+        const bool validHdrMetadata = (inputFrame.m_hdrExposureCount >= CameraSettings::m_minHdrExposureCount)
+            && (inputFrame.m_hdrExposureCount <= CameraSettings::m_maxHdrExposureCount)
+            && (inputFrame.m_hdrExposureIndex >= 0)
+            && (inputFrame.m_hdrExposureIndex < inputFrame.m_hdrExposureCount);
+
+        if (!validHdrMetadata)
+        {
+            qWarning() << "CameraFrameStacker: HDR stacking selected without valid HDR frame metadata; passing through current frame";
+            resetFrameHistoryState();
+            PROFILER_STOP(__FUNCTION__);
+            outputImage = workingMatToImage(frameMat);
+            stackCount = 1;
+            return true;
+        }
+
+        const bool resetHdrSequence = m_hdrFrameSamples.empty()
+            || (m_hdrFrameSamples.front().m_frameMat.size() != frameMat.size())
+            || (m_hdrFrameSamples.front().m_frameMat.type() != frameMat.type())
+            || (static_cast<int>(m_hdrFrameSamples.size()) >= inputFrame.m_hdrExposureCount)
+            || (inputFrame.m_hdrExposureIndex == 0);
+
+        if (resetHdrSequence) {
+            m_hdrFrameSamples.clear();
+        }
+
+        if (!m_hdrFrameSamples.empty() && (inputFrame.m_hdrExposureIndex != static_cast<int>(m_hdrFrameSamples.size())))
+        {
+            qWarning() << "CameraFrameStacker: HDR exposure sequence mismatch; restarting bracket at index" << inputFrame.m_hdrExposureIndex;
+            m_hdrFrameSamples.clear();
+        }
+
+        if (inputFrame.m_hdrExposureIndex != static_cast<int>(m_hdrFrameSamples.size()))
+        {
+            PROFILER_STOP(__FUNCTION__);
+            return false;
+        }
+
+        m_hdrFrameSamples.push_back({frameMat.clone(), std::max(CameraSettings::m_minExposureTimeMs, inputFrame.m_exposureTimeMs), inputFrame.m_hdrExposureIndex});
+        stackCount = static_cast<int>(m_hdrFrameSamples.size());
+
+        if (static_cast<int>(m_hdrFrameSamples.size()) < inputFrame.m_hdrExposureCount)
+        {
+            PROFILER_STOP(__FUNCTION__);
+            return false;
+        }
+
+        try
+        {
+            cv::Mat radianceSum = cv::Mat::zeros(frameMat.size(), CV_32FC3);
+            cv::Mat weightSum = cv::Mat::zeros(frameMat.size(), CV_32FC3);
+
+            for (const HdrFrameSample& sample : m_hdrFrameSamples)
+            {
+                cv::Mat ldrFrameFloat;
+                const double inputScale = sample.m_frameMat.depth() == CV_16U ? (1.0 / 65535.0) : (1.0 / 255.0);
+                sample.m_frameMat.convertTo(ldrFrameFloat, CV_32FC3, inputScale);
+
+                cv::Mat nonNegativeLdrFrame;
+                cv::Mat clampedLdrFrame;
+                cv::max(ldrFrameFloat, cv::Scalar::all(0.0f), nonNegativeLdrFrame);
+                cv::min(nonNegativeLdrFrame, cv::Scalar::all(1.0f), clampedLdrFrame);
+
+                cv::Mat centered;
+                cv::absdiff(clampedLdrFrame, cv::Scalar::all(0.5f), centered);
+
+                cv::Mat weights;
+                weights = cv::Scalar::all(1.0f) - (centered * 2.0f);
+                cv::max(weights, cv::Scalar::all(0.05f), weights);
+
+                cv::Mat radianceEstimate;
+                clampedLdrFrame.convertTo(radianceEstimate, CV_32FC3, 1.0 / std::max(1.0e-6, sample.m_exposureTimeMs / 1000.0));
+
+                radianceSum += radianceEstimate.mul(weights);
+                weightSum += weights;
+            }
+
+            cv::Mat safeWeights;
+            cv::max(weightSum, cv::Scalar::all(1.0e-6f), safeWeights);
+
+            cv::Mat hdrRadiance;
+            cv::divide(radianceSum, safeWeights, hdrRadiance);
+
+            cv::Mat tonemapDenominator = hdrRadiance + cv::Scalar::all(1.0f);
+            cv::Mat tonemapped;
+            cv::divide(hdrRadiance, tonemapDenominator, tonemapped);
+            cv::pow(tonemapped, 1.0 / 2.2, tonemapped);
+
+            cv::Mat ldr8u;
+            tonemapped.convertTo(ldr8u, CV_8UC3, 255.0);
+            cv::max(ldr8u, cv::Scalar::all(0), ldr8u);
+            cv::min(ldr8u, cv::Scalar::all(255), ldr8u);
+            outputImage = workingMatToImage(ldr8u);
+        }
+        catch (const cv::Exception& error)
+        {
+            qWarning() << "CameraFrameStacker: HDR merge failed:" << error.what();
+            outputImage = workingMatToImage(frameMat);
+            stackCount = 1;
+        }
+
+        m_hdrFrameSamples.clear();
+        PROFILER_STOP(__FUNCTION__);
+        return true;
     }
 
     if (frameMat.channels() == 1) {
@@ -573,13 +704,11 @@ QImage CameraFrameStacker::applyFrameStacking(const QImage& input, CameraPipelin
         cv::Mat averaged8u;
         averagedFloat.convertTo(averaged8u, CV_8UC3, scaleTo8Bit);
 
-        QImage stackedImage(averaged8u.cols, averaged8u.rows, QImage::Format_RGB888);
-        for (int row = 0; row < averaged8u.rows; ++row) {
-            std::memcpy(stackedImage.scanLine(row), averaged8u.ptr(row), static_cast<size_t>(averaged8u.cols * 3));
-        }
+        outputImage = workingMatToImage(averaged8u);
+        stackCount = static_cast<int>(m_stackFrameHistory.size());
 
         PROFILER_STOP(__FUNCTION__);
-        return stackedImage;
+        return true;
     }
 
     m_stackAccumulator.release();
@@ -675,5 +804,7 @@ QImage CameraFrameStacker::applyFrameStacking(const QImage& input, CameraPipelin
     }
 
     PROFILER_STOP(__FUNCTION__);
-    return stackedImage;
+    outputImage = stackedImage;
+    stackCount = static_cast<int>(m_stackFrameHistory.size());
+    return true;
 }

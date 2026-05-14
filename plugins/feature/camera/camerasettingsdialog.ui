@@ -1444,6 +1444,31 @@
               <string>Sigma clipped average</string>
              </property>
             </item>
+            <item>
+             <property name="text">
+              <string>HDR</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="stackHdrExposureCountLabel">
+            <property name="text">
+             <string>HDR frames</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="stackHdrExposureCountSpin">
+            <property name="minimum">
+             <number>2</number>
+            </property>
+            <property name="maximum">
+             <number>4</number>
+            </property>
+            <property name="value">
+             <number>3</number>
+            </property>
            </widget>
           </item>
           <item row="4" column="0">
@@ -1474,6 +1499,130 @@
              </property>
             </item>
            </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="stackHdrExposure1Label">
+            <property name="text">
+             <string>Exposure 1</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <layout class="QHBoxLayout" name="stackHdrExposure1Layout">
+            <item>
+             <widget class="QSlider" name="stackHdrExposure1Slider">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="maximum">
+               <number>1000</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDoubleSpinBox" name="stackHdrExposure1Spin">
+              <property name="decimals">
+               <number>3</number>
+              </property>
+              <property name="suffix">
+               <string> ms</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="stackHdrExposure2Label">
+            <property name="text">
+             <string>Exposure 2</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <layout class="QHBoxLayout" name="stackHdrExposure2Layout">
+            <item>
+             <widget class="QSlider" name="stackHdrExposure2Slider">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="maximum">
+               <number>1000</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDoubleSpinBox" name="stackHdrExposure2Spin">
+              <property name="decimals">
+               <number>3</number>
+              </property>
+              <property name="suffix">
+               <string> ms</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="stackHdrExposure3Label">
+            <property name="text">
+             <string>Exposure 3</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <layout class="QHBoxLayout" name="stackHdrExposure3Layout">
+            <item>
+             <widget class="QSlider" name="stackHdrExposure3Slider">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="maximum">
+               <number>1000</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDoubleSpinBox" name="stackHdrExposure3Spin">
+              <property name="decimals">
+               <number>3</number>
+              </property>
+              <property name="suffix">
+               <string> ms</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="stackHdrExposure4Label">
+            <property name="text">
+             <string>Exposure 4</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <layout class="QHBoxLayout" name="stackHdrExposure4Layout">
+            <item>
+             <widget class="QSlider" name="stackHdrExposure4Slider">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="maximum">
+               <number>1000</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDoubleSpinBox" name="stackHdrExposure4Spin">
+              <property name="decimals">
+               <number>3</number>
+              </property>
+              <property name="suffix">
+               <string> ms</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>

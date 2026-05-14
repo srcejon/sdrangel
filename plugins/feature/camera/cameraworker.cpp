@@ -474,6 +474,7 @@ CameraWorker::CameraWorker() :
     m_captureTimer(this),
     m_networkManager(nullptr),
     m_cameraFinder(new CameraFinder(this)),
+    m_hdrExposureIndex(0),
     m_alpacaFrameRequestPending(false),
     m_alpacaClientId(QRandomGenerator::global()->bounded(quint32(1), quint32(std::numeric_limits<quint32>::max()))),
     m_alpacaClientTransactionId(1),
@@ -733,6 +734,77 @@ void CameraWorker::reportErrorToFeature(const QString& errorKey, const QString& 
     m_msgQueueToFeature->push(Camera::MsgReportError::create(title, errorMessage));
 }
 
+bool CameraWorker::isHdrBracketingActive() const
+{
+    if (!m_settings.isHdrStackingEnabled()) {
+        return false;
+    }
+
+    if (m_settings.isAlpacaCamera()) {
+        return true;
+    }
+
+#ifdef ASICAMERA_FOUND
+    if (m_settings.isAsiCamera()) {
+        return m_settings.isIntervalCaptureMode();
+    }
+#endif
+
+    return false;
+}
+
+void CameraWorker::resetHdrBracketState()
+{
+    m_hdrExposureIndex = 0;
+
+#ifdef ASICAMERA_FOUND
+    if (m_settings.isAsiCamera()) {
+        m_asiSettingsApplied = false;
+    }
+#endif
+}
+
+int CameraWorker::currentHdrExposureCount() const
+{
+    return isHdrBracketingActive() ? m_settings.getHdrExposureCount() : 0;
+}
+
+int CameraWorker::currentHdrExposureIndex() const
+{
+    return isHdrBracketingActive() ? qBound(0, m_hdrExposureIndex, currentHdrExposureCount() - 1) : -1;
+}
+
+double CameraWorker::currentCaptureExposureTimeMs() const
+{
+    return isHdrBracketingActive()
+        ? m_settings.getHdrExposureTimeMs(currentHdrExposureIndex())
+        : std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_exposureTimeMs);
+}
+
+void CameraWorker::advanceHdrBracketState()
+{
+    if (!isHdrBracketingActive()) {
+        return;
+    }
+
+    const int hdrExposureCount = currentHdrExposureCount();
+    m_hdrExposureIndex = (m_hdrExposureIndex + 1) % std::max(1, hdrExposureCount);
+
+#ifdef ASICAMERA_FOUND
+    if (m_settings.isAsiCamera()) {
+        m_asiSettingsApplied = false;
+    }
+#endif
+}
+
+void CameraWorker::populateFrameExposureMetadata(CameraPipelineFrame& frame) const
+{
+    frame.m_captureDateTime = QDateTime::currentDateTime();
+    frame.m_exposureTimeMs = currentCaptureExposureTimeMs();
+    frame.m_hdrExposureIndex = currentHdrExposureIndex();
+    frame.m_hdrExposureCount = currentHdrExposureCount();
+}
+
 bool CameraWorker::handleMessage(const Message& cmd)
 {
     if (MsgConfigureCameraWorker::match(cmd))
@@ -789,11 +861,23 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("captureInterval")
         || settingsKeys.contains("captureIntervalUnits")
         || settingsKeys.contains("framesPerSecond");
+    const bool hdrSettingsChanged = force
+        || settingsKeys.contains("stackEnabled")
+        || settingsKeys.contains("stackMethod")
+        || settingsKeys.contains("stackHdrExposureCount")
+        || settingsKeys.contains("stackHdrExposure1Ms")
+        || settingsKeys.contains("stackHdrExposure2Ms")
+        || settingsKeys.contains("stackHdrExposure3Ms")
+        || settingsKeys.contains("stackHdrExposure4Ms");
 
     if (force) {
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
+    }
+
+    if (hdrSettingsChanged) {
+        resetHdrBracketState();
     }
 
     if (force
@@ -963,6 +1047,7 @@ void CameraWorker::startCapture()
         return;
     }
 
+    resetHdrBracketState();
     m_capturing = true;
     m_lastAlpacaCaptureTimeMs = -1;
     m_alpacaCaptureTimer.invalidate();
@@ -1027,6 +1112,7 @@ void CameraWorker::stopCapture()
     m_capturing = false;
     m_captureTimer.stop();
     m_alpacaCaptureTimer.invalidate();
+    resetHdrBracketState();
 
 #ifdef ASICAMERA_FOUND
     if (m_asiVideoCaptureStarted)
@@ -1904,7 +1990,8 @@ void CameraWorker::alpacaStartExposure()
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
-    const double durationSecs = m_settings.m_exposureTimeMs / 1000.0;
+    const double exposureTimeMs = currentCaptureExposureTimeMs();
+    const double durationSecs = exposureTimeMs / 1000.0;
     QUrlQuery body;
     body.addQueryItem("Duration", QString::number(durationSecs, 'f', 6)); // 6 needed for microsecond precision
     body.addQueryItem("Light", "True");
@@ -1915,7 +2002,7 @@ void CameraWorker::alpacaStartExposure()
     logAlpacaRequest("PUT", url, payload);
     QNetworkReply *reply = m_networkManager->put(request, payload);
 
-    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, exposureTimeMs]() {
         const QByteArray responseBody = reply->readAll();
         logAlpacaResponse("PUT", reply->request().url(), reply, responseBody);
         reply->deleteLater();
@@ -1932,7 +2019,7 @@ void CameraWorker::alpacaStartExposure()
         }
 
         // Wait for the exposure duration before polling imageready
-        QTimer::singleShot(static_cast<int>(std::ceil(m_settings.m_exposureTimeMs)), this, [this]() {
+        QTimer::singleShot(static_cast<int>(std::ceil(exposureTimeMs)), this, [this]() {
             if (m_capturing) {
                 alpacaCheckImageReady();
             } else {
@@ -2043,10 +2130,11 @@ void CameraWorker::alpacaFetchImageArray()
         if (m_frameAligner) {
             CameraPipelineFramePtr frame(new CameraPipelineFrame);
             frame->m_image = image;
-            frame->m_captureDateTime = QDateTime::currentDateTime();
+            populateFrameExposureMetadata(*frame);
             frame->m_bayerPattern = bayerPattern;
             m_frameAligner->submitFrame(frame);
         }
+        advanceHdrBracketState();
         reply->deleteLater();
     });
 }
@@ -3119,7 +3207,7 @@ bool CameraWorker::asiApplyCameraSettings()
         ? ASI_TRUE
         : ASI_FALSE;
     const ASI_ERROR_CODE exposureError = ASISetControlValue(cameraId, ASI_EXPOSURE,
-        std::max(1L, static_cast<long>(std::llround(m_settings.m_exposureTimeMs * 1000.0))), autoExposureGain);
+        std::max(1L, static_cast<long>(std::llround(currentCaptureExposureTimeMs() * 1000.0))), autoExposureGain);
     const ASI_ERROR_CODE gainError = ASISetControlValue(cameraId, ASI_GAIN,
         std::max(0L, static_cast<long>(m_settings.m_cameraGain)), autoExposureGain);
     const ASI_ERROR_CODE offsetError = ASISetControlValue(cameraId, ASI_OFFSET,
@@ -3305,7 +3393,7 @@ void CameraWorker::asiCaptureExposureFrame()
     QElapsedTimer captureTimer;
     captureTimer.start();
 
-    const qint64 timeoutMs = std::max<qint64>(1000, static_cast<qint64>(std::ceil(m_settings.m_exposureTimeMs)) + 5000);
+    const qint64 timeoutMs = std::max<qint64>(1000, static_cast<qint64>(std::ceil(currentCaptureExposureTimeMs())) + 5000);
     ASI_EXPOSURE_STATUS exposureStatus = ASI_EXP_IDLE;
 
     while (captureTimer.elapsed() <= timeoutMs)
@@ -3355,10 +3443,11 @@ void CameraWorker::asiCaptureExposureFrame()
         CameraPipelineFrame::BayerPattern bayerPattern = CameraPipelineFrame::BayerNone;
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = asiFrameToImage(&bayerPattern);
-        frame->m_captureDateTime = QDateTime::currentDateTime();
+        populateFrameExposureMetadata(*frame);
         frame->m_bayerPattern = bayerPattern;
         m_frameAligner->submitFrame(frame);
     }
+    advanceHdrBracketState();
 }
 
 void CameraWorker::asiCaptureVideoFrame()
@@ -3381,7 +3470,7 @@ void CameraWorker::asiCaptureVideoFrame()
         m_asiVideoCaptureStarted = true;
     }
 
-    const int waitMs = std::max(1000, static_cast<int>(std::ceil(m_settings.m_exposureTimeMs)) + 500);
+    const int waitMs = std::max(1000, static_cast<int>(std::ceil(currentCaptureExposureTimeMs())) + 500);
     QElapsedTimer captureTimer;
     captureTimer.start();
     const ASI_ERROR_CODE getVideoError = ASIGetVideoData(cameraId, m_asiFrameBuffer.data(), m_asiFrameBuffer.size(), waitMs);
@@ -3393,7 +3482,7 @@ void CameraWorker::asiCaptureVideoFrame()
             CameraPipelineFrame::BayerPattern bayerPattern = CameraPipelineFrame::BayerNone;
             CameraPipelineFramePtr frame(new CameraPipelineFrame);
             frame->m_image = asiFrameToImage(&bayerPattern);
-            frame->m_captureDateTime = QDateTime::currentDateTime();
+            populateFrameExposureMetadata(*frame);
             frame->m_bayerPattern = bayerPattern;
             m_frameAligner->submitFrame(frame);
         }

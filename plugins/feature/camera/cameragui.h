@@ -217,6 +217,7 @@ private:
     double m_exposureMinimumMs;
     double m_exposureMaximumMs;
     double m_exposureStepMs;
+    int m_qtHdrExposureIndex = 0;
     bool m_asiCoolerSupported;
     bool m_asiTargetTempSupported;
     bool m_asiUsbBandwidthSupported;
@@ -299,7 +300,20 @@ private:
     void updateImageWidget();
     void updateCaptureModeControls();
     void updateExposureControls();
+    void updateHdrExposureControls();
+    void updateHdrStackingControls();
     void updateVideoFileControls();
+    bool isHdrStackingSupported() const;
+    bool isHdrStackingActiveForQt() const;
+    void resetQtHdrBracketState();
+    double currentQtCaptureExposureTimeMs() const;
+    int currentQtHdrExposureIndex() const;
+    int currentQtHdrExposureCount() const;
+    void advanceQtHdrBracketState();
+    void applyQtExposureTimeMs(double exposureTimeMs);
+    void populateFrameExposureMetadata(CameraPipelineFrame& frame, double exposureTimeMs, int hdrExposureIndex, int hdrExposureCount) const;
+    void handleHdrExposureSliderChanged(int exposureIndex, int sliderValue);
+    void handleHdrExposureSpinChanged(int exposureIndex, double value);
     void probeQtCameraCapabilities();
     void reportResolutions();
     void populateQtFormatControls(const QList<QSize>& resolutions, const QHash<QString, FrameRateOptions>& frameRateOptionsByResolution);

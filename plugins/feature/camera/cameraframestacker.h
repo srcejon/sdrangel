@@ -114,11 +114,19 @@ public:
     void setNextStage(CameraImageProcessor *nextStage) { m_nextStage = nextStage; }
 
 private:
+    struct HdrFrameSample
+    {
+        cv::Mat m_frameMat;
+        double m_exposureTimeMs = 0.0;
+        int m_exposureIndex = -1;
+    };
+
     MessageQueue m_inputMessageQueue;
     CameraImageProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
     std::deque<cv::Mat> m_stackFrameHistory;
+    std::vector<HdrFrameSample> m_hdrFrameSamples;
     cv::Mat m_stackAccumulator;
     cv::Mat m_darkCalibrationFrame;
     cv::Mat m_flatCalibrationFrame;
@@ -140,7 +148,7 @@ private:
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);
     static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
-    [[nodiscard]] QImage applyFrameStacking(const QImage& input, CameraPipelineFrame::BayerPattern bayerPattern);
+    [[nodiscard]] bool applyFrameStacking(const CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount);
 
 private slots:
     void handleInputMessages();

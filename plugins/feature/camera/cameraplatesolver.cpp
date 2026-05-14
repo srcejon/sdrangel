@@ -2585,6 +2585,39 @@ bool isBetterWeakModeRefinedEvaluation(const Evaluation& candidate, const Evalua
     return isBetterWeakModeEvaluation(candidate, best);
 }
 
+bool isBetterFinalPassEvaluation(const Evaluation& candidate,
+                                 const Evaluation& best,
+                                 int minMatchCount)
+{
+    if (!candidate.valid) {
+        return false;
+    }
+    if (!best.valid) {
+        return true;
+    }
+
+    const bool candidateMeetsThreshold = candidate.matchCount >= minMatchCount;
+    const bool bestMeetsThreshold = best.matchCount >= minMatchCount;
+    if (candidateMeetsThreshold != bestMeetsThreshold) {
+        return candidateMeetsThreshold;
+    }
+
+    const int matchDelta = candidate.matchCount - best.matchCount;
+    if (std::abs(matchDelta) <= 1)
+    {
+        const double candidateMedian = medianDistancePixels(candidate.matches);
+        const double bestMedian = medianDistancePixels(best.matches);
+        if (!qFuzzyCompare(candidateMedian + 1.0, bestMedian + 1.0)) {
+            return candidateMedian < bestMedian;
+        }
+        if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
+            return candidate.rmsErrorPixels < best.rmsErrorPixels;
+        }
+    }
+
+    return isBetterEvaluation(candidate, best);
+}
+
 bool isBetterEvaluationForMode(const Evaluation& candidate,
                                const Evaluation& best,
                                bool useWeakModeScoring)
@@ -3496,63 +3529,105 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     centerOffsetYCenter = best.centerOffsetYPixels;
     distortionCenter = best.distortionK1;
 
-    // Final pass uses the tighter final-match radius. This pulls the pose toward the inlier
-    // cluster (rather than the looser acquisition radius), which is the entire point of
-    // exposing m_plateSolveFinalMatchRadius as a separate setting.
+    // Tighten in stages. Jumping directly from the loose acquisition radius to the tight final
+    // radius can leave wide-field weak solves stuck with a coarse-but-high-match-count pose that
+    // never wins the final comparison, even when the correct basin is nearby.
     const double finalPassRadius = std::min(
         static_cast<double>(settings.m_plateSolveMatchRadius),
         std::max(1.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius)));
+    const double intermediatePassRadius = std::min(
+        static_cast<double>(settings.m_plateSolveMatchRadius),
+        std::max(finalPassRadius + 10.0, finalPassRadius * 2.0));
+    QVector<double> tighteningPassRadii;
+    if (intermediatePassRadius > (finalPassRadius + 1e-6)) {
+        tighteningPassRadii.append(intermediatePassRadius);
+    }
+    tighteningPassRadii.append(finalPassRadius);
 
-    for (int iteration = 0; iteration < 2; ++iteration)
+    const int finalPassMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
+    for (double tighteningRadius : tighteningPassRadii)
     {
-        bool improvedAz = false;
-        bool improvedEl = false;
-        bool improvedRoll = false;
-        bool improvedFov = false;
-        for (double azOffset : offsets)
+        Evaluation tighteningBest = evaluatePose(
+            settings,
+            catalogContext,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices,
+            azCenter,
+            elCenter,
+            rollCenter,
+            fovCenter,
+            &catalogIndices,
+            centerOffsetXCenter,
+            centerOffsetYCenter,
+            distortionCenter,
+            tighteningRadius);
+
+        for (int iteration = 0; iteration < 2; ++iteration)
         {
-            for (double elOffset : offsets)
+            bool improvedAz = false;
+            bool improvedEl = false;
+            bool improvedRoll = false;
+            bool improvedFov = false;
+            for (double azOffset : offsets)
             {
-                for (double rollOffset : offsets)
+                for (double elOffset : offsets)
                 {
-                    for (double fovOffset : offsets)
+                    for (double rollOffset : offsets)
                     {
-                        const Evaluation candidate = evaluatePose(
-                            settings,
-                            catalogContext,
-                            imageSize,
-                            captureDateTimeUtc,
-                            starDetections,
-                            detectionIndices,
-                            azCenter + azOffset * azStep,
-                            elCenter + elOffset * elStep,
-                            rollCenter + rollOffset * rollStep,
-                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
-                            &catalogIndices,
-                            centerOffsetXCenter,
-                            centerOffsetYCenter,
-                            distortionCenter,
-                            finalPassRadius);
-                        if (isBetterEvaluation(candidate, best)) {
-                            best = candidate;
-                            if (azOffset != 0.0) improvedAz = true;
-                            if (elOffset != 0.0) improvedEl = true;
-                            if (rollOffset != 0.0) improvedRoll = true;
-                            if (fovOffset != 0.0) improvedFov = true;
+                        for (double fovOffset : offsets)
+                        {
+                            const Evaluation candidate = evaluatePose(
+                                settings,
+                                catalogContext,
+                                imageSize,
+                                captureDateTimeUtc,
+                                starDetections,
+                                detectionIndices,
+                                azCenter + azOffset * azStep,
+                                elCenter + elOffset * elStep,
+                                rollCenter + rollOffset * rollStep,
+                                std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
+                                &catalogIndices,
+                                centerOffsetXCenter,
+                                centerOffsetYCenter,
+                                distortionCenter,
+                                tighteningRadius);
+                            if (isBetterFinalPassEvaluation(candidate, tighteningBest, finalPassMinMatches)) {
+                                tighteningBest = candidate;
+                                if (azOffset != 0.0) improvedAz = true;
+                                if (elOffset != 0.0) improvedEl = true;
+                                if (rollOffset != 0.0) improvedRoll = true;
+                                if (fovOffset != 0.0) improvedFov = true;
+                            }
                         }
                     }
                 }
             }
+
+            if (tighteningBest.valid) {
+                azCenter = tighteningBest.azimuthDegrees;
+                elCenter = tighteningBest.elevationDegrees;
+                rollCenter = tighteningBest.rollDegrees;
+                fovCenter = tighteningBest.fovDegrees;
+            }
+            if (!improvedAz)   azStep   *= 0.5;
+            if (!improvedEl)   elStep   *= 0.5;
+            if (!improvedRoll) rollStep *= 0.5;
+            if (!improvedFov)  fovStep  *= 0.5;
         }
 
-        azCenter = best.azimuthDegrees;
-        elCenter = best.elevationDegrees;
-        rollCenter = best.rollDegrees;
-        fovCenter = best.fovDegrees;
-        if (!improvedAz)   azStep   *= 0.5;
-        if (!improvedEl)   elStep   *= 0.5;
-        if (!improvedRoll) rollStep *= 0.5;
-        if (!improvedFov)  fovStep  *= 0.5;
+        if (tighteningBest.valid && (tighteningBest.matchCount >= finalPassMinMatches)) {
+            best = tighteningBest;
+            azCenter = best.azimuthDegrees;
+            elCenter = best.elevationDegrees;
+            rollCenter = best.rollDegrees;
+            fovCenter = best.fovDegrees;
+            centerOffsetXCenter = best.centerOffsetXPixels;
+            centerOffsetYCenter = best.centerOffsetYPixels;
+            distortionCenter = best.distortionK1;
+        }
     }
 
     return best;

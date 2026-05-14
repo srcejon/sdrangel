@@ -3477,6 +3477,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     result.m_catalogStarsLoaded = brightStarCatalog(settings).size();
     result.m_detectedStarsConsidered = starDetections.size();
     const bool useCurrentSettingsOnly = plateSolveStartUsesCurrentSettingsOnly(settings);
+    const bool useStartFov = plateSolveStartUsesFov(settings);
     const bool useStartElevation = plateSolveStartUsesElevation(settings);
     const bool useStartDirection = plateSolveStartUsesDirection(settings);
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
@@ -3763,27 +3764,24 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     if (useElevationSeedOnly
         && !isAcceptableElevationSeedSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
-        if (kLogPlateSolveCandidates) {
-            qDebug() << "CameraPlateSolver: rejecting elevation-seeded solution"
-                     << "matches=" << finalMatches.size()
-                     << "rms=" << result.m_rmsErrorPixels
-                     << "max=" << result.m_maxErrorPixels;
-        }
+        qDebug() << "CameraPlateSolver: rejecting elevation-seeded solution"
+                 << "matches=" << finalMatches.size()
+                 << "rms=" << result.m_rmsErrorPixels
+                 << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
         PROFILER_STOP(__FUNCTION__ ": unacceptable elevation-seeded solve");
         return CameraPlateSolveResult();
     }
 
-    if (!useStartElevation
+    if (!useStartFov
+        && !useStartElevation
         && !useStartDirection
         && !isAcceptableBlindSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
-        if (kLogPlateSolveCandidates) {
-            qDebug() << "CameraPlateSolver: rejecting blind solution"
-                     << "matches=" << finalMatches.size()
-                     << "rms=" << result.m_rmsErrorPixels
-                     << "max=" << result.m_maxErrorPixels;
-        }
+        qDebug() << "CameraPlateSolver: rejecting blind solution"
+                 << "matches=" << finalMatches.size()
+                 << "rms=" << result.m_rmsErrorPixels
+                 << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
         PROFILER_STOP(__FUNCTION__ ": unacceptable blind solve");
         return CameraPlateSolveResult();

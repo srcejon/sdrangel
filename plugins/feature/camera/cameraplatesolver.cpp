@@ -2873,6 +2873,23 @@ void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
         }
     }
 
+    // Once the weak-mode pool is full, avoid appending/sorting candidates that cannot
+    // possibly survive. This cuts a lot of blind/FoV churn without changing the winner
+    // selection logic for genuinely competitive basins.
+    if (useWeakModeScoring && (candidates.size() >= maxCandidates) && !candidates.isEmpty())
+    {
+        const Evaluation& weakestCandidate = candidates.constLast();
+        if (!isBetterEvaluationForMode(candidate, weakestCandidate, useWeakModeScoring))
+        {
+            const bool nearTailChallenge = (candidate.matchCount >= weakestCandidate.matchCount)
+                || (candidate.rmsErrorPixels <= weakestCandidate.rmsErrorPixels);
+            if (stage && nearTailChallenge && (candidate.matchCount >= interestingMatchCount)) {
+                logWeakModePoolDecision(stage, "reject-below-tail", candidate, poolQualityRadius, &weakestCandidate);
+            }
+            return;
+        }
+    }
+
     candidates.append(candidate);
     std::sort(candidates.begin(), candidates.end(), [useWeakModeScoring](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterEvaluationForMode(lhs, rhs, useWeakModeScoring);
@@ -3000,6 +3017,7 @@ void logWeakModePoolDecision(const char *stage,
         << " score=" << weakModeEvaluationScore(candidate)
         << " matches=" << candidate.matchCount
         << " RMS=" << candidate.rmsErrorPixels
+        << " Median=" << medianDistancePixels(candidate.matches)
         << " poolRmsCap=" << poolQualityRadius
         << " Az=" << candidate.azimuthDegrees
         << " El=" << candidate.elevationDegrees
@@ -3014,6 +3032,7 @@ void logWeakModePoolDecision(const char *stage,
             << " score=" << weakModeEvaluationScore(*other)
             << " matches=" << other->matchCount
             << " RMS=" << other->rmsErrorPixels
+            << " Median=" << medianDistancePixels(other->matches)
             << " Az=" << other->azimuthDegrees
             << " El=" << other->elevationDegrees
             << " Roll=" << other->rollDegrees
@@ -3038,6 +3057,7 @@ void logWeakModeCandidatePool(const char *stage, const QVector<Evaluation>& cand
             << " score=" << weakModeEvaluationScore(candidate)
             << " matches=" << candidate.matchCount
             << " RMS=" << candidate.rmsErrorPixels
+            << " Median=" << medianDistancePixels(candidate.matches)
             << " Az=" << candidate.azimuthDegrees
             << " El=" << candidate.elevationDegrees
             << " Roll=" << candidate.rollDegrees

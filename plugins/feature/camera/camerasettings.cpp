@@ -328,6 +328,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveMaxMagnitude = 3.5;
     m_plateSolveMinMatches = 4;
     m_plateSolveMatchRadius = 24.0;
+    m_plateSolveFinalMatchRadius = 24.0;
     m_plateSolveSearchRadius = 12.0;
     m_plateSolveStartMode = PlateSolveStartFovAzElRoll;
     m_plateSolveLabelMode = PlateSolveLabelName;
@@ -500,6 +501,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(211, m_plateSolveMaxMagnitude);
     s.writeS32(212, m_plateSolveMinMatches);
     s.writeDouble(213, m_plateSolveMatchRadius);
+    s.writeDouble(226, m_plateSolveFinalMatchRadius);
     s.writeDouble(214, m_plateSolveSearchRadius);
     s.writeS32(225, static_cast<qint32>(m_plateSolveStartMode));
     s.writeBool(215, m_plateSolveUseDownloadedCatalog);
@@ -837,6 +839,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(211, &m_plateSolveMaxMagnitude, 3.5);
         d.readS32(212, &m_plateSolveMinMatches, 4);
         d.readDouble(213, &m_plateSolveMatchRadius, 24.0);
+        d.readDouble(226, &m_plateSolveFinalMatchRadius, m_plateSolveMatchRadius);
         d.readDouble(214, &m_plateSolveSearchRadius, 12.0);
         bool legacyPlateSolveUseCurrentDirection = true;
         d.readBool(224, &legacyPlateSolveUseCurrentDirection, true);
@@ -874,6 +877,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_plateSolveMaxMagnitude = qBound(m_minPlateSolveMagnitude, m_plateSolveMaxMagnitude, m_maxPlateSolveMagnitude);
         m_plateSolveMinMatches = qBound(m_minPlateSolveMatches, m_plateSolveMinMatches, m_maxPlateSolveMatches);
         m_plateSolveMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveMatchRadius, m_maxPlateSolveMatchRadius);
+        m_plateSolveFinalMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveFinalMatchRadius, m_maxPlateSolveMatchRadius);
         m_plateSolveSearchRadius = qBound(m_minPlateSolveSearchRadius, m_plateSolveSearchRadius, m_maxPlateSolveSearchRadius);
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(qBound(0, static_cast<int>(m_plateSolveApplyMode), 3));
         m_plateSolveStartMode = static_cast<PlateSolveStartMode>(qBound(0, static_cast<int>(m_plateSolveStartMode), 5));
@@ -1532,6 +1536,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveMatchRadius")) {
         m_plateSolveMatchRadius = settings.m_plateSolveMatchRadius;
     }
+    if (settingsKeys.contains("plateSolveFinalMatchRadius")) {
+        m_plateSolveFinalMatchRadius = settings.m_plateSolveFinalMatchRadius;
+    }
     if (settingsKeys.contains("plateSolveSearchRadius")) {
         m_plateSolveSearchRadius = settings.m_plateSolveSearchRadius;
     }
@@ -2131,6 +2138,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveMatchRadius") || force) {
         ostr << " m_plateSolveMatchRadius: " << m_plateSolveMatchRadius;
+    }
+    if (settingsKeys.contains("plateSolveFinalMatchRadius") || force) {
+        ostr << " m_plateSolveFinalMatchRadius: " << m_plateSolveFinalMatchRadius;
     }
     if (settingsKeys.contains("plateSolveSearchRadius") || force) {
         ostr << " m_plateSolveSearchRadius: " << m_plateSolveSearchRadius;

@@ -1204,6 +1204,7 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveMaxMagnitudeSpin->setValue(m_settings.m_plateSolveMaxMagnitude);
     settingsUI()->plateSolveMinMatchesSpin->setValue(m_settings.m_plateSolveMinMatches);
     settingsUI()->plateSolveMatchRadiusSpin->setValue(m_settings.m_plateSolveMatchRadius);
+    settingsUI()->plateSolveFinalMatchRadiusSpin->setValue(m_settings.m_plateSolveFinalMatchRadius);
     settingsUI()->plateSolveSearchRadiusSpin->setValue(m_settings.m_plateSolveSearchRadius);
     settingsUI()->plateSolveStartModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveStartMode));
     updatePlateSolveStartModeUi();
@@ -1636,6 +1637,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveMaxMagnitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMaxMagnitudeSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveMinMatchesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMinMatchesSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMatchRadiusSpin_valueChanged);
+    QObject::connect(settingsUI()->plateSolveFinalMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveFinalMatchRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveSearchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveStartModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveStartModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveUseCurrentDateTimeCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled);
@@ -5529,6 +5531,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveMaxMagnitude = defaults.m_plateSolveMaxMagnitude;
     m_settings.m_plateSolveMinMatches = defaults.m_plateSolveMinMatches;
     m_settings.m_plateSolveMatchRadius = defaults.m_plateSolveMatchRadius;
+    m_settings.m_plateSolveFinalMatchRadius = defaults.m_plateSolveFinalMatchRadius;
     m_settings.m_plateSolveSearchRadius = defaults.m_plateSolveSearchRadius;
     m_settings.m_plateSolveStartMode = defaults.m_plateSolveStartMode;
     m_settings.m_plateSolveUseCurrentDateTime = defaults.m_plateSolveUseCurrentDateTime;
@@ -5582,6 +5585,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveMaxMagnitude",
         "plateSolveMinMatches",
         "plateSolveMatchRadius",
+        "plateSolveFinalMatchRadius",
         "plateSolveSearchRadius",
         "plateSolveStartMode",
         "plateSolveUseCurrentDateTime",
@@ -5764,6 +5768,12 @@ void CameraGUI::on_plateSolveMatchRadiusSpin_valueChanged(double value)
 {
     m_settings.m_plateSolveMatchRadius = value;
     applySetting("plateSolveMatchRadius");
+}
+
+void CameraGUI::on_plateSolveFinalMatchRadiusSpin_valueChanged(double value)
+{
+    m_settings.m_plateSolveFinalMatchRadius = value;
+    applySetting("plateSolveFinalMatchRadius");
 }
 
 void CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged(double value)

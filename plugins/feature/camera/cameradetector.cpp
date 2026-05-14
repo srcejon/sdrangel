@@ -598,6 +598,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("plateSolveMaxMagnitude")
         || settingsKeys.contains("plateSolveMinMatches")
         || settingsKeys.contains("plateSolveMatchRadius")
+        || settingsKeys.contains("plateSolveFinalMatchRadius")
         || settingsKeys.contains("plateSolveSearchRadius")
         || settingsKeys.contains("plateSolveStartMode")
         || settingsKeys.contains("plateSolveUseCurrentDateTime")

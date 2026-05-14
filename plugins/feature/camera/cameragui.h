@@ -564,6 +564,7 @@ private slots:
     void on_plateSolveMaxMagnitudeSpin_valueChanged(double value);
     void on_plateSolveMinMatchesSpin_valueChanged(int value);
     void on_plateSolveMatchRadiusSpin_valueChanged(double value);
+    void on_plateSolveFinalMatchRadiusSpin_valueChanged(double value);
     void on_plateSolveSearchRadiusSpin_valueChanged(double value);
     void on_plateSolveStartModeCombo_currentIndexChanged(int index);
     void on_plateSolveUseCurrentDateTimeCheck_toggled(bool checked);

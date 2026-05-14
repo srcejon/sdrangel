@@ -4979,6 +4979,19 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
+              <item row="9" column="1">
+               <widget class="QDoubleSpinBox" name="plateSolveFinalMatchRadiusSpin">
+                <property name="minimum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>256.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>1.000000000000000</double>
+                </property>
+               </widget>
+              </item>
               <item row="8" column="1">
                <widget class="QCheckBox" name="plateSolveUseDownloadedCatalogCheck">
                 <property name="toolTip">
@@ -5029,7 +5042,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
               <item row="6" column="2">
                <widget class="QLabel" name="plateSolveMatchRadiusLabel">
                 <property name="text">
-                 <string>Match radius</string>
+                 <string>Acquisition radius</string>
+                </property>
+               </widget>
+              </item>
+              <item row="9" column="0">
+               <widget class="QLabel" name="plateSolveFinalMatchRadiusLabel">
+                <property name="text">
+                 <string>Final match radius</string>
                 </property>
                </widget>
               </item>

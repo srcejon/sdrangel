@@ -439,7 +439,8 @@ struct CameraSettings
     bool   m_plateSolve;        ///< Attempt to identify detected stars from a built-in bright-star catalog
     double m_plateSolveMaxMagnitude; ///< Faintest catalog star to consider during plate solving
     int    m_plateSolveMinMatches; ///< Minimum matches required for a successful solve
-    double m_plateSolveMatchRadius; ///< Maximum image-space distance in pixels for a star match
+    double m_plateSolveMatchRadius; ///< Maximum image-space distance in pixels for acquisition/coarse star matching
+    double m_plateSolveFinalMatchRadius; ///< Maximum image-space distance in pixels for final accepted star matches
     double m_plateSolveSearchRadius; ///< Search radius in degrees around the current pointing estimate when the chosen start mode uses it
     PlateSolveStartMode m_plateSolveStartMode; ///< Which current camera settings should be used as starting inputs for plate solving
     PlateSolveLabelMode m_plateSolveLabelMode; ///< Which catalog metadata should be shown for solved stars

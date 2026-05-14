@@ -2226,9 +2226,9 @@ bool isAcceptableBlindSolve(const CameraSettings& settings,
     }
 
     const double medianError = medianDistancePixels(matches);
-    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.70, 20.0);
-    const double maxMedianError = std::min(settings.m_plateSolveMatchRadius * 0.55, 15.0);
-    const double maxWorstError = std::min(settings.m_plateSolveMatchRadius * 1.10, 45.0);
+    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 20.0);
+    const double maxMedianError = std::min(settings.m_plateSolveFinalMatchRadius * 0.55, 15.0);
+    const double maxWorstError = std::min(settings.m_plateSolveFinalMatchRadius * 1.10, 45.0);
 
     return (rmsErrorPixels <= maxRmsError)
         && (medianError <= maxMedianError)
@@ -2244,7 +2244,7 @@ bool isStrongGuidedSolve(const CameraSettings& settings,
     }
 
     const int minAcceptedMatches = std::max(minMatchCount + 2, 6);
-    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.45, 12.0);
+    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.45, 12.0);
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
@@ -2257,7 +2257,7 @@ bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
     }
 
     const int minAcceptedMatches = std::max(minMatchCount, 4);
-    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.75, 20.0);
+    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 20.0);
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
@@ -2270,7 +2270,7 @@ bool isAcceptableElevationSeedEvaluation(const CameraSettings& settings,
     }
 
     const int minAcceptedMatches = std::max(minMatchCount + 1, 5);
-    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.85, 22.0);
+    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.85, 22.0);
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
@@ -2287,9 +2287,9 @@ bool isAcceptableElevationSeedSolve(const CameraSettings& settings,
     }
 
     const double medianError = medianDistancePixels(matches);
-    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.85, 24.0);
-    const double maxMedianError = std::min(settings.m_plateSolveMatchRadius * 0.70, 18.0);
-    const double maxWorstError = std::min(settings.m_plateSolveMatchRadius * 1.20, 50.0);
+    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.85, 24.0);
+    const double maxMedianError = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
+    const double maxWorstError = std::min(settings.m_plateSolveFinalMatchRadius * 1.20, 50.0);
 
     return (rmsErrorPixels <= maxRmsError)
         && (medianError <= maxMedianError)
@@ -3081,6 +3081,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     const bool useStartElevation = plateSolveStartUsesElevation(settings);
     const bool useStartDirection = plateSolveStartUsesDirection(settings);
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
+    const double finalMatchRadius = settings.m_plateSolveFinalMatchRadius;
 
     if (starDetections.isEmpty()) {
         return result;
@@ -3124,7 +3125,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
             catalogContext,
             currentSettingsProjector,
-            settings.m_plateSolveMatchRadius);
+            finalMatchRadius);
         result.m_catalogCandidateStars = projectedStars.size();
 
         const QVector<Match> allMatches = buildMatches(
@@ -3132,20 +3133,20 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             starDetections,
             allDetectionIndices,
             projectedStars,
-            settings.m_plateSolveMatchRadius);
+            finalMatchRadius);
 
         int outlierCount = 0;
         QVector<Match> finalMatches = rejectOutlierMatches(
             allMatches,
             settings.m_plateSolveMinMatches,
-            settings.m_plateSolveMatchRadius,
+            finalMatchRadius,
             &outlierCount);
         result.m_outlierStars = outlierCount;
 
         appendSupplementalMatches(
             starDetections,
             projectedStars,
-            settings.m_plateSolveMatchRadius,
+            finalMatchRadius,
             finalMatches);
 
         if (finalMatches.isEmpty()) {
@@ -3190,7 +3191,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             starDetections,
             projectedStars,
             finalMatches,
-            settings.m_plateSolveMatchRadius);
+            finalMatchRadius);
 
         PROFILER_STOP(__FUNCTION__ ": current-settings-only");
         return result;
@@ -3233,27 +3234,27 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
         catalogContext,
         finalProjector,
-        settings.m_plateSolveMatchRadius);
+        finalMatchRadius);
     result.m_catalogCandidateStars = projectedStars.size();
     const QVector<Match> allMatches = buildMatches(
         catalogContext,
         starDetections,
         allDetectionIndices,
         projectedStars,
-        settings.m_plateSolveMatchRadius);
+        finalMatchRadius);
 
     int outlierCount = 0;
     QVector<Match> finalMatches = rejectOutlierMatches(
         allMatches,
         settings.m_plateSolveMinMatches,
-        settings.m_plateSolveMatchRadius,
+        finalMatchRadius,
         &outlierCount);
     result.m_outlierStars = outlierCount;
 
     appendSupplementalMatches(
         starDetections,
         projectedStars,
-        settings.m_plateSolveMatchRadius,
+        finalMatchRadius,
         finalMatches);
 
     if (finalMatches.size() < settings.m_plateSolveMinMatches) {
@@ -3322,7 +3323,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         starDetections,
         projectedStars,
         finalMatches,
-        settings.m_plateSolveMatchRadius);
+        finalMatchRadius);
 
     PROFILER_STOP(__FUNCTION__);
 

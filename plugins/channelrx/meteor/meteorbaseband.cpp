@@ -19,6 +19,7 @@
 
 #include "dsp/downchannelizer.h"
 #include "dsp/dspcommands.h"
+#include "dsp/scopevis.h"
 #include "dsp/spectrumvis.h"
 
 #include "meteorbaseband.h"
@@ -78,6 +79,15 @@ void MeteorBaseband::stopWork()
 void MeteorBaseband::setChannel(ChannelAPI *channel)
 {
     (void) channel;
+}
+
+void MeteorBaseband::setScopeSink(ScopeVis* scopeSink)
+{
+    if (scopeSink) {
+        scopeSink->setNbStreams(MeteorDemodSink::m_scopeStreams);
+    }
+
+    m_sink.setScopeSink(scopeSink);
 }
 
 void MeteorBaseband::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)

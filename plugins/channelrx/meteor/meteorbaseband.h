@@ -73,7 +73,7 @@ public:
     void setBasebandSampleRate(int sampleRate);
     int getChannelSampleRate() const;
     void setChannel(ChannelAPI *channel);
-    void setScopeSink(ScopeVis* scopeSink) { m_sink.setScopeSink(scopeSink); }
+    void setScopeSink(ScopeVis* scopeSink);
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumVis = spectrumSink; m_sink.setSpectrumSink(spectrumSink); }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_sink.setMessageQueueToGUI(messageQueue); }
     bool isRunning() const { return m_running; }

@@ -36,6 +36,10 @@ class SpectrumVis;
 
 class MeteorDemodSink : public ChannelSampleSink {
 public:
+    enum {
+        m_scopeStreams = 4
+    };
+
     class MsgMeteorDetected : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -110,10 +114,6 @@ public:
     int getOutputSampleRate() const { return m_settings.m_channelSampleRate; }
 
 private:
-    enum {
-        m_scopeStreams = 4
-    };
-
     ScopeVis* m_scopeSink;
     SpectrumVis* m_spectrumSink;
     MessageQueue *m_messageQueueToGUI;

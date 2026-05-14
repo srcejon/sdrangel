@@ -24,6 +24,7 @@ if(NOT SERVER_MODE)
     set(meteor_SOURCES
         ${meteor_SOURCES}
         meteorgui.cpp
+        meteorgui.ui
     )
     set(meteor_HEADERS
         ${meteor_HEADERS}

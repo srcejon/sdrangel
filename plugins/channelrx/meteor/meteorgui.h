@@ -39,9 +39,14 @@ class GLScopeGUI;
 class GLSpectrum;
 class GLSpectrumGUI;
 class PluginAPI;
+class RollupContents;
 class ScopeVis;
 class SpectrumVis;
 class ValueDialZ;
+
+namespace Ui {
+    class MeteorGUI;
+}
 
 class QComboBox;
 class QDoubleSpinBox;
@@ -83,6 +88,7 @@ public slots:
     void channelMarkerHighlightedByCursor();
 
 private:
+    Ui::MeteorGUI* ui;
     PluginAPI* m_pluginAPI;
     DeviceUISet* m_deviceUISet;
     ChannelMarker m_channelMarker;
@@ -127,7 +133,7 @@ private:
     explicit MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSampleSink *rxChannel, QWidget* parent = nullptr);
     virtual ~MeteorGUI();
 
-    void setupUi(QWidget *rollupContents);
+    void setupUi(RollupContents *rollupContents);
     void setupScope();
     void setupSpectrum();
     void blockApplySettings(bool block);

@@ -20,15 +20,12 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDoubleSpinBox>
-#include <QGridLayout>
 #include <QHeaderView>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
-#include <QVBoxLayout>
 
 #include "device/deviceuiset.h"
 #include "dsp/dspcommands.h"
@@ -42,11 +39,11 @@
 #include "gui/glspectrum.h"
 #include "gui/glspectrumgui.h"
 #include "gui/rollupcontents.h"
-#include "gui/valuedialz.h"
 #include "maincore.h"
 #include "plugin/pluginapi.h"
 
 #include "meteorgui.h"
+#include "ui_meteorgui.h"
 
 const int MeteorGUI::m_sampleRates[4] = {100, 300, 1000, 3000};
 
@@ -89,6 +86,7 @@ bool MeteorGUI::deserialize(const QByteArray& data)
 
 MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSampleSink *rxChannel, QWidget* parent) :
     ChannelGUI(parent),
+    ui(new Ui::MeteorGUI),
     m_pluginAPI(pluginAPI),
     m_deviceUISet(deviceUISet),
     m_channelMarker(this),
@@ -153,112 +151,69 @@ MeteorGUI::~MeteorGUI()
 {
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
     m_glScope->disconnectTimer();
+    delete ui;
 }
 
-void MeteorGUI::setupUi(QWidget *rollupContents)
+void MeteorGUI::setupUi(RollupContents *rollupContents)
 {
-    rollupContents->setMinimumSize(360, 0);
+    ui->setupUi(rollupContents);
 
-    QWidget *settingsContainer = new QWidget(rollupContents);
-    settingsContainer->setObjectName("settingsContainer");
-    settingsContainer->setWindowTitle("Settings");
-    settingsContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    QGridLayout *settingsLayout = new QGridLayout(settingsContainer);
-    settingsLayout->setContentsMargins(2, 2, 2, 2);
-    settingsLayout->setHorizontalSpacing(4);
-    settingsLayout->setVerticalSpacing(3);
+    m_frequencyMode = ui->frequencyMode;
+    m_deltaFrequency = ui->deltaFrequency;
+    m_deltaUnits = ui->deltaUnits;
+    m_sampleRate = ui->sampleRate;
+    m_powerLPFCutoff = ui->powerLPFCutoff;
+    m_detectionThreshold = ui->detectionThreshold;
+    m_minDuration = ui->minDuration;
+    m_maxDuration = ui->maxDuration;
+    m_maxFrequencyDrift = ui->maxFrequencyDrift;
+    m_totalCountText = ui->totalCountText;
+    m_hourCountText = ui->hourCountText;
+    m_clearDetections = ui->clearDetections;
+    m_detectionsTable = ui->detectionsTable;
+    m_hourlyChartView = ui->hourlyChartView;
+    m_glSpectrum = ui->glSpectrum;
+    m_spectrumGUI = ui->spectrumGUI;
+    m_glScope = ui->glScope;
+    m_scopeGUI = ui->scopeGUI;
 
-    m_frequencyMode = new QComboBox(settingsContainer);
     m_frequencyMode->addItem("df");
     m_frequencyMode->addItem("f");
     m_frequencyMode->setToolTip("Select frequency entry mode");
-    m_deltaFrequency = new ValueDialZ(settingsContainer);
     m_deltaFrequency->setColorMapper(ColorMapper(ColorMapper::GrayGold));
     m_deltaFrequency->setValueRange(false, 7, -9999999, 9999999);
-    m_deltaUnits = new QLabel("Hz", settingsContainer);
 
-    m_sampleRate = new QComboBox(settingsContainer);
     m_sampleRate->addItems(QStringList({"100 Hz", "300 Hz", "1000 Hz", "3000 Hz"}));
     m_sampleRate->setToolTip("Meteor detector channel sample rate");
 
-    m_powerLPFCutoff = new QDoubleSpinBox(settingsContainer);
     m_powerLPFCutoff->setDecimals(1);
     m_powerLPFCutoff->setRange(0.1, 1350.0);
     m_powerLPFCutoff->setSuffix(" Hz");
     m_powerLPFCutoff->setToolTip("Power low pass filter cutoff frequency");
 
-    m_detectionThreshold = new QDoubleSpinBox(settingsContainer);
     m_detectionThreshold->setDecimals(1);
     m_detectionThreshold->setRange(1.0, 60.0);
     m_detectionThreshold->setSuffix(" dB");
     m_detectionThreshold->setToolTip("Detection threshold above the tracked noise floor");
 
-    m_minDuration = new QSpinBox(settingsContainer);
     m_minDuration->setRange(1, 10000);
     m_minDuration->setSuffix(" ms");
     m_minDuration->setToolTip("Minimum pulse duration");
 
-    m_maxDuration = new QSpinBox(settingsContainer);
     m_maxDuration->setRange(1, 60000);
     m_maxDuration->setSuffix(" ms");
     m_maxDuration->setToolTip("Maximum pulse duration");
 
-    m_maxFrequencyDrift = new QDoubleSpinBox(settingsContainer);
     m_maxFrequencyDrift->setDecimals(1);
     m_maxFrequencyDrift->setRange(0.0, 1500.0);
     m_maxFrequencyDrift->setSuffix(" Hz");
     m_maxFrequencyDrift->setToolTip("Maximum frequency span or drift accepted for a meteor pulse");
 
-    int row = 0;
-    settingsLayout->addWidget(new QLabel("Freq", settingsContainer), row, 0);
-    settingsLayout->addWidget(m_frequencyMode, row, 1);
-    settingsLayout->addWidget(m_deltaFrequency, row, 2);
-    settingsLayout->addWidget(m_deltaUnits, row, 3);
-    settingsLayout->addWidget(new QLabel("Rate", settingsContainer), row, 4);
-    settingsLayout->addWidget(m_sampleRate, row, 5);
-
-    row++;
-    settingsLayout->addWidget(new QLabel("LPF", settingsContainer), row, 0);
-    settingsLayout->addWidget(m_powerLPFCutoff, row, 1, 1, 2);
-    settingsLayout->addWidget(new QLabel("TH", settingsContainer), row, 3);
-    settingsLayout->addWidget(m_detectionThreshold, row, 4, 1, 2);
-
-    row++;
-    settingsLayout->addWidget(new QLabel("Min", settingsContainer), row, 0);
-    settingsLayout->addWidget(m_minDuration, row, 1, 1, 2);
-    settingsLayout->addWidget(new QLabel("Max", settingsContainer), row, 3);
-    settingsLayout->addWidget(m_maxDuration, row, 4, 1, 2);
-
-    row++;
-    settingsLayout->addWidget(new QLabel("Drift", settingsContainer), row, 0);
-    settingsLayout->addWidget(m_maxFrequencyDrift, row, 1, 1, 2);
-    settingsLayout->setColumnStretch(6, 1);
-
-    QWidget *detectionsContainer = new QWidget(rollupContents);
-    detectionsContainer->setObjectName("detectionsContainer");
-    detectionsContainer->setWindowTitle("Detections");
-    detectionsContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    QVBoxLayout *detectionsLayout = new QVBoxLayout(detectionsContainer);
-    detectionsLayout->setContentsMargins(2, 2, 2, 2);
-    detectionsLayout->setSpacing(3);
-
-    QHBoxLayout *countsLayout = new QHBoxLayout();
-    countsLayout->addWidget(new QLabel("Total", detectionsContainer));
-    m_totalCountText = new QLabel("0", detectionsContainer);
-    countsLayout->addWidget(m_totalCountText);
-    countsLayout->addSpacing(12);
-    countsLayout->addWidget(new QLabel("This hour", detectionsContainer));
-    m_hourCountText = new QLabel("0", detectionsContainer);
-    countsLayout->addWidget(m_hourCountText);
-    countsLayout->addStretch(1);
-    m_clearDetections = new QPushButton(detectionsContainer);
     m_clearDetections->setIcon(QIcon(":/bin.png"));
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
-    countsLayout->addWidget(m_clearDetections);
-    detectionsLayout->addLayout(countsLayout);
 
-    m_detectionsTable = new QTableWidget(0, 7, detectionsContainer);
+    m_detectionsTable->setColumnCount(7);
     m_detectionsTable->setHorizontalHeaderLabels(QStringList({"Time", "Peak dB", "Amp", "Duration", "Span", "Drift", "Rate"}));
     m_detectionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_detectionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -268,43 +223,10 @@ void MeteorGUI::setupUi(QWidget *rollupContents)
     m_detectionsTable->verticalHeader()->setVisible(false);
     m_detectionsTable->setSortingEnabled(true);
     m_detectionsTable->setMinimumHeight(120);
-    detectionsLayout->addWidget(m_detectionsTable);
 
-    QWidget *histogramContainer = new QWidget(rollupContents);
-    histogramContainer->setObjectName("histogramContainer");
-    histogramContainer->setWindowTitle("Hourly Counts");
-    histogramContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    QVBoxLayout *histogramLayout = new QVBoxLayout(histogramContainer);
-    histogramLayout->setContentsMargins(2, 2, 2, 2);
-    m_hourlyChartView = new QChartView(histogramContainer);
     m_hourlyChartView->setMinimumHeight(180);
-    histogramLayout->addWidget(m_hourlyChartView);
-
-    QWidget *spectrumContainer = new QWidget(rollupContents);
-    spectrumContainer->setObjectName("spectrumContainer");
-    spectrumContainer->setWindowTitle("Spectrum");
-    spectrumContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    QVBoxLayout *spectrumLayout = new QVBoxLayout(spectrumContainer);
-    spectrumLayout->setContentsMargins(2, 2, 2, 2);
-    spectrumLayout->setSpacing(2);
-    m_glSpectrum = new GLSpectrum(spectrumContainer);
     m_glSpectrum->setMinimumHeight(180);
-    m_spectrumGUI = new GLSpectrumGUI(spectrumContainer);
-    spectrumLayout->addWidget(m_glSpectrum, 1);
-    spectrumLayout->addWidget(m_spectrumGUI);
-
-    QWidget *scopeContainer = new QWidget(rollupContents);
-    scopeContainer->setObjectName("scopeContainer");
-    scopeContainer->setWindowTitle("Scope");
-    scopeContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    QVBoxLayout *scopeLayout = new QVBoxLayout(scopeContainer);
-    scopeLayout->setContentsMargins(2, 2, 2, 2);
-    scopeLayout->setSpacing(2);
-    m_glScope = new GLScope(scopeContainer);
     m_glScope->setMinimumHeight(180);
-    m_scopeGUI = new GLScopeGUI(scopeContainer);
-    scopeLayout->addWidget(m_glScope, 1);
-    scopeLayout->addWidget(m_scopeGUI);
 }
 
 void MeteorGUI::setupSpectrum()

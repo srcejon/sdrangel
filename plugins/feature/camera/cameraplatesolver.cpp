@@ -177,6 +177,12 @@ constexpr double kBlindSeedMaxRmsPixels = 18.0;
 constexpr double kBlindSeedMaxMedianPixels = 14.0;
 constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
 constexpr bool kLogPlateSolveCandidates = false;
+
+// Normalisation radius (pixels) used by the weak-mode scoring comparator. Set once at the
+// start of CameraPlateSolver::solve() so that all candidate comparisons within a single
+// solve agree on how aggressively RMS error penalises match count. Defaults to a sensible
+// value for the typical 24 px acquisition radius.
+thread_local double g_weakModeNormalizationPixels = 24.0;
 const char* const kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 const char* const kDownloadedCatalogDir = "camera";
 const char* const kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
@@ -196,7 +202,8 @@ Evaluation evaluatePose(const CameraSettings& settings,
                         const QVector<int>* allowedCatalogIndices = nullptr,
                         double centerOffsetXPixels = 0.0,
                         double centerOffsetYPixels = 0.0,
-                        double distortionK1 = 0.0);
+                        double distortionK1 = 0.0,
+                        double matchRadiusOverride = -1.0);
 
 Evaluation refinePoseFromMatches(const CameraSettings& settings,
                                  const PlateSolveCatalogContext& catalogContext,
@@ -1155,8 +1162,14 @@ bool isStrongBlindSeedEvaluation(const CameraSettings& settings,
     }
 
     const double medianError = medianCandidateDistancePixels(candidate.matches);
-    const double maxRmsError = std::min(settings.m_plateSolveMatchRadius * 0.60, kBlindSeedMaxRmsPixels);
-    const double maxMedianError = std::min(settings.m_plateSolveMatchRadius * 0.50, kBlindSeedMaxMedianPixels);
+    // Score blind seeds against the *final* (tighter) acceptance radius — the acquisition
+    // radius is intentionally generous so that buildMatches finds candidates, but a strong
+    // seed must already be well-localised relative to where the final solver will accept.
+    const double seedRadius = std::min(
+        static_cast<double>(settings.m_plateSolveMatchRadius),
+        static_cast<double>(settings.m_plateSolveFinalMatchRadius));
+    const double maxRmsError = std::min(seedRadius * 0.60, kBlindSeedMaxRmsPixels);
+    const double maxMedianError = std::min(seedRadius * 0.50, kBlindSeedMaxMedianPixels);
     return (candidate.rmsErrorPixels <= maxRmsError) && (medianError <= maxMedianError);
 }
 
@@ -1253,24 +1266,46 @@ QVector<TriangleSignature> buildCatalogTriangleSignatures(const CameraSettings& 
         {
             for (int k = j + 1; k < maxCatalogStars; ++k)
             {
-                const SkyVector center = normalize({
-                    visibleStars[i].vector.x + visibleStars[j].vector.x + visibleStars[k].vector.x,
-                    visibleStars[i].vector.y + visibleStars[j].vector.y + visibleStars[k].vector.y,
-                    visibleStars[i].vector.z + visibleStars[j].vector.z + visibleStars[k].vector.z
-                });
+                const SkyVector& va = visibleStars[i].vector;
+                const SkyVector& vb = visibleStars[j].vector;
+                const SkyVector& vc = visibleStars[k].vector;
+                const SkyVector center = normalize({va.x + vb.x + vc.x,
+                                                    va.y + vb.y + vc.y,
+                                                    va.z + vb.z + vc.z});
                 if (length(center) <= 0.0) {
                     continue;
                 }
 
+                // Use the synthetic projector for both ratios *and* orientation so the sign
+                // convention matches the detection-side 2D cross product. Ratios computed in
+                // pure angular space would be projection-independent, but then the orientation
+                // sign would have to match a y-flip convention that is fragile to changes in
+                // the SkyProjector implementation. Both ratios and orientation come from the
+                // same projected points here so the signs are guaranteed to match the detection
+                // triangles built from real image coordinates.
                 const double centerAzimuth = normalizeDegrees(std::atan2(center.x, center.y) * 180.0 / kPi);
                 const double centerElevation = std::asin(std::clamp(center.z, -1.0, 1.0)) * 180.0 / kPi;
+                // Pick a synthetic FoV broad enough to encompass the actual triangle's angular
+                // span. Previously this used `max(20, settings.m_fov)`, which under-projected
+                // wide-field triangles (forcing them through edge distortion) and biased the
+                // ratios.  Compute the maximum pairwise angle so we can scale appropriately.
+                const double maxPairAngleRad = std::max({
+                    std::acos(std::clamp(dot(va, vb), -1.0, 1.0)),
+                    std::acos(std::clamp(dot(va, vc), -1.0, 1.0)),
+                    std::acos(std::clamp(dot(vb, vc), -1.0, 1.0))
+                });
+                const double maxPairAngleDeg = maxPairAngleRad * 180.0 / kPi;
+                const double syntheticFov = std::clamp(
+                    std::max(maxPairAngleDeg * 2.5, static_cast<double>(settings.m_fov)),
+                    20.0,
+                    160.0);
                 const SkyProjector localProjector = createProjector(
                     settings,
                     QSize(1000, 1000),
                     centerAzimuth,
                     centerElevation,
                     0.0,
-                    std::max(20.0, static_cast<double>(settings.m_fov)));
+                    syntheticFov);
                 if (!localProjector.valid) {
                     continue;
                 }
@@ -1366,13 +1401,34 @@ QVector<QuadSignature> buildCatalogQuadSignatures(const CameraSettings& settings
 
                     const double centerAzimuth = normalizeDegrees(std::atan2(center.x, center.y) * 180.0 / kPi);
                     const double centerElevation = std::asin(std::clamp(center.z, -1.0, 1.0)) * 180.0 / kPi;
+                    // Scale the synthetic projector's FoV to the actual angular span of the
+                    // quad so wide-field constellations don't get pushed through projection
+                    // distortion at the synthetic edges. See the matching comment in
+                    // buildCatalogTriangleSignatures for rationale.
+                    const SkyVector& va = visibleStars[i].vector;
+                    const SkyVector& vb = visibleStars[j].vector;
+                    const SkyVector& vc = visibleStars[k].vector;
+                    const SkyVector& vd = visibleStars[l].vector;
+                    const double maxPairAngleRad = std::max({
+                        std::acos(std::clamp(dot(va, vb), -1.0, 1.0)),
+                        std::acos(std::clamp(dot(va, vc), -1.0, 1.0)),
+                        std::acos(std::clamp(dot(va, vd), -1.0, 1.0)),
+                        std::acos(std::clamp(dot(vb, vc), -1.0, 1.0)),
+                        std::acos(std::clamp(dot(vb, vd), -1.0, 1.0)),
+                        std::acos(std::clamp(dot(vc, vd), -1.0, 1.0))
+                    });
+                    const double maxPairAngleDeg = maxPairAngleRad * 180.0 / kPi;
+                    const double syntheticFov = std::clamp(
+                        std::max(maxPairAngleDeg * 2.5, static_cast<double>(settings.m_fov)),
+                        20.0,
+                        160.0);
                     const SkyProjector localProjector = createProjector(
                         settings,
                         QSize(1000, 1000),
                         centerAzimuth,
                         centerElevation,
                         0.0,
-                        std::max(20.0, static_cast<double>(settings.m_fov)));
+                        syntheticFov);
                     if (!localProjector.valid) {
                         continue;
                     }
@@ -1469,19 +1525,6 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
             const double seedAzimuth = normalizeDegrees(std::atan2(center.x, center.y) * 180.0 / kPi);
             const double seedElevation = std::asin(std::clamp(center.z, -1.0, 1.0)) * 180.0 / kPi;
 
-            // Skip sky directions already tried by a previous triangle match.
-            bool alreadyTried = false;
-            for (const TriedDirection& tried : triedDirections) {
-                if (std::fabs(seedAzimuth - tried.azimuthDegrees) < 3.0
-                    && std::fabs(seedElevation - tried.elevationDegrees) < 3.0)
-                {
-                    alreadyTried = true;
-                    break;
-                }
-            }
-            if (alreadyTried) continue;
-            triedDirections.append({seedAzimuth, seedElevation});
-
             // Use the longest pairwise angular distance so the scale estimate matches
             // detectionTriangle.longestDistance regardless of which edge is longest.
             const double abAngle = std::acos(std::clamp(dot(a.vector, b.vector), -1.0, 1.0)) * 180.0 / kPi;
@@ -1497,6 +1540,23 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 static_cast<double>(CameraSettings::m_minFov),
                 static_cast<double>(CameraSettings::m_maxFov));
 
+            // Skip sky directions already tried by a previous triangle match. The dedup
+            // radius scales with the seed FoV: at 90° FoV the original 3° tolerance is fine,
+            // but at 15-25° wide-field blind FoVs a 3° basin can swallow the correct
+            // direction after a near-miss. Use 5% of seed FoV with a 0.5°-5° clamp.
+            const double dedupRadiusDegrees = std::clamp(baseSeedFov * 0.05, 0.5, 5.0);
+            bool alreadyTried = false;
+            for (const TriedDirection& tried : triedDirections) {
+                if (std::fabs(seedAzimuth - tried.azimuthDegrees) < dedupRadiusDegrees
+                    && std::fabs(seedElevation - tried.elevationDegrees) < dedupRadiusDegrees)
+                {
+                    alreadyTried = true;
+                    break;
+                }
+            }
+            if (alreadyTried) continue;
+            triedDirections.append({seedAzimuth, seedElevation});
+
             const std::array<QPointF, 3> detectionPoints {{
                 starDetections[detectionTriangle.indices[0]].m_center,
                 starDetections[detectionTriangle.indices[1]].m_center,
@@ -1510,14 +1570,22 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 c.catalogIndex
             };
 
-            // For very wide fields, allow a broader but still bounded FoV sweep around the seed estimate.
-            for (double fovScale : {0.85, 0.93, 1.0, 1.07, 1.15})
+            // Sweep FoV around the seed estimate. The base estimate is derived from a
+            // rectilinear scale model (image_width / longest_pixel_distance), which biases
+            // the result low for fisheye lenses; widen the sweep accordingly. Also clamp to
+            // CameraSettings::m_maxFov for consistency with the base-clamp above — the
+            // earlier hard-coded 180.0 ceiling was inconsistent with the rest of the file.
+            const bool isFisheyeLens = (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
+            const std::array<double, 5> rectilinearFovScales = {{0.85, 0.93, 1.0, 1.07, 1.15}};
+            const std::array<double, 5> fisheyeFovScales = {{0.60, 0.80, 1.0, 1.25, 1.60}};
+            const auto& fovScales = isFisheyeLens ? fisheyeFovScales : rectilinearFovScales;
+            for (double fovScale : fovScales)
             {
                 if (earlyExit) break;
                 const double seedFov = std::clamp(
                     baseSeedFov * fovScale,
                     static_cast<double>(CameraSettings::m_minFov),
-                    180.0);
+                    static_cast<double>(CameraSettings::m_maxFov));
                 const SkyProjector rollProjector = createProjector(
                     settings,
                     imageSize,
@@ -1679,19 +1747,6 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
             const double seedAzimuth = normalizeDegrees(std::atan2(center.x, center.y) * 180.0 / kPi);
             const double seedElevation = std::asin(std::clamp(center.z, -1.0, 1.0)) * 180.0 / kPi;
 
-            // Skip sky directions already tried by a previous quad match.
-            bool alreadyTried = false;
-            for (const TriedDirection& tried : triedDirections) {
-                if (std::fabs(seedAzimuth - tried.azimuthDegrees) < 3.0
-                    && std::fabs(seedElevation - tried.elevationDegrees) < 3.0)
-                {
-                    alreadyTried = true;
-                    break;
-                }
-            }
-            if (alreadyTried) continue;
-            triedDirections.append({seedAzimuth, seedElevation});
-
             std::array<double, 6> angularDistances{{
                 std::acos(std::clamp(dot(a.vector, b.vector), -1.0, 1.0)) * 180.0 / kPi,
                 std::acos(std::clamp(dot(a.vector, c.vector), -1.0, 1.0)) * 180.0 / kPi,
@@ -1710,6 +1765,20 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                 static_cast<double>(CameraSettings::m_minFov),
                 static_cast<double>(CameraSettings::m_maxFov));
 
+            // FoV-scaled dedup so wide-field seeds don't swallow nearby distinct directions.
+            const double dedupRadiusDegrees = std::clamp(baseSeedFov * 0.05, 0.5, 5.0);
+            bool alreadyTried = false;
+            for (const TriedDirection& tried : triedDirections) {
+                if (std::fabs(seedAzimuth - tried.azimuthDegrees) < dedupRadiusDegrees
+                    && std::fabs(seedElevation - tried.elevationDegrees) < dedupRadiusDegrees)
+                {
+                    alreadyTried = true;
+                    break;
+                }
+            }
+            if (alreadyTried) continue;
+            triedDirections.append({seedAzimuth, seedElevation});
+
             const std::array<QPointF, 4> detectionPoints {{
                 starDetections[detectionQuad.indices[0]].m_center,
                 starDetections[detectionQuad.indices[1]].m_center,
@@ -1724,13 +1793,18 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                 d.catalogIndex
             };
 
-            for (double fovScale : {0.85, 0.95, 1.0, 1.10, 1.20})
+            // See buildBlindTriangleSeeds for the rationale on the broader fisheye sweep.
+            const bool isFisheyeLensQ = (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
+            const std::array<double, 5> rectilinearQuadFovScales = {{0.85, 0.95, 1.0, 1.10, 1.20}};
+            const std::array<double, 5> fisheyeQuadFovScales = {{0.60, 0.80, 1.0, 1.25, 1.60}};
+            const auto& quadFovScales = isFisheyeLensQ ? fisheyeQuadFovScales : rectilinearQuadFovScales;
+            for (double fovScale : quadFovScales)
             {
                 if (earlyExit) break;
                 const double seedFov = std::clamp(
                     baseSeedFov * fovScale,
                     static_cast<double>(CameraSettings::m_minFov),
-                    180.0);
+                    static_cast<double>(CameraSettings::m_maxFov));
                 const SkyProjector rollProjector = createProjector(
                     settings,
                     imageSize,
@@ -1914,26 +1988,45 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
         candidatePairs = std::move(cappedPairs);
     }
 
+    // Geometric-support tally. For each candidate (detection, catalog) pair we count how
+    // many *other* candidate pairs agree on the inter-star distance — i.e. the detection-
+    // space and catalog-space distances match within tolerance. A naive O(N^2) sweep can
+    // be ~65k comparisons for N=256, and this runs inside every evaluatePose call, so we
+    // also cap support accumulation per pair to avoid quadratic blow-up on dense fields.
+    constexpr int kGeometricSupportCap = 8;
     for (int i = 0; i < candidatePairs.size(); ++i)
     {
+        if (candidatePairs[i].geometricSupport >= kGeometricSupportCap) {
+            continue;
+        }
+        const CandidatePair& lhs = candidatePairs[i];
+        const QPointF lhsDetection = starDetections[lhs.detectionIndex].m_center;
+        const QPointF& lhsCatalogPoint = projectedStars[lhs.projectedIndex].point;
         for (int j = i + 1; j < candidatePairs.size(); ++j)
         {
-            const CandidatePair& lhs = candidatePairs[i];
-            const CandidatePair& rhs = candidatePairs[j];
+            CandidatePair& rhsRef = candidatePairs[j];
+            if (rhsRef.geometricSupport >= kGeometricSupportCap) {
+                continue;
+            }
+            const CandidatePair& rhs = rhsRef;
             if ((lhs.detectionIndex == rhs.detectionIndex) || (lhs.catalogIndex == rhs.catalogIndex)) {
                 continue;
             }
 
-            const QPointF detectionDelta = starDetections[lhs.detectionIndex].m_center - starDetections[rhs.detectionIndex].m_center;
-            const double detectionDistance = std::hypot(detectionDelta.x(), detectionDelta.y());
-            const QPointF& lhsCatalogPoint = projectedStars[lhs.projectedIndex].point;
+            const double detDx = lhsDetection.x() - starDetections[rhs.detectionIndex].m_center.x();
+            const double detDy = lhsDetection.y() - starDetections[rhs.detectionIndex].m_center.y();
+            const double detectionDistance = std::hypot(detDx, detDy);
             const QPointF& rhsCatalogPoint = projectedStars[rhs.projectedIndex].point;
-            const QPointF catalogDelta = lhsCatalogPoint - rhsCatalogPoint;
-            const double catalogDistance = std::hypot(catalogDelta.x(), catalogDelta.y());
+            const double catDx = lhsCatalogPoint.x() - rhsCatalogPoint.x();
+            const double catDy = lhsCatalogPoint.y() - rhsCatalogPoint.y();
+            const double catalogDistance = std::hypot(catDx, catDy);
             const double tolerance = std::max(2.0, 0.15 * std::max(detectionDistance, catalogDistance));
             if (std::fabs(detectionDistance - catalogDistance) <= tolerance) {
                 ++candidatePairs[i].geometricSupport;
-                ++candidatePairs[j].geometricSupport;
+                ++rhsRef.geometricSupport;
+                if (candidatePairs[i].geometricSupport >= kGeometricSupportCap) {
+                    break;
+                }
             }
         }
     }
@@ -1984,7 +2077,30 @@ void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starD
         catalogMatched.insert(match.catalogIndex, true);
     }
 
-    const double maxDistanceSquared = matchRadiusPixels * matchRadiusPixels;
+    // Bound supplemental matches to a quality envelope derived from the already-accepted
+    // inlier matches. Without this gate, every unmatched detection within the loose radius
+    // would be promoted to a match, inflating m_matchedStars and corrupting the reported
+    // RMS with what the bipartite assignment had already rejected.
+    const double medianAcceptedDistance = medianCandidateDistancePixels(matches);
+    const double supplementalRadiusCap = (medianAcceptedDistance > 0.0)
+        ? std::min(matchRadiusPixels, std::max(2.0, medianAcceptedDistance * 1.5))
+        : matchRadiusPixels;
+    const double maxDistanceSquared = supplementalRadiusCap * supplementalRadiusCap;
+
+    // Pre-sort projected stars into a spatial grid to avoid the O(D x P) loop that the
+    // original implementation used; for D=32 detections and P=500 catalog stars this cut
+    // ~16k coordinate compares per call.
+    const double cellSize = std::max(1.0, supplementalRadiusCap);
+    QHash<quint64, QVector<int>> projectedGrid;
+    projectedGrid.reserve(projectedStars.size());
+    for (int projectedIndex = 0; projectedIndex < projectedStars.size(); ++projectedIndex)
+    {
+        const QPointF& point = projectedStars[projectedIndex].point;
+        const int cellX = static_cast<int>(std::floor(point.x() / cellSize));
+        const int cellY = static_cast<int>(std::floor(point.y() / cellSize));
+        projectedGrid[spatialCellKey(cellX, cellY)].append(projectedIndex);
+    }
+
     for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex)
     {
         if (detectionMatched[detectionIndex]) {
@@ -1992,25 +2108,37 @@ void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starD
         }
 
         const QPointF detectionPoint = starDetections[detectionIndex].m_center;
+        const int cellX = static_cast<int>(std::floor(detectionPoint.x() / cellSize));
+        const int cellY = static_cast<int>(std::floor(detectionPoint.y() / cellSize));
         double bestDistanceSquared = std::numeric_limits<double>::max();
         int bestCatalogIndex = -1;
 
-        for (const ProjectedCatalogStar& projected : projectedStars)
+        for (int dy = -1; dy <= 1; ++dy)
         {
-            if (catalogMatched.contains(projected.catalogIndex)) {
-                continue;
-            }
-
-            const double dx = detectionPoint.x() - projected.point.x();
-            const double dy = detectionPoint.y() - projected.point.y();
-            const double distanceSquared = dx * dx + dy * dy;
-            if (distanceSquared > maxDistanceSquared) {
-                continue;
-            }
-            if (distanceSquared < bestDistanceSquared)
+            for (int dx = -1; dx <= 1; ++dx)
             {
-                bestDistanceSquared = distanceSquared;
-                bestCatalogIndex = projected.catalogIndex;
+                const auto it = projectedGrid.constFind(spatialCellKey(cellX + dx, cellY + dy));
+                if (it == projectedGrid.cend()) {
+                    continue;
+                }
+                for (int projectedIndex : it.value())
+                {
+                    const ProjectedCatalogStar& projected = projectedStars[projectedIndex];
+                    if (catalogMatched.contains(projected.catalogIndex)) {
+                        continue;
+                    }
+                    const double dxp = detectionPoint.x() - projected.point.x();
+                    const double dyp = detectionPoint.y() - projected.point.y();
+                    const double distanceSquared = dxp * dxp + dyp * dyp;
+                    if (distanceSquared > maxDistanceSquared) {
+                        continue;
+                    }
+                    if (distanceSquared < bestDistanceSquared)
+                    {
+                        bestDistanceSquared = distanceSquared;
+                        bestCatalogIndex = projected.catalogIndex;
+                    }
+                }
             }
         }
 
@@ -2020,10 +2148,12 @@ void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starD
             matches.append({detectionIndex, bestCatalogIndex, distancePixels});
             detectionMatched[detectionIndex] = true;
             catalogMatched.insert(bestCatalogIndex, true);
-            qDebug() << "CameraPlateSolver: supplemental final match"
-                     << "detection=" << detectionIndex
-                     << "catalog=" << bestCatalogIndex
-                     << "distance=" << distancePixels;
+            if (kLogPlateSolveCandidates) {
+                qDebug() << "CameraPlateSolver: supplemental final match"
+                         << "detection=" << detectionIndex
+                         << "catalog=" << bestCatalogIndex
+                         << "distance=" << distancePixels;
+            }
         }
     }
 }
@@ -2034,6 +2164,9 @@ void logUnmatchedDetections(const CameraSettings& settings,
                             const QVector<Match>& matches,
                             double matchRadiusPixels)
 {
+    if (!kLogPlateSolveCandidates) {
+        return;
+    }
     QVector<bool> detectionMatched(starDetections.size(), false);
     QHash<int, bool> catalogMatched;
     catalogMatched.reserve(matches.size());
@@ -2126,7 +2259,8 @@ Evaluation evaluatePose(const CameraSettings& settings,
                         const QVector<int>* allowedCatalogIndices,
                         double centerOffsetXPixels,
                         double centerOffsetYPixels,
-                        double distortionK1)
+                        double distortionK1,
+                        double matchRadiusOverride)
 {
     Evaluation evaluation;
     evaluation.azimuthDegrees = normalizeDegrees(azimuthDegrees);
@@ -2136,6 +2270,13 @@ Evaluation evaluatePose(const CameraSettings& settings,
     evaluation.centerOffsetXPixels = centerOffsetXPixels;
     evaluation.centerOffsetYPixels = centerOffsetYPixels;
     evaluation.distortionK1 = distortionK1;
+
+    // Default to the acquisition radius; callers (e.g. refinePoseFromMatches' final pass)
+    // can pass the tighter final-match radius so the split-radii intent ("search wide,
+    // accept narrow") actually influences scoring during refinement.
+    const double matchRadiusPixels = (matchRadiusOverride > 0.0)
+        ? matchRadiusOverride
+        : settings.m_plateSolveMatchRadius;
 
     const SkyProjector projector = createProjector(
         settings,
@@ -2154,7 +2295,7 @@ Evaluation evaluatePose(const CameraSettings& settings,
     const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
         catalogContext,
         projector,
-        settings.m_plateSolveMatchRadius,
+        matchRadiusPixels,
         allowedCatalogIndices);
     if (projectedStars.isEmpty()) {
         return evaluation;
@@ -2165,7 +2306,7 @@ Evaluation evaluatePose(const CameraSettings& settings,
         starDetections,
         detectionIndices,
         projectedStars,
-        settings.m_plateSolveMatchRadius);
+        matchRadiusPixels);
     evaluation.matchCount = evaluation.matches.size();
     if (evaluation.matchCount <= 0) {
         return evaluation;
@@ -2354,14 +2495,21 @@ bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
         : candidate.fovDegrees < best.fovDegrees;
 }
 
-double weakModeEvaluationScore(const Evaluation& evaluation)
+double weakModeEvaluationScore(const Evaluation& evaluation,
+                               double normalizationRadius = g_weakModeNormalizationPixels)
 {
     if (!evaluation.valid) {
         return -std::numeric_limits<double>::infinity();
     }
 
-    constexpr double kWeakModePixelsPerMatch = 12.0;
-    return static_cast<double>(evaluation.matchCount) - (evaluation.rmsErrorPixels / kWeakModePixelsPerMatch);
+    // Non-linear penalty proportional to the acceptance radius: a small RMS leaves the score
+    // essentially equal to matchCount, but as RMS approaches the radius the per-match value
+    // collapses to ~0.5 so a single false coincidence cannot outweigh a tighter cluster.
+    const double safeRadius = std::max(1.0, normalizationRadius);
+    const double normalizedRms = evaluation.rmsErrorPixels / safeRadius;
+    const double clampedRms = std::min(1.0, std::max(0.0, normalizedRms));
+    const double perMatchQuality = 1.0 - 0.5 * clampedRms * clampedRms;
+    return static_cast<double>(evaluation.matchCount) * perMatchQuality;
 }
 
 bool isBetterWeakModeEvaluation(const Evaluation& candidate, const Evaluation& best)
@@ -2439,6 +2587,18 @@ void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
         return;
     }
 
+    // Quality floor: don't admit obvious noise into the multi-hypothesis pool. A candidate
+    // must have at least 3 matches *and* an RMS well inside the acquisition radius. Without
+    // this, the bounded pool fills with high-FoV shotgun poses (many spurious matches near
+    // the radius) and crowds out a tighter real solution that surfaces later.
+    if (candidate.matchCount < 3) {
+        return;
+    }
+    const double poolQualityRadius = std::max(2.0, g_weakModeNormalizationPixels * 0.95);
+    if (candidate.rmsErrorPixels > poolQualityRadius) {
+        return;
+    }
+
     for (Evaluation& existing : candidates)
     {
         if (sameEvaluationBasin(candidate, existing))
@@ -2471,10 +2631,21 @@ Evaluation rescoreWeakModeCandidateWithDistortionSweep(const CameraSettings& set
         return candidate;
     }
 
+    // Preserve the user's calibrated lens centre when we can't calibrate the lens during
+    // this solve; previously this function unconditionally zeroed the centre offsets,
+    // throwing away a manual calibration and biasing the rescore against it. Likewise the
+    // distortion sweep only makes sense when we're allowed to calibrate the lens — if the
+    // user disabled calibration, a single re-evaluation with their settings is enough.
+    const bool calibrate = canCalibrateLens(settings);
+    const double baseCenterOffsetX = calibrate ? candidate.centerOffsetXPixels : settings.m_lensCenterOffsetX;
+    const double baseCenterOffsetY = calibrate ? candidate.centerOffsetYPixels : settings.m_lensCenterOffsetY;
+    const double baseDistortionK1 = calibrate ? candidate.distortionK1 : settings.m_lensDistortionK1;
+
     Evaluation best = candidate;
     const std::array<double, 4> distortionSweep = {{-0.05, -0.025, 0.0, 0.025}};
-    for (double distortionK1 : distortionSweep)
+    for (double distortionDelta : distortionSweep)
     {
+        const double distortionK1 = calibrate ? distortionDelta : baseDistortionK1;
         const Evaluation rescored = evaluatePose(
             settings,
             catalogContext,
@@ -2487,11 +2658,15 @@ Evaluation rescoreWeakModeCandidateWithDistortionSweep(const CameraSettings& set
             candidate.rollDegrees,
             candidate.fovDegrees,
             nullptr,
-            0.0,
-            0.0,
+            baseCenterOffsetX,
+            baseCenterOffsetY,
             distortionK1);
         if (isBetterWeakModeEvaluation(rescored, best)) {
             best = rescored;
+        }
+        if (!calibrate) {
+            // No need to sweep distortion if we can't calibrate; the loop body is identical.
+            break;
         }
     }
 
@@ -2765,8 +2940,21 @@ Evaluation searchBestPose(const CameraSettings& settings,
         }
     }
 
+    // Short-circuit the exhaustive wide-fallback grid when the blind seeds have already
+    // landed in a reasonable basin. The grid runs ~52k evaluatePose calls (72 az × 7 el ×
+    // 13 roll × 8 fov), so any half-decent prior result is worth keeping. Acceptance bar:
+    // at least half the minimum required matches *and* an RMS that fits inside the
+    // acquisition radius — the subsequent refinement loops will tighten this further.
+    const double wideFallbackRmsCap = std::max(
+        static_cast<double>(settings.m_plateSolveMatchRadius) * 0.9,
+        2.0);
+    const bool blindSeedAlreadyAcceptable = best.valid
+        && (best.matchCount >= std::max(2, minMatchCount / 2))
+        && (best.rmsErrorPixels <= wideFallbackRmsCap);
+
     if ((!best.valid || (best.matchCount < minMatchCount))
-        && (!useStartDirection || !best.valid))
+        && (!useStartDirection || !best.valid)
+        && !blindSeedAlreadyAcceptable)
     {
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
         const std::array<double, 8> wideBlindFovs = {{15.0, 25.0, 40.0, 60.0, 90.0, 130.0, 160.0, 180.0}};
@@ -3010,7 +3198,10 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
 
     for (int iteration = 0; iteration < 5; ++iteration)
     {
-        bool improved = false;
+        bool improvedAz = false;
+        bool improvedEl = false;
+        bool improvedRoll = false;
+        bool improvedFov = false;
         for (double azOffset : offsets)
         {
             for (double elOffset : offsets)
@@ -3036,7 +3227,10 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                             distortionCenter);
                         if (isBetterEvaluation(candidate, best)) {
                             best = candidate;
-                            improved = true;
+                            if (azOffset != 0.0) improvedAz = true;
+                            if (elOffset != 0.0) improvedEl = true;
+                            if (rollOffset != 0.0) improvedRoll = true;
+                            if (fovOffset != 0.0) improvedFov = true;
                         }
                     }
                 }
@@ -3047,12 +3241,13 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
         elCenter = best.elevationDegrees;
         rollCenter = best.rollDegrees;
         fovCenter = best.fovDegrees;
-        if (!improved) {
-            azStep *= 0.5;
-            elStep *= 0.5;
-            rollStep *= 0.5;
-            fovStep *= 0.5;
-        }
+        // Per-axis shrinking: only shrink the axes whose best offset was 0 this iteration.
+        // This avoids prematurely shrinking an axis that just hasn't been visited yet because
+        // another axis improved first.
+        if (!improvedAz)   azStep   *= 0.5;
+        if (!improvedEl)   elStep   *= 0.5;
+        if (!improvedRoll) rollStep *= 0.5;
+        if (!improvedFov)  fovStep  *= 0.5;
     }
 
     if (calibrateLens)
@@ -3122,9 +3317,19 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     centerOffsetYCenter = best.centerOffsetYPixels;
     distortionCenter = best.distortionK1;
 
+    // Final pass uses the tighter final-match radius. This pulls the pose toward the inlier
+    // cluster (rather than the looser acquisition radius), which is the entire point of
+    // exposing m_plateSolveFinalMatchRadius as a separate setting.
+    const double finalPassRadius = std::min(
+        static_cast<double>(settings.m_plateSolveMatchRadius),
+        std::max(1.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius)));
+
     for (int iteration = 0; iteration < 2; ++iteration)
     {
-        bool improved = false;
+        bool improvedAz = false;
+        bool improvedEl = false;
+        bool improvedRoll = false;
+        bool improvedFov = false;
         for (double azOffset : offsets)
         {
             for (double elOffset : offsets)
@@ -3147,10 +3352,14 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                             &catalogIndices,
                             centerOffsetXCenter,
                             centerOffsetYCenter,
-                            distortionCenter);
+                            distortionCenter,
+                            finalPassRadius);
                         if (isBetterEvaluation(candidate, best)) {
                             best = candidate;
-                            improved = true;
+                            if (azOffset != 0.0) improvedAz = true;
+                            if (elOffset != 0.0) improvedEl = true;
+                            if (rollOffset != 0.0) improvedRoll = true;
+                            if (fovOffset != 0.0) improvedFov = true;
                         }
                     }
                 }
@@ -3161,12 +3370,10 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
         elCenter = best.elevationDegrees;
         rollCenter = best.rollDegrees;
         fovCenter = best.fovDegrees;
-        if (!improved) {
-            azStep *= 0.5;
-            elStep *= 0.5;
-            rollStep *= 0.5;
-            fovStep *= 0.5;
-        }
+        if (!improvedAz)   azStep   *= 0.5;
+        if (!improvedEl)   elStep   *= 0.5;
+        if (!improvedRoll) rollStep *= 0.5;
+        if (!improvedFov)  fovStep  *= 0.5;
     }
 
     return best;
@@ -3276,6 +3483,11 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     const double finalMatchRadius = settings.m_plateSolveFinalMatchRadius;
     const bool useMultiHypothesisRefine = !useCurrentSettingsOnly && !useStartDirection && !useElevationSeedOnly;
 
+    // Configure weak-mode scoring normalisation for this solve. Using the final (tighter)
+    // radius means RMS values near the acceptable limit yield ~half-credit per match, which
+    // prevents shotgun poses (many loose coincidences) from outranking tight clusters.
+    g_weakModeNormalizationPixels = std::max(1.0, finalMatchRadius);
+
     if (starDetections.isEmpty()) {
         return result;
     }
@@ -3370,7 +3582,19 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         result.m_matchedStars = finalMatches.size();
         result.m_rmsErrorPixels = std::sqrt(sumSquaredError / finalMatches.size());
         result.m_maxErrorPixels = maxError;
-        result.m_solved = finalMatches.size() >= settings.m_plateSolveMinMatches;
+
+        // Apply the same quality acceptance applied to every other code path. Without this
+        // gate, the current-settings path would mark m_solved=true on three random near-
+        // coincidences within the (loose) acquisition radius.
+        const double currentSettingsMaxRms = std::min(finalMatchRadius * 0.85, 24.0);
+        const double currentSettingsMaxMedian = std::min(finalMatchRadius * 0.70, 18.0);
+        const double currentSettingsMedian = medianDistancePixels(finalMatches);
+        result.m_solved = (finalMatches.size() >= settings.m_plateSolveMinMatches)
+            && (result.m_rmsErrorPixels <= currentSettingsMaxRms)
+            && (currentSettingsMedian <= currentSettingsMaxMedian);
+        if (!result.m_solved) {
+            clearSolvedStars(starDetections);
+        }
         result.m_azimuthDegrees = settings.m_azimuth;
         result.m_elevationDegrees = settings.m_elevation;
         result.m_rollDegrees = settings.m_roll;
@@ -3461,7 +3685,9 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         logPlateSolveEvaluation("refine-from-matches", best, true);
     }
     if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
-        qDebug() << "CameraPlateSolver: refinePoseFromMatches failed to keep a valid solution";
+        if (kLogPlateSolveCandidates) {
+            qDebug() << "CameraPlateSolver: refinePoseFromMatches failed to keep a valid solution";
+        }
         return result;
     }
 
@@ -3537,10 +3763,12 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     if (useElevationSeedOnly
         && !isAcceptableElevationSeedSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
-        qDebug() << "CameraPlateSolver: rejecting elevation-seeded solution"
-                 << "matches=" << finalMatches.size()
-                 << "rms=" << result.m_rmsErrorPixels
-                 << "max=" << result.m_maxErrorPixels;
+        if (kLogPlateSolveCandidates) {
+            qDebug() << "CameraPlateSolver: rejecting elevation-seeded solution"
+                     << "matches=" << finalMatches.size()
+                     << "rms=" << result.m_rmsErrorPixels
+                     << "max=" << result.m_maxErrorPixels;
+        }
         clearSolvedStars(starDetections);
         PROFILER_STOP(__FUNCTION__ ": unacceptable elevation-seeded solve");
         return CameraPlateSolveResult();
@@ -3550,10 +3778,12 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         && !useStartDirection
         && !isAcceptableBlindSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
-        qDebug() << "CameraPlateSolver: rejecting blind solution"
-                 << "matches=" << finalMatches.size()
-                 << "rms=" << result.m_rmsErrorPixels
-                 << "max=" << result.m_maxErrorPixels;
+        if (kLogPlateSolveCandidates) {
+            qDebug() << "CameraPlateSolver: rejecting blind solution"
+                     << "matches=" << finalMatches.size()
+                     << "rms=" << result.m_rmsErrorPixels
+                     << "max=" << result.m_maxErrorPixels;
+        }
         clearSolvedStars(starDetections);
         PROFILER_STOP(__FUNCTION__ ": unacceptable blind solve");
         return CameraPlateSolveResult();

@@ -377,12 +377,22 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         && ((std::fabs(frequencySpan) > m_settings.m_maxFrequencyDrift)
             || (std::fabs(frequencyDrift) > m_settings.m_maxFrequencyDrift));
     const bool driftOK = !sweepRejected;
-    const bool accepted = !forceRejected && durationOK && driftOK && m_messageQueueToGUI;
+    const double sampleDurationMS = 1000.0 / (double) std::max(1, m_settings.m_channelSampleRate);
+    const double compactFrequencyLimit = std::max(10.0, std::min(50.0, (double) m_settings.m_channelSampleRate * 0.05));
+    const bool clippedDurationOK = forceRejected
+        && (durationMS >= m_settings.m_minDurationMS)
+        && (durationMS <= (double) m_settings.m_maxDurationMS + 2.0 * sampleDurationMS);
+    const bool compactClippedMeteor = clippedDurationOK
+        && (std::fabs(frequencySpan) <= compactFrequencyLimit)
+        && (std::fabs(frequencyDrift) <= compactFrequencyLimit)
+        && (sweepScore < 0.75);
+    const bool accepted = ((!forceRejected && durationOK) || compactClippedMeteor) && driftOK && m_messageQueueToGUI;
 
     qDebug() << "MeteorDemodSink::finishPulse:"
              << " accepted:" << accepted
              << " forceRejected:" << forceRejected
              << " durationOK:" << durationOK
+             << " compactClippedMeteor:" << compactClippedMeteor
              << " driftOK:" << driftOK
              << " sweepRejected:" << sweepRejected
              << " durationS:" << durationS

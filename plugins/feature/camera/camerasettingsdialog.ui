@@ -1471,6 +1471,35 @@
             </property>
            </widget>
           </item>
+          <item row="3" column="2">
+           <widget class="QLabel" name="stackHdrAlgorithmLabel">
+            <property name="text">
+             <string>HDR algorithm</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="3">
+           <widget class="QComboBox" name="stackHdrAlgorithmCombo">
+            <property name="toolTip">
+             <string>Algorithm used to merge bracketed HDR frames</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Debevec</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Robertson</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Mertens</string>
+             </property>
+            </item>
+           </widget>
+          </item>
           <item row="4" column="0">
            <widget class="QLabel" name="stackAlignmentLabel">
             <property name="text">

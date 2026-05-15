@@ -417,6 +417,7 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("stackEnabled")
         || settingsKeys.contains("stackMethod")
+        || settingsKeys.contains("stackHdrAlgorithm")
         || settingsKeys.contains("stackHdrExposureCount")
         || settingsKeys.contains("stackHdrExposure1Ms")
         || settingsKeys.contains("stackHdrExposure2Ms")
@@ -638,17 +639,38 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
 
             cv::Mat timesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, exposureTimesSeconds.data());
 
-            cv::Mat responseCurve;
-            cv::Ptr<cv::CalibrateDebevec> calibrateDebevec = cv::createCalibrateDebevec();
-            calibrateDebevec->process(ldrFrames, responseCurve, timesMat);
-
-            cv::Mat hdrRadiance;
-            cv::Ptr<cv::MergeDebevec> mergeDebevec = cv::createMergeDebevec();
-            mergeDebevec->process(ldrFrames, hdrRadiance, timesMat, responseCurve);
-
             cv::Mat tonemapped;
-            cv::Ptr<cv::TonemapReinhard> tonemap = cv::createTonemapReinhard(2.2f, 0.0f, 1.0f, 0.0f);
-            tonemap->process(hdrRadiance, tonemapped);
+
+            if (m_settings.m_stackHdrAlgorithm == CameraSettings::StackHdrAlgorithmMertens)
+            {
+                cv::Ptr<cv::MergeMertens> mergeMertens = cv::createMergeMertens();
+                mergeMertens->process(ldrFrames, tonemapped);
+            }
+            else
+            {
+                cv::Mat responseCurve;
+                cv::Mat hdrRadiance;
+
+                if (m_settings.m_stackHdrAlgorithm == CameraSettings::StackHdrAlgorithmRobertson)
+                {
+                    cv::Ptr<cv::CalibrateRobertson> calibrateRobertson = cv::createCalibrateRobertson();
+                    calibrateRobertson->process(ldrFrames, responseCurve, timesMat);
+
+                    cv::Ptr<cv::MergeRobertson> mergeRobertson = cv::createMergeRobertson();
+                    mergeRobertson->process(ldrFrames, hdrRadiance, timesMat, responseCurve);
+                }
+                else
+                {
+                    cv::Ptr<cv::CalibrateDebevec> calibrateDebevec = cv::createCalibrateDebevec();
+                    calibrateDebevec->process(ldrFrames, responseCurve, timesMat);
+
+                    cv::Ptr<cv::MergeDebevec> mergeDebevec = cv::createMergeDebevec();
+                    mergeDebevec->process(ldrFrames, hdrRadiance, timesMat, responseCurve);
+                }
+
+                cv::Ptr<cv::TonemapReinhard> tonemap = cv::createTonemapReinhard(2.2f, 0.0f, 1.0f, 0.0f);
+                tonemap->process(hdrRadiance, tonemapped);
+            }
 
             cv::Mat clampedTonemapped;
             cv::max(tonemapped, cv::Scalar::all(0.0f), clampedTonemapped);

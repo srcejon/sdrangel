@@ -864,6 +864,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     const bool hdrSettingsChanged = force
         || settingsKeys.contains("stackEnabled")
         || settingsKeys.contains("stackMethod")
+        || settingsKeys.contains("stackHdrAlgorithm")
         || settingsKeys.contains("stackHdrExposureCount")
         || settingsKeys.contains("stackHdrExposure1Ms")
         || settingsKeys.contains("stackHdrExposure2Ms")

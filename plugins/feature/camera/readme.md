@@ -224,6 +224,7 @@ The Cal / Stack tab configures calibration frames and image stacking.
 <li>Current count displays how many frames have been accumulated in the current stack.</li>
 <li>Method selects the stacking method.</li>
 <li>HDR exposure count selects how many exposure buckets are used for HDR stacking.</li>
+<li>HDR algorithm selects Debevec, Robertson or Mertens merging for HDR stacking.</li>
 <li>Alignment selects how frames are aligned before stacking.</li>
 <li>HDR Exposure 1 through HDR Exposure 4 sliders and spin boxes set the exposure values used by HDR stacking.</li>
 </ul>

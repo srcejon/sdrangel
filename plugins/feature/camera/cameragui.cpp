@@ -1087,6 +1087,7 @@ void CameraGUI::displaySettings()
     ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
     settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
+    settingsUI()->stackHdrAlgorithmCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackHdrAlgorithm));
     settingsUI()->stackHdrExposureCountSpin->setValue(m_settings.getHdrExposureCount());
     settingsUI()->stackAlignmentCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackAlignmentMethod));
     settingsUI()->stackDarkFileEdit->setText(m_settings.m_stackDarkFileName);
@@ -1525,6 +1526,12 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->stackHdrAlgorithmCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+        [this](int index)
+        {
+            m_settings.m_stackHdrAlgorithm = static_cast<CameraSettings::StackHdrAlgorithm>(index);
+            applySetting("stackHdrAlgorithm");
+        });
     QObject::connect(settingsUI()->stackHdrExposureCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
         [this](int value)
         {
@@ -2054,6 +2061,10 @@ void CameraGUI::updateHdrStackingControls()
     settingsUI()->stackHdrExposureCountSpin->setVisible(hdrSelected);
     settingsUI()->stackHdrExposureCountLabel->setEnabled(hdrControlsEnabled);
     settingsUI()->stackHdrExposureCountSpin->setEnabled(hdrControlsEnabled);
+    settingsUI()->stackHdrAlgorithmLabel->setVisible(hdrSelected);
+    settingsUI()->stackHdrAlgorithmCombo->setVisible(hdrSelected);
+    settingsUI()->stackHdrAlgorithmLabel->setEnabled(hdrControlsEnabled);
+    settingsUI()->stackHdrAlgorithmCombo->setEnabled(hdrControlsEnabled);
 
     for (int exposureIndex = 0; exposureIndex < CameraSettings::m_maxHdrExposureCount; ++exposureIndex)
     {
@@ -3148,6 +3159,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
     const bool hdrSettingsChanged = force
         || settingsKeys.contains("stackEnabled")
         || settingsKeys.contains("stackMethod")
+        || settingsKeys.contains("stackHdrAlgorithm")
         || settingsKeys.contains("stackHdrExposureCount")
         || settingsKeys.contains("stackHdrExposure1Ms")
         || settingsKeys.contains("stackHdrExposure2Ms")

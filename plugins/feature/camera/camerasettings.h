@@ -54,6 +54,13 @@ struct CameraSettings
         StackMethodHDR
     };
 
+    enum StackHdrAlgorithm
+    {
+        StackHdrAlgorithmDebevec = 0,
+        StackHdrAlgorithmRobertson,
+        StackHdrAlgorithmMertens
+    };
+
     enum StackAlignmentMethod
     {
         StackAlignmentNone = 0,
@@ -342,6 +349,7 @@ struct CameraSettings
     bool m_stackEnabled;
     int m_stackFrameCount;
     StackMethod m_stackMethod;
+    StackHdrAlgorithm m_stackHdrAlgorithm;
     int m_stackHdrExposureCount;
     std::array<double, 4> m_stackHdrExposureTimesMs;
     StackAlignmentMethod m_stackAlignmentMethod;

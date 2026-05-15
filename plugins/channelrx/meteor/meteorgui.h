@@ -20,6 +20,7 @@
 
 #include <QDate>
 #include <QMap>
+#include <QSet>
 #include <QVector>
 #include <QtCharts>
 
@@ -33,6 +34,7 @@
 #include "meteorsettings.h"
 
 class BasebandSampleSink;
+class ButtonSwitch;
 class DeviceUISet;
 class GLScope;
 class GLScopeGUI;
@@ -115,6 +117,7 @@ private:
     QSpinBox *m_minDuration;
     QSpinBox *m_maxDuration;
     QDoubleSpinBox *m_maxFrequencyDrift;
+    ButtonSwitch *m_highlightAllDetections;
     QLabel *m_totalCountText;
     QLabel *m_hourCountText;
     QPushButton *m_clearDetections;
@@ -127,10 +130,13 @@ private:
     GLScopeGUI *m_scopeGUI;
 
     int m_totalCount;
+    bool m_highlightAllDetectionOverlays;
+    quint64 m_nextDetectionOverlayId;
     QMap<QDate, QVector<int> > m_hourlyCounts;
 
     struct DetectionOverlay
     {
+        quint64 m_id;
         QDateTime m_startTimeUtc;
         double m_durationS;
         double m_centerFrequency;
@@ -162,6 +168,8 @@ private:
     void updateCounters();
     void updateHistogram();
     void drawDetectionOverlays(GLSpectrumView *spectrumView);
+    QSet<quint64> selectedDetectionOverlayIds() const;
+    void deleteSelectedDetections();
     int sampleRateIndex(int sampleRate) const;
     QTableWidgetItem *makeTableItem(const QString& text, const QVariant& sortValue = QVariant()) const;
 
@@ -177,8 +185,10 @@ private slots:
     void on_minDuration_valueChanged(int value);
     void on_maxDuration_valueChanged(int value);
     void on_maxFrequencyDrift_valueChanged(double value);
+    void on_highlightAllDetections_toggled(bool checked);
     void on_clearDetections_clicked();
     void on_detectionsTable_itemSelectionChanged();
+    void on_detectionsTable_customContextMenuRequested(const QPoint& pos);
     void onWidgetRolled(QWidget* widget, bool rollDown);
     void onMenuDialogCalled(const QPoint& p);
     void handleInputMessages();

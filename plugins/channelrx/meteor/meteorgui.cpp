@@ -23,6 +23,7 @@
 #include <QDoubleSpinBox>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMenu>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTableWidget>
@@ -33,6 +34,7 @@
 #include "dsp/glscopesettings.h"
 #include "dsp/spectrumsettings.h"
 #include "gui/basicchannelsettingsdialog.h"
+#include "gui/buttonswitch.h"
 #include "gui/dialogpositioner.h"
 #include "gui/dialpopup.h"
 #include "gui/glscope.h"
@@ -99,7 +101,9 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     m_spectrumVis(nullptr),
     m_scopeVis(nullptr),
     m_hourlyChart(nullptr),
-    m_totalCount(0)
+    m_totalCount(0),
+    m_highlightAllDetectionOverlays(true),
+    m_nextDetectionOverlayId(1)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     m_helpURL = "plugins/channelrx/meteor/readme.md";
@@ -169,6 +173,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_minDuration = ui->minDuration;
     m_maxDuration = ui->maxDuration;
     m_maxFrequencyDrift = ui->maxFrequencyDrift;
+    m_highlightAllDetections = ui->highlightAllDetections;
     m_totalCountText = ui->totalCountText;
     m_hourCountText = ui->hourCountText;
     m_clearDetections = ui->clearDetections;
@@ -211,6 +216,9 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_maxFrequencyDrift->setSuffix(" Hz");
     m_maxFrequencyDrift->setToolTip("Maximum frequency span or drift accepted for a meteor pulse");
 
+    m_highlightAllDetections->setChecked(true);
+    m_highlightAllDetections->setToolTip("Highlight all detections on the waterfall. Turn off to highlight only selected table rows.");
+
     m_clearDetections->setIcon(QIcon(":/bin.png"));
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
@@ -246,7 +254,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
 
     m_detectionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_detectionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_detectionsTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_detectionsTable->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_detectionsTable->setContextMenuPolicy(Qt::CustomContextMenu);
     m_detectionsTable->horizontalHeader()->setStretchLastSection(true);
     m_detectionsTable->horizontalHeader()->setSectionsMovable(true);
     m_detectionsTable->verticalHeader()->setVisible(false);
@@ -530,11 +539,18 @@ void MeteorGUI::on_maxFrequencyDrift_valueChanged(double value)
     applySetting("maxFrequencyDrift");
 }
 
+void MeteorGUI::on_highlightAllDetections_toggled(bool checked)
+{
+    m_highlightAllDetectionOverlays = checked;
+    m_glSpectrum->getSpectrumView()->update();
+}
+
 void MeteorGUI::on_clearDetections_clicked()
 {
     m_totalCount = 0;
     m_hourlyCounts.clear();
     m_detectionOverlays.clear();
+    m_nextDetectionOverlayId = 1;
     m_detectionsTable->setRowCount(0);
     updateCounters();
     updateHistogram();
@@ -563,6 +579,29 @@ void MeteorGUI::on_detectionsTable_itemSelectionChanged()
     }
 
     m_glSpectrum->scrollWaterfallToUTC(QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC));
+    m_glSpectrum->getSpectrumView()->update();
+}
+
+void MeteorGUI::on_detectionsTable_customContextMenuRequested(const QPoint& pos)
+{
+    QTableWidgetItem *item = m_detectionsTable->itemAt(pos);
+
+    if (item && !item->isSelected())
+    {
+        m_detectionsTable->clearSelection();
+        m_detectionsTable->selectRow(item->row());
+    }
+
+    if (selectedDetectionOverlayIds().isEmpty()) {
+        return;
+    }
+
+    QMenu menu(this);
+    QAction *deleteAction = menu.addAction("Delete selected detections");
+
+    if (menu.exec(m_detectionsTable->viewport()->mapToGlobal(pos)) == deleteAction) {
+        deleteSelectedDetections();
+    }
 }
 
 void MeteorGUI::onWidgetRolled(QWidget* widget, bool rollDown)
@@ -686,8 +725,10 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_minDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_minDuration_valueChanged);
     QObject::connect(m_maxDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_maxDuration_valueChanged);
     QObject::connect(m_maxFrequencyDrift, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_maxFrequencyDrift_valueChanged);
+    QObject::connect(m_highlightAllDetections, &ButtonSwitch::toggled, this, &MeteorGUI::on_highlightAllDetections_toggled);
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
     QObject::connect(m_detectionsTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_detectionsTable_itemSelectionChanged);
+    QObject::connect(m_detectionsTable, &QTableWidget::customContextMenuRequested, this, &MeteorGUI::on_detectionsTable_customContextMenuRequested);
 }
 
 void MeteorGUI::calcOffset()
@@ -742,7 +783,9 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_hourlyCounts[date][hour]++;
     m_totalCount++;
 
+    const quint64 overlayId = m_nextDetectionOverlayId++;
     m_detectionOverlays.push_back({
+        overlayId,
         detection.getDateTimeUtc(),
         detection.getDurationS(),
         detection.getCenterFrequency(),
@@ -758,6 +801,7 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_detectionsTable->insertRow(0);
     QTableWidgetItem *timeItem = makeTableItem(localTime.toString("yyyy-MM-dd HH:mm:ss.zzz"), localTime.toMSecsSinceEpoch());
     timeItem->setData(Qt::UserRole + 1, detection.getDateTimeUtc().toMSecsSinceEpoch());
+    timeItem->setData(Qt::UserRole + 2, QVariant::fromValue<qulonglong>(overlayId));
     m_detectionsTable->setItem(0, 0, timeItem);
     m_detectionsTable->setItem(0, 1, makeTableItem(QString::number(detection.getPeakPowerDB(), 'f', 1), detection.getPeakPowerDB()));
     m_detectionsTable->setItem(0, 2, makeTableItem(QString::number(detection.getPeakAmplitude(), 'f', 4), detection.getPeakAmplitude()));
@@ -847,12 +891,114 @@ void MeteorGUI::updateHistogram()
     delete oldChart;
 }
 
+QSet<quint64> MeteorGUI::selectedDetectionOverlayIds() const
+{
+    QSet<quint64> ids;
+
+    if (!m_detectionsTable->selectionModel()) {
+        return ids;
+    }
+
+    const QModelIndexList rows = m_detectionsTable->selectionModel()->selectedRows();
+
+    for (const QModelIndex& rowIndex : rows)
+    {
+        QTableWidgetItem *timeItem = m_detectionsTable->item(rowIndex.row(), 0);
+
+        if (timeItem)
+        {
+            bool ok = false;
+            const quint64 id = timeItem->data(Qt::UserRole + 2).toULongLong(&ok);
+
+            if (ok) {
+                ids.insert(id);
+            }
+        }
+    }
+
+    return ids;
+}
+
+void MeteorGUI::deleteSelectedDetections()
+{
+    if (!m_detectionsTable->selectionModel()) {
+        return;
+    }
+
+    QSet<quint64> idsToDelete;
+    QVector<int> rowsToDelete;
+    const QModelIndexList rows = m_detectionsTable->selectionModel()->selectedRows();
+
+    for (const QModelIndex& rowIndex : rows)
+    {
+        QTableWidgetItem *timeItem = m_detectionsTable->item(rowIndex.row(), 0);
+
+        if (!timeItem) {
+            continue;
+        }
+
+        bool idOK = false;
+        const quint64 id = timeItem->data(Qt::UserRole + 2).toULongLong(&idOK);
+
+        if (idOK) {
+            idsToDelete.insert(id);
+        }
+
+        bool timeOK = false;
+        const qint64 utcMSecs = timeItem->data(Qt::UserRole + 1).toLongLong(&timeOK);
+
+        if (timeOK)
+        {
+            const QDateTime localTime = QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC).toLocalTime();
+            const QDate date = localTime.date();
+            const int hour = localTime.time().hour();
+
+            if (m_hourlyCounts.contains(date) && (hour >= 0) && (hour < m_hourlyCounts[date].size()) && (m_hourlyCounts[date][hour] > 0)) {
+                m_hourlyCounts[date][hour]--;
+            }
+
+            if (m_totalCount > 0) {
+                m_totalCount--;
+            }
+        }
+
+        rowsToDelete.push_back(rowIndex.row());
+    }
+
+    std::sort(rowsToDelete.begin(), rowsToDelete.end(), std::greater<int>());
+
+    for (int row : rowsToDelete) {
+        m_detectionsTable->removeRow(row);
+    }
+
+    if (!idsToDelete.isEmpty())
+    {
+        for (int i = m_detectionOverlays.size() - 1; i >= 0; i--)
+        {
+            if (idsToDelete.contains(m_detectionOverlays[i].m_id)) {
+                m_detectionOverlays.removeAt(i);
+            }
+        }
+    }
+
+    updateCounters();
+    updateHistogram();
+    m_glSpectrum->getSpectrumView()->update();
+}
+
 void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
 {
     const QColor color(255, 190, 0);
+    const QSet<quint64> selectedIds = m_highlightAllDetectionOverlays
+        ? QSet<quint64>()
+        : selectedDetectionOverlayIds();
 
     for (const DetectionOverlay& detection : m_detectionOverlays)
     {
+        if (!m_highlightAllDetectionOverlays && !selectedIds.contains(detection.m_id)) {
+            continue;
+        }
+
         const QDateTime endTimeUtc = detection.m_startTimeUtc.addMSecs((qint64) std::ceil(detection.m_durationS * 1000.0));
         float yStart = 0.0f;
         float yEnd = 0.0f;

@@ -176,6 +176,16 @@
     <item row="3" column="1" colspan="2">
      <widget class="QDoubleSpinBox" name="maxFrequencyDrift"/>
     </item>
+    <item row="3" column="3" colspan="2">
+     <widget class="QLabel" name="highlightDetectionsLabel">
+      <property name="text">
+       <string>Hi all</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="5">
+     <widget class="ButtonSwitch" name="highlightAllDetections"/>
+    </item>
    </layout>
   </widget>
   <widget class="QWidget" name="detectionsContainer" native="true">
@@ -452,6 +462,11 @@
    <extends>QWidget</extends>
    <header>gui/valuedialz.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ButtonSwitch</class>
+   <extends>QToolButton</extends>
+   <header>gui/buttonswitch.h</header>
   </customwidget>
   <customwidget>
    <class>QChartView</class>

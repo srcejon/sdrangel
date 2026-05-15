@@ -38,10 +38,10 @@ void MeteorSettings::resetToDefaults()
     m_frequencyMode = Offset;
     m_frequency = 0;
     m_channelSampleRate = 1000;
-    m_powerLPFCutoff = 20.0f;
+    m_powerLPFCutoff = 50.0f;
     m_detectionThresholdDB = 6.0f;
-    m_minDurationMS = 20;
-    m_maxDurationMS = 2000;
+    m_minDurationMS = 5;
+    m_maxDurationMS = 5000;
     m_maxFrequencyDrift = 50.0f;
     m_rgbColor = QColor(255, 170, 0).rgb();
     m_title = "Meteor";
@@ -110,10 +110,10 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readS32(2, (int *) &m_frequencyMode, (int) Offset);
         d.readS64(3, &m_frequency, 0);
         d.readS32(4, &m_channelSampleRate, 1000);
-        d.readFloat(5, &m_powerLPFCutoff, 20.0f);
+        d.readFloat(5, &m_powerLPFCutoff, 50.0f);
         d.readFloat(6, &m_detectionThresholdDB, 6.0f);
-        d.readS32(7, &m_minDurationMS, 20);
-        d.readS32(8, &m_maxDurationMS, 2000);
+        d.readS32(7, &m_minDurationMS, 5);
+        d.readS32(8, &m_maxDurationMS, 5000);
         d.readFloat(9, &m_maxFrequencyDrift, 50.0f);
 
         d.readU32(21, &m_rgbColor, QColor(255, 170, 0).rgb());

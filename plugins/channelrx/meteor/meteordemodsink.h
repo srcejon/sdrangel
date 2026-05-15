@@ -19,6 +19,7 @@
 #define INCLUDE_METEORDEMODSINK_H
 
 #include <array>
+#include <vector>
 
 #include <QDateTime>
 
@@ -131,10 +132,9 @@ private:
     int m_scopeSampleBufferSize;
     int m_scopeSampleBufferIndex;
     ComplexVector m_spectrumBuffer;
+    ComplexVector m_pulseSamples;
 
     quint64 m_sampleCounter;
-    bool m_havePrevSample;
-    Complex m_prevSample;
     bool m_noiseFloorInitialized;
     double m_noiseFloor;
     bool m_pulseActive;
@@ -143,19 +143,16 @@ private:
     quint64 m_pulseLastAboveSample;
     QDateTime m_pulseStartDateTimeUtc;
     double m_pulsePeakPower;
-    double m_pulseFreqMin;
-    double m_pulseFreqMax;
-    double m_pulseFreqFirst;
-    double m_pulseFreqLast;
-    int m_pulseFreqCount;
-
     void processOneSample(Complex& ci);
-    bool processDetectorSample(double power, double filteredPower, double frequency, bool frequencyValid);
-    void startPulse(double power, double frequency, bool frequencyValid);
-    void updatePulse(double power, double frequency, bool frequencyValid);
+    bool processDetectorSample(const Complex& sample, double power, double filteredPower);
+    void startPulse(const Complex& sample, double power);
+    void updatePulse(const Complex& sample, double power);
     void finishPulse(bool forceRejected);
     void updateNoiseFloor(double filteredPower);
     double getDetectionThresholdPower() const;
+    bool estimatePulseFrequency(double& frequencySpan, double& frequencyDrift, double& sweepScore) const;
+    bool estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength) const;
+    static double averageFrequency(const std::vector<double>& frequencies, int begin, int end);
     void configureInterpolator();
     void configurePowerLowpass();
     void resizeScopeBuffers();

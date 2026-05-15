@@ -46,6 +46,7 @@ namespace {
         QDateTime dateTimeUtc;
         double peakAmplitude;
         double peakPowerDB;
+        double backgroundPowerDB;
         double durationS;
         double centerFrequency;
         double frequencySpan;
@@ -340,6 +341,7 @@ namespace {
                     detection.getDateTimeUtc(),
                     detection.getPeakAmplitude(),
                     detection.getPeakPowerDB(),
+                    detection.getBackgroundPowerDB(),
                     detection.getDurationS(),
                     detection.getCenterFrequency(),
                     detection.getFrequencySpan(),
@@ -415,11 +417,12 @@ namespace {
         for (int i = 0; i < detections.size(); i++)
         {
             const Detection& detection = detections[i];
-            out << QString("Detection %1: timeUtc=%2 peakAmplitude=%3 peakPowerDB=%4 durationS=%5 centerFrequencyHz=%6 frequencySpanHz=%7 frequencyDriftHz=%8 sampleRate=%9\n")
+            out << QString("Detection %1: timeUtc=%2 peakAmplitude=%3 peakPowerDB=%4 backgroundPowerDB=%5 durationS=%6 centerFrequencyHz=%7 frequencySpanHz=%8 frequencyDriftHz=%9 sampleRate=%10\n")
                 .arg(i + 1)
                 .arg(detection.dateTimeUtc.toString(Qt::ISODateWithMs))
                 .arg(detection.peakAmplitude, 0, 'f', 6)
                 .arg(detection.peakPowerDB, 0, 'f', 2)
+                .arg(detection.backgroundPowerDB, 0, 'f', 2)
                 .arg(detection.durationS, 0, 'f', 6)
                 .arg(detection.centerFrequency, 0, 'f', 2)
                 .arg(detection.frequencySpan, 0, 'f', 2)

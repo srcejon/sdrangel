@@ -48,6 +48,7 @@ public:
         const QDateTime& getDateTimeUtc() const { return m_dateTimeUtc; }
         double getPeakAmplitude() const { return m_peakAmplitude; }
         double getPeakPowerDB() const { return m_peakPowerDB; }
+        double getBackgroundPowerDB() const { return m_backgroundPowerDB; }
         double getDurationS() const { return m_durationS; }
         double getCenterFrequency() const { return m_centerFrequency; }
         double getFrequencySpan() const { return m_frequencySpan; }
@@ -58,6 +59,7 @@ public:
             const QDateTime& dateTimeUtc,
             double peakAmplitude,
             double peakPowerDB,
+            double backgroundPowerDB,
             double durationS,
             double centerFrequency,
             double frequencySpan,
@@ -68,6 +70,7 @@ public:
                 dateTimeUtc,
                 peakAmplitude,
                 peakPowerDB,
+                backgroundPowerDB,
                 durationS,
                 centerFrequency,
                 frequencySpan,
@@ -80,6 +83,7 @@ public:
         QDateTime m_dateTimeUtc;
         double m_peakAmplitude;
         double m_peakPowerDB;
+        double m_backgroundPowerDB;
         double m_durationS;
         double m_centerFrequency;
         double m_frequencySpan;
@@ -90,6 +94,7 @@ public:
             const QDateTime& dateTimeUtc,
             double peakAmplitude,
             double peakPowerDB,
+            double backgroundPowerDB,
             double durationS,
             double centerFrequency,
             double frequencySpan,
@@ -100,6 +105,7 @@ public:
             m_dateTimeUtc(dateTimeUtc),
             m_peakAmplitude(peakAmplitude),
             m_peakPowerDB(peakPowerDB),
+            m_backgroundPowerDB(backgroundPowerDB),
             m_durationS(durationS),
             m_centerFrequency(centerFrequency),
             m_frequencySpan(frequencySpan),

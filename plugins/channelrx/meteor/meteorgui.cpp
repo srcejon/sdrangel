@@ -223,10 +223,11 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
 
-    m_detectionsTable->setColumnCount(8);
+    m_detectionsTable->setColumnCount(9);
     const QStringList detectionHeaders = {
         "Time (local)",
         "Peak (dB)",
+        "BG (dB)",
         "Amp",
         "Duration (ms)",
         "Center (Hz)",
@@ -237,6 +238,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     const QStringList detectionHeaderTooltips = {
         "Local date and time when the meteor pulse started",
         "Peak signal power during the detection in dB",
+        "Estimated background power level at detection time in dB",
         "Peak linear signal amplitude during the detection",
         "Detected pulse duration in milliseconds",
         "Estimated center frequency of the pulse relative to channel center in hertz",
@@ -804,12 +806,13 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     timeItem->setData(Qt::UserRole + 2, QVariant::fromValue<qulonglong>(overlayId));
     m_detectionsTable->setItem(0, 0, timeItem);
     m_detectionsTable->setItem(0, 1, makeTableItem(QString::number(detection.getPeakPowerDB(), 'f', 1), detection.getPeakPowerDB()));
-    m_detectionsTable->setItem(0, 2, makeTableItem(QString::number(detection.getPeakAmplitude(), 'f', 4), detection.getPeakAmplitude()));
-    m_detectionsTable->setItem(0, 3, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
-    m_detectionsTable->setItem(0, 4, makeTableItem(QString::number(detection.getCenterFrequency(), 'f', 1), detection.getCenterFrequency()));
-    m_detectionsTable->setItem(0, 5, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
-    m_detectionsTable->setItem(0, 6, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
-    m_detectionsTable->setItem(0, 7, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
+    m_detectionsTable->setItem(0, 2, makeTableItem(QString::number(detection.getBackgroundPowerDB(), 'f', 1), detection.getBackgroundPowerDB()));
+    m_detectionsTable->setItem(0, 3, makeTableItem(QString::number(detection.getPeakAmplitude(), 'f', 4), detection.getPeakAmplitude()));
+    m_detectionsTable->setItem(0, 4, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
+    m_detectionsTable->setItem(0, 5, makeTableItem(QString::number(detection.getCenterFrequency(), 'f', 1), detection.getCenterFrequency()));
+    m_detectionsTable->setItem(0, 6, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
+    m_detectionsTable->setItem(0, 7, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
+    m_detectionsTable->setItem(0, 8, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
     m_detectionsTable->setSortingEnabled(true);
 
     updateCounters();

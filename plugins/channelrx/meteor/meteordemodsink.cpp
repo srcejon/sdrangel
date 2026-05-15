@@ -401,6 +401,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
              << " sweepRejected:" << sweepRejected
              << " durationS:" << durationS
              << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
+             << " backgroundPowerDB:" << 10.0 * std::log10(std::max(m_noiseFloor, 1e-20))
              << " centerFrequency:" << centerFrequency
              << " frequencySpan:" << frequencySpan
              << " frequencyDrift:" << frequencyDrift
@@ -412,11 +413,13 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
     {
         const double peakAmplitude = std::sqrt(std::max(m_pulsePeakPower, 0.0));
         const double peakPowerDB = 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20));
+        const double backgroundPowerDB = 10.0 * std::log10(std::max(m_noiseFloor, 1e-20));
 
         m_messageQueueToGUI->push(MsgMeteorDetected::create(
             m_pulseStartDateTimeUtc,
             peakAmplitude,
             peakPowerDB,
+            backgroundPowerDB,
             durationS,
             centerFrequency,
             frequencySpan,

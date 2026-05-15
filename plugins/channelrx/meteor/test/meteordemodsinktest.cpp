@@ -47,6 +47,7 @@ namespace {
         double peakAmplitude;
         double peakPowerDB;
         double durationS;
+        double centerFrequency;
         double frequencySpan;
         double frequencyDrift;
         int sampleRate;
@@ -340,6 +341,7 @@ namespace {
                     detection.getPeakAmplitude(),
                     detection.getPeakPowerDB(),
                     detection.getDurationS(),
+                    detection.getCenterFrequency(),
                     detection.getFrequencySpan(),
                     detection.getFrequencyDrift(),
                     detection.getSampleRate()
@@ -413,12 +415,13 @@ namespace {
         for (int i = 0; i < detections.size(); i++)
         {
             const Detection& detection = detections[i];
-            out << QString("Detection %1: timeUtc=%2 peakAmplitude=%3 peakPowerDB=%4 durationS=%5 frequencySpanHz=%6 frequencyDriftHz=%7 sampleRate=%8\n")
+            out << QString("Detection %1: timeUtc=%2 peakAmplitude=%3 peakPowerDB=%4 durationS=%5 centerFrequencyHz=%6 frequencySpanHz=%7 frequencyDriftHz=%8 sampleRate=%9\n")
                 .arg(i + 1)
                 .arg(detection.dateTimeUtc.toString(Qt::ISODateWithMs))
                 .arg(detection.peakAmplitude, 0, 'f', 6)
                 .arg(detection.peakPowerDB, 0, 'f', 2)
                 .arg(detection.durationS, 0, 'f', 6)
+                .arg(detection.centerFrequency, 0, 'f', 2)
                 .arg(detection.frequencySpan, 0, 'f', 2)
                 .arg(detection.frequencyDrift, 0, 'f', 2)
                 .arg(detection.sampleRate);

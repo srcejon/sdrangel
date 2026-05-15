@@ -124,6 +124,8 @@ public:
     bool writeImage(const QString& filename) { return m_spectrum->writeImage(filename); }
     void getDisplayedSpectrumCopy(std::vector<Real>& copy, bool zoomed) const { m_spectrum->getDisplayedSpectrumCopy(copy, zoomed); }
     void setMemory(int memoryIdx, const SpectrumSettings::SpectrumMemory &memory) { m_spectrum->setMemory(memoryIdx, memory); }
+    bool scrollWaterfallToUTC(const QDateTime& dateTimeUtc) { return m_spectrum->scrollWaterfallToUTC(dateTimeUtc); }
+    void setPaintGLCallback(GLSpectrumView::PaintGLCallback callback) { m_spectrum->setPaintGLCallback(callback); }
 
 private:
     QSplitter *m_splitter;

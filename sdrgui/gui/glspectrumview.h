@@ -36,6 +36,7 @@
 #include <QOpenGLDebugLogger>
 #include <QScrollBar>
 #include <QDateTime>
+#include <functional>
 #include "gui/qtcompatibility.h"
 #include "gui/scaleengine.h"
 #include "gui/glshadersimple.h"
@@ -183,6 +184,8 @@ public:
     GLSpectrumView(QWidget* parent = nullptr);
     virtual ~GLSpectrumView();
 
+    using PaintGLCallback = std::function<void(GLSpectrumView*)>;
+
     void setCenterFrequency(qint64 frequency);
     qint64 getCenterFrequency() const { return m_centerFrequency; }
     float getPowerMax() const;
@@ -276,6 +279,11 @@ public:
     bool writeImage(const QString& filename);
     void getDisplayedSpectrumCopy(std::vector<Real>& copy, bool zoomed);
     void setMemory(int memoryIdx, const SpectrumSettings::SpectrumMemory &memory);
+    bool scrollWaterfallToUTC(const QDateTime& dateTimeUtc);
+    void setPaintGLCallback(PaintGLCallback callback);
+    bool waterfallTimeToY(const QDateTime& dateTimeUtc, float& y) const;
+    bool waterfallFrequencyToX(double frequency, float& x) const;
+    void drawWaterfallOverlayBox(float x1, float y1, float x2, float y2, const QColor& color, float alpha = 1.0f);
 
     QString formatTick(double value) const override;
 
@@ -513,6 +521,7 @@ private:
     QString m_waterfallTimeFormat;
 
     QVector<SpectrumSettings::SpectrumMemory> m_spectrumMemory;
+    PaintGLCallback m_paintGLCallback;
 
     // For sending renders of spectrum to a pipe
     QObject* m_pipeProducer = nullptr;

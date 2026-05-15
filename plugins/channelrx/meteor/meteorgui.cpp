@@ -16,6 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cmath>
 
 #include <QComboBox>
 #include <QDateTime>
@@ -150,6 +151,7 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
 MeteorGUI::~MeteorGUI()
 {
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
+    m_glSpectrum->setPaintGLCallback(nullptr);
     m_glScope->disconnectTimer();
     delete ui;
 }
@@ -213,12 +215,13 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
 
-    m_detectionsTable->setColumnCount(7);
+    m_detectionsTable->setColumnCount(8);
     const QStringList detectionHeaders = {
         "Time (local)",
         "Peak (dB)",
         "Amp",
         "Duration (ms)",
+        "Center (Hz)",
         "Span (Hz)",
         "Drift (Hz)",
         "Rate (Hz)"
@@ -228,6 +231,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Peak signal power during the detection in dB",
         "Peak linear signal amplitude during the detection",
         "Detected pulse duration in milliseconds",
+        "Estimated center frequency of the pulse relative to channel center in hertz",
         "Estimated frequency span across the pulse in hertz",
         "Estimated start-to-end frequency drift across the pulse in hertz",
         "Meteor channel detector sample rate in hertz"
@@ -268,6 +272,9 @@ void MeteorGUI::setupSpectrum()
     spectrumSettings.m_scrollBar = true;
     SpectrumVis::MsgConfigureSpectrumVis *msg = SpectrumVis::MsgConfigureSpectrumVis::create(spectrumSettings, false);
     m_spectrumVis->getInputMessageQueue()->push(msg);
+    m_glSpectrum->setPaintGLCallback([this](GLSpectrumView *spectrumView) {
+        drawDetectionOverlays(spectrumView);
+    });
 }
 
 void MeteorGUI::setupScope()
@@ -527,9 +534,35 @@ void MeteorGUI::on_clearDetections_clicked()
 {
     m_totalCount = 0;
     m_hourlyCounts.clear();
+    m_detectionOverlays.clear();
     m_detectionsTable->setRowCount(0);
     updateCounters();
     updateHistogram();
+    m_glSpectrum->getSpectrumView()->update();
+}
+
+void MeteorGUI::on_detectionsTable_itemSelectionChanged()
+{
+    const QList<QTableWidgetItem*> selectedItems = m_detectionsTable->selectedItems();
+
+    if (selectedItems.isEmpty()) {
+        return;
+    }
+
+    QTableWidgetItem *timeItem = m_detectionsTable->item(selectedItems.first()->row(), 0);
+
+    if (!timeItem) {
+        return;
+    }
+
+    bool ok = false;
+    const qint64 utcMSecs = timeItem->data(Qt::UserRole + 1).toLongLong(&ok);
+
+    if (!ok) {
+        return;
+    }
+
+    m_glSpectrum->scrollWaterfallToUTC(QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC));
 }
 
 void MeteorGUI::onWidgetRolled(QWidget* widget, bool rollDown)
@@ -654,6 +687,7 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_maxDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_maxDuration_valueChanged);
     QObject::connect(m_maxFrequencyDrift, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_maxFrequencyDrift_valueChanged);
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
+    QObject::connect(m_detectionsTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_detectionsTable_itemSelectionChanged);
 }
 
 void MeteorGUI::calcOffset()
@@ -708,19 +742,35 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_hourlyCounts[date][hour]++;
     m_totalCount++;
 
+    m_detectionOverlays.push_back({
+        detection.getDateTimeUtc(),
+        detection.getDurationS(),
+        detection.getCenterFrequency(),
+        detection.getFrequencySpan(),
+        detection.getFrequencyDrift()
+    });
+
+    while (m_detectionOverlays.size() > 200) {
+        m_detectionOverlays.removeFirst();
+    }
+
     m_detectionsTable->setSortingEnabled(false);
     m_detectionsTable->insertRow(0);
-    m_detectionsTable->setItem(0, 0, makeTableItem(localTime.toString("yyyy-MM-dd HH:mm:ss.zzz"), localTime.toMSecsSinceEpoch()));
+    QTableWidgetItem *timeItem = makeTableItem(localTime.toString("yyyy-MM-dd HH:mm:ss.zzz"), localTime.toMSecsSinceEpoch());
+    timeItem->setData(Qt::UserRole + 1, detection.getDateTimeUtc().toMSecsSinceEpoch());
+    m_detectionsTable->setItem(0, 0, timeItem);
     m_detectionsTable->setItem(0, 1, makeTableItem(QString::number(detection.getPeakPowerDB(), 'f', 1), detection.getPeakPowerDB()));
     m_detectionsTable->setItem(0, 2, makeTableItem(QString::number(detection.getPeakAmplitude(), 'f', 4), detection.getPeakAmplitude()));
     m_detectionsTable->setItem(0, 3, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
-    m_detectionsTable->setItem(0, 4, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
-    m_detectionsTable->setItem(0, 5, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
-    m_detectionsTable->setItem(0, 6, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
+    m_detectionsTable->setItem(0, 4, makeTableItem(QString::number(detection.getCenterFrequency(), 'f', 1), detection.getCenterFrequency()));
+    m_detectionsTable->setItem(0, 5, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
+    m_detectionsTable->setItem(0, 6, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
+    m_detectionsTable->setItem(0, 7, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
     m_detectionsTable->setSortingEnabled(true);
 
     updateCounters();
     updateHistogram();
+    m_glSpectrum->getSpectrumView()->update();
 }
 
 void MeteorGUI::updateCounters()
@@ -795,6 +845,37 @@ void MeteorGUI::updateHistogram()
     m_hourlyChartView->setChart(m_hourlyChart);
 
     delete oldChart;
+}
+
+void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
+{
+    const QColor color(255, 190, 0);
+
+    for (const DetectionOverlay& detection : m_detectionOverlays)
+    {
+        const QDateTime endTimeUtc = detection.m_startTimeUtc.addMSecs((qint64) std::ceil(detection.m_durationS * 1000.0));
+        float yStart = 0.0f;
+        float yEnd = 0.0f;
+
+        if (!spectrumView->waterfallTimeToY(detection.m_startTimeUtc, yStart)
+            || !spectrumView->waterfallTimeToY(endTimeUtc, yEnd))
+        {
+            continue;
+        }
+
+        const double minWidthHz = std::max(10.0, (double) m_settings.m_channelSampleRate * 0.02);
+        const double halfBandwidth = std::max({std::fabs(detection.m_frequencySpan) * 0.5, std::fabs(detection.m_frequencyDrift) * 0.5, minWidthHz});
+        float xMin = 0.0f;
+        float xMax = 0.0f;
+
+        if (!spectrumView->waterfallFrequencyToX(detection.m_centerFrequency - halfBandwidth, xMin)
+            || !spectrumView->waterfallFrequencyToX(detection.m_centerFrequency + halfBandwidth, xMax))
+        {
+            continue;
+        }
+
+        spectrumView->drawWaterfallOverlayBox(xMin, yStart, xMax, yEnd, color, 1.0f);
+    }
 }
 
 int MeteorGUI::sampleRateIndex(int sampleRate) const

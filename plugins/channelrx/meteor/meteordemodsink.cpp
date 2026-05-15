@@ -265,8 +265,9 @@ bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize
     return std::isfinite(frequency) && std::isfinite(strength);
 }
 
-bool MeteorDemodSink::estimatePulseFrequency(double& frequencySpan, double& frequencyDrift, double& sweepScore) const
+bool MeteorDemodSink::estimatePulseFrequency(double& centerFrequency, double& frequencySpan, double& frequencyDrift, double& sweepScore) const
 {
+    centerFrequency = 0.0;
     frequencySpan = 0.0;
     frequencyDrift = 0.0;
     sweepScore = 0.0;
@@ -317,9 +318,11 @@ bool MeteorDemodSink::estimatePulseFrequency(double& frequencySpan, double& freq
         frequencies = selectedFrequencies;
     }
 
+    centerFrequency = averageFrequency(frequencies, 0, (int) frequencies.size());
+
     if (frequencies.size() == 1)
     {
-        return true;
+        return std::isfinite(centerFrequency);
     }
 
     std::vector<double> sortedFrequencies = frequencies;
@@ -357,7 +360,7 @@ bool MeteorDemodSink::estimatePulseFrequency(double& frequencySpan, double& freq
         }
     }
 
-    return std::isfinite(frequencySpan) && std::isfinite(frequencyDrift) && std::isfinite(sweepScore);
+    return std::isfinite(centerFrequency) && std::isfinite(frequencySpan) && std::isfinite(frequencyDrift) && std::isfinite(sweepScore);
 }
 
 void MeteorDemodSink::finishPulse(bool forceRejected)
@@ -365,11 +368,12 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
     const quint64 endSample = std::max(m_pulseLastAboveSample, m_pulseStartSample);
     const double durationS = (double) (endSample - m_pulseStartSample + 1) / (double) m_settings.m_channelSampleRate;
     const double durationMS = 1000.0 * durationS;
+    double centerFrequency = 0.0;
     double frequencySpan = 0.0;
     double frequencyDrift = 0.0;
     double sweepScore = 0.0;
 
-    estimatePulseFrequency(frequencySpan, frequencyDrift, sweepScore);
+    estimatePulseFrequency(centerFrequency, frequencySpan, frequencyDrift, sweepScore);
 
     const bool durationOK = (durationMS >= m_settings.m_minDurationMS) && (durationMS <= m_settings.m_maxDurationMS);
     const bool sweepRejected = (m_settings.m_maxFrequencyDrift > 0.0f)
@@ -397,6 +401,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
              << " sweepRejected:" << sweepRejected
              << " durationS:" << durationS
              << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
+             << " centerFrequency:" << centerFrequency
              << " frequencySpan:" << frequencySpan
              << " frequencyDrift:" << frequencyDrift
              << " sweepScore:" << sweepScore
@@ -413,6 +418,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
             peakAmplitude,
             peakPowerDB,
             durationS,
+            centerFrequency,
             frequencySpan,
             frequencyDrift,
             m_settings.m_channelSampleRate

@@ -24,6 +24,8 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cmath>
+#include <utility>
 
 #include <QtAlgorithms>
 #include <QMouseEvent>
@@ -166,7 +168,8 @@ GLSpectrumView::GLSpectrumView(QWidget* parent) :
     m_scrollBarValue(0),
     m_waterfallTimeUnits(SpectrumSettings::TimeOffset),
     m_waterfallTimeFormat("hh:mm:ss"),
-    m_spectrumMemory(SpectrumSettings::m_maxSpectrumMemories)
+    m_spectrumMemory(SpectrumSettings::m_maxSpectrumMemories),
+    m_paintGLCallback(nullptr)
 {
     // Enable multisampling anti-aliasing (MSAA)
     int multisamples = MainCore::instance()->getSettings().getMultisampling();
@@ -844,6 +847,49 @@ int GLSpectrumView::scrollBarValue() const
     return m_scrollBarValue;
 }
 
+bool GLSpectrumView::scrollWaterfallToUTC(const QDateTime& dateTimeUtc)
+{
+    int scrollValue = 0;
+
+    {
+        QMutexLocker mutexLocker(&m_mutex);
+
+        if (!m_scrollBar || !m_scrollBarEnabled || m_spectrumBuffer.isEmpty()) {
+            return false;
+        }
+
+        const qint64 targetMSecs = dateTimeUtc.toUTC().toMSecsSinceEpoch();
+        const qint64 firstMSecs = m_spectrumBuffer[0].m_dateTime.toUTC().toMSecsSinceEpoch();
+        const qint64 lastMSecs = m_spectrumBuffer[m_spectrumBuffer.size() - 1].m_dateTime.toUTC().toMSecsSinceEpoch();
+
+        if ((targetMSecs < firstMSecs) || (targetMSecs > lastMSecs)) {
+            return false;
+        }
+
+        int closestIdx = 0;
+        qint64 closestDistance = -1;
+
+        for (int i = 0; i < (int) m_spectrumBuffer.size(); i++)
+        {
+            const qint64 rowMSecs = m_spectrumBuffer[i].m_dateTime.toUTC().toMSecsSinceEpoch();
+            const qint64 distance = targetMSecs >= rowMSecs ? targetMSecs - rowMSecs : rowMSecs - targetMSecs;
+
+            if ((closestDistance < 0) || (distance < closestDistance))
+            {
+                closestDistance = distance;
+                closestIdx = i;
+            }
+        }
+
+        const int page = m_waterfallBuffer ? m_waterfallBuffer->height() : m_waterfallHeight;
+        const int maxScroll = std::max(0, (int) m_spectrumBuffer.size() - 1 - page);
+        scrollValue = std::clamp((int) m_spectrumBuffer.size() - 1 - closestIdx - page / 2, 0, maxScroll);
+    }
+
+    m_scrollBar->setValue(scrollValue);
+    return true;
+}
+
 // Read spectrum from .csv file
 void GLSpectrumView::readCSV(QTextStream &in, bool append, QString &error)
 {
@@ -965,6 +1011,12 @@ bool GLSpectrumView::writeImage(const QString& filename)
     QImage image = grabFramebuffer();
 
     return image.save(filename);
+}
+
+void GLSpectrumView::setPaintGLCallback(PaintGLCallback callback)
+{
+    QMutexLocker mutexLocker(&m_mutex);
+    m_paintGLCallback = std::move(callback);
 }
 
 // Get center frequency for currently displayed spectrum (which is selected via the scroll bar)
@@ -2340,6 +2392,10 @@ void GLSpectrumView::paintGL()
         measure(&m_currentSpectrum[m_fftMin], true);
     }
 
+    if (m_paintGLCallback) {
+        m_paintGLCallback(this);
+    }
+
     m_mutex.unlock();
 
 #ifdef ENABLE_PROFILER
@@ -3265,6 +3321,100 @@ QString GLSpectrumView::formatTick(double value) const
     {
         return "";
     }
+}
+
+bool GLSpectrumView::waterfallTimeToY(const QDateTime& dateTimeUtc, float& y) const
+{
+    if ((m_waterfallHeight <= 0) || m_spectrumBuffer.isEmpty()) {
+        return false;
+    }
+
+    const qint64 targetMSecs = dateTimeUtc.toUTC().toMSecsSinceEpoch();
+    const int firstIdx = (int) m_spectrumBuffer.size() - 1 - scrollBarValue() - m_waterfallHeight;
+    const int lastIdx = (int) m_spectrumBuffer.size() - 1 - scrollBarValue();
+
+    if ((lastIdx < 0) || (firstIdx >= (int) m_spectrumBuffer.size())) {
+        return false;
+    }
+
+    const int beginIdx = std::max(0, firstIdx);
+    const int endIdx = std::min(lastIdx, (int) m_spectrumBuffer.size() - 1);
+
+    if (beginIdx > endIdx) {
+        return false;
+    }
+
+    for (int idx = beginIdx; idx <= endIdx; idx++)
+    {
+        const qint64 rowMSecs = m_spectrumBuffer[idx].m_dateTime.toUTC().toMSecsSinceEpoch();
+        const qint64 nextMSecs = idx < endIdx
+            ? m_spectrumBuffer[idx + 1].m_dateTime.toUTC().toMSecsSinceEpoch()
+            : rowMSecs;
+        const qint64 minMSecs = std::min(rowMSecs, nextMSecs);
+        const qint64 maxMSecs = std::max(rowMSecs, nextMSecs);
+
+        if ((targetMSecs >= minMSecs) && (targetMSecs <= maxMSecs))
+        {
+            double row = (double) (idx - firstIdx);
+
+            if (nextMSecs != rowMSecs) {
+                row += (double) (targetMSecs - rowMSecs) / (double) (nextMSecs - rowMSecs);
+            }
+
+            y = (float) (row / (double) std::max(1, m_waterfallHeight));
+
+            if (!m_invertedWaterfall) {
+                y = 1.0f - y;
+            }
+
+            y = std::clamp(y, 0.0f, 1.0f);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool GLSpectrumView::waterfallFrequencyToX(double frequency, float& x) const
+{
+    const double range = m_frequencyScale.getRange();
+
+    if ((m_waterfallHeight <= 0) || (range <= 0.0)) {
+        return false;
+    }
+
+    x = (float) ((frequency - m_frequencyScale.getRangeMin()) / range);
+    x = std::clamp(x, 0.0f, 1.0f);
+    return true;
+}
+
+void GLSpectrumView::drawWaterfallOverlayBox(float x1, float y1, float x2, float y2, const QColor& color, float alpha)
+{
+    if ((m_waterfallHeight <= 0) || !m_displayWaterfall) {
+        return;
+    }
+
+    x1 = std::clamp(x1, 0.0f, 1.0f);
+    x2 = std::clamp(x2, 0.0f, 1.0f);
+    y1 = std::clamp(y1, 0.0f, 1.0f);
+    y2 = std::clamp(y2, 0.0f, 1.0f);
+
+    if ((std::fabs(x2 - x1) <= 0.0f) || (std::fabs(y2 - y1) <= 0.0f)) {
+        return;
+    }
+
+    const float left = std::min(x1, x2);
+    const float right = std::max(x1, x2);
+    const float top = std::min(y1, y2);
+    const float bottom = std::max(y1, y2);
+    GLfloat vertices[] {
+        right, bottom,
+        left, bottom,
+        left, top,
+        right, top
+    };
+    QVector4D glColor(color.redF(), color.greenF(), color.blueF(), std::clamp(alpha, 0.0f, 1.0f));
+    m_glShaderSimple.drawContour(m_glWaterfallBoxMatrix, glColor, vertices, 4);
 }
 
 void GLSpectrumView::setTimeScaleRange()

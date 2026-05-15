@@ -49,6 +49,7 @@ public:
         double getPeakAmplitude() const { return m_peakAmplitude; }
         double getPeakPowerDB() const { return m_peakPowerDB; }
         double getDurationS() const { return m_durationS; }
+        double getCenterFrequency() const { return m_centerFrequency; }
         double getFrequencySpan() const { return m_frequencySpan; }
         double getFrequencyDrift() const { return m_frequencyDrift; }
         int getSampleRate() const { return m_sampleRate; }
@@ -58,6 +59,7 @@ public:
             double peakAmplitude,
             double peakPowerDB,
             double durationS,
+            double centerFrequency,
             double frequencySpan,
             double frequencyDrift,
             int sampleRate)
@@ -67,6 +69,7 @@ public:
                 peakAmplitude,
                 peakPowerDB,
                 durationS,
+                centerFrequency,
                 frequencySpan,
                 frequencyDrift,
                 sampleRate
@@ -78,6 +81,7 @@ public:
         double m_peakAmplitude;
         double m_peakPowerDB;
         double m_durationS;
+        double m_centerFrequency;
         double m_frequencySpan;
         double m_frequencyDrift;
         int m_sampleRate;
@@ -87,6 +91,7 @@ public:
             double peakAmplitude,
             double peakPowerDB,
             double durationS,
+            double centerFrequency,
             double frequencySpan,
             double frequencyDrift,
             int sampleRate
@@ -96,6 +101,7 @@ public:
             m_peakAmplitude(peakAmplitude),
             m_peakPowerDB(peakPowerDB),
             m_durationS(durationS),
+            m_centerFrequency(centerFrequency),
             m_frequencySpan(frequencySpan),
             m_frequencyDrift(frequencyDrift),
             m_sampleRate(sampleRate)
@@ -151,7 +157,7 @@ private:
     void finishPulse(bool forceRejected);
     void updateNoiseFloor(double filteredPower);
     double getDetectionThresholdPower() const;
-    bool estimatePulseFrequency(double& frequencySpan, double& frequencyDrift, double& sweepScore) const;
+    bool estimatePulseFrequency(double& centerFrequency, double& frequencySpan, double& frequencyDrift, double& sweepScore) const;
     bool estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength) const;
     static double averageFrequency(const std::vector<double>& frequencies, int begin, int end);
     void configureInterpolator();

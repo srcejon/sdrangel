@@ -38,6 +38,7 @@ class GLScope;
 class GLScopeGUI;
 class GLSpectrum;
 class GLSpectrumGUI;
+class GLSpectrumView;
 class PluginAPI;
 class RollupContents;
 class ScopeVis;
@@ -128,6 +129,17 @@ private:
     int m_totalCount;
     QMap<QDate, QVector<int> > m_hourlyCounts;
 
+    struct DetectionOverlay
+    {
+        QDateTime m_startTimeUtc;
+        double m_durationS;
+        double m_centerFrequency;
+        double m_frequencySpan;
+        double m_frequencyDrift;
+    };
+
+    QVector<DetectionOverlay> m_detectionOverlays;
+
     static const int m_sampleRates[4];
 
     explicit MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSampleSink *rxChannel, QWidget* parent = nullptr);
@@ -149,6 +161,7 @@ private:
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
     void updateCounters();
     void updateHistogram();
+    void drawDetectionOverlays(GLSpectrumView *spectrumView);
     int sampleRateIndex(int sampleRate) const;
     QTableWidgetItem *makeTableItem(const QString& text, const QVariant& sortValue = QVariant()) const;
 
@@ -165,6 +178,7 @@ private slots:
     void on_maxDuration_valueChanged(int value);
     void on_maxFrequencyDrift_valueChanged(double value);
     void on_clearDetections_clicked();
+    void on_detectionsTable_itemSelectionChanged();
     void onWidgetRolled(QWidget* widget, bool rollDown);
     void onMenuDialogCalled(const QPoint& p);
     void handleInputMessages();

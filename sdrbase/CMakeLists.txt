@@ -617,6 +617,10 @@ if(DEFINED LIBSIGMF_DEPENDS)
     add_dependencies(sdrbase "${LIBSIGMF_DEPENDS}")
 endif()
 
+if(DEFINED VKFFT_DEPENDS)
+    add_dependencies(sdrbase "${VKFFT_DEPENDS}")
+endif()
+
 if(Vulkan_FOUND AND (${VKFFT_BACKEND} EQUAL 0))
     target_compile_definitions(sdrbase PUBLIC -DVK_API_VERSION=11)
     target_include_directories(sdrbase PUBLIC ${Vulkan_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIR}/glslang/Include)

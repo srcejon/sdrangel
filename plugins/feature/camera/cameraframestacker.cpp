@@ -616,7 +616,7 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
 
         try
         {
-            auto sanitizeFloatImage = [](cv::Mat& floatFrame)
+            auto sanitizeFloatImage = [](cv::Mat& floatFrame, bool clampUpper)
             {
                 for (int y = 0; y < floatFrame.rows; ++y)
                 {
@@ -628,34 +628,70 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
                         {
                             if (!std::isfinite(row[x][c])) {
                                 row[x][c] = 0.0f;
+                            } else if (row[x][c] < 0.0f) {
+                                row[x][c] = 0.0f;
+                            } else if (clampUpper && (row[x][c] > 1.0f)) {
+                                row[x][c] = 1.0f;
                             }
                         }
                     }
                 }
-
-                cv::max(floatFrame, cv::Scalar::all(0.0f), floatFrame);
-                cv::min(floatFrame, cv::Scalar::all(1.0f), floatFrame);
             };
+
+            auto isUsefulFloatImage = [](const cv::Mat& floatFrame) -> bool
+            {
+                if (floatFrame.empty() || (floatFrame.type() != CV_32FC3)) {
+                    return false;
+                }
+
+                double minValue = 0.0;
+                double maxValue = 0.0;
+                cv::minMaxLoc(floatFrame.reshape(1), &minValue, &maxValue);
+                return std::isfinite(minValue) && std::isfinite(maxValue) && (maxValue > 1.0e-4);
+            };
+
+            auto useMiddleExposureFrame = [](const std::vector<cv::Mat>& ldrFrames, cv::Mat& tonemapped)
+            {
+                const int middleIndex = static_cast<int>(ldrFrames.size() / 2);
+                ldrFrames[middleIndex].convertTo(tonemapped, CV_32FC3, 1.0 / 255.0);
+            };
+
+            std::vector<const HdrFrameSample *> sortedSamples;
+            sortedSamples.reserve(m_hdrFrameSamples.size());
+            for (const HdrFrameSample& sample : m_hdrFrameSamples) {
+                sortedSamples.push_back(&sample);
+            }
+            std::stable_sort(sortedSamples.begin(), sortedSamples.end(),
+                [](const HdrFrameSample *left, const HdrFrameSample *right)
+                {
+                    return left->m_exposureTimeMs < right->m_exposureTimeMs;
+                });
 
             std::vector<cv::Mat> ldrFrames;
             std::vector<float> exposureTimesSeconds;
             ldrFrames.reserve(m_hdrFrameSamples.size());
             exposureTimesSeconds.reserve(m_hdrFrameSamples.size());
 
-            for (const HdrFrameSample& sample : m_hdrFrameSamples)
+            for (const HdrFrameSample *sample : sortedSamples)
             {
                 cv::Mat ldrFrame8u;
 
-                if (sample.m_frameMat.depth() == CV_16U) {
-                    sample.m_frameMat.convertTo(ldrFrame8u, CV_8UC3, 255.0 / 65535.0);
-                } else if (sample.m_frameMat.depth() == CV_8U) {
-                    ldrFrame8u = sample.m_frameMat;
+                if (sample->m_frameMat.depth() == CV_16U) {
+                    sample->m_frameMat.convertTo(ldrFrame8u, CV_8UC3, 255.0 / 65535.0);
+                } else if (sample->m_frameMat.depth() == CV_8U) {
+                    ldrFrame8u = sample->m_frameMat.clone();
                 } else {
-                    sample.m_frameMat.convertTo(ldrFrame8u, CV_8UC3);
+                    sample->m_frameMat.convertTo(ldrFrame8u, CV_8UC3);
                 }
 
+                cv::cvtColor(ldrFrame8u, ldrFrame8u, cv::COLOR_RGB2BGR);
                 ldrFrames.push_back(ldrFrame8u);
-                exposureTimesSeconds.push_back(static_cast<float>(std::max(1.0e-6, sample.m_exposureTimeMs / 1000.0)));
+
+                float exposureSeconds = static_cast<float>(std::max(1.0e-6, sample->m_exposureTimeMs / 1000.0));
+                if (!exposureTimesSeconds.empty() && (exposureSeconds <= exposureTimesSeconds.back())) {
+                    exposureSeconds = exposureTimesSeconds.back() + std::max(1.0e-6f, exposureTimesSeconds.back() * 1.0e-4f);
+                }
+                exposureTimesSeconds.push_back(exposureSeconds);
             }
 
             cv::Mat timesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, exposureTimesSeconds.data());
@@ -682,12 +718,15 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
                 }
                 else
                 {
-                    cv::Ptr<cv::CalibrateDebevec> calibrateDebevec = cv::createCalibrateDebevec();
-                    calibrateDebevec->process(ldrFrames, responseCurve, timesMat);
-
                     cv::Ptr<cv::MergeDebevec> mergeDebevec = cv::createMergeDebevec();
-                    mergeDebevec->process(ldrFrames, hdrRadiance, timesMat, responseCurve);
+                    // Live brackets are too small and scene-dependent for a reliable per-stack CRF fit.
+                    mergeDebevec->process(ldrFrames, hdrRadiance, timesMat);
                 }
+
+                if (hdrRadiance.depth() != CV_32F) {
+                    hdrRadiance.convertTo(hdrRadiance, CV_32FC3);
+                }
+                sanitizeFloatImage(hdrRadiance, false);
 
                 cv::Ptr<cv::TonemapReinhard> tonemap = cv::createTonemapReinhard(2.2f, 0.0f, 1.0f, 0.0f);
                 tonemap->process(hdrRadiance, tonemapped);
@@ -696,7 +735,31 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
             if (tonemapped.depth() != CV_32F) {
                 tonemapped.convertTo(tonemapped, CV_32FC3);
             }
-            sanitizeFloatImage(tonemapped);
+            sanitizeFloatImage(tonemapped, true);
+            if (!isUsefulFloatImage(tonemapped))
+            {
+                if (m_settings.m_stackHdrAlgorithm == CameraSettings::StackHdrAlgorithmMertens)
+                {
+                    qWarning() << "CameraFrameStacker: HDR exposure fusion produced an unusable image; falling back to middle exposure";
+                    useMiddleExposureFrame(ldrFrames, tonemapped);
+                }
+                else
+                {
+                    qWarning() << "CameraFrameStacker: HDR merge produced an unusable image; falling back to exposure fusion";
+                    cv::Ptr<cv::MergeMertens> mergeMertens = cv::createMergeMertens();
+                    mergeMertens->process(ldrFrames, tonemapped);
+                    if (tonemapped.depth() != CV_32F) {
+                        tonemapped.convertTo(tonemapped, CV_32FC3);
+                    }
+                    sanitizeFloatImage(tonemapped, true);
+
+                    if (!isUsefulFloatImage(tonemapped)) {
+                        useMiddleExposureFrame(ldrFrames, tonemapped);
+                    }
+                }
+            }
+
+            cv::cvtColor(tonemapped, tonemapped, cv::COLOR_BGR2RGB);
 
             cv::Mat clampedTonemapped;
             cv::max(tonemapped, cv::Scalar::all(0.0f), clampedTonemapped);

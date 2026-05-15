@@ -104,22 +104,22 @@ void MeteorDemodSink::processOneSample(Complex& ci)
 
 bool MeteorDemodSink::processDetectorSample(const Complex& sample, double power, double filteredPower)
 {
-    const double threshold = getDetectionThresholdPower();
-    const double releaseThreshold = threshold * 0.7;
-
     if (m_rearmNeeded)
     {
+        updateNoiseFloor(filteredPower);
+        const double releaseThreshold = getDetectionThresholdPower() * 0.7;
+
         if (filteredPower < releaseThreshold) {
             m_rearmNeeded = false;
         }
 
-        updateNoiseFloor(filteredPower);
         return false;
     }
 
     if (!m_pulseActive)
     {
         updateNoiseFloor(filteredPower);
+        const double threshold = getDetectionThresholdPower();
 
         if (m_noiseFloorInitialized && (filteredPower > threshold))
         {
@@ -131,6 +131,8 @@ bool MeteorDemodSink::processDetectorSample(const Complex& sample, double power,
     }
 
     updatePulse(sample, power);
+
+    const double releaseThreshold = getDetectionThresholdPower() * 0.7;
 
     if (filteredPower > releaseThreshold) {
         m_pulseLastAboveSample = m_sampleCounter;

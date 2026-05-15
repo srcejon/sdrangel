@@ -43,6 +43,8 @@ void MeteorSettings::resetToDefaults()
     m_minDurationMS = 5;
     m_maxDurationMS = 5000;
     m_maxFrequencyDrift = 50.0f;
+    m_detectionsTableColumnHidden = 0;
+    m_detectionBoxPaddingPixels = 4;
     m_rgbColor = QColor(255, 170, 0).rgb();
     m_title = "Meteor";
     m_streamIndex = 0;
@@ -63,6 +65,8 @@ QByteArray MeteorSettings::serialize() const
     s.writeS32(7, m_minDurationMS);
     s.writeS32(8, m_maxDurationMS);
     s.writeFloat(9, m_maxFrequencyDrift);
+    s.writeU32(10, m_detectionsTableColumnHidden);
+    s.writeS32(11, m_detectionBoxPaddingPixels);
 
     s.writeU32(21, m_rgbColor);
     s.writeString(22, m_title);
@@ -115,6 +119,8 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readS32(7, &m_minDurationMS, 5);
         d.readS32(8, &m_maxDurationMS, 5000);
         d.readFloat(9, &m_maxFrequencyDrift, 50.0f);
+        d.readU32(10, &m_detectionsTableColumnHidden, 0);
+        d.readS32(11, &m_detectionBoxPaddingPixels, 4);
 
         d.readU32(21, &m_rgbColor, QColor(255, 170, 0).rgb());
         d.readString(22, &m_title, "Meteor");
@@ -187,6 +193,12 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
     if (settingsKeys.contains("maxFrequencyDrift")) {
         m_maxFrequencyDrift = settings.m_maxFrequencyDrift;
     }
+    if (settingsKeys.contains("detectionsTableColumnHidden")) {
+        m_detectionsTableColumnHidden = settings.m_detectionsTableColumnHidden;
+    }
+    if (settingsKeys.contains("detectionBoxPaddingPixels")) {
+        m_detectionBoxPaddingPixels = settings.m_detectionBoxPaddingPixels;
+    }
     if (settingsKeys.contains("rgbColor")) {
         m_rgbColor = settings.m_rgbColor;
     }
@@ -234,6 +246,12 @@ QString MeteorSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("maxFrequencyDrift") || force) {
         ostr << " m_maxFrequencyDrift: " << m_maxFrequencyDrift;
+    }
+    if (settingsKeys.contains("detectionsTableColumnHidden") || force) {
+        ostr << " m_detectionsTableColumnHidden: " << m_detectionsTableColumnHidden;
+    }
+    if (settingsKeys.contains("detectionBoxPaddingPixels") || force) {
+        ostr << " m_detectionBoxPaddingPixels: " << m_detectionBoxPaddingPixels;
     }
     if (settingsKeys.contains("streamIndex") || force) {
         ostr << " m_streamIndex: " << m_streamIndex;

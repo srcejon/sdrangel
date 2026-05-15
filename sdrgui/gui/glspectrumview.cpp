@@ -3388,6 +3388,18 @@ bool GLSpectrumView::waterfallFrequencyToX(double frequency, float& x) const
     return true;
 }
 
+double GLSpectrumView::waterfallFrequencyPerPixel()
+{
+    const double range = m_frequencyScale.getRange();
+    const int widthPixels = m_frequencyScale.getSize();
+
+    if ((range <= 0.0) || (widthPixels <= 0)) {
+        return 0.0;
+    }
+
+    return range / (double) widthPixels;
+}
+
 void GLSpectrumView::drawWaterfallOverlayBox(float x1, float y1, float x2, float y2, const QColor& color, float alpha)
 {
     if ((m_waterfallHeight <= 0) || !m_displayWaterfall) {

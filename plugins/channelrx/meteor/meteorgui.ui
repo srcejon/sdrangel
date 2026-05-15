@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>390</width>
-    <height>980</height>
+    <height>1005</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -40,7 +40,7 @@
      <x>0</x>
      <y>0</y>
      <width>390</width>
-     <height>120</height>
+     <height>145</height>
     </rect>
    </property>
    <property name="sizePolicy">
@@ -186,13 +186,23 @@
     <item row="3" column="5">
      <widget class="ButtonSwitch" name="highlightAllDetections"/>
     </item>
+    <item row="4" column="0">
+     <widget class="QLabel" name="detectionBoxPaddingLabel">
+      <property name="text">
+       <string>Box px</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="1" colspan="2">
+     <widget class="QSpinBox" name="detectionBoxPadding"/>
+    </item>
    </layout>
   </widget>
   <widget class="QWidget" name="detectionsContainer" native="true">
    <property name="geometry">
     <rect>
      <x>0</x>
-     <y>125</y>
+     <y>150</y>
      <width>390</width>
      <height>190</height>
     </rect>
@@ -294,6 +304,19 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QPushButton" name="saveDetections">
+        <property name="maximumSize">
+         <size>
+          <width>28</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
      </layout>
     </item>
     <item>
@@ -312,7 +335,7 @@
    <property name="geometry">
     <rect>
      <x>0</x>
-     <y>320</y>
+     <y>345</y>
      <width>390</width>
      <height>220</height>
     </rect>
@@ -355,7 +378,7 @@
    <property name="geometry">
     <rect>
      <x>0</x>
-     <y>545</y>
+     <y>570</y>
      <width>390</width>
      <height>210</height>
     </rect>
@@ -404,7 +427,7 @@
    <property name="geometry">
     <rect>
      <x>0</x>
-     <y>760</y>
+     <y>785</y>
      <width>390</width>
      <height>210</height>
     </rect>

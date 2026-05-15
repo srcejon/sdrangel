@@ -21,13 +21,17 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDoubleSpinBox>
+#include <QFile>
+#include <QFileDialog>
 #include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTextStream>
 
 #include "device/deviceuiset.h"
 #include "dsp/dspcommands.h"
@@ -44,6 +48,7 @@
 #include "gui/rollupcontents.h"
 #include "maincore.h"
 #include "plugin/pluginapi.h"
+#include "util/csv.h"
 
 #include "meteorgui.h"
 #include "ui_meteorgui.h"
@@ -174,8 +179,10 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_maxDuration = ui->maxDuration;
     m_maxFrequencyDrift = ui->maxFrequencyDrift;
     m_highlightAllDetections = ui->highlightAllDetections;
+    m_detectionBoxPadding = ui->detectionBoxPadding;
     m_totalCountText = ui->totalCountText;
     m_hourCountText = ui->hourCountText;
+    m_saveDetections = ui->saveDetections;
     m_clearDetections = ui->clearDetections;
     m_detectionsTable = ui->detectionsTable;
     m_hourlyChartView = ui->hourlyChartView;
@@ -219,6 +226,14 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_highlightAllDetections->setChecked(true);
     m_highlightAllDetections->setToolTip("Highlight all detections on the waterfall. Turn off to highlight only selected table rows.");
 
+    m_detectionBoxPadding->setRange(0, 100);
+    m_detectionBoxPadding->setSuffix(" px");
+    m_detectionBoxPadding->setToolTip("Extra waterfall bounding box width in pixels on each side of the detected frequency range");
+
+    m_saveDetections->setIcon(QIcon(":/save.png"));
+    m_saveDetections->setToolTip("Save detections to CSV");
+    m_saveDetections->setMaximumWidth(28);
+
     m_clearDetections->setIcon(QIcon(":/bin.png"));
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
@@ -260,6 +275,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_detectionsTable->setContextMenuPolicy(Qt::CustomContextMenu);
     m_detectionsTable->horizontalHeader()->setStretchLastSection(true);
     m_detectionsTable->horizontalHeader()->setSectionsMovable(true);
+    m_detectionsTable->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
     m_detectionsTable->verticalHeader()->setVisible(false);
     m_detectionsTable->setSortingEnabled(true);
     m_detectionsTable->setMinimumHeight(120);
@@ -547,6 +563,77 @@ void MeteorGUI::on_highlightAllDetections_toggled(bool checked)
     m_glSpectrum->getSpectrumView()->update();
 }
 
+void MeteorGUI::on_detectionBoxPadding_valueChanged(int value)
+{
+    m_settings.m_detectionBoxPaddingPixels = value;
+    applySetting("detectionBoxPaddingPixels");
+    m_glSpectrum->getSpectrumView()->update();
+}
+
+void MeteorGUI::on_saveDetections_clicked()
+{
+    QFileDialog fileDialog(this, "Select file to save detections to", "", "*.csv");
+    fileDialog.setDefaultSuffix("csv");
+    fileDialog.setAcceptMode(QFileDialog::AcceptSave);
+
+    if (!fileDialog.exec()) {
+        return;
+    }
+
+    const QStringList fileNames = fileDialog.selectedFiles();
+
+    if (fileNames.isEmpty()) {
+        return;
+    }
+
+    QFile file(fileNames[0]);
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QMessageBox::critical(this, "Meteor", QString("Failed to open file %1").arg(fileNames[0]));
+        return;
+    }
+
+    QTextStream out(&file);
+    QHeaderView *header = m_detectionsTable->horizontalHeader();
+    QVector<int> visibleColumns;
+
+    for (int visualIndex = 0; visualIndex < header->count(); visualIndex++)
+    {
+        const int logicalIndex = header->logicalIndex(visualIndex);
+
+        if (!m_detectionsTable->isColumnHidden(logicalIndex)) {
+            visibleColumns.push_back(logicalIndex);
+        }
+    }
+
+    for (int i = 0; i < visibleColumns.size(); i++)
+    {
+        if (i > 0) {
+            out << ",";
+        }
+
+        out << CSV::escape(m_detectionsTable->horizontalHeaderItem(visibleColumns[i])->text());
+    }
+
+    out << "\n";
+
+    for (int row = 0; row < m_detectionsTable->rowCount(); row++)
+    {
+        for (int i = 0; i < visibleColumns.size(); i++)
+        {
+            if (i > 0) {
+                out << ",";
+            }
+
+            QTableWidgetItem *item = m_detectionsTable->item(row, visibleColumns[i]);
+            out << CSV::escape(item ? item->text() : QString());
+        }
+
+        out << "\n";
+    }
+}
+
 void MeteorGUI::on_clearDetections_clicked()
 {
     m_totalCount = 0;
@@ -604,6 +691,45 @@ void MeteorGUI::on_detectionsTable_customContextMenuRequested(const QPoint& pos)
     if (menu.exec(m_detectionsTable->viewport()->mapToGlobal(pos)) == deleteAction) {
         deleteSelectedDetections();
     }
+}
+
+void MeteorGUI::on_detectionsTableHeader_customContextMenuRequested(const QPoint& pos)
+{
+    QHeaderView *header = m_detectionsTable->horizontalHeader();
+    QMenu menu(this);
+
+    for (int visualIndex = 0; visualIndex < header->count(); visualIndex++)
+    {
+        const int logicalIndex = header->logicalIndex(visualIndex);
+        QAction *action = menu.addAction(m_detectionsTable->horizontalHeaderItem(logicalIndex)->text());
+        action->setCheckable(true);
+        action->setChecked(!m_detectionsTable->isColumnHidden(logicalIndex));
+        action->setData(logicalIndex);
+    }
+
+    QAction *selectedAction = menu.exec(header->viewport()->mapToGlobal(pos));
+
+    if (!selectedAction) {
+        return;
+    }
+
+    const int logicalIndex = selectedAction->data().toInt();
+    const bool hideColumn = !selectedAction->isChecked();
+    int visibleColumns = 0;
+
+    for (int i = 0; i < header->count(); i++)
+    {
+        if (!m_detectionsTable->isColumnHidden(i)) {
+            visibleColumns++;
+        }
+    }
+
+    if (hideColumn && (visibleColumns <= 1)) {
+        return;
+    }
+
+    m_detectionsTable->setColumnHidden(logicalIndex, hideColumn);
+    saveDetectionsColumnVisibility();
 }
 
 void MeteorGUI::onWidgetRolled(QWidget* widget, bool rollDown)
@@ -708,6 +834,8 @@ void MeteorGUI::displaySettings()
     m_minDuration->setValue(m_settings.m_minDurationMS);
     m_maxDuration->setValue(m_settings.m_maxDurationMS);
     m_maxFrequencyDrift->setValue(m_settings.m_maxFrequencyDrift);
+    m_detectionBoxPadding->setValue(m_settings.m_detectionBoxPaddingPixels);
+    applyDetectionsColumnVisibility();
 
     updateVisualSampleRate();
     updateIndexLabel();
@@ -728,9 +856,12 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_maxDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_maxDuration_valueChanged);
     QObject::connect(m_maxFrequencyDrift, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_maxFrequencyDrift_valueChanged);
     QObject::connect(m_highlightAllDetections, &ButtonSwitch::toggled, this, &MeteorGUI::on_highlightAllDetections_toggled);
+    QObject::connect(m_detectionBoxPadding, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_detectionBoxPadding_valueChanged);
+    QObject::connect(m_saveDetections, &QPushButton::clicked, this, &MeteorGUI::on_saveDetections_clicked);
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
     QObject::connect(m_detectionsTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_detectionsTable_itemSelectionChanged);
     QObject::connect(m_detectionsTable, &QTableWidget::customContextMenuRequested, this, &MeteorGUI::on_detectionsTable_customContextMenuRequested);
+    QObject::connect(m_detectionsTable->horizontalHeader(), &QHeaderView::customContextMenuRequested, this, &MeteorGUI::on_detectionsTableHeader_customContextMenuRequested);
 }
 
 void MeteorGUI::calcOffset()
@@ -894,6 +1025,49 @@ void MeteorGUI::updateHistogram()
     delete oldChart;
 }
 
+void MeteorGUI::applyDetectionsColumnVisibility()
+{
+    if (!m_detectionsTable) {
+        return;
+    }
+
+    int visibleColumns = 0;
+
+    for (int i = 0; i < m_detectionsTable->columnCount(); i++)
+    {
+        const bool hidden = (m_settings.m_detectionsTableColumnHidden & (1u << i)) != 0;
+        m_detectionsTable->setColumnHidden(i, hidden);
+
+        if (!hidden) {
+            visibleColumns++;
+        }
+    }
+
+    if ((visibleColumns == 0) && (m_detectionsTable->columnCount() > 0))
+    {
+        m_detectionsTable->setColumnHidden(0, false);
+        saveDetectionsColumnVisibility();
+    }
+}
+
+void MeteorGUI::saveDetectionsColumnVisibility()
+{
+    quint32 hiddenColumns = 0;
+
+    for (int i = 0; i < m_detectionsTable->columnCount(); i++)
+    {
+        if (m_detectionsTable->isColumnHidden(i)) {
+            hiddenColumns |= (1u << i);
+        }
+    }
+
+    if (hiddenColumns != m_settings.m_detectionsTableColumnHidden)
+    {
+        m_settings.m_detectionsTableColumnHidden = hiddenColumns;
+        applySetting("detectionsTableColumnHidden");
+    }
+}
+
 QSet<quint64> MeteorGUI::selectedDetectionOverlayIds() const
 {
     QSet<quint64> ids;
@@ -1013,7 +1187,12 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
         }
 
         const double minWidthHz = std::max(10.0, (double) m_settings.m_channelSampleRate * 0.02);
-        const double halfBandwidth = std::max({std::fabs(detection.m_frequencySpan) * 0.5, std::fabs(detection.m_frequencyDrift) * 0.5, minWidthHz});
+        const double paddingHz = std::max(0, m_settings.m_detectionBoxPaddingPixels) * spectrumView->waterfallFrequencyPerPixel();
+        const double halfBandwidth = std::max({
+            std::fabs(detection.m_frequencySpan) * 0.5,
+            std::fabs(detection.m_frequencyDrift) * 0.5,
+            minWidthHz
+        }) + paddingHz;
         float xMin = 0.0f;
         float xMax = 0.0f;
 

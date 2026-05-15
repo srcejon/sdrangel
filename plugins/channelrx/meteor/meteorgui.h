@@ -118,8 +118,10 @@ private:
     QSpinBox *m_maxDuration;
     QDoubleSpinBox *m_maxFrequencyDrift;
     ButtonSwitch *m_highlightAllDetections;
+    QSpinBox *m_detectionBoxPadding;
     QLabel *m_totalCountText;
     QLabel *m_hourCountText;
+    QPushButton *m_saveDetections;
     QPushButton *m_clearDetections;
     QTableWidget *m_detectionsTable;
     QChartView *m_hourlyChartView;
@@ -168,6 +170,8 @@ private:
     void updateCounters();
     void updateHistogram();
     void drawDetectionOverlays(GLSpectrumView *spectrumView);
+    void applyDetectionsColumnVisibility();
+    void saveDetectionsColumnVisibility();
     QSet<quint64> selectedDetectionOverlayIds() const;
     void deleteSelectedDetections();
     int sampleRateIndex(int sampleRate) const;
@@ -186,9 +190,12 @@ private slots:
     void on_maxDuration_valueChanged(int value);
     void on_maxFrequencyDrift_valueChanged(double value);
     void on_highlightAllDetections_toggled(bool checked);
+    void on_detectionBoxPadding_valueChanged(int value);
+    void on_saveDetections_clicked();
     void on_clearDetections_clicked();
     void on_detectionsTable_itemSelectionChanged();
     void on_detectionsTable_customContextMenuRequested(const QPoint& pos);
+    void on_detectionsTableHeader_customContextMenuRequested(const QPoint& pos);
     void onWidgetRolled(QWidget* widget, bool rollDown);
     void onMenuDialogCalled(const QPoint& p);
     void handleInputMessages();

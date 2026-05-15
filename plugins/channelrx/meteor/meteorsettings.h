@@ -38,6 +38,8 @@ struct MeteorSettings
     int m_minDurationMS;
     int m_maxDurationMS;
     float m_maxFrequencyDrift;
+    quint32 m_detectionsTableColumnHidden;
+    int m_detectionBoxPaddingPixels;
 
     quint32 m_rgbColor;
     QString m_title;

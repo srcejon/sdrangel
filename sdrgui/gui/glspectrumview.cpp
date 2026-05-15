@@ -3388,6 +3388,15 @@ bool GLSpectrumView::waterfallFrequencyToX(double frequency, float& x) const
     return true;
 }
 
+double GLSpectrumView::waterfallTimePerPixel() const
+{
+    if (m_waterfallHeight <= 0) {
+        return 0.0;
+    }
+
+    return 1.0 / (double) m_waterfallHeight;
+}
+
 double GLSpectrumView::waterfallFrequencyPerPixel()
 {
     const double range = m_frequencyScale.getRange();

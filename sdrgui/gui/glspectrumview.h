@@ -283,6 +283,7 @@ public:
     void setPaintGLCallback(PaintGLCallback callback);
     bool waterfallTimeToY(const QDateTime& dateTimeUtc, float& y) const;
     bool waterfallFrequencyToX(double frequency, float& x) const;
+    double waterfallTimePerPixel() const;
     double waterfallFrequencyPerPixel();
     void drawWaterfallOverlayBox(float x1, float y1, float x2, float y2, const QColor& color, float alpha = 1.0f);
 

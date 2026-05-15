@@ -1186,8 +1186,10 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
             continue;
         }
 
+        const int paddingPixels = std::max(0, m_settings.m_detectionBoxPaddingPixels);
         const double minWidthHz = std::max(10.0, (double) m_settings.m_channelSampleRate * 0.02);
-        const double paddingHz = std::max(0, m_settings.m_detectionBoxPaddingPixels) * spectrumView->waterfallFrequencyPerPixel();
+        const double paddingHz = paddingPixels * spectrumView->waterfallFrequencyPerPixel();
+        const float paddingY = (float) (paddingPixels * spectrumView->waterfallTimePerPixel());
         const double halfBandwidth = std::max({
             std::fabs(detection.m_frequencySpan) * 0.5,
             std::fabs(detection.m_frequencyDrift) * 0.5,
@@ -1202,6 +1204,8 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
             continue;
         }
 
+        yStart = std::clamp(yStart - paddingY, 0.0f, 1.0f);
+        yEnd = std::clamp(yEnd + paddingY, 0.0f, 1.0f);
         spectrumView->drawWaterfallOverlayBox(xMin, yStart, xMax, yEnd, color, 1.0f);
     }
 }

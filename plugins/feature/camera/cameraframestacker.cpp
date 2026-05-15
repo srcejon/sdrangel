@@ -616,8 +616,6 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
 
         try
         {
-            static constexpr float kHdrSaturationThreshold = 0.98f;
-
             auto sanitizeFloatImage = [](cv::Mat& floatFrame)
             {
                 for (int y = 0; y < floatFrame.rows; ++y)
@@ -639,107 +637,25 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
                 cv::min(floatFrame, cv::Scalar::all(1.0f), floatFrame);
             };
 
-            auto normalizedFloatFrame = [&sanitizeFloatImage](const cv::Mat& input) -> cv::Mat
-            {
-                cv::Mat floatFrame;
-
-                if (input.depth() == CV_16U) {
-                    input.convertTo(floatFrame, CV_32FC3, 1.0 / 65535.0);
-                } else if (input.depth() == CV_8U) {
-                    input.convertTo(floatFrame, CV_32FC3, 1.0 / 255.0);
-                } else {
-                    input.convertTo(floatFrame, CV_32FC3);
-                }
-
-                sanitizeFloatImage(floatFrame);
-                return floatFrame;
-            };
-
             std::vector<cv::Mat> ldrFrames;
-            std::vector<cv::Mat> floatFrames;
             std::vector<float> exposureTimesSeconds;
             ldrFrames.reserve(m_hdrFrameSamples.size());
-            floatFrames.reserve(m_hdrFrameSamples.size());
             exposureTimesSeconds.reserve(m_hdrFrameSamples.size());
 
             for (const HdrFrameSample& sample : m_hdrFrameSamples)
             {
-                floatFrames.push_back(normalizedFloatFrame(sample.m_frameMat));
-                exposureTimesSeconds.push_back(static_cast<float>(std::max(1.0e-6, sample.m_exposureTimeMs / 1000.0)));
-            }
+                cv::Mat ldrFrame8u;
 
-            std::vector<cv::Mat> repairedFloatFrames;
-            repairedFloatFrames.reserve(floatFrames.size());
-            for (const cv::Mat& floatFrame : floatFrames) {
-                repairedFloatFrames.push_back(floatFrame.clone());
-            }
-
-            // Only replace a saturated highlight with a whole RGB pixel from a shorter,
-            // unsaturated exposure. Per-channel repair can create strong colour cycling.
-            for (size_t frameIndex = 0; frameIndex < repairedFloatFrames.size(); ++frameIndex)
-            {
-                cv::Mat& repairedFrame = repairedFloatFrames[frameIndex];
-                const float currentExposureSeconds = exposureTimesSeconds[frameIndex];
-
-                for (int y = 0; y < repairedFrame.rows; ++y)
-                {
-                    cv::Vec3f *repairedRow = repairedFrame.ptr<cv::Vec3f>(y);
-
-                    for (int x = 0; x < repairedFrame.cols; ++x)
-                    {
-                        const cv::Vec3f originalPixel = repairedRow[x];
-                        const float highlight = std::max({
-                            originalPixel[0],
-                            originalPixel[1],
-                            originalPixel[2]
-                        });
-
-                        if (highlight < kHdrSaturationThreshold) {
-                            continue;
-                        }
-
-                        cv::Vec3f replacementPixel = originalPixel;
-                        float replacementExposureSeconds = 0.0f;
-
-                        for (size_t candidateIndex = 0; candidateIndex < floatFrames.size(); ++candidateIndex)
-                        {
-                            const float candidateExposureSeconds = exposureTimesSeconds[candidateIndex];
-                            if (candidateExposureSeconds >= currentExposureSeconds) {
-                                continue;
-                            }
-
-                            const cv::Vec3f candidatePixel = floatFrames[candidateIndex].ptr<cv::Vec3f>(y)[x];
-                            const float candidateHighlight = std::max({
-                                candidatePixel[0],
-                                candidatePixel[1],
-                                candidatePixel[2]
-                            });
-
-                            if (candidateHighlight >= kHdrSaturationThreshold) {
-                                continue;
-                            }
-
-                            if (candidateExposureSeconds > replacementExposureSeconds)
-                            {
-                                replacementPixel = candidatePixel;
-                                replacementExposureSeconds = candidateExposureSeconds;
-                            }
-                        }
-
-                        if (replacementExposureSeconds > 0.0f) {
-                            repairedRow[x] = replacementPixel;
-                        }
-                    }
+                if (sample.m_frameMat.depth() == CV_16U) {
+                    sample.m_frameMat.convertTo(ldrFrame8u, CV_8UC3, 255.0 / 65535.0);
+                } else if (sample.m_frameMat.depth() == CV_8U) {
+                    ldrFrame8u = sample.m_frameMat;
+                } else {
+                    sample.m_frameMat.convertTo(ldrFrame8u, CV_8UC3);
                 }
 
-                sanitizeFloatImage(repairedFrame);
-            }
-
-            for (const cv::Mat& repairedFrame : repairedFloatFrames)
-            {
-                cv::Mat ldrFrame8u;
-                repairedFrame.convertTo(ldrFrame8u, CV_8UC3, 255.0);
                 ldrFrames.push_back(ldrFrame8u);
+                exposureTimesSeconds.push_back(static_cast<float>(std::max(1.0e-6, sample.m_exposureTimeMs / 1000.0)));
             }
 
             cv::Mat timesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, exposureTimesSeconds.data());

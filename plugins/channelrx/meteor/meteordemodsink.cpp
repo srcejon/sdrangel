@@ -359,8 +359,23 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         && ((std::fabs(frequencySpan) > m_settings.m_maxFrequencyDrift)
             || (std::fabs(frequencyDrift) > m_settings.m_maxFrequencyDrift));
     const bool driftOK = !sweepRejected;
+    const bool accepted = !forceRejected && durationOK && driftOK && m_messageQueueToGUI;
 
-    if (!forceRejected && durationOK && driftOK && m_messageQueueToGUI)
+    qDebug() << "MeteorDemodSink::finishPulse:"
+             << " accepted:" << accepted
+             << " forceRejected:" << forceRejected
+             << " durationOK:" << durationOK
+             << " driftOK:" << driftOK
+             << " sweepRejected:" << sweepRejected
+             << " durationS:" << durationS
+             << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
+             << " frequencySpan:" << frequencySpan
+             << " frequencyDrift:" << frequencyDrift
+             << " sweepScore:" << sweepScore
+             << " startSample:" << m_pulseStartSample
+             << " endSample:" << endSample;
+
+    if (accepted)
     {
         const double peakAmplitude = std::sqrt(std::max(m_pulsePeakPower, 0.0));
         const double peakPowerDB = 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20));

@@ -240,6 +240,7 @@ void MeteorGUI::setupSpectrum()
     SpectrumSettings spectrumSettings = m_spectrumVis->getSettings();
     spectrumSettings.m_displayWaterfall = true;
     spectrumSettings.m_displayMaxHold = false;
+    spectrumSettings.m_scrollBar = true;
     SpectrumVis::MsgConfigureSpectrumVis *msg = SpectrumVis::MsgConfigureSpectrumVis::create(spectrumSettings, false);
     m_spectrumVis->getInputMessageQueue()->push(msg);
 }

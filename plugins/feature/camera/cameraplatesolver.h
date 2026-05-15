@@ -58,6 +58,9 @@ public:
                                         const QSize& imageSize,
                                         const QDateTime& captureDateTime,
                                         QVector<CameraPipelineStarDetection>& starDetections);
+
+private:
+    class SolverContext;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAPLATESOLVER_H_

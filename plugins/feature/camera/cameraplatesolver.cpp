@@ -43,7 +43,9 @@
 #include "util/astronomy.h"
 #include "util/profiler.h"
 
-namespace {
+class CameraPlateSolver::SolverContext
+{
+public:
 
 struct CatalogStar
 {
@@ -145,7 +147,7 @@ struct QuadSignature
     std::array<int, 4> indices{{-1, -1, -1, -1}};
 };
 
-constexpr std::array<std::array<int, 3>, 6> kTrianglePermutations {{
+static constexpr std::array<std::array<int, 3>, 6> kTrianglePermutations {{
     {{0, 1, 2}},
     {{0, 2, 1}},
     {{1, 0, 2}},
@@ -154,7 +156,7 @@ constexpr std::array<std::array<int, 3>, 6> kTrianglePermutations {{
     {{2, 1, 0}}
 }};
 
-constexpr std::array<std::array<int, 4>, 8> kQuadPermutations {{
+static constexpr std::array<std::array<int, 4>, 8> kQuadPermutations {{
     {{0, 1, 2, 3}},
     {{1, 2, 3, 0}},
     {{2, 3, 0, 1}},
@@ -182,82 +184,43 @@ struct SkyProjector
     int height = 0;
 };
 
-constexpr double kPi = 3.14159265358979323846;
-constexpr double kVisibleAltitudeFloor = -5.0;
-constexpr int kMaxDetectionsForSolve = 32;
-constexpr double kBlindSeedRatioTolerance = 0.035;
-constexpr double kBlindSeedMaxRmsPixels = 18.0;
-constexpr double kBlindSeedMaxMedianPixels = 14.0;
-constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
-constexpr bool kLogPlateSolveCandidates = false;
-constexpr bool kLogWeakModeCandidatePools = true;
-constexpr bool kLogWeakModeTailRejects = false;
+static constexpr double kPi = 3.14159265358979323846;
+static constexpr double kVisibleAltitudeFloor = -5.0;
+static constexpr int kMaxDetectionsForSolve = 32;
+static constexpr double kBlindSeedRatioTolerance = 0.035;
+static constexpr double kBlindSeedMaxRmsPixels = 18.0;
+static constexpr double kBlindSeedMaxMedianPixels = 14.0;
+static constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
+static constexpr bool kLogPlateSolveCandidates = false;
+static constexpr bool kLogWeakModeCandidatePools = true;
+static constexpr bool kLogWeakModeTailRejects = false;
 
 // Normalisation radius (pixels) used by the weak-mode scoring comparator and coarse
-// candidate-pool admission. Set once at the start of CameraPlateSolver::solve() so weak
-// FoV/Blind searches compare basins against the loose acquisition geometry rather than the
-// tighter final acceptance radius.
-thread_local double g_weakModeNormalizationPixels = 24.0;
-thread_local bool g_useElevationSeedPreference = false;
-thread_local double g_elevationSeedReferenceDegrees = 0.0;
-thread_local double g_elevationSeedReferenceFovDegrees = 0.0;
-thread_local double g_elevationSeedScaleDegrees = 1.0;
-thread_local double g_elevationSeedFovScaleDegrees = 1.0;
-const char* const kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
-const char* const kDownloadedCatalogDir = "camera";
-const char* const kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
-const char* const kDownloadedCatalogCsvFile = "hyg_v42.csv";
-const char* const kDownloadedCatalogReducedFile = "hyg_v42_reduced.txt";
+// candidate-pool admission. This is per-solve state, so it lives on the solver context
+// instance rather than in thread-local globals.
+double m_weakModeNormalizationPixels = 24.0;
+bool m_useElevationSeedPreference = false;
+double m_elevationSeedReferenceDegrees = 0.0;
+double m_elevationSeedReferenceFovDegrees = 0.0;
+double m_elevationSeedScaleDegrees = 1.0;
+double m_elevationSeedFovScaleDegrees = 1.0;
+static constexpr const char* kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
+static constexpr const char* kDownloadedCatalogDir = "camera";
+static constexpr const char* kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
+static constexpr const char* kDownloadedCatalogCsvFile = "hyg_v42.csv";
+static constexpr const char* kDownloadedCatalogReducedFile = "hyg_v42_reduced.txt";
 
-Evaluation evaluatePose(const CameraSettings& settings,
-                        const PlateSolveCatalogContext& catalogContext,
-                        const QSize& imageSize,
-                        const QDateTime& captureDateTimeUtc,
-                        const QVector<CameraPipelineStarDetection>& starDetections,
-                        const QVector<int>& detectionIndices,
-                        double azimuthDegrees,
-                        double elevationDegrees,
-                        double rollDegrees,
-                        double fovDegrees,
-                        const QVector<int>* allowedCatalogIndices = nullptr,
-                        double centerOffsetXPixels = 0.0,
-                        double centerOffsetYPixels = 0.0,
-                        double distortionK1 = 0.0,
-                        double matchRadiusOverride = -1.0);
+CameraPlateSolveResult solve(const CameraSettings& settings,
+                             const QSize& imageSize,
+                             const QDateTime& captureDateTime,
+                             QVector<CameraPipelineStarDetection>& starDetections);
 
-Evaluation refinePoseFromMatches(const CameraSettings& settings,
-                                 const PlateSolveCatalogContext& catalogContext,
-                                 const QSize& imageSize,
-                                 const QDateTime& captureDateTimeUtc,
-                                 const QVector<CameraPipelineStarDetection>& starDetections,
-                                 const Evaluation& initialEvaluation);
-
-QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
-                                    int minMatches,
-                                    double matchRadiusPixels,
-                                    int* outlierCount);
-
-bool isBetterWeakModeEvaluation(const Evaluation& candidate, const Evaluation& best);
-bool isBetterWeakModeRefinedEvaluation(const Evaluation& candidate, const Evaluation& best);
-bool isBetterEvaluationForMode(const Evaluation& candidate,
-                               const Evaluation& best,
-                               bool useWeakModeScoring);
-double weakModeEvaluationScore(const Evaluation& evaluation,
-                               double normalizationRadius = g_weakModeNormalizationPixels);
-bool sameEvaluationIdentity(const Evaluation& lhs, const Evaluation& rhs);
-void logWeakModePoolDecision(const char *stage,
-                             const char *decision,
-                             const Evaluation& candidate,
-                             double poolQualityRadius,
-                             const Evaluation *other = nullptr);
-void logWeakModeCandidatePool(const char *stage, const QVector<Evaluation>& candidates);
-
-double degToRad(double value)
+static double degToRad(double value)
 {
     return value * kPi / 180.0;
 }
 
-double normalizeDegrees(double value)
+static double normalizeDegrees(double value)
 {
     value = std::fmod(value, 360.0);
     if (value < 0.0) {
@@ -266,7 +229,7 @@ double normalizeDegrees(double value)
     return value;
 }
 
-SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
+static SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
 {
     const double azimuth = degToRad(azimuthDegrees);
     const double elevation = degToRad(elevationDegrees);
@@ -279,12 +242,12 @@ SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
     };
 }
 
-double dot(const SkyVector& lhs, const SkyVector& rhs)
+static double dot(const SkyVector& lhs, const SkyVector& rhs)
 {
     return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
 }
 
-SkyVector cross(const SkyVector& lhs, const SkyVector& rhs)
+static SkyVector cross(const SkyVector& lhs, const SkyVector& rhs)
 {
     return {
         lhs.y * rhs.z - lhs.z * rhs.y,
@@ -293,12 +256,12 @@ SkyVector cross(const SkyVector& lhs, const SkyVector& rhs)
     };
 }
 
-double length(const SkyVector& vector)
+static double length(const SkyVector& vector)
 {
     return std::sqrt(dot(vector, vector));
 }
 
-SkyVector normalize(const SkyVector& vector)
+static SkyVector normalize(const SkyVector& vector)
 {
     const double vectorLength = length(vector);
     if (vectorLength <= 0.0) {
@@ -312,7 +275,7 @@ SkyVector normalize(const SkyVector& vector)
     };
 }
 
-SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians)
+static SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians)
 {
     const double cosAngle = std::cos(angleRadians);
     const double sinAngle = std::sin(angleRadians);
@@ -326,7 +289,7 @@ SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, doubl
     };
 }
 
-double parseRightAscensionDegrees(const QString& value)
+static double parseRightAscensionDegrees(const QString& value)
 {
     const QStringList fields = value.split(' ', Qt::SkipEmptyParts);
     if (fields.size() != 3) {
@@ -346,7 +309,7 @@ double parseRightAscensionDegrees(const QString& value)
     return 15.0 * (hours + minutes / 60.0 + seconds / 3600.0);
 }
 
-double parseDeclinationDegrees(const QString& value)
+static double parseDeclinationDegrees(const QString& value)
 {
     const QStringList fields = value.split(' ', Qt::SkipEmptyParts);
     if (fields.size() != 3) {
@@ -368,7 +331,7 @@ double parseDeclinationDegrees(const QString& value)
     return sign * (absoluteDegrees + minutes / 60.0 + seconds / 3600.0);
 }
 
-QString stripQuotedField(const QString& value)
+static QString stripQuotedField(const QString& value)
 {
     QString stripped = value.trimmed();
     if (stripped.startsWith('"') && stripped.endsWith('"') && (stripped.size() >= 2)) {
@@ -377,18 +340,18 @@ QString stripQuotedField(const QString& value)
     return stripped.replace(QStringLiteral("\"\""), QStringLiteral("\""));
 }
 
-QString downloadedCatalogDir()
+static QString downloadedCatalogDir()
 {
     const QString baseDir = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0);
     return QDir(baseDir).filePath(QString::fromUtf8(kDownloadedCatalogDir));
 }
 
-QString downloadedCatalogReducedPath()
+static QString downloadedCatalogReducedPath()
 {
     return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kDownloadedCatalogReducedFile));
 }
 
-QByteArray gunzipData(const QByteArray& compressedData, QString* errorMessage)
+static QByteArray gunzipData(const QByteArray& compressedData, QString* errorMessage)
 {
     if (compressedData.isEmpty()) {
         if (errorMessage) {
@@ -434,7 +397,7 @@ QByteArray gunzipData(const QByteArray& compressedData, QString* errorMessage)
     return uncompressedData;
 }
 
-QVector<CatalogStar> parseBundledCatalog(const QString& text)
+static QVector<CatalogStar> parseBundledCatalog(const QString& text)
 {
     QVector<CatalogStar> stars;
     const QStringList lines = text.split('\n');
@@ -470,7 +433,7 @@ QVector<CatalogStar> parseBundledCatalog(const QString& text)
     return stars;
 }
 
-QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text)
+static QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text)
 {
     QVector<CatalogStar> stars;
     const QStringList lines = text.split('\n');
@@ -576,7 +539,7 @@ QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text)
     return stars;
 }
 
-bool isGenericCatalogName(const QString& name)
+static bool isGenericCatalogName(const QString& name)
 {
     return name.startsWith(QStringLiteral("HIP "))
         || name.startsWith(QStringLiteral("HR "))
@@ -629,7 +592,7 @@ QVector<CatalogStar> filterCatalogStars(const QVector<CatalogStar>& stars)
     return filtered;
 }
 
-QString formatRightAscensionHours(double rightAscensionDegrees)
+static QString formatRightAscensionHours(double rightAscensionDegrees)
 {
     const double totalHours = normalizeDegrees(rightAscensionDegrees) / 15.0;
     const int hours = static_cast<int>(std::floor(totalHours));
@@ -642,7 +605,7 @@ QString formatRightAscensionHours(double rightAscensionDegrees)
         .arg(seconds, 0, 'f', 5);
 }
 
-QString formatDeclinationDegrees(double declinationDegrees)
+static QString formatDeclinationDegrees(double declinationDegrees)
 {
     const QChar sign = (declinationDegrees < 0.0) ? QLatin1Char('-') : QLatin1Char('+');
     const double absoluteDegrees = std::fabs(declinationDegrees);
@@ -657,7 +620,7 @@ QString formatDeclinationDegrees(double declinationDegrees)
         .arg(seconds, 0, 'f', 4);
 }
 
-bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path, QString* errorMessage)
+static bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path, QString* errorMessage)
 {
     QFile outputFile(path);
     if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
@@ -695,7 +658,7 @@ bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path,
     return true;
 }
 
-QVector<CatalogStar> loadCatalogFromTextFile(const QString& path)
+static QVector<CatalogStar> loadCatalogFromTextFile(const QString& path)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -709,7 +672,7 @@ QVector<CatalogStar> loadCatalogFromTextFile(const QString& path)
     return parseDownloadedHygCatalog(text);
 }
 
-QString currentCatalogPath(const CameraSettings& settings)
+static QString currentCatalogPath(const CameraSettings& settings)
 {
     if (settings.m_plateSolveUseDownloadedCatalog && QFileInfo::exists(downloadedCatalogReducedPath())) {
         return downloadedCatalogReducedPath();
@@ -717,24 +680,24 @@ QString currentCatalogPath(const CameraSettings& settings)
     return QString::fromUtf8(kBundledCatalogPath);
 }
 
-QString currentCatalogSource(const CameraSettings& settings)
+static QString currentCatalogSource(const CameraSettings& settings)
 {
     return (settings.m_plateSolveUseDownloadedCatalog && QFileInfo::exists(downloadedCatalogReducedPath()))
         ? QStringLiteral("HYG")
         : QStringLiteral("Bundled");
 }
 
-bool plateSolveStartUsesFov(const CameraSettings& settings)
+static bool plateSolveStartUsesFov(const CameraSettings& settings)
 {
     return settings.m_plateSolveStartMode != CameraSettings::PlateSolveStartBlind;
 }
 
-bool plateSolveStartUsesCurrentSettingsOnly(const CameraSettings& settings)
+static bool plateSolveStartUsesCurrentSettingsOnly(const CameraSettings& settings)
 {
     return settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartCurrentSettingsOnly;
 }
 
-bool plateSolveStartUsesElevation(const CameraSettings& settings)
+static bool plateSolveStartUsesElevation(const CameraSettings& settings)
 {
     switch (settings.m_plateSolveStartMode)
     {
@@ -748,7 +711,7 @@ bool plateSolveStartUsesElevation(const CameraSettings& settings)
     }
 }
 
-bool plateSolveStartUsesDirection(const CameraSettings& settings)
+static bool plateSolveStartUsesDirection(const CameraSettings& settings)
 {
     switch (settings.m_plateSolveStartMode)
     {
@@ -761,7 +724,7 @@ bool plateSolveStartUsesDirection(const CameraSettings& settings)
     }
 }
 
-bool plateSolveStartUsesLens(const CameraSettings& settings)
+static bool plateSolveStartUsesLens(const CameraSettings& settings)
 {
     switch (settings.m_plateSolveStartMode)
     {
@@ -773,12 +736,12 @@ bool plateSolveStartUsesLens(const CameraSettings& settings)
     }
 }
 
-bool canCalibrateLens(const CameraSettings& settings)
+static bool canCalibrateLens(const CameraSettings& settings)
 {
     return settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens;
 }
 
-const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
+static const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
 {
     static QMutex s_catalogMutex;
     static QString s_loadedPath;
@@ -800,7 +763,7 @@ const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
     return s_catalog;
 }
 
-SkyProjector createProjector(const CameraSettings& settings,
+static SkyProjector createProjector(const CameraSettings& settings,
                              const QSize& size,
                              double azimuthDegrees,
                              double elevationDegrees,
@@ -850,7 +813,7 @@ SkyProjector createProjector(const CameraSettings& settings,
     return projector;
 }
 
-bool projectVector(const SkyProjector& projector, const SkyVector& vector, QPointF& point)
+static bool projectVector(const SkyProjector& projector, const SkyVector& vector, QPointF& point)
 {
     if (!projector.valid) {
         return false;
@@ -904,7 +867,7 @@ bool projectVector(const SkyProjector& projector, const SkyVector& vector, QPoin
     return true;
 }
 
-bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double elevationDegrees, QPointF& point)
+static bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double elevationDegrees, QPointF& point)
 {
     return projectVector(projector, vectorFromAltAz(azimuthDegrees, elevationDegrees), point);
 }
@@ -963,7 +926,7 @@ QVector<int> selectDetectionIndicesForSolve(const QVector<CameraPipelineStarDete
     return indices;
 }
 
-QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatalogContext& catalogContext,
+static QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatalogContext& catalogContext,
                                                     const SkyProjector& projector,
                                                     double searchMarginPixels,
                                                     const QVector<int>* allowedCatalogIndices = nullptr)
@@ -1010,7 +973,7 @@ QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatalogConte
     return projectedStars;
 }
 
-QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& settings,
+static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& settings,
                                                 const QDateTime& captureDateTimeUtc,
                                                 double maxMagnitude)
 {
@@ -1052,7 +1015,7 @@ QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& settings,
     return visibleStars;
 }
 
-PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& settings,
+static PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& settings,
                                                        const QDateTime& captureDateTimeUtc,
                                                        double maxMagnitude)
 {
@@ -1066,7 +1029,7 @@ PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& set
     return context;
 }
 
-TriangleSignature buildTriangleSignature(const std::array<QPointF, 3>& points)
+static TriangleSignature buildTriangleSignature(const std::array<QPointF, 3>& points)
 {
     struct EdgeInfo {
         double length = 0.0;
@@ -1102,7 +1065,7 @@ TriangleSignature buildTriangleSignature(const std::array<QPointF, 3>& points)
     return signature;
 }
 
-std::array<QPointF, 4> orderQuadPoints(const std::array<QPointF, 4>& points)
+static std::array<QPointF, 4> orderQuadPoints(const std::array<QPointF, 4>& points)
 {
     QPointF centroid;
     for (const QPointF& point : points) {
@@ -1123,7 +1086,7 @@ std::array<QPointF, 4> orderQuadPoints(const std::array<QPointF, 4>& points)
     return orderedPoints;
 }
 
-QuadSignature buildQuadSignature(const std::array<QPointF, 4>& unorderedPoints)
+static QuadSignature buildQuadSignature(const std::array<QPointF, 4>& unorderedPoints)
 {
     QuadSignature signature;
     const std::array<QPointF, 4> points = orderQuadPoints(unorderedPoints);
@@ -1156,7 +1119,7 @@ QuadSignature buildQuadSignature(const std::array<QPointF, 4>& unorderedPoints)
     return signature;
 }
 
-double medianCandidateDistancePixels(const QVector<Match>& matches)
+static double medianCandidateDistancePixels(const QVector<Match>& matches)
 {
     if (matches.isEmpty()) {
         return 0.0;
@@ -1697,7 +1660,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
         }
     }
 
-    std::sort(seeds.begin(), seeds.end(), [](const Evaluation& lhs, const Evaluation& rhs) {
+    std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterWeakModeEvaluation(lhs, rhs);
     });
     if (seeds.size() > 16) {
@@ -1916,7 +1879,7 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
         }
     }
 
-    std::sort(seeds.begin(), seeds.end(), [](const Evaluation& lhs, const Evaluation& rhs) {
+    std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterWeakModeEvaluation(lhs, rhs);
     });
     if (seeds.size() > 12) {
@@ -1926,13 +1889,13 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
     return seeds;
 }
 
-quint64 spatialCellKey(int x, int y)
+static quint64 spatialCellKey(int x, int y)
 {
     return (static_cast<quint64>(static_cast<quint32>(x)) << 32)
         | static_cast<quint32>(y);
 }
 
-QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
+static QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
                             const QVector<CameraPipelineStarDetection>& starDetections,
                             const QVector<int>& detectionIndices,
                             const QVector<ProjectedCatalogStar>& projectedStars,
@@ -2093,10 +2056,10 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
     return matches;
 }
 
-void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starDetections,
-                               const QVector<ProjectedCatalogStar>& projectedStars,
-                               double matchRadiusPixels,
-                               QVector<Match>& matches)
+static void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starDetections,
+                                      const QVector<ProjectedCatalogStar>& projectedStars,
+                                      double matchRadiusPixels,
+                                      QVector<Match>& matches)
 {
     QVector<bool> detectionMatched(starDetections.size(), false);
     QHash<int, bool> catalogMatched;
@@ -2286,11 +2249,11 @@ Evaluation evaluatePose(const CameraSettings& settings,
                         double elevationDegrees,
                         double rollDegrees,
                         double fovDegrees,
-                        const QVector<int>* allowedCatalogIndices,
-                        double centerOffsetXPixels,
-                        double centerOffsetYPixels,
-                        double distortionK1,
-                        double matchRadiusOverride)
+                        const QVector<int>* allowedCatalogIndices = nullptr,
+                        double centerOffsetXPixels = 0.0,
+                        double centerOffsetYPixels = 0.0,
+                        double distortionK1 = 0.0,
+                        double matchRadiusOverride = -1.0)
 {
     Evaluation evaluation;
     evaluation.azimuthDegrees = normalizeDegrees(azimuthDegrees);
@@ -2351,7 +2314,7 @@ Evaluation evaluatePose(const CameraSettings& settings,
     return evaluation;
 }
 
-double medianDistancePixels(const QVector<Match>& matches)
+static double medianDistancePixels(const QVector<Match>& matches)
 {
     if (matches.isEmpty()) {
         return 0.0;
@@ -2371,7 +2334,7 @@ double medianDistancePixels(const QVector<Match>& matches)
     return distances[middle];
 }
 
-QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
+static QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
                                     int minMatches,
                                     double matchRadiusPixels,
                                     int* outlierCount = nullptr)
@@ -2413,7 +2376,7 @@ QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
     return inliers;
 }
 
-bool isAcceptableBlindSolve(const CameraSettings& settings,
+static bool isAcceptableBlindSolve(const CameraSettings& settings,
                             const QVector<CameraPipelineStarDetection>& starDetections,
                             const QVector<Match>& matches,
                             double rmsErrorPixels,
@@ -2435,7 +2398,7 @@ bool isAcceptableBlindSolve(const CameraSettings& settings,
         && (maxErrorPixels <= maxWorstError);
 }
 
-bool isStrongGuidedSolve(const CameraSettings& settings,
+static bool isStrongGuidedSolve(const CameraSettings& settings,
                          int minMatchCount,
                          const Evaluation& evaluation)
 {
@@ -2448,7 +2411,7 @@ bool isStrongGuidedSolve(const CameraSettings& settings,
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
-bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
+static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
                                     int minMatchCount,
                                     const Evaluation& evaluation)
 {
@@ -2461,7 +2424,7 @@ bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
-bool isAcceptableElevationSeedEvaluation(const CameraSettings& settings,
+static bool isAcceptableElevationSeedEvaluation(const CameraSettings& settings,
                                          int minMatchCount,
                                          const Evaluation& evaluation)
 {
@@ -2474,7 +2437,7 @@ bool isAcceptableElevationSeedEvaluation(const CameraSettings& settings,
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
-bool isAcceptableElevationSeedSolve(const CameraSettings& settings,
+static bool isAcceptableElevationSeedSolve(const CameraSettings& settings,
                                     const QVector<CameraPipelineStarDetection>& starDetections,
                                     const QVector<Match>& matches,
                                     double rmsErrorPixels,
@@ -2496,7 +2459,7 @@ bool isAcceptableElevationSeedSolve(const CameraSettings& settings,
         && (maxErrorPixels <= maxWorstError);
 }
 
-bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
+static bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
 {
     if (!candidate.valid) {
         return false;
@@ -2526,8 +2489,11 @@ bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
 }
 
 double weakModeEvaluationScore(const Evaluation& evaluation,
-                               double normalizationRadius)
+                               double normalizationRadius = -1.0)
 {
+    if (normalizationRadius < 0.0) {
+        normalizationRadius = m_weakModeNormalizationPixels;
+    }
     if (!evaluation.valid) {
         return -std::numeric_limits<double>::infinity();
     }
@@ -2541,14 +2507,14 @@ double weakModeEvaluationScore(const Evaluation& evaluation,
     const double perMatchQuality = 1.0 - 0.5 * clampedRms * clampedRms;
     double score = static_cast<double>(evaluation.matchCount) * perMatchQuality;
 
-    if (g_useElevationSeedPreference)
+    if (m_useElevationSeedPreference)
     {
-        const double safeElevationScale = std::max(1.0, g_elevationSeedScaleDegrees);
-        const double safeFovScale = std::max(1.0, g_elevationSeedFovScaleDegrees);
+        const double safeElevationScale = std::max(1.0, m_elevationSeedScaleDegrees);
+        const double safeFovScale = std::max(1.0, m_elevationSeedFovScaleDegrees);
         const double normalizedElevationDelta = std::fabs(
-            evaluation.elevationDegrees - g_elevationSeedReferenceDegrees) / safeElevationScale;
+            evaluation.elevationDegrees - m_elevationSeedReferenceDegrees) / safeElevationScale;
         const double normalizedFovDelta = std::fabs(
-            evaluation.fovDegrees - g_elevationSeedReferenceFovDegrees) / safeFovScale;
+            evaluation.fovDegrees - m_elevationSeedReferenceFovDegrees) / safeFovScale;
         const double seedAffinity = 1.0 / (1.0
             + 0.5 * normalizedElevationDelta * normalizedElevationDelta
             + 1.5 * normalizedFovDelta * normalizedFovDelta);
@@ -2620,7 +2586,7 @@ bool isBetterWeakModeRefinedEvaluation(const Evaluation& candidate, const Evalua
     return isBetterWeakModeEvaluation(candidate, best);
 }
 
-FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
+static FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
                                                 const PlateSolveCatalogContext& catalogContext,
                                                 const QSize& imageSize,
                                                 const QVector<CameraPipelineStarDetection>& starDetections,
@@ -2712,7 +2678,7 @@ void logFinalMatchPassEvaluation(const char *stage,
         << " K1=" << evaluation.pose.distortionK1;
 }
 
-bool isBetterFinalPassEvaluation(const Evaluation& candidate,
+static bool isBetterFinalPassEvaluation(const Evaluation& candidate,
                                  const Evaluation& best,
                                  int retainedMatchThreshold)
 {
@@ -2827,7 +2793,7 @@ bool isBetterEvaluationForMode(const Evaluation& candidate,
         : isBetterEvaluation(candidate, best);
 }
 
-double angularDistanceDegrees(double lhs, double rhs)
+static double angularDistanceDegrees(double lhs, double rhs)
 {
     double delta = std::fabs(lhs - rhs);
     while (delta > 360.0) {
@@ -2839,7 +2805,7 @@ double angularDistanceDegrees(double lhs, double rhs)
     return delta;
 }
 
-bool sameEvaluationBasin(const Evaluation& lhs, const Evaluation& rhs)
+static bool sameEvaluationBasin(const Evaluation& lhs, const Evaluation& rhs)
 {
     return angularDistanceDegrees(lhs.azimuthDegrees, rhs.azimuthDegrees) <= 20.0
         && std::fabs(lhs.elevationDegrees - rhs.elevationDegrees) <= 10.0
@@ -2871,7 +2837,7 @@ void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
         }
         return;
     }
-    const double poolQualityRadius = std::max(2.0, g_weakModeNormalizationPixels * 0.95);
+    const double poolQualityRadius = std::max(2.0, m_weakModeNormalizationPixels * 0.95);
     if (candidate.rmsErrorPixels > poolQualityRadius) {
         if (useWeakModeScoring && stage && (candidate.matchCount >= interestingMatchCount)) {
             logWeakModePoolDecision(stage, "reject-rms-floor", candidate, poolQualityRadius);
@@ -2913,13 +2879,13 @@ void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
     }
 
     candidates.append(candidate);
-    std::sort(candidates.begin(), candidates.end(), [useWeakModeScoring](const Evaluation& lhs, const Evaluation& rhs) {
+    std::sort(candidates.begin(), candidates.end(), [this, useWeakModeScoring](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterEvaluationForMode(lhs, rhs, useWeakModeScoring);
     });
     bool candidateKept = true;
     if (candidates.size() > maxCandidates) {
         candidates.resize(maxCandidates);
-        candidateKept = std::any_of(candidates.cbegin(), candidates.cend(), [&candidate](const Evaluation& existing) {
+        candidateKept = std::any_of(candidates.cbegin(), candidates.cend(), [this, &candidate](const Evaluation& existing) {
             return sameEvaluationIdentity(existing, candidate);
         });
     }
@@ -3009,7 +2975,7 @@ void logPlateSolveEvaluation(const char *stage,
         << " K1=" << evaluation.distortionK1;
 }
 
-bool sameEvaluationIdentity(const Evaluation& lhs, const Evaluation& rhs)
+static bool sameEvaluationIdentity(const Evaluation& lhs, const Evaluation& rhs)
 {
     return lhs.valid == rhs.valid
         && lhs.matchCount == rhs.matchCount
@@ -3027,7 +2993,7 @@ void logWeakModePoolDecision(const char *stage,
                              const char *decision,
                              const Evaluation& candidate,
                              double poolQualityRadius,
-                             const Evaluation *other)
+                             const Evaluation *other = nullptr)
 {
     if (!kLogWeakModeCandidatePools || !candidate.valid) {
         return;
@@ -3869,7 +3835,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     return best;
 }
 
-void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
+static void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
 {
     for (CameraPipelineStarDetection& detection : starDetections)
     {
@@ -3882,20 +3848,23 @@ void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
     }
 }
 
-} // namespace
+};
 
 QString CameraPlateSolver::downloadedCatalogArchivePath()
 {
-    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kDownloadedCatalogArchiveFile));
+    SolverContext context;
+    return QDir(context.downloadedCatalogDir()).filePath(QString::fromUtf8(SolverContext::kDownloadedCatalogArchiveFile));
 }
 
 QString CameraPlateSolver::downloadedCatalogCsvPath()
 {
-    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kDownloadedCatalogCsvFile));
+    SolverContext context;
+    return QDir(context.downloadedCatalogDir()).filePath(QString::fromUtf8(SolverContext::kDownloadedCatalogCsvFile));
 }
 
 bool CameraPlateSolver::importDownloadedCatalogArchive(const QString& archivePath, QString* errorMessage)
 {
+    SolverContext context;
     QFile inputFile(archivePath);
     if (!inputFile.open(QIODevice::ReadOnly))
     {
@@ -3906,12 +3875,12 @@ bool CameraPlateSolver::importDownloadedCatalogArchive(const QString& archivePat
     }
 
     const QByteArray compressedData = inputFile.readAll();
-    const QByteArray uncompressedData = gunzipData(compressedData, errorMessage);
+    const QByteArray uncompressedData = context.gunzipData(compressedData, errorMessage);
     if (uncompressedData.isEmpty()) {
         return false;
     }
 
-    const QString outputDirPath = downloadedCatalogDir();
+    const QString outputDirPath = context.downloadedCatalogDir();
     QDir outputDir;
     if (!outputDir.mkpath(outputDirPath))
     {
@@ -3938,7 +3907,8 @@ bool CameraPlateSolver::importDownloadedCatalogArchive(const QString& archivePat
         return false;
     }
 
-    const QVector<CatalogStar> reducedCatalog = filterCatalogStars(parseDownloadedHygCatalog(QString::fromUtf8(uncompressedData)));
+    const QVector<SolverContext::CatalogStar> reducedCatalog =
+        context.filterCatalogStars(context.parseDownloadedHygCatalog(QString::fromUtf8(uncompressedData)));
     if (reducedCatalog.isEmpty())
     {
         if (errorMessage) {
@@ -3947,17 +3917,17 @@ bool CameraPlateSolver::importDownloadedCatalogArchive(const QString& archivePat
         return false;
     }
 
-    if (!writeReducedCatalog(reducedCatalog, downloadedCatalogReducedPath(), errorMessage)) {
+    if (!context.writeReducedCatalog(reducedCatalog, context.downloadedCatalogReducedPath(), errorMessage)) {
         return false;
     }
 
     return true;
 }
 
-CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
-                                                const QSize& imageSize,
-                                                const QDateTime& captureDateTime,
-                                                QVector<CameraPipelineStarDetection>& starDetections)
+CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSettings& settings,
+                                                               const QSize& imageSize,
+                                                               const QDateTime& captureDateTime,
+                                                               QVector<CameraPipelineStarDetection>& starDetections)
 {
     PROFILER_START();
 
@@ -3978,12 +3948,12 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // Configure weak-mode scoring normalisation for this solve. Weak FoV/Blind searches need
     // to rank and preserve coarse basins using the loose acquisition geometry; the tighter
     // final-match radius is reserved for the late refinement/acceptance stages.
-    g_weakModeNormalizationPixels = std::max(1.0, static_cast<double>(settings.m_plateSolveMatchRadius));
-    g_useElevationSeedPreference = useElevationSeedOnly;
-    g_elevationSeedReferenceDegrees = settings.m_elevation;
-    g_elevationSeedReferenceFovDegrees = settings.m_fov;
-    g_elevationSeedScaleDegrees = std::max(2.0, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35);
-    g_elevationSeedFovScaleDegrees = std::max(4.0, static_cast<double>(settings.m_fov) * 0.05);
+    m_weakModeNormalizationPixels = std::max(1.0, static_cast<double>(settings.m_plateSolveMatchRadius));
+    m_useElevationSeedPreference = useElevationSeedOnly;
+    m_elevationSeedReferenceDegrees = settings.m_elevation;
+    m_elevationSeedReferenceFovDegrees = settings.m_fov;
+    m_elevationSeedScaleDegrees = std::max(2.0, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35);
+    m_elevationSeedFovScaleDegrees = std::max(4.0, static_cast<double>(settings.m_fov) * 0.05);
 
     if (starDetections.isEmpty()) {
         return result;
@@ -4339,4 +4309,13 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     PROFILER_STOP(__FUNCTION__);
 
     return result;
+}
+
+CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
+                                                const QSize& imageSize,
+                                                const QDateTime& captureDateTime,
+                                                QVector<CameraPipelineStarDetection>& starDetections)
+{
+    SolverContext context;
+    return context.solve(settings, imageSize, captureDateTime, starDetections);
 }

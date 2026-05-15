@@ -617,7 +617,6 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
         try
         {
             static constexpr float kHdrSaturationThreshold = 0.98f;
-            static constexpr float kHdrRepairedHighlightLimit = 1.0f;
 
             auto sanitizeFloatImage = [](cv::Mat& floatFrame)
             {
@@ -675,6 +674,8 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
                 repairedFloatFrames.push_back(floatFrame.clone());
             }
 
+            // Only replace a saturated highlight with a whole RGB pixel from a shorter,
+            // unsaturated exposure. Per-channel repair can create strong colour cycling.
             for (size_t frameIndex = 0; frameIndex < repairedFloatFrames.size(); ++frameIndex)
             {
                 cv::Mat& repairedFrame = repairedFloatFrames[frameIndex];
@@ -686,37 +687,47 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
 
                     for (int x = 0; x < repairedFrame.cols; ++x)
                     {
-                        for (int c = 0; c < 3; ++c)
+                        const cv::Vec3f originalPixel = repairedRow[x];
+                        const float highlight = std::max({
+                            originalPixel[0],
+                            originalPixel[1],
+                            originalPixel[2]
+                        });
+
+                        if (highlight < kHdrSaturationThreshold) {
+                            continue;
+                        }
+
+                        cv::Vec3f replacementPixel = originalPixel;
+                        float replacementExposureSeconds = 0.0f;
+
+                        for (size_t candidateIndex = 0; candidateIndex < floatFrames.size(); ++candidateIndex)
                         {
-                            if (repairedRow[x][c] < kHdrSaturationThreshold) {
+                            const float candidateExposureSeconds = exposureTimesSeconds[candidateIndex];
+                            if (candidateExposureSeconds >= currentExposureSeconds) {
                                 continue;
                             }
 
-                            float replacement = repairedRow[x][c];
-                            float replacementExposureSeconds = 0.0f;
+                            const cv::Vec3f candidatePixel = floatFrames[candidateIndex].ptr<cv::Vec3f>(y)[x];
+                            const float candidateHighlight = std::max({
+                                candidatePixel[0],
+                                candidatePixel[1],
+                                candidatePixel[2]
+                            });
 
-                            for (size_t candidateIndex = 0; candidateIndex < floatFrames.size(); ++candidateIndex)
+                            if (candidateHighlight >= kHdrSaturationThreshold) {
+                                continue;
+                            }
+
+                            if (candidateExposureSeconds > replacementExposureSeconds)
                             {
-                                const float candidateExposureSeconds = exposureTimesSeconds[candidateIndex];
-                                if (candidateExposureSeconds >= currentExposureSeconds) {
-                                    continue;
-                                }
-
-                                const cv::Vec3f candidatePixel = floatFrames[candidateIndex].ptr<cv::Vec3f>(y)[x];
-                                if (candidatePixel[c] >= kHdrSaturationThreshold) {
-                                    continue;
-                                }
-
-                                if (candidateExposureSeconds > replacementExposureSeconds)
-                                {
-                                    replacement = candidatePixel[c] * (currentExposureSeconds / candidateExposureSeconds);
-                                    replacementExposureSeconds = candidateExposureSeconds;
-                                }
+                                replacementPixel = candidatePixel;
+                                replacementExposureSeconds = candidateExposureSeconds;
                             }
+                        }
 
-                            if (replacementExposureSeconds > 0.0f) {
-                                repairedRow[x][c] = std::min(kHdrRepairedHighlightLimit, replacement);
-                            }
+                        if (replacementExposureSeconds > 0.0f) {
+                            repairedRow[x] = replacementPixel;
                         }
                     }
                 }
@@ -738,7 +749,7 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
             if (m_settings.m_stackHdrAlgorithm == CameraSettings::StackHdrAlgorithmMertens)
             {
                 cv::Ptr<cv::MergeMertens> mergeMertens = cv::createMergeMertens();
-                mergeMertens->process(repairedFloatFrames, tonemapped);
+                mergeMertens->process(ldrFrames, tonemapped);
             }
             else
             {

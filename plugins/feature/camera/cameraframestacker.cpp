@@ -616,25 +616,119 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
 
         try
         {
+            static constexpr float kHdrSaturationThreshold = 0.98f;
+            static constexpr float kHdrRepairedHighlightLimit = 1.0f;
+
+            auto sanitizeFloatImage = [](cv::Mat& floatFrame)
+            {
+                for (int y = 0; y < floatFrame.rows; ++y)
+                {
+                    cv::Vec3f *row = floatFrame.ptr<cv::Vec3f>(y);
+
+                    for (int x = 0; x < floatFrame.cols; ++x)
+                    {
+                        for (int c = 0; c < 3; ++c)
+                        {
+                            if (!std::isfinite(row[x][c])) {
+                                row[x][c] = 0.0f;
+                            }
+                        }
+                    }
+                }
+
+                cv::max(floatFrame, cv::Scalar::all(0.0f), floatFrame);
+                cv::min(floatFrame, cv::Scalar::all(1.0f), floatFrame);
+            };
+
+            auto normalizedFloatFrame = [&sanitizeFloatImage](const cv::Mat& input) -> cv::Mat
+            {
+                cv::Mat floatFrame;
+
+                if (input.depth() == CV_16U) {
+                    input.convertTo(floatFrame, CV_32FC3, 1.0 / 65535.0);
+                } else if (input.depth() == CV_8U) {
+                    input.convertTo(floatFrame, CV_32FC3, 1.0 / 255.0);
+                } else {
+                    input.convertTo(floatFrame, CV_32FC3);
+                }
+
+                sanitizeFloatImage(floatFrame);
+                return floatFrame;
+            };
+
             std::vector<cv::Mat> ldrFrames;
+            std::vector<cv::Mat> floatFrames;
             std::vector<float> exposureTimesSeconds;
             ldrFrames.reserve(m_hdrFrameSamples.size());
+            floatFrames.reserve(m_hdrFrameSamples.size());
             exposureTimesSeconds.reserve(m_hdrFrameSamples.size());
 
             for (const HdrFrameSample& sample : m_hdrFrameSamples)
             {
-                cv::Mat ldrFrame8u;
+                floatFrames.push_back(normalizedFloatFrame(sample.m_frameMat));
+                exposureTimesSeconds.push_back(static_cast<float>(std::max(1.0e-6, sample.m_exposureTimeMs / 1000.0)));
+            }
 
-                if (sample.m_frameMat.depth() == CV_16U) {
-                    sample.m_frameMat.convertTo(ldrFrame8u, CV_8UC3, 255.0 / 65535.0);
-                } else if (sample.m_frameMat.depth() == CV_8U) {
-                    ldrFrame8u = sample.m_frameMat;
-                } else {
-                    sample.m_frameMat.convertTo(ldrFrame8u, CV_8UC3);
+            std::vector<cv::Mat> repairedFloatFrames;
+            repairedFloatFrames.reserve(floatFrames.size());
+            for (const cv::Mat& floatFrame : floatFrames) {
+                repairedFloatFrames.push_back(floatFrame.clone());
+            }
+
+            for (size_t frameIndex = 0; frameIndex < repairedFloatFrames.size(); ++frameIndex)
+            {
+                cv::Mat& repairedFrame = repairedFloatFrames[frameIndex];
+                const float currentExposureSeconds = exposureTimesSeconds[frameIndex];
+
+                for (int y = 0; y < repairedFrame.rows; ++y)
+                {
+                    cv::Vec3f *repairedRow = repairedFrame.ptr<cv::Vec3f>(y);
+
+                    for (int x = 0; x < repairedFrame.cols; ++x)
+                    {
+                        for (int c = 0; c < 3; ++c)
+                        {
+                            if (repairedRow[x][c] < kHdrSaturationThreshold) {
+                                continue;
+                            }
+
+                            float replacement = repairedRow[x][c];
+                            float replacementExposureSeconds = 0.0f;
+
+                            for (size_t candidateIndex = 0; candidateIndex < floatFrames.size(); ++candidateIndex)
+                            {
+                                const float candidateExposureSeconds = exposureTimesSeconds[candidateIndex];
+                                if (candidateExposureSeconds >= currentExposureSeconds) {
+                                    continue;
+                                }
+
+                                const cv::Vec3f candidatePixel = floatFrames[candidateIndex].ptr<cv::Vec3f>(y)[x];
+                                if (candidatePixel[c] >= kHdrSaturationThreshold) {
+                                    continue;
+                                }
+
+                                if (candidateExposureSeconds > replacementExposureSeconds)
+                                {
+                                    replacement = candidatePixel[c] * (currentExposureSeconds / candidateExposureSeconds);
+                                    replacementExposureSeconds = candidateExposureSeconds;
+                                }
+                            }
+
+                            if (replacementExposureSeconds > 0.0f) {
+                                repairedRow[x][c] = std::min(kHdrRepairedHighlightLimit, replacement);
+                            }
+                        }
+                    }
                 }
 
+                sanitizeFloatImage(repairedFrame);
+            }
+
+            for (const cv::Mat& repairedFrame : repairedFloatFrames)
+            {
+                cv::Mat ldrFrame8u;
+                repairedFrame.convertTo(ldrFrame8u, CV_8UC3, 255.0);
                 ldrFrames.push_back(ldrFrame8u);
-                exposureTimesSeconds.push_back(static_cast<float>(std::max(1.0e-6, sample.m_exposureTimeMs / 1000.0)));
             }
 
             cv::Mat timesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, exposureTimesSeconds.data());
@@ -644,7 +738,7 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
             if (m_settings.m_stackHdrAlgorithm == CameraSettings::StackHdrAlgorithmMertens)
             {
                 cv::Ptr<cv::MergeMertens> mergeMertens = cv::createMergeMertens();
-                mergeMertens->process(ldrFrames, tonemapped);
+                mergeMertens->process(repairedFloatFrames, tonemapped);
             }
             else
             {
@@ -671,6 +765,11 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
                 cv::Ptr<cv::TonemapReinhard> tonemap = cv::createTonemapReinhard(2.2f, 0.0f, 1.0f, 0.0f);
                 tonemap->process(hdrRadiance, tonemapped);
             }
+
+            if (tonemapped.depth() != CV_32F) {
+                tonemapped.convertTo(tonemapped, CV_32FC3);
+            }
+            sanitizeFloatImage(tonemapped);
 
             cv::Mat clampedTonemapped;
             cv::max(tonemapped, cv::Scalar::all(0.0f), clampedTonemapped);

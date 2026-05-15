@@ -3363,7 +3363,7 @@ bool GLSpectrumView::waterfallTimeToY(const QDateTime& dateTimeUtc, float& y) co
 
             y = (float) (row / (double) std::max(1, m_waterfallHeight));
 
-            if (!m_invertedWaterfall) {
+            if (m_invertedWaterfall) {
                 y = 1.0f - y;
             }
 

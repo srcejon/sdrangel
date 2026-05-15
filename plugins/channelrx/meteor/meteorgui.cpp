@@ -662,7 +662,6 @@ void MeteorGUI::updateAbsoluteCenterFrequency()
 void MeteorGUI::updateVisualSampleRate()
 {
     m_glSpectrum->setSampleRate(m_settings.m_channelSampleRate);
-    m_glSpectrum->setTimingRate(m_settings.m_channelSampleRate);
     m_scopeVis->setLiveRate(m_settings.m_channelSampleRate);
     m_scopeGUI->setSampleRate(m_settings.m_channelSampleRate);
 

@@ -1128,9 +1128,12 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceRedGainSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->postProcessWhiteBalanceRedGainSpin));
     settingsUI()->postProcessWhiteBalanceGreenGainSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->postProcessWhiteBalanceGreenGainSpin));
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->postProcessWhiteBalanceBlueGainSpin));
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->setMaximum(doubleSpinBoxSliderMaximum(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin));
     settingsUI()->postProcessWhiteBalanceRedGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceRedGainSpin, m_settings.m_postProcessWhiteBalanceRedGain));
     settingsUI()->postProcessWhiteBalanceGreenGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceGreenGainSpin, m_settings.m_postProcessWhiteBalanceGreenGain));
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, m_settings.m_postProcessWhiteBalanceBlueGain));
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setValue(m_settings.m_postProcessWhiteBalanceHighlightProtection);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin, m_settings.m_postProcessWhiteBalanceHighlightProtection));
     settingsUI()->stackCurrentCountValue->setText(QString::number(m_lastStackCount));
     settingsUI()->postProcessUnwarpCheck->setChecked(m_settings.m_postProcessUnwarp);
     settingsUI()->histogramStretchModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_histogramStretch));
@@ -1584,6 +1587,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->postProcessWhiteBalanceGreenGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceGreenGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
+    QObject::connect(settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceHighlightProtectionSlider_valueChanged);
+    QObject::connect(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceHighlightProtectionSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessUnwarpCheck, &QCheckBox::toggled, this, &CameraGUI::on_postProcessUnwarpCheck_toggled);
     QObject::connect(settingsUI()->histogramStretchModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_histogramStretchModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->histogramStretchBlackPointSlider, &QSlider::valueChanged, this, &CameraGUI::on_histogramStretchBlackPointSlider_valueChanged);
@@ -4774,6 +4779,9 @@ void CameraGUI::updatePostProcessWhiteBalanceControls()
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setEnabled(manual);
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setEnabled(manual);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setEnabled(manual);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionLabel->setEnabled(manual);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->setEnabled(manual);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setEnabled(manual);
 }
 
 void CameraGUI::updateHistogramStretchControls()
@@ -5026,6 +5034,25 @@ void CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceBlueGain = value;
     applySetting("postProcessWhiteBalanceBlueGain");
+}
+
+void CameraGUI::on_postProcessWhiteBalanceHighlightProtectionSlider_valueChanged(int value)
+{
+    const double protection = sliderValueToDoubleSpinBox(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin, value);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->blockSignals(true);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setValue(protection);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->blockSignals(false);
+    m_settings.m_postProcessWhiteBalanceHighlightProtection = protection;
+    applySetting("postProcessWhiteBalanceHighlightProtection");
+}
+
+void CameraGUI::on_postProcessWhiteBalanceHighlightProtectionSpin_valueChanged(double value)
+{
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->blockSignals(true);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin, value));
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->blockSignals(false);
+    m_settings.m_postProcessWhiteBalanceHighlightProtection = value;
+    applySetting("postProcessWhiteBalanceHighlightProtection");
 }
 
 void CameraGUI::on_postProcessGreyscaleCheck_toggled(bool checked)
@@ -5673,6 +5700,7 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(1);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setValue(1);
     settingsUI()->postProcessUnwarpCheck->setChecked(false);
     settingsUI()->histogramStretchModeCombo->setCurrentIndex(static_cast<int>(CameraSettings::HistogramStretchOff));
     settingsUI()->histogramStretchBlackPointSpin->setValue(0.0);

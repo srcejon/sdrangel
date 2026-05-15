@@ -236,6 +236,7 @@ The Colour tab controls image post-processing.
 <ul>
 <li>White Balance selects Off, Auto or Manual post-processing white balance.</li>
 <li>Red Gain, Green Gain and Blue Gain sliders and spin boxes set manual white-balance gains.</li>
+<li>Highlight Protection reduces manual white-balance gain in saturated highlights to keep bright white areas neutral.</li>
 <li>Greyscale converts the image to greyscale after white balance.</li>
 <li>Brightness, Contrast, Saturation and Gamma sliders and spin boxes adjust image tone and colour.</li>
 <li>Histogram Stretch Mode selects Off, Linear, Gamma, Asinh, Log or CLAHE stretching.</li>

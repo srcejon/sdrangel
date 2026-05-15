@@ -231,6 +231,7 @@ void CameraSettings::resetToDefaults()
     m_postProcessWhiteBalanceRedGain = 1.0;
     m_postProcessWhiteBalanceGreenGain = 1.0;
     m_postProcessWhiteBalanceBlueGain = 1.0;
+    m_postProcessWhiteBalanceHighlightProtection = 1.0;
     m_postProcessUnwarp = false;
     m_histogramStretch = HistogramStretchOff;
     m_histogramStretchBlackPoint = 0.0;
@@ -584,6 +585,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(214, m_diffMaskOpenSize);
     s.writeS32(215, m_recordMode);
     s.writeBool(216, m_asiAutoExposureGain);
+    s.writeDouble(217, m_postProcessWhiteBalanceHighlightProtection);
 
     return s.final();
 }
@@ -900,6 +902,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         qint32 videoPostProcessMode = static_cast<qint32>(SavedMediaRaw);
         d.readS32(215, &videoPostProcessMode, videoPostProcessMode);
         m_recordMode = qBound(SavedMediaRaw, static_cast<SavedMediaMode>(videoPostProcessMode), SavedMediaBoth);
+        d.readDouble(217, &m_postProcessWhiteBalanceHighlightProtection, 1.0);
+        m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(144, &m_overlaySpectrum, false);
         d.readString(145, &m_spectrumDevice, "");
         d.readS32(146, &m_spectrumOffsetX, 0);
@@ -1333,6 +1337,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain")) {
         m_postProcessWhiteBalanceBlueGain = qBound(m_minWhiteBalanceGain, settings.m_postProcessWhiteBalanceBlueGain, m_maxWhiteBalanceGain);
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceHighlightProtection")) {
+        m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, settings.m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
     }
     if (settingsKeys.contains("postProcessUnwarp")) {
         m_postProcessUnwarp = settings.m_postProcessUnwarp;
@@ -1972,6 +1979,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("postProcessWhiteBalanceBlueGain") || force) {
         ostr << " m_postProcessWhiteBalanceBlueGain: " << m_postProcessWhiteBalanceBlueGain;
+    }
+    if (settingsKeys.contains("postProcessWhiteBalanceHighlightProtection") || force) {
+        ostr << " m_postProcessWhiteBalanceHighlightProtection: " << m_postProcessWhiteBalanceHighlightProtection;
     }
     if (settingsKeys.contains("postProcessUnwarp") || force) {
         ostr << " m_postProcessUnwarp: " << m_postProcessUnwarp;

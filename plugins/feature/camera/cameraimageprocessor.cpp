@@ -110,6 +110,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "postProcessWhiteBalanceRedGain",
         "postProcessWhiteBalanceGreenGain",
         "postProcessWhiteBalanceBlueGain",
+        "postProcessWhiteBalanceHighlightProtection",
         "postProcessUnwarp",
         "histogramStretch",
         "histogramStretchBlackPoint",
@@ -161,6 +162,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         || settingsKeys.contains("postProcessWhiteBalanceRedGain")
         || settingsKeys.contains("postProcessWhiteBalanceGreenGain")
         || settingsKeys.contains("postProcessWhiteBalanceBlueGain")
+        || settingsKeys.contains("postProcessWhiteBalanceHighlightProtection")
         || settingsKeys.contains("postProcessGreyscale"))
     {
         m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
@@ -402,12 +404,48 @@ void CameraImageProcessor::applyWhiteBalance(cv::Mat& bgrMat)
         gains = m_autoWhiteBalanceGains;
     }
 
-    std::vector<cv::Mat> channels;
-    cv::split(bgrMat, channels);
-    channels[0].convertTo(channels[0], -1, gains[0], 0.0);
-    channels[1].convertTo(channels[1], -1, gains[1], 0.0);
-    channels[2].convertTo(channels[2], -1, gains[2], 0.0);
-    cv::merge(channels, bgrMat);
+    const double highlightProtection = (m_settings.m_postProcessWhiteBalanceMode == 2)
+        ? qBound(0.0, m_settings.m_postProcessWhiteBalanceHighlightProtection, 1.0)
+        : 0.0;
+
+    if (highlightProtection <= 1e-6)
+    {
+        std::vector<cv::Mat> channels;
+        cv::split(bgrMat, channels);
+        channels[0].convertTo(channels[0], -1, gains[0], 0.0);
+        channels[1].convertTo(channels[1], -1, gains[1], 0.0);
+        channels[2].convertTo(channels[2], -1, gains[2], 0.0);
+        cv::merge(channels, bgrMat);
+    }
+    else
+    {
+        static constexpr double kHighlightRolloffStart = 0.85 * 255.0;
+        static constexpr double kHighlightRolloffRange = 255.0 - kHighlightRolloffStart;
+
+        for (int y = 0; y < bgrMat.rows; ++y)
+        {
+            cv::Vec3b *row = bgrMat.ptr<cv::Vec3b>(y);
+
+            for (int x = 0; x < bgrMat.cols; ++x)
+            {
+                const cv::Vec3b src = row[x];
+                const double highlight = std::max({
+                    static_cast<double>(src[0]),
+                    static_cast<double>(src[1]),
+                    static_cast<double>(src[2])
+                });
+                double rolloff = qBound(0.0, (highlight - kHighlightRolloffStart) / kHighlightRolloffRange, 1.0);
+                rolloff = rolloff * rolloff * (3.0 - 2.0 * rolloff);
+                rolloff *= highlightProtection;
+
+                for (int c = 0; c < 3; ++c)
+                {
+                    const double effectiveGain = gains[c] + (1.0 - gains[c]) * rolloff;
+                    row[x][c] = cv::saturate_cast<uchar>(src[c] * effectiveGain);
+                }
+            }
+        }
+    }
     PROFILER_STOP(__FUNCTION__);
 }
 

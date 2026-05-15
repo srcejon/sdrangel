@@ -214,7 +214,32 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections->setMaximumWidth(28);
 
     m_detectionsTable->setColumnCount(7);
-    m_detectionsTable->setHorizontalHeaderLabels(QStringList({"Time", "Peak dB", "Amp", "Duration", "Span", "Drift", "Rate"}));
+    const QStringList detectionHeaders = {
+        "Time (local)",
+        "Peak (dB)",
+        "Amp",
+        "Duration (ms)",
+        "Span (Hz)",
+        "Drift (Hz)",
+        "Rate (Hz)"
+    };
+    const QStringList detectionHeaderTooltips = {
+        "Local date and time when the meteor pulse started",
+        "Peak signal power during the detection in dB",
+        "Peak linear signal amplitude during the detection",
+        "Detected pulse duration in milliseconds",
+        "Estimated frequency span across the pulse in hertz",
+        "Estimated start-to-end frequency drift across the pulse in hertz",
+        "Meteor channel detector sample rate in hertz"
+    };
+
+    for (int i = 0; i < detectionHeaders.size(); i++)
+    {
+        QTableWidgetItem *headerItem = new QTableWidgetItem(detectionHeaders[i]);
+        headerItem->setToolTip(detectionHeaderTooltips[i]);
+        m_detectionsTable->setHorizontalHeaderItem(i, headerItem);
+    }
+
     m_detectionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_detectionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_detectionsTable->setSelectionMode(QAbstractItemView::SingleSelection);

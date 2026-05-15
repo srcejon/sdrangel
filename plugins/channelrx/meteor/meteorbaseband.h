@@ -18,8 +18,10 @@
 #ifndef INCLUDE_METEORBASEBAND_H
 #define INCLUDE_METEORBASEBAND_H
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QRecursiveMutex>
+#include <QTimer>
 
 #include "dsp/samplesinkfifo.h"
 #include "util/message.h"
@@ -87,6 +89,8 @@ private:
     MeteorSettings m_settings;
     SpectrumVis *m_spectrumVis;
     bool m_running;
+    QTimer *m_inactivityTimer;
+    QElapsedTimer m_lastDataTimer;
     QRecursiveMutex m_mutex;
 
     bool handleMessage(const Message& cmd);
@@ -94,6 +98,9 @@ private:
     void notifyVisualSampleRate();
 
 private slots:
+    void startInactivityTimer();
+    void stopInactivityTimer();
+    void handleInactivity();
     void handleInputMessages();
     void handleData();
 };

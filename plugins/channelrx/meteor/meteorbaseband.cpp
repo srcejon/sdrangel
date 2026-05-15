@@ -16,6 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QDebug>
+#include <QThread>
 
 #include "dsp/downchannelizer.h"
 #include "dsp/dspcommands.h"
@@ -28,12 +29,16 @@ MESSAGE_CLASS_DEFINITION(MeteorBaseband::MsgConfigureMeteorBaseband, Message)
 
 MeteorBaseband::MeteorBaseband() :
     m_spectrumVis(nullptr),
-    m_running(false)
+    m_running(false),
+    m_inactivityTimer(new QTimer(this))
 {
     qDebug("MeteorBaseband::MeteorBaseband");
 
     m_sampleFifo.setSize(SampleSinkFifo::getSizePolicy(48000));
     m_channelizer = new DownChannelizer(&m_sink);
+    m_inactivityTimer->setInterval(250);
+    m_inactivityTimer->setSingleShot(false);
+    connect(m_inactivityTimer, &QTimer::timeout, this, &MeteorBaseband::handleInactivity);
 }
 
 MeteorBaseband::~MeteorBaseband()
@@ -61,10 +66,23 @@ void MeteorBaseband::startWork()
     );
     connect(&m_inputMessageQueue, SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
     m_running = true;
+    m_lastDataTimer.start();
+
+    if (QThread::currentThread() == thread()) {
+        startInactivityTimer();
+    } else {
+        QMetaObject::invokeMethod(this, "startInactivityTimer", Qt::QueuedConnection);
+    }
 }
 
 void MeteorBaseband::stopWork()
 {
+    if (QThread::currentThread() == thread()) {
+        stopInactivityTimer();
+    } else if (thread()->isRunning()) {
+        QMetaObject::invokeMethod(this, "stopInactivityTimer", Qt::BlockingQueuedConnection);
+    }
+
     QMutexLocker mutexLocker(&m_mutex);
     disconnect(&m_inputMessageQueue, SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
     QObject::disconnect(
@@ -117,6 +135,33 @@ void MeteorBaseband::handleData()
         }
 
         m_sampleFifo.readCommit((unsigned int) count);
+
+        if (count > 0) {
+            m_lastDataTimer.restart();
+        }
+    }
+}
+
+void MeteorBaseband::startInactivityTimer()
+{
+    m_inactivityTimer->start();
+}
+
+void MeteorBaseband::stopInactivityTimer()
+{
+    m_inactivityTimer->stop();
+}
+
+void MeteorBaseband::handleInactivity()
+{
+    QMutexLocker mutexLocker(&m_mutex);
+
+    if (!m_running || !m_lastDataTimer.isValid() || (m_lastDataTimer.elapsed() < 250)) {
+        return;
+    }
+
+    if (m_sink.flushPendingPulse()) {
+        m_lastDataTimer.restart();
     }
 }
 

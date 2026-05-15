@@ -106,6 +106,7 @@ public:
     ~MeteorDemodSink();
 
     virtual void feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end);
+    bool flushPendingPulse();
 
     void setScopeSink(ScopeVis* scopeSink) { m_scopeSink = scopeSink; }
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumSink = spectrumSink; }

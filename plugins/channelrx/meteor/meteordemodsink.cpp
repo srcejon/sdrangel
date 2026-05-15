@@ -88,6 +88,22 @@ void MeteorDemodSink::feed(const SampleVector::const_iterator& begin, const Samp
     }
 }
 
+bool MeteorDemodSink::flushPendingPulse()
+{
+    if (!m_pulseActive) {
+        return false;
+    }
+
+    Complex zero(0.0f, 0.0f);
+    const int tailSamples = std::max(m_settings.m_channelSampleRate / 2, m_settings.m_channelSampleRate / 20 + 4);
+
+    for (int i = 0; i < tailSamples && m_pulseActive; i++) {
+        processOneSample(zero);
+    }
+
+    return true;
+}
+
 void MeteorDemodSink::processOneSample(Complex& ci)
 {
     const Real re = ci.real() / SDR_RX_SCALEF;

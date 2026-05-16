@@ -41,7 +41,7 @@ void MeteorSettings::resetToDefaults()
     m_powerLPFCutoff = 50.0f;
     m_detectionThresholdDB = 6.0f;
     m_minDurationMS = 5;
-    m_maxDurationMS = 5000;
+    m_maxDurationMS = 20000;
     m_maxFrequencyDrift = 50.0f;
     m_detectionsTableColumnHidden = 0;
     m_detectionBoxPaddingPixels = 4;
@@ -117,7 +117,7 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readFloat(5, &m_powerLPFCutoff, 50.0f);
         d.readFloat(6, &m_detectionThresholdDB, 6.0f);
         d.readS32(7, &m_minDurationMS, 5);
-        d.readS32(8, &m_maxDurationMS, 5000);
+        d.readS32(8, &m_maxDurationMS, 20000);
         d.readFloat(9, &m_maxFrequencyDrift, 50.0f);
         d.readU32(10, &m_detectionsTableColumnHidden, 0);
         d.readS32(11, &m_detectionBoxPaddingPixels, 4);

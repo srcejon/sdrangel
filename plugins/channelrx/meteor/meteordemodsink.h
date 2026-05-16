@@ -153,6 +153,75 @@ private:
         {}
     };
 
+    struct SpectralBand {
+        bool m_valid;
+        double m_centerFrequency;
+        double m_lowFrequency;
+        double m_highFrequency;
+        double m_bandwidth;
+        double m_peakBinPower;
+        double m_totalExcessPower;
+        double m_contrastDB;
+        double m_peakRatio;
+        double m_framePeakPower;
+        int m_lowIndex;
+        int m_highIndex;
+
+        SpectralBand() :
+            m_valid(false),
+            m_centerFrequency(0.0),
+            m_lowFrequency(0.0),
+            m_highFrequency(0.0),
+            m_bandwidth(0.0),
+            m_peakBinPower(0.0),
+            m_totalExcessPower(0.0),
+            m_contrastDB(0.0),
+            m_peakRatio(0.0),
+            m_framePeakPower(0.0),
+            m_lowIndex(0),
+            m_highIndex(0)
+        {}
+    };
+
+    struct SpectralEvent {
+        bool m_valid;
+        quint64 m_startCenterSample;
+        quint64 m_lastCenterSample;
+        int m_missingFrames;
+        double m_peakPower;
+        double m_backgroundPower;
+        double m_minFrequency;
+        double m_maxFrequency;
+        double m_maxBandwidth;
+        double m_weightedFrequencySum;
+        double m_weightSum;
+        double m_maxContrastDB;
+        double m_maxPeakRatio;
+        std::vector<double> m_trackFrequencies;
+        std::vector<quint64> m_trackSamples;
+
+        SpectralEvent() :
+            m_valid(false),
+            m_startCenterSample(0),
+            m_lastCenterSample(0),
+            m_missingFrames(0),
+            m_peakPower(0.0),
+            m_backgroundPower(1e-20),
+            m_minFrequency(0.0),
+            m_maxFrequency(0.0),
+            m_maxBandwidth(0.0),
+            m_weightedFrequencySum(0.0),
+            m_weightSum(0.0),
+            m_maxContrastDB(0.0),
+            m_maxPeakRatio(0.0)
+        {}
+    };
+
+    struct DetectionRange {
+        quint64 m_startSample;
+        quint64 m_endSample;
+    };
+
     ScopeVis* m_scopeSink;
     SpectrumVis* m_spectrumSink;
     MessageQueue *m_messageQueueToGUI;
@@ -171,6 +240,14 @@ private:
     int m_scopeSampleBufferIndex;
     ComplexVector m_spectrumBuffer;
     ComplexVector m_pulseSamples;
+    ComplexVector m_spectralFrameBuffer;
+    std::vector<double> m_spectralNoiseFloor;
+    std::vector<SpectralEvent> m_spectralEvents;
+    std::vector<DetectionRange> m_recentDetectionRanges;
+    int m_spectralFrameSize;
+    int m_spectralHopSize;
+    bool m_spectralNoiseFloorInitialized;
+    bool m_spectralEventActiveForScope;
 
     quint64 m_sampleCounter;
     bool m_noiseFloorInitialized;
@@ -188,6 +265,16 @@ private:
     void startPulse(const Complex& sample, double power);
     void updatePulse(const Complex& sample, double power);
     void finishPulse(bool forceRejected);
+    bool processSpectralSample(const Complex& sample, double power);
+    void processSpectralFrame(quint64 frameStartSample);
+    std::vector<SpectralBand> detectSpectralBands(const std::vector<double>& binPower, double framePeakPower);
+    void updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
+    void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
+    void finishSpectralEvent(const SpectralEvent& event);
+    bool isDuplicateDetection(quint64 startSample, quint64 endSample) const;
+    void rememberDetection(quint64 startSample, quint64 endSample);
+    void pruneRecentDetections();
+    void emitDetectionReport(const PulseReport& report, const char *source);
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;
     void updateNoiseFloor(double filteredPower);
     double getDetectionThresholdPower() const;
@@ -205,6 +292,7 @@ private:
     static double averageFrequency(const std::vector<double>& frequencies, int begin, int end);
     void configureInterpolator();
     void configurePowerLowpass();
+    void configureSpectralDetector();
     void resizeScopeBuffers();
     void resetDetector();
     void sampleToScope(const Complex& sample, double power, double filteredPower, bool detected);

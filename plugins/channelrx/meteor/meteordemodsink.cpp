@@ -178,7 +178,7 @@ void MeteorDemodSink::startPulse(const Complex& sample, double power)
     m_pulseActive = true;
     m_pulseStartSample = m_sampleCounter;
     m_pulseLastAboveSample = m_sampleCounter;
-    m_pulseStartDateTimeUtc = QDateTime::currentDateTimeUtc();
+    m_pulseStartDateTimeUtc = sampleCounterToDateTimeUtc(m_pulseStartSample);
     m_pulsePeakPower = power;
     m_pulseSamples.clear();
     m_pulseSamples.push_back(sample);
@@ -432,6 +432,16 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
     m_pulseSamples.clear();
 }
 
+QDateTime MeteorDemodSink::sampleCounterToDateTimeUtc(quint64 sampleCounter) const
+{
+    if (!m_streamStartDateTimeUtc.isValid() || (m_settings.m_channelSampleRate <= 0)) {
+        return QDateTime::currentDateTimeUtc();
+    }
+
+    const qint64 offsetMSecs = (qint64) std::llround(1000.0 * (double) sampleCounter / (double) m_settings.m_channelSampleRate);
+    return m_streamStartDateTimeUtc.addMSecs(offsetMSecs);
+}
+
 void MeteorDemodSink::updateNoiseFloor(double filteredPower)
 {
     const double power = std::max(filteredPower, 1e-20);
@@ -499,6 +509,7 @@ void MeteorDemodSink::resetDetector()
     m_noiseFloor = 1e-12;
     m_pulseActive = false;
     m_rearmNeeded = false;
+    m_streamStartDateTimeUtc = QDateTime::currentDateTimeUtc();
     m_pulseStartSample = 0;
     m_pulseLastAboveSample = 0;
     m_pulsePeakPower = 0.0;

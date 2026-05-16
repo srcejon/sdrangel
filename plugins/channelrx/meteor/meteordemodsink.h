@@ -152,6 +152,7 @@ private:
     double m_noiseFloor;
     bool m_pulseActive;
     bool m_rearmNeeded;
+    QDateTime m_streamStartDateTimeUtc;
     quint64 m_pulseStartSample;
     quint64 m_pulseLastAboveSample;
     QDateTime m_pulseStartDateTimeUtc;
@@ -161,6 +162,7 @@ private:
     void startPulse(const Complex& sample, double power);
     void updatePulse(const Complex& sample, double power);
     void finishPulse(bool forceRejected);
+    QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;
     void updateNoiseFloor(double filteredPower);
     double getDetectionThresholdPower() const;
     bool estimatePulseFrequency(double& centerFrequency, double& frequencySpan, double& frequencyDrift, double& sweepScore) const;

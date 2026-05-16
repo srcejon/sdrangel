@@ -328,7 +328,7 @@ bool MeteorDemodSink::estimatePulseSpectralBand(int windowSize, int hopSize, dou
     const double floorPower = std::max(sortedPower[sortedPower.size() / 2], 1e-30);
     const int peakIndex = (int) std::distance(binPower.begin(), peakIt);
     const double peakPower = *peakIt;
-    const double threshold = floorPower + 0.25 * (peakPower - floorPower);
+    const double threshold = floorPower + 0.10 * (peakPower - floorPower);
     int lowIndex = peakIndex;
     int highIndex = peakIndex;
 
@@ -560,6 +560,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
     const bool shortStandaloneLine = stableLineOK && !strongShortLine && !veryShortLineOK && !compactClippedMeteor && (durationS < 0.5);
     const bool directAccepted = ((!forceRejected && durationOK) || compactClippedMeteor) && driftOK && spectralEvidenceOK && !shortStandaloneLine && m_messageQueueToGUI;
     const int broadValidationGapSamples = std::max(2, m_settings.m_channelSampleRate / 10);
+    const double reportedFrequencySpan = std::max(std::fabs(frequencySpan), spectralBandwidth);
 
     if (m_pendingBroadPulse.m_valid
         && (m_pulseStartSample > m_pendingBroadPulse.m_endSample + (quint64) broadValidationGapSamples))
@@ -629,7 +630,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         {
             report = m_pendingBroadPulse;
             report.m_centerFrequency = centerFrequency;
-            report.m_frequencySpan = std::min(stableFrequencyLimit, std::max(std::fabs(report.m_frequencySpan), compactFrequencyLimit * 3.0));
+            report.m_frequencySpan = std::min(stableFrequencyLimit, std::max({std::fabs(report.m_frequencySpan), reportedFrequencySpan, compactFrequencyLimit * 3.0}));
         }
         else
         {
@@ -641,7 +642,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
             report.m_backgroundPower = m_noiseFloor;
             report.m_durationS = durationS;
             report.m_centerFrequency = centerFrequency;
-            report.m_frequencySpan = frequencySpan > 0.0 ? frequencySpan : spectralBandwidth;
+            report.m_frequencySpan = reportedFrequencySpan;
             report.m_frequencyDrift = frequencyDrift;
         }
 
@@ -673,7 +674,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         m_pendingBroadPulse.m_backgroundPower = m_noiseFloor;
         m_pendingBroadPulse.m_durationS = durationS;
         m_pendingBroadPulse.m_centerFrequency = centerFrequency;
-        m_pendingBroadPulse.m_frequencySpan = frequencySpan;
+        m_pendingBroadPulse.m_frequencySpan = reportedFrequencySpan;
         m_pendingBroadPulse.m_frequencyDrift = frequencyDrift;
     }
 

@@ -124,6 +124,7 @@ private:
     QPushButton *m_saveDetections;
     QPushButton *m_clearDetections;
     QTableWidget *m_detectionsTable;
+    QTableWidget *m_colorgrammeTable;
     QChartView *m_hourlyChartView;
     QChart *m_hourlyChart;
     GLSpectrum *m_glSpectrum;
@@ -169,6 +170,8 @@ private:
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
     void updateCounters();
     void updateHistogram();
+    void updateColorgramme();
+    QColor colorgrammeColor(int count, int maxCount) const;
     void drawDetectionOverlays(GLSpectrumView *spectrumView);
     void applyDetectionsColumnVisibility();
     void saveDetectionsColumnVisibility();

@@ -150,6 +150,7 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     connect(getInputMessageQueue(), SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
 
     updateHistogram();
+    updateColorgramme();
     displaySettings();
     makeUIConnections();
     applyAllSettings();
@@ -185,6 +186,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_saveDetections = ui->saveDetections;
     m_clearDetections = ui->clearDetections;
     m_detectionsTable = ui->detectionsTable;
+    m_colorgrammeTable = ui->colorgrammeTable;
     m_hourlyChartView = ui->hourlyChartView;
     m_glSpectrum = ui->glSpectrum;
     m_spectrumGUI = ui->spectrumGUI;
@@ -279,6 +281,24 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_detectionsTable->verticalHeader()->setVisible(false);
     m_detectionsTable->setSortingEnabled(true);
     m_detectionsTable->setMinimumHeight(120);
+
+    m_colorgrammeTable->setRowCount(24);
+    m_colorgrammeTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_colorgrammeTable->setSelectionMode(QAbstractItemView::NoSelection);
+    m_colorgrammeTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_colorgrammeTable->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_colorgrammeTable->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
+    m_colorgrammeTable->verticalHeader()->setDefaultAlignment(Qt::AlignCenter);
+    m_colorgrammeTable->setShowGrid(false);
+    m_colorgrammeTable->setMinimumHeight(180);
+    m_colorgrammeTable->setToolTip("Monthly meteor count colorgramme: columns are days, rows are UTC/local display hours, color shows detections per hour");
+
+    for (int hour = 0; hour < 24; hour++)
+    {
+        QTableWidgetItem *hourItem = new QTableWidgetItem(QString::number(hour));
+        hourItem->setTextAlignment(Qt::AlignCenter);
+        m_colorgrammeTable->setVerticalHeaderItem(hour, hourItem);
+    }
 
     m_hourlyChartView->setMinimumHeight(180);
     m_glSpectrum->setMinimumHeight(180);
@@ -643,6 +663,7 @@ void MeteorGUI::on_clearDetections_clicked()
     m_detectionsTable->setRowCount(0);
     updateCounters();
     updateHistogram();
+    updateColorgramme();
     m_glSpectrum->getSpectrumView()->update();
 }
 
@@ -948,6 +969,7 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
 
     updateCounters();
     updateHistogram();
+    updateColorgramme();
     m_glSpectrum->getSpectrumView()->update();
 }
 
@@ -1023,6 +1045,98 @@ void MeteorGUI::updateHistogram()
     m_hourlyChartView->setChart(m_hourlyChart);
 
     delete oldChart;
+}
+
+void MeteorGUI::updateColorgramme()
+{
+    if (!m_colorgrammeTable) {
+        return;
+    }
+
+    QDate monthDate = QDate::currentDate();
+
+    if (!m_hourlyCounts.isEmpty()) {
+        monthDate = m_hourlyCounts.lastKey();
+    }
+
+    const int year = monthDate.year();
+    const int month = monthDate.month();
+    const int daysInMonth = monthDate.daysInMonth();
+    int maxCount = 0;
+
+    m_colorgrammeTable->setColumnCount(daysInMonth);
+
+    for (int day = 1; day <= daysInMonth; day++)
+    {
+        QTableWidgetItem *dayItem = new QTableWidgetItem(QString::number(day));
+        dayItem->setTextAlignment(Qt::AlignCenter);
+        m_colorgrammeTable->setHorizontalHeaderItem(day - 1, dayItem);
+
+        const QDate date(year, month, day);
+
+        if (!m_hourlyCounts.contains(date)) {
+            continue;
+        }
+
+        for (int hour = 0; hour < 24; hour++) {
+            maxCount = std::max(maxCount, m_hourlyCounts[date].value(hour));
+        }
+    }
+
+    for (int hour = 0; hour < 24; hour++)
+    {
+        for (int day = 1; day <= daysInMonth; day++)
+        {
+            const QDate date(year, month, day);
+            const int count = m_hourlyCounts.contains(date) ? m_hourlyCounts[date].value(hour) : 0;
+            QTableWidgetItem *item = m_colorgrammeTable->item(hour, day - 1);
+
+            if (!item)
+            {
+                item = new QTableWidgetItem();
+                item->setTextAlignment(Qt::AlignCenter);
+                m_colorgrammeTable->setItem(hour, day - 1, item);
+            }
+
+            item->setText(count > 0 ? QString::number(count) : QString());
+            item->setToolTip(QString("%1 %2:00-%2:59: %3 meteor%4")
+                .arg(date.toString(Qt::ISODate))
+                .arg(hour, 2, 10, QLatin1Char('0'))
+                .arg(count)
+                .arg(count == 1 ? "" : "s"));
+
+            const QColor color = colorgrammeColor(count, maxCount);
+            item->setBackground(color);
+            item->setForeground(color.lightness() < 110 ? Qt::white : Qt::black);
+        }
+    }
+}
+
+QColor MeteorGUI::colorgrammeColor(int count, int maxCount) const
+{
+    if ((count <= 0) || (maxCount <= 0)) {
+        return QColor(0, 0, 170);
+    }
+
+    const double position = std::clamp((double) count / (double) maxCount, 0.0, 1.0);
+    const QVector<QColor> stops = {
+        QColor(0, 0, 170),
+        QColor(0, 220, 255),
+        QColor(0, 190, 0),
+        QColor(255, 230, 0),
+        QColor(220, 0, 0)
+    };
+    const double scaled = position * (double) (stops.size() - 1);
+    const int index = std::min((int) std::floor(scaled), (int) stops.size() - 2);
+    const double t = scaled - (double) index;
+    const QColor a = stops[index];
+    const QColor b = stops[index + 1];
+
+    return QColor(
+        (int) std::round((1.0 - t) * a.red() + t * b.red()),
+        (int) std::round((1.0 - t) * a.green() + t * b.green()),
+        (int) std::round((1.0 - t) * a.blue() + t * b.blue())
+    );
 }
 
 void MeteorGUI::applyDetectionsColumnVisibility()
@@ -1160,6 +1274,7 @@ void MeteorGUI::deleteSelectedDetections()
 
     updateCounters();
     updateHistogram();
+    updateColorgramme();
     m_glSpectrum->getSpectrumView()->update();
 }
 
@@ -1187,13 +1302,13 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
         }
 
         const int paddingPixels = std::max(0, m_settings.m_detectionBoxPaddingPixels);
-        const double minWidthHz = std::max(10.0, (double) m_settings.m_channelSampleRate * 0.02);
+        const double minHalfWidthHz = std::max(2.0, (double) m_settings.m_channelSampleRate * 0.0025);
         const double paddingHz = paddingPixels * spectrumView->waterfallFrequencyPerPixel();
         const float paddingY = (float) (paddingPixels * spectrumView->waterfallTimePerPixel());
         const double halfBandwidth = std::max({
             std::fabs(detection.m_frequencySpan) * 0.5,
             std::fabs(detection.m_frequencyDrift) * 0.5,
-            minWidthHz
+            minHalfWidthHz
         }) + paddingHz;
         float xMin = 0.0f;
         float xMax = 0.0f;

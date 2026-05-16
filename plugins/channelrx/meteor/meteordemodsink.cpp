@@ -154,7 +154,7 @@ bool MeteorDemodSink::processDetectorSample(const Complex& sample, double power,
         m_pulseLastAboveSample = m_sampleCounter;
     }
 
-    const int holdSamples = std::max(2, m_settings.m_channelSampleRate / 20);
+    const int holdSamples = std::max(2, m_settings.m_channelSampleRate / 10);
     const int maxSamples = std::max(1, (m_settings.m_maxDurationMS * m_settings.m_channelSampleRate) / 1000);
 
     if ((int) (m_sampleCounter - m_pulseStartSample + 1) > maxSamples)
@@ -215,7 +215,7 @@ double MeteorDemodSink::averageFrequency(const std::vector<double>& frequencies,
     return sum / (double) (end - begin);
 }
 
-bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength) const
+bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength, double& prominence) const
 {
     if ((startIndex < 0) || (windowSize < 8) || ((startIndex + windowSize) > (int) m_pulseSamples.size())) {
         return false;
@@ -225,6 +225,8 @@ bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize
     double windowedEnergy = 0.0;
     int bestBin = 0;
     double bestMagnitudeSq = 0.0;
+    double magnitudeSqSum = 0.0;
+    int binCount = 0;
 
     for (int bin = -windowSize / 2; bin < windowSize / 2; bin++)
     {
@@ -248,6 +250,8 @@ bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize
         }
 
         const double magnitudeSq = realSum*realSum + imagSum*imagSum;
+        magnitudeSqSum += magnitudeSq;
+        binCount++;
 
         if (magnitudeSq > bestMagnitudeSq)
         {
@@ -262,15 +266,121 @@ bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize
 
     frequency = (double) bestBin * (double) m_settings.m_channelSampleRate / (double) windowSize;
     strength = bestMagnitudeSq;
-    return std::isfinite(frequency) && std::isfinite(strength);
+    prominence = binCount > 0 ? bestMagnitudeSq / std::max(magnitudeSqSum / (double) binCount, 1e-30) : 0.0;
+    return std::isfinite(frequency) && std::isfinite(strength) && std::isfinite(prominence);
 }
 
-bool MeteorDemodSink::estimatePulseFrequency(double& centerFrequency, double& frequencySpan, double& frequencyDrift, double& sweepScore) const
+bool MeteorDemodSink::estimatePulseSpectralBand(int windowSize, int hopSize, double& centerFrequency, double& bandwidth, double& contrastDB) const
+{
+    centerFrequency = 0.0;
+    bandwidth = 0.0;
+    contrastDB = 0.0;
+
+    if ((windowSize < 8) || ((int) m_pulseSamples.size() < windowSize)) {
+        return false;
+    }
+
+    const double twoPi = 2.0 * std::acos(-1.0);
+    std::vector<double> binPower(windowSize, 0.0);
+    int windowCount = 0;
+
+    for (int start = 0; (start + windowSize) <= (int) m_pulseSamples.size(); start += hopSize)
+    {
+        for (int bin = -windowSize / 2; bin < windowSize / 2; bin++)
+        {
+            double realSum = 0.0;
+            double imagSum = 0.0;
+
+            for (int i = 0; i < windowSize; i++)
+            {
+                const double window = 0.5 - 0.5 * std::cos(twoPi * (double) i / (double) (windowSize - 1));
+                const Complex sample = m_pulseSamples[start + i] * (Real) window;
+                const double angle = -twoPi * (double) bin * (double) i / (double) windowSize;
+                const double c = std::cos(angle);
+                const double s = std::sin(angle);
+
+                realSum += sample.real() * c - sample.imag() * s;
+                imagSum += sample.real() * s + sample.imag() * c;
+            }
+
+            binPower[bin + windowSize / 2] += realSum*realSum + imagSum*imagSum;
+        }
+
+        windowCount++;
+    }
+
+    if (windowCount == 0) {
+        return false;
+    }
+
+    for (double& power : binPower) {
+        power /= (double) windowCount;
+    }
+
+    const auto peakIt = std::max_element(binPower.begin(), binPower.end());
+
+    if ((peakIt == binPower.end()) || (*peakIt <= 1e-30)) {
+        return false;
+    }
+
+    std::vector<double> sortedPower = binPower;
+    std::sort(sortedPower.begin(), sortedPower.end());
+    const double floorPower = std::max(sortedPower[sortedPower.size() / 2], 1e-30);
+    const int peakIndex = (int) std::distance(binPower.begin(), peakIt);
+    const double peakPower = *peakIt;
+    const double threshold = floorPower + 0.25 * (peakPower - floorPower);
+    int lowIndex = peakIndex;
+    int highIndex = peakIndex;
+
+    while ((lowIndex > 0) && (binPower[lowIndex - 1] >= threshold)) {
+        lowIndex--;
+    }
+
+    while ((highIndex + 1 < (int) binPower.size()) && (binPower[highIndex + 1] >= threshold)) {
+        highIndex++;
+    }
+
+    double weightedFrequencySum = 0.0;
+    double weightSum = 0.0;
+
+    for (int i = lowIndex; i <= highIndex; i++)
+    {
+        const double excessPower = std::max(0.0, binPower[i] - floorPower);
+        const double frequency = (double) (i - windowSize / 2) * (double) m_settings.m_channelSampleRate / (double) windowSize;
+        weightedFrequencySum += frequency * excessPower;
+        weightSum += excessPower;
+    }
+
+    if (weightSum > 0.0) {
+        centerFrequency = weightedFrequencySum / weightSum;
+    } else {
+        centerFrequency = (double) (peakIndex - windowSize / 2) * (double) m_settings.m_channelSampleRate / (double) windowSize;
+    }
+
+    bandwidth = (double) (highIndex - lowIndex + 1) * (double) m_settings.m_channelSampleRate / (double) windowSize;
+    contrastDB = 10.0 * std::log10(peakPower / floorPower);
+
+    return std::isfinite(centerFrequency) && std::isfinite(bandwidth) && std::isfinite(contrastDB);
+}
+
+bool MeteorDemodSink::estimatePulseFrequency(
+    double& centerFrequency,
+    double& frequencySpan,
+    double& frequencyDrift,
+    double& sweepScore,
+    double& spectralProminence,
+    double& frequencyConcentration,
+    double& spectralBandwidth,
+    double& spectralBandContrastDB) const
 {
     centerFrequency = 0.0;
     frequencySpan = 0.0;
     frequencyDrift = 0.0;
     sweepScore = 0.0;
+    spectralProminence = 0.0;
+    frequencyConcentration = 0.0;
+    spectralBandwidth = 0.0;
+    spectralBandContrastDB = 0.0;
 
     if (m_pulseSamples.size() < 8) {
         return false;
@@ -284,18 +394,24 @@ bool MeteorDemodSink::estimatePulseFrequency(double& centerFrequency, double& fr
     }
 
     const int hopSize = std::max(1, windowSize / 4);
+
+    estimatePulseSpectralBand(windowSize, hopSize, centerFrequency, spectralBandwidth, spectralBandContrastDB);
+
     std::vector<double> frequencies;
     std::vector<double> strengths;
+    std::vector<double> prominences;
 
     for (int start = 0; (start + windowSize) <= (int) m_pulseSamples.size(); start += hopSize)
     {
         double frequency = 0.0;
         double strength = 0.0;
+        double prominence = 0.0;
 
-        if (estimateWindowPeakFrequency(start, windowSize, frequency, strength))
+        if (estimateWindowPeakFrequency(start, windowSize, frequency, strength, prominence))
         {
             frequencies.push_back(frequency);
             strengths.push_back(strength);
+            prominences.push_back(prominence);
         }
     }
 
@@ -309,16 +425,43 @@ bool MeteorDemodSink::estimatePulseFrequency(double& centerFrequency, double& fr
 
     for (int i = 0; i < (int) frequencies.size(); i++)
     {
-        if (strengths[i] >= minSelectedStrength) {
+        if (strengths[i] >= minSelectedStrength)
+        {
             selectedFrequencies.push_back(frequencies[i]);
+            spectralProminence = std::max(spectralProminence, prominences[i]);
         }
     }
 
     if (!selectedFrequencies.empty()) {
         frequencies = selectedFrequencies;
+    } else if (!prominences.empty()) {
+        spectralProminence = *std::max_element(prominences.begin(), prominences.end());
     }
 
-    centerFrequency = averageFrequency(frequencies, 0, (int) frequencies.size());
+    const double trackCenterFrequency = averageFrequency(frequencies, 0, (int) frequencies.size());
+
+    if (spectralBandwidth <= 0.0) {
+        centerFrequency = trackCenterFrequency;
+    }
+
+    const double concentrationWindowHz = std::max(20.0, (double) m_settings.m_channelSampleRate * 0.03);
+    int bestConcentrationCount = 0;
+
+    for (double frequency : frequencies)
+    {
+        int concentrationCount = 0;
+
+        for (double otherFrequency : frequencies)
+        {
+            if (std::fabs(otherFrequency - frequency) <= concentrationWindowHz) {
+                concentrationCount++;
+            }
+        }
+
+        bestConcentrationCount = std::max(bestConcentrationCount, concentrationCount);
+    }
+
+    frequencyConcentration = frequencies.empty() ? 0.0 : (double) bestConcentrationCount / (double) frequencies.size();
 
     if (frequencies.size() == 1)
     {
@@ -360,7 +503,7 @@ bool MeteorDemodSink::estimatePulseFrequency(double& centerFrequency, double& fr
         }
     }
 
-    return std::isfinite(centerFrequency) && std::isfinite(frequencySpan) && std::isfinite(frequencyDrift) && std::isfinite(sweepScore);
+    return std::isfinite(centerFrequency) && std::isfinite(frequencySpan) && std::isfinite(frequencyDrift) && std::isfinite(sweepScore) && std::isfinite(spectralProminence) && std::isfinite(frequencyConcentration) && std::isfinite(spectralBandwidth) && std::isfinite(spectralBandContrastDB);
 }
 
 void MeteorDemodSink::finishPulse(bool forceRejected)
@@ -372,8 +515,12 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
     double frequencySpan = 0.0;
     double frequencyDrift = 0.0;
     double sweepScore = 0.0;
+    double spectralProminence = 0.0;
+    double frequencyConcentration = 0.0;
+    double spectralBandwidth = 0.0;
+    double spectralBandContrastDB = 0.0;
 
-    estimatePulseFrequency(centerFrequency, frequencySpan, frequencyDrift, sweepScore);
+    estimatePulseFrequency(centerFrequency, frequencySpan, frequencyDrift, sweepScore, spectralProminence, frequencyConcentration, spectralBandwidth, spectralBandContrastDB);
 
     const bool durationOK = (durationMS >= m_settings.m_minDurationMS) && (durationMS <= m_settings.m_maxDurationMS);
     const bool sweepRejected = (m_settings.m_maxFrequencyDrift > 0.0f)
@@ -390,15 +537,58 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         && (std::fabs(frequencySpan) <= compactFrequencyLimit)
         && (std::fabs(frequencyDrift) <= compactFrequencyLimit)
         && (sweepScore < 0.75);
-    const bool accepted = ((!forceRejected && durationOK) || compactClippedMeteor) && driftOK && m_messageQueueToGUI;
+    const double stableFrequencyLimit = std::max(compactFrequencyLimit, std::min(180.0, (double) m_settings.m_channelSampleRate * 0.18));
+    const bool stableLineOK = (spectralProminence >= 7.5)
+        && (frequencyConcentration >= 0.60)
+        && (std::fabs(frequencySpan) <= stableFrequencyLimit)
+        && (std::fabs(frequencyDrift) <= stableFrequencyLimit);
+    const bool boundedBandOK = (spectralProminence >= 9.0)
+        && (spectralBandContrastDB >= 3.0)
+        && (spectralBandwidth >= compactFrequencyLimit)
+        && (spectralBandwidth <= stableFrequencyLimit)
+        && (std::fabs(frequencyDrift) <= m_settings.m_maxFrequencyDrift);
+    const bool spectralEvidenceOK = stableLineOK || boundedBandOK;
+    const bool shortStandaloneLine = stableLineOK && !compactClippedMeteor && (durationS < 0.5);
+    const bool directAccepted = ((!forceRejected && durationOK) || compactClippedMeteor) && driftOK && spectralEvidenceOK && !shortStandaloneLine && m_messageQueueToGUI;
+    const int broadValidationGapSamples = std::max(2, m_settings.m_channelSampleRate / 10);
+
+    if (m_pendingBroadPulse.m_valid
+        && (m_pulseStartSample > m_pendingBroadPulse.m_endSample + (quint64) broadValidationGapSamples))
+    {
+        m_pendingBroadPulse = PulseReport();
+    }
+
+    const bool broadPulseCandidate = forceRejected
+        && durationOK
+        && driftOK
+        && !spectralEvidenceOK
+        && (durationS >= 0.5)
+        && (spectralProminence >= 9.0)
+        && (frequencyConcentration <= 0.35)
+        && (sweepScore < 0.25)
+        && (std::fabs(frequencyDrift) <= stableFrequencyLimit);
+    const bool validatesPendingBroadPulse = m_messageQueueToGUI
+        && stableLineOK
+        && (durationS <= 1.0)
+        && m_pendingBroadPulse.m_valid
+        && (m_pulseStartSample >= m_pendingBroadPulse.m_endSample)
+        && ((m_pulseStartSample - m_pendingBroadPulse.m_endSample) <= (quint64) broadValidationGapSamples);
+    const bool accepted = directAccepted || validatesPendingBroadPulse;
 
     qDebug() << "MeteorDemodSink::finishPulse:"
              << " accepted:" << accepted
+             << " directAccepted:" << directAccepted
+             << " broadPulseCandidate:" << broadPulseCandidate
+             << " validatesPendingBroadPulse:" << validatesPendingBroadPulse
              << " forceRejected:" << forceRejected
              << " durationOK:" << durationOK
              << " compactClippedMeteor:" << compactClippedMeteor
              << " driftOK:" << driftOK
              << " sweepRejected:" << sweepRejected
+             << " spectralEvidenceOK:" << spectralEvidenceOK
+             << " stableLineOK:" << stableLineOK
+             << " boundedBandOK:" << boundedBandOK
+             << " shortStandaloneLine:" << shortStandaloneLine
              << " durationS:" << durationS
              << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
              << " backgroundPowerDB:" << 10.0 * std::log10(std::max(m_noiseFloor, 1e-20))
@@ -406,26 +596,67 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
              << " frequencySpan:" << frequencySpan
              << " frequencyDrift:" << frequencyDrift
              << " sweepScore:" << sweepScore
+             << " spectralProminence:" << spectralProminence
+             << " frequencyConcentration:" << frequencyConcentration
+             << " spectralBandwidth:" << spectralBandwidth
+             << " spectralBandContrastDB:" << spectralBandContrastDB
              << " startSample:" << m_pulseStartSample
              << " endSample:" << endSample;
 
     if (accepted)
     {
-        const double peakAmplitude = std::sqrt(std::max(m_pulsePeakPower, 0.0));
-        const double peakPowerDB = 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20));
-        const double backgroundPowerDB = 10.0 * std::log10(std::max(m_noiseFloor, 1e-20));
+        PulseReport report;
+
+        if (validatesPendingBroadPulse)
+        {
+            report = m_pendingBroadPulse;
+            report.m_centerFrequency = centerFrequency;
+            report.m_frequencySpan = std::min(stableFrequencyLimit, std::max(std::fabs(report.m_frequencySpan), compactFrequencyLimit * 3.0));
+        }
+        else
+        {
+            report.m_valid = true;
+            report.m_dateTimeUtc = m_pulseStartDateTimeUtc;
+            report.m_startSample = m_pulseStartSample;
+            report.m_endSample = endSample;
+            report.m_peakPower = m_pulsePeakPower;
+            report.m_backgroundPower = m_noiseFloor;
+            report.m_durationS = durationS;
+            report.m_centerFrequency = centerFrequency;
+            report.m_frequencySpan = frequencySpan > 0.0 ? frequencySpan : spectralBandwidth;
+            report.m_frequencyDrift = frequencyDrift;
+        }
+
+        const double peakAmplitude = std::sqrt(std::max(report.m_peakPower, 0.0));
+        const double peakPowerDB = 10.0 * std::log10(std::max(report.m_peakPower, 1e-20));
+        const double backgroundPowerDB = 10.0 * std::log10(std::max(report.m_backgroundPower, 1e-20));
 
         m_messageQueueToGUI->push(MsgMeteorDetected::create(
-            m_pulseStartDateTimeUtc,
+            report.m_dateTimeUtc,
             peakAmplitude,
             peakPowerDB,
             backgroundPowerDB,
-            durationS,
-            centerFrequency,
-            frequencySpan,
-            frequencyDrift,
+            report.m_durationS,
+            report.m_centerFrequency,
+            report.m_frequencySpan,
+            report.m_frequencyDrift,
             m_settings.m_channelSampleRate
         ));
+
+        m_pendingBroadPulse = PulseReport();
+    }
+    else if (broadPulseCandidate)
+    {
+        m_pendingBroadPulse.m_valid = true;
+        m_pendingBroadPulse.m_dateTimeUtc = m_pulseStartDateTimeUtc;
+        m_pendingBroadPulse.m_startSample = m_pulseStartSample;
+        m_pendingBroadPulse.m_endSample = endSample;
+        m_pendingBroadPulse.m_peakPower = m_pulsePeakPower;
+        m_pendingBroadPulse.m_backgroundPower = m_noiseFloor;
+        m_pendingBroadPulse.m_durationS = durationS;
+        m_pendingBroadPulse.m_centerFrequency = centerFrequency;
+        m_pendingBroadPulse.m_frequencySpan = frequencySpan;
+        m_pendingBroadPulse.m_frequencyDrift = frequencyDrift;
     }
 
     m_pulseActive = false;
@@ -514,6 +745,7 @@ void MeteorDemodSink::resetDetector()
     m_pulseLastAboveSample = 0;
     m_pulsePeakPower = 0.0;
     m_pulseSamples.clear();
+    m_pendingBroadPulse = PulseReport();
 }
 
 void MeteorDemodSink::sampleToScope(const Complex& sample, double power, double filteredPower, bool detected)

@@ -128,6 +128,31 @@ public:
     int getOutputSampleRate() const { return m_settings.m_channelSampleRate; }
 
 private:
+    struct PulseReport {
+        bool m_valid;
+        QDateTime m_dateTimeUtc;
+        quint64 m_startSample;
+        quint64 m_endSample;
+        double m_peakPower;
+        double m_backgroundPower;
+        double m_durationS;
+        double m_centerFrequency;
+        double m_frequencySpan;
+        double m_frequencyDrift;
+
+        PulseReport() :
+            m_valid(false),
+            m_startSample(0),
+            m_endSample(0),
+            m_peakPower(0.0),
+            m_backgroundPower(1e-20),
+            m_durationS(0.0),
+            m_centerFrequency(0.0),
+            m_frequencySpan(0.0),
+            m_frequencyDrift(0.0)
+        {}
+    };
+
     ScopeVis* m_scopeSink;
     SpectrumVis* m_spectrumSink;
     MessageQueue *m_messageQueueToGUI;
@@ -157,6 +182,7 @@ private:
     quint64 m_pulseLastAboveSample;
     QDateTime m_pulseStartDateTimeUtc;
     double m_pulsePeakPower;
+    PulseReport m_pendingBroadPulse;
     void processOneSample(Complex& ci);
     bool processDetectorSample(const Complex& sample, double power, double filteredPower);
     void startPulse(const Complex& sample, double power);
@@ -165,8 +191,17 @@ private:
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;
     void updateNoiseFloor(double filteredPower);
     double getDetectionThresholdPower() const;
-    bool estimatePulseFrequency(double& centerFrequency, double& frequencySpan, double& frequencyDrift, double& sweepScore) const;
-    bool estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength) const;
+    bool estimatePulseFrequency(
+        double& centerFrequency,
+        double& frequencySpan,
+        double& frequencyDrift,
+        double& sweepScore,
+        double& spectralProminence,
+        double& frequencyConcentration,
+        double& spectralBandwidth,
+        double& spectralBandContrastDB) const;
+    bool estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength, double& prominence) const;
+    bool estimatePulseSpectralBand(int windowSize, int hopSize, double& centerFrequency, double& bandwidth, double& contrastDB) const;
     static double averageFrequency(const std::vector<double>& frequencies, int begin, int end);
     void configureInterpolator();
     void configurePowerLowpass();

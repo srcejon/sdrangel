@@ -122,6 +122,7 @@ private:
     QLabel *m_totalCountText;
     QLabel *m_hourCountText;
     QPushButton *m_saveDetections;
+    QPushButton *m_saveColorgramme;
     QPushButton *m_clearDetections;
     QTableWidget *m_detectionsTable;
     QTableWidget *m_colorgrammeTable;
@@ -172,6 +173,8 @@ private:
     void updateHistogram();
     void updateColorgramme();
     QColor colorgrammeColor(int count, int maxCount) const;
+    QDate colorgrammeMonthDate() const;
+    QString formatRMOBFrequency(qint64 frequency) const;
     void drawDetectionOverlays(GLSpectrumView *spectrumView);
     void applyDetectionsColumnVisibility();
     void saveDetectionsColumnVisibility();
@@ -195,6 +198,7 @@ private slots:
     void on_highlightAllDetections_toggled(bool checked);
     void on_detectionBoxPadding_valueChanged(int value);
     void on_saveDetections_clicked();
+    void on_saveColorgramme_clicked();
     void on_clearDetections_clicked();
     void on_detectionsTable_itemSelectionChanged();
     void on_detectionsTable_customContextMenuRequested(const QPoint& pos);

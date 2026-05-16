@@ -16,6 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cstdlib>
 #include <cmath>
 
 #include <QComboBox>
@@ -25,6 +26,7 @@
 #include <QFileDialog>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLocale>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -184,6 +186,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_totalCountText = ui->totalCountText;
     m_hourCountText = ui->hourCountText;
     m_saveDetections = ui->saveDetections;
+    m_saveColorgramme = ui->saveColorgramme;
     m_clearDetections = ui->clearDetections;
     m_detectionsTable = ui->detectionsTable;
     m_colorgrammeTable = ui->colorgrammeTable;
@@ -235,6 +238,9 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_saveDetections->setIcon(QIcon(":/save.png"));
     m_saveDetections->setToolTip("Save detections to CSV");
     m_saveDetections->setMaximumWidth(28);
+    m_saveColorgramme->setIcon(QIcon(":/save.png"));
+    m_saveColorgramme->setToolTip("Save Colorgramme to RMOB text report");
+    m_saveColorgramme->setMaximumWidth(28);
 
     m_clearDetections->setIcon(QIcon(":/bin.png"));
     m_clearDetections->setToolTip("Clear detections");
@@ -289,7 +295,9 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_colorgrammeTable->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_colorgrammeTable->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
     m_colorgrammeTable->verticalHeader()->setDefaultAlignment(Qt::AlignCenter);
-    m_colorgrammeTable->setShowGrid(false);
+    m_colorgrammeTable->setShowGrid(true);
+    m_colorgrammeTable->setGridStyle(Qt::SolidLine);
+    m_colorgrammeTable->setStyleSheet("QTableWidget { gridline-color: white; }");
     m_colorgrammeTable->setMinimumHeight(180);
     m_colorgrammeTable->setToolTip("Monthly meteor count colorgramme: columns are days, rows are UTC/local display hours, color shows detections per hour");
 
@@ -654,6 +662,84 @@ void MeteorGUI::on_saveDetections_clicked()
     }
 }
 
+void MeteorGUI::on_saveColorgramme_clicked()
+{
+    const QDate monthDate = colorgrammeMonthDate();
+    const int year = monthDate.year();
+    const int month = monthDate.month();
+    const int daysInMonth = monthDate.daysInMonth();
+    const QString monthName = QLocale::c().standaloneMonthName(month, QLocale::ShortFormat).toLower();
+    QFileDialog fileDialog(
+        this,
+        "Select file to save Colorgramme to",
+        QString("meteor_%1_%2.rmob.txt").arg(year).arg(month, 2, 10, QLatin1Char('0')),
+        "*.txt"
+    );
+    fileDialog.setDefaultSuffix("txt");
+    fileDialog.setAcceptMode(QFileDialog::AcceptSave);
+
+    if (!fileDialog.exec()) {
+        return;
+    }
+
+    const QStringList fileNames = fileDialog.selectedFiles();
+
+    if (fileNames.isEmpty()) {
+        return;
+    }
+
+    QFile file(fileNames[0]);
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QMessageBox::critical(this, "Meteor", QString("Failed to open file %1").arg(fileNames[0]));
+        return;
+    }
+
+    QTextStream out(&file);
+
+    out << monthName << "|";
+
+    for (int hour = 0; hour < 24; hour++) {
+        out << QString("%1h|").arg(hour, 2, 10, QLatin1Char('0'));
+    }
+
+    out << "\n";
+
+    for (int day = 1; day <= daysInMonth; day++)
+    {
+        const QDate date(year, month, day);
+        const bool hasData = m_hourlyCounts.contains(date);
+
+        out << QString("%1|").arg(day, 2, 10, QLatin1Char('0'));
+
+        for (int hour = 0; hour < 24; hour++)
+        {
+            const QString value = hasData
+                ? QString::number(m_hourlyCounts[date].value(hour, 0))
+                : QString("???");
+            out << QString("%1|").arg(value, -4, QLatin1Char(' '));
+        }
+
+        out << "\n";
+    }
+
+    out << "[Observer]\n";
+    out << "[Country]\n";
+    out << "[City]\n";
+    out << "[Longitude]\n";
+    out << "[Latitude ]\n";
+    out << "[Longitude GMAP]\n";
+    out << "[Latitude GMAP]\n";
+    out << "[Frequencies]" << formatRMOBFrequency(m_settings.m_frequency) << "\n";
+    out << "[Antenna]\n";
+    out << "[Azimut Antenna]\n";
+    out << "[Elevation Antenna]\n";
+    out << "[Pre-Amplifier]\n";
+    out << "[Receiver]\n";
+    out << "[Observing Method]SDRangel\n";
+}
+
 void MeteorGUI::on_clearDetections_clicked()
 {
     m_totalCount = 0;
@@ -879,6 +965,7 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_highlightAllDetections, &ButtonSwitch::toggled, this, &MeteorGUI::on_highlightAllDetections_toggled);
     QObject::connect(m_detectionBoxPadding, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_detectionBoxPadding_valueChanged);
     QObject::connect(m_saveDetections, &QPushButton::clicked, this, &MeteorGUI::on_saveDetections_clicked);
+    QObject::connect(m_saveColorgramme, &QPushButton::clicked, this, &MeteorGUI::on_saveColorgramme_clicked);
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
     QObject::connect(m_detectionsTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_detectionsTable_itemSelectionChanged);
     QObject::connect(m_detectionsTable, &QTableWidget::customContextMenuRequested, this, &MeteorGUI::on_detectionsTable_customContextMenuRequested);
@@ -1053,11 +1140,7 @@ void MeteorGUI::updateColorgramme()
         return;
     }
 
-    QDate monthDate = QDate::currentDate();
-
-    if (!m_hourlyCounts.isEmpty()) {
-        monthDate = m_hourlyCounts.lastKey();
-    }
+    QDate monthDate = colorgrammeMonthDate();
 
     const int year = monthDate.year();
     const int month = monthDate.month();
@@ -1088,7 +1171,8 @@ void MeteorGUI::updateColorgramme()
         for (int day = 1; day <= daysInMonth; day++)
         {
             const QDate date(year, month, day);
-            const int count = m_hourlyCounts.contains(date) ? m_hourlyCounts[date].value(hour) : 0;
+            const bool hasData = m_hourlyCounts.contains(date);
+            const int count = hasData ? m_hourlyCounts[date].value(hour) : 0;
             QTableWidgetItem *item = m_colorgrammeTable->item(hour, day - 1);
 
             if (!item)
@@ -1098,14 +1182,18 @@ void MeteorGUI::updateColorgramme()
                 m_colorgrammeTable->setItem(hour, day - 1, item);
             }
 
-            item->setText(count > 0 ? QString::number(count) : QString());
-            item->setToolTip(QString("%1 %2:00-%2:59: %3 meteor%4")
-                .arg(date.toString(Qt::ISODate))
-                .arg(hour, 2, 10, QLatin1Char('0'))
-                .arg(count)
-                .arg(count == 1 ? "" : "s"));
+            item->setText(hasData && (count > 0) ? QString::number(count) : QString());
+            item->setToolTip(hasData
+                ? QString("%1 %2:00-%2:59: %3 meteor%4")
+                    .arg(date.toString(Qt::ISODate))
+                    .arg(hour, 2, 10, QLatin1Char('0'))
+                    .arg(count)
+                    .arg(count == 1 ? "" : "s")
+                : QString("%1 %2:00-%2:59: no data")
+                    .arg(date.toString(Qt::ISODate))
+                    .arg(hour, 2, 10, QLatin1Char('0')));
 
-            const QColor color = colorgrammeColor(count, maxCount);
+            const QColor color = hasData ? colorgrammeColor(count, maxCount) : QColor(Qt::black);
             item->setBackground(color);
             item->setForeground(color.lightness() < 110 ? Qt::white : Qt::black);
         }
@@ -1137,6 +1225,32 @@ QColor MeteorGUI::colorgrammeColor(int count, int maxCount) const
         (int) std::round((1.0 - t) * a.green() + t * b.green()),
         (int) std::round((1.0 - t) * a.blue() + t * b.blue())
     );
+}
+
+QDate MeteorGUI::colorgrammeMonthDate() const
+{
+    if (!m_hourlyCounts.isEmpty()) {
+        return m_hourlyCounts.lastKey();
+    }
+
+    return QDate::currentDate();
+}
+
+QString MeteorGUI::formatRMOBFrequency(qint64 frequency) const
+{
+    if (frequency <= 0) {
+        return QString();
+    }
+
+    const qint64 frequencyHz = std::llabs(frequency);
+    const qint64 mhz = frequencyHz / 1000000;
+    const qint64 khz = (frequencyHz / 1000) % 1000;
+    const qint64 hz = frequencyHz % 1000;
+
+    return QString("%1.%2.%3")
+        .arg(mhz, 4, 10, QLatin1Char('0'))
+        .arg(khz, 3, 10, QLatin1Char('0'))
+        .arg(hz, 3, 10, QLatin1Char('0'));
 }
 
 void MeteorGUI::applyDetectionsColumnVisibility()

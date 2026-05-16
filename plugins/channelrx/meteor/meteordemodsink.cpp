@@ -515,6 +515,7 @@ void MeteorDemodSink::updateSpectralEvent(SpectralEvent& event, const SpectralBa
     event.m_maxPeakRatio = std::max(event.m_maxPeakRatio, band.m_peakRatio);
     event.m_trackFrequencies.push_back(band.m_centerFrequency);
     event.m_trackSamples.push_back(frameCenterSample);
+    event.m_trackStrengths.push_back(std::max(band.m_totalExcessPower, 1e-30));
 }
 
 void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
@@ -523,11 +524,12 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
         return;
     }
 
-    const quint64 startSample = event.m_startCenterSample > (quint64) (m_spectralHopSize / 2)
-        ? event.m_startCenterSample - (quint64) (m_spectralHopSize / 2)
-        : 0;
-    const quint64 endSample = event.m_lastCenterSample + (quint64) (m_spectralHopSize / 2);
-    const double durationS = (double) (endSample - startSample + 1) / (double) std::max(1, m_settings.m_channelSampleRate);
+    double startSampleEstimate = 0.0;
+    const double durationSamples = estimateSpectralEventDurationSamples(event, startSampleEstimate);
+    const quint64 startSample = startSampleEstimate > 0.0 ? (quint64) std::llround(startSampleEstimate) : 0;
+    const quint64 durationSampleCount = (quint64) std::max(1.0, (double) std::llround(durationSamples));
+    const quint64 endSample = startSample + durationSampleCount - 1;
+    const double durationS = durationSamples / (double) std::max(1, m_settings.m_channelSampleRate);
     const double durationMS = 1000.0 * durationS;
     const bool durationOK = (durationMS >= m_settings.m_minDurationMS) && (durationMS <= m_settings.m_maxDurationMS);
     const double centerFrequency = event.m_weightSum > 0.0
@@ -606,8 +608,8 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
                  << " insideUsableBandwidth:" << insideUsableBandwidth
                  << " strongLineOK:" << strongLineOK
                  << " boundedBandOK:" << boundedBandOK
-                 << " durationS:" << durationS
-                 << " peakPowerDB:" << 10.0 * std::log10(std::max(event.m_peakPower, 1e-20))
+             << " durationS:" << durationS
+             << " peakPowerDB:" << 10.0 * std::log10(std::max(event.m_peakPower, 1e-20))
                  << " backgroundPowerDB:" << 10.0 * std::log10(std::max(event.m_backgroundPower, 1e-20))
                  << " peakAboveBackgroundDB:" << peakAboveBackgroundDB
                  << " centerFrequency:" << centerFrequency
@@ -639,6 +641,41 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
     report.m_frequencyDrift = frequencyDrift;
 
     emitDetectionReport(report, "spectral");
+}
+
+double MeteorDemodSink::estimateSpectralEventDurationSamples(const SpectralEvent& event, double& startSample) const
+{
+    const int count = (int) event.m_trackSamples.size();
+
+    if ((count <= 0) || (m_spectralHopSize <= 0))
+    {
+        startSample = (double) event.m_startCenterSample;
+        return 1.0;
+    }
+
+    double maxStrength = 0.0;
+
+    for (double strength : event.m_trackStrengths) {
+        maxStrength = std::max(maxStrength, strength);
+    }
+
+    if (maxStrength <= 0.0)
+    {
+        startSample = (double) event.m_startCenterSample - 0.5 * (double) m_spectralHopSize;
+        return std::max(1.0, (double) (event.m_lastCenterSample - event.m_startCenterSample + m_spectralHopSize));
+    }
+
+    const double edgeThreshold = 0.25 * maxStrength;
+    const double firstStrength = event.m_trackStrengths.empty() ? maxStrength : event.m_trackStrengths.front();
+    const double lastStrength = event.m_trackStrengths.empty() ? maxStrength : event.m_trackStrengths.back();
+    const double leadingSamples = (double) m_spectralHopSize * std::clamp(1.0 - edgeThreshold / std::max(firstStrength, edgeThreshold), 0.0, 1.0);
+    const double trailingSamples = (double) m_spectralHopSize * std::clamp(1.0 - edgeThreshold / std::max(lastStrength, edgeThreshold), 0.0, 1.0);
+    const double centerSpan = count > 1
+        ? (double) (event.m_trackSamples.back() - event.m_trackSamples.front())
+        : 0.0;
+
+    startSample = (double) event.m_trackSamples.front() - leadingSamples;
+    return std::max(1.0, centerSpan + leadingSamples + trailingSamples);
 }
 
 double MeteorDemodSink::averageFrequency(const std::vector<double>& frequencies, int begin, int end)

@@ -199,6 +199,7 @@ private:
         double m_maxPeakRatio;
         std::vector<double> m_trackFrequencies;
         std::vector<quint64> m_trackSamples;
+        std::vector<double> m_trackStrengths;
 
         SpectralEvent() :
             m_valid(false),
@@ -271,6 +272,7 @@ private:
     void updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
     void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
     void finishSpectralEvent(const SpectralEvent& event);
+    double estimateSpectralEventDurationSamples(const SpectralEvent& event, double& startSample) const;
     bool isDuplicateDetection(quint64 startSample, quint64 endSample) const;
     void rememberDetection(quint64 startSample, quint64 endSample);
     void pruneRecentDetections();

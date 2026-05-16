@@ -36,6 +36,8 @@
 #include <QTextStream>
 
 #include "device/deviceuiset.h"
+#include "device/deviceapi.h"
+#include "channel/channelwebapiutils.h"
 #include "dsp/dspcommands.h"
 #include "dsp/glscopesettings.h"
 #include "dsp/spectrumsettings.h"
@@ -297,7 +299,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_colorgrammeTable->verticalHeader()->setDefaultAlignment(Qt::AlignCenter);
     m_colorgrammeTable->setShowGrid(true);
     m_colorgrammeTable->setGridStyle(Qt::SolidLine);
-    m_colorgrammeTable->setStyleSheet("QTableWidget { gridline-color: white; }");
+    m_colorgrammeTable->setStyleSheet("QTableWidget { gridline-color: black; }");
     m_colorgrammeTable->setMinimumHeight(180);
     m_colorgrammeTable->setToolTip("Monthly meteor count colorgramme: columns are days, rows are UTC/local display hours, color shows detections per hour");
 
@@ -709,13 +711,12 @@ void MeteorGUI::on_saveColorgramme_clicked()
     for (int day = 1; day <= daysInMonth; day++)
     {
         const QDate date(year, month, day);
-        const bool hasData = m_hourlyCounts.contains(date);
 
         out << QString("%1|").arg(day, 2, 10, QLatin1Char('0'));
 
         for (int hour = 0; hour < 24; hour++)
         {
-            const QString value = hasData
+            const QString value = hasHourData(date, hour)
                 ? QString::number(m_hourlyCounts[date].value(hour, 0))
                 : QString("???");
             out << QString("%1|").arg(value, -4, QLatin1Char(' '));
@@ -724,19 +725,22 @@ void MeteorGUI::on_saveColorgramme_clicked()
         out << "\n";
     }
 
-    out << "[Observer]\n";
+    const float latitude = MainCore::instance()->getSettings().getLatitude();
+    const float longitude = MainCore::instance()->getSettings().getLongitude();
+
+    out << "[Observer]" << MainCore::instance()->getSettings().getStationName() << "\n";
     out << "[Country]\n";
     out << "[City]\n";
-    out << "[Longitude]\n";
-    out << "[Latitude ]\n";
-    out << "[Longitude GMAP]\n";
-    out << "[Latitude GMAP]\n";
-    out << "[Frequencies]" << formatRMOBFrequency(m_settings.m_frequency) << "\n";
+    out << "[Longitude]" << formatRMOBCoordinate(longitude, false) << "\n";
+    out << "[Latitude ]" << formatRMOBCoordinate(latitude, true) << "\n";
+    out << "[Longitude GMAP]" << QString::number(longitude, 'f', 4) << "\n";
+    out << "[Latitude GMAP]" << QString("%1%2").arg(latitude >= 0.0f ? "+" : "").arg(latitude, 0, 'f', 4) << "\n";
+    out << "[Frequencies]" << formatRMOBFrequency(rmobReportFrequency()) << "\n";
     out << "[Antenna]\n";
     out << "[Azimut Antenna]\n";
     out << "[Elevation Antenna]\n";
     out << "[Pre-Amplifier]\n";
-    out << "[Receiver]\n";
+    out << "[Receiver]" << rmobReceiverName() << "\n";
     out << "[Observing Method]SDRangel\n";
 }
 
@@ -744,6 +748,7 @@ void MeteorGUI::on_clearDetections_clicked()
 {
     m_totalCount = 0;
     m_hourlyCounts.clear();
+    m_hourlyData.clear();
     m_detectionOverlays.clear();
     m_nextDetectionOverlayId = 1;
     m_detectionsTable->setRowCount(0);
@@ -1021,6 +1026,7 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
         m_hourlyCounts[date] = QVector<int>(24, 0);
     }
 
+    markHourData(date, hour);
     m_hourlyCounts[date][hour]++;
     m_totalCount++;
 
@@ -1157,12 +1163,14 @@ void MeteorGUI::updateColorgramme()
 
         const QDate date(year, month, day);
 
-        if (!m_hourlyCounts.contains(date)) {
+        if (!m_hourlyData.contains(date)) {
             continue;
         }
 
         for (int hour = 0; hour < 24; hour++) {
-            maxCount = std::max(maxCount, m_hourlyCounts[date].value(hour));
+            if (hasHourData(date, hour)) {
+                maxCount = std::max(maxCount, m_hourlyCounts[date].value(hour));
+            }
         }
     }
 
@@ -1171,7 +1179,7 @@ void MeteorGUI::updateColorgramme()
         for (int day = 1; day <= daysInMonth; day++)
         {
             const QDate date(year, month, day);
-            const bool hasData = m_hourlyCounts.contains(date);
+            const bool hasData = hasHourData(date, hour);
             const int count = hasData ? m_hourlyCounts[date].value(hour) : 0;
             QTableWidgetItem *item = m_colorgrammeTable->item(hour, day - 1);
 
@@ -1227,8 +1235,43 @@ QColor MeteorGUI::colorgrammeColor(int count, int maxCount) const
     );
 }
 
+void MeteorGUI::markCurrentHourData()
+{
+    const QDateTime now = QDateTime::currentDateTime();
+    markHourData(now.date(), now.time().hour());
+}
+
+void MeteorGUI::markHourData(const QDate& date, int hour)
+{
+    if (!date.isValid() || (hour < 0) || (hour >= 24)) {
+        return;
+    }
+
+    if (!m_hourlyCounts.contains(date)) {
+        m_hourlyCounts[date] = QVector<int>(24, 0);
+    }
+
+    if (!m_hourlyData.contains(date)) {
+        m_hourlyData[date] = QVector<bool>(24, false);
+    }
+
+    m_hourlyData[date][hour] = true;
+}
+
+bool MeteorGUI::hasHourData(const QDate& date, int hour) const
+{
+    return (hour >= 0)
+        && (hour < 24)
+        && m_hourlyData.contains(date)
+        && m_hourlyData[date].value(hour);
+}
+
 QDate MeteorGUI::colorgrammeMonthDate() const
 {
+    if (!m_hourlyData.isEmpty()) {
+        return m_hourlyData.lastKey();
+    }
+
     if (!m_hourlyCounts.isEmpty()) {
         return m_hourlyCounts.lastKey();
     }
@@ -1251,6 +1294,75 @@ QString MeteorGUI::formatRMOBFrequency(qint64 frequency) const
         .arg(mhz, 4, 10, QLatin1Char('0'))
         .arg(khz, 3, 10, QLatin1Char('0'))
         .arg(hz, 3, 10, QLatin1Char('0'));
+}
+
+QString MeteorGUI::formatRMOBCoordinate(double coordinate, bool latitude) const
+{
+    const double absCoordinate = std::fabs(coordinate);
+    int degrees = (int) std::floor(absCoordinate);
+    double minutesDecimal = (absCoordinate - (double) degrees) * 60.0;
+    int minutes = (int) std::floor(minutesDecimal);
+    int seconds = (int) std::round((minutesDecimal - (double) minutes) * 60.0);
+
+    if (seconds >= 60)
+    {
+        seconds -= 60;
+        minutes++;
+    }
+
+    if (minutes >= 60)
+    {
+        minutes -= 60;
+        degrees++;
+    }
+
+    const QChar hemisphere = latitude
+        ? (coordinate >= 0.0 ? QChar('N') : QChar('S'))
+        : (coordinate >= 0.0 ? QChar('E') : QChar('W'));
+
+    return QString("%1%2%3%4 %5")
+        .arg(degrees, 3, 10, QLatin1Char('0'))
+        .arg(QChar(0x00b0))
+        .arg(minutes, 2, 10, QLatin1Char('0'))
+        .arg(seconds, 2, 10, QLatin1Char('0'))
+        .arg(hemisphere);
+}
+
+qint64 MeteorGUI::rmobReportFrequency() const
+{
+    double centerFrequency = 0.0;
+
+    if (m_deviceUISet
+        && m_deviceUISet->m_deviceAPI
+        && ChannelWebAPIUtils::getCenterFrequency((unsigned int) m_deviceUISet->m_deviceAPI->getDeviceSetIndex(), centerFrequency))
+    {
+        return (qint64) std::llround(centerFrequency) + (qint64) m_settings.m_inputFrequencyOffset;
+    }
+
+    if (m_deviceCenterFrequency > 0) {
+        return m_deviceCenterFrequency + (qint64) m_settings.m_inputFrequencyOffset;
+    }
+
+    return m_settings.m_frequency;
+}
+
+QString MeteorGUI::rmobReceiverName() const
+{
+    if (!m_deviceUISet || !m_deviceUISet->m_deviceAPI) {
+        return QString();
+    }
+
+    const DeviceAPI *deviceAPI = m_deviceUISet->m_deviceAPI;
+
+    if (!deviceAPI->getSamplingDeviceDisplayName().isEmpty()) {
+        return deviceAPI->getSamplingDeviceDisplayName();
+    }
+
+    if (!deviceAPI->getSamplingDeviceId().isEmpty()) {
+        return deviceAPI->getSamplingDeviceId();
+    }
+
+    return deviceAPI->getHardwareId();
 }
 
 void MeteorGUI::applyDetectionsColumnVisibility()
@@ -1477,7 +1589,10 @@ void MeteorGUI::enterEvent(EnterEventType* event)
 
 void MeteorGUI::tick()
 {
-    if ((m_tickCount++ % 20) == 0) {
+    if ((m_tickCount++ % 20) == 0)
+    {
+        markCurrentHourData();
         updateCounters();
+        updateColorgramme();
     }
 }

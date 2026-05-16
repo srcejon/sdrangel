@@ -137,6 +137,7 @@ private:
     bool m_highlightAllDetectionOverlays;
     quint64 m_nextDetectionOverlayId;
     QMap<QDate, QVector<int> > m_hourlyCounts;
+    QMap<QDate, QVector<bool> > m_hourlyData;
 
     struct DetectionOverlay
     {
@@ -172,9 +173,15 @@ private:
     void updateCounters();
     void updateHistogram();
     void updateColorgramme();
+    void markCurrentHourData();
+    void markHourData(const QDate& date, int hour);
+    bool hasHourData(const QDate& date, int hour) const;
     QColor colorgrammeColor(int count, int maxCount) const;
     QDate colorgrammeMonthDate() const;
     QString formatRMOBFrequency(qint64 frequency) const;
+    QString formatRMOBCoordinate(double coordinate, bool latitude) const;
+    qint64 rmobReportFrequency() const;
+    QString rmobReceiverName() const;
     void drawDetectionOverlays(GLSpectrumView *spectrumView);
     void applyDetectionsColumnVisibility();
     void saveDetectionsColumnVisibility();

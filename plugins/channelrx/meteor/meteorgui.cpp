@@ -21,9 +21,11 @@
 
 #include <QComboBox>
 #include <QDateTime>
+#include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLocale>
@@ -31,6 +33,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QStandardPaths>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTextStream>
@@ -153,6 +156,7 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     connect(&m_channelMarker, SIGNAL(highlightedByCursor()), this, SLOT(channelMarkerHighlightedByCursor()));
     connect(getInputMessageQueue(), SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
 
+    loadRMOBReport(automaticRMOBReportFileName(QDate::currentDate()));
     updateHistogram();
     updateColorgramme();
     displaySettings();
@@ -164,6 +168,7 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
 
 MeteorGUI::~MeteorGUI()
 {
+    saveRMOBReport(automaticRMOBReportFileName(QDate::currentDate()));
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
     m_glSpectrum->setPaintGLCallback(nullptr);
     m_glScope->disconnectTimer();
@@ -669,8 +674,6 @@ void MeteorGUI::on_saveColorgramme_clicked()
     const QDate monthDate = colorgrammeMonthDate();
     const int year = monthDate.year();
     const int month = monthDate.month();
-    const int daysInMonth = monthDate.daysInMonth();
-    const QString monthName = QLocale::c().standaloneMonthName(month, QLocale::ShortFormat).toLower();
     QFileDialog fileDialog(
         this,
         "Select file to save Colorgramme to",
@@ -690,14 +693,118 @@ void MeteorGUI::on_saveColorgramme_clicked()
         return;
     }
 
-    QFile file(fileNames[0]);
+    QString error;
+
+    if (!saveRMOBReport(fileNames[0], &error))
+    {
+        QMessageBox::critical(this, "Meteor", error);
+        return;
+    }
+}
+
+bool MeteorGUI::loadRMOBReport(const QString& fileName)
+{
+    QFile file(fileName);
+
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return false;
+    }
+
+    const QDate monthDate = QDate::currentDate();
+    const int year = monthDate.year();
+    const int month = monthDate.month();
+    const int daysInMonth = monthDate.daysInMonth();
+    QMap<QDate, QVector<int> > hourlyCounts;
+    QMap<QDate, QVector<bool> > hourlyData;
+    int totalCount = 0;
+    QTextStream in(&file);
+
+    while (!in.atEnd())
+    {
+        const QString line = in.readLine();
+
+        if (line.startsWith('[')) {
+            break;
+        }
+
+        const QStringList fields = line.split('|');
+
+        if (fields.size() < 25) {
+            continue;
+        }
+
+        bool dayOK = false;
+        const int day = fields[0].trimmed().toInt(&dayOK);
+
+        if (!dayOK || (day < 1) || (day > daysInMonth)) {
+            continue;
+        }
+
+        const QDate date(year, month, day);
+
+        if (!hourlyCounts.contains(date)) {
+            hourlyCounts[date] = QVector<int>(24, 0);
+        }
+
+        if (!hourlyData.contains(date)) {
+            hourlyData[date] = QVector<bool>(24, false);
+        }
+
+        for (int hour = 0; hour < 24; hour++)
+        {
+            const QString value = fields.value(hour + 1).trimmed();
+
+            if ((value.isEmpty()) || (value == "???")) {
+                continue;
+            }
+
+            bool countOK = false;
+            const int count = value.toInt(&countOK);
+
+            if (countOK)
+            {
+                hourlyData[date][hour] = true;
+                hourlyCounts[date][hour] = std::max(0, count);
+                totalCount += std::max(0, count);
+            }
+        }
+    }
+
+    m_hourlyCounts = hourlyCounts;
+    m_hourlyData = hourlyData;
+    m_totalCount = totalCount;
+    return true;
+}
+
+bool MeteorGUI::saveRMOBReport(const QString& fileName, QString *error) const
+{
+    QDir dir = QFileInfo(fileName).absoluteDir();
+
+    if (!dir.exists() && !dir.mkpath("."))
+    {
+        if (error) {
+            *error = QString("Failed to create directory %1").arg(dir.absolutePath());
+        }
+
+        return false;
+    }
+
+    QFile file(fileName);
 
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
-        QMessageBox::critical(this, "Meteor", QString("Failed to open file %1").arg(fileNames[0]));
-        return;
+        if (error) {
+            *error = QString("Failed to open file %1").arg(fileName);
+        }
+
+        return false;
     }
 
+    const QDate monthDate = colorgrammeMonthDate();
+    const int year = monthDate.year();
+    const int month = monthDate.month();
+    const int daysInMonth = monthDate.daysInMonth();
+    const QString monthName = QLocale::c().standaloneMonthName(month, QLocale::ShortFormat).toLower();
     QTextStream out(&file);
 
     out << monthName << "|";
@@ -742,6 +849,7 @@ void MeteorGUI::on_saveColorgramme_clicked()
     out << "[Pre-Amplifier]\n";
     out << "[Receiver]" << rmobReceiverName() << "\n";
     out << "[Observing Method]SDRangel\n";
+    return true;
 }
 
 void MeteorGUI::on_clearDetections_clicked()
@@ -1264,6 +1372,23 @@ bool MeteorGUI::hasHourData(const QDate& date, int hour) const
         && (hour < 24)
         && m_hourlyData.contains(date)
         && m_hourlyData[date].value(hour);
+}
+
+QString MeteorGUI::automaticRMOBReportFileName(const QDate& date) const
+{
+    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+
+    if (appDataPath.isEmpty()) {
+        appDataPath = QDir::homePath();
+    }
+
+    QDir dir(appDataPath);
+    dir.mkpath("meteor");
+    dir.cd("meteor");
+
+    return dir.filePath(QString("meteor_%1_%2.rmob.txt")
+        .arg(date.year())
+        .arg(date.month(), 2, 10, QLatin1Char('0')));
 }
 
 QDate MeteorGUI::colorgrammeMonthDate() const

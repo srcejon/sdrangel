@@ -176,6 +176,9 @@ private:
     void markCurrentHourData();
     void markHourData(const QDate& date, int hour);
     bool hasHourData(const QDate& date, int hour) const;
+    bool loadRMOBReport(const QString& fileName);
+    bool saveRMOBReport(const QString& fileName, QString *error = nullptr) const;
+    QString automaticRMOBReportFileName(const QDate& date) const;
     QColor colorgrammeColor(int count, int maxCount) const;
     QDate colorgrammeMonthDate() const;
     QString formatRMOBFrequency(qint64 frequency) const;

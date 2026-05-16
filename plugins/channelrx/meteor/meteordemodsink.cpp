@@ -567,8 +567,13 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         && (frequencyConcentration <= 0.35)
         && (sweepScore < 0.25)
         && (std::fabs(frequencyDrift) <= stableFrequencyLimit);
+    const bool broadValidationLineOK = (spectralProminence >= 6.0)
+        && (frequencyConcentration >= 0.60)
+        && (spectralBandContrastDB >= 6.0)
+        && (spectralBandwidth <= stableFrequencyLimit)
+        && (std::fabs(frequencyDrift) <= stableFrequencyLimit);
     const bool validatesPendingBroadPulse = m_messageQueueToGUI
-        && stableLineOK
+        && broadValidationLineOK
         && (durationS <= 1.0)
         && m_pendingBroadPulse.m_valid
         && (m_pulseStartSample >= m_pendingBroadPulse.m_endSample)
@@ -579,6 +584,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
              << " accepted:" << accepted
              << " directAccepted:" << directAccepted
              << " broadPulseCandidate:" << broadPulseCandidate
+             << " broadValidationLineOK:" << broadValidationLineOK
              << " validatesPendingBroadPulse:" << validatesPendingBroadPulse
              << " forceRejected:" << forceRejected
              << " durationOK:" << durationOK

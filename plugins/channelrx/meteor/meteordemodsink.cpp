@@ -547,8 +547,17 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         && (spectralBandwidth >= compactFrequencyLimit)
         && (spectralBandwidth <= stableFrequencyLimit)
         && (std::fabs(frequencyDrift) <= m_settings.m_maxFrequencyDrift);
-    const bool spectralEvidenceOK = stableLineOK || boundedBandOK;
-    const bool shortStandaloneLine = stableLineOK && !compactClippedMeteor && (durationS < 0.5);
+    const double peakAboveBackgroundDB = 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20) / std::max(m_noiseFloor, 1e-20));
+    const bool veryShortLineOK = (durationS <= 0.25)
+        && (peakAboveBackgroundDB >= 6.0)
+        && (spectralProminence >= 4.0)
+        && (frequencyConcentration >= 0.60)
+        && (spectralBandContrastDB >= 8.0)
+        && (spectralBandwidth <= stableFrequencyLimit)
+        && (std::fabs(frequencyDrift) <= stableFrequencyLimit);
+    const bool spectralEvidenceOK = stableLineOK || boundedBandOK || veryShortLineOK;
+    const bool strongShortLine = stableLineOK && (peakAboveBackgroundDB >= 12.0);
+    const bool shortStandaloneLine = stableLineOK && !strongShortLine && !veryShortLineOK && !compactClippedMeteor && (durationS < 0.5);
     const bool directAccepted = ((!forceRejected && durationOK) || compactClippedMeteor) && driftOK && spectralEvidenceOK && !shortStandaloneLine && m_messageQueueToGUI;
     const int broadValidationGapSamples = std::max(2, m_settings.m_channelSampleRate / 10);
 
@@ -594,10 +603,13 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
              << " spectralEvidenceOK:" << spectralEvidenceOK
              << " stableLineOK:" << stableLineOK
              << " boundedBandOK:" << boundedBandOK
+             << " veryShortLineOK:" << veryShortLineOK
              << " shortStandaloneLine:" << shortStandaloneLine
+             << " strongShortLine:" << strongShortLine
              << " durationS:" << durationS
              << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
              << " backgroundPowerDB:" << 10.0 * std::log10(std::max(m_noiseFloor, 1e-20))
+             << " peakAboveBackgroundDB:" << peakAboveBackgroundDB
              << " centerFrequency:" << centerFrequency
              << " frequencySpan:" << frequencySpan
              << " frequencyDrift:" << frequencyDrift

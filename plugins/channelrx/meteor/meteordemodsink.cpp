@@ -591,7 +591,7 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
         && (event.m_maxBandwidth <= stableFrequencyLimit);
     const bool spectralEvidenceOK = strongLineOK || boundedBandOK;
     const bool insideUsableBandwidth = std::fabs(centerFrequency) <= (double) m_settings.m_channelSampleRate * 0.30;
-    const bool duplicate = isDuplicateDetection(startSample, endSample);
+    const bool duplicate = isDuplicateDetection(startSample, endSample, centerFrequency, frequencySpan);
     const bool accepted = enoughFrames && durationOK && !sweepRejected && spectralEvidenceOK && insideUsableBandwidth && !duplicate;
 
     if (accepted || (spectralEvidenceOK && (durationS >= 1.0)))
@@ -1033,7 +1033,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
     const bool spectralEvidenceOK = stableLineOK || boundedBandOK || veryShortLineOK;
     const bool strongShortLine = stableLineOK && (peakAboveBackgroundDB >= 12.0);
     const bool shortStandaloneLine = stableLineOK && !strongShortLine && !veryShortLineOK && !compactClippedMeteor && (durationS < 0.5);
-    const bool directAccepted = ((!forceRejected && durationOK) || compactClippedMeteor) && driftOK && spectralEvidenceOK && !shortStandaloneLine && m_messageQueueToGUI;
+    const bool directAccepted = false;
     const int broadValidationGapSamples = std::max(2, m_settings.m_channelSampleRate / 10);
     const double reportedFrequencySpan = std::max(std::fabs(frequencySpan), spectralBandwidth);
 
@@ -1121,7 +1121,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
             report.m_frequencyDrift = frequencyDrift;
         }
 
-        if (!isDuplicateDetection(report.m_startSample, report.m_endSample)) {
+        if (!isDuplicateDetection(report.m_startSample, report.m_endSample, report.m_centerFrequency, report.m_frequencySpan)) {
             emitDetectionReport(report, "power");
         } else {
             qDebug() << "MeteorDemodSink::finishPulse: duplicate power-gate detection suppressed";
@@ -1149,25 +1149,68 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
 
 bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSample) const
 {
+    return isDuplicateDetection(startSample, endSample, 0.0, 0.0);
+}
+
+bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan) const
+{
     if (endSample < startSample) {
         return false;
     }
 
     const quint64 detectionLength = endSample - startSample + 1;
+    const bool hasFrequencyRange = frequencySpan > 0.0;
+    const double halfSpan = 0.5 * std::max(0.0, frequencySpan);
+    const double lowFrequency = centerFrequency - halfSpan;
+    const double highFrequency = centerFrequency + halfSpan;
+    const double binWidth = m_spectralFrameSize > 0
+        ? (double) m_settings.m_channelSampleRate / (double) m_spectralFrameSize
+        : 0.0;
+    const double frequencyPadding = std::max(4.0, binWidth);
+    const quint64 sameEventGapSamples = (quint64) std::max(1, m_settings.m_channelSampleRate) * 5;
+    const quint64 shortFragmentSamples = (quint64) std::max(1, m_settings.m_channelSampleRate) / 5;
 
     for (const DetectionRange& range : m_recentDetectionRanges)
     {
-        if ((endSample < range.m_startSample) || (startSample > range.m_endSample)) {
+        const quint64 rangeLength = range.m_endSample - range.m_startSample + 1;
+        const bool overlapsInTime = (endSample >= range.m_startSample) && (startSample <= range.m_endSample);
+
+        if (overlapsInTime)
+        {
+            const quint64 overlapStart = std::max(startSample, range.m_startSample);
+            const quint64 overlapEnd = std::min(endSample, range.m_endSample);
+            const quint64 overlapLength = overlapEnd - overlapStart + 1;
+            const quint64 shorterLength = std::max<quint64>(1, std::min(detectionLength, rangeLength));
+
+            if ((double) overlapLength >= 0.50 * (double) shorterLength) {
+                return true;
+            }
+        }
+
+        if (!hasFrequencyRange || (range.m_highFrequency <= range.m_lowFrequency)) {
             continue;
         }
 
-        const quint64 overlapStart = std::max(startSample, range.m_startSample);
-        const quint64 overlapEnd = std::min(endSample, range.m_endSample);
-        const quint64 overlapLength = overlapEnd - overlapStart + 1;
-        const quint64 rangeLength = range.m_endSample - range.m_startSample + 1;
-        const quint64 shorterLength = std::max<quint64>(1, std::min(detectionLength, rangeLength));
+        const quint64 gapSamples = endSample < range.m_startSample
+            ? range.m_startSample - endSample
+            : (startSample > range.m_endSample ? startSample - range.m_endSample : 0);
+        const bool shortFragmentPair = (detectionLength <= shortFragmentSamples) && (rangeLength <= shortFragmentSamples);
+        const bool closeInTime = shortFragmentPair && (gapSamples <= sameEventGapSamples);
+        const bool overlapsInFrequency = (highFrequency + frequencyPadding >= range.m_lowFrequency)
+            && (lowFrequency - frequencyPadding <= range.m_highFrequency);
 
-        if ((double) overlapLength >= 0.50 * (double) shorterLength) {
+        if (closeInTime && overlapsInFrequency)
+        {
+            qDebug() << "MeteorDemodSink::isDuplicateDetection: close spectral duplicate suppressed"
+                     << " gapSamples:" << gapSamples
+                     << " startSample:" << startSample
+                     << " endSample:" << endSample
+                     << " frequencyLow:" << lowFrequency
+                     << " frequencyHigh:" << highFrequency
+                     << " previousStart:" << range.m_startSample
+                     << " previousEnd:" << range.m_endSample
+                     << " previousFrequencyLow:" << range.m_lowFrequency
+                     << " previousFrequencyHigh:" << range.m_highFrequency;
             return true;
         }
     }
@@ -1177,11 +1220,17 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
 
 void MeteorDemodSink::rememberDetection(quint64 startSample, quint64 endSample)
 {
+    rememberDetection(startSample, endSample, 0.0, 0.0);
+}
+
+void MeteorDemodSink::rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan)
+{
     if (endSample < startSample) {
         return;
     }
 
-    m_recentDetectionRanges.push_back({startSample, endSample});
+    const double halfSpan = 0.5 * std::max(0.0, frequencySpan);
+    m_recentDetectionRanges.push_back({startSample, endSample, centerFrequency - halfSpan, centerFrequency + halfSpan});
     pruneRecentDetections();
 }
 
@@ -1237,7 +1286,7 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
         m_settings.m_channelSampleRate
     ));
 
-    rememberDetection(report.m_startSample, report.m_endSample);
+    rememberDetection(report.m_startSample, report.m_endSample, report.m_centerFrequency, report.m_frequencySpan);
 }
 
 QDateTime MeteorDemodSink::sampleCounterToDateTimeUtc(quint64 sampleCounter) const

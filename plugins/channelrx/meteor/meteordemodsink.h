@@ -221,6 +221,8 @@ private:
     struct DetectionRange {
         quint64 m_startSample;
         quint64 m_endSample;
+        double m_lowFrequency;
+        double m_highFrequency;
     };
 
     ScopeVis* m_scopeSink;
@@ -274,7 +276,9 @@ private:
     void finishSpectralEvent(const SpectralEvent& event);
     double estimateSpectralEventDurationSamples(const SpectralEvent& event, double& startSample) const;
     bool isDuplicateDetection(quint64 startSample, quint64 endSample) const;
+    bool isDuplicateDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan) const;
     void rememberDetection(quint64 startSample, quint64 endSample);
+    void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();
     void emitDetectionReport(const PulseReport& report, const char *source);
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;

@@ -245,8 +245,7 @@ The Colour tab controls image post-processing.
 <li>Edge Display selects whether detected edges are overlaid on the image or shown as edges only.</li>
 <li>Gaussian Blur and Median Blur set blur strength.</li>
 <li>Sharpen sets sharpening amount.</li>
-<li>Sobel Edge, Canny Edge, Line Enhancement and Ridge Detection set edge and line enhancement amounts.</li>
-<li>Ridge Kernel, Scale and Delta set the ridge detection filter parameters.</li>
+<li>Sobel Edge, Canny Edge and Line Enhancement set edge and line enhancement amounts.</li>
 <li>Flip X and Flip Y mirror the image horizontally or vertically.</li>
 <li>Unwarp Fisheye unwarps the image using the configured lens projection and FoV.</li>
 <li>Reset color settings restores colour, histogram, filter and image post-processing controls to their defaults.</li>
@@ -275,17 +274,13 @@ The Overlay tab controls spectrum, sky grid, tracked-object, date/time and HTML 
 
 <h3>Recording tab</h3>
 
-The Recording tab configures file output and scheduled capture.
+The Recording tab configures file output.
 
 <ul>
 <li>Image filename and browse button set the base filename used when saving images.</li>
 <li>Video filename and browse button set the base filename used when recording video.</li>
 <li>Record mode selects whether raw, processed or both raw and processed images/video are recorded.</li>
 <li>Hardware acceleration enables hardware-accelerated video encoding when supported by the selected video backend.</li>
-<li>Schedule enabled enables automatic scheduled capture.</li>
-<li>Start time and End time set the daily schedule window.</li>
-<li>Monday through Sunday check boxes select which weekdays the schedule applies to.</li>
-<li>Status displays the current schedule state.</li>
 </ul>
 
 <h3>Detection tab</h3>

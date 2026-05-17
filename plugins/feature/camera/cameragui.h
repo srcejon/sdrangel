@@ -27,7 +27,6 @@
 #include <QNetworkReply>
 #include <QPair>
 #include <QSize>
-#include <QTime>
 #include <QToolButton>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QMediaPlayer>
@@ -153,10 +152,6 @@ private:
     bool m_doApplySettings;
     bool m_forceSettings;
     QTimer m_updateTimer;
-    QTimer m_scheduleTimer;
-    bool m_scheduleManualStartLatch = false;
-    bool m_scheduleManualStopLatch = false;
-    bool m_scheduleLastWithinWindow = false;
     bool m_updatingMotionExclusionRectsTable = false;
     bool m_showMotionExclusionRects = true;
     QList<qint64> m_pipelineFrameTimes;
@@ -280,12 +275,6 @@ private:
     void populateGs232ControllerCombo();
     void applyPositionSync();
     void updatePositionControls();
-    void updateScheduleControls();
-    void updateScheduledCapture();
-    bool isWithinScheduleWindow() const;
-    bool isScheduleWeekdaySelected(int dayOfWeek) const;
-    int scheduleWeekdayMaskFromUi() const;
-    static QTime parseScheduleTime(const QString& timeText, const QTime& fallbackTime);
     void syncFromMainSettings();
     void syncFromSelectedGs232Controller();
     QPair<int, int> selectedGs232ControllerIndices() const;
@@ -462,10 +451,6 @@ private slots:
     void on_lensCenterOffsetXSpin_valueChanged(double value);
     void on_lensCenterOffsetYSpin_valueChanged(double value);
     void on_lensDistortionK1Spin_valueChanged(double value);
-    void on_scheduleEnabledCheck_toggled(bool checked);
-    void on_scheduleStartTimeEdit_timeChanged(const QTime& time);
-    void on_scheduleEndTimeEdit_timeChanged(const QTime& time);
-    void on_scheduleWeekdayCheck_toggled(bool checked);
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);
@@ -505,11 +490,6 @@ private slots:
     void on_cannyEdgeSpin_valueChanged(double value);
     void on_lineEnhancementSlider_valueChanged(int value);
     void on_lineEnhancementSpin_valueChanged(double value);
-    void on_ridgeDetectionSlider_valueChanged(int value);
-    void on_ridgeDetectionSpin_valueChanged(double value);
-    void on_ridgeDetectionKernelSizeCombo_currentIndexChanged(int index);
-    void on_ridgeDetectionScaleSpin_valueChanged(double value);
-    void on_ridgeDetectionDeltaSpin_valueChanged(double value);
     void on_flipXButton_toggled(bool checked);
     void on_flipYButton_toggled(bool checked);
     void on_brightnessSlider_valueChanged(int value);

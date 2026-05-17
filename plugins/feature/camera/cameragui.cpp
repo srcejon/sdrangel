@@ -153,7 +153,6 @@ bool CameraGUI::deserialize(const QByteArray& data)
         displaySettings();
         applyAllSettings();
         updateHardware();
-        updateScheduledCapture();
         m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
         return true;
     }
@@ -594,7 +593,6 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_doApplySettings(true),
     m_forceSettings(false),
     m_updateTimer(this),
-    m_scheduleTimer(this),
     m_lastFeatureState(0),
     m_dlm(this),
     m_lastAlpacaCameraState(-1),
@@ -720,7 +718,6 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 #endif
 
     connect(&m_statusTimer, &QTimer::timeout, this, &CameraGUI::updateStatus);
-    connect(&m_scheduleTimer, &QTimer::timeout, this, &CameraGUI::updateScheduledCapture);
     connect(m_settingsDialog, &QDialog::finished, this, &CameraGUI::onSettingsDialogFinished);
     connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
     connect(&m_dlm, &HttpDownloadManagerGUI::downloadComplete, this, &CameraGUI::handleYoloDownloadComplete);
@@ -739,13 +736,11 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     settingsUI()->exposureUnitsCombo->addItem(tr("min"), 60000.0);
     settingsUI()->exposureUnitsCombo->setCurrentIndex(1);
     m_statusTimer.start(250);
-    m_scheduleTimer.start(1000);
 
     connect(&m_updateTimer, &QTimer::timeout, this, &CameraGUI::updateHardware);
 
     displaySettings();
     applyAllSettings();
-    updateScheduledCapture();
     makeUIConnections();
     m_resizer.enableChildMouseTracking();
 
@@ -1115,20 +1110,9 @@ void CameraGUI::displaySettings()
     settingsUI()->lensCenterOffsetXSpin->setValue(m_settings.m_lensCenterOffsetX);
     settingsUI()->lensCenterOffsetYSpin->setValue(m_settings.m_lensCenterOffsetY);
     settingsUI()->lensDistortionK1Spin->setValue(m_settings.m_lensDistortionK1);
-    settingsUI()->scheduleEnabledCheck->setChecked(m_settings.m_scheduleEnabled);
-    settingsUI()->scheduleStartTimeEdit->setTime(parseScheduleTime(m_settings.m_scheduleStartTime, QTime(20, 0, 0)));
-    settingsUI()->scheduleEndTimeEdit->setTime(parseScheduleTime(m_settings.m_scheduleEndTime, QTime(6, 0, 0)));
-    settingsUI()->scheduleMondayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 0)) != 0);
-    settingsUI()->scheduleTuesdayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 1)) != 0);
-    settingsUI()->scheduleWednesdayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 2)) != 0);
-    settingsUI()->scheduleThursdayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 3)) != 0);
-    settingsUI()->scheduleFridayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 4)) != 0);
-    settingsUI()->scheduleSaturdayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 5)) != 0);
-    settingsUI()->scheduleSundayCheck->setChecked((m_settings.m_scheduleWeekdays & (1 << 6)) != 0);
     populateGs232ControllerCombo();
     applyPositionSync();
     updatePositionControls();
-    updateScheduleControls();
     settingsUI()->postProcessWhiteBalanceModeCombo->setCurrentIndex(m_settings.m_postProcessWhiteBalanceMode);
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(m_settings.m_postProcessWhiteBalanceRedGain);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(m_settings.m_postProcessWhiteBalanceGreenGain);
@@ -1173,14 +1157,6 @@ void CameraGUI::displaySettings()
     settingsUI()->cannyEdgeSpin->setValue(m_settings.m_cannyEdge);
     settingsUI()->lineEnhancementSlider->setValue(static_cast<int>(m_settings.m_lineEnhancement * 100.0));
     settingsUI()->lineEnhancementSpin->setValue(m_settings.m_lineEnhancement);
-    settingsUI()->ridgeDetectionSlider->setValue(static_cast<int>(m_settings.m_ridgeDetection * 100.0));
-    settingsUI()->ridgeDetectionSpin->setValue(m_settings.m_ridgeDetection);
-    settingsUI()->ridgeDetectionKernelSizeCombo->setCurrentIndex(
-        m_settings.m_ridgeDetectionKernelSize <= 1 ? 0 :
-        m_settings.m_ridgeDetectionKernelSize <= 3 ? 1 :
-        m_settings.m_ridgeDetectionKernelSize <= 5 ? 2 : 3);
-    settingsUI()->ridgeDetectionScaleSpin->setValue(m_settings.m_ridgeDetectionScale);
-    settingsUI()->ridgeDetectionDeltaSpin->setValue(m_settings.m_ridgeDetectionDelta);
     settingsUI()->flipXButton->setChecked(m_settings.m_flipX);
     settingsUI()->flipYButton->setChecked(m_settings.m_flipY);
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
@@ -1582,16 +1558,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->lensCenterOffsetXSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensCenterOffsetXSpin_valueChanged);
     QObject::connect(settingsUI()->lensCenterOffsetYSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensCenterOffsetYSpin_valueChanged);
     QObject::connect(settingsUI()->lensDistortionK1Spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensDistortionK1Spin_valueChanged);
-    QObject::connect(settingsUI()->scheduleEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleEnabledCheck_toggled);
-    QObject::connect(settingsUI()->scheduleStartTimeEdit, &QTimeEdit::timeChanged, this, &CameraGUI::on_scheduleStartTimeEdit_timeChanged);
-    QObject::connect(settingsUI()->scheduleEndTimeEdit, &QTimeEdit::timeChanged, this, &CameraGUI::on_scheduleEndTimeEdit_timeChanged);
-    QObject::connect(settingsUI()->scheduleMondayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
-    QObject::connect(settingsUI()->scheduleTuesdayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
-    QObject::connect(settingsUI()->scheduleWednesdayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
-    QObject::connect(settingsUI()->scheduleThursdayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
-    QObject::connect(settingsUI()->scheduleFridayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
-    QObject::connect(settingsUI()->scheduleSaturdayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
-    QObject::connect(settingsUI()->scheduleSundayCheck, &QCheckBox::toggled, this, &CameraGUI::on_scheduleWeekdayCheck_toggled);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -1631,11 +1597,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cannyEdgeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cannyEdgeSpin_valueChanged);
     QObject::connect(settingsUI()->lineEnhancementSlider, &QSlider::valueChanged, this, &CameraGUI::on_lineEnhancementSlider_valueChanged);
     QObject::connect(settingsUI()->lineEnhancementSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lineEnhancementSpin_valueChanged);
-    QObject::connect(settingsUI()->ridgeDetectionSlider, &QSlider::valueChanged, this, &CameraGUI::on_ridgeDetectionSlider_valueChanged);
-    QObject::connect(settingsUI()->ridgeDetectionSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_ridgeDetectionSpin_valueChanged);
-    QObject::connect(settingsUI()->ridgeDetectionKernelSizeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_ridgeDetectionKernelSizeCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->ridgeDetectionScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_ridgeDetectionScaleSpin_valueChanged);
-    QObject::connect(settingsUI()->ridgeDetectionDeltaSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_ridgeDetectionDeltaSpin_valueChanged);
     QObject::connect(settingsUI()->flipXButton, &QCheckBox::toggled, this, &CameraGUI::on_flipXButton_toggled);
     QObject::connect(settingsUI()->flipYButton, &QCheckBox::toggled, this, &CameraGUI::on_flipYButton_toggled);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
@@ -2310,120 +2271,6 @@ void CameraGUI::updatePositionControls()
     settingsUI()->altitudeSpin->setReadOnly(m_settings.m_positionSync);
     settingsUI()->azimuthSpin->setReadOnly(azElSynced);
     settingsUI()->elevationSpin->setReadOnly(azElSynced);
-}
-
-void CameraGUI::updateScheduleControls()
-{
-    const bool enabled = m_settings.m_scheduleEnabled;
-    settingsUI()->scheduleStartTimeEdit->setEnabled(enabled);
-    settingsUI()->scheduleEndTimeEdit->setEnabled(enabled);
-    settingsUI()->scheduleMondayCheck->setEnabled(enabled);
-    settingsUI()->scheduleTuesdayCheck->setEnabled(enabled);
-    settingsUI()->scheduleWednesdayCheck->setEnabled(enabled);
-    settingsUI()->scheduleThursdayCheck->setEnabled(enabled);
-    settingsUI()->scheduleFridayCheck->setEnabled(enabled);
-    settingsUI()->scheduleSaturdayCheck->setEnabled(enabled);
-    settingsUI()->scheduleSundayCheck->setEnabled(enabled);
-
-    QString statusText;
-    if (!enabled) {
-        statusText = tr("Disabled");
-    } else if (m_scheduleManualStartLatch) {
-        statusText = tr("Manual run until next window");
-    } else if (m_scheduleManualStopLatch) {
-        statusText = tr("Paused until next window");
-    } else if (m_settings.m_scheduleWeekdays == 0) {
-        statusText = tr("Inactive: no weekdays selected");
-    } else if (m_settings.m_scheduleStartTime == m_settings.m_scheduleEndTime) {
-        statusText = tr("Inactive: start and end are the same");
-    } else if (isWithinScheduleWindow()) {
-        statusText = tr("Inside schedule window");
-    } else {
-        statusText = tr("Outside schedule window");
-    }
-
-    settingsUI()->scheduleStatusValue->setText(statusText);
-}
-
-void CameraGUI::updateScheduledCapture()
-{
-    const bool withinWindow = isWithinScheduleWindow();
-
-    if (!m_scheduleLastWithinWindow && withinWindow) {
-        m_scheduleManualStartLatch = false;
-    }
-
-    if (m_scheduleLastWithinWindow && !withinWindow) {
-        m_scheduleManualStopLatch = false;
-    }
-    m_scheduleLastWithinWindow = withinWindow;
-
-    updateScheduleControls();
-
-    if (!m_settings.m_scheduleEnabled || (m_settings.m_scheduleStartTime == m_settings.m_scheduleEndTime) || (m_settings.m_scheduleWeekdays == 0)) {
-        return;
-    }
-
-    const bool shouldRun = (withinWindow && !m_scheduleManualStopLatch) || (!withinWindow && m_scheduleManualStartLatch);
-    const int state = m_camera->getState();
-
-    if (shouldRun && (state == Feature::StIdle)) {
-        m_camera->getInputMessageQueue()->push(Camera::MsgStartStop::create(true));
-    } else if (!shouldRun && (state == Feature::StRunning)) {
-        m_camera->getInputMessageQueue()->push(Camera::MsgStartStop::create(false));
-    }
-}
-
-bool CameraGUI::isWithinScheduleWindow() const
-{
-    const QTime startTime = parseScheduleTime(m_settings.m_scheduleStartTime, QTime(20, 0, 0));
-    const QTime endTime = parseScheduleTime(m_settings.m_scheduleEndTime, QTime(6, 0, 0));
-
-    if (!startTime.isValid() || !endTime.isValid() || (startTime == endTime) || (m_settings.m_scheduleWeekdays == 0)) {
-        return false;
-    }
-
-    const QTime now = QTime::currentTime();
-    const int today = QDate::currentDate().dayOfWeek();
-    const int previousDay = (today == 1) ? 7 : (today - 1);
-
-    if (startTime < endTime) {
-        return isScheduleWeekdaySelected(today) && (now >= startTime) && (now < endTime);
-    }
-
-    if (now >= startTime) {
-        return isScheduleWeekdaySelected(today);
-    }
-
-    return (now < endTime) && isScheduleWeekdaySelected(previousDay);
-}
-
-bool CameraGUI::isScheduleWeekdaySelected(int dayOfWeek) const
-{
-    if ((dayOfWeek < 1) || (dayOfWeek > 7)) {
-        return false;
-    }
-
-    return (m_settings.m_scheduleWeekdays & (1 << (dayOfWeek - 1))) != 0;
-}
-
-int CameraGUI::scheduleWeekdayMaskFromUi() const
-{
-    int mask = 0;
-    if (settingsUI()->scheduleMondayCheck->isChecked()) { mask |= (1 << 0); }
-    if (settingsUI()->scheduleTuesdayCheck->isChecked()) { mask |= (1 << 1); }
-    if (settingsUI()->scheduleWednesdayCheck->isChecked()) { mask |= (1 << 2); }
-    if (settingsUI()->scheduleThursdayCheck->isChecked()) { mask |= (1 << 3); }
-    if (settingsUI()->scheduleFridayCheck->isChecked()) { mask |= (1 << 4); }
-    if (settingsUI()->scheduleSaturdayCheck->isChecked()) { mask |= (1 << 5); }
-    if (settingsUI()->scheduleSundayCheck->isChecked()) { mask |= (1 << 6); }
-    return mask;
-}
-
-QTime CameraGUI::parseScheduleTime(const QString& timeText, const QTime& fallbackTime)
-{
-    const QTime parsedTime = QTime::fromString(timeText, QStringLiteral("HH:mm:ss"));
-    return parsedTime.isValid() ? parsedTime : fallbackTime;
 }
 
 void CameraGUI::syncFromMainSettings()
@@ -3933,25 +3780,6 @@ void CameraGUI::updateCameraSubframeControls()
 
 void CameraGUI::on_startStop_clicked(bool checked)
 {
-    if (m_settings.m_scheduleEnabled)
-    {
-        if (checked)
-        {
-            if (!isWithinScheduleWindow()) {
-                m_scheduleManualStartLatch = true;
-            }
-            m_scheduleManualStopLatch = false;
-        }
-        else
-        {
-            m_scheduleManualStartLatch = false;
-
-            if (isWithinScheduleWindow()) {
-                m_scheduleManualStopLatch = true;
-            }
-        }
-    }
-
     m_camera->getInputMessageQueue()->push(Camera::MsgStartStop::create(checked));
 }
 
@@ -4823,45 +4651,6 @@ void CameraGUI::on_lensDistortionK1Spin_valueChanged(double value)
     applySetting("lensDistortionK1");
 }
 
-void CameraGUI::on_scheduleEnabledCheck_toggled(bool checked)
-{
-    m_settings.m_scheduleEnabled = checked;
-    if (!checked)
-    {
-        m_scheduleManualStartLatch = false;
-        m_scheduleManualStopLatch = false;
-    }
-    updateScheduleControls();
-    applySetting("scheduleEnabled");
-    updateScheduledCapture();
-}
-
-void CameraGUI::on_scheduleStartTimeEdit_timeChanged(const QTime& time)
-{
-    m_settings.m_scheduleStartTime = time.toString(QStringLiteral("HH:mm:ss"));
-    updateScheduleControls();
-    applySetting("scheduleStartTime");
-    updateScheduledCapture();
-}
-
-void CameraGUI::on_scheduleEndTimeEdit_timeChanged(const QTime& time)
-{
-    m_settings.m_scheduleEndTime = time.toString(QStringLiteral("HH:mm:ss"));
-    updateScheduleControls();
-    applySetting("scheduleEndTime");
-    updateScheduledCapture();
-}
-
-void CameraGUI::on_scheduleWeekdayCheck_toggled(bool checked)
-{
-    Q_UNUSED(checked)
-
-    m_settings.m_scheduleWeekdays = scheduleWeekdayMaskFromUi();
-    updateScheduleControls();
-    applySetting("scheduleWeekdays");
-    updateScheduledCapture();
-}
-
 void CameraGUI::updatePostProcessWhiteBalanceControls()
 {
     const bool manual = m_settings.m_postProcessWhiteBalanceMode == 2;
@@ -5433,43 +5222,6 @@ void CameraGUI::on_lineEnhancementSpin_valueChanged(double value)
     applySetting("lineEnhancement");
 }
 
-void CameraGUI::on_ridgeDetectionSlider_valueChanged(int value)
-{
-    m_settings.m_ridgeDetection = value / 100.0;
-    settingsUI()->ridgeDetectionSpin->blockSignals(true);
-    settingsUI()->ridgeDetectionSpin->setValue(m_settings.m_ridgeDetection);
-    settingsUI()->ridgeDetectionSpin->blockSignals(false);
-    applySetting("ridgeDetection");
-}
-
-void CameraGUI::on_ridgeDetectionSpin_valueChanged(double value)
-{
-    settingsUI()->ridgeDetectionSlider->blockSignals(true);
-    settingsUI()->ridgeDetectionSlider->setValue(static_cast<int>(value * 100.0));
-    settingsUI()->ridgeDetectionSlider->blockSignals(false);
-    m_settings.m_ridgeDetection = value;
-    applySetting("ridgeDetection");
-}
-
-void CameraGUI::on_ridgeDetectionKernelSizeCombo_currentIndexChanged(int index)
-{
-    static const int kernelSizes[] = {1, 3, 5, 7};
-    m_settings.m_ridgeDetectionKernelSize = kernelSizes[qBound(0, index, 3)];
-    applySetting("ridgeDetectionKernelSize");
-}
-
-void CameraGUI::on_ridgeDetectionScaleSpin_valueChanged(double value)
-{
-    m_settings.m_ridgeDetectionScale = value;
-    applySetting("ridgeDetectionScale");
-}
-
-void CameraGUI::on_ridgeDetectionDeltaSpin_valueChanged(double value)
-{
-    m_settings.m_ridgeDetectionDelta = value;
-    applySetting("ridgeDetectionDelta");
-}
-
 void CameraGUI::on_flipXButton_toggled(bool checked)
 {
     m_settings.m_flipX = checked;
@@ -5812,10 +5564,6 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->sobelEdgeSpin->setValue(0.0);
     settingsUI()->cannyEdgeSpin->setValue(0.0);
     settingsUI()->lineEnhancementSpin->setValue(0.0);
-    settingsUI()->ridgeDetectionSpin->setValue(0.0);
-    settingsUI()->ridgeDetectionKernelSizeCombo->setCurrentIndex(1);
-    settingsUI()->ridgeDetectionScaleSpin->setValue(1.0);
-    settingsUI()->ridgeDetectionDeltaSpin->setValue(0.0);
     settingsUI()->flipXButton->setChecked(false);
     settingsUI()->flipYButton->setChecked(false);
 }

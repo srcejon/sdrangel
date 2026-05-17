@@ -76,6 +76,14 @@ if(Qt${QT_DEFAULT_MAJOR_VERSION}TextToSpeech_FOUND)
     list(APPEND TARGET_LIB Qt::TextToSpeech)
 endif()
 
+set(camera_OpenCV_LIBS ${OpenCV_LIBS})
+if(NOT OpenCV_bgsegm_FOUND)
+    list(REMOVE_ITEM camera_OpenCV_LIBS opencv_bgsegm)
+endif()
+if(NOT OpenCV_ximgproc_FOUND)
+    list(REMOVE_ITEM camera_OpenCV_LIBS opencv_ximgproc)
+endif()
+
 if(NOT Qt6_FOUND)
     add_library(${TARGET_NAME} ${camera_SOURCES})
 else()
@@ -97,7 +105,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     Qt::Gui
     Qt::Multimedia
     ${TARGET_LIB}
-    ${OpenCV_LIBS}
+    ${camera_OpenCV_LIBS}
     ${ASICAMERA_LIBRARIES}
     ${ZLIB_LIBRARIES}
     sdrbase

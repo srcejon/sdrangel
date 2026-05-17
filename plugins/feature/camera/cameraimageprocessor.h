@@ -24,7 +24,6 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/ximgproc/ridgefilter.hpp>
 
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -145,7 +144,6 @@ private:
     void applySobelEdge(cv::Mat& bgrMat) const;
     void applyCannyEdge(cv::Mat& bgrMat) const;
     void applyLineEnhancement(cv::Mat& bgrMat) const;
-    void applyRidgeDetection(cv::Mat& bgrMat) const;
     void applyFlip(cv::Mat& bgrMat) const;
     void applyBrightnessContrast(cv::Mat& bgrMat) const;
     void applyInvertColors(cv::Mat& bgrMat) const;

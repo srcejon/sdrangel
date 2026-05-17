@@ -240,10 +240,6 @@ struct CameraSettings
     static constexpr double m_maxFilterAmount = 3.0;
     static constexpr int m_minBlurRadius = 0;
     static constexpr int m_maxBlurRadius = 15;
-    static constexpr double m_minRidgeScale = 0.0;
-    static constexpr double m_maxRidgeScale = 16.0;
-    static constexpr double m_minRidgeDelta = -255.0;
-    static constexpr double m_maxRidgeDelta = 255.0;
     static constexpr double m_minBrightness = -100.0;
     static constexpr double m_maxBrightness = 100.0;
     static constexpr int m_minThreshold8Bit = 0;
@@ -373,10 +369,6 @@ struct CameraSettings
     double m_lensCenterOffsetX;    ///< Principal point X offset in pixels from image center
     double m_lensCenterOffsetY;    ///< Principal point Y offset in pixels from image center
     double m_lensDistortionK1;     ///< Radial distortion coefficient for plate solving / overlays
-    bool m_scheduleEnabled;        ///< Enable daily capture schedule
-    QString m_scheduleStartTime;   ///< Daily schedule start time in HH:mm:ss
-    QString m_scheduleEndTime;     ///< Daily schedule end time in HH:mm:ss
-    int m_scheduleWeekdays;        ///< Bitmask of active weekdays: bit0=Mon ... bit6=Sun
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;
@@ -404,10 +396,6 @@ struct CameraSettings
     double m_sobelEdge;       ///< Sobel edge blend amount: 0.0..3.0
     double m_cannyEdge;       ///< Canny edge blend amount: 0.0..3.0
     double m_lineEnhancement; ///< Thin line enhancement amount: 0.0..3.0
-    double m_ridgeDetection;  ///< Ridge detection blend amount: 0.0..3.0
-    int    m_ridgeDetectionKernelSize; ///< Sobel kernel size for ridge detection: 1,3,5,7
-    double m_ridgeDetectionScale; ///< Scale factor applied inside ridge detection
-    double m_ridgeDetectionDelta; ///< Bias added inside ridge detection
     bool m_flipX;             ///< Flip image horizontally
     bool m_flipY;             ///< Flip image vertically
     double m_brightness;      ///< Brightness adjustment: -100.0..100.0

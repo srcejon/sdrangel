@@ -224,10 +224,6 @@ void CameraSettings::resetToDefaults()
     m_lensCenterOffsetX = 0.0;
     m_lensCenterOffsetY = 0.0;
     m_lensDistortionK1 = 0.0;
-    m_scheduleEnabled = false;
-    m_scheduleStartTime = QStringLiteral("20:00:00");
-    m_scheduleEndTime = QStringLiteral("06:00:00");
-    m_scheduleWeekdays = 0x7f;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -252,10 +248,6 @@ void CameraSettings::resetToDefaults()
     m_sobelEdge = 0.0;
     m_cannyEdge = 0.0;
     m_lineEnhancement = 0.0;
-    m_ridgeDetection = 0.0;
-    m_ridgeDetectionKernelSize = 3;
-    m_ridgeDetectionScale = 1.0;
-    m_ridgeDetectionDelta = 0.0;
     m_flipX = false;
     m_flipY = false;
     m_brightness = 0.0;
@@ -414,184 +406,176 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(45, m_lensCenterOffsetX);
     s.writeDouble(46, m_lensCenterOffsetY);
     s.writeDouble(47, m_lensDistortionK1);
-    s.writeBool(48, m_scheduleEnabled);
-    s.writeString(49, m_scheduleStartTime);
-    s.writeString(50, m_scheduleEndTime);
-    s.writeS32(51, m_scheduleWeekdays);
 
     if (m_rollupState) {
-        s.writeBlob(52, m_rollupState->serialize());
+        s.writeBlob(48, m_rollupState->serialize());
     }
 
-    s.writeS32(53, m_workspaceIndex);
-    s.writeBlob(54, m_geometryBytes);
-    s.writeS32(55, m_cameraBinX);
-    s.writeS32(56, m_cameraBinY);
-    s.writeS32(57, m_cameraGain);
-    s.writeS32(58, m_cameraReadoutMode);
-    s.writeS32(59, m_cameraOffset);
-    s.writeS32(60, m_cameraNumX);
-    s.writeS32(61, m_cameraNumY);
-    s.writeS32(62, m_cameraStartX);
-    s.writeS32(63, m_cameraStartY);
-    s.writeS32(64, m_postProcessWhiteBalanceMode);
-    s.writeDouble(65, m_postProcessWhiteBalanceRedGain);
-    s.writeDouble(66, m_postProcessWhiteBalanceGreenGain);
-    s.writeDouble(67, m_postProcessWhiteBalanceBlueGain);
-    s.writeBool(68, m_postProcessUnwarp);
-    s.writeS32(69, static_cast<qint32>(m_histogramStretch));
-    s.writeDouble(70, m_histogramStretchBlackPoint);
-    s.writeDouble(71, m_histogramStretchWhitePoint);
-    s.writeDouble(72, m_histogramStretchGamma);
-    s.writeDouble(73, m_histogramStretchAsinhStrength);
-    s.writeDouble(74, m_histogramStretchLogStrength);
-    s.writeBool(75, m_postProcessGreyscale);
-    s.writeDouble(76, m_saturation);
-    s.writeDouble(77, m_gamma);
-    s.writeS32(78, m_gaussianBlur);
-    s.writeS32(79, m_medianBlur);
-    s.writeDouble(80, m_sharpen);
-    s.writeS32(81, static_cast<qint32>(m_edgeDisplayMode));
-    s.writeDouble(82, m_sobelEdge);
-    s.writeDouble(83, m_cannyEdge);
-    s.writeDouble(84, m_lineEnhancement);
-    s.writeDouble(85, m_ridgeDetection);
-    s.writeS32(86, m_ridgeDetectionKernelSize);
-    s.writeDouble(87, m_ridgeDetectionScale);
-    s.writeDouble(88, m_ridgeDetectionDelta);
-    s.writeBool(89, m_flipX);
-    s.writeBool(90, m_flipY);
-    s.writeDouble(91, m_brightness);
-    s.writeDouble(92, m_contrast);
-    s.writeBool(93, m_invertColors);
-    s.writeBool(94, m_overlayDateTime);
-    s.writeU32(95, m_dateTimeColor.rgba());
-    s.writeBool(96, m_diffMask);
-    s.writeS32(97, m_diffThreshold);
-    s.writeS32(98, m_dilationSize);
-    s.writeS32(99, m_diffMaskHistoryFrames);
-    s.writeS32(100, m_diffMaskCloseSize);
-    s.writeString(101, m_overlayFontFamily);
-    s.writeDouble(102, m_overlayFontScale);
-    s.writeS32(103, m_detectionRoiX);
-    s.writeS32(104, m_detectionRoiY);
-    s.writeS32(105, m_detectionRoiWidth);
-    s.writeS32(106, m_detectionRoiHeight);
-    s.writeBool(107, m_showDetectionRoi);
-    s.writeBool(108, m_motionDetect);
-    s.writeS32(109, static_cast<qint32>(m_motionBackgroundSubtractor));
-    s.writeS32(110, static_cast<qint32>(m_motionMaskView));
-    s.writeS32(111, m_motionHistory);
-    s.writeDouble(112, m_motionVarThreshold);
-    s.writeBool(113, m_motionDetectShadows);
-    s.writeS32(114, m_motionOpenSize);
-    s.writeS32(115, m_motionCloseSize);
-    s.writeS32(116, m_motionPersistenceFrames);
-    s.writeU32(117, m_motionBoxColor.rgba());
-    s.writeS32(118, m_minContourArea);
-    s.writeDouble(119, m_motionLearningRate);
-    s.writeS32(120, m_motionConfirmFrames);
-    s.writeDouble(121, m_motionDownscale);
-    s.writeBlob(122, serializeMotionExclusionRects(m_motionExclusionRects));
-    s.writeBool(123, m_showMotionExclusionRects);
-    s.writeBool(124, m_starDetect);
-    s.writeS32(125, m_starThreshold);
-    s.writeS32(126, m_starBackgroundBlur);
-    s.writeS32(127, m_starMinArea);
-    s.writeS32(128, m_starMaxArea);
-    s.writeDouble(129, m_starMaxAspectRatio);
-    s.writeS32(130, static_cast<qint32>(m_starDebugView));
-    s.writeU32(131, m_starColor.rgba());
-    s.writeBool(132, m_plateSolve);
-    s.writeDouble(133, m_plateSolveMaxMagnitude);
-    s.writeS32(134, m_plateSolveMinMatches);
-    s.writeDouble(135, m_plateSolveMatchRadius);
-    s.writeDouble(136, m_plateSolveFinalMatchRadius);
-    s.writeDouble(137, m_plateSolveSearchRadius);
-    s.writeS32(138, static_cast<qint32>(m_plateSolveStartMode));
-    s.writeBool(139, m_plateSolveUseDownloadedCatalog);
-    s.writeBool(140, m_plateSolveUseCurrentDateTime);
-    s.writeS64(141, m_plateSolveDateTime.isValid() ? m_plateSolveDateTime.toMSecsSinceEpoch() : 0);
-    s.writeS32(142, static_cast<qint32>(m_plateSolveApplyMode));
-    s.writeS32(143, static_cast<qint32>(m_plateSolveLabelMode));
-    s.writeBool(144, m_overlaySpectrum);
-    s.writeString(145, m_spectrumDevice);
-    s.writeS32(146, m_spectrumOffsetX);
-    s.writeS32(147, m_spectrumOffsetY);
-    s.writeDouble(148, m_spectrumScale);
-    s.writeString(149, m_dateTimeFormat);
-    s.writeS32(150, m_dateTimePosX);
-    s.writeS32(151, m_dateTimePosY);
-    s.writeBool(152, m_overlayText);
-    s.writeString(153, m_overlayTextString);
-    s.writeU32(154, m_overlayTextColor.rgba());
-    s.writeString(155, m_overlayTextFontFamily);
-    s.writeDouble(156, m_overlayTextFontScale);
-    s.writeS32(157, m_overlayTextPosX);
-    s.writeS32(158, m_overlayTextPosY);
-    s.writeBool(159, m_equatorialGrid);
-    s.writeU32(160, m_equatorialGridColor.rgba());
-    s.writeBool(161, m_altAzGrid);
-    s.writeU32(162, m_altAzGridColor.rgba());
-    s.writeBool(163, m_constellation);
-    s.writeU32(164, m_constellationColor.rgba());
-    s.writeS32(165, static_cast<qint32>(m_constellationOverlay));
-    s.writeBool(166, m_trackObjects);
-    s.writeDouble(167, m_trackObjectMinElevation);
-    s.writeU32(168, m_trackObjectColor.rgba());
-    s.writeDouble(169, m_trackObjectFontScale);
-    s.writeString(170, m_gridLabelFontFamily);
-    s.writeDouble(171, m_gridLabelFontScale);
-    s.writeBool(172, m_yoloEnabled);
-    s.writeString(173, m_yoloModelPath);
-    s.writeString(174, m_yoloLabelsPath);
-    s.writeDouble(175, m_yoloConfThreshold);
-    s.writeDouble(176, m_yoloNmsThreshold);
-    s.writeU32(177, m_yoloBoxColor.rgba());
-    s.writeDouble(178, m_yoloDisappearDebounce);
-    s.writeS32(179, m_yoloDnnTarget);
-    s.writeBlob(180, serializeObjectDeviceSettings(m_objectDeviceSettings));
-    s.writeBool(181, m_audioMute);
-    s.writeString(182, m_audioDeviceName);
-    s.writeS32(183, m_whiteBalanceMode);
-    s.writeDouble(184, m_exposureCompensation);
-    s.writeS32(185, m_focusMode);
-    s.writeDouble(186, m_focusDistance);
-    s.writeDouble(187, m_zoomFactor);
-    s.writeDouble(188, m_captureInterval);
-    s.writeS32(189, m_captureIntervalUnits);
-    s.writeBool(190, m_alpacaDiscoveryEnabled);
-    s.writeBool(191, m_alpacaApiLogEnabled);
-    s.writeBool(192, m_alpacaFocuserEnabled);
-    s.writeString(193, m_alpacaFocuserHost);
-    s.writeU32(194, m_alpacaFocuserPort);
-    s.writeS32(195, m_alpacaFocuserDeviceNumber);
-    s.writeS32(196, m_alpacaFocusPosition);
-    s.writeS32(197, m_alpacaFocusStepSize);
-    s.writeBool(198, m_alpacaFilterWheelEnabled);
-    s.writeString(199, m_alpacaFilterWheelHost);
-    s.writeU32(200, m_alpacaFilterWheelPort);
-    s.writeS32(201, m_alpacaFilterWheelDeviceNumber);
-    s.writeS32(202, m_alpacaFilterWheelPosition);
-    s.writeString(203, m_videoFileCameraPath);
+    s.writeS32(49, m_workspaceIndex);
+    s.writeBlob(50, m_geometryBytes);
+    s.writeS32(51, m_cameraBinX);
+    s.writeS32(52, m_cameraBinY);
+    s.writeS32(53, m_cameraGain);
+    s.writeS32(54, m_cameraReadoutMode);
+    s.writeS32(55, m_cameraOffset);
+    s.writeS32(56, m_cameraNumX);
+    s.writeS32(57, m_cameraNumY);
+    s.writeS32(58, m_cameraStartX);
+    s.writeS32(59, m_cameraStartY);
+    s.writeS32(60, m_postProcessWhiteBalanceMode);
+    s.writeDouble(61, m_postProcessWhiteBalanceRedGain);
+    s.writeDouble(62, m_postProcessWhiteBalanceGreenGain);
+    s.writeDouble(63, m_postProcessWhiteBalanceBlueGain);
+    s.writeBool(64, m_postProcessUnwarp);
+    s.writeS32(65, static_cast<qint32>(m_histogramStretch));
+    s.writeDouble(66, m_histogramStretchBlackPoint);
+    s.writeDouble(67, m_histogramStretchWhitePoint);
+    s.writeDouble(68, m_histogramStretchGamma);
+    s.writeDouble(69, m_histogramStretchAsinhStrength);
+    s.writeDouble(70, m_histogramStretchLogStrength);
+    s.writeBool(71, m_postProcessGreyscale);
+    s.writeDouble(72, m_saturation);
+    s.writeDouble(73, m_gamma);
+    s.writeS32(74, m_gaussianBlur);
+    s.writeS32(75, m_medianBlur);
+    s.writeDouble(76, m_sharpen);
+    s.writeS32(77, static_cast<qint32>(m_edgeDisplayMode));
+    s.writeDouble(78, m_sobelEdge);
+    s.writeDouble(79, m_cannyEdge);
+    s.writeDouble(80, m_lineEnhancement);
+    s.writeBool(81, m_flipX);
+    s.writeBool(82, m_flipY);
+    s.writeDouble(83, m_brightness);
+    s.writeDouble(84, m_contrast);
+    s.writeBool(85, m_invertColors);
+    s.writeBool(86, m_overlayDateTime);
+    s.writeU32(87, m_dateTimeColor.rgba());
+    s.writeBool(88, m_diffMask);
+    s.writeS32(89, m_diffThreshold);
+    s.writeS32(90, m_dilationSize);
+    s.writeS32(91, m_diffMaskHistoryFrames);
+    s.writeS32(92, m_diffMaskCloseSize);
+    s.writeString(93, m_overlayFontFamily);
+    s.writeDouble(94, m_overlayFontScale);
+    s.writeS32(95, m_detectionRoiX);
+    s.writeS32(96, m_detectionRoiY);
+    s.writeS32(97, m_detectionRoiWidth);
+    s.writeS32(98, m_detectionRoiHeight);
+    s.writeBool(99, m_showDetectionRoi);
+    s.writeBool(100, m_motionDetect);
+    s.writeS32(101, static_cast<qint32>(m_motionBackgroundSubtractor));
+    s.writeS32(102, static_cast<qint32>(m_motionMaskView));
+    s.writeS32(103, m_motionHistory);
+    s.writeDouble(104, m_motionVarThreshold);
+    s.writeBool(105, m_motionDetectShadows);
+    s.writeS32(106, m_motionOpenSize);
+    s.writeS32(107, m_motionCloseSize);
+    s.writeS32(108, m_motionPersistenceFrames);
+    s.writeU32(109, m_motionBoxColor.rgba());
+    s.writeS32(110, m_minContourArea);
+    s.writeDouble(111, m_motionLearningRate);
+    s.writeS32(112, m_motionConfirmFrames);
+    s.writeDouble(113, m_motionDownscale);
+    s.writeBlob(114, serializeMotionExclusionRects(m_motionExclusionRects));
+    s.writeBool(115, m_showMotionExclusionRects);
+    s.writeBool(116, m_starDetect);
+    s.writeS32(117, m_starThreshold);
+    s.writeS32(118, m_starBackgroundBlur);
+    s.writeS32(119, m_starMinArea);
+    s.writeS32(120, m_starMaxArea);
+    s.writeDouble(121, m_starMaxAspectRatio);
+    s.writeS32(122, static_cast<qint32>(m_starDebugView));
+    s.writeU32(123, m_starColor.rgba());
+    s.writeBool(124, m_plateSolve);
+    s.writeDouble(125, m_plateSolveMaxMagnitude);
+    s.writeS32(126, m_plateSolveMinMatches);
+    s.writeDouble(127, m_plateSolveMatchRadius);
+    s.writeDouble(128, m_plateSolveFinalMatchRadius);
+    s.writeDouble(129, m_plateSolveSearchRadius);
+    s.writeS32(130, static_cast<qint32>(m_plateSolveStartMode));
+    s.writeBool(131, m_plateSolveUseDownloadedCatalog);
+    s.writeBool(132, m_plateSolveUseCurrentDateTime);
+    s.writeS64(133, m_plateSolveDateTime.isValid() ? m_plateSolveDateTime.toMSecsSinceEpoch() : 0);
+    s.writeS32(134, static_cast<qint32>(m_plateSolveApplyMode));
+    s.writeS32(135, static_cast<qint32>(m_plateSolveLabelMode));
+    s.writeBool(136, m_overlaySpectrum);
+    s.writeString(137, m_spectrumDevice);
+    s.writeS32(138, m_spectrumOffsetX);
+    s.writeS32(139, m_spectrumOffsetY);
+    s.writeDouble(140, m_spectrumScale);
+    s.writeString(141, m_dateTimeFormat);
+    s.writeS32(142, m_dateTimePosX);
+    s.writeS32(143, m_dateTimePosY);
+    s.writeBool(144, m_overlayText);
+    s.writeString(145, m_overlayTextString);
+    s.writeU32(146, m_overlayTextColor.rgba());
+    s.writeString(147, m_overlayTextFontFamily);
+    s.writeDouble(148, m_overlayTextFontScale);
+    s.writeS32(149, m_overlayTextPosX);
+    s.writeS32(150, m_overlayTextPosY);
+    s.writeBool(151, m_equatorialGrid);
+    s.writeU32(152, m_equatorialGridColor.rgba());
+    s.writeBool(153, m_altAzGrid);
+    s.writeU32(154, m_altAzGridColor.rgba());
+    s.writeBool(155, m_constellation);
+    s.writeU32(156, m_constellationColor.rgba());
+    s.writeS32(157, static_cast<qint32>(m_constellationOverlay));
+    s.writeBool(158, m_trackObjects);
+    s.writeDouble(159, m_trackObjectMinElevation);
+    s.writeU32(160, m_trackObjectColor.rgba());
+    s.writeDouble(161, m_trackObjectFontScale);
+    s.writeString(162, m_gridLabelFontFamily);
+    s.writeDouble(163, m_gridLabelFontScale);
+    s.writeBool(164, m_yoloEnabled);
+    s.writeString(165, m_yoloModelPath);
+    s.writeString(166, m_yoloLabelsPath);
+    s.writeDouble(167, m_yoloConfThreshold);
+    s.writeDouble(168, m_yoloNmsThreshold);
+    s.writeU32(169, m_yoloBoxColor.rgba());
+    s.writeDouble(170, m_yoloDisappearDebounce);
+    s.writeS32(171, m_yoloDnnTarget);
+    s.writeBlob(172, serializeObjectDeviceSettings(m_objectDeviceSettings));
+    s.writeBool(173, m_audioMute);
+    s.writeString(174, m_audioDeviceName);
+    s.writeS32(175, m_whiteBalanceMode);
+    s.writeDouble(176, m_exposureCompensation);
+    s.writeS32(177, m_focusMode);
+    s.writeDouble(178, m_focusDistance);
+    s.writeDouble(179, m_zoomFactor);
+    s.writeDouble(180, m_captureInterval);
+    s.writeS32(181, m_captureIntervalUnits);
+    s.writeBool(182, m_alpacaDiscoveryEnabled);
+    s.writeBool(183, m_alpacaApiLogEnabled);
+    s.writeBool(184, m_alpacaFocuserEnabled);
+    s.writeString(185, m_alpacaFocuserHost);
+    s.writeU32(186, m_alpacaFocuserPort);
+    s.writeS32(187, m_alpacaFocuserDeviceNumber);
+    s.writeS32(188, m_alpacaFocusPosition);
+    s.writeS32(189, m_alpacaFocusStepSize);
+    s.writeBool(190, m_alpacaFilterWheelEnabled);
+    s.writeString(191, m_alpacaFilterWheelHost);
+    s.writeU32(192, m_alpacaFilterWheelPort);
+    s.writeS32(193, m_alpacaFilterWheelDeviceNumber);
+    s.writeS32(194, m_alpacaFilterWheelPosition);
+    s.writeString(195, m_videoFileCameraPath);
 
-    s.writeBool(204, m_useReverseAPI);
-    s.writeString(205, m_reverseAPIAddress);
-    s.writeU32(206, m_reverseAPIPort);
-    s.writeU32(207, m_reverseAPIFeatureSetIndex);
-    s.writeU32(208, m_reverseAPIFeatureIndex);
-    s.writeS32(209, m_asiCoolerOn);
-    s.writeS32(210, m_asiTargetTemp);
-    s.writeS32(211, m_asiUsbBandwidth);
-    s.writeS32(212, m_asiHighSpeedMode);
-    s.writeS32(213, m_asiColorImageType);
-    s.writeS32(214, m_diffMaskOpenSize);
-    s.writeS32(215, m_recordMode);
-    s.writeBool(216, m_asiAutoExposureGain);
-    s.writeDouble(217, m_postProcessWhiteBalanceHighlightProtection);
-    s.writeS32(218, m_videoPreRecordBufferSeconds);
-    s.writeS32(219, m_imageRecordLimit);
-    s.writeS32(220, m_videoRecordLimitSeconds);
+    s.writeBool(196, m_useReverseAPI);
+    s.writeString(197, m_reverseAPIAddress);
+    s.writeU32(198, m_reverseAPIPort);
+    s.writeU32(199, m_reverseAPIFeatureSetIndex);
+    s.writeU32(200, m_reverseAPIFeatureIndex);
+    s.writeS32(201, m_asiCoolerOn);
+    s.writeS32(202, m_asiTargetTemp);
+    s.writeS32(203, m_asiUsbBandwidth);
+    s.writeS32(204, m_asiHighSpeedMode);
+    s.writeS32(205, m_asiColorImageType);
+    s.writeS32(206, m_diffMaskOpenSize);
+    s.writeS32(207, m_recordMode);
+    s.writeBool(208, m_asiAutoExposureGain);
+    s.writeDouble(209, m_postProcessWhiteBalanceHighlightProtection);
+    s.writeS32(210, m_videoPreRecordBufferSeconds);
+    s.writeS32(211, m_imageRecordLimit);
+    s.writeS32(212, m_videoRecordLimitSeconds);
 
     return s.final();
 }
@@ -625,23 +609,23 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_resolutionWidth = std::max(m_minResolution, m_resolutionWidth);
         m_resolutionHeight = std::max(m_minResolution, m_resolutionHeight);
         m_framesPerSecond = std::max(m_minFramesPerSecond, m_framesPerSecond);
-        d.readDouble(188, &m_captureInterval, 1.0);
-        d.readS32(189, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
-        d.readBool(190, &m_alpacaDiscoveryEnabled, false);
-        d.readBool(191, &m_alpacaApiLogEnabled, false);
-        d.readBool(192, &m_alpacaFocuserEnabled, false);
-        d.readString(193, &m_alpacaFocuserHost, "127.0.0.1");
-        d.readU32(194, &utmp, 11111);
+        d.readDouble(180, &m_captureInterval, 1.0);
+        d.readS32(181, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
+        d.readBool(182, &m_alpacaDiscoveryEnabled, false);
+        d.readBool(183, &m_alpacaApiLogEnabled, false);
+        d.readBool(184, &m_alpacaFocuserEnabled, false);
+        d.readString(185, &m_alpacaFocuserHost, "127.0.0.1");
+        d.readU32(186, &utmp, 11111);
         m_alpacaFocuserPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
-        d.readS32(195, &m_alpacaFocuserDeviceNumber, 0);
-        d.readS32(196, &m_alpacaFocusPosition, 0);
-        d.readS32(197, &m_alpacaFocusStepSize, 100);
-        d.readBool(198, &m_alpacaFilterWheelEnabled, false);
-        d.readString(199, &m_alpacaFilterWheelHost, "127.0.0.1");
-        d.readU32(200, &utmp, 11111);
+        d.readS32(187, &m_alpacaFocuserDeviceNumber, 0);
+        d.readS32(188, &m_alpacaFocusPosition, 0);
+        d.readS32(189, &m_alpacaFocusStepSize, 100);
+        d.readBool(190, &m_alpacaFilterWheelEnabled, false);
+        d.readString(191, &m_alpacaFilterWheelHost, "127.0.0.1");
+        d.readU32(192, &utmp, 11111);
         m_alpacaFilterWheelPort = (utmp <= 65535) ? static_cast<uint16_t>(utmp) : 11111;
-        d.readS32(201, &m_alpacaFilterWheelDeviceNumber, 0);
-        d.readS32(202, &m_alpacaFilterWheelPosition, 0);
+        d.readS32(193, &m_alpacaFilterWheelDeviceNumber, 0);
+        d.readS32(194, &m_alpacaFilterWheelPosition, 0);
         m_alpacaFocuserDeviceNumber = std::max(m_minNonNegative, m_alpacaFocuserDeviceNumber);
         m_alpacaFocusPosition = std::max(m_minNonNegative, m_alpacaFocusPosition);
         m_alpacaFocusStepSize = std::max(m_minPositive, m_alpacaFocusStepSize);
@@ -660,11 +644,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(16, &m_saveVideo, false);
         d.readString(17, &m_videoFileName, "camera.mp4");
         d.readBool(18, &m_videoHwAcceleration, true);
-        d.readS32(218, &m_videoPreRecordBufferSeconds, 0);
+        d.readS32(210, &m_videoPreRecordBufferSeconds, 0);
         m_videoPreRecordBufferSeconds = qBound(0, m_videoPreRecordBufferSeconds, 60);
-        d.readS32(219, &m_imageRecordLimit, 0);
+        d.readS32(211, &m_imageRecordLimit, 0);
         m_imageRecordLimit = std::max(m_minNonNegative, m_imageRecordLimit);
-        d.readS32(220, &m_videoRecordLimitSeconds, 0);
+        d.readS32(212, &m_videoRecordLimitSeconds, 0);
         m_videoRecordLimitSeconds = std::max(m_minNonNegative, m_videoRecordLimitSeconds);
         d.readBool(21, &m_stackEnabled, false);
         d.readS32(22, &m_stackFrameCount, 4);
@@ -693,28 +677,24 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(45, &m_lensCenterOffsetX, 0.0);
         d.readDouble(46, &m_lensCenterOffsetY, 0.0);
         d.readDouble(47, &m_lensDistortionK1, 0.0);
-        d.readBool(48, &m_scheduleEnabled, false);
-        d.readString(49, &m_scheduleStartTime, "20:00:00");
-        d.readString(50, &m_scheduleEndTime, "06:00:00");
-        d.readS32(51, &m_scheduleWeekdays, 0x7f);
 
         if (m_rollupState)
         {
-            d.readBlob(52, &bytetmp);
+            d.readBlob(48, &bytetmp);
             m_rollupState->deserialize(bytetmp);
         }
 
-        d.readS32(53, &m_workspaceIndex, 0);
-        d.readBlob(54, &m_geometryBytes);
-        d.readS32(55, &m_cameraBinX, 1);
-        d.readS32(56, &m_cameraBinY, 1);
-        d.readS32(57, &m_cameraGain, 100);
-        d.readS32(58, &m_cameraReadoutMode, 0);
-        d.readS32(59, &m_cameraOffset, 1);
-        d.readS32(60, &m_cameraNumX, 0);
-        d.readS32(61, &m_cameraNumY, 0);
-        d.readS32(62, &m_cameraStartX, 0);
-        d.readS32(63, &m_cameraStartY, 0);
+        d.readS32(49, &m_workspaceIndex, 0);
+        d.readBlob(50, &m_geometryBytes);
+        d.readS32(51, &m_cameraBinX, 1);
+        d.readS32(52, &m_cameraBinY, 1);
+        d.readS32(53, &m_cameraGain, 100);
+        d.readS32(54, &m_cameraReadoutMode, 0);
+        d.readS32(55, &m_cameraOffset, 1);
+        d.readS32(56, &m_cameraNumX, 0);
+        d.readS32(57, &m_cameraNumY, 0);
+        d.readS32(58, &m_cameraStartX, 0);
+        d.readS32(59, &m_cameraStartY, 0);
         m_cameraBinX = std::max(m_minPositive, m_cameraBinX);
         m_cameraBinY = std::max(m_minPositive, m_cameraBinY);
         m_cameraNumX = std::max(m_minNonNegative, m_cameraNumX);
@@ -722,38 +702,34 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_cameraStartX = std::max(m_minNonNegative, m_cameraStartX);
         m_cameraStartY = std::max(m_minNonNegative, m_cameraStartY);
         m_cameraReadoutMode = std::max(m_minNonNegative, m_cameraReadoutMode);
-        d.readS32(64, &m_postProcessWhiteBalanceMode, 0);
-        d.readDouble(65, &m_postProcessWhiteBalanceRedGain, 1.0);
-        d.readDouble(66, &m_postProcessWhiteBalanceGreenGain, 1.0);
-        d.readDouble(67, &m_postProcessWhiteBalanceBlueGain, 1.0);
-        d.readBool(68, &m_postProcessUnwarp, false);
-        d.readS32(69, reinterpret_cast<qint32*>(&m_histogramStretch), static_cast<qint32>(HistogramStretchOff));
-        d.readDouble(70, &m_histogramStretchBlackPoint, 0.0);
-        d.readDouble(71, &m_histogramStretchWhitePoint, 1.0);
-        d.readDouble(72, &m_histogramStretchGamma, 1.0);
-        d.readDouble(73, &m_histogramStretchAsinhStrength, 10.0);
-        d.readDouble(74, &m_histogramStretchLogStrength, 10.0);
-        d.readBool(75, &m_postProcessGreyscale, false);
-        d.readDouble(76, &m_saturation, 1.0);
-        d.readDouble(77, &m_gamma, 1.0);
-        d.readS32(78, &m_gaussianBlur, 0);
-        d.readS32(79, &m_medianBlur, 0);
-        d.readDouble(80, &m_sharpen, 0.0);
+        d.readS32(60, &m_postProcessWhiteBalanceMode, 0);
+        d.readDouble(61, &m_postProcessWhiteBalanceRedGain, 1.0);
+        d.readDouble(62, &m_postProcessWhiteBalanceGreenGain, 1.0);
+        d.readDouble(63, &m_postProcessWhiteBalanceBlueGain, 1.0);
+        d.readBool(64, &m_postProcessUnwarp, false);
+        d.readS32(65, reinterpret_cast<qint32*>(&m_histogramStretch), static_cast<qint32>(HistogramStretchOff));
+        d.readDouble(66, &m_histogramStretchBlackPoint, 0.0);
+        d.readDouble(67, &m_histogramStretchWhitePoint, 1.0);
+        d.readDouble(68, &m_histogramStretchGamma, 1.0);
+        d.readDouble(69, &m_histogramStretchAsinhStrength, 10.0);
+        d.readDouble(70, &m_histogramStretchLogStrength, 10.0);
+        d.readBool(71, &m_postProcessGreyscale, false);
+        d.readDouble(72, &m_saturation, 1.0);
+        d.readDouble(73, &m_gamma, 1.0);
+        d.readS32(74, &m_gaussianBlur, 0);
+        d.readS32(75, &m_medianBlur, 0);
+        d.readDouble(76, &m_sharpen, 0.0);
         qint32 edgeDisplayMode = static_cast<qint32>(EdgeDisplayOverlay);
-        d.readS32(81, &edgeDisplayMode, static_cast<qint32>(EdgeDisplayOverlay));
+        d.readS32(77, &edgeDisplayMode, static_cast<qint32>(EdgeDisplayOverlay));
         m_edgeDisplayMode = static_cast<EdgeDisplayMode>(qBound(
             static_cast<qint32>(EdgeDisplayOverlay),
             edgeDisplayMode,
             static_cast<qint32>(EdgeDisplayEdgesOnly)));
-        d.readDouble(82, &m_sobelEdge, 0.0);
-        d.readDouble(83, &m_cannyEdge, 0.0);
-        d.readDouble(84, &m_lineEnhancement, 0.0);
-        d.readDouble(85, &m_ridgeDetection, 0.0);
-        d.readS32(86, &m_ridgeDetectionKernelSize, 3);
-        d.readDouble(87, &m_ridgeDetectionScale, 1.0);
-        d.readDouble(88, &m_ridgeDetectionDelta, 0.0);
-        d.readBool(89, &m_flipX, false);
-        d.readBool(90, &m_flipY, false);
+        d.readDouble(78, &m_sobelEdge, 0.0);
+        d.readDouble(79, &m_cannyEdge, 0.0);
+        d.readDouble(80, &m_lineEnhancement, 0.0);
+        d.readBool(81, &m_flipX, false);
+        d.readBool(82, &m_flipY, false);
         m_postProcessWhiteBalanceMode = qBound(m_minNonNegative, m_postProcessWhiteBalanceMode, 2);
         m_postProcessWhiteBalanceRedGain = qBound(m_minWhiteBalanceGain, m_postProcessWhiteBalanceRedGain, m_maxWhiteBalanceGain);
         m_postProcessWhiteBalanceGreenGain = qBound(m_minWhiteBalanceGain, m_postProcessWhiteBalanceGreenGain, m_maxWhiteBalanceGain);
@@ -776,26 +752,19 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_sobelEdge = qBound(m_minFilterAmount, m_sobelEdge, m_maxFilterAmount);
         m_cannyEdge = qBound(m_minFilterAmount, m_cannyEdge, m_maxFilterAmount);
         m_lineEnhancement = qBound(m_minFilterAmount, m_lineEnhancement, m_maxFilterAmount);
-        m_ridgeDetection = qBound(m_minFilterAmount, m_ridgeDetection, m_maxFilterAmount);
-        m_ridgeDetectionKernelSize = (m_ridgeDetectionKernelSize <= 1) ? 1 :
-            (m_ridgeDetectionKernelSize <= 3) ? 3 :
-            (m_ridgeDetectionKernelSize <= 5) ? 5 : 7;
-        m_ridgeDetectionScale = qBound(m_minRidgeScale, m_ridgeDetectionScale, m_maxRidgeScale);
-        m_ridgeDetectionDelta = qBound(m_minRidgeDelta, m_ridgeDetectionDelta, m_maxRidgeDelta);
-
-        d.readDouble(91, &m_brightness, 0.0);
-        d.readDouble(92, &m_contrast, 1.0);
-        d.readBool(93, &m_invertColors, false);
-        d.readBool(94, &m_overlayDateTime, false);
+        d.readDouble(83, &m_brightness, 0.0);
+        d.readDouble(84, &m_contrast, 1.0);
+        d.readBool(85, &m_invertColors, false);
+        d.readBool(86, &m_overlayDateTime, false);
         uint32_t colorRgba = QColor(Qt::white).rgba();
-        d.readU32(95, &colorRgba, QColor(Qt::white).rgba());
+        d.readU32(87, &colorRgba, QColor(Qt::white).rgba());
         m_dateTimeColor = QColor::fromRgba(colorRgba);
-        d.readBool(96, &m_diffMask, false);
-        d.readS32(97, &m_diffThreshold, 30);
-        d.readS32(98, &m_dilationSize, 3);
-        d.readS32(99, &m_diffMaskHistoryFrames, 1);
-        d.readS32(100, &m_diffMaskCloseSize, 0);
-        d.readS32(214, &m_diffMaskOpenSize, 0);
+        d.readBool(88, &m_diffMask, false);
+        d.readS32(89, &m_diffThreshold, 30);
+        d.readS32(90, &m_dilationSize, 3);
+        d.readS32(91, &m_diffMaskHistoryFrames, 1);
+        d.readS32(92, &m_diffMaskCloseSize, 0);
+        d.readS32(206, &m_diffMaskOpenSize, 0);
         m_brightness = qBound(m_minBrightness, m_brightness, m_maxBrightness);
         m_contrast = qBound(m_minWhiteBalanceGain, m_contrast, m_maxFilterAmount);
         m_diffThreshold = qBound(m_minThreshold8Bit, m_diffThreshold, m_maxThreshold8Bit);
@@ -804,76 +773,76 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_diffMaskHistoryFrames = qBound(m_minShortHistoryFrames, m_diffMaskHistoryFrames, m_maxShortHistoryFrames);
         m_diffMaskCloseSize = qBound(m_minMorphologyKernel, m_diffMaskCloseSize, m_maxMorphologyKernel);
 
-        d.readString(101, &m_overlayFontFamily, "");
-        d.readDouble(102, &m_overlayFontScale, 12.0);
-        d.readS32(103, &m_detectionRoiX, 0);
-        d.readS32(104, &m_detectionRoiY, 0);
-        d.readS32(105, &m_detectionRoiWidth, 0);
-        d.readS32(106, &m_detectionRoiHeight, 0);
-        d.readBool(107, &m_showDetectionRoi, true);
-        d.readBool(108, &m_motionDetect, false);
+        d.readString(93, &m_overlayFontFamily, "");
+        d.readDouble(94, &m_overlayFontScale, 12.0);
+        d.readS32(95, &m_detectionRoiX, 0);
+        d.readS32(96, &m_detectionRoiY, 0);
+        d.readS32(97, &m_detectionRoiWidth, 0);
+        d.readS32(98, &m_detectionRoiHeight, 0);
+        d.readBool(99, &m_showDetectionRoi, true);
+        d.readBool(100, &m_motionDetect, false);
         qint32 motionBackgroundSubtractor = static_cast<qint32>(MotionBackgroundSubtractorMOG2);
-        d.readS32(109, &motionBackgroundSubtractor, static_cast<qint32>(MotionBackgroundSubtractorMOG2));
+        d.readS32(101, &motionBackgroundSubtractor, static_cast<qint32>(MotionBackgroundSubtractorMOG2));
         m_motionBackgroundSubtractor = static_cast<MotionBackgroundSubtractor>(qBound(
             static_cast<qint32>(MotionBackgroundSubtractorMOG2),
             motionBackgroundSubtractor,
             static_cast<qint32>(MotionBackgroundSubtractorKNN)));
         qint32 motionMaskView = static_cast<qint32>(MotionMaskViewOff);
-        d.readS32(110, &motionMaskView, static_cast<qint32>(MotionMaskViewOff));
+        d.readS32(102, &motionMaskView, static_cast<qint32>(MotionMaskViewOff));
         m_motionMaskView = static_cast<MotionMaskView>(qBound(
             static_cast<qint32>(MotionMaskViewOff),
             motionMaskView,
             static_cast<qint32>(MotionMaskViewFinal)));
-        d.readS32(111, &m_motionHistory, 500);
-        d.readDouble(112, &m_motionVarThreshold, 16.0);
-        d.readDouble(119, &m_motionLearningRate, -1.0);
-        d.readS32(120, &m_motionConfirmFrames, 1);
-        d.readDouble(121, &m_motionDownscale, 1.0);
-        d.readBool(113, &m_motionDetectShadows, true);
-        d.readS32(114, &m_motionOpenSize, 0);
-        d.readS32(115, &m_motionCloseSize, 0);
-        d.readS32(116, &m_motionPersistenceFrames, 0);
+        d.readS32(103, &m_motionHistory, 500);
+        d.readDouble(104, &m_motionVarThreshold, 16.0);
+        d.readDouble(111, &m_motionLearningRate, -1.0);
+        d.readS32(112, &m_motionConfirmFrames, 1);
+        d.readDouble(113, &m_motionDownscale, 1.0);
+        d.readBool(105, &m_motionDetectShadows, true);
+        d.readS32(106, &m_motionOpenSize, 0);
+        d.readS32(107, &m_motionCloseSize, 0);
+        d.readS32(108, &m_motionPersistenceFrames, 0);
         uint32_t motionBoxColorRgba = QColor(Qt::red).rgba();
-        d.readU32(117, &motionBoxColorRgba, QColor(Qt::red).rgba());
+        d.readU32(109, &motionBoxColorRgba, QColor(Qt::red).rgba());
         m_motionBoxColor = QColor::fromRgba(motionBoxColorRgba);
-        d.readS32(118, &m_minContourArea, 100);
-        d.readBlob(122, &bytetmp);
+        d.readS32(110, &m_minContourArea, 100);
+        d.readBlob(114, &bytetmp);
         deserializeMotionExclusionRects(bytetmp, m_motionExclusionRects);
-        d.readBool(123, &m_showMotionExclusionRects, true);
-        d.readBool(124, &m_starDetect, false);
-        d.readS32(125, &m_starThreshold, 24);
-        d.readS32(126, &m_starBackgroundBlur, 12);
-        d.readS32(127, &m_starMinArea, 1);
-        d.readS32(128, &m_starMaxArea, 36);
-        d.readDouble(129, &m_starMaxAspectRatio, 2.5);
+        d.readBool(115, &m_showMotionExclusionRects, true);
+        d.readBool(116, &m_starDetect, false);
+        d.readS32(117, &m_starThreshold, 24);
+        d.readS32(118, &m_starBackgroundBlur, 12);
+        d.readS32(119, &m_starMinArea, 1);
+        d.readS32(120, &m_starMaxArea, 36);
+        d.readDouble(121, &m_starMaxAspectRatio, 2.5);
         qint32 starDebugView = static_cast<qint32>(StarDebugViewOff);
-        d.readS32(130, &starDebugView, static_cast<qint32>(StarDebugViewOff));
+        d.readS32(122, &starDebugView, static_cast<qint32>(StarDebugViewOff));
         m_starDebugView = static_cast<StarDebugView>(qBound(
             static_cast<qint32>(StarDebugViewOff),
             starDebugView,
             static_cast<qint32>(StarDebugViewFinal)));
         uint32_t starColorRgba = QColor(120, 255, 255).rgba();
-        d.readU32(131, &starColorRgba, QColor(120, 255, 255).rgba());
+        d.readU32(123, &starColorRgba, QColor(120, 255, 255).rgba());
         m_starColor = QColor::fromRgba(starColorRgba);
-        d.readBool(132, &m_plateSolve, false);
-        d.readDouble(133, &m_plateSolveMaxMagnitude, 3.5);
-        d.readS32(134, &m_plateSolveMinMatches, 4);
-        d.readDouble(135, &m_plateSolveMatchRadius, 24.0);
-        d.readDouble(136, &m_plateSolveFinalMatchRadius, m_plateSolveMatchRadius);
-        d.readDouble(137, &m_plateSolveSearchRadius, 12.0);
-        d.readBool(139, &m_plateSolveUseDownloadedCatalog, false);
-        d.readBool(140, &m_plateSolveUseCurrentDateTime, true);
+        d.readBool(124, &m_plateSolve, false);
+        d.readDouble(125, &m_plateSolveMaxMagnitude, 3.5);
+        d.readS32(126, &m_plateSolveMinMatches, 4);
+        d.readDouble(127, &m_plateSolveMatchRadius, 24.0);
+        d.readDouble(128, &m_plateSolveFinalMatchRadius, m_plateSolveMatchRadius);
+        d.readDouble(129, &m_plateSolveSearchRadius, 12.0);
+        d.readBool(131, &m_plateSolveUseDownloadedCatalog, false);
+        d.readBool(132, &m_plateSolveUseCurrentDateTime, true);
         qint64 plateSolveDateTimeMs = QDateTime::currentDateTime().toMSecsSinceEpoch();
-        d.readS64(141, &plateSolveDateTimeMs, plateSolveDateTimeMs);
+        d.readS64(133, &plateSolveDateTimeMs, plateSolveDateTimeMs);
         m_plateSolveDateTime = QDateTime::fromMSecsSinceEpoch(std::max(plateSolveDateTimeMs, m_minPlateSolveDateTimeMs));
         qint32 plateSolveApplyMode = static_cast<qint32>(PlateSolveApplyAzElRollFov);
-        d.readS32(142, &plateSolveApplyMode, static_cast<qint32>(PlateSolveApplyAzElRollFov));
+        d.readS32(134, &plateSolveApplyMode, static_cast<qint32>(PlateSolveApplyAzElRollFov));
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(plateSolveApplyMode);
         qint32 plateSolveStartMode = static_cast<qint32>(PlateSolveStartFovAzElRoll);
-        d.readS32(138, &plateSolveStartMode, plateSolveStartMode);
+        d.readS32(130, &plateSolveStartMode, plateSolveStartMode);
         m_plateSolveStartMode = static_cast<PlateSolveStartMode>(plateSolveStartMode);
         qint32 plateSolveLabelMode = static_cast<qint32>(PlateSolveLabelName);
-        d.readS32(143, &plateSolveLabelMode, static_cast<qint32>(PlateSolveLabelName));
+        d.readS32(135, &plateSolveLabelMode, static_cast<qint32>(PlateSolveLabelName));
         m_plateSolveLabelMode = static_cast<PlateSolveLabelMode>(plateSolveLabelMode);
         m_overlayFontScale = qBound(m_minOverlayFontScale, m_overlayFontScale, m_maxOverlayFontScale);
         m_detectionRoiX = qBound(m_minUiPixelOffset, m_detectionRoiX, m_maxUiPixelOffset);
@@ -912,112 +881,112 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_motionPersistenceFrames = qBound(m_minNonNegative, m_motionPersistenceFrames, m_maxShortHistoryFrames);
         m_minContourArea = qBound(m_minContourAreaBound, m_minContourArea, m_maxContourAreaBound);
         qint32 videoPostProcessMode = static_cast<qint32>(SavedMediaRaw);
-        d.readS32(215, &videoPostProcessMode, videoPostProcessMode);
+        d.readS32(207, &videoPostProcessMode, videoPostProcessMode);
         m_recordMode = qBound(SavedMediaRaw, static_cast<SavedMediaMode>(videoPostProcessMode), SavedMediaBoth);
-        d.readDouble(217, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
+        d.readDouble(209, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
-        d.readBool(144, &m_overlaySpectrum, false);
-        d.readString(145, &m_spectrumDevice, "");
-        d.readS32(146, &m_spectrumOffsetX, 0);
-        d.readS32(147, &m_spectrumOffsetY, 0);
+        d.readBool(136, &m_overlaySpectrum, false);
+        d.readString(137, &m_spectrumDevice, "");
+        d.readS32(138, &m_spectrumOffsetX, 0);
+        d.readS32(139, &m_spectrumOffsetY, 0);
         m_spectrumOffsetX = qBound(m_minSignedUiPixelOffset, m_spectrumOffsetX, m_maxSignedUiPixelOffset);
         m_spectrumOffsetY = qBound(m_minSignedUiPixelOffset, m_spectrumOffsetY, m_maxSignedUiPixelOffset);
-        d.readDouble(148, &m_spectrumScale, 1.0);
+        d.readDouble(140, &m_spectrumScale, 1.0);
         m_spectrumScale = qBound(m_minSpectrumScale, m_spectrumScale, m_maxSpectrumScale);
-        d.readString(149, &m_dateTimeFormat, "yyyy-MM-dd hh:mm:ss");
-        d.readS32(150, &m_dateTimePosX, 4);
-        d.readS32(151, &m_dateTimePosY, 0);
+        d.readString(141, &m_dateTimeFormat, "yyyy-MM-dd hh:mm:ss");
+        d.readS32(142, &m_dateTimePosX, 4);
+        d.readS32(143, &m_dateTimePosY, 0);
         m_dateTimePosX = qBound(m_minUiPixelOffset, m_dateTimePosX, m_maxUiPixelOffset);
         m_dateTimePosY = qBound(m_minUiPixelOffset, m_dateTimePosY, m_maxUiPixelOffset);
-        d.readBool(159, &m_equatorialGrid, false);
+        d.readBool(151, &m_equatorialGrid, false);
         uint32_t equatorialGridColorRgba = QColor(80, 170, 255).rgba();
-        d.readU32(160, &equatorialGridColorRgba, QColor(80, 170, 255).rgba());
+        d.readU32(152, &equatorialGridColorRgba, QColor(80, 170, 255).rgba());
         m_equatorialGridColor = QColor::fromRgba(equatorialGridColorRgba);
-        d.readBool(161, &m_altAzGrid, false);
+        d.readBool(153, &m_altAzGrid, false);
         uint32_t altAzGridColorRgba = QColor(255, 170, 80).rgba();
-        d.readU32(162, &altAzGridColorRgba, QColor(255, 170, 80).rgba());
+        d.readU32(154, &altAzGridColorRgba, QColor(255, 170, 80).rgba());
         m_altAzGridColor = QColor::fromRgba(altAzGridColorRgba);
-        d.readBool(163, &m_constellation, false);
+        d.readBool(155, &m_constellation, false);
         uint32_t constellationColorRgba = QColor(255, 255, 120).rgba();
-        d.readU32(164, &constellationColorRgba, QColor(255, 255, 120).rgba());
+        d.readU32(156, &constellationColorRgba, QColor(255, 255, 120).rgba());
         m_constellationColor = QColor::fromRgba(constellationColorRgba);
-        d.readS32(165, reinterpret_cast<qint32*>(&m_constellationOverlay), static_cast<qint32>(ConstellationOverlayUrsaMajor));
-        d.readBool(166, &m_trackObjects, false);
-        d.readDouble(167, &m_trackObjectMinElevation, 0.0);
+        d.readS32(157, reinterpret_cast<qint32*>(&m_constellationOverlay), static_cast<qint32>(ConstellationOverlayUrsaMajor));
+        d.readBool(158, &m_trackObjects, false);
+        d.readDouble(159, &m_trackObjectMinElevation, 0.0);
         m_trackObjectMinElevation = qBound(m_minNormalized, m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
         uint32_t trackObjectColorRgba = QColor(80, 255, 80).rgba();
-        d.readU32(168, &trackObjectColorRgba, QColor(80, 255, 80).rgba());
+        d.readU32(160, &trackObjectColorRgba, QColor(80, 255, 80).rgba());
         m_trackObjectColor = QColor::fromRgba(trackObjectColorRgba);
-        d.readDouble(169, &m_trackObjectFontScale, 9.0);
+        d.readDouble(161, &m_trackObjectFontScale, 9.0);
         m_trackObjectFontScale = qBound(m_minOverlayFontScale, m_trackObjectFontScale, m_maxOverlayFontScale);
-        d.readString(170, &m_gridLabelFontFamily, "");
-        d.readDouble(171, &m_gridLabelFontScale, 9.0);
+        d.readString(162, &m_gridLabelFontFamily, "");
+        d.readDouble(163, &m_gridLabelFontScale, 9.0);
         m_gridLabelFontScale = qBound(m_minOverlayFontScale, m_gridLabelFontScale, m_maxOverlayFontScale);
-        d.readBool(152, &m_overlayText, false);
-        d.readString(153, &m_overlayTextString, DEFAULT_OVERLAY_TEXT_STRING);
+        d.readBool(144, &m_overlayText, false);
+        d.readString(145, &m_overlayTextString, DEFAULT_OVERLAY_TEXT_STRING);
         uint32_t overlayTextColorRgba = QColor(Qt::white).rgba();
-        d.readU32(154, &overlayTextColorRgba, QColor(Qt::white).rgba());
+        d.readU32(146, &overlayTextColorRgba, QColor(Qt::white).rgba());
         m_overlayTextColor = QColor::fromRgba(overlayTextColorRgba);
-        d.readString(155, &m_overlayTextFontFamily, "");
-        d.readDouble(156, &m_overlayTextFontScale, 12.0);
+        d.readString(147, &m_overlayTextFontFamily, "");
+        d.readDouble(148, &m_overlayTextFontScale, 12.0);
         m_overlayTextFontScale = qBound(m_minOverlayFontScale, m_overlayTextFontScale, m_maxOverlayFontScale);
-        d.readS32(157, &m_overlayTextPosX, 4);
-        d.readS32(158, &m_overlayTextPosY, 0);
+        d.readS32(149, &m_overlayTextPosX, 4);
+        d.readS32(150, &m_overlayTextPosY, 0);
         m_overlayTextPosX = qBound(m_minUiPixelOffset, m_overlayTextPosX, m_maxUiPixelOffset);
         m_overlayTextPosY = qBound(m_minUiPixelOffset, m_overlayTextPosY, m_maxUiPixelOffset);
-        d.readBool(172, &m_yoloEnabled, false);
-        d.readString(173, &m_yoloModelPath, "");
-        d.readString(174, &m_yoloLabelsPath, "");
-        d.readDouble(175, &m_yoloConfThreshold, 0.5);
-        d.readDouble(176, &m_yoloNmsThreshold, 0.45);
+        d.readBool(164, &m_yoloEnabled, false);
+        d.readString(165, &m_yoloModelPath, "");
+        d.readString(166, &m_yoloLabelsPath, "");
+        d.readDouble(167, &m_yoloConfThreshold, 0.5);
+        d.readDouble(168, &m_yoloNmsThreshold, 0.45);
         m_yoloConfThreshold = qBound(m_minNormalized, m_yoloConfThreshold, m_maxNormalized);
         m_yoloNmsThreshold = qBound(m_minNormalized, m_yoloNmsThreshold, m_maxNormalized);
         uint32_t yoloBoxColorRgba = QColor(Qt::green).rgba();
-        d.readU32(177, &yoloBoxColorRgba, QColor(Qt::green).rgba());
+        d.readU32(169, &yoloBoxColorRgba, QColor(Qt::green).rgba());
         m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
-        d.readDouble(178, &m_yoloDisappearDebounce, 0.0);
+        d.readDouble(170, &m_yoloDisappearDebounce, 0.0);
         m_yoloDisappearDebounce = qBound(m_minYoloDisappearDebounce, m_yoloDisappearDebounce, m_maxYoloDisappearDebounce);
-        d.readS32(179, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
-        d.readBlob(180, &bytetmp);
+        d.readS32(171, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
+        d.readBlob(172, &bytetmp);
         deserializeObjectDeviceSettings(bytetmp, m_objectDeviceSettings);
 
-        d.readBool(181, &m_audioMute, true);
-        d.readString(182, &m_audioDeviceName, "");
-        d.readS32(183, &m_whiteBalanceMode, 0);
+        d.readBool(173, &m_audioMute, true);
+        d.readString(174, &m_audioDeviceName, "");
+        d.readS32(175, &m_whiteBalanceMode, 0);
         m_whiteBalanceMode = std::max(m_minNonNegative, m_whiteBalanceMode);
-        d.readDouble(184, &m_exposureCompensation, 0.0);
+        d.readDouble(176, &m_exposureCompensation, 0.0);
         m_exposureCompensation = qBound(m_minExposureCompensation, m_exposureCompensation, m_maxExposureCompensation);
-        d.readS32(185, &m_focusMode, 0);
+        d.readS32(177, &m_focusMode, 0);
         m_focusMode = std::max(m_minNonNegative, m_focusMode);
-        d.readDouble(186, &m_focusDistance, 1.0);
+        d.readDouble(178, &m_focusDistance, 1.0);
         m_focusDistance = qBound(m_minNormalized, m_focusDistance, m_maxNormalized);
-        d.readDouble(187, &m_zoomFactor, 1.0);
+        d.readDouble(179, &m_zoomFactor, 1.0);
         m_zoomFactor = std::max(m_minZoomFactor, m_zoomFactor);
 
-        d.readString(203, &m_videoFileCameraPath, "");
+        d.readString(195, &m_videoFileCameraPath, "");
         d.readBool(19, &m_videoLoop, false);
         d.readDouble(20, &m_videoPlaybackRate, 1.0);
         m_videoPlaybackRate = qBound(m_minVideoPlaybackRate, m_videoPlaybackRate, m_maxVideoPlaybackRate);
 
-        d.readBool(204, &m_useReverseAPI);
-        d.readString(205, &m_reverseAPIAddress);
-        d.readU32(206, &utmp, 0);
+        d.readBool(196, &m_useReverseAPI);
+        d.readString(197, &m_reverseAPIAddress);
+        d.readU32(198, &utmp, 0);
 
         if ((utmp > 1023) && (utmp < 65535)) {
             m_reverseAPIPort = utmp;
         } else {
             m_reverseAPIPort = 8888;
         }
-        d.readU32(207, &utmp, 0);
+        d.readU32(199, &utmp, 0);
         m_reverseAPIFeatureSetIndex = utmp > 99 ? 99 : utmp;
-        d.readU32(208, &utmp, 0);
+        d.readU32(200, &utmp, 0);
         m_reverseAPIFeatureIndex = utmp > 99 ? 99 : utmp;
-        d.readS32(209, &m_asiCoolerOn, -1);
-        d.readS32(210, &m_asiTargetTemp, std::numeric_limits<int>::min());
-        d.readS32(211, &m_asiUsbBandwidth, -1);
-        d.readS32(212, &m_asiHighSpeedMode, -1);
-        d.readS32(213, (qint32 *) &m_asiColorImageType, (qint32) AsiColorImageTypeRgb24);
-        d.readBool(216, &m_asiAutoExposureGain, false);
+        d.readS32(201, &m_asiCoolerOn, -1);
+        d.readS32(202, &m_asiTargetTemp, std::numeric_limits<int>::min());
+        d.readS32(203, &m_asiUsbBandwidth, -1);
+        d.readS32(204, &m_asiHighSpeedMode, -1);
+        d.readS32(205, (qint32 *) &m_asiColorImageType, (qint32) AsiColorImageTypeRgb24);
+        d.readBool(208, &m_asiAutoExposureGain, false);
         m_asiCoolerOn = qBound(m_minAsiControl, m_asiCoolerOn, m_maxAsiControl);
         m_asiUsbBandwidth = std::max(m_minAsiControl, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(m_minAsiControl, m_asiHighSpeedMode, m_maxAsiControl);
@@ -1329,18 +1298,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("lensDistortionK1")) {
         m_lensDistortionK1 = qBound(m_minLensDistortionK1, settings.m_lensDistortionK1, m_maxLensDistortionK1);
     }
-    if (settingsKeys.contains("scheduleEnabled")) {
-        m_scheduleEnabled = settings.m_scheduleEnabled;
-    }
-    if (settingsKeys.contains("scheduleStartTime")) {
-        m_scheduleStartTime = settings.m_scheduleStartTime;
-    }
-    if (settingsKeys.contains("scheduleEndTime")) {
-        m_scheduleEndTime = settings.m_scheduleEndTime;
-    }
-    if (settingsKeys.contains("scheduleWeekdays")) {
-        m_scheduleWeekdays = settings.m_scheduleWeekdays & 0x7f;
-    }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
     }
@@ -1415,20 +1372,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("lineEnhancement")) {
         m_lineEnhancement = qBound(m_minFilterAmount, settings.m_lineEnhancement, m_maxFilterAmount);
-    }
-    if (settingsKeys.contains("ridgeDetection")) {
-        m_ridgeDetection = qBound(m_minFilterAmount, settings.m_ridgeDetection, m_maxFilterAmount);
-    }
-    if (settingsKeys.contains("ridgeDetectionKernelSize")) {
-        m_ridgeDetectionKernelSize = (settings.m_ridgeDetectionKernelSize <= 1) ? 1 :
-            (settings.m_ridgeDetectionKernelSize <= 3) ? 3 :
-            (settings.m_ridgeDetectionKernelSize <= 5) ? 5 : 7;
-    }
-    if (settingsKeys.contains("ridgeDetectionScale")) {
-        m_ridgeDetectionScale = qBound(m_minRidgeScale, settings.m_ridgeDetectionScale, m_maxRidgeScale);
-    }
-    if (settingsKeys.contains("ridgeDetectionDelta")) {
-        m_ridgeDetectionDelta = qBound(m_minRidgeDelta, settings.m_ridgeDetectionDelta, m_maxRidgeDelta);
     }
     if (settingsKeys.contains("flipX")) {
         m_flipX = settings.m_flipX;
@@ -1983,18 +1926,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("lensDistortionK1") || force) {
         ostr << " m_lensDistortionK1: " << m_lensDistortionK1;
     }
-    if (settingsKeys.contains("scheduleEnabled") || force) {
-        ostr << " m_scheduleEnabled: " << m_scheduleEnabled;
-    }
-    if (settingsKeys.contains("scheduleStartTime") || force) {
-        ostr << " m_scheduleStartTime: " << m_scheduleStartTime.toStdString();
-    }
-    if (settingsKeys.contains("scheduleEndTime") || force) {
-        ostr << " m_scheduleEndTime: " << m_scheduleEndTime.toStdString();
-    }
-    if (settingsKeys.contains("scheduleWeekdays") || force) {
-        ostr << " m_scheduleWeekdays: " << m_scheduleWeekdays;
-    }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;
     }
@@ -2063,18 +1994,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("lineEnhancement") || force) {
         ostr << " m_lineEnhancement: " << m_lineEnhancement;
-    }
-    if (settingsKeys.contains("ridgeDetection") || force) {
-        ostr << " m_ridgeDetection: " << m_ridgeDetection;
-    }
-    if (settingsKeys.contains("ridgeDetectionKernelSize") || force) {
-        ostr << " m_ridgeDetectionKernelSize: " << m_ridgeDetectionKernelSize;
-    }
-    if (settingsKeys.contains("ridgeDetectionScale") || force) {
-        ostr << " m_ridgeDetectionScale: " << m_ridgeDetectionScale;
-    }
-    if (settingsKeys.contains("ridgeDetectionDelta") || force) {
-        ostr << " m_ridgeDetectionDelta: " << m_ridgeDetectionDelta;
     }
     if (settingsKeys.contains("flipX") || force) {
         ostr << " m_flipX: " << m_flipX;

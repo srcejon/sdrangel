@@ -1097,10 +1097,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
              << " startSample:" << m_pulseStartSample
              << " endSample:" << endSample;
 
-    const bool usePulseEnvelopeForSpectralReports = !forceRejected
-        && durationOK
-        && driftOK
-        && (durationS >= 0.5);
+    const bool usePulseEnvelopeForSpectralReports = driftOK && (durationS >= 0.5);
 
     finishPendingSpectralReportsForPulse(endSample, usePulseEnvelopeForSpectralReports);
 
@@ -1175,7 +1172,7 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
         : 0.0;
     const double frequencyPadding = std::max(4.0, binWidth);
     const quint64 sameEventGapSamples = (quint64) std::max(1, m_settings.m_channelSampleRate) * 5;
-    const quint64 shortFragmentSamples = (quint64) std::max(1, m_settings.m_channelSampleRate) / 5;
+    const quint64 compactEventSamples = (quint64) std::max(1, m_settings.m_channelSampleRate) * 2;
 
     for (const DetectionRange& range : m_recentDetectionRanges)
     {
@@ -1201,8 +1198,8 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
         const quint64 gapSamples = endSample < range.m_startSample
             ? range.m_startSample - endSample
             : (startSample > range.m_endSample ? startSample - range.m_endSample : 0);
-        const bool shortFragmentPair = (detectionLength <= shortFragmentSamples) && (rangeLength <= shortFragmentSamples);
-        const bool closeInTime = shortFragmentPair && (gapSamples <= sameEventGapSamples);
+        const bool compactEventPair = (detectionLength <= compactEventSamples) && (rangeLength <= compactEventSamples);
+        const bool closeInTime = compactEventPair && (gapSamples <= sameEventGapSamples);
         const bool overlapsInFrequency = (highFrequency + frequencyPadding >= range.m_lowFrequency)
             && (lowFrequency - frequencyPadding <= range.m_highFrequency);
 
@@ -1288,6 +1285,7 @@ void MeteorDemodSink::finishPendingSpectralReportsForPulse(quint64 pulseEndSampl
     }
 
     std::vector<PulseReport> remainingReports;
+    std::vector<PulseReport> reportsToEmit;
 
     for (PulseReport report : m_pendingSpectralReports)
     {
@@ -1301,11 +1299,35 @@ void MeteorDemodSink::finishPendingSpectralReportsForPulse(quint64 pulseEndSampl
         {
             PulseReport extendedReport = report;
 
-            if (estimatePulseBandEnvelope(extendedReport)) {
+            if (estimatePulseBandEnvelope(extendedReport))
+            {
+                qDebug() << "MeteorDemodSink::finishPendingSpectralReportsForPulse: extended spectral duration"
+                         << " from:" << report.m_durationS
+                         << " to:" << extendedReport.m_durationS
+                         << " centerFrequency:" << extendedReport.m_centerFrequency
+                         << " startSample:" << extendedReport.m_startSample
+                         << " endSample:" << extendedReport.m_endSample;
                 report = extendedReport;
             }
         }
 
+        reportsToEmit.push_back(report);
+    }
+
+    std::sort(
+        reportsToEmit.begin(),
+        reportsToEmit.end(),
+        [](const PulseReport& left, const PulseReport& right)
+        {
+            if (left.m_durationS != right.m_durationS) {
+                return left.m_durationS > right.m_durationS;
+            }
+
+            return left.m_peakPower > right.m_peakPower;
+        });
+
+    for (const PulseReport& report : reportsToEmit)
+    {
         if (!isDuplicateDetection(report.m_startSample, report.m_endSample, report.m_centerFrequency, report.m_frequencySpan)) {
             emitDetectionReport(report, "spectral");
         } else {

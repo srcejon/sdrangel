@@ -1548,7 +1548,7 @@ bool CameraPostProcessor::ensureVideoWriter(cv::VideoWriter& writer, const QStri
         params);
 
     if (writer.isOpened()) {
-        qDebug() << "CameraPostProcessor opened:" << filename << "backend:" << writer.getBackendName();
+        qDebug() << "CameraPostProcessor opened:" << filename << "backend:" << QString::fromStdString(writer.getBackendName());
     } else {
         qWarning() << "CameraPostProcessor failed to open:" << filename;
     }

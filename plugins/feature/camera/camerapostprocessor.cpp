@@ -840,7 +840,6 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
-    const QImage& pipelineImage = frame->m_image;
     const QImage& unprocessedImage = frame->m_unprocessedImage.isNull() ? frame->m_image : frame->m_unprocessedImage;
     const QImage processed = applyPostProcessing(*frame);
 

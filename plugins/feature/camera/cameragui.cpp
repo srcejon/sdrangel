@@ -589,11 +589,6 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_scheduleTimer(this),
     m_lastFeatureState(0),
     m_dlm(this),
-    m_settingsDialog(nullptr),
-    m_detectionHistoryDialog(nullptr),
-    m_histogramDialog(nullptr),
-    m_alpacaHasNamedGains(false),
-    m_alpacaHasNamedOffsets(false),
     m_lastAlpacaCameraState(-1),
     m_lastAlpacaCaptureTimeMs(-1),
     m_lastAlpacaReceiveImageFormat(),
@@ -601,6 +596,11 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_lastAlpacaCcdTemperatureValid(false),
     m_lastAlpacaErrorNumber(0),
     m_lastAlpacaErrorMessage(),
+    m_settingsDialog(nullptr),
+    m_detectionHistoryDialog(nullptr),
+    m_histogramDialog(nullptr),
+    m_alpacaHasNamedGains(false),
+    m_alpacaHasNamedOffsets(false),
     m_alpacaCameraSizeX(0),
     m_alpacaCameraSizeY(0),
     m_qtZoomSupported(false),
@@ -1525,7 +1525,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
-    QObject::connect(settingsUI()->recordModeCombo, &QComboBox::currentIndexChanged, this, &CameraGUI::on_recordModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->recordModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_recordModeCombo_currentIndexChanged);
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
@@ -1951,7 +1951,11 @@ void CameraGUI::updateVideoFileControls()
 {
     const bool fileCameraSelected = m_settings.isFileCamera();
     const bool hasVideoFile = fileCameraSelected && !m_settings.m_videoFileCameraPath.isEmpty();
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const bool hasPlaybackPosition = hasVideoFile && (m_mediaPlayerDurationMs > 0);
+#else
+    const bool hasPlaybackPosition = false;
+#endif
 
     ui->browseVideoFileButton->setVisible(fileCameraSelected);
     ui->browseVideoFileButton->setEnabled(fileCameraSelected);

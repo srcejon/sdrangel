@@ -2255,6 +2255,8 @@ Evaluation evaluatePose(const CameraSettings& settings,
                         double distortionK1 = 0.0,
                         double matchRadiusOverride = -1.0)
 {
+    Q_UNUSED(captureDateTimeUtc)
+
     Evaluation evaluation;
     evaluation.azimuthDegrees = normalizeDegrees(azimuthDegrees);
     evaluation.elevationDegrees = elevationDegrees;
@@ -3094,7 +3096,6 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const double maxElevationDegrees = 90.0;
     const double elevationStepDegrees = 15.0;
 
-    const std::array<double, 5> coarseOffsets = {{-1.0, -0.5, 0.0, 0.5, 1.0}};
     const std::array<double, 3> coarseFovOffsets = {{-1.0, 0.0, 1.0}};
     const std::array<double, 5> coarseOffsetsOrdered = {{0.0, -0.5, 0.5, -1.0, 1.0}};
     const std::array<double, 3> coarseFovOffsetsOrdered = {{0.0, -1.0, 1.0}};

@@ -2657,8 +2657,6 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
         }
     }
 
-    const int range = maxValue - minValue;
-
     if (m_alpacaSensorType == 2)
     {
         const int phaseX = ((m_alpacaBayerOffsetX % 2) + 2) % 2;

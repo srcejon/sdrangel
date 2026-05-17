@@ -358,11 +358,11 @@ CameraDetector::CameraDetector() :
     m_captureActive(false),
     m_motionPersistenceRemaining(0),
     m_motionConfirmCount(0),
-    m_yoloInputSize(640, 640),
-    m_processingFrame(false)
+    m_yoloInputSize(640, 640)
 #ifdef QT_TEXTTOSPEECH_FOUND
     , m_speech(new QTextToSpeech(this))
 #endif
+    , m_processingFrame(false)
 {
 }
 

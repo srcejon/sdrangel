@@ -1164,6 +1164,11 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         && (std::fabs(frequencyDrift) <= stableFrequencyLimit);
     const bool spectralEvidenceOK = stableLineOK || boundedBandOK || veryShortLineOK;
     const bool strongShortLine = stableLineOK && (peakAboveBackgroundDB >= 12.0);
+    const bool strongCoherentLine = stableLineOK
+        && (peakAboveBackgroundDB >= 18.0)
+        && (spectralProminence >= 18.0)
+        && (frequencyConcentration >= 0.90)
+        && (spectralBandContrastDB >= 3.5);
     const bool shortStandaloneLine = stableLineOK && !strongShortLine && !veryShortLineOK && !compactClippedMeteor && (durationS < 0.5);
     const bool directAccepted = false;
     const int broadValidationGapSamples = std::max(2, m_settings.m_channelSampleRate / 10);
@@ -1214,6 +1219,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
              << " veryShortLineOK:" << veryShortLineOK
              << " shortStandaloneLine:" << shortStandaloneLine
              << " strongShortLine:" << strongShortLine
+             << " strongCoherentLine:" << strongCoherentLine
              << " durationS:" << durationS
              << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
              << " backgroundPowerDB:" << 10.0 * std::log10(std::max(m_noiseFloor, 1e-20))
@@ -1234,11 +1240,11 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         && (frequencyConcentration >= 0.85)
         && (spectralBandContrastDB >= 6.0);
     const bool powerLineFallback = !accepted
-        && strongShortLine
+        && (strongShortLine || strongCoherentLine)
         && driftOK
         && (peakAboveBackgroundDB >= 12.0)
         && (frequencyConcentration >= 0.50)
-        && (spectralBandContrastDB >= 6.0)
+        && ((spectralBandContrastDB >= 6.0) || strongCoherentLine)
         && (std::fabs(centerFrequency) <= (double) m_settings.m_channelSampleRate * 0.30);
 
     auto emitPowerLineFallback = [this, centerFrequency, reportedFrequencySpan, frequencyDrift]() -> void

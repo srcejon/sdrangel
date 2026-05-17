@@ -247,6 +247,7 @@ private:
     std::vector<double> m_spectralNoiseFloor;
     std::vector<SpectralEvent> m_spectralEvents;
     std::vector<DetectionRange> m_recentDetectionRanges;
+    std::vector<PulseReport> m_pendingSpectralReports;
     int m_spectralFrameSize;
     int m_spectralHopSize;
     bool m_spectralNoiseFloorInitialized;
@@ -280,6 +281,10 @@ private:
     void rememberDetection(quint64 startSample, quint64 endSample);
     void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();
+    void emitOrDeferSpectralReport(const PulseReport& report);
+    void finishPendingSpectralReportsForPulse(quint64 pulseEndSample, bool usePulseEnvelope);
+    bool estimatePulseBandEnvelope(PulseReport& report) const;
+    bool reportsOverlap(quint64 firstStartSample, quint64 firstEndSample, quint64 secondStartSample, quint64 secondEndSample) const;
     void emitDetectionReport(const PulseReport& report, const char *source);
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;
     void updateNoiseFloor(double filteredPower);

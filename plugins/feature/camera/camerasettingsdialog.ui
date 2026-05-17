@@ -941,79 +941,6 @@
              </property>
             </widget>
            </item>
-           <item row="7" column="0">
-            <widget class="QLabel" name="plateSolveStatusTextLabel">
-             <property name="text">
-              <string>Plate solve</string>
-             </property>
-            </widget>
-           </item>
-           <item row="7" column="1">
-            <widget class="QLabel" name="plateSolveStatusLabel">
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="8" column="0">
-            <widget class="QLabel" name="plateSolveMatchesTextLabel">
-             <property name="text">
-              <string>Matched stars</string>
-             </property>
-            </widget>
-           </item>
-           <item row="8" column="1">
-            <widget class="QLabel" name="plateSolveMatchesLabel">
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="9" column="0">
-            <widget class="QLabel" name="plateSolveDetectedTextLabel">
-             <property name="text">
-              <string>Detected stars</string>
-             </property>
-            </widget>
-           </item>
-           <item row="9" column="1">
-            <widget class="QLabel" name="plateSolveDetectedLabel">
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="10" column="0">
-            <widget class="QLabel" name="plateSolveRmsTextLabel">
-             <property name="text">
-              <string>RMS / max (px)</string>
-             </property>
-            </widget>
-           </item>
-           <item row="10" column="1">
-            <widget class="QLabel" name="plateSolveRmsLabel">
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="11" column="0">
-            <widget class="QLabel" name="plateSolvePointingTextLabel">
-             <property name="text">
-              <string>Solved pointing</string>
-             </property>
-            </widget>
-           </item>
-           <item row="11" column="1">
-            <widget class="QLabel" name="plateSolvePointingLabel">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="wordWrap">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
           </layout>
          </item>
         </layout>
@@ -4170,7 +4097,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
        <item>
         <widget class="QTabWidget" name="detectionTabWidget">
          <property name="currentIndex">
-          <number>0</number>
+          <number>2</number>
          </property>
          <widget class="QWidget" name="tab">
           <attribute name="title">
@@ -4985,10 +4912,218 @@ li.checked::marker { content: &quot;\2612&quot;; }
               <string>Star Detection</string>
              </property>
              <layout class="QGridLayout" name="gridLayout_30">
+              <item row="6" column="3">
+               <widget class="QDoubleSpinBox" name="plateSolveMatchRadiusSpin">
+                <property name="minimum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>256.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>1.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="starThresholdLabel">
+                <property name="text">
+                 <string>Threshold</string>
+                </property>
+               </widget>
+              </item>
+              <item row="12" column="1">
+               <widget class="QToolButton" name="plateSolveApplyButton">
+                <property name="toolTip">
+                 <string>Apply the last solved pointing values to the camera settings using the selected apply mode</string>
+                </property>
+                <property name="text">
+                 <string>Apply solved pointing</string>
+                </property>
+               </widget>
+              </item>
+              <item row="10" column="3">
+               <widget class="QDateTimeEdit" name="plateSolveDateTimeEdit">
+                <property name="displayFormat">
+                 <string>yyyy-MM-dd HH:mm:ss</string>
+                </property>
+                <property name="calendarPopup">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QLabel" name="starMaxAreaLabel">
+                <property name="text">
+                 <string>Max area</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QLabel" name="starDebugViewLabel">
+                <property name="text">
+                 <string>Debug view</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="0">
+               <widget class="QLabel" name="plateSolveMinMatchesLabel">
+                <property name="text">
+                 <string>Min matches</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="starMinAreaLabel">
+                <property name="text">
+                 <string>Min area</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="0">
+               <widget class="QLabel" name="plateSolveLabel">
+                <property name="text">
+                 <string>Plate solve settings</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="0">
+               <widget class="QLabel" name="plateSolveSearchRadiusLabel">
+                <property name="text">
+                 <string>Search radius</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="starMaxAspectRatioLabel">
+                <property name="text">
+                 <string>Max aspect ratio</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="starDetectLabel">
+                <property name="text">
+                 <string>Enable</string>
+                </property>
+               </widget>
+              </item>
+              <item row="8" column="1">
+               <widget class="QCheckBox" name="plateSolveUseDownloadedCatalogCheck">
+                <property name="toolTip">
+                 <string>Use the downloaded HYG catalog for plate solving when it is available</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="13" column="1">
+               <widget class="QLabel" name="plateSolveDetectedLabel">
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="1">
+               <widget class="QSpinBox" name="plateSolveMinMatchesSpin">
+                <property name="minimum">
+                 <number>2</number>
+                </property>
+                <property name="maximum">
+                 <number>32</number>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="3">
+               <widget class="QDoubleSpinBox" name="plateSolveMaxMagnitudeSpin">
+                <property name="minimum">
+                 <double>-2.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>8.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+               </widget>
+              </item>
               <item row="8" column="0">
                <widget class="QLabel" name="plateSolveUseDownloadedCatalogLabel">
                 <property name="text">
                  <string>Use HYG catalog</string>
+                </property>
+               </widget>
+              </item>
+              <item row="16" column="1">
+               <widget class="QLabel" name="plateSolveStatusLabel">
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QSpinBox" name="starMinAreaSpin">
+                <property name="maximum">
+                 <number>10000</number>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="3">
+               <widget class="QSpinBox" name="starMaxAreaSpin">
+                <property name="maximum">
+                 <number>10000</number>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="2">
+               <widget class="QLabel" name="plateSolveMaxMagnitudeLabel">
+                <property name="text">
+                 <string>Max magnitude</string>
+                </property>
+               </widget>
+              </item>
+              <item row="8" column="2">
+               <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
+                <property name="toolTip">
+                 <string>Download and import the HYG bright-star catalog for plate solving</string>
+                </property>
+                <property name="text">
+                 <string>Download HYG catalog</string>
+                </property>
+               </widget>
+              </item>
+              <item row="14" column="1">
+               <widget class="QLabel" name="plateSolveMatchesLabel">
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item row="25" column="0">
+               <spacer name="verticalSpacer_10">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="16" column="0">
+               <widget class="QLabel" name="plateSolveStatusTextLabel">
+                <property name="text">
+                 <string>Plate solve</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="2">
+               <widget class="QLabel" name="starColorLabel">
+                <property name="text">
+                 <string>Colour</string>
                 </property>
                </widget>
               </item>
@@ -5002,6 +5137,36 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                 <property name="singleStep">
                  <double>0.100000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="plateSolveLabelModeLabel">
+                <property name="text">
+                 <string>Plate solve labels</string>
+                </property>
+               </widget>
+              </item>
+              <item row="9" column="1">
+               <widget class="QDoubleSpinBox" name="plateSolveFinalMatchRadiusSpin">
+                <property name="minimum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>256.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>1.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="23" column="1">
+               <widget class="QLabel" name="plateSolvePointingLabel">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
                 </property>
                </widget>
               </item>
@@ -5024,17 +5189,51 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </item>
                </widget>
               </item>
-              <item row="6" column="0">
-               <widget class="QLabel" name="plateSolveMinMatchesLabel">
-                <property name="text">
-                 <string>Min matches</string>
+              <item row="7" column="1">
+               <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>45.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.500000000000000</double>
                 </property>
                </widget>
               </item>
-              <item row="3" column="2">
-               <widget class="QLabel" name="starColorLabel">
+              <item row="14" column="0">
+               <widget class="QLabel" name="plateSolveMatchesTextLabel">
                 <property name="text">
-                 <string>Colour</string>
+                 <string>Matched stars</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="2">
+               <widget class="QLabel" name="plateSolveStartModeLabel">
+                <property name="text">
+                 <string>Start mode</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QSpinBox" name="starThresholdSpin">
+                <property name="maximum">
+                 <number>255</number>
+                </property>
+               </widget>
+              </item>
+              <item row="10" column="0">
+               <widget class="QLabel" name="plateSolveUseCurrentDateTimeLabel">
+                <property name="text">
+                 <string>Use current date/time</string>
+                </property>
+               </widget>
+              </item>
+              <item row="23" column="0">
+               <widget class="QLabel" name="plateSolvePointingTextLabel">
+                <property name="text">
+                 <string>Solved pointing</string>
                 </property>
                </widget>
               </item>
@@ -5065,6 +5264,30 @@ li.checked::marker { content: &quot;\2612&quot;; }
                   <string>Final</string>
                  </property>
                 </item>
+               </widget>
+              </item>
+              <item row="9" column="0">
+               <widget class="QLabel" name="plateSolveFinalMatchRadiusLabel">
+                <property name="text">
+                 <string>Final match radius</string>
+                </property>
+               </widget>
+              </item>
+              <item row="11" column="0" colspan="4">
+               <widget class="QLabel" name="plateSolveSolutionLabel">
+                <property name="text">
+                 <string>No solution</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="10" column="1">
+               <widget class="QCheckBox" name="plateSolveUseCurrentDateTimeCheck">
+                <property name="text">
+                 <string/>
+                </property>
                </widget>
               </item>
               <item row="7" column="3">
@@ -5101,71 +5324,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </item>
                </widget>
               </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="starMinAreaLabel">
-                <property name="text">
-                 <string>Min area</string>
-                </property>
-               </widget>
-              </item>
-              <item row="5" column="2">
-               <widget class="QLabel" name="plateSolveMaxMagnitudeLabel">
-                <property name="text">
-                 <string>Max magnitude</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="starBackgroundBlurLabel">
-                <property name="text">
-                 <string>Background blur</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="3">
-               <widget class="QSpinBox" name="starMaxAreaSpin">
-                <property name="maximum">
-                 <number>10000</number>
-                </property>
-               </widget>
-              </item>
-              <item row="11" column="0" colspan="4">
-               <widget class="QLabel" name="plateSolveSolutionLabel">
-                <property name="text">
-                 <string>No solution</string>
-                </property>
-                <property name="wordWrap">
-                 <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="2">
-               <widget class="QLabel" name="starDebugViewLabel">
-                <property name="text">
-                 <string>Debug view</string>
-                </property>
-               </widget>
-              </item>
-              <item row="4" column="0">
-               <widget class="QLabel" name="plateSolveLabelModeLabel">
-                <property name="text">
-                 <string>Plate solve labels</string>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="1">
-               <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
-                <property name="minimum">
-                 <double>0.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>45.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>0.500000000000000</double>
-                </property>
-               </widget>
-              </item>
               <item row="12" column="0">
                <widget class="QComboBox" name="plateSolveApplyModeCombo">
                 <property name="toolTip">
@@ -5193,193 +5351,17 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </item>
                </widget>
               </item>
-              <item row="0" column="2">
-               <widget class="QLabel" name="starThresholdLabel">
+              <item row="10" column="2">
+               <widget class="QLabel" name="plateSolveDateTimeLabel">
                 <property name="text">
-                 <string>Threshold</string>
+                 <string>Solve date/time</string>
                 </property>
                </widget>
               </item>
-              <item row="0" column="3">
-               <widget class="QSpinBox" name="starThresholdSpin">
-                <property name="maximum">
-                 <number>255</number>
-                </property>
-               </widget>
-              </item>
-              <item row="5" column="0">
-               <widget class="QLabel" name="plateSolveLabel">
+              <item row="1" column="0">
+               <widget class="QLabel" name="starBackgroundBlurLabel">
                 <property name="text">
-                 <string>Plate solve settings</string>
-                </property>
-               </widget>
-              </item>
-              <item row="10" column="3">
-               <widget class="QDateTimeEdit" name="plateSolveDateTimeEdit">
-                <property name="displayFormat">
-                 <string>yyyy-MM-dd HH:mm:ss</string>
-                </property>
-                <property name="calendarPopup">
-                 <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="3">
-               <widget class="QDoubleSpinBox" name="plateSolveMatchRadiusSpin">
-                <property name="minimum">
-                 <double>1.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>256.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>1.000000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="9" column="1">
-               <widget class="QDoubleSpinBox" name="plateSolveFinalMatchRadiusSpin">
-                <property name="minimum">
-                 <double>1.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>256.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>1.000000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="8" column="1">
-               <widget class="QCheckBox" name="plateSolveUseDownloadedCatalogCheck">
-                <property name="toolTip">
-                 <string>Use the downloaded HYG catalog for plate solving when it is available</string>
-                </property>
-                <property name="text">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="1">
-               <widget class="QSpinBox" name="plateSolveMinMatchesSpin">
-                <property name="minimum">
-                 <number>2</number>
-                </property>
-                <property name="maximum">
-                 <number>32</number>
-                </property>
-               </widget>
-              </item>
-              <item row="13" column="0">
-               <spacer name="verticalSpacer_10">
-                <property name="orientation">
-                 <enum>Qt::Orientation::Vertical</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>20</width>
-                  <height>40</height>
-                 </size>
-                </property>
-               </spacer>
-              </item>
-              <item row="3" column="3">
-               <widget class="QToolButton" name="starColorButton">
-                <property name="text">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="0">
-               <widget class="QLabel" name="plateSolveSearchRadiusLabel">
-                <property name="text">
-                 <string>Search radius</string>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="2">
-               <widget class="QLabel" name="plateSolveMatchRadiusLabel">
-                <property name="text">
-                 <string>Acquisition radius</string>
-                </property>
-               </widget>
-              </item>
-              <item row="9" column="0">
-               <widget class="QLabel" name="plateSolveFinalMatchRadiusLabel">
-                <property name="text">
-                 <string>Final match radius</string>
-                </property>
-               </widget>
-              </item>
-              <item row="5" column="3">
-               <widget class="QDoubleSpinBox" name="plateSolveMaxMagnitudeSpin">
-                <property name="minimum">
-                 <double>-2.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>8.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>0.100000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="starMaxAspectRatioLabel">
-                <property name="text">
-                 <string>Max aspect ratio</string>
-                </property>
-               </widget>
-              </item>
-              <item row="8" column="2">
-               <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
-                <property name="toolTip">
-                 <string>Download and import the HYG bright-star catalog for plate solving</string>
-                </property>
-                <property name="text">
-                 <string>Download HYG catalog</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="0">
-               <widget class="QLabel" name="starDetectLabel">
-                <property name="text">
-                 <string>Enable</string>
-                </property>
-               </widget>
-              </item>
-              <item row="10" column="1">
-               <widget class="QCheckBox" name="plateSolveUseCurrentDateTimeCheck">
-                <property name="text">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-              <item row="10" column="0">
-               <widget class="QLabel" name="plateSolveUseCurrentDateTimeLabel">
-                <property name="text">
-                 <string>Use current date/time</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="2">
-               <widget class="QLabel" name="starMaxAreaLabel">
-                <property name="text">
-                 <string>Max area</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="1">
-               <widget class="QSpinBox" name="starMinAreaSpin">
-                <property name="maximum">
-                 <number>10000</number>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="2">
-               <widget class="QLabel" name="plateSolveStartModeLabel">
-                <property name="text">
-                 <string>Start mode</string>
+                 <string>Background blur</string>
                 </property>
                </widget>
               </item>
@@ -5393,20 +5375,41 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
-              <item row="10" column="2">
-               <widget class="QLabel" name="plateSolveDateTimeLabel">
+              <item row="25" column="2">
+               <widget class="QWidget" name="widget" native="true"/>
+              </item>
+              <item row="3" column="3">
+               <widget class="QToolButton" name="starColorButton">
                 <property name="text">
-                 <string>Solve date/time</string>
+                 <string/>
                 </property>
                </widget>
               </item>
-              <item row="12" column="1">
-               <widget class="QToolButton" name="plateSolveApplyButton">
-                <property name="toolTip">
-                 <string>Apply the last solved pointing values to the camera settings using the selected apply mode</string>
-                </property>
+              <item row="13" column="0">
+               <widget class="QLabel" name="plateSolveDetectedTextLabel">
                 <property name="text">
-                 <string>Apply solved pointing</string>
+                 <string>Detected stars</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="2">
+               <widget class="QLabel" name="plateSolveMatchRadiusLabel">
+                <property name="text">
+                 <string>Acquisition radius</string>
+                </property>
+               </widget>
+              </item>
+              <item row="15" column="0">
+               <widget class="QLabel" name="plateSolveRmsTextLabel">
+                <property name="text">
+                 <string>RMS / max (px)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="15" column="1">
+               <widget class="QLabel" name="plateSolveRmsLabel">
+                <property name="text">
+                 <string>-</string>
                 </property>
                </widget>
               </item>

@@ -1950,7 +1950,7 @@ void CameraGUI::updateCaptureIntervalWarning()
     const bool intervalTooShort = intervalMode && (intervalMs < exposureTimeMs);
 
     settingsUI()->intervalSpin->setStyleSheet(intervalTooShort
-        ? QStringLiteral("QDoubleSpinBox { background-color: #ffdddd; }")
+        ? QStringLiteral("QDoubleSpinBox { background-color: #ff0000; }")
         : QString());
     settingsUI()->intervalSpin->setToolTip(intervalTooShort
         ? tr("Interval is shorter than the exposure time")

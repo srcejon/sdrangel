@@ -390,48 +390,6 @@
        </widget>
       </item>
       <item>
-       <widget class="ButtonSwitch" name="diffMaskButton">
-        <property name="toolTip">
-         <string>Show differences from previous image</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="cameraicons.qrc">
-          <normaloff>:/camera/icons/difference.png</normaloff>:/camera/icons/difference.png</iconset>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="ButtonSwitch" name="motionDetectButton">
-        <property name="toolTip">
-         <string>Motion detection</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="cameraicons.qrc">
-          <normaloff>:/camera/icons/motion_detect.png</normaloff>:/camera/icons/motion_detect.png</iconset>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="ButtonSwitch" name="starDetectButton">
-        <property name="toolTip">
-         <string>Star detection and plate solving</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="cameraicons.qrc">
-          <normaloff>:/camera/icons/constellation.png</normaloff>:/camera/icons/constellation.png</iconset>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="ButtonSwitch" name="yoloButton">
         <property name="toolTip">
          <string>Object detection</string>
@@ -452,6 +410,48 @@
         </property>
         <property name="text">
          <string>Hist</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="motionDetectButton">
+        <property name="toolTip">
+         <string>Motion detection</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/motion_detect.png</normaloff>:/camera/icons/motion_detect.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="diffMaskButton">
+        <property name="toolTip">
+         <string>Show differences from previous image</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/difference.png</normaloff>:/camera/icons/difference.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ButtonSwitch" name="starDetectButton">
+        <property name="toolTip">
+         <string>Star detection and plate solving</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/constellation.png</normaloff>:/camera/icons/constellation.png</iconset>
         </property>
        </widget>
       </item>
@@ -635,15 +635,15 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>ButtonSwitch</class>
+   <extends>QToolButton</extends>
+   <header>gui/buttonswitch.h</header>
+  </customwidget>
+  <customwidget>
    <class>RollupContents</class>
    <extends>QWidget</extends>
    <header>gui/rollupcontents.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>ButtonSwitch</class>
-   <extends>QToolButton</extends>
-   <header>gui/buttonswitch.h</header>
   </customwidget>
  </customwidgets>
  <resources>

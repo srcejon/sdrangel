@@ -15,6 +15,8 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <algorithm>
+
 #include <QDebug>
 #include <QThread>
 
@@ -34,7 +36,7 @@ MeteorBaseband::MeteorBaseband() :
 {
     qDebug("MeteorBaseband::MeteorBaseband");
 
-    m_sampleFifo.setSize(SampleSinkFifo::getSizePolicy(48000));
+    m_sampleFifo.setSize(SampleSinkFifo::getSizePolicy(192000));
     m_channelizer = new DownChannelizer(&m_sink);
     m_inactivityTimer->setInterval(250);
     m_inactivityTimer->setSingleShot(false);
@@ -196,7 +198,7 @@ bool MeteorBaseband::handleMessage(const Message& cmd)
         qDebug() << "MeteorBaseband::handleMessage: DSPSignalNotification: basebandSampleRate:" << notif.getSampleRate();
 
         setBasebandSampleRate(notif.getSampleRate());
-        m_sampleFifo.setSize(SampleSinkFifo::getSizePolicy(notif.getSampleRate()));
+        m_sampleFifo.setSize(SampleSinkFifo::getSizePolicy(std::max(notif.getSampleRate(), 192000)));
 
         return true;
     }

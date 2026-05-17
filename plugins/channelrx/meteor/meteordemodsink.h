@@ -270,6 +270,7 @@ private:
     QDateTime m_streamStartDateTimeUtc;
     quint64 m_pulseStartSample;
     quint64 m_pulseLastAboveSample;
+    quint64 m_pulsePeakSample;
     QDateTime m_pulseStartDateTimeUtc;
     double m_pulsePeakPower;
     PulseReport m_pendingBroadPulse;
@@ -291,7 +292,13 @@ private:
     void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();
     void emitOrDeferSpectralReport(const PulseReport& report);
-    void finishPendingSpectralReportsForPulse(quint64 pulseEndSample, bool usePulseEnvelope);
+    void finishPendingSpectralReportsForPulse(
+        quint64 pulseEndSample,
+        bool usePulseEnvelope,
+        bool usePulseFrequency,
+        double pulseCenterFrequency,
+        double pulseFrequencySpan,
+        double pulseFrequencyDrift);
     bool estimatePulseBandEnvelope(PulseReport& report) const;
     bool reportsOverlap(quint64 firstStartSample, quint64 firstEndSample, quint64 secondStartSample, quint64 secondEndSample) const;
     void emitDetectionReport(const PulseReport& report, const char *source);

@@ -223,6 +223,7 @@ void MeteorDemodSink::startPulse(const Complex& sample, double power)
     m_pulseActive = true;
     m_pulseStartSample = m_sampleCounter;
     m_pulseLastAboveSample = m_sampleCounter;
+    m_pulsePeakSample = m_sampleCounter;
     m_pulseStartDateTimeUtc = sampleCounterToDateTimeUtc(m_pulseStartSample);
     m_pulsePeakPower = power;
     m_pulseSamples.clear();
@@ -233,6 +234,7 @@ void MeteorDemodSink::updatePulse(const Complex& sample, double power)
 {
     if (power > m_pulsePeakPower) {
         m_pulsePeakPower = power;
+        m_pulsePeakSample = m_sampleCounter;
     }
 
     const int maxSamples = std::max(1, (m_settings.m_maxDurationMS * m_settings.m_channelSampleRate) / 1000);
@@ -1228,8 +1230,58 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
              << " endSample:" << endSample;
 
     const bool usePulseEnvelopeForSpectralReports = driftOK && (durationS >= 0.5);
+    const bool usePulseFrequencyForSpectralReports = stableLineOK
+        && (frequencyConcentration >= 0.85)
+        && (spectralBandContrastDB >= 6.0);
+    const bool powerLineFallback = !accepted
+        && strongShortLine
+        && driftOK
+        && (peakAboveBackgroundDB >= 12.0)
+        && (frequencyConcentration >= 0.50)
+        && (spectralBandContrastDB >= 6.0)
+        && (std::fabs(centerFrequency) <= (double) m_settings.m_channelSampleRate * 0.30);
 
-    finishPendingSpectralReportsForPulse(endSample, usePulseEnvelopeForSpectralReports);
+    auto emitPowerLineFallback = [this, centerFrequency, reportedFrequencySpan, frequencyDrift]() -> void
+    {
+        PulseReport report;
+        report.m_valid = true;
+        report.m_startSample = m_pulsePeakSample;
+        report.m_endSample = m_pulsePeakSample;
+        report.m_dateTimeUtc = sampleCounterToDateTimeUtc(report.m_startSample);
+        report.m_peakPower = m_pulsePeakPower;
+        report.m_backgroundPower = m_noiseFloor;
+        report.m_durationS = 1.0 / (double) std::max(1, m_settings.m_channelSampleRate);
+        report.m_centerFrequency = centerFrequency;
+        report.m_frequencySpan = reportedFrequencySpan;
+        report.m_frequencyDrift = frequencyDrift;
+
+        if (estimatePulseBandEnvelope(report)
+            && (1000.0 * report.m_durationS >= (double) m_settings.m_minDurationMS)
+            && (1000.0 * report.m_durationS <= (double) m_settings.m_maxDurationMS))
+        {
+            if (!isDuplicateDetection(report.m_startSample, report.m_endSample, report.m_centerFrequency, report.m_frequencySpan)) {
+                emitDetectionReport(report, "power-line");
+            } else {
+                qDebug() << "MeteorDemodSink::finishPulse: duplicate power-line detection suppressed";
+            }
+        }
+    };
+
+    if (powerLineFallback && !usePulseFrequencyForSpectralReports) {
+        emitPowerLineFallback();
+    }
+
+    finishPendingSpectralReportsForPulse(
+        endSample,
+        usePulseEnvelopeForSpectralReports,
+        usePulseFrequencyForSpectralReports,
+        centerFrequency,
+        reportedFrequencySpan,
+        frequencyDrift);
+
+    if (powerLineFallback && usePulseFrequencyForSpectralReports) {
+        emitPowerLineFallback();
+    }
 
     if (accepted)
     {
@@ -1308,6 +1360,24 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
     {
         const quint64 rangeLength = range.m_endSample - range.m_startSample + 1;
         const bool overlapsInTime = (endSample >= range.m_startSample) && (startSample <= range.m_endSample);
+        const bool rangeHasFrequencyRange = hasFrequencyRange && (range.m_highFrequency > range.m_lowFrequency);
+        double frequencyOverlapRatio = 0.0;
+        double centerDistance = std::numeric_limits<double>::max();
+        double frequencyGap = std::numeric_limits<double>::max();
+        double width = std::max(1.0, highFrequency - lowFrequency);
+        double rangeWidth = std::max(1.0, range.m_highFrequency - range.m_lowFrequency);
+
+        if (rangeHasFrequencyRange)
+        {
+            const double overlapLow = std::max(lowFrequency, range.m_lowFrequency);
+            const double overlapHigh = std::min(highFrequency, range.m_highFrequency);
+            const double overlapWidth = std::max(0.0, overlapHigh - overlapLow);
+            frequencyOverlapRatio = overlapWidth / std::min(width, rangeWidth);
+            centerDistance = std::fabs(centerFrequency - 0.5 * (range.m_lowFrequency + range.m_highFrequency));
+            frequencyGap = overlapWidth > 0.0
+                ? 0.0
+                : std::max(range.m_lowFrequency - highFrequency, lowFrequency - range.m_highFrequency);
+        }
 
         if (overlapsInTime)
         {
@@ -1316,12 +1386,15 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
             const quint64 overlapLength = overlapEnd - overlapStart + 1;
             const quint64 shorterLength = std::max<quint64>(1, std::min(detectionLength, rangeLength));
 
-            if ((double) overlapLength >= 0.50 * (double) shorterLength) {
-                return true;
+            if ((double) overlapLength >= 0.50 * (double) shorterLength)
+            {
+                if (!rangeHasFrequencyRange || (frequencyOverlapRatio >= 0.65)) {
+                    return true;
+                }
             }
         }
 
-        if (!hasFrequencyRange || (range.m_highFrequency <= range.m_lowFrequency)) {
+        if (!rangeHasFrequencyRange) {
             continue;
         }
 
@@ -1330,8 +1403,11 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
             : (startSample > range.m_endSample ? startSample - range.m_endSample : 0);
         const bool compactEventPair = (detectionLength <= compactEventSamples) && (rangeLength <= compactEventSamples);
         const bool closeInTime = compactEventPair && (gapSamples <= sameEventGapSamples);
-        const bool overlapsInFrequency = (highFrequency + frequencyPadding >= range.m_lowFrequency)
-            && (lowFrequency - frequencyPadding <= range.m_highFrequency);
+        const bool adjacentFrequency = (frequencyGap <= frequencyPadding)
+            && (centerDistance <= std::max(25.0, 0.5 * std::max(width, rangeWidth)));
+        const bool overlapsInFrequency = (frequencyOverlapRatio >= 0.65)
+            || (centerDistance <= frequencyPadding)
+            || adjacentFrequency;
 
         if (closeInTime && overlapsInFrequency)
         {
@@ -1341,6 +1417,9 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
                      << " endSample:" << endSample
                      << " frequencyLow:" << lowFrequency
                      << " frequencyHigh:" << highFrequency
+                     << " frequencyOverlapRatio:" << frequencyOverlapRatio
+                     << " centerDistance:" << centerDistance
+                     << " frequencyGap:" << frequencyGap
                      << " previousStart:" << range.m_startSample
                      << " previousEnd:" << range.m_endSample
                      << " previousFrequencyLow:" << range.m_lowFrequency
@@ -1408,7 +1487,13 @@ void MeteorDemodSink::emitOrDeferSpectralReport(const PulseReport& report)
     emitDetectionReport(report, "spectral");
 }
 
-void MeteorDemodSink::finishPendingSpectralReportsForPulse(quint64 pulseEndSample, bool usePulseEnvelope)
+void MeteorDemodSink::finishPendingSpectralReportsForPulse(
+    quint64 pulseEndSample,
+    bool usePulseEnvelope,
+    bool usePulseFrequency,
+    double pulseCenterFrequency,
+    double pulseFrequencySpan,
+    double pulseFrequencyDrift)
 {
     if (m_pendingSpectralReports.empty()) {
         return;
@@ -1416,6 +1501,14 @@ void MeteorDemodSink::finishPendingSpectralReportsForPulse(quint64 pulseEndSampl
 
     std::vector<PulseReport> remainingReports;
     std::vector<PulseReport> reportsToEmit;
+    int overlappingReportCount = 0;
+
+    for (const PulseReport& report : m_pendingSpectralReports)
+    {
+        if (reportsOverlap(report.m_startSample, report.m_endSample, m_pulseStartSample, pulseEndSample)) {
+            overlappingReportCount++;
+        }
+    }
 
     for (PulseReport report : m_pendingSpectralReports)
     {
@@ -1438,6 +1531,25 @@ void MeteorDemodSink::finishPendingSpectralReportsForPulse(quint64 pulseEndSampl
                          << " startSample:" << extendedReport.m_startSample
                          << " endSample:" << extendedReport.m_endSample;
                 report = extendedReport;
+            }
+        }
+
+        if (usePulseFrequency && (overlappingReportCount == 1))
+        {
+            const double centerMismatch = std::fabs(report.m_centerFrequency - pulseCenterFrequency);
+            const double reportSpan = std::max(1.0, std::fabs(report.m_frequencySpan));
+            const double pulseSpan = std::max(1.0, std::fabs(pulseFrequencySpan));
+
+            if (centerMismatch > std::max(40.0, 0.75 * reportSpan))
+            {
+                qDebug() << "MeteorDemodSink::finishPendingSpectralReportsForPulse: corrected spectral center from pulse line"
+                         << " from:" << report.m_centerFrequency
+                         << " to:" << pulseCenterFrequency
+                         << " reportSpan:" << report.m_frequencySpan
+                         << " pulseSpan:" << pulseFrequencySpan;
+                report.m_centerFrequency = pulseCenterFrequency;
+                report.m_frequencySpan = std::max(reportSpan, pulseSpan);
+                report.m_frequencyDrift = pulseFrequencyDrift;
             }
         }
 
@@ -1484,6 +1596,10 @@ void MeteorDemodSink::finishPendingSpectralReportsForPulse(quint64 pulseEndSampl
         reportsToEmit.end(),
         [](const PulseReport& left, const PulseReport& right)
         {
+            if (left.m_startSample != right.m_startSample) {
+                return left.m_startSample < right.m_startSample;
+            }
+
             if (left.m_durationS != right.m_durationS) {
                 return left.m_durationS > right.m_durationS;
             }
@@ -1837,6 +1953,7 @@ void MeteorDemodSink::resetDetector()
     m_streamStartDateTimeUtc = QDateTime::currentDateTimeUtc();
     m_pulseStartSample = 0;
     m_pulseLastAboveSample = 0;
+    m_pulsePeakSample = 0;
     m_pulsePeakPower = 0.0;
     m_pulseSamples.clear();
     m_pendingBroadPulse = PulseReport();

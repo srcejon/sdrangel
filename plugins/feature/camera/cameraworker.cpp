@@ -3205,22 +3205,47 @@ bool CameraWorker::asiApplyCameraSettings()
             && (m_settings.m_captureMode == CameraSettings::CaptureModeFrameRate))
         ? ASI_TRUE
         : ASI_FALSE;
+    auto writableControl = [cameraId](ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS *controlCaps = nullptr) -> bool {
+        ASI_CONTROL_CAPS caps {};
+        if (!asiGetControlCapsByType(cameraId, controlType, caps) || (caps.IsWritable != ASI_TRUE)) {
+            return false;
+        }
+
+        if (controlCaps) {
+            *controlCaps = caps;
+        }
+        return true;
+    };
+
+    ASI_CONTROL_CAPS coolerOnCaps {};
+    ASI_CONTROL_CAPS targetTempCaps {};
+    ASI_CONTROL_CAPS usbBandwidthCaps {};
+    ASI_CONTROL_CAPS highSpeedModeCaps {};
+    const bool canSetCoolerOn = writableControl(ASI_COOLER_ON, &coolerOnCaps);
+    const bool canSetTargetTemp = writableControl(ASI_TARGET_TEMP, &targetTempCaps);
+    const bool canSetUsbBandwidth = writableControl(ASI_BANDWIDTHOVERLOAD, &usbBandwidthCaps);
+    const bool canSetHighSpeedMode = writableControl(ASI_HIGH_SPEED_MODE, &highSpeedModeCaps);
+
     const ASI_ERROR_CODE exposureError = ASISetControlValue(cameraId, ASI_EXPOSURE,
         std::max(1L, static_cast<long>(std::llround(currentCaptureExposureTimeMs() * 1000.0))), autoExposureGain);
     const ASI_ERROR_CODE gainError = ASISetControlValue(cameraId, ASI_GAIN,
         std::max(0L, static_cast<long>(m_settings.m_cameraGain)), autoExposureGain);
     const ASI_ERROR_CODE offsetError = ASISetControlValue(cameraId, ASI_OFFSET,
         std::max(0L, static_cast<long>(m_settings.m_cameraOffset)), ASI_FALSE);
-    const ASI_ERROR_CODE coolerOnError = (m_settings.m_asiCoolerOn >= 0)
+    const ASI_ERROR_CODE coolerOnError = ((m_settings.m_asiCoolerOn >= 0) && canSetCoolerOn)
         ? ASISetControlValue(cameraId, ASI_COOLER_ON, m_settings.m_asiCoolerOn != 0 ? 1L : 0L, ASI_FALSE)
         : ASI_SUCCESS;
-    const ASI_ERROR_CODE targetTempError = (m_settings.m_asiTargetTemp != std::numeric_limits<int>::min())
-        ? ASISetControlValue(cameraId, ASI_TARGET_TEMP, static_cast<long>(m_settings.m_asiTargetTemp), ASI_FALSE)
+    const ASI_ERROR_CODE targetTempError = ((m_settings.m_asiTargetTemp != std::numeric_limits<int>::min()) && canSetTargetTemp)
+        ? ASISetControlValue(cameraId, ASI_TARGET_TEMP,
+            qBound(targetTempCaps.MinValue, static_cast<long>(m_settings.m_asiTargetTemp), targetTempCaps.MaxValue),
+            ASI_FALSE)
         : ASI_SUCCESS;
-    const ASI_ERROR_CODE usbBandwidthError = (m_settings.m_asiUsbBandwidth >= 0)
-        ? ASISetControlValue(cameraId, ASI_BANDWIDTHOVERLOAD, static_cast<long>(m_settings.m_asiUsbBandwidth), ASI_FALSE)
+    const ASI_ERROR_CODE usbBandwidthError = ((m_settings.m_asiUsbBandwidth >= 0) && canSetUsbBandwidth)
+        ? ASISetControlValue(cameraId, ASI_BANDWIDTHOVERLOAD,
+            qBound(usbBandwidthCaps.MinValue, static_cast<long>(m_settings.m_asiUsbBandwidth), usbBandwidthCaps.MaxValue),
+            ASI_FALSE)
         : ASI_SUCCESS;
-    const ASI_ERROR_CODE highSpeedModeError = (m_settings.m_asiHighSpeedMode >= 0)
+    const ASI_ERROR_CODE highSpeedModeError = ((m_settings.m_asiHighSpeedMode >= 0) && canSetHighSpeedMode)
         ? ASISetControlValue(cameraId, ASI_HIGH_SPEED_MODE, m_settings.m_asiHighSpeedMode != 0 ? 1L : 0L, ASI_FALSE)
         : ASI_SUCCESS;
 

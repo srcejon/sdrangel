@@ -73,6 +73,7 @@ MESSAGE_CLASS_DEFINITION(MainCore::MsgStarTrackerDisplaySettings, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgStarTrackerDisplayLoSSettings, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgSkyMapTarget, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgImage, Message)
+MESSAGE_CLASS_DEFINITION(MainCore::MsgEvent, Message)
 
 MainCore::MainCore()
 {

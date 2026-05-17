@@ -98,7 +98,7 @@ void MeteorBaseband::stopWork()
 
 void MeteorBaseband::setChannel(ChannelAPI *channel)
 {
-    (void) channel;
+    m_sink.setChannel(channel);
 }
 
 void MeteorBaseband::setScopeSink(ScopeVis* scopeSink)

@@ -892,6 +892,57 @@ public:
          { }
      };
 
+     class SDRBASE_API MsgEvent : public Message {
+         MESSAGE_CLASS_DECLARATION
+
+     public:
+
+         enum EventType {
+             SatelliteAOSEvent,          // Data: name=ISS
+             SatelliteLOSEvent,
+             ADSBAircraftDetectedEvent,  // Data: type=B737 ICAO=123456   - from announcements?
+             ADSBAircraftLostEvent,
+             AISShipDetectedEvent,       // From feature, rather than demod
+             AISShipLostEvent,
+             StarRiseEvent,              // Data: name=Sun
+             StarSetEvent,
+             MeteorScatterEvent,         // Data: power=4.3 duration=3.4
+             CameraObjectDetectedEvent,  // Data: class=person
+             CameraObjectLostEvent,
+             CameraMotionDetectedEvent,
+             CameraMotionStoppedEvent,
+             CameraObjectInViewEvent,    // For objects from other features / channels
+             CameraObjectOutOfViewEvent,
+             PacketReceivedEvent         // Data: data=deadbeef
+         };
+
+         // Allow matching on regexp of data? So data can be structured?
+
+         const QObject *getPipeSource() const { return m_pipeSource; }
+         const QDateTime &getDateTime() const { return m_dateTime; }
+         EventType getEvent() const { return m_event; }
+         const QString &getData() const { return m_data; }
+
+         static MsgEvent* create(const QObject *pipeSource, const QDateTime& dateTime, EventType event, const QString &data)
+         {
+             return new MsgEvent(pipeSource, dateTime, event, data);
+         }
+
+     private:
+         const QObject *m_pipeSource;
+         QDateTime m_dateTime;
+         EventType m_event;
+         QString m_data;
+
+         MsgEvent(const QObject *pipeSource, const QDateTime& dateTime, EventType event, const QString &data) :
+             Message(),
+             m_pipeSource(pipeSource),
+             m_dateTime(dateTime),
+             m_event(event),
+             m_data(data)
+         { }
+     };
+
 	MainCore();
 	~MainCore();
 	static MainCore *instance();

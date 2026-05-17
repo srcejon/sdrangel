@@ -25,6 +25,7 @@
 #include "dsp/scopevis.h"
 #include "dsp/spectrumvis.h"
 #include "util/messagequeue.h"
+#include "maincore.h"
 
 #include "meteordemodsink.h"
 
@@ -1866,6 +1867,18 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
     ));
 
     rememberDetection(report.m_startSample, report.m_endSample, report.m_centerFrequency, report.m_frequencySpan);
+
+    // Send to event pipes
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_channel, "event", eventPipes);
+
+    QString eventData = QString("peakPowerDB=%1,duration=%2").arg(peakPowerDB).arg(displayDurationS);
+
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_channel, displayDateTimeUtc, MainCore::MsgEvent::EventType::MeteorScatterEvent, eventData));
+    }
 }
 
 QDateTime MeteorDemodSink::sampleCounterToDateTimeUtc(quint64 sampleCounter) const

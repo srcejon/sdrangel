@@ -31,6 +31,7 @@
 
 #include "meteorsettings.h"
 
+class ChannelAPI;
 class MessageQueue;
 class ScopeVis;
 class SpectrumVis;
@@ -136,6 +137,7 @@ public:
     void setScopeSink(ScopeVis* scopeSink) { m_scopeSink = scopeSink; }
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumSink = spectrumSink; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_messageQueueToGUI = messageQueue; }
+    void setChannel(ChannelAPI *channel) { m_channel = channel; }
     void applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force = false);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
     int getOutputSampleRate() const { return m_settings.m_channelSampleRate; }
@@ -247,6 +249,7 @@ private:
     SpectrumVis* m_spectrumSink;
     MessageQueue *m_messageQueueToGUI;
     MeteorSettings m_settings;
+    ChannelAPI *m_channel;
 
     int m_channelSampleRate;
     int m_channelFrequencyOffset;

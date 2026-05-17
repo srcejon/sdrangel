@@ -118,6 +118,27 @@ CameraSettings:
     alpacaReadoutMode:
       description: "ALPACA camera readout mode index"
       type: integer
+    asiCoolerOn:
+      description: "ASI cooler control: -1 do not set, 0 off, 1 on"
+      type: integer
+    asiTargetTemp:
+      description: "ASI cooler target temperature in Celsius"
+      type: integer
+    asiUsbBandwidth:
+      description: "ASI USB bandwidth setting (-1 = do not set)"
+      type: integer
+    asiHighSpeedMode:
+      description: "ASI high-speed mode: -1 do not set, 0 off, 1 on"
+      type: integer
+    asiAutoExposureGain:
+      description: "Enable ASI auto exposure/gain in frame-rate mode (1 for yes, 0 for no)"
+      type: integer
+    asiColorImageType:
+      description: >
+        ASI colour image type
+          * 0 - RGB24
+          * 1 - RAW16
+      type: integer
     saveImage:
       description: "Save captured frames as still images (1 for yes, 0 for no)"
       type: integer
@@ -136,6 +157,124 @@ CameraSettings:
     videoHwAcceleration:
       description: "Prefer hardware-accelerated video encoding when available (1 for yes, 0 for no)"
       type: integer
+    videoLoop:
+      description: "Loop file-camera video input (1 for yes, 0 for no)"
+      type: integer
+    videoPlaybackRate:
+      description: "Playback rate multiplier for file-camera video input"
+      type: number
+      format: double
+    videoPreRecordBufferSeconds:
+      description: "Seconds of live frames to buffer and prepend when video recording starts"
+      type: integer
+    imageRecordLimit:
+      description: "Number of still images to save before disabling image recording; 0 = unlimited"
+      type: integer
+    videoRecordLimitSeconds:
+      description: "Seconds of video to record before disabling video recording; 0 = unlimited"
+      type: integer
+    stackEnabled:
+      description: "Enable frame stacking (1 for yes, 0 for no)"
+      type: integer
+    stackFrameCount:
+      description: "Number of frames to stack"
+      type: integer
+    stackMethod:
+      description: >
+        Frame stacking method
+          * 0 - Average
+          * 1 - Median
+          * 2 - Sigma-clipped average
+          * 3 - HDR
+      type: integer
+    stackHdrAlgorithm:
+      description: >
+        HDR stacking algorithm
+          * 0 - Debevec
+          * 1 - Robertson
+          * 2 - Mertens
+      type: integer
+    stackHdrExposureCount:
+      description: "Number of HDR exposure times to use"
+      type: integer
+    stackHdrExposureTimesMs:
+      description: "HDR exposure times in milliseconds"
+      type: array
+      items:
+        type: number
+        format: double
+    stackAlignmentMethod:
+      description: >
+        Frame alignment method
+          * 0 - None
+          * 1 - Phase correlation
+          * 2 - Star centroid matching
+      type: integer
+    stackDarkFileName:
+      description: "Dark calibration frame file path"
+      type: string
+    stackFlatFileName:
+      description: "Flat calibration frame file path"
+      type: string
+    stackBiasFileName:
+      description: "Bias calibration frame file path"
+      type: string
+    latitude:
+      description: "Camera latitude in degrees"
+      type: number
+      format: float
+    longitude:
+      description: "Camera longitude in degrees"
+      type: number
+      format: float
+    altitude:
+      description: "Camera altitude in metres"
+      type: number
+      format: float
+    positionSync:
+      description: "Sync camera location from main settings (1 for yes, 0 for no)"
+      type: integer
+    owmAPIKey:
+      description: "OpenWeatherMap API key"
+      type: string
+    azimuth:
+      description: "Camera pointing azimuth in degrees"
+      type: number
+      format: float
+    elevation:
+      description: "Camera pointing elevation in degrees"
+      type: number
+      format: float
+    roll:
+      description: "Camera roll about optical axis in degrees"
+      type: number
+      format: float
+    rotator:
+      description: "Rotator feature identifier as featureSetIndex:featureIndex"
+      type: string
+    fov:
+      description: "Camera field of view in degrees"
+      type: number
+      format: float
+    lensProjection:
+      description: >
+        Lens projection model
+          * 0 - Rectilinear
+          * 1 - Equidistant
+          * 2 - Equisolid
+      type: integer
+    lensCenterOffsetX:
+      description: "Principal point X offset in pixels from image centre"
+      type: number
+      format: double
+    lensCenterOffsetY:
+      description: "Principal point Y offset in pixels from image centre"
+      type: number
+      format: double
+    lensDistortionK1:
+      description: "Radial distortion coefficient"
+      type: number
+      format: double
     postProcessWhiteBalanceMode:
       description: >
         Post-processing white balance mode
@@ -155,6 +294,46 @@ CameraSettings:
       description: "Manual white balance blue channel gain: 0.1 to 8.0"
       type: number
       format: double
+    postProcessWhiteBalanceHighlightProtection:
+      description: "Amount to reduce manual white-balance gains toward neutral in highlights"
+      type: number
+      format: double
+    postProcessUnwarp:
+      description: "Unwarp fisheye images using lens settings (1 for yes, 0 for no)"
+      type: integer
+    histogramStretch:
+      description: >
+        Histogram stretch mode
+          * 0 - Off
+          * 1 - Linear
+          * 2 - Gamma
+          * 3 - Asinh
+          * 4 - Log
+          * 5 - CLAHE
+      type: integer
+    histogramStretchBlackPoint:
+      description: "Histogram stretch black point normalized to 0..1"
+      type: number
+      format: double
+    histogramStretchWhitePoint:
+      description: "Histogram stretch white point normalized to 0..1"
+      type: number
+      format: double
+    histogramStretchGamma:
+      description: "Histogram stretch gamma exponent"
+      type: number
+      format: double
+    histogramStretchAsinhStrength:
+      description: "Asinh stretch strength"
+      type: number
+      format: double
+    histogramStretchLogStrength:
+      description: "Log stretch strength"
+      type: number
+      format: double
+    postProcessGreyscale:
+      description: "Convert post-processed image to greyscale (1 for yes, 0 for no)"
+      type: integer
     saturation:
       description: "Saturation multiplier: 0.0 to 3.0"
       type: number
@@ -181,8 +360,18 @@ CameraSettings:
       description: "Sharpening amount: 0.0 to 3.0"
       type: number
       format: double
+    edgeDisplayMode:
+      description: >
+        Edge display mode
+          * 0 - Overlay
+          * 1 - Edges only
+      type: integer
     sobelEdge:
       description: "Sobel edge blend amount: 0.0 to 3.0"
+      type: number
+      format: double
+    cannyEdge:
+      description: "Canny edge blend amount: 0.0 to 3.0"
       type: number
       format: double
     flipX:
@@ -212,6 +401,52 @@ CameraSettings:
     overlayText:
       description: "Draw custom HTML text on each frame (1 for yes, 0 for no)"
       type: integer
+    equatorialGrid:
+      description: "Draw equatorial sky grid overlay (1 for yes, 0 for no)"
+      type: integer
+    equatorialGridColor:
+      description: "Equatorial grid colour as 0xRRGGBB integer"
+      type: integer
+    altAzGrid:
+      description: "Draw alt-az sky grid overlay (1 for yes, 0 for no)"
+      type: integer
+    altAzGridColor:
+      description: "Alt-az grid colour as 0xRRGGBB integer"
+      type: integer
+    constellation:
+      description: "Draw constellation overlay (1 for yes, 0 for no)"
+      type: integer
+    constellationColor:
+      description: "Constellation overlay colour as 0xRRGGBB integer"
+      type: integer
+    constellationOverlay:
+      description: >
+        Constellation overlay
+          * 0 - Ursa Major
+          * 1 - Orion
+          * 2 - Crux
+      type: integer
+    trackObjects:
+      description: "Draw tracked object overlay (1 for yes, 0 for no)"
+      type: integer
+    trackObjectMinElevation:
+      description: "Minimum elevation in degrees for tracked objects"
+      type: number
+      format: double
+    trackObjectColor:
+      description: "Tracked object label colour as 0xRRGGBB integer"
+      type: integer
+    trackObjectFontScale:
+      description: "Tracked object label font point size"
+      type: number
+      format: double
+    gridLabelFontFamily:
+      description: "Font family for sky grid labels"
+      type: string
+    gridLabelFontScale:
+      description: "Font point size for sky grid labels"
+      type: number
+      format: double
     overlayTextString:
       description: "HTML text content to render on the frame"
       type: string
@@ -237,6 +472,9 @@ CameraSettings:
     diffThreshold:
       description: "Threshold for diff-mask binary classification: 0 to 255"
       type: integer
+    diffMaskOpenSize:
+      description: "Kernel radius for morphological open on diff mask before accumulation: 0 to 20"
+      type: integer
     dilationSize:
       description: "Kernel radius for diff-mask dilation: 0 to 20"
       type: integer
@@ -246,6 +484,13 @@ CameraSettings:
     diffMaskCloseSize:
       description: "Kernel radius for morphological close on the accumulated diff mask: 0 to 20"
       type: integer
+    overlayFontFamily:
+      description: "Font family for detector overlays"
+      type: string
+    overlayFontScale:
+      description: "Font point size for detector overlays"
+      type: number
+      format: double
     detectionRoiX:
       description: "Detection region-of-interest X origin in pixels: 0 to 4096"
       type: integer
@@ -258,14 +503,44 @@ CameraSettings:
     detectionRoiHeight:
       description: "Detection region-of-interest height in pixels (0 = full height)"
       type: integer
+    showDetectionRoi:
+      description: "Show detection ROI rectangle (1 for yes, 0 for no)"
+      type: integer
     motionDetect:
       description: "Enable MOG2 background subtractor for motion detection (1 for yes, 0 for no)"
+      type: integer
+    motionBackgroundSubtractor:
+      description: >
+        Motion background subtractor
+          * 0 - MOG2
+          * 1 - KNN
+      type: integer
+    motionMaskView:
+      description: >
+        Motion mask debug view
+          * 0 - Off
+          * 1 - Raw
+          * 2 - Thresholded
+          * 3 - Opened
+          * 4 - Closed
+          * 5 - Final
       type: integer
     motionHistory:
       description: "Background subtractor history length in frames: 1 to 5000"
       type: integer
     motionVarThreshold:
       description: "Variance threshold for MOG2 foreground classification: 1.0 to 200.0"
+      type: number
+      format: double
+    motionLearningRate:
+      description: "Background subtractor learning rate: -1.0 auto, otherwise 0.0 to 1.0"
+      type: number
+      format: double
+    motionConfirmFrames:
+      description: "Consecutive motion frames required before reporting"
+      type: integer
+    motionDownscale:
+      description: "Downscale factor for the motion detection path"
       type: number
       format: double
     motionDetectShadows:
@@ -285,6 +560,101 @@ CameraSettings:
       type: integer
     minContourArea:
       description: "Minimum contour area in square pixels to draw: 0 to 10000"
+      type: integer
+    showMotionExclusionRects:
+      description: "Show motion exclusion rectangles (1 for yes, 0 for no)"
+      type: integer
+    motionExclusionRects:
+      description: "Full-resolution rectangles excluded from diff/motion detection"
+      type: array
+      items:
+        $ref: "http://swgserver:8081/api/swagger/include/Camera.yaml#/CameraRect"
+    starDetect:
+      description: "Enable star detection (1 for yes, 0 for no)"
+      type: integer
+    starThreshold:
+      description: "Threshold for star residual image"
+      type: integer
+    starBackgroundBlur:
+      description: "Radius used to estimate smooth sky background"
+      type: integer
+    starMinArea:
+      description: "Minimum star blob area in pixels"
+      type: integer
+    starMaxArea:
+      description: "Maximum star blob area in pixels"
+      type: integer
+    starMaxAspectRatio:
+      description: "Maximum accepted star blob aspect ratio"
+      type: number
+      format: double
+    starDebugView:
+      description: >
+        Star detector debug view
+          * 0 - Off
+          * 1 - Background
+          * 2 - Residual
+          * 3 - Thresholded
+          * 4 - Final
+      type: integer
+    starColor:
+      description: "Detected star overlay colour as 0xRRGGBB integer"
+      type: integer
+    plateSolve:
+      description: "Enable plate solving from detected stars (1 for yes, 0 for no)"
+      type: integer
+    plateSolveMaxMagnitude:
+      description: "Faintest catalog star magnitude to consider"
+      type: number
+      format: double
+    plateSolveMinMatches:
+      description: "Minimum star matches for a successful plate solve"
+      type: integer
+    plateSolveMatchRadius:
+      description: "Maximum acquisition/coarse match radius in pixels"
+      type: number
+      format: double
+    plateSolveFinalMatchRadius:
+      description: "Maximum final accepted match radius in pixels"
+      type: number
+      format: double
+    plateSolveSearchRadius:
+      description: "Search radius around current pointing estimate in degrees"
+      type: number
+      format: double
+    plateSolveStartMode:
+      description: >
+        Plate solve start mode
+          * 0 - Blind
+          * 1 - FoV
+          * 2 - FoV/elevation
+          * 3 - FoV/azimuth/elevation/roll
+          * 4 - FoV/azimuth/elevation/roll/lens
+          * 5 - Current settings only
+      type: integer
+    plateSolveLabelMode:
+      description: >
+        Plate solve label mode
+          * 0 - Name
+          * 1 - Name/magnitude
+          * 2 - Name/magnitude/spectral type
+      type: integer
+    plateSolveUseCurrentDateTime:
+      description: "Use current system date/time for plate solving (1 for yes, 0 for no)"
+      type: integer
+    plateSolveDateTime:
+      description: "Fixed local date/time for plate solving recorded media"
+      type: string
+    plateSolveUseDownloadedCatalog:
+      description: "Prefer downloaded HYG catalog when available (1 for yes, 0 for no)"
+      type: integer
+    plateSolveApplyMode:
+      description: >
+        Plate solve apply mode
+          * 0 - Azimuth/elevation
+          * 1 - Azimuth/elevation/roll
+          * 2 - Azimuth/elevation/roll/FoV
+          * 3 - Azimuth/elevation/roll/FoV/lens
       type: integer
     videoPostProcess:
       description: "Write post-processed frames to video file; when 0 write raw frames (1 for yes, 0 for no)"
@@ -418,6 +788,9 @@ CameraObjectDeviceSettings:
     startStopFileSink:
       description: "Start/stop file sinks with detection/disappearance (1 for yes, 0 for no)"
       type: integer
+    saveCurrentImage:
+      description: "Save the current image when the object class is detected (1 for yes, 0 for no)"
+      type: integer
     recordVideo:
       description: "Start video recording on detection and stop when the object disappears (1 for yes, 0 for no)"
       type: integer
@@ -455,3 +828,15 @@ CameraActions:
         Set the plugin running state
           * 0 - idle
           * 1 - run
+
+CameraRect:
+  description: "Rectangle in image pixel coordinates"
+  properties:
+    x:
+      type: integer
+    y:
+      type: integer
+    width:
+      type: integer
+    height:
+      type: integer

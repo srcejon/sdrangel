@@ -49,6 +49,8 @@ FeatureSettings:
       $ref: "http://swgserver:8081/api/swagger/include/RigCtlServer.yaml#/RigCtlServerSettings"
     SatelliteTrackerSettings:
       $ref: "http://swgserver:8081/api/swagger/include/SatelliteTracker.yaml#/SatelliteTrackerSettings"
+    SchedulerSettings:
+      $ref: "http://swgserver:8081/api/swagger/include/Scheduler.yaml#/SchedulerSettings"
     SIDSettings:
       $ref: "http://swgserver:8081/api/swagger/include/SID.yaml#/SIDSettings"
     SimplePTTSettings:

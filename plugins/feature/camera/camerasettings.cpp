@@ -159,7 +159,7 @@ void CameraSettings::resetToDefaults()
     m_captureIntervalUnits = CaptureIntervalSeconds;
     m_exposureTimeMs = 50;
     m_isoSensitivity = -1; // -1 is auto
-    m_alpacaDiscoveryEnabled = false;
+    m_alpacaDiscoveryEnabled = true;
     m_alpacaApiLogEnabled = false;
     m_alpacaHost = "127.0.0.1";
     m_alpacaPort = 11111;
@@ -609,7 +609,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_framesPerSecond = std::max(m_minFramesPerSecond, m_framesPerSecond);
         d.readDouble(179, &m_captureInterval, 1.0);
         d.readS32(180, (qint32 *) &m_captureIntervalUnits, (qint32) CaptureIntervalSeconds);
-        d.readBool(181, &m_alpacaDiscoveryEnabled, false);
+        d.readBool(181, &m_alpacaDiscoveryEnabled, true);
         d.readBool(182, &m_alpacaApiLogEnabled, false);
         d.readBool(183, &m_alpacaFocuserEnabled, false);
         d.readString(184, &m_alpacaFocuserHost, "127.0.0.1");

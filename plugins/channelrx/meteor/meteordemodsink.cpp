@@ -21,6 +21,7 @@
 
 #include <QDebug>
 
+#include "dsp/fftengine.h"
 #include "dsp/scopevis.h"
 #include "dsp/spectrumvis.h"
 #include "util/messagequeue.h"
@@ -30,6 +31,31 @@
 MESSAGE_CLASS_DEFINITION(MeteorDemodSink::MsgMeteorDetected, Message)
 
 namespace {
+    FFTEngine *createMeteorFFT()
+    {
+        return FFTEngine::create(QString(), QStringLiteral("Kiss"));
+    }
+
+    void makeHannWindow(std::vector<Real>& window, int size)
+    {
+        window.resize(size);
+
+        if (size <= 1)
+        {
+            if (size == 1) {
+                window[0] = 1.0f;
+            }
+
+            return;
+        }
+
+        const double twoPi = 2.0 * std::acos(-1.0);
+
+        for (int i = 0; i < size; i++) {
+            window[i] = (Real) (0.5 - 0.5 * std::cos(twoPi * (double) i / (double) (size - 1)));
+        }
+    }
+
     Real powerToDB(double power)
     {
         return (Real) (10.0 * std::log10(std::max(power, 1e-20)));
@@ -46,8 +72,12 @@ MeteorDemodSink::MeteorDemodSink() :
     m_interpolatorDistanceRemain(0.0f),
     m_scopeSampleBufferSize(0),
     m_scopeSampleBufferIndex(0),
+    m_spectralFFT(nullptr),
+    m_pulseFFT(nullptr),
     m_spectralFrameSize(0),
     m_spectralHopSize(0),
+    m_spectralFFTSize(0),
+    m_pulseFFTSize(0),
     m_spectralNoiseFloorInitialized(false),
     m_spectralEventActiveForScope(false)
 {
@@ -59,6 +89,8 @@ MeteorDemodSink::MeteorDemodSink() :
 
 MeteorDemodSink::~MeteorDemodSink()
 {
+    delete m_spectralFFT;
+    delete m_pulseFFT;
 }
 
 void MeteorDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -238,37 +270,68 @@ void MeteorDemodSink::processSpectralFrame(quint64 frameStartSample)
         return;
     }
 
-    const double twoPi = 2.0 * std::acos(-1.0);
-    std::vector<double> binPower(m_spectralFrameSize, 0.0);
-    double framePeakPower = 1e-20;
-
-    for (int i = 0; i < m_spectralFrameSize; i++) {
-        framePeakPower = std::max(framePeakPower, (double) std::norm(m_spectralFrameBuffer[i]));
+    if ((int) m_spectralBinPower.size() != m_spectralFrameSize) {
+        m_spectralBinPower.assign(m_spectralFrameSize, 0.0);
+    } else {
+        std::fill(m_spectralBinPower.begin(), m_spectralBinPower.end(), 0.0);
     }
 
-    for (int bin = -m_spectralFrameSize / 2; bin < m_spectralFrameSize / 2; bin++)
+    double framePeakPower = 1e-20;
+
+    if (m_spectralFFT && ((int) m_spectralWindow.size() == m_spectralFrameSize))
     {
-        double realSum = 0.0;
-        double imagSum = 0.0;
+        Complex *fftIn = m_spectralFFT->in();
 
         for (int i = 0; i < m_spectralFrameSize; i++)
         {
-            const double window = 0.5 - 0.5 * std::cos(twoPi * (double) i / (double) (m_spectralFrameSize - 1));
-            const Complex windowedSample = m_spectralFrameBuffer[i] * (Real) window;
-            const double angle = -twoPi * (double) bin * (double) i / (double) m_spectralFrameSize;
-            const double c = std::cos(angle);
-            const double s = std::sin(angle);
-
-            realSum += windowedSample.real() * c - windowedSample.imag() * s;
-            imagSum += windowedSample.real() * s + windowedSample.imag() * c;
+            framePeakPower = std::max(framePeakPower, (double) std::norm(m_spectralFrameBuffer[i]));
+            fftIn[i] = m_spectralFrameBuffer[i] * m_spectralWindow[i];
         }
 
-        binPower[bin + m_spectralFrameSize / 2] = std::max(realSum*realSum + imagSum*imagSum, 1e-30);
+        m_spectralFFT->transform();
+        const Complex *fftOut = m_spectralFFT->out();
+        const int halfSize = m_spectralFrameSize / 2;
+
+        for (int bin = -halfSize; bin < halfSize; bin++)
+        {
+            const int fftIndex = bin < 0 ? bin + m_spectralFrameSize : bin;
+            m_spectralBinPower[bin + halfSize] = std::max((double) std::norm(fftOut[fftIndex]), 1e-30);
+        }
+    }
+    else
+    {
+        const double twoPi = 2.0 * std::acos(-1.0);
+
+        for (int i = 0; i < m_spectralFrameSize; i++) {
+            framePeakPower = std::max(framePeakPower, (double) std::norm(m_spectralFrameBuffer[i]));
+        }
+
+        for (int bin = -m_spectralFrameSize / 2; bin < m_spectralFrameSize / 2; bin++)
+        {
+            double realSum = 0.0;
+            double imagSum = 0.0;
+
+            for (int i = 0; i < m_spectralFrameSize; i++)
+            {
+                const double window = (int) m_spectralWindow.size() == m_spectralFrameSize
+                    ? m_spectralWindow[i]
+                    : 0.5 - 0.5 * std::cos(twoPi * (double) i / (double) (m_spectralFrameSize - 1));
+                const Complex windowedSample = m_spectralFrameBuffer[i] * (Real) window;
+                const double angle = -twoPi * (double) bin * (double) i / (double) m_spectralFrameSize;
+                const double c = std::cos(angle);
+                const double s = std::sin(angle);
+
+                realSum += windowedSample.real() * c - windowedSample.imag() * s;
+                imagSum += windowedSample.real() * s + windowedSample.imag() * c;
+            }
+
+            m_spectralBinPower[bin + m_spectralFrameSize / 2] = std::max(realSum*realSum + imagSum*imagSum, 1e-30);
+        }
     }
 
-    if (!m_spectralNoiseFloorInitialized || (m_spectralNoiseFloor.size() != binPower.size()))
+    if (!m_spectralNoiseFloorInitialized || (m_spectralNoiseFloor.size() != m_spectralBinPower.size()))
     {
-        m_spectralNoiseFloor = binPower;
+        m_spectralNoiseFloor = m_spectralBinPower;
         m_spectralNoiseFloorInitialized = true;
         return;
     }
@@ -279,27 +342,32 @@ void MeteorDemodSink::processSpectralFrame(quint64 frameStartSample)
 
     if (!noiseFloorWarm)
     {
-        for (int i = 0; i < (int) binPower.size(); i++) {
-            m_spectralNoiseFloor[i] = 0.75 * std::max(m_spectralNoiseFloor[i], 1e-30) + 0.25 * binPower[i];
+        for (int i = 0; i < (int) m_spectralBinPower.size(); i++) {
+            m_spectralNoiseFloor[i] = 0.75 * std::max(m_spectralNoiseFloor[i], 1e-30) + 0.25 * m_spectralBinPower[i];
         }
 
         return;
     }
 
-    std::vector<SpectralBand> bands = detectSpectralBands(binPower, framePeakPower);
-    std::vector<bool> activeBins(binPower.size(), false);
+    std::vector<SpectralBand> bands = detectSpectralBands(m_spectralBinPower, framePeakPower);
+
+    if (m_spectralActiveBins.size() != m_spectralBinPower.size()) {
+        m_spectralActiveBins.assign(m_spectralBinPower.size(), 0);
+    } else {
+        std::fill(m_spectralActiveBins.begin(), m_spectralActiveBins.end(), 0);
+    }
 
     for (const SpectralBand& band : bands)
     {
-        for (int i = std::max(0, band.m_lowIndex); i <= std::min((int) activeBins.size() - 1, band.m_highIndex); i++) {
-            activeBins[i] = true;
+        for (int i = std::max(0, band.m_lowIndex); i <= std::min((int) m_spectralActiveBins.size() - 1, band.m_highIndex); i++) {
+            m_spectralActiveBins[i] = 1;
         }
     }
 
-    for (int i = 0; i < (int) binPower.size(); i++)
+    for (int i = 0; i < (int) m_spectralBinPower.size(); i++)
     {
-        const double alpha = m_spectralNoiseFloor[i] < (binPower[i] * 0.01) ? 0.25 : (activeBins[i] ? 0.001 : 0.02);
-        m_spectralNoiseFloor[i] = (1.0 - alpha) * std::max(m_spectralNoiseFloor[i], 1e-30) + alpha * binPower[i];
+        const double alpha = m_spectralNoiseFloor[i] < (m_spectralBinPower[i] * 0.01) ? 0.25 : (m_spectralActiveBins[i] ? 0.001 : 0.02);
+        m_spectralNoiseFloor[i] = (1.0 - alpha) * std::max(m_spectralNoiseFloor[i], 1e-30) + alpha * m_spectralBinPower[i];
     }
 
     updateSpectralEvents(bands, frameStartSample + (quint64) (m_spectralFrameSize / 2));
@@ -696,18 +764,70 @@ double MeteorDemodSink::averageFrequency(const std::vector<double>& frequencies,
     return sum / (double) (end - begin);
 }
 
-bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength, double& prominence) const
+bool MeteorDemodSink::ensurePulseFFT(int windowSize)
+{
+    if (windowSize < 8) {
+        return false;
+    }
+
+    if (!m_pulseFFT) {
+        m_pulseFFT = createMeteorFFT();
+    }
+
+    if (!m_pulseFFT) {
+        return false;
+    }
+
+    if (m_pulseFFTSize != windowSize)
+    {
+        m_pulseFFT->configure(windowSize, false);
+        m_pulseFFTSize = windowSize;
+        makeHannWindow(m_pulseFFTWindow, windowSize);
+    }
+
+    return true;
+}
+
+bool MeteorDemodSink::computePulseWindowSpectrum(int startIndex, int windowSize, std::vector<double>& binPower, double *windowedEnergy)
 {
     if ((startIndex < 0) || (windowSize < 8) || ((startIndex + windowSize) > (int) m_pulseSamples.size())) {
         return false;
     }
 
+    binPower.assign(windowSize, 0.0);
+
+    if (windowedEnergy) {
+        *windowedEnergy = 0.0;
+    }
+
+    if (ensurePulseFFT(windowSize) && ((int) m_pulseFFTWindow.size() == windowSize))
+    {
+        Complex *fftIn = m_pulseFFT->in();
+
+        for (int i = 0; i < windowSize; i++)
+        {
+            const Complex sample = m_pulseSamples[startIndex + i] * m_pulseFFTWindow[i];
+            fftIn[i] = sample;
+
+            if (windowedEnergy) {
+                *windowedEnergy += std::norm(sample);
+            }
+        }
+
+        m_pulseFFT->transform();
+        const Complex *fftOut = m_pulseFFT->out();
+        const int halfSize = windowSize / 2;
+
+        for (int bin = -halfSize; bin < halfSize; bin++)
+        {
+            const int fftIndex = bin < 0 ? bin + windowSize : bin;
+            binPower[bin + halfSize] = std::max((double) std::norm(fftOut[fftIndex]), 1e-30);
+        }
+
+        return true;
+    }
+
     const double twoPi = 2.0 * std::acos(-1.0);
-    double windowedEnergy = 0.0;
-    int bestBin = 0;
-    double bestMagnitudeSq = 0.0;
-    double magnitudeSqSum = 0.0;
-    int binCount = 0;
 
     for (int bin = -windowSize / 2; bin < windowSize / 2; bin++)
     {
@@ -725,12 +845,34 @@ bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize
             realSum += sample.real() * c - sample.imag() * s;
             imagSum += sample.real() * s + sample.imag() * c;
 
-            if (bin == -windowSize / 2) {
-                windowedEnergy += std::norm(sample);
+            if ((bin == -windowSize / 2) && windowedEnergy) {
+                *windowedEnergy += std::norm(sample);
             }
         }
 
-        const double magnitudeSq = realSum*realSum + imagSum*imagSum;
+        binPower[bin + windowSize / 2] = std::max(realSum*realSum + imagSum*imagSum, 1e-30);
+    }
+
+    return true;
+}
+
+bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength, double& prominence)
+{
+    double windowedEnergy = 0.0;
+    std::vector<double> binPower;
+
+    if (!computePulseWindowSpectrum(startIndex, windowSize, binPower, &windowedEnergy)) {
+        return false;
+    }
+
+    int bestBin = 0;
+    double bestMagnitudeSq = 0.0;
+    double magnitudeSqSum = 0.0;
+    int binCount = 0;
+
+    for (int bin = -windowSize / 2; bin < windowSize / 2; bin++)
+    {
+        const double magnitudeSq = binPower[bin + windowSize / 2];
         magnitudeSqSum += magnitudeSq;
         binCount++;
 
@@ -751,7 +893,7 @@ bool MeteorDemodSink::estimateWindowPeakFrequency(int startIndex, int windowSize
     return std::isfinite(frequency) && std::isfinite(strength) && std::isfinite(prominence);
 }
 
-bool MeteorDemodSink::estimatePulseSpectralBand(int windowSize, int hopSize, double& centerFrequency, double& bandwidth, double& contrastDB) const
+bool MeteorDemodSink::estimatePulseSpectralBand(int windowSize, int hopSize, double& centerFrequency, double& bandwidth, double& contrastDB)
 {
     centerFrequency = 0.0;
     bandwidth = 0.0;
@@ -761,30 +903,18 @@ bool MeteorDemodSink::estimatePulseSpectralBand(int windowSize, int hopSize, dou
         return false;
     }
 
-    const double twoPi = 2.0 * std::acos(-1.0);
     std::vector<double> binPower(windowSize, 0.0);
+    std::vector<double> windowPower;
     int windowCount = 0;
 
     for (int start = 0; (start + windowSize) <= (int) m_pulseSamples.size(); start += hopSize)
     {
-        for (int bin = -windowSize / 2; bin < windowSize / 2; bin++)
-        {
-            double realSum = 0.0;
-            double imagSum = 0.0;
+        if (!computePulseWindowSpectrum(start, windowSize, windowPower, nullptr)) {
+            continue;
+        }
 
-            for (int i = 0; i < windowSize; i++)
-            {
-                const double window = 0.5 - 0.5 * std::cos(twoPi * (double) i / (double) (windowSize - 1));
-                const Complex sample = m_pulseSamples[start + i] * (Real) window;
-                const double angle = -twoPi * (double) bin * (double) i / (double) windowSize;
-                const double c = std::cos(angle);
-                const double s = std::sin(angle);
-
-                realSum += sample.real() * c - sample.imag() * s;
-                imagSum += sample.real() * s + sample.imag() * c;
-            }
-
-            binPower[bin + windowSize / 2] += realSum*realSum + imagSum*imagSum;
+        for (int i = 0; i < windowSize; i++) {
+            binPower[i] += windowPower[i];
         }
 
         windowCount++;
@@ -852,7 +982,7 @@ bool MeteorDemodSink::estimatePulseFrequency(
     double& spectralProminence,
     double& frequencyConcentration,
     double& spectralBandwidth,
-    double& spectralBandContrastDB) const
+    double& spectralBandContrastDB)
 {
     centerFrequency = 0.0;
     frequencySpan = 0.0;
@@ -1311,7 +1441,42 @@ void MeteorDemodSink::finishPendingSpectralReportsForPulse(quint64 pulseEndSampl
             }
         }
 
-        reportsToEmit.push_back(report);
+        bool merged = false;
+
+        for (PulseReport& mergedReport : reportsToEmit)
+        {
+            if (!reportsOverlap(report.m_startSample, report.m_endSample, mergedReport.m_startSample, mergedReport.m_endSample)) {
+                continue;
+            }
+
+            const bool reportIsStronger = report.m_peakPower > mergedReport.m_peakPower;
+            const quint64 mergedDurationSamples = mergedReport.m_endSample - mergedReport.m_startSample + 1;
+            const quint64 reportDurationSamples = report.m_endSample - report.m_startSample + 1;
+
+            if (reportIsStronger)
+            {
+                mergedReport.m_centerFrequency = report.m_centerFrequency;
+                mergedReport.m_frequencySpan = report.m_frequencySpan;
+                mergedReport.m_frequencyDrift = report.m_frequencyDrift;
+            }
+
+            if (reportDurationSamples > mergedDurationSamples)
+            {
+                mergedReport.m_dateTimeUtc = report.m_dateTimeUtc;
+                mergedReport.m_startSample = report.m_startSample;
+                mergedReport.m_endSample = report.m_endSample;
+                mergedReport.m_durationS = report.m_durationS;
+            }
+
+            mergedReport.m_peakPower = std::max(mergedReport.m_peakPower, report.m_peakPower);
+            mergedReport.m_backgroundPower = std::max(mergedReport.m_backgroundPower, report.m_backgroundPower);
+            merged = true;
+            break;
+        }
+
+        if (!merged) {
+            reportsToEmit.push_back(report);
+        }
     }
 
     std::sort(
@@ -1354,32 +1519,69 @@ bool MeteorDemodSink::estimatePulseBandEnvelope(PulseReport& report) const
     const int hopSize = std::max(1, frameSize / 8);
     const double binWidth = (double) sampleRate / (double) frameSize;
     const double halfBandwidth = std::max({0.5 * std::fabs(report.m_frequencySpan), 20.0, 2.0 * binWidth});
-    const double lowFrequency = report.m_centerFrequency - halfBandwidth;
-    const double highFrequency = report.m_centerFrequency + halfBandwidth;
     const double twoPi = 2.0 * std::acos(-1.0);
+    std::vector<Real> window;
     std::vector<double> strengths;
     std::vector<quint64> centerSamples;
+    std::vector<double> probeFrequencies;
+    const quint64 reportCenterSample = report.m_startSample + (report.m_endSample - report.m_startSample) / 2;
+    const quint64 reportCenterOffset = reportCenterSample > m_pulseStartSample ? reportCenterSample - m_pulseStartSample : 0;
+    const quint64 localRadiusSamples = (quint64) sampleRate * 4;
+    const int pulseSampleCount = (int) m_pulseSamples.size();
+    const int scanStart = reportCenterOffset > (localRadiusSamples + (quint64) frameSize)
+        ? (int) (reportCenterOffset - localRadiusSamples - (quint64) frameSize)
+        : 0;
+    const int scanEnd = (int) std::min<quint64>(
+        (quint64) pulseSampleCount,
+        reportCenterOffset + localRadiusSamples + (quint64) frameSize
+    );
+    const double maxUsableFrequency = 0.45 * (double) sampleRate;
 
-    for (int start = 0; (start + frameSize) <= (int) m_pulseSamples.size(); start += hopSize)
+    auto addProbeFrequency = [&probeFrequencies, maxUsableFrequency](double frequency)
+    {
+        if (std::fabs(frequency) > maxUsableFrequency) {
+            return;
+        }
+
+        for (double existingFrequency : probeFrequencies)
+        {
+            if (std::fabs(existingFrequency - frequency) < 1.0) {
+                return;
+            }
+        }
+
+        probeFrequencies.push_back(frequency);
+    };
+
+    addProbeFrequency(report.m_centerFrequency);
+    addProbeFrequency(report.m_centerFrequency - 0.5 * halfBandwidth);
+    addProbeFrequency(report.m_centerFrequency + 0.5 * halfBandwidth);
+
+    if (halfBandwidth > 60.0)
+    {
+        addProbeFrequency(report.m_centerFrequency - 0.85 * halfBandwidth);
+        addProbeFrequency(report.m_centerFrequency + 0.85 * halfBandwidth);
+    }
+
+    if (probeFrequencies.empty()) {
+        return false;
+    }
+
+    makeHannWindow(window, frameSize);
+
+    for (int start = scanStart; (start + frameSize) <= scanEnd; start += hopSize)
     {
         double bandPower = 0.0;
 
-        for (int bin = -frameSize / 2; bin < frameSize / 2; bin++)
+        for (double frequency : probeFrequencies)
         {
-            const double frequency = (double) bin * binWidth;
-
-            if ((frequency < lowFrequency) || (frequency > highFrequency)) {
-                continue;
-            }
-
             double realSum = 0.0;
             double imagSum = 0.0;
 
             for (int i = 0; i < frameSize; i++)
             {
-                const double window = 0.5 - 0.5 * std::cos(twoPi * (double) i / (double) (frameSize - 1));
-                const Complex windowedSample = m_pulseSamples[start + i] * (Real) window;
-                const double angle = -twoPi * (double) bin * (double) i / (double) frameSize;
+                const Complex windowedSample = m_pulseSamples[start + i] * window[i];
+                const double angle = -twoPi * frequency * (double) i / (double) sampleRate;
                 const double c = std::cos(angle);
                 const double s = std::sin(angle);
 
@@ -1401,7 +1603,6 @@ bool MeteorDemodSink::estimatePulseBandEnvelope(PulseReport& report) const
     std::vector<double> sortedStrengths = strengths;
     std::sort(sortedStrengths.begin(), sortedStrengths.end());
     const double floorStrength = std::max(sortedStrengths[sortedStrengths.size() / 5], 1e-30);
-    const quint64 reportCenterSample = report.m_startSample + (report.m_endSample - report.m_startSample) / 2;
     const quint64 searchRadiusSamples = (quint64) sampleRate * 2;
     int peakIndex = -1;
     double peakStrength = 0.0;
@@ -1591,6 +1792,20 @@ void MeteorDemodSink::configureSpectralDetector()
         m_spectralFrameSize++;
     }
     m_spectralHopSize = std::max(1, m_spectralFrameSize / 4);
+
+    if (!m_spectralFFT) {
+        m_spectralFFT = createMeteorFFT();
+    }
+
+    if (m_spectralFFT && (m_spectralFFTSize != m_spectralFrameSize))
+    {
+        m_spectralFFT->configure(m_spectralFrameSize, false);
+        m_spectralFFTSize = m_spectralFrameSize;
+    }
+
+    makeHannWindow(m_spectralWindow, m_spectralFrameSize);
+    m_spectralBinPower.assign(m_spectralFrameSize, 0.0);
+    m_spectralActiveBins.assign(m_spectralFrameSize, 0);
     m_spectralFrameBuffer.clear();
     m_spectralNoiseFloor.clear();
     m_spectralEvents.clear();

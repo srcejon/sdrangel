@@ -34,6 +34,7 @@
 class MessageQueue;
 class ScopeVis;
 class SpectrumVis;
+class FFTEngine;
 
 class MeteorDemodSink : public ChannelSampleSink {
 public:
@@ -244,12 +245,20 @@ private:
     ComplexVector m_spectrumBuffer;
     ComplexVector m_pulseSamples;
     ComplexVector m_spectralFrameBuffer;
+    std::vector<Real> m_spectralWindow;
+    std::vector<double> m_spectralBinPower;
     std::vector<double> m_spectralNoiseFloor;
     std::vector<SpectralEvent> m_spectralEvents;
     std::vector<DetectionRange> m_recentDetectionRanges;
     std::vector<PulseReport> m_pendingSpectralReports;
+    std::vector<char> m_spectralActiveBins;
+    FFTEngine *m_spectralFFT;
+    FFTEngine *m_pulseFFT;
     int m_spectralFrameSize;
     int m_spectralHopSize;
+    int m_spectralFFTSize;
+    int m_pulseFFTSize;
+    std::vector<Real> m_pulseFFTWindow;
     bool m_spectralNoiseFloorInitialized;
     bool m_spectralEventActiveForScope;
 
@@ -297,9 +306,11 @@ private:
         double& spectralProminence,
         double& frequencyConcentration,
         double& spectralBandwidth,
-        double& spectralBandContrastDB) const;
-    bool estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength, double& prominence) const;
-    bool estimatePulseSpectralBand(int windowSize, int hopSize, double& centerFrequency, double& bandwidth, double& contrastDB) const;
+        double& spectralBandContrastDB);
+    bool estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength, double& prominence);
+    bool estimatePulseSpectralBand(int windowSize, int hopSize, double& centerFrequency, double& bandwidth, double& contrastDB);
+    bool computePulseWindowSpectrum(int startIndex, int windowSize, std::vector<double>& binPower, double *windowedEnergy);
+    bool ensurePulseFFT(int windowSize);
     static double averageFrequency(const std::vector<double>& frequencies, int begin, int end);
     void configureInterpolator();
     void configurePowerLowpass();

@@ -56,6 +56,35 @@ bool FeatureWebAPIUtils::run(int featureSetIndex, int featureIndex)
     }
 }
 
+// Stop feature
+bool FeatureWebAPIUtils::stop(int featureSetIndex, int featureIndex)
+{
+    Feature *feature = FeatureWebAPIUtils::getFeature(featureSetIndex, featureIndex, "");
+    if (feature != nullptr)
+    {
+        SWGSDRangel::SWGDeviceState runResponse;
+        QString errorResponse;
+        int httpRC;
+
+        runResponse.setState(new QString());
+        httpRC = feature->webapiRun(false, runResponse, errorResponse);
+
+        if (httpRC/100 != 2)
+        {
+            qWarning("FeatureWebAPIUtils::stop: stop error %d: %s",
+                httpRC, qPrintable(errorResponse));
+            return false;
+        }
+
+        return true;
+    }
+    else
+    {
+        qWarning("FeatureWebAPIUtils::stop: no feature F%d:%d", featureSetIndex, featureIndex);
+        return false;
+    }
+}
+
 // Find the specified target on the map
 bool FeatureWebAPIUtils::mapFind(const QString& target, int featureSetIndex, int featureIndex)
 {

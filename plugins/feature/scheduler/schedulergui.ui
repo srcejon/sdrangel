@@ -1,0 +1,572 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SchedulerGUI</class>
+ <widget class="RollupContents" name="SchedulerGUI">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>620</width>
+    <height>760</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>420</width>
+    <height>300</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Scheduler</string>
+  </property>
+  <widget class="QWidget" name="settingsContainer" native="true">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>620</width>
+     <height>760</height>
+    </rect>
+   </property>
+   <property name="windowTitle">
+    <string>Rules</string>
+   </property>
+   <layout class="QVBoxLayout" name="settingsLayout">
+    <property name="spacing">
+     <number>4</number>
+    </property>
+    <property name="leftMargin">
+     <number>4</number>
+    </property>
+    <property name="topMargin">
+     <number>4</number>
+    </property>
+    <property name="rightMargin">
+     <number>4</number>
+    </property>
+    <property name="bottomMargin">
+     <number>4</number>
+    </property>
+    <item>
+     <widget class="QTableWidget" name="rulesTable">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>150</height>
+       </size>
+      </property>
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SingleSelection</enum>
+      </property>
+      <property name="selectionBehavior">
+       <enum>QAbstractItemView::SelectRows</enum>
+      </property>
+      <property name="editTriggers">
+       <set>QAbstractItemView::NoEditTriggers</set>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="ruleButtonLayout">
+      <item>
+       <widget class="QToolButton" name="addRule">
+        <property name="toolTip">
+         <string>Add rule</string>
+        </property>
+        <property name="text">
+         <string>+</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="deleteRule">
+        <property name="toolTip">
+         <string>Delete selected rule</string>
+        </property>
+        <property name="text">
+         <string>-</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="refreshLists">
+        <property name="toolTip">
+         <string>Refresh device, feature and event source lists</string>
+        </property>
+        <property name="text">
+         <string>Refresh</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="ruleButtonSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QScrollArea" name="editorScrollArea">
+      <property name="widgetResizable">
+       <bool>true</bool>
+      </property>
+      <widget class="QWidget" name="editorScrollContents">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>596</width>
+         <height>560</height>
+        </rect>
+       </property>
+       <layout class="QVBoxLayout" name="editorLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <property name="leftMargin">
+         <number>4</number>
+        </property>
+        <property name="topMargin">
+         <number>4</number>
+        </property>
+        <property name="rightMargin">
+         <number>4</number>
+        </property>
+        <property name="bottomMargin">
+         <number>4</number>
+        </property>
+        <item>
+         <widget class="QGroupBox" name="ruleEditor">
+          <property name="title">
+           <string>Rule</string>
+          </property>
+          <layout class="QFormLayout" name="ruleForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="ruleNameLabel">
+             <property name="text">
+              <string>Name</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="ruleName"/>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="ruleEnabledLabel">
+             <property name="text">
+              <string>Enabled</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QCheckBox" name="ruleEnabled">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="triggerTypeLabel">
+             <property name="text">
+              <string>Trigger</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QComboBox" name="triggerType"/>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="timeGroup">
+          <property name="title">
+           <string>Time Schedule</string>
+          </property>
+          <layout class="QFormLayout" name="timeForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="dateTimeLabel">
+             <property name="text">
+              <string>Date/time</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QDateTimeEdit" name="dateTime">
+             <property name="calendarPopup">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="recurrenceLabel">
+             <property name="text">
+              <string>Recurrence</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QComboBox" name="recurrence"/>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="eventGroup">
+          <property name="title">
+           <string>Event Match</string>
+          </property>
+          <layout class="QFormLayout" name="eventForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="eventTypeLabel">
+             <property name="text">
+              <string>Event</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QComboBox" name="eventType"/>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="eventSourceLabel">
+             <property name="text">
+              <string>Source</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QComboBox" name="eventSource">
+             <property name="editable">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="eventDataRegexLabel">
+             <property name="text">
+              <string>Data regex</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLineEdit" name="eventDataRegex"/>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="eventDelayLabel">
+             <property name="text">
+              <string>Delay</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <layout class="QHBoxLayout" name="delayLayout">
+             <item>
+              <widget class="QSpinBox" name="eventDelay">
+               <property name="maximum">
+                <number>86400</number>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="eventDelayUnit"/>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="commandGroup">
+          <property name="title">
+           <string>Command and Speech</string>
+          </property>
+          <layout class="QFormLayout" name="commandForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="commandLabel">
+             <property name="text">
+              <string>Command</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="command"/>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="speechLabel">
+             <property name="text">
+              <string>Speech</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="speech"/>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="deviceGroup">
+          <property name="title">
+           <string>Device Set Actions</string>
+          </property>
+          <layout class="QVBoxLayout" name="deviceGroupLayout">
+           <item>
+            <widget class="QTableWidget" name="deviceActionsTable">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>90</height>
+              </size>
+             </property>
+             <property name="selectionMode">
+              <enum>QAbstractItemView::SingleSelection</enum>
+             </property>
+             <property name="selectionBehavior">
+              <enum>QAbstractItemView::SelectRows</enum>
+             </property>
+             <property name="editTriggers">
+              <set>QAbstractItemView::NoEditTriggers</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="deviceButtonLayout">
+             <item>
+              <widget class="QToolButton" name="addDeviceAction">
+               <property name="toolTip">
+                <string>Add device action</string>
+               </property>
+               <property name="text">
+                <string>+</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QToolButton" name="deleteDeviceAction">
+               <property name="toolTip">
+                <string>Delete selected device action</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="deviceButtonSpacer">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QFormLayout" name="deviceForm">
+             <item row="0" column="0">
+              <widget class="QLabel" name="deviceSetLabel">
+               <property name="text">
+                <string>Device set</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="deviceSet">
+               <property name="editable">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="presetLabel">
+               <property name="text">
+                <string>Preset</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QComboBox" name="preset"/>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="acquisitionActionLabel">
+               <property name="text">
+                <string>Acquisition</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QComboBox" name="acquisitionAction"/>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="fileSinkActionLabel">
+               <property name="text">
+                <string>File sinks</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QComboBox" name="fileSinkAction"/>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="overrideFrequencyLabel">
+               <property name="text">
+                <string>Override frequency</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <widget class="QCheckBox" name="overrideFrequency">
+               <property name="text">
+                <string/>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="centerFrequencyLabel">
+               <property name="text">
+                <string>Center frequency</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QDoubleSpinBox" name="centerFrequency">
+               <property name="decimals">
+                <number>6</number>
+               </property>
+               <property name="maximum">
+                <double>999999.000000000000000</double>
+               </property>
+               <property name="suffix">
+                <string> MHz</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="featureGroup">
+          <property name="title">
+           <string>Feature Actions</string>
+          </property>
+          <layout class="QVBoxLayout" name="featureGroupLayout">
+           <item>
+            <widget class="QTableWidget" name="featureActionsTable">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>90</height>
+              </size>
+             </property>
+             <property name="selectionMode">
+              <enum>QAbstractItemView::SingleSelection</enum>
+             </property>
+             <property name="selectionBehavior">
+              <enum>QAbstractItemView::SelectRows</enum>
+             </property>
+             <property name="editTriggers">
+              <set>QAbstractItemView::NoEditTriggers</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="featureButtonLayout">
+             <item>
+              <widget class="QToolButton" name="addFeatureAction">
+               <property name="toolTip">
+                <string>Add feature action</string>
+               </property>
+               <property name="text">
+                <string>+</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QToolButton" name="deleteFeatureAction">
+               <property name="toolTip">
+                <string>Delete selected feature action</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="featureButtonSpacer">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QFormLayout" name="featureForm">
+             <item row="0" column="0">
+              <widget class="QLabel" name="featureSelectLabel">
+               <property name="text">
+                <string>Feature</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="featureSelect">
+               <property name="editable">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="featureActionLabel">
+               <property name="text">
+                <string>Action</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QComboBox" name="featureAction"/>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>RollupContents</class>
+   <extends>QWidget</extends>
+   <header>gui/rollupcontents.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

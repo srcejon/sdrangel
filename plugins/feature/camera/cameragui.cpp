@@ -400,6 +400,7 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         settingsUI()->pipelineFpsLabel->setText(
             m_lastPipelineFps > 0.0 ? QString::number(m_lastPipelineFps, 'f', 1) : "-");
+        updateVideoPreRecordBufferMemoryLabel();
         m_lastPlateSolved = report.isPlateSolved();
         m_lastPlateSolvedMatches = report.getPlateSolvedMatches();
         m_lastPlateSolveDetectedStarsConsidered = report.getPlateSolveDetectedStarsConsidered();
@@ -1077,6 +1078,7 @@ void CameraGUI::displaySettings()
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
     settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
     settingsUI()->videoHwAccelerationCheck->setChecked(m_settings.m_videoHwAcceleration);
+    settingsUI()->videoPreRecordBufferSpin->setValue(m_settings.m_videoPreRecordBufferSeconds);
     settingsUI()->recordModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_recordMode));
     ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
@@ -1519,6 +1521,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
+    QObject::connect(settingsUI()->videoPreRecordBufferSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoPreRecordBufferSpin_valueChanged);
     QObject::connect(settingsUI()->recordModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_recordModeCombo_currentIndexChanged);
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
@@ -1964,6 +1967,25 @@ void CameraGUI::updateVideoFileControls()
     ui->playbackPositionSlider->setVisible(fileCameraSelected);
     ui->playbackPositionSlider->setEnabled(hasPlaybackPosition);
     ui->videoLine->setVisible(fileCameraSelected);
+    updateVideoPreRecordBufferMemoryLabel();
+}
+
+void CameraGUI::updateVideoPreRecordBufferMemoryLabel()
+{
+    if (!m_settingsDialog) {
+        return;
+    }
+
+    const int width = m_lastImage.isNull() ? std::max(0, m_settings.m_resolutionWidth) : m_lastImage.width();
+    const int height = m_lastImage.isNull() ? std::max(0, m_settings.m_resolutionHeight) : m_lastImage.height();
+    const int seconds = std::max(0, m_settings.m_videoPreRecordBufferSeconds);
+    const int streams = (m_settings.m_recordMode == CameraSettings::SavedMediaBoth) ? 2 : 1;
+    const double frameRate = std::max(0.0, m_settings.getCaptureFrameRate());
+    const double bytes = static_cast<double>(width) * static_cast<double>(height) * 3.0
+        * frameRate * static_cast<double>(seconds) * static_cast<double>(streams);
+    const double mib = bytes / (1024.0 * 1024.0);
+
+    settingsUI()->videoPreRecordBufferMemoryLabel->setText(QStringLiteral("%1 MiB").arg(mib, 0, 'f', mib < 10.0 ? 1 : 0));
 }
 
 void CameraGUI::updateHdrExposureControls()
@@ -4117,6 +4139,7 @@ void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
             m_settings.m_resolutionWidth = width;
             m_settings.m_resolutionHeight = height;
             updateFrameRateControlForResolution(settingsUI()->resolutionCombo->currentText());
+            updateVideoPreRecordBufferMemoryLabel();
             applySettings({"resolutionWidth", "resolutionHeight", "framesPerSecond"});
         }
     }
@@ -4134,12 +4157,14 @@ void CameraGUI::on_fpsLabel_currentIndexChanged(int index)
 
     m_settings.m_captureMode = static_cast<CameraSettings::CaptureMode>(settingsUI()->fpsLabel->itemData(index).toInt());
     updateCameraSettingsVisibility();
+    updateVideoPreRecordBufferMemoryLabel();
     applySetting("captureMode");
 }
 
 void CameraGUI::on_fpsSpin_valueChanged(int value)
 {
     m_settings.m_framesPerSecond = value;
+    updateVideoPreRecordBufferMemoryLabel();
     applySetting("framesPerSecond");
 }
 
@@ -4150,12 +4175,14 @@ void CameraGUI::on_fpsCombo_currentIndexChanged(int index)
     }
 
     m_settings.m_framesPerSecond = settingsUI()->fpsCombo->itemData(index).toInt();
+    updateVideoPreRecordBufferMemoryLabel();
     applySetting("framesPerSecond");
 }
 
 void CameraGUI::on_intervalSpin_valueChanged(double value)
 {
     m_settings.m_captureInterval = value;
+    updateVideoPreRecordBufferMemoryLabel();
     applySetting("captureInterval");
 }
 
@@ -4166,6 +4193,7 @@ void CameraGUI::on_intervalUnitsCombo_currentIndexChanged(int index)
     }
 
     m_settings.m_captureIntervalUnits = static_cast<CameraSettings::CaptureIntervalUnits>(settingsUI()->intervalUnitsCombo->itemData(index).toInt());
+    updateVideoPreRecordBufferMemoryLabel();
     applySetting("captureIntervalUnits");
 }
 
@@ -4529,11 +4557,19 @@ void CameraGUI::on_videoHwAccelerationCheck_toggled(bool checked)
     applySetting("videoHwAcceleration");
 }
 
+void CameraGUI::on_videoPreRecordBufferSpin_valueChanged(int value)
+{
+    m_settings.m_videoPreRecordBufferSeconds = value;
+    updateVideoPreRecordBufferMemoryLabel();
+    applySetting("videoPreRecordBufferSeconds");
+}
+
 void CameraGUI::on_recordModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
         static_cast<CameraSettings::SavedMediaMode>(index),
         CameraSettings::SavedMediaBoth);
+    updateVideoPreRecordBufferMemoryLabel();
     applySetting("videoPostProcess");
     applyImageToolTip();
     applyVideoToolTip();

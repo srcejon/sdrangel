@@ -504,6 +504,7 @@ CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_availableChannelOrFeatureHandler(kTrackedObjectPipeURIs, QStringList{QStringLiteral("mapitems")}),
     m_captureActive(false),
+    m_preRecordBufferFlushed(false),
     m_processingFrame(false)
 {}
 
@@ -607,6 +608,8 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         else
         {
             closeVideoWriters();
+            m_preRecordVideoFrames.clear();
+            m_preRecordBufferFlushed = false;
         }
 
         QMutexLocker locker(&m_frameMutex);
@@ -672,6 +675,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 
     if (sourceChanged) {
         m_lastFrame = CameraPipelineFrame();
+        m_preRecordVideoFrames.clear();
+        m_preRecordBufferFlushed = false;
     }
 
     if (force || settingsKeys.contains("spectrumDevice")) {
@@ -687,6 +692,11 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         || settingsKeys.contains("videoHwAcceleration") || settingsKeys.contains("videoPostProcess"))
     {
         closeVideoWriters();
+        m_preRecordBufferFlushed = false;
+    }
+
+    if (force || settingsKeys.contains("videoPreRecordBufferSeconds")) {
+        trimPreRecordBuffer();
     }
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
@@ -866,6 +876,10 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     if (m_captureActive && m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
     {
+        if (!m_preRecordBufferFlushed) {
+            flushPreRecordFrames(unprocessedImage, processed);
+        }
+
         if (shouldSaveRawMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, unprocessedImage, true)) {
             writeVideoFrame(m_rawVideoWriter, unprocessedImage);
         }
@@ -873,6 +887,10 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         if (shouldSaveProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processed, false)) {
             writeVideoFrame(m_processedVideoWriter, processed);
         }
+    }
+    else if (m_captureActive && !m_settings.m_saveVideo)
+    {
+        appendPreRecordFrame(unprocessedImage, processed);
     }
 }
 
@@ -1486,6 +1504,7 @@ void CameraPostProcessor::setVideoRecordingEnabled(bool enabled)
     }
 
     m_settings.m_saveVideo = enabled;
+    m_preRecordBufferFlushed = false;
 
     if (!enabled) {
         closeVideoWriters();
@@ -1524,6 +1543,71 @@ void CameraPostProcessor::closeVideoWriters()
     if (m_processedVideoWriter.isOpened()) {
         m_processedVideoWriter.release();
     }
+}
+
+int CameraPostProcessor::preRecordBufferFrameLimit() const
+{
+    const int seconds = qBound(0, m_settings.m_videoPreRecordBufferSeconds, 60);
+    if (seconds <= 0) {
+        return 0;
+    }
+
+    return std::max(1, static_cast<int>(std::ceil(m_settings.getCaptureFrameRate() * seconds)));
+}
+
+void CameraPostProcessor::trimPreRecordBuffer()
+{
+    const int frameLimit = preRecordBufferFrameLimit();
+    while (static_cast<int>(m_preRecordVideoFrames.size()) > frameLimit) {
+        m_preRecordVideoFrames.pop_front();
+    }
+
+    if (frameLimit == 0) {
+        m_preRecordVideoFrames.clear();
+    }
+}
+
+void CameraPostProcessor::appendPreRecordFrame(const QImage& rawImage, const QImage& processedImage)
+{
+    if (preRecordBufferFrameLimit() <= 0) {
+        m_preRecordVideoFrames.clear();
+        return;
+    }
+
+    m_preRecordVideoFrames.push_back({rawImage.copy(), processedImage.copy()});
+    trimPreRecordBuffer();
+}
+
+void CameraPostProcessor::flushPreRecordFrames(const QImage& currentRawImage, const QImage& currentProcessedImage)
+{
+    if (!m_settings.m_saveVideo || m_settings.m_videoFileName.isEmpty())
+    {
+        m_preRecordBufferFlushed = true;
+        return;
+    }
+
+    if (shouldSaveRawMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, currentRawImage, true))
+    {
+        for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
+        {
+            if (bufferedFrame.m_rawImage.size() == currentRawImage.size()) {
+                writeVideoFrame(m_rawVideoWriter, bufferedFrame.m_rawImage);
+            }
+        }
+    }
+
+    if (shouldSaveProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, currentProcessedImage, false))
+    {
+        for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
+        {
+            if (bufferedFrame.m_processedImage.size() == currentProcessedImage.size()) {
+                writeVideoFrame(m_processedVideoWriter, bufferedFrame.m_processedImage);
+            }
+        }
+    }
+
+    m_preRecordVideoFrames.clear();
+    m_preRecordBufferFlushed = true;
 }
 
 bool CameraPostProcessor::ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant)

@@ -173,15 +173,15 @@ int CameraWorker::asiBayerToOpenCvCode(int bayerPattern)
     switch (bayerPattern)
     {
     case ASI_BAYER_RG:
-        return cv::COLOR_BayerRG2BGR;
-    case ASI_BAYER_BG:
         return cv::COLOR_BayerBG2BGR;
-    case ASI_BAYER_GR:
-        return cv::COLOR_BayerGR2BGR;
-    case ASI_BAYER_GB:
-        return cv::COLOR_BayerGB2BGR;
-    default:
+    case ASI_BAYER_BG:
         return cv::COLOR_BayerRG2BGR;
+    case ASI_BAYER_GR:
+        return cv::COLOR_BayerGB2BGR;
+    case ASI_BAYER_GB:
+        return cv::COLOR_BayerGR2BGR;
+    default:
+        return cv::COLOR_BayerBG2BGR;
     }
 }
 

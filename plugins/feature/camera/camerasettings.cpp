@@ -197,6 +197,7 @@ void CameraSettings::resetToDefaults()
     m_videoLoop = false;
     m_videoPlaybackRate = 1.0;
     m_videoHwAcceleration = true;
+    m_videoPreRecordBufferSeconds = 0;
     m_stackEnabled = false;
     m_stackFrameCount = 4;
     m_stackMethod = StackMethodAverage;
@@ -586,6 +587,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(215, m_recordMode);
     s.writeBool(216, m_asiAutoExposureGain);
     s.writeDouble(217, m_postProcessWhiteBalanceHighlightProtection);
+    s.writeS32(218, m_videoPreRecordBufferSeconds);
 
     return s.final();
 }
@@ -654,6 +656,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(16, &m_saveVideo, false);
         d.readString(17, &m_videoFileName, "camera.mp4");
         d.readBool(18, &m_videoHwAcceleration, true);
+        d.readS32(218, &m_videoPreRecordBufferSeconds, 0);
+        m_videoPreRecordBufferSeconds = qBound(0, m_videoPreRecordBufferSeconds, 60);
         d.readBool(21, &m_stackEnabled, false);
         d.readS32(22, &m_stackFrameCount, 4);
         d.readS32(23, (qint32 *) &m_stackMethod, (qint32) StackMethodAverage);
@@ -1226,6 +1230,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoHwAcceleration")) {
         m_videoHwAcceleration = settings.m_videoHwAcceleration;
+    }
+    if (settingsKeys.contains("videoPreRecordBufferSeconds")) {
+        m_videoPreRecordBufferSeconds = qBound(0, settings.m_videoPreRecordBufferSeconds, 60);
     }
     if (settingsKeys.contains("stackEnabled")) {
         m_stackEnabled = settings.m_stackEnabled;
@@ -1871,6 +1878,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoHwAcceleration") || force) {
         ostr << " m_videoHwAcceleration: " << m_videoHwAcceleration;
+    }
+    if (settingsKeys.contains("videoPreRecordBufferSeconds") || force) {
+        ostr << " m_videoPreRecordBufferSeconds: " << m_videoPreRecordBufferSeconds;
     }
     if (settingsKeys.contains("stackEnabled") || force) {
         ostr << " m_stackEnabled: " << m_stackEnabled;

@@ -3689,6 +3689,37 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="videoPreRecordBufferLabel">
+            <property name="text">
+             <string>Pre-record buffer</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <layout class="QHBoxLayout" name="videoPreRecordBufferLayout">
+            <item>
+             <widget class="QSpinBox" name="videoPreRecordBufferSpin">
+              <property name="toolTip">
+               <string>Seconds of live video frames to keep before recording starts</string>
+              </property>
+              <property name="suffix">
+               <string> s</string>
+              </property>
+              <property name="maximum">
+               <number>60</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="videoPreRecordBufferMemoryLabel">
+              <property name="text">
+               <string>0 MB</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
          </layout>
         </widget>
        </item>
@@ -6095,6 +6126,7 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>videoPathButton</tabstop>
   <tabstop>recordModeCombo</tabstop>
   <tabstop>videoHwAccelerationCheck</tabstop>
+  <tabstop>videoPreRecordBufferSpin</tabstop>
   <tabstop>yoloModelPathCombo</tabstop>
   <tabstop>yoloModelPathButton</tabstop>
   <tabstop>yoloLabelsPathCombo</tabstop>

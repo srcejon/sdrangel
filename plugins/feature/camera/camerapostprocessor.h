@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
 
 #include <QObject>
+#include <deque>
 #include <limits>
 #include <QHash>
 #include <QMutex>
@@ -321,6 +322,12 @@ private:
         QDateTime m_availableUntil;
     };
 
+    struct BufferedVideoFrame
+    {
+        QImage m_rawImage;
+        QImage m_processedImage;
+    };
+
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
     AvailableChannelOrFeatureHandler m_availableChannelOrFeatureHandler;
@@ -330,6 +337,8 @@ private:
     QDateTime m_captureDateTime;
     cv::VideoWriter m_rawVideoWriter;
     cv::VideoWriter m_processedVideoWriter;
+    std::deque<BufferedVideoFrame> m_preRecordVideoFrames;
+    bool m_preRecordBufferFlushed;
     QImage m_spectrumViewImage;
     Weather *m_weather = nullptr;
     float m_weatherTemperature = std::numeric_limits<float>::quiet_NaN();
@@ -369,6 +378,10 @@ private:
     void closeVideoWriters();
     bool ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant);
     void writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite);
+    int preRecordBufferFrameLimit() const;
+    void trimPreRecordBuffer();
+    void appendPreRecordFrame(const QImage& rawImage, const QImage& processedImage);
+    void flushPreRecordFrames(const QImage& currentRawImage, const QImage& currentProcessedImage);
 private slots:
     void handleInputMessages();
     void handlePipeMessageQueue(MessageQueue* messageQueue);

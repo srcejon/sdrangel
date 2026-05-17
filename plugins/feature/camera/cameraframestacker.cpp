@@ -235,13 +235,13 @@ int CameraFrameStacker::bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPatte
     switch (bayerPattern)
     {
     case CameraPipelineFrame::BayerRGGB:
-        return cv::COLOR_BayerRG2BGR;
-    case CameraPipelineFrame::BayerBGGR:
         return cv::COLOR_BayerBG2BGR;
+    case CameraPipelineFrame::BayerBGGR:
+        return cv::COLOR_BayerRG2BGR;
     case CameraPipelineFrame::BayerGRBG:
-        return cv::COLOR_BayerGR2BGR;
-    case CameraPipelineFrame::BayerGBRG:
         return cv::COLOR_BayerGB2BGR;
+    case CameraPipelineFrame::BayerGBRG:
+        return cv::COLOR_BayerGR2BGR;
     case CameraPipelineFrame::BayerNone:
     default:
         return -1;

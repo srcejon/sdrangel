@@ -3720,6 +3720,49 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </item>
            </layout>
           </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="imageRecordLimitLabel">
+            <property name="text">
+             <string>Image limit</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QSpinBox" name="imageRecordLimitSpin">
+            <property name="toolTip">
+             <string>Number of image frames to save before image recording is automatically disabled; 0 records until disabled manually</string>
+            </property>
+            <property name="specialValueText">
+             <string>Unlimited</string>
+            </property>
+            <property name="maximum">
+             <number>1000000</number>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="videoRecordLimitLabel">
+            <property name="text">
+             <string>Video limit</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QSpinBox" name="videoRecordLimitSpin">
+            <property name="toolTip">
+             <string>Seconds of video to record after recording is enabled before video recording is automatically disabled; 0 records until disabled manually</string>
+            </property>
+            <property name="specialValueText">
+             <string>Unlimited</string>
+            </property>
+            <property name="suffix">
+             <string> s</string>
+            </property>
+            <property name="maximum">
+             <number>86400</number>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
@@ -6127,6 +6170,8 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>recordModeCombo</tabstop>
   <tabstop>videoHwAccelerationCheck</tabstop>
   <tabstop>videoPreRecordBufferSpin</tabstop>
+  <tabstop>imageRecordLimitSpin</tabstop>
+  <tabstop>videoRecordLimitSpin</tabstop>
   <tabstop>yoloModelPathCombo</tabstop>
   <tabstop>yoloModelPathButton</tabstop>
   <tabstop>yoloLabelsPathCombo</tabstop>

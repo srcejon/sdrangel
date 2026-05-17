@@ -262,6 +262,26 @@ public:
         { }
     };
 
+    class MsgReportSaveImageState : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool getSaveImage() const { return m_saveImage; }
+
+        static MsgReportSaveImageState* create(bool saveImage)
+        {
+            return new MsgReportSaveImageState(saveImage);
+        }
+
+    private:
+        bool m_saveImage;
+
+        MsgReportSaveImageState(bool saveImage) :
+            Message(),
+            m_saveImage(saveImage)
+        { }
+    };
+
     class MsgSetVideoRecordingEnabled : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -339,6 +359,8 @@ private:
     cv::VideoWriter m_processedVideoWriter;
     std::deque<BufferedVideoFrame> m_preRecordVideoFrames;
     bool m_preRecordBufferFlushed;
+    int m_recordedImageFrames;
+    QDateTime m_videoRecordingStartDateTime;
     QImage m_spectrumViewImage;
     Weather *m_weather = nullptr;
     float m_weatherTemperature = std::numeric_limits<float>::quiet_NaN();
@@ -371,6 +393,9 @@ private:
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void restartWeatherUpdates();
     void setVideoRecordingEnabled(bool enabled);
+    void setImageRecordingEnabled(bool enabled);
+    void resetRecordingLimits();
+    void updateRecordingLimitsAfterFrame(bool savedImageFrame, bool savedVideoFrame);
     void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame);
     [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant);
     [[nodiscard]] bool shouldSaveRawMedia() const;

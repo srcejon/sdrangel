@@ -198,6 +198,8 @@ void CameraSettings::resetToDefaults()
     m_videoPlaybackRate = 1.0;
     m_videoHwAcceleration = true;
     m_videoPreRecordBufferSeconds = 0;
+    m_imageRecordLimit = 0;
+    m_videoRecordLimitSeconds = 0;
     m_stackEnabled = false;
     m_stackFrameCount = 4;
     m_stackMethod = StackMethodAverage;
@@ -588,6 +590,8 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(216, m_asiAutoExposureGain);
     s.writeDouble(217, m_postProcessWhiteBalanceHighlightProtection);
     s.writeS32(218, m_videoPreRecordBufferSeconds);
+    s.writeS32(219, m_imageRecordLimit);
+    s.writeS32(220, m_videoRecordLimitSeconds);
 
     return s.final();
 }
@@ -658,6 +662,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(18, &m_videoHwAcceleration, true);
         d.readS32(218, &m_videoPreRecordBufferSeconds, 0);
         m_videoPreRecordBufferSeconds = qBound(0, m_videoPreRecordBufferSeconds, 60);
+        d.readS32(219, &m_imageRecordLimit, 0);
+        m_imageRecordLimit = std::max(m_minNonNegative, m_imageRecordLimit);
+        d.readS32(220, &m_videoRecordLimitSeconds, 0);
+        m_videoRecordLimitSeconds = std::max(m_minNonNegative, m_videoRecordLimitSeconds);
         d.readBool(21, &m_stackEnabled, false);
         d.readS32(22, &m_stackFrameCount, 4);
         d.readS32(23, (qint32 *) &m_stackMethod, (qint32) StackMethodAverage);
@@ -1233,6 +1241,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoPreRecordBufferSeconds")) {
         m_videoPreRecordBufferSeconds = qBound(0, settings.m_videoPreRecordBufferSeconds, 60);
+    }
+    if (settingsKeys.contains("imageRecordLimit")) {
+        m_imageRecordLimit = std::max(m_minNonNegative, settings.m_imageRecordLimit);
+    }
+    if (settingsKeys.contains("videoRecordLimitSeconds")) {
+        m_videoRecordLimitSeconds = std::max(m_minNonNegative, settings.m_videoRecordLimitSeconds);
     }
     if (settingsKeys.contains("stackEnabled")) {
         m_stackEnabled = settings.m_stackEnabled;
@@ -1881,6 +1895,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoPreRecordBufferSeconds") || force) {
         ostr << " m_videoPreRecordBufferSeconds: " << m_videoPreRecordBufferSeconds;
+    }
+    if (settingsKeys.contains("imageRecordLimit") || force) {
+        ostr << " m_imageRecordLimit: " << m_imageRecordLimit;
+    }
+    if (settingsKeys.contains("videoRecordLimitSeconds") || force) {
+        ostr << " m_videoRecordLimitSeconds: " << m_videoRecordLimitSeconds;
     }
     if (settingsKeys.contains("stackEnabled") || force) {
         ostr << " m_stackEnabled: " << m_stackEnabled;

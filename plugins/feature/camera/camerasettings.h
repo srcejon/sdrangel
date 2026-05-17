@@ -347,6 +347,8 @@ struct CameraSettings
     double m_videoPlaybackRate;
     bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported
     int m_videoPreRecordBufferSeconds; ///< Seconds of frames to prepend when recording starts
+    int m_imageRecordLimit; ///< Number of image frames to save before disabling image recording; 0 = unlimited
+    int m_videoRecordLimitSeconds; ///< Seconds of video to record before disabling video recording; 0 = unlimited
     bool m_stackEnabled;
     int m_stackFrameCount;
     StackMethod m_stackMethod;

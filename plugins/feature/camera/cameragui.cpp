@@ -484,6 +484,16 @@ bool CameraGUI::handleMessage(const Message& message)
         applySetting("saveVideo");
         return true;
     }
+    else if (CameraPostProcessor::MsgReportSaveImageState::match(message))
+    {
+        const CameraPostProcessor::MsgReportSaveImageState& report = (CameraPostProcessor::MsgReportSaveImageState&) message;
+        m_settings.m_saveImage = report.getSaveImage();
+        ui->saveImageCheck->blockSignals(true);
+        ui->saveImageCheck->setChecked(m_settings.m_saveImage);
+        ui->saveImageCheck->blockSignals(false);
+        applySetting("saveImage");
+        return true;
+    }
     else if (CameraWorker::MsgReportAlpacaCameraInfo::match(message))
     {
         const CameraWorker::MsgReportAlpacaCameraInfo& info = (CameraWorker::MsgReportAlpacaCameraInfo&) message;
@@ -1079,6 +1089,8 @@ void CameraGUI::displaySettings()
     settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
     settingsUI()->videoHwAccelerationCheck->setChecked(m_settings.m_videoHwAcceleration);
     settingsUI()->videoPreRecordBufferSpin->setValue(m_settings.m_videoPreRecordBufferSeconds);
+    settingsUI()->imageRecordLimitSpin->setValue(m_settings.m_imageRecordLimit);
+    settingsUI()->videoRecordLimitSpin->setValue(m_settings.m_videoRecordLimitSeconds);
     settingsUI()->recordModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_recordMode));
     ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
@@ -1522,6 +1534,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
     QObject::connect(settingsUI()->videoPreRecordBufferSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoPreRecordBufferSpin_valueChanged);
+    QObject::connect(settingsUI()->imageRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_imageRecordLimitSpin_valueChanged);
+    QObject::connect(settingsUI()->videoRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoRecordLimitSpin_valueChanged);
     QObject::connect(settingsUI()->recordModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_recordModeCombo_currentIndexChanged);
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
@@ -1537,6 +1551,7 @@ void CameraGUI::makeUIConnections()
         {
             m_settings.m_stackHdrExposureCount = value;
             updateHdrStackingControls();
+            updateCaptureIntervalWarning();
             applySetting("stackHdrExposureCount");
         });
     for (int exposureIndex = 0; exposureIndex < CameraSettings::m_maxHdrExposureCount; ++exposureIndex)
@@ -1915,6 +1930,31 @@ void CameraGUI::updateCaptureModeControls()
     const bool intervalMode = m_settings.isAlpacaCamera() || m_settings.isIntervalCaptureMode();
     settingsUI()->intervalUnitsCombo->setVisible(intervalMode);
     settingsUI()->captureValueStack->setCurrentWidget(intervalMode ? settingsUI()->intervalPage : settingsUI()->frameRatePage);
+    updateCaptureIntervalWarning();
+}
+
+void CameraGUI::updateCaptureIntervalWarning()
+{
+    const bool intervalMode = m_settings.isAlpacaCamera() || m_settings.isIntervalCaptureMode();
+    double exposureTimeMs = std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_exposureTimeMs);
+
+    if (m_settings.isHdrStackingEnabled())
+    {
+        for (int exposureIndex = 0; exposureIndex < m_settings.getHdrExposureCount(); ++exposureIndex)
+        {
+            exposureTimeMs = std::max(exposureTimeMs, m_settings.getHdrExposureTimeMs(exposureIndex));
+        }
+    }
+
+    const double intervalMs = m_settings.getCaptureIntervalSeconds() * 1000.0;
+    const bool intervalTooShort = intervalMode && (intervalMs < exposureTimeMs);
+
+    settingsUI()->intervalSpin->setStyleSheet(intervalTooShort
+        ? QStringLiteral("QDoubleSpinBox { background-color: #ffdddd; }")
+        : QString());
+    settingsUI()->intervalSpin->setToolTip(intervalTooShort
+        ? tr("Interval is shorter than the exposure time")
+        : tr("Interval between still-image captures"));
 }
 
 void CameraGUI::updateExposureControls()
@@ -1942,6 +1982,7 @@ void CameraGUI::updateExposureControls()
     }
 
     updateHdrExposureControls();
+    updateCaptureIntervalWarning();
 }
 
 void CameraGUI::updateVideoFileControls()
@@ -2181,6 +2222,7 @@ void CameraGUI::handleHdrExposureSliderChanged(int exposureIndex, int sliderValu
     }
 
     m_settings.m_stackHdrExposureTimesMs[static_cast<size_t>(exposureIndex)] = exposureTimeMs;
+    updateCaptureIntervalWarning();
     applySetting(QStringLiteral("stackHdrExposure%1Ms").arg(exposureIndex + 1));
 }
 
@@ -2196,6 +2238,7 @@ void CameraGUI::handleHdrExposureSpinChanged(int exposureIndex, double value)
     }
 
     m_settings.m_stackHdrExposureTimesMs[static_cast<size_t>(exposureIndex)] = exposureTimeMs;
+    updateCaptureIntervalWarning();
     applySetting(QStringLiteral("stackHdrExposure%1Ms").arg(exposureIndex + 1));
 }
 
@@ -4157,6 +4200,7 @@ void CameraGUI::on_fpsLabel_currentIndexChanged(int index)
 
     m_settings.m_captureMode = static_cast<CameraSettings::CaptureMode>(settingsUI()->fpsLabel->itemData(index).toInt());
     updateCameraSettingsVisibility();
+    updateCaptureIntervalWarning();
     updateVideoPreRecordBufferMemoryLabel();
     applySetting("captureMode");
 }
@@ -4182,6 +4226,7 @@ void CameraGUI::on_fpsCombo_currentIndexChanged(int index)
 void CameraGUI::on_intervalSpin_valueChanged(double value)
 {
     m_settings.m_captureInterval = value;
+    updateCaptureIntervalWarning();
     updateVideoPreRecordBufferMemoryLabel();
     applySetting("captureInterval");
 }
@@ -4193,6 +4238,7 @@ void CameraGUI::on_intervalUnitsCombo_currentIndexChanged(int index)
     }
 
     m_settings.m_captureIntervalUnits = static_cast<CameraSettings::CaptureIntervalUnits>(settingsUI()->intervalUnitsCombo->itemData(index).toInt());
+    updateCaptureIntervalWarning();
     updateVideoPreRecordBufferMemoryLabel();
     applySetting("captureIntervalUnits");
 }
@@ -4205,6 +4251,7 @@ void CameraGUI::on_exposureSlider_valueChanged(int value)
     settingsUI()->exposureSpin->setValue(exposureValue);
     settingsUI()->exposureSpin->blockSignals(false);
     m_settings.m_exposureTimeMs = exposureMs;
+    updateCaptureIntervalWarning();
     applySetting("exposureTimeMs");
 }
 
@@ -4214,6 +4261,7 @@ void CameraGUI::on_exposureSpin_valueChanged(double value)
     settingsUI()->exposureSlider->setValue(exposureValueToSlider(settingsUI()->exposureSpin, value));
     settingsUI()->exposureSlider->blockSignals(false);
     m_settings.m_exposureTimeMs = value * currentExposureUnitScaleMs(settingsUI());
+    updateCaptureIntervalWarning();
     applySetting("exposureTimeMs");
 }
 
@@ -4562,6 +4610,18 @@ void CameraGUI::on_videoPreRecordBufferSpin_valueChanged(int value)
     m_settings.m_videoPreRecordBufferSeconds = value;
     updateVideoPreRecordBufferMemoryLabel();
     applySetting("videoPreRecordBufferSeconds");
+}
+
+void CameraGUI::on_imageRecordLimitSpin_valueChanged(int value)
+{
+    m_settings.m_imageRecordLimit = value;
+    applySetting("imageRecordLimit");
+}
+
+void CameraGUI::on_videoRecordLimitSpin_valueChanged(int value)
+{
+    m_settings.m_videoRecordLimitSeconds = value;
+    applySetting("videoRecordLimitSeconds");
 }
 
 void CameraGUI::on_recordModeCombo_currentIndexChanged(int index)

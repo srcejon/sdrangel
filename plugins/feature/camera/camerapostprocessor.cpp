@@ -38,6 +38,7 @@ MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveVideoState, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveImageState, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSetVideoRecordingEnabled, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
 
@@ -505,6 +506,7 @@ CameraPostProcessor::CameraPostProcessor() :
     m_availableChannelOrFeatureHandler(kTrackedObjectPipeURIs, QStringList{QStringLiteral("mapitems")}),
     m_captureActive(false),
     m_preRecordBufferFlushed(false),
+    m_recordedImageFrames(0),
     m_processingFrame(false)
 {}
 
@@ -610,6 +612,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
             closeVideoWriters();
             m_preRecordVideoFrames.clear();
             m_preRecordBufferFlushed = false;
+            resetRecordingLimits();
         }
 
         QMutexLocker locker(&m_frameMutex);
@@ -628,6 +631,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 {
     qDebug() << "CameraPostProcessor::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
+    const bool wasSaveImage = m_settings.m_saveImage;
+    const bool wasSaveVideo = m_settings.m_saveVideo;
     static const QStringList kPostProcessingKeys = {
         "overlayDateTime", "dateTimeColor",
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
@@ -677,6 +682,14 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_lastFrame = CameraPipelineFrame();
         m_preRecordVideoFrames.clear();
         m_preRecordBufferFlushed = false;
+        resetRecordingLimits();
+    }
+
+    if (force
+        || (settingsKeys.contains("saveImage") && m_settings.m_saveImage != wasSaveImage)
+        || (settingsKeys.contains("saveVideo") && m_settings.m_saveVideo != wasSaveVideo))
+    {
+        resetRecordingLimits();
     }
 
     if (force || settingsKeys.contains("spectrumDevice")) {
@@ -857,6 +870,9 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     reportFrameToGUI(processed, *frame);
 
+    bool savedImageFrame = false;
+    bool savedVideoFrame = false;
+
     if (m_captureActive && (m_settings.m_saveImage || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
     {
         if (shouldSaveRawMedia())
@@ -872,6 +888,8 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
             qDebug() << "CameraPostProcessor: Saving processed image to" << processedFilename;
             processed.save(processedFilename);
         }
+
+        savedImageFrame = m_settings.m_saveImage;
     }
 
     if (m_captureActive && m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
@@ -882,16 +900,20 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
         if (shouldSaveRawMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, unprocessedImage, true)) {
             writeVideoFrame(m_rawVideoWriter, unprocessedImage);
+            savedVideoFrame = true;
         }
 
         if (shouldSaveProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processed, false)) {
             writeVideoFrame(m_processedVideoWriter, processed);
+            savedVideoFrame = true;
         }
     }
     else if (m_captureActive && !m_settings.m_saveVideo)
     {
         appendPreRecordFrame(unprocessedImage, processed);
     }
+
+    updateRecordingLimitsAfterFrame(savedImageFrame, savedVideoFrame);
 }
 
 void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame)
@@ -1506,12 +1528,61 @@ void CameraPostProcessor::setVideoRecordingEnabled(bool enabled)
     m_settings.m_saveVideo = enabled;
     m_preRecordBufferFlushed = false;
 
-    if (!enabled) {
+    if (enabled) {
+        m_videoRecordingStartDateTime = QDateTime::currentDateTimeUtc();
+    } else {
         closeVideoWriters();
+        m_videoRecordingStartDateTime = QDateTime();
     }
 
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportSaveVideoState::create(enabled));
+    }
+}
+
+void CameraPostProcessor::setImageRecordingEnabled(bool enabled)
+{
+    if (m_settings.m_saveImage == enabled) {
+        return;
+    }
+
+    m_settings.m_saveImage = enabled;
+
+    if (enabled) {
+        m_recordedImageFrames = 0;
+    }
+
+    if (m_msgQueueToGUI) {
+        m_msgQueueToGUI->push(MsgReportSaveImageState::create(enabled));
+    }
+}
+
+void CameraPostProcessor::resetRecordingLimits()
+{
+    m_recordedImageFrames = 0;
+    m_videoRecordingStartDateTime = m_settings.m_saveVideo ? QDateTime::currentDateTimeUtc() : QDateTime();
+}
+
+void CameraPostProcessor::updateRecordingLimitsAfterFrame(bool savedImageFrame, bool savedVideoFrame)
+{
+    if (savedImageFrame && (m_settings.m_imageRecordLimit > 0))
+    {
+        ++m_recordedImageFrames;
+
+        if (m_recordedImageFrames >= m_settings.m_imageRecordLimit) {
+            setImageRecordingEnabled(false);
+        }
+    }
+
+    if (savedVideoFrame && (m_settings.m_videoRecordLimitSeconds > 0))
+    {
+        if (!m_videoRecordingStartDateTime.isValid()) {
+            m_videoRecordingStartDateTime = QDateTime::currentDateTimeUtc();
+        }
+
+        if (m_videoRecordingStartDateTime.msecsTo(QDateTime::currentDateTimeUtc()) >= (m_settings.m_videoRecordLimitSeconds * 1000LL)) {
+            setVideoRecordingEnabled(false);
+        }
     }
 }
 

@@ -301,6 +301,7 @@ private:
     void updateCameraSubframeControls();
     void updateImageWidget();
     void updateCaptureModeControls();
+    void updateCaptureIntervalWarning();
     void updateExposureControls();
     void updateHdrExposureControls();
     void updateHdrStackingControls();
@@ -433,6 +434,8 @@ private slots:
     void on_videoPathButton_clicked();
     void on_videoHwAccelerationCheck_toggled(bool checked);
     void on_videoPreRecordBufferSpin_valueChanged(int value);
+    void on_imageRecordLimitSpin_valueChanged(int value);
+    void on_videoRecordLimitSpin_valueChanged(int value);
     void on_recordModeCombo_currentIndexChanged(int index);
     void on_stackEnabledCheck_toggled(bool checked);
     void on_stackFrameCountSpin_valueChanged(int value);

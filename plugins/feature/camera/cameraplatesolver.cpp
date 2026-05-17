@@ -3990,7 +3990,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             settings.m_lensCenterOffsetY,
             settings.m_lensDistortionK1);
         if (!currentSettingsProjector.valid) {
-            PROFILER_STOP(__FUNCTION__ ": invalid current-settings projector");
+            PROFILER_STOP(QString("%1: invalid current-settings projector").arg(__FUNCTION__));
             return result;
         }
 
@@ -4022,7 +4022,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             finalMatches);
 
         if (finalMatches.isEmpty()) {
-            PROFILER_STOP(__FUNCTION__ ": no current-settings matches");
+            PROFILER_STOP(QString("%1: no current-settings matches").arg(__FUNCTION__));
             return result;
         }
 
@@ -4077,7 +4077,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             finalMatches,
             finalMatchRadius);
 
-        PROFILER_STOP(__FUNCTION__ ": current-settings-only");
+        PROFILER_STOP(QString("%1: current-settings-only").arg(__FUNCTION__));
         return result;
     }
 
@@ -4242,7 +4242,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             << " Roll=" << selectedFinalPass.pose.rollDegrees
             << " FoV=" << selectedFinalPass.pose.fovDegrees
             << " K1=" << selectedFinalPass.pose.distortionK1;
-        PROFILER_STOP(__FUNCTION__ ": insufficient matches");
+        PROFILER_STOP(QString("%1: insufficient matches").arg(__FUNCTION__));
         return result;
     }
 
@@ -4274,7 +4274,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "rms=" << result.m_rmsErrorPixels
                  << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
-        PROFILER_STOP(__FUNCTION__ ": unacceptable elevation-seeded solve");
+        PROFILER_STOP(QString("%1: unacceptable elevation-seeded solve").arg(__FUNCTION__));
         return CameraPlateSolveResult();
     }
 
@@ -4288,7 +4288,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "rms=" << result.m_rmsErrorPixels
                  << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
-        PROFILER_STOP(__FUNCTION__ ": unacceptable blind solve");
+        PROFILER_STOP(QString("%1: unacceptable blind solve").arg(__FUNCTION__));
         return CameraPlateSolveResult();
     }
     result.m_azimuthDegrees = selectedFinalPass.pose.azimuthDegrees;

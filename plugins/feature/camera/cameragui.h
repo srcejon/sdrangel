@@ -488,8 +488,6 @@ private slots:
     void on_sobelEdgeSpin_valueChanged(double value);
     void on_cannyEdgeSlider_valueChanged(int value);
     void on_cannyEdgeSpin_valueChanged(double value);
-    void on_lineEnhancementSlider_valueChanged(int value);
-    void on_lineEnhancementSpin_valueChanged(double value);
     void on_flipXButton_toggled(bool checked);
     void on_flipYButton_toggled(bool checked);
     void on_brightnessSlider_valueChanged(int value);

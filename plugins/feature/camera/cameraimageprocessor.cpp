@@ -119,7 +119,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "histogramStretchAsinhStrength",
         "histogramStretchLogStrength",
         "postProcessGreyscale",
-        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "edgeDisplayMode", "sobelEdge", "cannyEdge", "lineEnhancement", "flipX", "flipY",
+        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "edgeDisplayMode", "sobelEdge", "cannyEdge", "flipX", "flipY",
         "brightness", "contrast", "invertColors"
     };
     const bool imageProcessingChanged = force || std::any_of(kImageProcessingKeys.cbegin(), kImageProcessingKeys.cend(),
@@ -314,7 +314,6 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     const bool needsSharpen = m_settings.m_sharpen > 1e-4;
     const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
     const bool needsCannyEdge = m_settings.m_cannyEdge > 1e-4;
-    const bool needsLineEnhancement = m_settings.m_lineEnhancement > 1e-4;
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
@@ -327,7 +326,6 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
         || needsSharpen
         || needsSobelEdge
         || needsCannyEdge
-        || needsLineEnhancement
         || needsFlip
         || needsBrightContrast
         || needsGreyscale
@@ -354,7 +352,6 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     if (needsSharpen) { applySharpen(bgrMat); }
     if (needsSobelEdge) { applySobelEdge(bgrMat); }
     if (needsCannyEdge) { applyCannyEdge(bgrMat); }
-    if (needsLineEnhancement) { applyLineEnhancement(bgrMat); }
     if (needsFlip) { applyFlip(bgrMat); }
     if (needsBrightContrast) { applyBrightnessContrast(bgrMat); }
     if (m_settings.m_invertColors) { applyInvertColors(bgrMat); }
@@ -773,60 +770,6 @@ void CameraImageProcessor::applyCannyEdge(cv::Mat& bgrMat) const
     } else {
         cv::addWeighted(bgrMat, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, bgrMat);
     }
-    PROFILER_STOP(__FUNCTION__);
-}
-
-void CameraImageProcessor::applyLineEnhancement(cv::Mat& bgrMat) const
-{
-    PROFILER_START();
-
-    cv::Mat grayMat;
-    cv::cvtColor(bgrMat, grayMat, cv::COLOR_BGR2GRAY);
-
-    cv::Mat response = cv::Mat::zeros(grayMat.size(), CV_8U);
-
-    auto updateResponse = [&](const cv::Mat& kernel)
-    {
-        cv::Mat enhanced;
-        cv::morphologyEx(grayMat, enhanced, cv::MORPH_TOPHAT, kernel);
-        cv::max(response, enhanced, response);
-    };
-
-    const std::array<int, 2> kernelSizes{5, 7};
-    for (int kernelSize : kernelSizes)
-    {
-        cv::Mat kernelHorizontal = cv::Mat::ones(1, kernelSize, CV_8U);
-        cv::Mat kernelVertical = cv::Mat::ones(kernelSize, 1, CV_8U);
-        cv::Mat kernelDiag1 = cv::Mat::zeros(kernelSize, kernelSize, CV_8U);
-        cv::Mat kernelDiag2 = cv::Mat::zeros(kernelSize, kernelSize, CV_8U);
-
-        for (int i = 0; i < kernelSize; ++i)
-        {
-            kernelDiag1.at<uchar>(i, i) = 1;
-            kernelDiag2.at<uchar>(i, kernelSize - 1 - i) = 1;
-        }
-
-        updateResponse(kernelHorizontal);
-        updateResponse(kernelVertical);
-        updateResponse(kernelDiag1);
-        updateResponse(kernelDiag2);
-    }
-
-    cv::Mat response8u = response;
-    double maxValue = 0.0;
-    cv::minMaxLoc(response8u, nullptr, &maxValue);
-    if (maxValue > 0.0) {
-        response8u.convertTo(response8u, CV_8U, 255.0 / maxValue);
-    }
-
-    cv::Mat responseBgr;
-    cv::cvtColor(response8u, responseBgr, cv::COLOR_GRAY2BGR);
-    if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
-        bgrMat = std::move(responseBgr);
-    } else {
-        cv::addWeighted(bgrMat, 1.0, responseBgr, m_settings.m_lineEnhancement, 0.0, bgrMat);
-    }
-
     PROFILER_STOP(__FUNCTION__);
 }
 

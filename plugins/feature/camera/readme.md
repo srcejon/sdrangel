@@ -245,7 +245,7 @@ The Colour tab controls image post-processing.
 <li>Edge Display selects whether detected edges are overlaid on the image or shown as edges only.</li>
 <li>Gaussian Blur and Median Blur set blur strength.</li>
 <li>Sharpen sets sharpening amount.</li>
-<li>Sobel Edge, Canny Edge and Line Enhancement set edge and line enhancement amounts.</li>
+<li>Sobel Edge and Canny Edge set edge detection amounts.</li>
 <li>Flip X and Flip Y mirror the image horizontally or vertically.</li>
 <li>Unwarp Fisheye unwarps the image using the configured lens projection and FoV.</li>
 <li>Reset color settings restores colour, histogram, filter and image post-processing controls to their defaults.</li>

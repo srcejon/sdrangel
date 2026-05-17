@@ -3601,15 +3601,13 @@ void CameraGUI::handleMediaPlayerDurationChanged(qint64 duration)
 #endif
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void CameraGUI::handleMediaPlayerPlaybackStateChanged(QMediaPlayer::PlaybackState state)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QSignalBlocker blocker(ui->playPauseVideo);
     ui->playPauseVideo->setChecked(state == QMediaPlayer::PlayingState);
-#else
-    Q_UNUSED(state)
-#endif
 }
+#endif
 
 
 void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info)

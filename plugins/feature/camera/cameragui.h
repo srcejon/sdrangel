@@ -295,7 +295,9 @@ private:
     void updateCameraStatusDisplay();
     void handleMediaPlayerPositionChanged(qint64 position);
     void handleMediaPlayerDurationChanged(qint64 duration);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void handleMediaPlayerPlaybackStateChanged(QMediaPlayer::PlaybackState state);
+#endif
     void updateCameraSubframeControls();
     void updateImageWidget();
     void updateCaptureModeControls();

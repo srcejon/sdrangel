@@ -24,10 +24,27 @@
 
 #include "ui_camerasettingsdialog.h"
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+namespace QtCharts {
+    class QChart;
+    class QDateTimeAxis;
+    class QLineSeries;
+    class QValueAxis;
+}
+using CameraSettingsChart = QtCharts::QChart;
+using CameraSettingsDateTimeAxis = QtCharts::QDateTimeAxis;
+using CameraSettingsLineSeries = QtCharts::QLineSeries;
+using CameraSettingsValueAxis = QtCharts::QValueAxis;
+#else
 QT_FORWARD_DECLARE_CLASS(QChart)
 QT_FORWARD_DECLARE_CLASS(QDateTimeAxis)
 QT_FORWARD_DECLARE_CLASS(QLineSeries)
 QT_FORWARD_DECLARE_CLASS(QValueAxis)
+using CameraSettingsChart = QChart;
+using CameraSettingsDateTimeAxis = QDateTimeAxis;
+using CameraSettingsLineSeries = QLineSeries;
+using CameraSettingsValueAxis = QValueAxis;
+#endif
 
 class CameraSettingsDialog : public QDialog
 {
@@ -43,10 +60,10 @@ public:
 
 private:
     Ui::CameraSettingsDialog *ui;
-    QChart *m_tempChart;
-    QLineSeries *m_tempSeries;
-    QDateTimeAxis *m_tempAxisX;
-    QValueAxis *m_tempAxisY;
+    CameraSettingsChart *m_tempChart;
+    CameraSettingsLineSeries *m_tempSeries;
+    CameraSettingsDateTimeAxis *m_tempAxisX;
+    CameraSettingsValueAxis *m_tempAxisY;
 
 private slots:
     void on_clearChart_clicked();

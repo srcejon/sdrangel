@@ -2546,7 +2546,7 @@
          </property>
          <layout class="QFormLayout" name="formLayout_9">
           <item row="0" column="0">
-           <widget class="QLabel" name="flipXLabel_3">
+           <widget class="QLabel" name="flipXLabel">
             <property name="minimumSize">
              <size>
               <width>100</width>
@@ -2559,14 +2559,14 @@
            </widget>
           </item>
           <item row="1" column="0">
-           <widget class="QLabel" name="flipYLabel_3">
+           <widget class="QLabel" name="flipYLabel">
             <property name="text">
              <string>Flip Y</string>
             </property>
            </widget>
           </item>
           <item row="0" column="1">
-           <widget class="QCheckBox" name="flipXButton_3">
+           <widget class="QCheckBox" name="flipXButton">
             <property name="toolTip">
              <string>Flip the image horizontally</string>
             </property>
@@ -2576,7 +2576,7 @@
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="QCheckBox" name="flipYButton_3">
+           <widget class="QCheckBox" name="flipYButton">
             <property name="toolTip">
              <string>Flip the image vertically</string>
             </property>
@@ -2586,14 +2586,14 @@
            </widget>
           </item>
           <item row="2" column="0">
-           <widget class="QLabel" name="postProcessUnwarpLabel_3">
+           <widget class="QLabel" name="postProcessUnwarpLabel">
             <property name="text">
              <string>Unwarp Fisheye</string>
             </property>
            </widget>
           </item>
           <item row="2" column="1">
-           <widget class="QCheckBox" name="postProcessUnwarpCheck_3">
+           <widget class="QCheckBox" name="postProcessUnwarpCheck">
             <property name="toolTip">
              <string>Unwarp the image from the configured fisheye lens projection using the camera FoV setting</string>
             </property>

@@ -1141,8 +1141,8 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     const quint64 overlayId = m_nextDetectionOverlayId++;
     m_detectionOverlays.push_back({
         overlayId,
-        detection.getDateTimeUtc(),
-        detection.getDurationS(),
+        detection.getDisplayDateTimeUtc(),
+        detection.getDisplayDurationS(),
         detection.getCenterFrequency(),
         detection.getFrequencySpan(),
         detection.getFrequencyDrift()

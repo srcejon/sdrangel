@@ -47,10 +47,12 @@ public:
 
     public:
         const QDateTime& getDateTimeUtc() const { return m_dateTimeUtc; }
+        const QDateTime& getDisplayDateTimeUtc() const { return m_displayDateTimeUtc; }
         double getPeakAmplitude() const { return m_peakAmplitude; }
         double getPeakPowerDB() const { return m_peakPowerDB; }
         double getBackgroundPowerDB() const { return m_backgroundPowerDB; }
         double getDurationS() const { return m_durationS; }
+        double getDisplayDurationS() const { return m_displayDurationS; }
         double getCenterFrequency() const { return m_centerFrequency; }
         double getFrequencySpan() const { return m_frequencySpan; }
         double getFrequencyDrift() const { return m_frequencyDrift; }
@@ -58,10 +60,12 @@ public:
 
         static MsgMeteorDetected* create(
             const QDateTime& dateTimeUtc,
+            const QDateTime& displayDateTimeUtc,
             double peakAmplitude,
             double peakPowerDB,
             double backgroundPowerDB,
             double durationS,
+            double displayDurationS,
             double centerFrequency,
             double frequencySpan,
             double frequencyDrift,
@@ -69,10 +73,12 @@ public:
         {
             return new MsgMeteorDetected(
                 dateTimeUtc,
+                displayDateTimeUtc,
                 peakAmplitude,
                 peakPowerDB,
                 backgroundPowerDB,
                 durationS,
+                displayDurationS,
                 centerFrequency,
                 frequencySpan,
                 frequencyDrift,
@@ -82,10 +88,12 @@ public:
 
     private:
         QDateTime m_dateTimeUtc;
+        QDateTime m_displayDateTimeUtc;
         double m_peakAmplitude;
         double m_peakPowerDB;
         double m_backgroundPowerDB;
         double m_durationS;
+        double m_displayDurationS;
         double m_centerFrequency;
         double m_frequencySpan;
         double m_frequencyDrift;
@@ -93,10 +101,12 @@ public:
 
         MsgMeteorDetected(
             const QDateTime& dateTimeUtc,
+            const QDateTime& displayDateTimeUtc,
             double peakAmplitude,
             double peakPowerDB,
             double backgroundPowerDB,
             double durationS,
+            double displayDurationS,
             double centerFrequency,
             double frequencySpan,
             double frequencyDrift,
@@ -104,10 +114,12 @@ public:
         ) :
             Message(),
             m_dateTimeUtc(dateTimeUtc),
+            m_displayDateTimeUtc(displayDateTimeUtc),
             m_peakAmplitude(peakAmplitude),
             m_peakPowerDB(peakPowerDB),
             m_backgroundPowerDB(backgroundPowerDB),
             m_durationS(durationS),
+            m_displayDurationS(displayDurationS),
             m_centerFrequency(centerFrequency),
             m_frequencySpan(frequencySpan),
             m_frequencyDrift(frequencyDrift),
@@ -226,6 +238,11 @@ private:
         double m_highFrequency;
     };
 
+    struct DisplayTimeAnchor {
+        quint64 m_sampleCounter;
+        QDateTime m_dateTimeUtc;
+    };
+
     ScopeVis* m_scopeSink;
     SpectrumVis* m_spectrumSink;
     MessageQueue *m_messageQueueToGUI;
@@ -263,6 +280,8 @@ private:
     bool m_spectralEventActiveForScope;
 
     quint64 m_sampleCounter;
+    std::vector<DisplayTimeAnchor> m_displayTimeAnchors;
+    quint64 m_nextDisplayTimeAnchorSample;
     bool m_noiseFloorInitialized;
     double m_noiseFloor;
     bool m_pulseActive;
@@ -303,6 +322,8 @@ private:
     bool reportsOverlap(quint64 firstStartSample, quint64 firstEndSample, quint64 secondStartSample, quint64 secondEndSample) const;
     void emitDetectionReport(const PulseReport& report, const char *source);
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;
+    QDateTime sampleCounterToDisplayDateTimeUtc(quint64 sampleCounter) const;
+    void recordDisplayTimeAnchor();
     void updateNoiseFloor(double filteredPower);
     double getDetectionThresholdPower() const;
     bool estimatePulseFrequency(

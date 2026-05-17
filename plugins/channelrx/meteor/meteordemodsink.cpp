@@ -79,7 +79,8 @@ MeteorDemodSink::MeteorDemodSink() :
     m_spectralFFTSize(0),
     m_pulseFFTSize(0),
     m_spectralNoiseFloorInitialized(false),
-    m_spectralEventActiveForScope(false)
+    m_spectralEventActiveForScope(false),
+    m_nextDisplayTimeAnchorSample(0)
 {
     resizeScopeBuffers();
     resetDetector();
@@ -146,6 +147,8 @@ bool MeteorDemodSink::flushPendingPulse()
 
 void MeteorDemodSink::processOneSample(Complex& ci)
 {
+    recordDisplayTimeAnchor();
+
     const Real re = ci.real() / SDR_RX_SCALEF;
     const Real im = ci.imag() / SDR_RX_SCALEF;
     const Complex normalized(re, im);
@@ -1821,11 +1824,25 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
     const double peakAmplitude = std::sqrt(std::max(report.m_peakPower, 0.0));
     const double peakPowerDB = 10.0 * std::log10(std::max(report.m_peakPower, 1e-20));
     const double backgroundPowerDB = 10.0 * std::log10(std::max(report.m_backgroundPower, 1e-20));
+    const QDateTime displayDateTimeUtc = sampleCounterToDisplayDateTimeUtc(report.m_startSample);
+    const QDateTime displayEndDateTimeUtc = sampleCounterToDisplayDateTimeUtc(report.m_endSample + 1);
+    double displayDurationS = report.m_durationS;
+
+    if (displayDateTimeUtc.isValid() && displayEndDateTimeUtc.isValid())
+    {
+        const qint64 displayDurationMS = displayDateTimeUtc.msecsTo(displayEndDateTimeUtc);
+
+        if (displayDurationMS >= 0) {
+            displayDurationS = std::max(0.001, (double) displayDurationMS / 1000.0);
+        }
+    }
 
     qDebug() << "MeteorDemodSink::emitDetectionReport:"
              << " source:" << source
              << " dateTimeUtc:" << report.m_dateTimeUtc
+             << " displayDateTimeUtc:" << displayDateTimeUtc
              << " durationS:" << report.m_durationS
+             << " displayDurationS:" << displayDurationS
              << " peakPowerDB:" << peakPowerDB
              << " backgroundPowerDB:" << backgroundPowerDB
              << " centerFrequency:" << report.m_centerFrequency
@@ -1836,10 +1853,12 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
 
     m_messageQueueToGUI->push(MsgMeteorDetected::create(
         report.m_dateTimeUtc,
+        displayDateTimeUtc,
         peakAmplitude,
         peakPowerDB,
         backgroundPowerDB,
         report.m_durationS,
+        displayDurationS,
         report.m_centerFrequency,
         report.m_frequencySpan,
         report.m_frequencyDrift,
@@ -1857,6 +1876,94 @@ QDateTime MeteorDemodSink::sampleCounterToDateTimeUtc(quint64 sampleCounter) con
 
     const qint64 offsetMSecs = (qint64) std::llround(1000.0 * (double) sampleCounter / (double) m_settings.m_channelSampleRate);
     return m_streamStartDateTimeUtc.addMSecs(offsetMSecs);
+}
+
+QDateTime MeteorDemodSink::sampleCounterToDisplayDateTimeUtc(quint64 sampleCounter) const
+{
+    if (m_displayTimeAnchors.empty() || (m_settings.m_channelSampleRate <= 0)) {
+        return sampleCounterToDateTimeUtc(sampleCounter);
+    }
+
+    auto anchorIt = std::lower_bound(
+        m_displayTimeAnchors.begin(),
+        m_displayTimeAnchors.end(),
+        sampleCounter,
+        [](const DisplayTimeAnchor& anchor, quint64 sample)
+        {
+            return anchor.m_sampleCounter < sample;
+        });
+
+    auto interpolateFromAnchor = [this](const DisplayTimeAnchor& anchor, quint64 sample) -> QDateTime
+    {
+        const double sampleDelta = (double) sample - (double) anchor.m_sampleCounter;
+        const qint64 offsetMSecs = (qint64) std::llround(1000.0 * sampleDelta / (double) m_settings.m_channelSampleRate);
+        return anchor.m_dateTimeUtc.addMSecs(offsetMSecs);
+    };
+
+    if (anchorIt == m_displayTimeAnchors.begin()) {
+        return interpolateFromAnchor(*anchorIt, sampleCounter);
+    }
+
+    if (anchorIt == m_displayTimeAnchors.end()) {
+        return interpolateFromAnchor(m_displayTimeAnchors.back(), sampleCounter);
+    }
+
+    if (anchorIt->m_sampleCounter == sampleCounter) {
+        return anchorIt->m_dateTimeUtc;
+    }
+
+    const DisplayTimeAnchor& right = *anchorIt;
+    const DisplayTimeAnchor& left = *(anchorIt - 1);
+    const quint64 sampleSpan = right.m_sampleCounter - left.m_sampleCounter;
+
+    if (sampleSpan == 0) {
+        return left.m_dateTimeUtc;
+    }
+
+    const qint64 timeSpanMSecs = left.m_dateTimeUtc.msecsTo(right.m_dateTimeUtc);
+    const double fraction = (double) (sampleCounter - left.m_sampleCounter) / (double) sampleSpan;
+    return left.m_dateTimeUtc.addMSecs((qint64) std::llround((double) timeSpanMSecs * fraction));
+}
+
+void MeteorDemodSink::recordDisplayTimeAnchor()
+{
+    const int sampleRate = std::max(1, m_settings.m_channelSampleRate);
+    const quint64 anchorInterval = (quint64) std::max(1, sampleRate / 20);
+
+    if (!m_displayTimeAnchors.empty() && (m_sampleCounter < m_nextDisplayTimeAnchorSample)) {
+        return;
+    }
+
+    m_displayTimeAnchors.push_back({
+        m_sampleCounter,
+        QDateTime::currentDateTimeUtc()
+    });
+    m_nextDisplayTimeAnchorSample = m_sampleCounter + anchorInterval;
+
+    const int maxDurationSamples = std::max(1, (m_settings.m_maxDurationMS * sampleRate) / 1000);
+    const quint64 keepSamples = (quint64) std::max(sampleRate * 120, maxDurationSamples + sampleRate * 20);
+
+    if (m_sampleCounter <= keepSamples) {
+        return;
+    }
+
+    const quint64 oldestSample = m_sampleCounter - keepSamples;
+    auto firstKeep = std::lower_bound(
+        m_displayTimeAnchors.begin(),
+        m_displayTimeAnchors.end(),
+        oldestSample,
+        [](const DisplayTimeAnchor& anchor, quint64 sample)
+        {
+            return anchor.m_sampleCounter < sample;
+        });
+
+    if ((firstKeep != m_displayTimeAnchors.begin()) && (firstKeep != m_displayTimeAnchors.end())) {
+        --firstKeep;
+    }
+
+    if (firstKeep != m_displayTimeAnchors.begin()) {
+        m_displayTimeAnchors.erase(m_displayTimeAnchors.begin(), firstKeep);
+    }
 }
 
 void MeteorDemodSink::updateNoiseFloor(double filteredPower)
@@ -1961,6 +2068,8 @@ void MeteorDemodSink::resetDetector()
     m_pulseLastAboveSample = 0;
     m_pulsePeakSample = 0;
     m_pulsePeakPower = 0.0;
+    m_displayTimeAnchors.clear();
+    m_nextDisplayTimeAnchorSample = 0;
     m_pulseSamples.clear();
     m_pendingBroadPulse = PulseReport();
     m_spectralFrameBuffer.clear();

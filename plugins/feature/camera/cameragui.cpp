@@ -453,9 +453,6 @@ bool CameraGUI::handleMessage(const Message& message)
                       .arg(QString::number(m_lastPlateSolveCatalogCandidateStars))
                       .arg(QString::number(m_lastPlateSolveCatalogStarsLoaded))
                 : tr("No solution"));
-        settingsUI()->plateSolveCatalogLabel->setText(m_lastPlateSolved ? (m_lastPlateSolveCatalogSource.isEmpty() ? tr("Bundled") : m_lastPlateSolveCatalogSource) : "-");
-        settingsUI()->plateSolveCandidatesLabel->setText(m_lastPlateSolved ? QString::number(m_lastPlateSolveCatalogCandidateStars) : "-");
-        settingsUI()->plateSolveOutliersLabel->setText(m_lastPlateSolved ? QString::number(m_lastPlateSolveOutlierStars) : "-");
         settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
         if (m_histogramDialog) {
@@ -889,9 +886,6 @@ void CameraGUI::resetCameraStatus()
     settingsUI()->plateSolveDetectedLabel->setText("-");
     settingsUI()->plateSolveRmsLabel->setText("-");
     settingsUI()->plateSolvePointingLabel->setText("-");
-    settingsUI()->plateSolveCatalogLabel->setText("-");
-    settingsUI()->plateSolveCandidatesLabel->setText("-");
-    settingsUI()->plateSolveOutliersLabel->setText("-");
     settingsUI()->plateSolveSolutionLabel->setText(tr("No solution"));
     settingsUI()->plateSolveApplyButton->setEnabled(false);
     m_settingsDialog->clearCameraStatus();

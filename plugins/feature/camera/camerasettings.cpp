@@ -232,7 +232,7 @@ void CameraSettings::resetToDefaults()
     m_postProcessWhiteBalanceRedGain = 1.0;
     m_postProcessWhiteBalanceGreenGain = 1.0;
     m_postProcessWhiteBalanceBlueGain = 1.0;
-    m_postProcessWhiteBalanceHighlightProtection = 1.0;
+    m_postProcessWhiteBalanceHighlightProtection = 0.0;
     m_postProcessUnwarp = false;
     m_histogramStretch = HistogramStretchOff;
     m_histogramStretchBlackPoint = 0.0;
@@ -906,7 +906,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         qint32 videoPostProcessMode = static_cast<qint32>(SavedMediaRaw);
         d.readS32(215, &videoPostProcessMode, videoPostProcessMode);
         m_recordMode = qBound(SavedMediaRaw, static_cast<SavedMediaMode>(videoPostProcessMode), SavedMediaBoth);
-        d.readDouble(217, &m_postProcessWhiteBalanceHighlightProtection, 1.0);
+        d.readDouble(217, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(144, &m_overlaySpectrum, false);
         d.readString(145, &m_spectrumDevice, "");

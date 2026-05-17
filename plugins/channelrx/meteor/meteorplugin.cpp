@@ -22,6 +22,7 @@
 #include "meteorgui.h"
 #endif
 #include "meteor.h"
+#include "meteorwebapiadapter.h"
 #include "meteorplugin.h"
 
 const PluginDescriptor MeteorPlugin::m_pluginDescriptor = {
@@ -65,6 +66,11 @@ void MeteorPlugin::createRxChannel(DeviceAPI *deviceAPI, BasebandSampleSink **bs
             *cs = instance;
         }
     }
+}
+
+ChannelWebAPIAdapter* MeteorPlugin::createChannelWebAPIAdapter() const
+{
+    return new MeteorWebAPIAdapter();
 }
 
 #ifdef SERVER_MODE

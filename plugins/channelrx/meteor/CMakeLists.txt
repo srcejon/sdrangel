@@ -6,6 +6,7 @@ include_directories(
 
 set(meteor_SOURCES
     meteor.cpp
+    meteorwebapiadapter.cpp
     meteorsettings.cpp
     meteorbaseband.cpp
     meteordemodsink.cpp
@@ -14,6 +15,7 @@ set(meteor_SOURCES
 
 set(meteor_HEADERS
     meteor.h
+    meteorwebapiadapter.h
     meteorsettings.h
     meteorbaseband.h
     meteordemodsink.h

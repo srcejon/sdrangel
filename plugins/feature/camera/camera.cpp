@@ -24,6 +24,7 @@
 #include "SWGFeatureActions.h"
 #include "SWGDeviceState.h"
 #include "SWGCameraSettings.h"
+#include "SWGCameraRect.h"
 #include "SWGCameraReport.h"
 #include "SWGCameraActions.h"
 
@@ -486,6 +487,12 @@ void Camera::webapiFormatFeatureSettings(
     swg->setAlpacaGain(settings.m_cameraGain);
     swg->setAlpacaOffset(settings.m_cameraOffset);
     swg->setAlpacaReadoutMode(settings.m_cameraReadoutMode);
+    swg->setAsiCoolerOn(settings.m_asiCoolerOn);
+    swg->setAsiTargetTemp(settings.m_asiTargetTemp);
+    swg->setAsiUsbBandwidth(settings.m_asiUsbBandwidth);
+    swg->setAsiHighSpeedMode(settings.m_asiHighSpeedMode);
+    swg->setAsiAutoExposureGain(settings.m_asiAutoExposureGain ? 1 : 0);
+    swg->setAsiColorImageType((int) settings.m_asiColorImageType);
 
     // Image / video output
     swg->setSaveImage(settings.m_saveImage ? 1 : 0);
@@ -494,12 +501,58 @@ void Camera::webapiFormatFeatureSettings(
     swg->setVideoFileCameraPath(new QString(settings.m_videoFileCameraPath));
     swg->setVideoFileName(new QString(settings.m_videoFileName));
     swg->setVideoHwAcceleration(settings.m_videoHwAcceleration ? 1 : 0);
+    swg->setVideoLoop(settings.m_videoLoop ? 1 : 0);
+    swg->setVideoPlaybackRate(settings.m_videoPlaybackRate);
+    swg->setVideoPreRecordBufferSeconds(settings.m_videoPreRecordBufferSeconds);
+    swg->setImageRecordLimit(settings.m_imageRecordLimit);
+    swg->setVideoRecordLimitSeconds(settings.m_videoRecordLimitSeconds);
+
+    // Frame stacking / calibration
+    swg->setStackEnabled(settings.m_stackEnabled ? 1 : 0);
+    swg->setStackFrameCount(settings.m_stackFrameCount);
+    swg->setStackMethod((int) settings.m_stackMethod);
+    swg->setStackHdrAlgorithm((int) settings.m_stackHdrAlgorithm);
+    swg->setStackHdrExposureCount(settings.m_stackHdrExposureCount);
+    auto *swgHdrExposures = new QList<double>();
+    for (double exposureTimeMs : settings.m_stackHdrExposureTimesMs) {
+        swgHdrExposures->append(exposureTimeMs);
+    }
+    swg->setStackHdrExposureTimesMs(swgHdrExposures);
+    swg->setStackAlignmentMethod((int) settings.m_stackAlignmentMethod);
+    swg->setStackDarkFileName(new QString(settings.m_stackDarkFileName));
+    swg->setStackFlatFileName(new QString(settings.m_stackFlatFileName));
+    swg->setStackBiasFileName(new QString(settings.m_stackBiasFileName));
+
+    // Sky location / lens model
+    swg->setLatitude(settings.m_latitude);
+    swg->setLongitude(settings.m_longitude);
+    swg->setAltitude(settings.m_altitude);
+    swg->setPositionSync(settings.m_positionSync ? 1 : 0);
+    swg->setOwmApiKey(new QString(settings.m_owmAPIKey));
+    swg->setAzimuth(settings.m_azimuth);
+    swg->setElevation(settings.m_elevation);
+    swg->setRoll(settings.m_roll);
+    swg->setRotator(new QString(settings.m_rotator));
+    swg->setFov(settings.m_fov);
+    swg->setLensProjection((int) settings.m_lensProjection);
+    swg->setLensCenterOffsetX(settings.m_lensCenterOffsetX);
+    swg->setLensCenterOffsetY(settings.m_lensCenterOffsetY);
+    swg->setLensDistortionK1(settings.m_lensDistortionK1);
 
     // Post-processing – tone / colour
     swg->setPostProcessWhiteBalanceMode(settings.m_postProcessWhiteBalanceMode);
     swg->setPostProcessWhiteBalanceRedGain(settings.m_postProcessWhiteBalanceRedGain);
     swg->setPostProcessWhiteBalanceGreenGain(settings.m_postProcessWhiteBalanceGreenGain);
     swg->setPostProcessWhiteBalanceBlueGain(settings.m_postProcessWhiteBalanceBlueGain);
+    swg->setPostProcessWhiteBalanceHighlightProtection(settings.m_postProcessWhiteBalanceHighlightProtection);
+    swg->setPostProcessUnwarp(settings.m_postProcessUnwarp ? 1 : 0);
+    swg->setHistogramStretch((int) settings.m_histogramStretch);
+    swg->setHistogramStretchBlackPoint(settings.m_histogramStretchBlackPoint);
+    swg->setHistogramStretchWhitePoint(settings.m_histogramStretchWhitePoint);
+    swg->setHistogramStretchGamma(settings.m_histogramStretchGamma);
+    swg->setHistogramStretchAsinhStrength(settings.m_histogramStretchAsinhStrength);
+    swg->setHistogramStretchLogStrength(settings.m_histogramStretchLogStrength);
+    swg->setPostProcessGreyscale(settings.m_postProcessGreyscale ? 1 : 0);
     swg->setSaturation(settings.m_saturation);
     swg->setGamma(settings.m_gamma);
     swg->setBrightness(settings.m_brightness);
@@ -507,7 +560,9 @@ void Camera::webapiFormatFeatureSettings(
     swg->setGaussianBlur(settings.m_gaussianBlur);
     swg->setMedianBlur(settings.m_medianBlur);
     swg->setSharpen(settings.m_sharpen);
+    swg->setEdgeDisplayMode((int) settings.m_edgeDisplayMode);
     swg->setSobelEdge(settings.m_sobelEdge);
+    swg->setCannyEdge(settings.m_cannyEdge);
     swg->setFlipX(settings.m_flipX ? 1 : 0);
     swg->setFlipY(settings.m_flipY ? 1 : 0);
     swg->setInvertColors(settings.m_invertColors ? 1 : 0);
@@ -521,6 +576,19 @@ void Camera::webapiFormatFeatureSettings(
 
     // Text overlay
     swg->setOverlayText(settings.m_overlayText ? 1 : 0);
+    swg->setEquatorialGrid(settings.m_equatorialGrid ? 1 : 0);
+    swg->setEquatorialGridColor((qint32) settings.m_equatorialGridColor.rgb());
+    swg->setAltAzGrid(settings.m_altAzGrid ? 1 : 0);
+    swg->setAltAzGridColor((qint32) settings.m_altAzGridColor.rgb());
+    swg->setConstellation(settings.m_constellation ? 1 : 0);
+    swg->setConstellationColor((qint32) settings.m_constellationColor.rgb());
+    swg->setConstellationOverlay((int) settings.m_constellationOverlay);
+    swg->setTrackObjects(settings.m_trackObjects ? 1 : 0);
+    swg->setTrackObjectMinElevation(settings.m_trackObjectMinElevation);
+    swg->setTrackObjectColor((qint32) settings.m_trackObjectColor.rgb());
+    swg->setTrackObjectFontScale(settings.m_trackObjectFontScale);
+    swg->setGridLabelFontFamily(new QString(settings.m_gridLabelFontFamily));
+    swg->setGridLabelFontScale(settings.m_gridLabelFontScale);
     swg->setOverlayTextString(new QString(settings.m_overlayTextString));
     swg->setOverlayTextColor((qint32) settings.m_overlayTextColor.rgb());
     swg->setOverlayTextFontFamily(new QString(settings.m_overlayTextFontFamily));
@@ -531,26 +599,68 @@ void Camera::webapiFormatFeatureSettings(
     // Diff-mask
     swg->setDiffMask(settings.m_diffMask ? 1 : 0);
     swg->setDiffThreshold(settings.m_diffThreshold);
+    swg->setDiffMaskOpenSize(settings.m_diffMaskOpenSize);
     swg->setDilationSize(settings.m_dilationSize);
     swg->setDiffMaskHistoryFrames(settings.m_diffMaskHistoryFrames);
     swg->setDiffMaskCloseSize(settings.m_diffMaskCloseSize);
+    swg->setOverlayFontFamily(new QString(settings.m_overlayFontFamily));
+    swg->setOverlayFontScale(settings.m_overlayFontScale);
 
     // Detection ROI
     swg->setDetectionRoiX(settings.m_detectionRoiX);
     swg->setDetectionRoiY(settings.m_detectionRoiY);
     swg->setDetectionRoiWidth(settings.m_detectionRoiWidth);
     swg->setDetectionRoiHeight(settings.m_detectionRoiHeight);
+    swg->setShowDetectionRoi(settings.m_showDetectionRoi ? 1 : 0);
 
     // Motion detection
     swg->setMotionDetect(settings.m_motionDetect ? 1 : 0);
+    swg->setMotionBackgroundSubtractor((int) settings.m_motionBackgroundSubtractor);
+    swg->setMotionMaskView((int) settings.m_motionMaskView);
     swg->setMotionHistory(settings.m_motionHistory);
     swg->setMotionVarThreshold(settings.m_motionVarThreshold);
+    swg->setMotionLearningRate(settings.m_motionLearningRate);
+    swg->setMotionConfirmFrames(settings.m_motionConfirmFrames);
+    swg->setMotionDownscale(settings.m_motionDownscale);
     swg->setMotionDetectShadows(settings.m_motionDetectShadows ? 1 : 0);
     swg->setMotionOpenSize(settings.m_motionOpenSize);
     swg->setMotionCloseSize(settings.m_motionCloseSize);
     swg->setMotionPersistenceFrames(settings.m_motionPersistenceFrames);
     swg->setMotionBoxColor((qint32) settings.m_motionBoxColor.rgb());
     swg->setMinContourArea(settings.m_minContourArea);
+    swg->setShowMotionExclusionRects(settings.m_showMotionExclusionRects ? 1 : 0);
+    auto *swgMotionExclusionRects = new QList<SWGSDRangel::SWGCameraRect*>();
+    for (const QRect& rect : settings.m_motionExclusionRects)
+    {
+        auto *swgRect = new SWGSDRangel::SWGCameraRect();
+        swgRect->init();
+        swgRect->setX(rect.x());
+        swgRect->setY(rect.y());
+        swgRect->setWidth(rect.width());
+        swgRect->setHeight(rect.height());
+        swgMotionExclusionRects->append(swgRect);
+    }
+    swg->setMotionExclusionRects(swgMotionExclusionRects);
+    swg->setStarDetect(settings.m_starDetect ? 1 : 0);
+    swg->setStarThreshold(settings.m_starThreshold);
+    swg->setStarBackgroundBlur(settings.m_starBackgroundBlur);
+    swg->setStarMinArea(settings.m_starMinArea);
+    swg->setStarMaxArea(settings.m_starMaxArea);
+    swg->setStarMaxAspectRatio(settings.m_starMaxAspectRatio);
+    swg->setStarDebugView((int) settings.m_starDebugView);
+    swg->setStarColor((qint32) settings.m_starColor.rgb());
+    swg->setPlateSolve(settings.m_plateSolve ? 1 : 0);
+    swg->setPlateSolveMaxMagnitude(settings.m_plateSolveMaxMagnitude);
+    swg->setPlateSolveMinMatches(settings.m_plateSolveMinMatches);
+    swg->setPlateSolveMatchRadius(settings.m_plateSolveMatchRadius);
+    swg->setPlateSolveFinalMatchRadius(settings.m_plateSolveFinalMatchRadius);
+    swg->setPlateSolveSearchRadius(settings.m_plateSolveSearchRadius);
+    swg->setPlateSolveStartMode((int) settings.m_plateSolveStartMode);
+    swg->setPlateSolveLabelMode((int) settings.m_plateSolveLabelMode);
+    swg->setPlateSolveUseCurrentDateTime(settings.m_plateSolveUseCurrentDateTime ? 1 : 0);
+    swg->setPlateSolveDateTime(new QString(settings.m_plateSolveDateTime.toString(Qt::ISODateWithMs)));
+    swg->setPlateSolveUseDownloadedCatalog(settings.m_plateSolveUseDownloadedCatalog ? 1 : 0);
+    swg->setPlateSolveApplyMode((int) settings.m_plateSolveApplyMode);
     swg->setVideoPostProcess(settings.m_recordMode);
 
     // Spectrum overlay
@@ -589,6 +699,7 @@ void Camera::webapiFormatFeatureSettings(
             swgDs->setStartOnDetect(ds->m_startOnDetect ? 1 : 0);
             swgDs->setStopOnDisappear(ds->m_stopOnDisappear ? 1 : 0);
             swgDs->setStartStopFileSink(ds->m_startStopFileSink ? 1 : 0);
+            swgDs->setSaveCurrentImage(ds->m_saveCurrentImage ? 1 : 0);
             swgDs->setRecordVideo(ds->m_recordVideo ? 1 : 0);
             swgDs->setDetectCommand(new QString(ds->m_detectCommand));
             swgDs->setDisappearCommand(new QString(ds->m_disappearCommand));
@@ -761,6 +872,24 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("cameraReadoutMode") || featureSettingsKeys.contains("alpacaReadoutMode")) {
         settings.m_cameraReadoutMode = swg->getAlpacaReadoutMode();
     }
+    if (featureSettingsKeys.contains("asiCoolerOn")) {
+        settings.m_asiCoolerOn = swg->getAsiCoolerOn();
+    }
+    if (featureSettingsKeys.contains("asiTargetTemp")) {
+        settings.m_asiTargetTemp = swg->getAsiTargetTemp();
+    }
+    if (featureSettingsKeys.contains("asiUsbBandwidth")) {
+        settings.m_asiUsbBandwidth = swg->getAsiUsbBandwidth();
+    }
+    if (featureSettingsKeys.contains("asiHighSpeedMode")) {
+        settings.m_asiHighSpeedMode = swg->getAsiHighSpeedMode();
+    }
+    if (featureSettingsKeys.contains("asiAutoExposureGain")) {
+        settings.m_asiAutoExposureGain = swg->getAsiAutoExposureGain() != 0;
+    }
+    if (featureSettingsKeys.contains("asiColorImageType")) {
+        settings.m_asiColorImageType = (CameraSettings::AsiColorImageType) swg->getAsiColorImageType();
+    }
 
     // Image / video output
     if (featureSettingsKeys.contains("saveImage")) {
@@ -781,6 +910,97 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("videoHwAcceleration")) {
         settings.m_videoHwAcceleration = swg->getVideoHwAcceleration() != 0;
     }
+    if (featureSettingsKeys.contains("videoLoop")) {
+        settings.m_videoLoop = swg->getVideoLoop() != 0;
+    }
+    if (featureSettingsKeys.contains("videoPlaybackRate")) {
+        settings.m_videoPlaybackRate = swg->getVideoPlaybackRate();
+    }
+    if (featureSettingsKeys.contains("videoPreRecordBufferSeconds")) {
+        settings.m_videoPreRecordBufferSeconds = swg->getVideoPreRecordBufferSeconds();
+    }
+    if (featureSettingsKeys.contains("imageRecordLimit")) {
+        settings.m_imageRecordLimit = swg->getImageRecordLimit();
+    }
+    if (featureSettingsKeys.contains("videoRecordLimitSeconds")) {
+        settings.m_videoRecordLimitSeconds = swg->getVideoRecordLimitSeconds();
+    }
+    if (featureSettingsKeys.contains("stackEnabled")) {
+        settings.m_stackEnabled = swg->getStackEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("stackFrameCount")) {
+        settings.m_stackFrameCount = swg->getStackFrameCount();
+    }
+    if (featureSettingsKeys.contains("stackMethod")) {
+        settings.m_stackMethod = (CameraSettings::StackMethod) swg->getStackMethod();
+    }
+    if (featureSettingsKeys.contains("stackHdrAlgorithm")) {
+        settings.m_stackHdrAlgorithm = (CameraSettings::StackHdrAlgorithm) swg->getStackHdrAlgorithm();
+    }
+    if (featureSettingsKeys.contains("stackHdrExposureCount")) {
+        settings.m_stackHdrExposureCount = swg->getStackHdrExposureCount();
+    }
+    if (featureSettingsKeys.contains("stackHdrExposureTimesMs") && swg->getStackHdrExposureTimesMs())
+    {
+        const int count = qMin((int) settings.m_stackHdrExposureTimesMs.size(), swg->getStackHdrExposureTimesMs()->size());
+        for (int i = 0; i < count; ++i) {
+            settings.m_stackHdrExposureTimesMs[static_cast<size_t>(i)] = swg->getStackHdrExposureTimesMs()->at(i);
+        }
+    }
+    if (featureSettingsKeys.contains("stackAlignmentMethod")) {
+        settings.m_stackAlignmentMethod = (CameraSettings::StackAlignmentMethod) swg->getStackAlignmentMethod();
+    }
+    if (featureSettingsKeys.contains("stackDarkFileName")) {
+        settings.m_stackDarkFileName = *swg->getStackDarkFileName();
+    }
+    if (featureSettingsKeys.contains("stackFlatFileName")) {
+        settings.m_stackFlatFileName = *swg->getStackFlatFileName();
+    }
+    if (featureSettingsKeys.contains("stackBiasFileName")) {
+        settings.m_stackBiasFileName = *swg->getStackBiasFileName();
+    }
+    if (featureSettingsKeys.contains("latitude")) {
+        settings.m_latitude = swg->getLatitude();
+    }
+    if (featureSettingsKeys.contains("longitude")) {
+        settings.m_longitude = swg->getLongitude();
+    }
+    if (featureSettingsKeys.contains("altitude")) {
+        settings.m_altitude = swg->getAltitude();
+    }
+    if (featureSettingsKeys.contains("positionSync")) {
+        settings.m_positionSync = swg->getPositionSync() != 0;
+    }
+    if (featureSettingsKeys.contains("owmAPIKey")) {
+        settings.m_owmAPIKey = *swg->getOwmApiKey();
+    }
+    if (featureSettingsKeys.contains("azimuth")) {
+        settings.m_azimuth = swg->getAzimuth();
+    }
+    if (featureSettingsKeys.contains("elevation")) {
+        settings.m_elevation = swg->getElevation();
+    }
+    if (featureSettingsKeys.contains("roll")) {
+        settings.m_roll = swg->getRoll();
+    }
+    if (featureSettingsKeys.contains("rotator")) {
+        settings.m_rotator = *swg->getRotator();
+    }
+    if (featureSettingsKeys.contains("fov")) {
+        settings.m_fov = swg->getFov();
+    }
+    if (featureSettingsKeys.contains("lensProjection")) {
+        settings.m_lensProjection = (CameraSettings::LensProjection) swg->getLensProjection();
+    }
+    if (featureSettingsKeys.contains("lensCenterOffsetX")) {
+        settings.m_lensCenterOffsetX = swg->getLensCenterOffsetX();
+    }
+    if (featureSettingsKeys.contains("lensCenterOffsetY")) {
+        settings.m_lensCenterOffsetY = swg->getLensCenterOffsetY();
+    }
+    if (featureSettingsKeys.contains("lensDistortionK1")) {
+        settings.m_lensDistortionK1 = swg->getLensDistortionK1();
+    }
 
     // Post-processing – tone / colour
     if (featureSettingsKeys.contains("postProcessWhiteBalanceMode")) {
@@ -794,6 +1014,33 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("postProcessWhiteBalanceBlueGain")) {
         settings.m_postProcessWhiteBalanceBlueGain = swg->getPostProcessWhiteBalanceBlueGain();
+    }
+    if (featureSettingsKeys.contains("postProcessWhiteBalanceHighlightProtection")) {
+        settings.m_postProcessWhiteBalanceHighlightProtection = swg->getPostProcessWhiteBalanceHighlightProtection();
+    }
+    if (featureSettingsKeys.contains("postProcessUnwarp")) {
+        settings.m_postProcessUnwarp = swg->getPostProcessUnwarp() != 0;
+    }
+    if (featureSettingsKeys.contains("histogramStretch")) {
+        settings.m_histogramStretch = (CameraSettings::HistogramStretch) swg->getHistogramStretch();
+    }
+    if (featureSettingsKeys.contains("histogramStretchBlackPoint")) {
+        settings.m_histogramStretchBlackPoint = swg->getHistogramStretchBlackPoint();
+    }
+    if (featureSettingsKeys.contains("histogramStretchWhitePoint")) {
+        settings.m_histogramStretchWhitePoint = swg->getHistogramStretchWhitePoint();
+    }
+    if (featureSettingsKeys.contains("histogramStretchGamma")) {
+        settings.m_histogramStretchGamma = swg->getHistogramStretchGamma();
+    }
+    if (featureSettingsKeys.contains("histogramStretchAsinhStrength")) {
+        settings.m_histogramStretchAsinhStrength = swg->getHistogramStretchAsinhStrength();
+    }
+    if (featureSettingsKeys.contains("histogramStretchLogStrength")) {
+        settings.m_histogramStretchLogStrength = swg->getHistogramStretchLogStrength();
+    }
+    if (featureSettingsKeys.contains("postProcessGreyscale")) {
+        settings.m_postProcessGreyscale = swg->getPostProcessGreyscale() != 0;
     }
     if (featureSettingsKeys.contains("saturation")) {
         settings.m_saturation = swg->getSaturation();
@@ -816,8 +1063,14 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("sharpen")) {
         settings.m_sharpen = swg->getSharpen();
     }
+    if (featureSettingsKeys.contains("edgeDisplayMode")) {
+        settings.m_edgeDisplayMode = (CameraSettings::EdgeDisplayMode) swg->getEdgeDisplayMode();
+    }
     if (featureSettingsKeys.contains("sobelEdge")) {
         settings.m_sobelEdge = swg->getSobelEdge();
+    }
+    if (featureSettingsKeys.contains("cannyEdge")) {
+        settings.m_cannyEdge = swg->getCannyEdge();
     }
     if (featureSettingsKeys.contains("flipX")) {
         settings.m_flipX = swg->getFlipX() != 0;
@@ -850,6 +1103,45 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("overlayText")) {
         settings.m_overlayText = swg->getOverlayText() != 0;
     }
+    if (featureSettingsKeys.contains("equatorialGrid")) {
+        settings.m_equatorialGrid = swg->getEquatorialGrid() != 0;
+    }
+    if (featureSettingsKeys.contains("equatorialGridColor")) {
+        settings.m_equatorialGridColor = QColor(swg->getEquatorialGridColor());
+    }
+    if (featureSettingsKeys.contains("altAzGrid")) {
+        settings.m_altAzGrid = swg->getAltAzGrid() != 0;
+    }
+    if (featureSettingsKeys.contains("altAzGridColor")) {
+        settings.m_altAzGridColor = QColor(swg->getAltAzGridColor());
+    }
+    if (featureSettingsKeys.contains("constellation")) {
+        settings.m_constellation = swg->getConstellation() != 0;
+    }
+    if (featureSettingsKeys.contains("constellationColor")) {
+        settings.m_constellationColor = QColor(swg->getConstellationColor());
+    }
+    if (featureSettingsKeys.contains("constellationOverlay")) {
+        settings.m_constellationOverlay = (CameraSettings::ConstellationOverlay) swg->getConstellationOverlay();
+    }
+    if (featureSettingsKeys.contains("trackObjects")) {
+        settings.m_trackObjects = swg->getTrackObjects() != 0;
+    }
+    if (featureSettingsKeys.contains("trackObjectMinElevation")) {
+        settings.m_trackObjectMinElevation = swg->getTrackObjectMinElevation();
+    }
+    if (featureSettingsKeys.contains("trackObjectColor")) {
+        settings.m_trackObjectColor = QColor(swg->getTrackObjectColor());
+    }
+    if (featureSettingsKeys.contains("trackObjectFontScale")) {
+        settings.m_trackObjectFontScale = swg->getTrackObjectFontScale();
+    }
+    if (featureSettingsKeys.contains("gridLabelFontFamily")) {
+        settings.m_gridLabelFontFamily = *swg->getGridLabelFontFamily();
+    }
+    if (featureSettingsKeys.contains("gridLabelFontScale")) {
+        settings.m_gridLabelFontScale = swg->getGridLabelFontScale();
+    }
     if (featureSettingsKeys.contains("overlayTextString")) {
         settings.m_overlayTextString = *swg->getOverlayTextString();
     }
@@ -876,6 +1168,9 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("diffThreshold")) {
         settings.m_diffThreshold = swg->getDiffThreshold();
     }
+    if (featureSettingsKeys.contains("diffMaskOpenSize")) {
+        settings.m_diffMaskOpenSize = swg->getDiffMaskOpenSize();
+    }
     if (featureSettingsKeys.contains("dilationSize")) {
         settings.m_dilationSize = swg->getDilationSize();
     }
@@ -884,6 +1179,12 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("diffMaskCloseSize")) {
         settings.m_diffMaskCloseSize = swg->getDiffMaskCloseSize();
+    }
+    if (featureSettingsKeys.contains("overlayFontFamily")) {
+        settings.m_overlayFontFamily = *swg->getOverlayFontFamily();
+    }
+    if (featureSettingsKeys.contains("overlayFontScale")) {
+        settings.m_overlayFontScale = swg->getOverlayFontScale();
     }
 
     // Detection ROI
@@ -899,16 +1200,34 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("detectionRoiHeight")) {
         settings.m_detectionRoiHeight = swg->getDetectionRoiHeight();
     }
+    if (featureSettingsKeys.contains("showDetectionRoi")) {
+        settings.m_showDetectionRoi = swg->getShowDetectionRoi() != 0;
+    }
 
     // Motion detection
     if (featureSettingsKeys.contains("motionDetect")) {
         settings.m_motionDetect = swg->getMotionDetect() != 0;
+    }
+    if (featureSettingsKeys.contains("motionBackgroundSubtractor")) {
+        settings.m_motionBackgroundSubtractor = (CameraSettings::MotionBackgroundSubtractor) swg->getMotionBackgroundSubtractor();
+    }
+    if (featureSettingsKeys.contains("motionMaskView")) {
+        settings.m_motionMaskView = (CameraSettings::MotionMaskView) swg->getMotionMaskView();
     }
     if (featureSettingsKeys.contains("motionHistory")) {
         settings.m_motionHistory = swg->getMotionHistory();
     }
     if (featureSettingsKeys.contains("motionVarThreshold")) {
         settings.m_motionVarThreshold = swg->getMotionVarThreshold();
+    }
+    if (featureSettingsKeys.contains("motionLearningRate")) {
+        settings.m_motionLearningRate = swg->getMotionLearningRate();
+    }
+    if (featureSettingsKeys.contains("motionConfirmFrames")) {
+        settings.m_motionConfirmFrames = swg->getMotionConfirmFrames();
+    }
+    if (featureSettingsKeys.contains("motionDownscale")) {
+        settings.m_motionDownscale = swg->getMotionDownscale();
     }
     if (featureSettingsKeys.contains("motionDetectShadows")) {
         settings.m_motionDetectShadows = swg->getMotionDetectShadows() != 0;
@@ -927,6 +1246,93 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("minContourArea")) {
         settings.m_minContourArea = swg->getMinContourArea();
+    }
+    if (featureSettingsKeys.contains("showMotionExclusionRects")) {
+        settings.m_showMotionExclusionRects = swg->getShowMotionExclusionRects() != 0;
+    }
+    if (featureSettingsKeys.contains("motionExclusionRects"))
+    {
+        settings.m_motionExclusionRects.clear();
+
+        if (swg->getMotionExclusionRects())
+        {
+            for (auto *swgRect : *swg->getMotionExclusionRects())
+            {
+                if (swgRect) {
+                    settings.m_motionExclusionRects.append(QRect(
+                        swgRect->getX(),
+                        swgRect->getY(),
+                        swgRect->getWidth(),
+                        swgRect->getHeight()));
+                }
+            }
+        }
+    }
+    if (featureSettingsKeys.contains("starDetect")) {
+        settings.m_starDetect = swg->getStarDetect() != 0;
+    }
+    if (featureSettingsKeys.contains("starThreshold")) {
+        settings.m_starThreshold = swg->getStarThreshold();
+    }
+    if (featureSettingsKeys.contains("starBackgroundBlur")) {
+        settings.m_starBackgroundBlur = swg->getStarBackgroundBlur();
+    }
+    if (featureSettingsKeys.contains("starMinArea")) {
+        settings.m_starMinArea = swg->getStarMinArea();
+    }
+    if (featureSettingsKeys.contains("starMaxArea")) {
+        settings.m_starMaxArea = swg->getStarMaxArea();
+    }
+    if (featureSettingsKeys.contains("starMaxAspectRatio")) {
+        settings.m_starMaxAspectRatio = swg->getStarMaxAspectRatio();
+    }
+    if (featureSettingsKeys.contains("starDebugView")) {
+        settings.m_starDebugView = (CameraSettings::StarDebugView) swg->getStarDebugView();
+    }
+    if (featureSettingsKeys.contains("starColor")) {
+        settings.m_starColor = QColor(swg->getStarColor());
+    }
+    if (featureSettingsKeys.contains("plateSolve")) {
+        settings.m_plateSolve = swg->getPlateSolve() != 0;
+    }
+    if (featureSettingsKeys.contains("plateSolveMaxMagnitude")) {
+        settings.m_plateSolveMaxMagnitude = swg->getPlateSolveMaxMagnitude();
+    }
+    if (featureSettingsKeys.contains("plateSolveMinMatches")) {
+        settings.m_plateSolveMinMatches = swg->getPlateSolveMinMatches();
+    }
+    if (featureSettingsKeys.contains("plateSolveMatchRadius")) {
+        settings.m_plateSolveMatchRadius = swg->getPlateSolveMatchRadius();
+    }
+    if (featureSettingsKeys.contains("plateSolveFinalMatchRadius")) {
+        settings.m_plateSolveFinalMatchRadius = swg->getPlateSolveFinalMatchRadius();
+    }
+    if (featureSettingsKeys.contains("plateSolveSearchRadius")) {
+        settings.m_plateSolveSearchRadius = swg->getPlateSolveSearchRadius();
+    }
+    if (featureSettingsKeys.contains("plateSolveStartMode")) {
+        settings.m_plateSolveStartMode = (CameraSettings::PlateSolveStartMode) swg->getPlateSolveStartMode();
+    }
+    if (featureSettingsKeys.contains("plateSolveLabelMode")) {
+        settings.m_plateSolveLabelMode = (CameraSettings::PlateSolveLabelMode) swg->getPlateSolveLabelMode();
+    }
+    if (featureSettingsKeys.contains("plateSolveUseCurrentDateTime")) {
+        settings.m_plateSolveUseCurrentDateTime = swg->getPlateSolveUseCurrentDateTime() != 0;
+    }
+    if (featureSettingsKeys.contains("plateSolveDateTime"))
+    {
+        settings.m_plateSolveDateTime = swg->getPlateSolveDateTime()
+            ? QDateTime::fromString(*swg->getPlateSolveDateTime(), Qt::ISODateWithMs)
+            : QDateTime();
+        if (!settings.m_plateSolveDateTime.isValid() && swg->getPlateSolveDateTime()) {
+            settings.m_plateSolveDateTime = QDateTime::fromString(*swg->getPlateSolveDateTime(), Qt::ISODate);
+        }
+    }
+    if (featureSettingsKeys.contains("plateSolveUseDownloadedCatalog")) {
+        settings.m_plateSolveUseDownloadedCatalog = swg->getPlateSolveUseDownloadedCatalog() != 0;
+    }
+    if (featureSettingsKeys.contains("plateSolveApplyMode")) {
+        settings.m_plateSolveApplyMode = (CameraSettings::PlateSolveApplyMode) swg->getPlateSolveApplyMode();
     }
     if (featureSettingsKeys.contains("videoPostProcess")) {
         settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
@@ -1007,6 +1413,7 @@ void Camera::webapiUpdateFeatureSettings(
                         ds->m_startOnDetect     = swgDs->getStartOnDetect()     != 0;
                         ds->m_stopOnDisappear   = swgDs->getStopOnDisappear()   != 0;
                         ds->m_startStopFileSink = swgDs->getStartStopFileSink() != 0;
+                        ds->m_saveCurrentImage  = swgDs->getSaveCurrentImage()  != 0;
                         ds->m_recordVideo       = swgDs->getRecordVideo()       != 0;
                         ds->m_detectCommand     = swgDs->getDetectCommand()     ? *swgDs->getDetectCommand()     : QString();
                         ds->m_disappearCommand  = swgDs->getDisappearCommand()  ? *swgDs->getDisappearCommand()  : QString();

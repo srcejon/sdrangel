@@ -37,6 +37,7 @@ class WebAPIAdapterInterface;
 
 namespace SWGSDRangel {
     class SWGDeviceState;
+    class SWGFeatureSettings;
 }
 
 class Scheduler : public Feature
@@ -83,6 +84,22 @@ public:
     bool deserialize(const QByteArray& data) override;
 
     int webapiRun(bool run, SWGSDRangel::SWGDeviceState& response, QString& errorMessage) override;
+    int webapiSettingsGet(
+            SWGSDRangel::SWGFeatureSettings& response,
+            QString& errorMessage) override;
+    int webapiSettingsPutPatch(
+            bool force,
+            const QStringList& featureSettingsKeys,
+            SWGSDRangel::SWGFeatureSettings& response,
+            QString& errorMessage) override;
+
+    static void webapiFormatFeatureSettings(
+            SWGSDRangel::SWGFeatureSettings& response,
+            const SchedulerSettings& settings);
+    static void webapiUpdateFeatureSettings(
+            SchedulerSettings& settings,
+            const QStringList& featureSettingsKeys,
+            SWGSDRangel::SWGFeatureSettings& response);
 
     static QStringList eventTypeNames();
     static QString eventTypeName(int eventType);

@@ -31,6 +31,16 @@ public:
     QByteArray serialize() const override { return m_settings.serialize(); }
     bool deserialize(const QByteArray& data) override { return m_settings.deserialize(data); }
 
+    int webapiSettingsGet(
+            SWGSDRangel::SWGFeatureSettings& response,
+            QString& errorMessage) override;
+
+    int webapiSettingsPutPatch(
+            bool force,
+            const QStringList& featureSettingsKeys,
+            SWGSDRangel::SWGFeatureSettings& response,
+            QString& errorMessage) override;
+
 private:
     SchedulerSettings m_settings;
 };

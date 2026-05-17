@@ -31,6 +31,11 @@
 
 class DeviceAPI;
 
+namespace SWGSDRangel {
+    class SWGChannelSettings;
+    class SWGWorkspaceInfo;
+}
+
 class Meteor : public BasebandSampleSink, public ChannelAPI {
 public:
     class MsgConfigureMeteor : public Message {
@@ -87,6 +92,16 @@ public:
     virtual QByteArray serialize() const;
     virtual bool deserialize(const QByteArray& data);
 
+    virtual int webapiSettingsGet(
+            SWGSDRangel::SWGChannelSettings& response,
+            QString& errorMessage);
+
+    virtual int webapiSettingsPutPatch(
+            bool force,
+            const QStringList& channelSettingsKeys,
+            SWGSDRangel::SWGChannelSettings& response,
+            QString& errorMessage);
+
     virtual int getNbSinkStreams() const { return 1; }
     virtual int getNbSourceStreams() const { return 0; }
     virtual int getStreamIndex() const { return m_settings.m_streamIndex; }
@@ -102,6 +117,15 @@ public:
     virtual int webapiWorkspaceGet(
             SWGSDRangel::SWGWorkspaceInfo& response,
             QString& errorMessage);
+
+    static void webapiFormatChannelSettings(
+            SWGSDRangel::SWGChannelSettings& response,
+            const MeteorSettings& settings);
+
+    static void webapiUpdateChannelSettings(
+            MeteorSettings& settings,
+            const QStringList& channelSettingsKeys,
+            SWGSDRangel::SWGChannelSettings& response);
 
     static const char * const m_channelIdURI;
     static const char * const m_channelId;

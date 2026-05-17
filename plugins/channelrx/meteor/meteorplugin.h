@@ -23,6 +23,7 @@
 
 class DeviceUISet;
 class BasebandSampleSink;
+class ChannelWebAPIAdapter;
 
 class MeteorPlugin : public QObject, PluginInterface {
     Q_OBJECT
@@ -37,6 +38,7 @@ public:
 
     virtual void createRxChannel(DeviceAPI *deviceAPI, BasebandSampleSink **bs, ChannelAPI **cs) const;
     virtual ChannelGUI* createRxChannelGUI(DeviceUISet *deviceUISet, BasebandSampleSink *rxChannel) const;
+    virtual ChannelWebAPIAdapter* createChannelWebAPIAdapter() const;
 
 private:
     static const PluginDescriptor m_pluginDescriptor;

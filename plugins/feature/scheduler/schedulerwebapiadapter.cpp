@@ -15,4 +15,31 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include "SWGFeatureSettings.h"
+#include "SWGSchedulerSettings.h"
+
+#include "scheduler.h"
 #include "schedulerwebapiadapter.h"
+
+int SchedulerWebAPIAdapter::webapiSettingsGet(
+        SWGSDRangel::SWGFeatureSettings& response,
+        QString& errorMessage)
+{
+    (void) errorMessage;
+    response.setSchedulerSettings(new SWGSDRangel::SWGSchedulerSettings());
+    response.getSchedulerSettings()->init();
+    Scheduler::webapiFormatFeatureSettings(response, m_settings);
+    return 200;
+}
+
+int SchedulerWebAPIAdapter::webapiSettingsPutPatch(
+        bool force,
+        const QStringList& featureSettingsKeys,
+        SWGSDRangel::SWGFeatureSettings& response,
+        QString& errorMessage)
+{
+    (void) force;
+    (void) errorMessage;
+    Scheduler::webapiUpdateFeatureSettings(m_settings, featureSettingsKeys, response);
+    return 200;
+}

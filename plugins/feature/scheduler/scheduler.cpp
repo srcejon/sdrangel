@@ -20,12 +20,18 @@
 #include <QRegularExpression>
 
 #include "SWGDeviceState.h"
+#include "SWGFeatureSettings.h"
+#include "SWGSchedulerDeviceSetAction.h"
+#include "SWGSchedulerFeatureAction.h"
+#include "SWGSchedulerRule.h"
+#include "SWGSchedulerSettings.h"
 
 #include "channel/channelwebapiutils.h"
 #include "device/deviceset.h"
 #include "feature/featureset.h"
 #include "feature/featurewebapiutils.h"
 #include "maincore.h"
+#include "settings/serializable.h"
 #include "settings/mainsettings.h"
 #include "settings/preset.h"
 #include "util/messagequeue.h"
@@ -36,6 +42,29 @@ MESSAGE_CLASS_DEFINITION(Scheduler::MsgConfigureScheduler, Message)
 
 const char* const Scheduler::m_featureIdURI = "sdrangel.feature.scheduler";
 const char* const Scheduler::m_featureId = "Scheduler";
+
+namespace
+{
+QDateTime schedulerDateTimeFromString(const QString *text)
+{
+    if (!text) {
+        return QDateTime();
+    }
+
+    QDateTime dateTime = QDateTime::fromString(*text, Qt::ISODateWithMs);
+
+    if (!dateTime.isValid()) {
+        dateTime = QDateTime::fromString(*text, Qt::ISODate);
+    }
+
+    return dateTime;
+}
+
+QString schedulerDateTimeToString(const QDateTime& dateTime)
+{
+    return dateTime.isValid() ? dateTime.toString(Qt::ISODateWithMs) : QString();
+}
+}
 
 Scheduler::Scheduler(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),
@@ -101,6 +130,222 @@ int Scheduler::webapiRun(bool run, SWGSDRangel::SWGDeviceState& response, QStrin
     (void) errorMessage;
     response.setState(new QString(QStringLiteral("running")));
     return 200;
+}
+
+int Scheduler::webapiSettingsGet(
+        SWGSDRangel::SWGFeatureSettings& response,
+        QString& errorMessage)
+{
+    (void) errorMessage;
+    response.setSchedulerSettings(new SWGSDRangel::SWGSchedulerSettings());
+    response.getSchedulerSettings()->init();
+    webapiFormatFeatureSettings(response, m_settings);
+    return 200;
+}
+
+int Scheduler::webapiSettingsPutPatch(
+        bool force,
+        const QStringList& featureSettingsKeys,
+        SWGSDRangel::SWGFeatureSettings& response,
+        QString& errorMessage)
+{
+    (void) errorMessage;
+    SchedulerSettings settings = m_settings;
+    webapiUpdateFeatureSettings(settings, featureSettingsKeys, response);
+
+    MsgConfigureScheduler *msg = MsgConfigureScheduler::create(settings, featureSettingsKeys, force);
+    m_inputMessageQueue.push(msg);
+
+    if (m_guiMessageQueue)
+    {
+        MsgConfigureScheduler *msgToGUI = MsgConfigureScheduler::create(settings, featureSettingsKeys, force);
+        m_guiMessageQueue->push(msgToGUI);
+    }
+
+    webapiFormatFeatureSettings(response, settings);
+    return 200;
+}
+
+void Scheduler::webapiFormatFeatureSettings(
+        SWGSDRangel::SWGFeatureSettings& response,
+        const SchedulerSettings& settings)
+{
+    SWGSDRangel::SWGSchedulerSettings *swg = response.getSchedulerSettings();
+
+    if (swg->getTitle()) {
+        *swg->getTitle() = settings.m_title;
+    } else {
+        swg->setTitle(new QString(settings.m_title));
+    }
+
+    swg->setRgbColor(settings.m_rgbColor);
+    swg->setWorkspaceIndex(settings.m_workspaceIndex);
+
+    QList<SWGSDRangel::SWGSchedulerRule*> *swgRules = new QList<SWGSDRangel::SWGSchedulerRule*>();
+
+    for (const SchedulerSettings::ScheduleRule& rule : settings.m_rules)
+    {
+        SWGSDRangel::SWGSchedulerRule *swgRule = new SWGSDRangel::SWGSchedulerRule();
+        swgRule->init();
+        swgRule->setId(new QString(rule.m_id));
+        swgRule->setName(new QString(rule.m_name));
+        swgRule->setEnabled(rule.m_enabled ? 1 : 0);
+        swgRule->setTriggerType((int) rule.m_triggerType);
+        swgRule->setTime(new QString(schedulerDateTimeToString(rule.m_time)));
+        swgRule->setRecurrence((int) rule.m_recurrence);
+        swgRule->setEventType(rule.m_eventType);
+        swgRule->setEventSourceId(new QString(rule.m_eventSourceId));
+        swgRule->setEventDataRegex(new QString(rule.m_eventDataRegex));
+        swgRule->setEventDelay(rule.m_eventDelay);
+        swgRule->setEventDelayUnit((int) rule.m_eventDelayUnit);
+        swgRule->setCommand(new QString(rule.m_command));
+        swgRule->setSpeech(new QString(rule.m_speech));
+
+        QList<SWGSDRangel::SWGSchedulerDeviceSetAction*> *swgDeviceActions =
+            new QList<SWGSDRangel::SWGSchedulerDeviceSetAction*>();
+        for (const SchedulerSettings::DeviceSetAction& action : rule.m_deviceSetActions)
+        {
+            SWGSDRangel::SWGSchedulerDeviceSetAction *swgAction =
+                new SWGSDRangel::SWGSchedulerDeviceSetAction();
+            swgAction->init();
+            swgAction->setDeviceSetIndex(action.m_deviceSetIndex);
+            swgAction->setDeviceSetId(new QString(action.m_deviceSetId));
+            swgAction->setPresetGroup(new QString(action.m_presetGroup));
+            swgAction->setPresetFrequency((qint64) action.m_presetFrequency);
+            swgAction->setPresetDescription(new QString(action.m_presetDescription));
+            swgAction->setAcquisitionAction((int) action.m_acquisitionAction);
+            swgAction->setFileSinkAction((int) action.m_fileSinkAction);
+            swgAction->setOverrideCenterFrequency(action.m_overrideCenterFrequency ? 1 : 0);
+            swgAction->setCenterFrequency((qint64) action.m_centerFrequency);
+            swgDeviceActions->append(swgAction);
+        }
+        swgRule->setDeviceSetActions(swgDeviceActions);
+
+        QList<SWGSDRangel::SWGSchedulerFeatureAction*> *swgFeatureActions =
+            new QList<SWGSDRangel::SWGSchedulerFeatureAction*>();
+        for (const SchedulerSettings::FeatureAction& action : rule.m_featureActions)
+        {
+            SWGSDRangel::SWGSchedulerFeatureAction *swgAction =
+                new SWGSDRangel::SWGSchedulerFeatureAction();
+            swgAction->init();
+            swgAction->setFeatureSetIndex(action.m_featureSetIndex);
+            swgAction->setFeatureIndex(action.m_featureIndex);
+            swgAction->setFeatureId(new QString(action.m_featureId));
+            swgAction->setAction((int) action.m_action);
+            swgFeatureActions->append(swgAction);
+        }
+        swgRule->setFeatureActions(swgFeatureActions);
+        swgRule->setLastRun(new QString(schedulerDateTimeToString(rule.m_lastRun)));
+        swgRules->append(swgRule);
+    }
+
+    swg->setRules(swgRules);
+
+    if (settings.m_rollupState)
+    {
+        if (swg->getRollupState()) {
+            settings.m_rollupState->formatTo(swg->getRollupState());
+        } else {
+            SWGSDRangel::SWGRollupState *swgRollupState = new SWGSDRangel::SWGRollupState();
+            settings.m_rollupState->formatTo(swgRollupState);
+            swg->setRollupState(swgRollupState);
+        }
+    }
+}
+
+void Scheduler::webapiUpdateFeatureSettings(
+        SchedulerSettings& settings,
+        const QStringList& featureSettingsKeys,
+        SWGSDRangel::SWGFeatureSettings& response)
+{
+    SWGSDRangel::SWGSchedulerSettings *swg = response.getSchedulerSettings();
+
+    if (featureSettingsKeys.contains("title")) {
+        settings.m_title = *swg->getTitle();
+    }
+    if (featureSettingsKeys.contains("rgbColor")) {
+        settings.m_rgbColor = swg->getRgbColor();
+    }
+    if (featureSettingsKeys.contains("workspaceIndex")) {
+        settings.m_workspaceIndex = swg->getWorkspaceIndex();
+    }
+    if (featureSettingsKeys.contains("rules"))
+    {
+        settings.m_rules.clear();
+
+        if (swg->getRules())
+        {
+            for (auto *swgRule : *swg->getRules())
+            {
+                if (!swgRule) {
+                    continue;
+                }
+
+                SchedulerSettings::ScheduleRule rule;
+                rule.m_id = swgRule->getId() ? *swgRule->getId() : SchedulerSettings::newRuleId();
+                if (rule.m_id.isEmpty()) {
+                    rule.m_id = SchedulerSettings::newRuleId();
+                }
+                rule.m_name = swgRule->getName() ? *swgRule->getName() : QString();
+                rule.m_enabled = swgRule->getEnabled() != 0;
+                rule.m_triggerType = (SchedulerSettings::TriggerType) swgRule->getTriggerType();
+                rule.m_time = schedulerDateTimeFromString(swgRule->getTime());
+                rule.m_recurrence = (SchedulerSettings::Recurrence) swgRule->getRecurrence();
+                rule.m_eventType = swgRule->getEventType();
+                rule.m_eventSourceId = swgRule->getEventSourceId() ? *swgRule->getEventSourceId() : QString();
+                rule.m_eventDataRegex = swgRule->getEventDataRegex() ? *swgRule->getEventDataRegex() : QString();
+                rule.m_eventDelay = swgRule->getEventDelay();
+                rule.m_eventDelayUnit = (SchedulerSettings::DelayUnit) swgRule->getEventDelayUnit();
+                rule.m_command = swgRule->getCommand() ? *swgRule->getCommand() : QString();
+                rule.m_speech = swgRule->getSpeech() ? *swgRule->getSpeech() : QString();
+
+                if (swgRule->getDeviceSetActions())
+                {
+                    for (auto *swgAction : *swgRule->getDeviceSetActions())
+                    {
+                        if (!swgAction) {
+                            continue;
+                        }
+
+                        SchedulerSettings::DeviceSetAction action;
+                        action.m_deviceSetIndex = swgAction->getDeviceSetIndex();
+                        action.m_deviceSetId = swgAction->getDeviceSetId() ? *swgAction->getDeviceSetId() : QString();
+                        action.m_presetGroup = swgAction->getPresetGroup() ? *swgAction->getPresetGroup() : QString();
+                        action.m_presetFrequency = (quint64) swgAction->getPresetFrequency();
+                        action.m_presetDescription = swgAction->getPresetDescription() ? *swgAction->getPresetDescription() : QString();
+                        action.m_acquisitionAction = (SchedulerSettings::RunAction) swgAction->getAcquisitionAction();
+                        action.m_fileSinkAction = (SchedulerSettings::RunAction) swgAction->getFileSinkAction();
+                        action.m_overrideCenterFrequency = swgAction->getOverrideCenterFrequency() != 0;
+                        action.m_centerFrequency = (quint64) swgAction->getCenterFrequency();
+                        rule.m_deviceSetActions.append(action);
+                    }
+                }
+
+                if (swgRule->getFeatureActions())
+                {
+                    for (auto *swgAction : *swgRule->getFeatureActions())
+                    {
+                        if (!swgAction) {
+                            continue;
+                        }
+
+                        SchedulerSettings::FeatureAction action;
+                        action.m_featureSetIndex = swgAction->getFeatureSetIndex();
+                        action.m_featureIndex = swgAction->getFeatureIndex();
+                        action.m_featureId = swgAction->getFeatureId() ? *swgAction->getFeatureId() : QString();
+                        action.m_action = (SchedulerSettings::RunAction) swgAction->getAction();
+                        rule.m_featureActions.append(action);
+                    }
+                }
+
+                rule.m_lastRun = schedulerDateTimeFromString(swgRule->getLastRun());
+                settings.m_rules.append(rule);
+            }
+        }
+    }
+    if (settings.m_rollupState && featureSettingsKeys.contains("rollupState")) {
+        settings.m_rollupState->updateFrom(featureSettingsKeys, swg->getRollupState());
+    }
 }
 
 QStringList Scheduler::eventTypeNames()

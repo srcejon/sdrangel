@@ -102,6 +102,18 @@ SWGCameraSettings::SWGCameraSettings() {
     m_alpaca_offset_isSet = false;
     alpaca_readout_mode = 0;
     m_alpaca_readout_mode_isSet = false;
+    asi_cooler_on = 0;
+    m_asi_cooler_on_isSet = false;
+    asi_target_temp = 0;
+    m_asi_target_temp_isSet = false;
+    asi_usb_bandwidth = 0;
+    m_asi_usb_bandwidth_isSet = false;
+    asi_high_speed_mode = 0;
+    m_asi_high_speed_mode_isSet = false;
+    asi_auto_exposure_gain = 0;
+    m_asi_auto_exposure_gain_isSet = false;
+    asi_color_image_type = 0;
+    m_asi_color_image_type_isSet = false;
     save_image = 0;
     m_save_image_isSet = false;
     image_file_name = nullptr;
@@ -114,6 +126,64 @@ SWGCameraSettings::SWGCameraSettings() {
     m_video_file_name_isSet = false;
     video_hw_acceleration = 0;
     m_video_hw_acceleration_isSet = false;
+    video_loop = 0;
+    m_video_loop_isSet = false;
+    video_playback_rate = 0.0;
+    m_video_playback_rate_isSet = false;
+    video_pre_record_buffer_seconds = 0;
+    m_video_pre_record_buffer_seconds_isSet = false;
+    image_record_limit = 0;
+    m_image_record_limit_isSet = false;
+    video_record_limit_seconds = 0;
+    m_video_record_limit_seconds_isSet = false;
+    stack_enabled = 0;
+    m_stack_enabled_isSet = false;
+    stack_frame_count = 0;
+    m_stack_frame_count_isSet = false;
+    stack_method = 0;
+    m_stack_method_isSet = false;
+    stack_hdr_algorithm = 0;
+    m_stack_hdr_algorithm_isSet = false;
+    stack_hdr_exposure_count = 0;
+    m_stack_hdr_exposure_count_isSet = false;
+    stack_hdr_exposure_times_ms = new QList<double>();
+    m_stack_hdr_exposure_times_ms_isSet = false;
+    stack_alignment_method = 0;
+    m_stack_alignment_method_isSet = false;
+    stack_dark_file_name = nullptr;
+    m_stack_dark_file_name_isSet = false;
+    stack_flat_file_name = nullptr;
+    m_stack_flat_file_name_isSet = false;
+    stack_bias_file_name = nullptr;
+    m_stack_bias_file_name_isSet = false;
+    latitude = 0.0f;
+    m_latitude_isSet = false;
+    longitude = 0.0f;
+    m_longitude_isSet = false;
+    altitude = 0.0f;
+    m_altitude_isSet = false;
+    position_sync = 0;
+    m_position_sync_isSet = false;
+    owm_api_key = nullptr;
+    m_owm_api_key_isSet = false;
+    azimuth = 0.0f;
+    m_azimuth_isSet = false;
+    elevation = 0.0f;
+    m_elevation_isSet = false;
+    roll = 0.0f;
+    m_roll_isSet = false;
+    rotator = nullptr;
+    m_rotator_isSet = false;
+    fov = 0.0f;
+    m_fov_isSet = false;
+    lens_projection = 0;
+    m_lens_projection_isSet = false;
+    lens_center_offset_x = 0.0;
+    m_lens_center_offset_x_isSet = false;
+    lens_center_offset_y = 0.0;
+    m_lens_center_offset_y_isSet = false;
+    lens_distortion_k1 = 0.0;
+    m_lens_distortion_k1_isSet = false;
     post_process_white_balance_mode = 0;
     m_post_process_white_balance_mode_isSet = false;
     post_process_white_balance_red_gain = 0.0;
@@ -122,6 +192,24 @@ SWGCameraSettings::SWGCameraSettings() {
     m_post_process_white_balance_green_gain_isSet = false;
     post_process_white_balance_blue_gain = 0.0;
     m_post_process_white_balance_blue_gain_isSet = false;
+    post_process_white_balance_highlight_protection = 0.0;
+    m_post_process_white_balance_highlight_protection_isSet = false;
+    post_process_unwarp = 0;
+    m_post_process_unwarp_isSet = false;
+    histogram_stretch = 0;
+    m_histogram_stretch_isSet = false;
+    histogram_stretch_black_point = 0.0;
+    m_histogram_stretch_black_point_isSet = false;
+    histogram_stretch_white_point = 0.0;
+    m_histogram_stretch_white_point_isSet = false;
+    histogram_stretch_gamma = 0.0;
+    m_histogram_stretch_gamma_isSet = false;
+    histogram_stretch_asinh_strength = 0.0;
+    m_histogram_stretch_asinh_strength_isSet = false;
+    histogram_stretch_log_strength = 0.0;
+    m_histogram_stretch_log_strength_isSet = false;
+    post_process_greyscale = 0;
+    m_post_process_greyscale_isSet = false;
     saturation = 0.0;
     m_saturation_isSet = false;
     gamma = 0.0;
@@ -136,8 +224,12 @@ SWGCameraSettings::SWGCameraSettings() {
     m_median_blur_isSet = false;
     sharpen = 0.0;
     m_sharpen_isSet = false;
+    edge_display_mode = 0;
+    m_edge_display_mode_isSet = false;
     sobel_edge = 0.0;
     m_sobel_edge_isSet = false;
+    canny_edge = 0.0;
+    m_canny_edge_isSet = false;
     flip_x = 0;
     m_flip_x_isSet = false;
     flip_y = 0;
@@ -156,6 +248,32 @@ SWGCameraSettings::SWGCameraSettings() {
     m_date_time_pos_y_isSet = false;
     overlay_text = 0;
     m_overlay_text_isSet = false;
+    equatorial_grid = 0;
+    m_equatorial_grid_isSet = false;
+    equatorial_grid_color = 0;
+    m_equatorial_grid_color_isSet = false;
+    alt_az_grid = 0;
+    m_alt_az_grid_isSet = false;
+    alt_az_grid_color = 0;
+    m_alt_az_grid_color_isSet = false;
+    constellation = 0;
+    m_constellation_isSet = false;
+    constellation_color = 0;
+    m_constellation_color_isSet = false;
+    constellation_overlay = 0;
+    m_constellation_overlay_isSet = false;
+    track_objects = 0;
+    m_track_objects_isSet = false;
+    track_object_min_elevation = 0.0;
+    m_track_object_min_elevation_isSet = false;
+    track_object_color = 0;
+    m_track_object_color_isSet = false;
+    track_object_font_scale = 0.0;
+    m_track_object_font_scale_isSet = false;
+    grid_label_font_family = nullptr;
+    m_grid_label_font_family_isSet = false;
+    grid_label_font_scale = 0.0;
+    m_grid_label_font_scale_isSet = false;
     overlay_text_string = nullptr;
     m_overlay_text_string_isSet = false;
     overlay_text_color = 0;
@@ -172,12 +290,18 @@ SWGCameraSettings::SWGCameraSettings() {
     m_diff_mask_isSet = false;
     diff_threshold = 0;
     m_diff_threshold_isSet = false;
+    diff_mask_open_size = 0;
+    m_diff_mask_open_size_isSet = false;
     dilation_size = 0;
     m_dilation_size_isSet = false;
     diff_mask_history_frames = 0;
     m_diff_mask_history_frames_isSet = false;
     diff_mask_close_size = 0;
     m_diff_mask_close_size_isSet = false;
+    overlay_font_family = nullptr;
+    m_overlay_font_family_isSet = false;
+    overlay_font_scale = 0.0;
+    m_overlay_font_scale_isSet = false;
     detection_roi_x = 0;
     m_detection_roi_x_isSet = false;
     detection_roi_y = 0;
@@ -186,12 +310,24 @@ SWGCameraSettings::SWGCameraSettings() {
     m_detection_roi_width_isSet = false;
     detection_roi_height = 0;
     m_detection_roi_height_isSet = false;
+    show_detection_roi = 0;
+    m_show_detection_roi_isSet = false;
     motion_detect = 0;
     m_motion_detect_isSet = false;
+    motion_background_subtractor = 0;
+    m_motion_background_subtractor_isSet = false;
+    motion_mask_view = 0;
+    m_motion_mask_view_isSet = false;
     motion_history = 0;
     m_motion_history_isSet = false;
     motion_var_threshold = 0.0;
     m_motion_var_threshold_isSet = false;
+    motion_learning_rate = 0.0;
+    m_motion_learning_rate_isSet = false;
+    motion_confirm_frames = 0;
+    m_motion_confirm_frames_isSet = false;
+    motion_downscale = 0.0;
+    m_motion_downscale_isSet = false;
     motion_detect_shadows = 0;
     m_motion_detect_shadows_isSet = false;
     motion_open_size = 0;
@@ -204,6 +340,50 @@ SWGCameraSettings::SWGCameraSettings() {
     m_motion_box_color_isSet = false;
     min_contour_area = 0;
     m_min_contour_area_isSet = false;
+    show_motion_exclusion_rects = 0;
+    m_show_motion_exclusion_rects_isSet = false;
+    motion_exclusion_rects = nullptr;
+    m_motion_exclusion_rects_isSet = false;
+    star_detect = 0;
+    m_star_detect_isSet = false;
+    star_threshold = 0;
+    m_star_threshold_isSet = false;
+    star_background_blur = 0;
+    m_star_background_blur_isSet = false;
+    star_min_area = 0;
+    m_star_min_area_isSet = false;
+    star_max_area = 0;
+    m_star_max_area_isSet = false;
+    star_max_aspect_ratio = 0.0;
+    m_star_max_aspect_ratio_isSet = false;
+    star_debug_view = 0;
+    m_star_debug_view_isSet = false;
+    star_color = 0;
+    m_star_color_isSet = false;
+    plate_solve = 0;
+    m_plate_solve_isSet = false;
+    plate_solve_max_magnitude = 0.0;
+    m_plate_solve_max_magnitude_isSet = false;
+    plate_solve_min_matches = 0;
+    m_plate_solve_min_matches_isSet = false;
+    plate_solve_match_radius = 0.0;
+    m_plate_solve_match_radius_isSet = false;
+    plate_solve_final_match_radius = 0.0;
+    m_plate_solve_final_match_radius_isSet = false;
+    plate_solve_search_radius = 0.0;
+    m_plate_solve_search_radius_isSet = false;
+    plate_solve_start_mode = 0;
+    m_plate_solve_start_mode_isSet = false;
+    plate_solve_label_mode = 0;
+    m_plate_solve_label_mode_isSet = false;
+    plate_solve_use_current_date_time = 0;
+    m_plate_solve_use_current_date_time_isSet = false;
+    plate_solve_date_time = nullptr;
+    m_plate_solve_date_time_isSet = false;
+    plate_solve_use_downloaded_catalog = 0;
+    m_plate_solve_use_downloaded_catalog_isSet = false;
+    plate_solve_apply_mode = 0;
+    m_plate_solve_apply_mode_isSet = false;
     video_post_process = 0;
     m_video_post_process_isSet = false;
     overlay_spectrum = 0;
@@ -344,6 +524,18 @@ SWGCameraSettings::init() {
     m_alpaca_offset_isSet = false;
     alpaca_readout_mode = 0;
     m_alpaca_readout_mode_isSet = false;
+    asi_cooler_on = 0;
+    m_asi_cooler_on_isSet = false;
+    asi_target_temp = 0;
+    m_asi_target_temp_isSet = false;
+    asi_usb_bandwidth = 0;
+    m_asi_usb_bandwidth_isSet = false;
+    asi_high_speed_mode = 0;
+    m_asi_high_speed_mode_isSet = false;
+    asi_auto_exposure_gain = 0;
+    m_asi_auto_exposure_gain_isSet = false;
+    asi_color_image_type = 0;
+    m_asi_color_image_type_isSet = false;
     save_image = 0;
     m_save_image_isSet = false;
     image_file_name = new QString("");
@@ -356,6 +548,64 @@ SWGCameraSettings::init() {
     m_video_file_name_isSet = false;
     video_hw_acceleration = 0;
     m_video_hw_acceleration_isSet = false;
+    video_loop = 0;
+    m_video_loop_isSet = false;
+    video_playback_rate = 0.0;
+    m_video_playback_rate_isSet = false;
+    video_pre_record_buffer_seconds = 0;
+    m_video_pre_record_buffer_seconds_isSet = false;
+    image_record_limit = 0;
+    m_image_record_limit_isSet = false;
+    video_record_limit_seconds = 0;
+    m_video_record_limit_seconds_isSet = false;
+    stack_enabled = 0;
+    m_stack_enabled_isSet = false;
+    stack_frame_count = 0;
+    m_stack_frame_count_isSet = false;
+    stack_method = 0;
+    m_stack_method_isSet = false;
+    stack_hdr_algorithm = 0;
+    m_stack_hdr_algorithm_isSet = false;
+    stack_hdr_exposure_count = 0;
+    m_stack_hdr_exposure_count_isSet = false;
+    stack_hdr_exposure_times_ms = new QList<double>();
+    m_stack_hdr_exposure_times_ms_isSet = false;
+    stack_alignment_method = 0;
+    m_stack_alignment_method_isSet = false;
+    stack_dark_file_name = new QString("");
+    m_stack_dark_file_name_isSet = false;
+    stack_flat_file_name = new QString("");
+    m_stack_flat_file_name_isSet = false;
+    stack_bias_file_name = new QString("");
+    m_stack_bias_file_name_isSet = false;
+    latitude = 0.0f;
+    m_latitude_isSet = false;
+    longitude = 0.0f;
+    m_longitude_isSet = false;
+    altitude = 0.0f;
+    m_altitude_isSet = false;
+    position_sync = 0;
+    m_position_sync_isSet = false;
+    owm_api_key = new QString("");
+    m_owm_api_key_isSet = false;
+    azimuth = 0.0f;
+    m_azimuth_isSet = false;
+    elevation = 0.0f;
+    m_elevation_isSet = false;
+    roll = 0.0f;
+    m_roll_isSet = false;
+    rotator = new QString("");
+    m_rotator_isSet = false;
+    fov = 0.0f;
+    m_fov_isSet = false;
+    lens_projection = 0;
+    m_lens_projection_isSet = false;
+    lens_center_offset_x = 0.0;
+    m_lens_center_offset_x_isSet = false;
+    lens_center_offset_y = 0.0;
+    m_lens_center_offset_y_isSet = false;
+    lens_distortion_k1 = 0.0;
+    m_lens_distortion_k1_isSet = false;
     post_process_white_balance_mode = 0;
     m_post_process_white_balance_mode_isSet = false;
     post_process_white_balance_red_gain = 0.0;
@@ -364,6 +614,24 @@ SWGCameraSettings::init() {
     m_post_process_white_balance_green_gain_isSet = false;
     post_process_white_balance_blue_gain = 0.0;
     m_post_process_white_balance_blue_gain_isSet = false;
+    post_process_white_balance_highlight_protection = 0.0;
+    m_post_process_white_balance_highlight_protection_isSet = false;
+    post_process_unwarp = 0;
+    m_post_process_unwarp_isSet = false;
+    histogram_stretch = 0;
+    m_histogram_stretch_isSet = false;
+    histogram_stretch_black_point = 0.0;
+    m_histogram_stretch_black_point_isSet = false;
+    histogram_stretch_white_point = 0.0;
+    m_histogram_stretch_white_point_isSet = false;
+    histogram_stretch_gamma = 0.0;
+    m_histogram_stretch_gamma_isSet = false;
+    histogram_stretch_asinh_strength = 0.0;
+    m_histogram_stretch_asinh_strength_isSet = false;
+    histogram_stretch_log_strength = 0.0;
+    m_histogram_stretch_log_strength_isSet = false;
+    post_process_greyscale = 0;
+    m_post_process_greyscale_isSet = false;
     saturation = 0.0;
     m_saturation_isSet = false;
     gamma = 0.0;
@@ -378,8 +646,12 @@ SWGCameraSettings::init() {
     m_median_blur_isSet = false;
     sharpen = 0.0;
     m_sharpen_isSet = false;
+    edge_display_mode = 0;
+    m_edge_display_mode_isSet = false;
     sobel_edge = 0.0;
     m_sobel_edge_isSet = false;
+    canny_edge = 0.0;
+    m_canny_edge_isSet = false;
     flip_x = 0;
     m_flip_x_isSet = false;
     flip_y = 0;
@@ -398,6 +670,32 @@ SWGCameraSettings::init() {
     m_date_time_pos_y_isSet = false;
     overlay_text = 0;
     m_overlay_text_isSet = false;
+    equatorial_grid = 0;
+    m_equatorial_grid_isSet = false;
+    equatorial_grid_color = 0;
+    m_equatorial_grid_color_isSet = false;
+    alt_az_grid = 0;
+    m_alt_az_grid_isSet = false;
+    alt_az_grid_color = 0;
+    m_alt_az_grid_color_isSet = false;
+    constellation = 0;
+    m_constellation_isSet = false;
+    constellation_color = 0;
+    m_constellation_color_isSet = false;
+    constellation_overlay = 0;
+    m_constellation_overlay_isSet = false;
+    track_objects = 0;
+    m_track_objects_isSet = false;
+    track_object_min_elevation = 0.0;
+    m_track_object_min_elevation_isSet = false;
+    track_object_color = 0;
+    m_track_object_color_isSet = false;
+    track_object_font_scale = 0.0;
+    m_track_object_font_scale_isSet = false;
+    grid_label_font_family = new QString("");
+    m_grid_label_font_family_isSet = false;
+    grid_label_font_scale = 0.0;
+    m_grid_label_font_scale_isSet = false;
     overlay_text_string = new QString("");
     m_overlay_text_string_isSet = false;
     overlay_text_color = 0;
@@ -414,12 +712,18 @@ SWGCameraSettings::init() {
     m_diff_mask_isSet = false;
     diff_threshold = 0;
     m_diff_threshold_isSet = false;
+    diff_mask_open_size = 0;
+    m_diff_mask_open_size_isSet = false;
     dilation_size = 0;
     m_dilation_size_isSet = false;
     diff_mask_history_frames = 0;
     m_diff_mask_history_frames_isSet = false;
     diff_mask_close_size = 0;
     m_diff_mask_close_size_isSet = false;
+    overlay_font_family = new QString("");
+    m_overlay_font_family_isSet = false;
+    overlay_font_scale = 0.0;
+    m_overlay_font_scale_isSet = false;
     detection_roi_x = 0;
     m_detection_roi_x_isSet = false;
     detection_roi_y = 0;
@@ -428,12 +732,24 @@ SWGCameraSettings::init() {
     m_detection_roi_width_isSet = false;
     detection_roi_height = 0;
     m_detection_roi_height_isSet = false;
+    show_detection_roi = 0;
+    m_show_detection_roi_isSet = false;
     motion_detect = 0;
     m_motion_detect_isSet = false;
+    motion_background_subtractor = 0;
+    m_motion_background_subtractor_isSet = false;
+    motion_mask_view = 0;
+    m_motion_mask_view_isSet = false;
     motion_history = 0;
     m_motion_history_isSet = false;
     motion_var_threshold = 0.0;
     m_motion_var_threshold_isSet = false;
+    motion_learning_rate = 0.0;
+    m_motion_learning_rate_isSet = false;
+    motion_confirm_frames = 0;
+    m_motion_confirm_frames_isSet = false;
+    motion_downscale = 0.0;
+    m_motion_downscale_isSet = false;
     motion_detect_shadows = 0;
     m_motion_detect_shadows_isSet = false;
     motion_open_size = 0;
@@ -446,6 +762,50 @@ SWGCameraSettings::init() {
     m_motion_box_color_isSet = false;
     min_contour_area = 0;
     m_min_contour_area_isSet = false;
+    show_motion_exclusion_rects = 0;
+    m_show_motion_exclusion_rects_isSet = false;
+    motion_exclusion_rects = new QList<SWGCameraRect*>();
+    m_motion_exclusion_rects_isSet = false;
+    star_detect = 0;
+    m_star_detect_isSet = false;
+    star_threshold = 0;
+    m_star_threshold_isSet = false;
+    star_background_blur = 0;
+    m_star_background_blur_isSet = false;
+    star_min_area = 0;
+    m_star_min_area_isSet = false;
+    star_max_area = 0;
+    m_star_max_area_isSet = false;
+    star_max_aspect_ratio = 0.0;
+    m_star_max_aspect_ratio_isSet = false;
+    star_debug_view = 0;
+    m_star_debug_view_isSet = false;
+    star_color = 0;
+    m_star_color_isSet = false;
+    plate_solve = 0;
+    m_plate_solve_isSet = false;
+    plate_solve_max_magnitude = 0.0;
+    m_plate_solve_max_magnitude_isSet = false;
+    plate_solve_min_matches = 0;
+    m_plate_solve_min_matches_isSet = false;
+    plate_solve_match_radius = 0.0;
+    m_plate_solve_match_radius_isSet = false;
+    plate_solve_final_match_radius = 0.0;
+    m_plate_solve_final_match_radius_isSet = false;
+    plate_solve_search_radius = 0.0;
+    m_plate_solve_search_radius_isSet = false;
+    plate_solve_start_mode = 0;
+    m_plate_solve_start_mode_isSet = false;
+    plate_solve_label_mode = 0;
+    m_plate_solve_label_mode_isSet = false;
+    plate_solve_use_current_date_time = 0;
+    m_plate_solve_use_current_date_time_isSet = false;
+    plate_solve_date_time = new QString("");
+    m_plate_solve_date_time_isSet = false;
+    plate_solve_use_downloaded_catalog = 0;
+    m_plate_solve_use_downloaded_catalog_isSet = false;
+    plate_solve_apply_mode = 0;
+    m_plate_solve_apply_mode_isSet = false;
     video_post_process = 0;
     m_video_post_process_isSet = false;
     overlay_spectrum = 0;
@@ -560,6 +920,12 @@ SWGCameraSettings::cleanup() {
 
 
 
+
+
+
+
+
+
     if(image_file_name != nullptr) { 
         delete image_file_name;
     }
@@ -570,6 +936,56 @@ SWGCameraSettings::cleanup() {
     if(video_file_name != nullptr) { 
         delete video_file_name;
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if(stack_dark_file_name != nullptr) { 
+        delete stack_dark_file_name;
+    }
+    if(stack_flat_file_name != nullptr) { 
+        delete stack_flat_file_name;
+    }
+    if(stack_bias_file_name != nullptr) { 
+        delete stack_bias_file_name;
+    }
+
+
+
+
+    if(owm_api_key != nullptr) { 
+        delete owm_api_key;
+    }
+
+
+
+    if(rotator != nullptr) { 
+        delete rotator;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -594,6 +1010,21 @@ SWGCameraSettings::cleanup() {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+    if(grid_label_font_family != nullptr) { 
+        delete grid_label_font_family;
+    }
+
     if(overlay_text_string != nullptr) { 
         delete overlay_text_string;
     }
@@ -610,6 +1041,9 @@ SWGCameraSettings::cleanup() {
 
 
 
+    if(overlay_font_family != nullptr) { 
+        delete overlay_font_family;
+    }
 
 
 
@@ -620,6 +1054,44 @@ SWGCameraSettings::cleanup() {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+    if(motion_exclusion_rects != nullptr) { 
+        auto arr = motion_exclusion_rects;
+        for(auto o: *arr) { 
+            delete o;
+        }
+        delete motion_exclusion_rects;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if(plate_solve_date_time != nullptr) { 
+        delete plate_solve_date_time;
+    }
 
 
 
@@ -756,6 +1228,18 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&alpaca_readout_mode, pJson["alpacaReadoutMode"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&asi_cooler_on, pJson["asiCoolerOn"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&asi_target_temp, pJson["asiTargetTemp"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&asi_usb_bandwidth, pJson["asiUsbBandwidth"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&asi_high_speed_mode, pJson["asiHighSpeedMode"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&asi_auto_exposure_gain, pJson["asiAutoExposureGain"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&asi_color_image_type, pJson["asiColorImageType"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&save_image, pJson["saveImage"], "qint32", "");
     
     ::SWGSDRangel::setValue(&image_file_name, pJson["imageFileName"], "QString", "QString");
@@ -768,6 +1252,64 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&video_hw_acceleration, pJson["videoHwAcceleration"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&video_loop, pJson["videoLoop"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&video_playback_rate, pJson["videoPlaybackRate"], "double", "");
+    
+    ::SWGSDRangel::setValue(&video_pre_record_buffer_seconds, pJson["videoPreRecordBufferSeconds"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&image_record_limit, pJson["imageRecordLimit"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&video_record_limit_seconds, pJson["videoRecordLimitSeconds"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&stack_enabled, pJson["stackEnabled"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&stack_frame_count, pJson["stackFrameCount"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&stack_method, pJson["stackMethod"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&stack_hdr_algorithm, pJson["stackHdrAlgorithm"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&stack_hdr_exposure_count, pJson["stackHdrExposureCount"], "qint32", "");
+    
+    
+    ::SWGSDRangel::setValue(&stack_hdr_exposure_times_ms, pJson["stackHdrExposureTimesMs"], "QList", "double");
+    ::SWGSDRangel::setValue(&stack_alignment_method, pJson["stackAlignmentMethod"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&stack_dark_file_name, pJson["stackDarkFileName"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&stack_flat_file_name, pJson["stackFlatFileName"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&stack_bias_file_name, pJson["stackBiasFileName"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&latitude, pJson["latitude"], "float", "");
+    
+    ::SWGSDRangel::setValue(&longitude, pJson["longitude"], "float", "");
+    
+    ::SWGSDRangel::setValue(&altitude, pJson["altitude"], "float", "");
+    
+    ::SWGSDRangel::setValue(&position_sync, pJson["positionSync"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&owm_api_key, pJson["owmAPIKey"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&azimuth, pJson["azimuth"], "float", "");
+    
+    ::SWGSDRangel::setValue(&elevation, pJson["elevation"], "float", "");
+    
+    ::SWGSDRangel::setValue(&roll, pJson["roll"], "float", "");
+    
+    ::SWGSDRangel::setValue(&rotator, pJson["rotator"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&fov, pJson["fov"], "float", "");
+    
+    ::SWGSDRangel::setValue(&lens_projection, pJson["lensProjection"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&lens_center_offset_x, pJson["lensCenterOffsetX"], "double", "");
+    
+    ::SWGSDRangel::setValue(&lens_center_offset_y, pJson["lensCenterOffsetY"], "double", "");
+    
+    ::SWGSDRangel::setValue(&lens_distortion_k1, pJson["lensDistortionK1"], "double", "");
+    
     ::SWGSDRangel::setValue(&post_process_white_balance_mode, pJson["postProcessWhiteBalanceMode"], "qint32", "");
     
     ::SWGSDRangel::setValue(&post_process_white_balance_red_gain, pJson["postProcessWhiteBalanceRedGain"], "double", "");
@@ -775,6 +1317,24 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&post_process_white_balance_green_gain, pJson["postProcessWhiteBalanceGreenGain"], "double", "");
     
     ::SWGSDRangel::setValue(&post_process_white_balance_blue_gain, pJson["postProcessWhiteBalanceBlueGain"], "double", "");
+    
+    ::SWGSDRangel::setValue(&post_process_white_balance_highlight_protection, pJson["postProcessWhiteBalanceHighlightProtection"], "double", "");
+    
+    ::SWGSDRangel::setValue(&post_process_unwarp, pJson["postProcessUnwarp"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&histogram_stretch, pJson["histogramStretch"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&histogram_stretch_black_point, pJson["histogramStretchBlackPoint"], "double", "");
+    
+    ::SWGSDRangel::setValue(&histogram_stretch_white_point, pJson["histogramStretchWhitePoint"], "double", "");
+    
+    ::SWGSDRangel::setValue(&histogram_stretch_gamma, pJson["histogramStretchGamma"], "double", "");
+    
+    ::SWGSDRangel::setValue(&histogram_stretch_asinh_strength, pJson["histogramStretchAsinhStrength"], "double", "");
+    
+    ::SWGSDRangel::setValue(&histogram_stretch_log_strength, pJson["histogramStretchLogStrength"], "double", "");
+    
+    ::SWGSDRangel::setValue(&post_process_greyscale, pJson["postProcessGreyscale"], "qint32", "");
     
     ::SWGSDRangel::setValue(&saturation, pJson["saturation"], "double", "");
     
@@ -790,7 +1350,11 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&sharpen, pJson["sharpen"], "double", "");
     
+    ::SWGSDRangel::setValue(&edge_display_mode, pJson["edgeDisplayMode"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&sobel_edge, pJson["sobelEdge"], "double", "");
+    
+    ::SWGSDRangel::setValue(&canny_edge, pJson["cannyEdge"], "double", "");
     
     ::SWGSDRangel::setValue(&flip_x, pJson["flipX"], "qint32", "");
     
@@ -810,6 +1374,32 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&overlay_text, pJson["overlayText"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&equatorial_grid, pJson["equatorialGrid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&equatorial_grid_color, pJson["equatorialGridColor"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&alt_az_grid, pJson["altAzGrid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&alt_az_grid_color, pJson["altAzGridColor"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&constellation, pJson["constellation"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&constellation_color, pJson["constellationColor"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&constellation_overlay, pJson["constellationOverlay"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&track_objects, pJson["trackObjects"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&track_object_min_elevation, pJson["trackObjectMinElevation"], "double", "");
+    
+    ::SWGSDRangel::setValue(&track_object_color, pJson["trackObjectColor"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&track_object_font_scale, pJson["trackObjectFontScale"], "double", "");
+    
+    ::SWGSDRangel::setValue(&grid_label_font_family, pJson["gridLabelFontFamily"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&grid_label_font_scale, pJson["gridLabelFontScale"], "double", "");
+    
     ::SWGSDRangel::setValue(&overlay_text_string, pJson["overlayTextString"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&overlay_text_color, pJson["overlayTextColor"], "qint32", "");
@@ -826,11 +1416,17 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&diff_threshold, pJson["diffThreshold"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&diff_mask_open_size, pJson["diffMaskOpenSize"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&dilation_size, pJson["dilationSize"], "qint32", "");
     
     ::SWGSDRangel::setValue(&diff_mask_history_frames, pJson["diffMaskHistoryFrames"], "qint32", "");
     
     ::SWGSDRangel::setValue(&diff_mask_close_size, pJson["diffMaskCloseSize"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&overlay_font_family, pJson["overlayFontFamily"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&overlay_font_scale, pJson["overlayFontScale"], "double", "");
     
     ::SWGSDRangel::setValue(&detection_roi_x, pJson["detectionRoiX"], "qint32", "");
     
@@ -840,11 +1436,23 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&detection_roi_height, pJson["detectionRoiHeight"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&show_detection_roi, pJson["showDetectionRoi"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&motion_detect, pJson["motionDetect"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&motion_background_subtractor, pJson["motionBackgroundSubtractor"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&motion_mask_view, pJson["motionMaskView"], "qint32", "");
     
     ::SWGSDRangel::setValue(&motion_history, pJson["motionHistory"], "qint32", "");
     
     ::SWGSDRangel::setValue(&motion_var_threshold, pJson["motionVarThreshold"], "double", "");
+    
+    ::SWGSDRangel::setValue(&motion_learning_rate, pJson["motionLearningRate"], "double", "");
+    
+    ::SWGSDRangel::setValue(&motion_confirm_frames, pJson["motionConfirmFrames"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&motion_downscale, pJson["motionDownscale"], "double", "");
     
     ::SWGSDRangel::setValue(&motion_detect_shadows, pJson["motionDetectShadows"], "qint32", "");
     
@@ -857,6 +1465,50 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&motion_box_color, pJson["motionBoxColor"], "qint32", "");
     
     ::SWGSDRangel::setValue(&min_contour_area, pJson["minContourArea"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&show_motion_exclusion_rects, pJson["showMotionExclusionRects"], "qint32", "");
+    
+    
+    ::SWGSDRangel::setValue(&motion_exclusion_rects, pJson["motionExclusionRects"], "QList", "SWGCameraRect");
+    ::SWGSDRangel::setValue(&star_detect, pJson["starDetect"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&star_threshold, pJson["starThreshold"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&star_background_blur, pJson["starBackgroundBlur"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&star_min_area, pJson["starMinArea"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&star_max_area, pJson["starMaxArea"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&star_max_aspect_ratio, pJson["starMaxAspectRatio"], "double", "");
+    
+    ::SWGSDRangel::setValue(&star_debug_view, pJson["starDebugView"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&star_color, pJson["starColor"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve, pJson["plateSolve"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_max_magnitude, pJson["plateSolveMaxMagnitude"], "double", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_min_matches, pJson["plateSolveMinMatches"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_match_radius, pJson["plateSolveMatchRadius"], "double", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_final_match_radius, pJson["plateSolveFinalMatchRadius"], "double", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_search_radius, pJson["plateSolveSearchRadius"], "double", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_start_mode, pJson["plateSolveStartMode"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_label_mode, pJson["plateSolveLabelMode"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_use_current_date_time, pJson["plateSolveUseCurrentDateTime"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_date_time, pJson["plateSolveDateTime"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&plate_solve_use_downloaded_catalog, pJson["plateSolveUseDownloadedCatalog"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&plate_solve_apply_mode, pJson["plateSolveApplyMode"], "qint32", "");
     
     ::SWGSDRangel::setValue(&video_post_process, pJson["videoPostProcess"], "qint32", "");
     
@@ -1043,6 +1695,24 @@ SWGCameraSettings::asJsonObject() {
     if(m_alpaca_readout_mode_isSet){
         obj->insert("alpacaReadoutMode", QJsonValue(alpaca_readout_mode));
     }
+    if(m_asi_cooler_on_isSet){
+        obj->insert("asiCoolerOn", QJsonValue(asi_cooler_on));
+    }
+    if(m_asi_target_temp_isSet){
+        obj->insert("asiTargetTemp", QJsonValue(asi_target_temp));
+    }
+    if(m_asi_usb_bandwidth_isSet){
+        obj->insert("asiUsbBandwidth", QJsonValue(asi_usb_bandwidth));
+    }
+    if(m_asi_high_speed_mode_isSet){
+        obj->insert("asiHighSpeedMode", QJsonValue(asi_high_speed_mode));
+    }
+    if(m_asi_auto_exposure_gain_isSet){
+        obj->insert("asiAutoExposureGain", QJsonValue(asi_auto_exposure_gain));
+    }
+    if(m_asi_color_image_type_isSet){
+        obj->insert("asiColorImageType", QJsonValue(asi_color_image_type));
+    }
     if(m_save_image_isSet){
         obj->insert("saveImage", QJsonValue(save_image));
     }
@@ -1061,6 +1731,93 @@ SWGCameraSettings::asJsonObject() {
     if(m_video_hw_acceleration_isSet){
         obj->insert("videoHwAcceleration", QJsonValue(video_hw_acceleration));
     }
+    if(m_video_loop_isSet){
+        obj->insert("videoLoop", QJsonValue(video_loop));
+    }
+    if(m_video_playback_rate_isSet){
+        obj->insert("videoPlaybackRate", QJsonValue(video_playback_rate));
+    }
+    if(m_video_pre_record_buffer_seconds_isSet){
+        obj->insert("videoPreRecordBufferSeconds", QJsonValue(video_pre_record_buffer_seconds));
+    }
+    if(m_image_record_limit_isSet){
+        obj->insert("imageRecordLimit", QJsonValue(image_record_limit));
+    }
+    if(m_video_record_limit_seconds_isSet){
+        obj->insert("videoRecordLimitSeconds", QJsonValue(video_record_limit_seconds));
+    }
+    if(m_stack_enabled_isSet){
+        obj->insert("stackEnabled", QJsonValue(stack_enabled));
+    }
+    if(m_stack_frame_count_isSet){
+        obj->insert("stackFrameCount", QJsonValue(stack_frame_count));
+    }
+    if(m_stack_method_isSet){
+        obj->insert("stackMethod", QJsonValue(stack_method));
+    }
+    if(m_stack_hdr_algorithm_isSet){
+        obj->insert("stackHdrAlgorithm", QJsonValue(stack_hdr_algorithm));
+    }
+    if(m_stack_hdr_exposure_count_isSet){
+        obj->insert("stackHdrExposureCount", QJsonValue(stack_hdr_exposure_count));
+    }
+    if(stack_hdr_exposure_times_ms && stack_hdr_exposure_times_ms->size() > 0){
+        toJsonArray((QList<void*>*)stack_hdr_exposure_times_ms, obj, "stackHdrExposureTimesMs", "");
+    }
+    if(m_stack_alignment_method_isSet){
+        obj->insert("stackAlignmentMethod", QJsonValue(stack_alignment_method));
+    }
+    if(stack_dark_file_name != nullptr && *stack_dark_file_name != QString("")){
+        toJsonValue(QString("stackDarkFileName"), stack_dark_file_name, obj, QString("QString"));
+    }
+    if(stack_flat_file_name != nullptr && *stack_flat_file_name != QString("")){
+        toJsonValue(QString("stackFlatFileName"), stack_flat_file_name, obj, QString("QString"));
+    }
+    if(stack_bias_file_name != nullptr && *stack_bias_file_name != QString("")){
+        toJsonValue(QString("stackBiasFileName"), stack_bias_file_name, obj, QString("QString"));
+    }
+    if(m_latitude_isSet){
+        obj->insert("latitude", QJsonValue(latitude));
+    }
+    if(m_longitude_isSet){
+        obj->insert("longitude", QJsonValue(longitude));
+    }
+    if(m_altitude_isSet){
+        obj->insert("altitude", QJsonValue(altitude));
+    }
+    if(m_position_sync_isSet){
+        obj->insert("positionSync", QJsonValue(position_sync));
+    }
+    if(owm_api_key != nullptr && *owm_api_key != QString("")){
+        toJsonValue(QString("owmAPIKey"), owm_api_key, obj, QString("QString"));
+    }
+    if(m_azimuth_isSet){
+        obj->insert("azimuth", QJsonValue(azimuth));
+    }
+    if(m_elevation_isSet){
+        obj->insert("elevation", QJsonValue(elevation));
+    }
+    if(m_roll_isSet){
+        obj->insert("roll", QJsonValue(roll));
+    }
+    if(rotator != nullptr && *rotator != QString("")){
+        toJsonValue(QString("rotator"), rotator, obj, QString("QString"));
+    }
+    if(m_fov_isSet){
+        obj->insert("fov", QJsonValue(fov));
+    }
+    if(m_lens_projection_isSet){
+        obj->insert("lensProjection", QJsonValue(lens_projection));
+    }
+    if(m_lens_center_offset_x_isSet){
+        obj->insert("lensCenterOffsetX", QJsonValue(lens_center_offset_x));
+    }
+    if(m_lens_center_offset_y_isSet){
+        obj->insert("lensCenterOffsetY", QJsonValue(lens_center_offset_y));
+    }
+    if(m_lens_distortion_k1_isSet){
+        obj->insert("lensDistortionK1", QJsonValue(lens_distortion_k1));
+    }
     if(m_post_process_white_balance_mode_isSet){
         obj->insert("postProcessWhiteBalanceMode", QJsonValue(post_process_white_balance_mode));
     }
@@ -1072,6 +1829,33 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_post_process_white_balance_blue_gain_isSet){
         obj->insert("postProcessWhiteBalanceBlueGain", QJsonValue(post_process_white_balance_blue_gain));
+    }
+    if(m_post_process_white_balance_highlight_protection_isSet){
+        obj->insert("postProcessWhiteBalanceHighlightProtection", QJsonValue(post_process_white_balance_highlight_protection));
+    }
+    if(m_post_process_unwarp_isSet){
+        obj->insert("postProcessUnwarp", QJsonValue(post_process_unwarp));
+    }
+    if(m_histogram_stretch_isSet){
+        obj->insert("histogramStretch", QJsonValue(histogram_stretch));
+    }
+    if(m_histogram_stretch_black_point_isSet){
+        obj->insert("histogramStretchBlackPoint", QJsonValue(histogram_stretch_black_point));
+    }
+    if(m_histogram_stretch_white_point_isSet){
+        obj->insert("histogramStretchWhitePoint", QJsonValue(histogram_stretch_white_point));
+    }
+    if(m_histogram_stretch_gamma_isSet){
+        obj->insert("histogramStretchGamma", QJsonValue(histogram_stretch_gamma));
+    }
+    if(m_histogram_stretch_asinh_strength_isSet){
+        obj->insert("histogramStretchAsinhStrength", QJsonValue(histogram_stretch_asinh_strength));
+    }
+    if(m_histogram_stretch_log_strength_isSet){
+        obj->insert("histogramStretchLogStrength", QJsonValue(histogram_stretch_log_strength));
+    }
+    if(m_post_process_greyscale_isSet){
+        obj->insert("postProcessGreyscale", QJsonValue(post_process_greyscale));
     }
     if(m_saturation_isSet){
         obj->insert("saturation", QJsonValue(saturation));
@@ -1094,8 +1878,14 @@ SWGCameraSettings::asJsonObject() {
     if(m_sharpen_isSet){
         obj->insert("sharpen", QJsonValue(sharpen));
     }
+    if(m_edge_display_mode_isSet){
+        obj->insert("edgeDisplayMode", QJsonValue(edge_display_mode));
+    }
     if(m_sobel_edge_isSet){
         obj->insert("sobelEdge", QJsonValue(sobel_edge));
+    }
+    if(m_canny_edge_isSet){
+        obj->insert("cannyEdge", QJsonValue(canny_edge));
     }
     if(m_flip_x_isSet){
         obj->insert("flipX", QJsonValue(flip_x));
@@ -1124,6 +1914,45 @@ SWGCameraSettings::asJsonObject() {
     if(m_overlay_text_isSet){
         obj->insert("overlayText", QJsonValue(overlay_text));
     }
+    if(m_equatorial_grid_isSet){
+        obj->insert("equatorialGrid", QJsonValue(equatorial_grid));
+    }
+    if(m_equatorial_grid_color_isSet){
+        obj->insert("equatorialGridColor", QJsonValue(equatorial_grid_color));
+    }
+    if(m_alt_az_grid_isSet){
+        obj->insert("altAzGrid", QJsonValue(alt_az_grid));
+    }
+    if(m_alt_az_grid_color_isSet){
+        obj->insert("altAzGridColor", QJsonValue(alt_az_grid_color));
+    }
+    if(m_constellation_isSet){
+        obj->insert("constellation", QJsonValue(constellation));
+    }
+    if(m_constellation_color_isSet){
+        obj->insert("constellationColor", QJsonValue(constellation_color));
+    }
+    if(m_constellation_overlay_isSet){
+        obj->insert("constellationOverlay", QJsonValue(constellation_overlay));
+    }
+    if(m_track_objects_isSet){
+        obj->insert("trackObjects", QJsonValue(track_objects));
+    }
+    if(m_track_object_min_elevation_isSet){
+        obj->insert("trackObjectMinElevation", QJsonValue(track_object_min_elevation));
+    }
+    if(m_track_object_color_isSet){
+        obj->insert("trackObjectColor", QJsonValue(track_object_color));
+    }
+    if(m_track_object_font_scale_isSet){
+        obj->insert("trackObjectFontScale", QJsonValue(track_object_font_scale));
+    }
+    if(grid_label_font_family != nullptr && *grid_label_font_family != QString("")){
+        toJsonValue(QString("gridLabelFontFamily"), grid_label_font_family, obj, QString("QString"));
+    }
+    if(m_grid_label_font_scale_isSet){
+        obj->insert("gridLabelFontScale", QJsonValue(grid_label_font_scale));
+    }
     if(overlay_text_string != nullptr && *overlay_text_string != QString("")){
         toJsonValue(QString("overlayTextString"), overlay_text_string, obj, QString("QString"));
     }
@@ -1148,6 +1977,9 @@ SWGCameraSettings::asJsonObject() {
     if(m_diff_threshold_isSet){
         obj->insert("diffThreshold", QJsonValue(diff_threshold));
     }
+    if(m_diff_mask_open_size_isSet){
+        obj->insert("diffMaskOpenSize", QJsonValue(diff_mask_open_size));
+    }
     if(m_dilation_size_isSet){
         obj->insert("dilationSize", QJsonValue(dilation_size));
     }
@@ -1156,6 +1988,12 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_diff_mask_close_size_isSet){
         obj->insert("diffMaskCloseSize", QJsonValue(diff_mask_close_size));
+    }
+    if(overlay_font_family != nullptr && *overlay_font_family != QString("")){
+        toJsonValue(QString("overlayFontFamily"), overlay_font_family, obj, QString("QString"));
+    }
+    if(m_overlay_font_scale_isSet){
+        obj->insert("overlayFontScale", QJsonValue(overlay_font_scale));
     }
     if(m_detection_roi_x_isSet){
         obj->insert("detectionRoiX", QJsonValue(detection_roi_x));
@@ -1169,14 +2007,32 @@ SWGCameraSettings::asJsonObject() {
     if(m_detection_roi_height_isSet){
         obj->insert("detectionRoiHeight", QJsonValue(detection_roi_height));
     }
+    if(m_show_detection_roi_isSet){
+        obj->insert("showDetectionRoi", QJsonValue(show_detection_roi));
+    }
     if(m_motion_detect_isSet){
         obj->insert("motionDetect", QJsonValue(motion_detect));
+    }
+    if(m_motion_background_subtractor_isSet){
+        obj->insert("motionBackgroundSubtractor", QJsonValue(motion_background_subtractor));
+    }
+    if(m_motion_mask_view_isSet){
+        obj->insert("motionMaskView", QJsonValue(motion_mask_view));
     }
     if(m_motion_history_isSet){
         obj->insert("motionHistory", QJsonValue(motion_history));
     }
     if(m_motion_var_threshold_isSet){
         obj->insert("motionVarThreshold", QJsonValue(motion_var_threshold));
+    }
+    if(m_motion_learning_rate_isSet){
+        obj->insert("motionLearningRate", QJsonValue(motion_learning_rate));
+    }
+    if(m_motion_confirm_frames_isSet){
+        obj->insert("motionConfirmFrames", QJsonValue(motion_confirm_frames));
+    }
+    if(m_motion_downscale_isSet){
+        obj->insert("motionDownscale", QJsonValue(motion_downscale));
     }
     if(m_motion_detect_shadows_isSet){
         obj->insert("motionDetectShadows", QJsonValue(motion_detect_shadows));
@@ -1195,6 +2051,72 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_min_contour_area_isSet){
         obj->insert("minContourArea", QJsonValue(min_contour_area));
+    }
+    if(m_show_motion_exclusion_rects_isSet){
+        obj->insert("showMotionExclusionRects", QJsonValue(show_motion_exclusion_rects));
+    }
+    if(motion_exclusion_rects && motion_exclusion_rects->size() > 0){
+        toJsonArray((QList<void*>*)motion_exclusion_rects, obj, "motionExclusionRects", "SWGCameraRect");
+    }
+    if(m_star_detect_isSet){
+        obj->insert("starDetect", QJsonValue(star_detect));
+    }
+    if(m_star_threshold_isSet){
+        obj->insert("starThreshold", QJsonValue(star_threshold));
+    }
+    if(m_star_background_blur_isSet){
+        obj->insert("starBackgroundBlur", QJsonValue(star_background_blur));
+    }
+    if(m_star_min_area_isSet){
+        obj->insert("starMinArea", QJsonValue(star_min_area));
+    }
+    if(m_star_max_area_isSet){
+        obj->insert("starMaxArea", QJsonValue(star_max_area));
+    }
+    if(m_star_max_aspect_ratio_isSet){
+        obj->insert("starMaxAspectRatio", QJsonValue(star_max_aspect_ratio));
+    }
+    if(m_star_debug_view_isSet){
+        obj->insert("starDebugView", QJsonValue(star_debug_view));
+    }
+    if(m_star_color_isSet){
+        obj->insert("starColor", QJsonValue(star_color));
+    }
+    if(m_plate_solve_isSet){
+        obj->insert("plateSolve", QJsonValue(plate_solve));
+    }
+    if(m_plate_solve_max_magnitude_isSet){
+        obj->insert("plateSolveMaxMagnitude", QJsonValue(plate_solve_max_magnitude));
+    }
+    if(m_plate_solve_min_matches_isSet){
+        obj->insert("plateSolveMinMatches", QJsonValue(plate_solve_min_matches));
+    }
+    if(m_plate_solve_match_radius_isSet){
+        obj->insert("plateSolveMatchRadius", QJsonValue(plate_solve_match_radius));
+    }
+    if(m_plate_solve_final_match_radius_isSet){
+        obj->insert("plateSolveFinalMatchRadius", QJsonValue(plate_solve_final_match_radius));
+    }
+    if(m_plate_solve_search_radius_isSet){
+        obj->insert("plateSolveSearchRadius", QJsonValue(plate_solve_search_radius));
+    }
+    if(m_plate_solve_start_mode_isSet){
+        obj->insert("plateSolveStartMode", QJsonValue(plate_solve_start_mode));
+    }
+    if(m_plate_solve_label_mode_isSet){
+        obj->insert("plateSolveLabelMode", QJsonValue(plate_solve_label_mode));
+    }
+    if(m_plate_solve_use_current_date_time_isSet){
+        obj->insert("plateSolveUseCurrentDateTime", QJsonValue(plate_solve_use_current_date_time));
+    }
+    if(plate_solve_date_time != nullptr && *plate_solve_date_time != QString("")){
+        toJsonValue(QString("plateSolveDateTime"), plate_solve_date_time, obj, QString("QString"));
+    }
+    if(m_plate_solve_use_downloaded_catalog_isSet){
+        obj->insert("plateSolveUseDownloadedCatalog", QJsonValue(plate_solve_use_downloaded_catalog));
+    }
+    if(m_plate_solve_apply_mode_isSet){
+        obj->insert("plateSolveApplyMode", QJsonValue(plate_solve_apply_mode));
     }
     if(m_video_post_process_isSet){
         obj->insert("videoPostProcess", QJsonValue(video_post_process));
@@ -1658,6 +2580,66 @@ SWGCameraSettings::setAlpacaReadoutMode(qint32 alpaca_readout_mode) {
 }
 
 qint32
+SWGCameraSettings::getAsiCoolerOn() {
+    return asi_cooler_on;
+}
+void
+SWGCameraSettings::setAsiCoolerOn(qint32 asi_cooler_on) {
+    this->asi_cooler_on = asi_cooler_on;
+    this->m_asi_cooler_on_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAsiTargetTemp() {
+    return asi_target_temp;
+}
+void
+SWGCameraSettings::setAsiTargetTemp(qint32 asi_target_temp) {
+    this->asi_target_temp = asi_target_temp;
+    this->m_asi_target_temp_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAsiUsbBandwidth() {
+    return asi_usb_bandwidth;
+}
+void
+SWGCameraSettings::setAsiUsbBandwidth(qint32 asi_usb_bandwidth) {
+    this->asi_usb_bandwidth = asi_usb_bandwidth;
+    this->m_asi_usb_bandwidth_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAsiHighSpeedMode() {
+    return asi_high_speed_mode;
+}
+void
+SWGCameraSettings::setAsiHighSpeedMode(qint32 asi_high_speed_mode) {
+    this->asi_high_speed_mode = asi_high_speed_mode;
+    this->m_asi_high_speed_mode_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAsiAutoExposureGain() {
+    return asi_auto_exposure_gain;
+}
+void
+SWGCameraSettings::setAsiAutoExposureGain(qint32 asi_auto_exposure_gain) {
+    this->asi_auto_exposure_gain = asi_auto_exposure_gain;
+    this->m_asi_auto_exposure_gain_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAsiColorImageType() {
+    return asi_color_image_type;
+}
+void
+SWGCameraSettings::setAsiColorImageType(qint32 asi_color_image_type) {
+    this->asi_color_image_type = asi_color_image_type;
+    this->m_asi_color_image_type_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getSaveImage() {
     return save_image;
 }
@@ -1718,6 +2700,296 @@ SWGCameraSettings::setVideoHwAcceleration(qint32 video_hw_acceleration) {
 }
 
 qint32
+SWGCameraSettings::getVideoLoop() {
+    return video_loop;
+}
+void
+SWGCameraSettings::setVideoLoop(qint32 video_loop) {
+    this->video_loop = video_loop;
+    this->m_video_loop_isSet = true;
+}
+
+double
+SWGCameraSettings::getVideoPlaybackRate() {
+    return video_playback_rate;
+}
+void
+SWGCameraSettings::setVideoPlaybackRate(double video_playback_rate) {
+    this->video_playback_rate = video_playback_rate;
+    this->m_video_playback_rate_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getVideoPreRecordBufferSeconds() {
+    return video_pre_record_buffer_seconds;
+}
+void
+SWGCameraSettings::setVideoPreRecordBufferSeconds(qint32 video_pre_record_buffer_seconds) {
+    this->video_pre_record_buffer_seconds = video_pre_record_buffer_seconds;
+    this->m_video_pre_record_buffer_seconds_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getImageRecordLimit() {
+    return image_record_limit;
+}
+void
+SWGCameraSettings::setImageRecordLimit(qint32 image_record_limit) {
+    this->image_record_limit = image_record_limit;
+    this->m_image_record_limit_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getVideoRecordLimitSeconds() {
+    return video_record_limit_seconds;
+}
+void
+SWGCameraSettings::setVideoRecordLimitSeconds(qint32 video_record_limit_seconds) {
+    this->video_record_limit_seconds = video_record_limit_seconds;
+    this->m_video_record_limit_seconds_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackEnabled() {
+    return stack_enabled;
+}
+void
+SWGCameraSettings::setStackEnabled(qint32 stack_enabled) {
+    this->stack_enabled = stack_enabled;
+    this->m_stack_enabled_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackFrameCount() {
+    return stack_frame_count;
+}
+void
+SWGCameraSettings::setStackFrameCount(qint32 stack_frame_count) {
+    this->stack_frame_count = stack_frame_count;
+    this->m_stack_frame_count_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackMethod() {
+    return stack_method;
+}
+void
+SWGCameraSettings::setStackMethod(qint32 stack_method) {
+    this->stack_method = stack_method;
+    this->m_stack_method_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackHdrAlgorithm() {
+    return stack_hdr_algorithm;
+}
+void
+SWGCameraSettings::setStackHdrAlgorithm(qint32 stack_hdr_algorithm) {
+    this->stack_hdr_algorithm = stack_hdr_algorithm;
+    this->m_stack_hdr_algorithm_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackHdrExposureCount() {
+    return stack_hdr_exposure_count;
+}
+void
+SWGCameraSettings::setStackHdrExposureCount(qint32 stack_hdr_exposure_count) {
+    this->stack_hdr_exposure_count = stack_hdr_exposure_count;
+    this->m_stack_hdr_exposure_count_isSet = true;
+}
+
+QList<double>*
+SWGCameraSettings::getStackHdrExposureTimesMs() {
+    return stack_hdr_exposure_times_ms;
+}
+void
+SWGCameraSettings::setStackHdrExposureTimesMs(QList<double>* stack_hdr_exposure_times_ms) {
+    this->stack_hdr_exposure_times_ms = stack_hdr_exposure_times_ms;
+    this->m_stack_hdr_exposure_times_ms_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackAlignmentMethod() {
+    return stack_alignment_method;
+}
+void
+SWGCameraSettings::setStackAlignmentMethod(qint32 stack_alignment_method) {
+    this->stack_alignment_method = stack_alignment_method;
+    this->m_stack_alignment_method_isSet = true;
+}
+
+QString*
+SWGCameraSettings::getStackDarkFileName() {
+    return stack_dark_file_name;
+}
+void
+SWGCameraSettings::setStackDarkFileName(QString* stack_dark_file_name) {
+    this->stack_dark_file_name = stack_dark_file_name;
+    this->m_stack_dark_file_name_isSet = true;
+}
+
+QString*
+SWGCameraSettings::getStackFlatFileName() {
+    return stack_flat_file_name;
+}
+void
+SWGCameraSettings::setStackFlatFileName(QString* stack_flat_file_name) {
+    this->stack_flat_file_name = stack_flat_file_name;
+    this->m_stack_flat_file_name_isSet = true;
+}
+
+QString*
+SWGCameraSettings::getStackBiasFileName() {
+    return stack_bias_file_name;
+}
+void
+SWGCameraSettings::setStackBiasFileName(QString* stack_bias_file_name) {
+    this->stack_bias_file_name = stack_bias_file_name;
+    this->m_stack_bias_file_name_isSet = true;
+}
+
+float
+SWGCameraSettings::getLatitude() {
+    return latitude;
+}
+void
+SWGCameraSettings::setLatitude(float latitude) {
+    this->latitude = latitude;
+    this->m_latitude_isSet = true;
+}
+
+float
+SWGCameraSettings::getLongitude() {
+    return longitude;
+}
+void
+SWGCameraSettings::setLongitude(float longitude) {
+    this->longitude = longitude;
+    this->m_longitude_isSet = true;
+}
+
+float
+SWGCameraSettings::getAltitude() {
+    return altitude;
+}
+void
+SWGCameraSettings::setAltitude(float altitude) {
+    this->altitude = altitude;
+    this->m_altitude_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPositionSync() {
+    return position_sync;
+}
+void
+SWGCameraSettings::setPositionSync(qint32 position_sync) {
+    this->position_sync = position_sync;
+    this->m_position_sync_isSet = true;
+}
+
+QString*
+SWGCameraSettings::getOwmApiKey() {
+    return owm_api_key;
+}
+void
+SWGCameraSettings::setOwmApiKey(QString* owm_api_key) {
+    this->owm_api_key = owm_api_key;
+    this->m_owm_api_key_isSet = true;
+}
+
+float
+SWGCameraSettings::getAzimuth() {
+    return azimuth;
+}
+void
+SWGCameraSettings::setAzimuth(float azimuth) {
+    this->azimuth = azimuth;
+    this->m_azimuth_isSet = true;
+}
+
+float
+SWGCameraSettings::getElevation() {
+    return elevation;
+}
+void
+SWGCameraSettings::setElevation(float elevation) {
+    this->elevation = elevation;
+    this->m_elevation_isSet = true;
+}
+
+float
+SWGCameraSettings::getRoll() {
+    return roll;
+}
+void
+SWGCameraSettings::setRoll(float roll) {
+    this->roll = roll;
+    this->m_roll_isSet = true;
+}
+
+QString*
+SWGCameraSettings::getRotator() {
+    return rotator;
+}
+void
+SWGCameraSettings::setRotator(QString* rotator) {
+    this->rotator = rotator;
+    this->m_rotator_isSet = true;
+}
+
+float
+SWGCameraSettings::getFov() {
+    return fov;
+}
+void
+SWGCameraSettings::setFov(float fov) {
+    this->fov = fov;
+    this->m_fov_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getLensProjection() {
+    return lens_projection;
+}
+void
+SWGCameraSettings::setLensProjection(qint32 lens_projection) {
+    this->lens_projection = lens_projection;
+    this->m_lens_projection_isSet = true;
+}
+
+double
+SWGCameraSettings::getLensCenterOffsetX() {
+    return lens_center_offset_x;
+}
+void
+SWGCameraSettings::setLensCenterOffsetX(double lens_center_offset_x) {
+    this->lens_center_offset_x = lens_center_offset_x;
+    this->m_lens_center_offset_x_isSet = true;
+}
+
+double
+SWGCameraSettings::getLensCenterOffsetY() {
+    return lens_center_offset_y;
+}
+void
+SWGCameraSettings::setLensCenterOffsetY(double lens_center_offset_y) {
+    this->lens_center_offset_y = lens_center_offset_y;
+    this->m_lens_center_offset_y_isSet = true;
+}
+
+double
+SWGCameraSettings::getLensDistortionK1() {
+    return lens_distortion_k1;
+}
+void
+SWGCameraSettings::setLensDistortionK1(double lens_distortion_k1) {
+    this->lens_distortion_k1 = lens_distortion_k1;
+    this->m_lens_distortion_k1_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getPostProcessWhiteBalanceMode() {
     return post_process_white_balance_mode;
 }
@@ -1755,6 +3027,96 @@ void
 SWGCameraSettings::setPostProcessWhiteBalanceBlueGain(double post_process_white_balance_blue_gain) {
     this->post_process_white_balance_blue_gain = post_process_white_balance_blue_gain;
     this->m_post_process_white_balance_blue_gain_isSet = true;
+}
+
+double
+SWGCameraSettings::getPostProcessWhiteBalanceHighlightProtection() {
+    return post_process_white_balance_highlight_protection;
+}
+void
+SWGCameraSettings::setPostProcessWhiteBalanceHighlightProtection(double post_process_white_balance_highlight_protection) {
+    this->post_process_white_balance_highlight_protection = post_process_white_balance_highlight_protection;
+    this->m_post_process_white_balance_highlight_protection_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPostProcessUnwarp() {
+    return post_process_unwarp;
+}
+void
+SWGCameraSettings::setPostProcessUnwarp(qint32 post_process_unwarp) {
+    this->post_process_unwarp = post_process_unwarp;
+    this->m_post_process_unwarp_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getHistogramStretch() {
+    return histogram_stretch;
+}
+void
+SWGCameraSettings::setHistogramStretch(qint32 histogram_stretch) {
+    this->histogram_stretch = histogram_stretch;
+    this->m_histogram_stretch_isSet = true;
+}
+
+double
+SWGCameraSettings::getHistogramStretchBlackPoint() {
+    return histogram_stretch_black_point;
+}
+void
+SWGCameraSettings::setHistogramStretchBlackPoint(double histogram_stretch_black_point) {
+    this->histogram_stretch_black_point = histogram_stretch_black_point;
+    this->m_histogram_stretch_black_point_isSet = true;
+}
+
+double
+SWGCameraSettings::getHistogramStretchWhitePoint() {
+    return histogram_stretch_white_point;
+}
+void
+SWGCameraSettings::setHistogramStretchWhitePoint(double histogram_stretch_white_point) {
+    this->histogram_stretch_white_point = histogram_stretch_white_point;
+    this->m_histogram_stretch_white_point_isSet = true;
+}
+
+double
+SWGCameraSettings::getHistogramStretchGamma() {
+    return histogram_stretch_gamma;
+}
+void
+SWGCameraSettings::setHistogramStretchGamma(double histogram_stretch_gamma) {
+    this->histogram_stretch_gamma = histogram_stretch_gamma;
+    this->m_histogram_stretch_gamma_isSet = true;
+}
+
+double
+SWGCameraSettings::getHistogramStretchAsinhStrength() {
+    return histogram_stretch_asinh_strength;
+}
+void
+SWGCameraSettings::setHistogramStretchAsinhStrength(double histogram_stretch_asinh_strength) {
+    this->histogram_stretch_asinh_strength = histogram_stretch_asinh_strength;
+    this->m_histogram_stretch_asinh_strength_isSet = true;
+}
+
+double
+SWGCameraSettings::getHistogramStretchLogStrength() {
+    return histogram_stretch_log_strength;
+}
+void
+SWGCameraSettings::setHistogramStretchLogStrength(double histogram_stretch_log_strength) {
+    this->histogram_stretch_log_strength = histogram_stretch_log_strength;
+    this->m_histogram_stretch_log_strength_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPostProcessGreyscale() {
+    return post_process_greyscale;
+}
+void
+SWGCameraSettings::setPostProcessGreyscale(qint32 post_process_greyscale) {
+    this->post_process_greyscale = post_process_greyscale;
+    this->m_post_process_greyscale_isSet = true;
 }
 
 double
@@ -1827,6 +3189,16 @@ SWGCameraSettings::setSharpen(double sharpen) {
     this->m_sharpen_isSet = true;
 }
 
+qint32
+SWGCameraSettings::getEdgeDisplayMode() {
+    return edge_display_mode;
+}
+void
+SWGCameraSettings::setEdgeDisplayMode(qint32 edge_display_mode) {
+    this->edge_display_mode = edge_display_mode;
+    this->m_edge_display_mode_isSet = true;
+}
+
 double
 SWGCameraSettings::getSobelEdge() {
     return sobel_edge;
@@ -1835,6 +3207,16 @@ void
 SWGCameraSettings::setSobelEdge(double sobel_edge) {
     this->sobel_edge = sobel_edge;
     this->m_sobel_edge_isSet = true;
+}
+
+double
+SWGCameraSettings::getCannyEdge() {
+    return canny_edge;
+}
+void
+SWGCameraSettings::setCannyEdge(double canny_edge) {
+    this->canny_edge = canny_edge;
+    this->m_canny_edge_isSet = true;
 }
 
 qint32
@@ -1927,6 +3309,136 @@ SWGCameraSettings::setOverlayText(qint32 overlay_text) {
     this->m_overlay_text_isSet = true;
 }
 
+qint32
+SWGCameraSettings::getEquatorialGrid() {
+    return equatorial_grid;
+}
+void
+SWGCameraSettings::setEquatorialGrid(qint32 equatorial_grid) {
+    this->equatorial_grid = equatorial_grid;
+    this->m_equatorial_grid_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getEquatorialGridColor() {
+    return equatorial_grid_color;
+}
+void
+SWGCameraSettings::setEquatorialGridColor(qint32 equatorial_grid_color) {
+    this->equatorial_grid_color = equatorial_grid_color;
+    this->m_equatorial_grid_color_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAltAzGrid() {
+    return alt_az_grid;
+}
+void
+SWGCameraSettings::setAltAzGrid(qint32 alt_az_grid) {
+    this->alt_az_grid = alt_az_grid;
+    this->m_alt_az_grid_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAltAzGridColor() {
+    return alt_az_grid_color;
+}
+void
+SWGCameraSettings::setAltAzGridColor(qint32 alt_az_grid_color) {
+    this->alt_az_grid_color = alt_az_grid_color;
+    this->m_alt_az_grid_color_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getConstellation() {
+    return constellation;
+}
+void
+SWGCameraSettings::setConstellation(qint32 constellation) {
+    this->constellation = constellation;
+    this->m_constellation_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getConstellationColor() {
+    return constellation_color;
+}
+void
+SWGCameraSettings::setConstellationColor(qint32 constellation_color) {
+    this->constellation_color = constellation_color;
+    this->m_constellation_color_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getConstellationOverlay() {
+    return constellation_overlay;
+}
+void
+SWGCameraSettings::setConstellationOverlay(qint32 constellation_overlay) {
+    this->constellation_overlay = constellation_overlay;
+    this->m_constellation_overlay_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getTrackObjects() {
+    return track_objects;
+}
+void
+SWGCameraSettings::setTrackObjects(qint32 track_objects) {
+    this->track_objects = track_objects;
+    this->m_track_objects_isSet = true;
+}
+
+double
+SWGCameraSettings::getTrackObjectMinElevation() {
+    return track_object_min_elevation;
+}
+void
+SWGCameraSettings::setTrackObjectMinElevation(double track_object_min_elevation) {
+    this->track_object_min_elevation = track_object_min_elevation;
+    this->m_track_object_min_elevation_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getTrackObjectColor() {
+    return track_object_color;
+}
+void
+SWGCameraSettings::setTrackObjectColor(qint32 track_object_color) {
+    this->track_object_color = track_object_color;
+    this->m_track_object_color_isSet = true;
+}
+
+double
+SWGCameraSettings::getTrackObjectFontScale() {
+    return track_object_font_scale;
+}
+void
+SWGCameraSettings::setTrackObjectFontScale(double track_object_font_scale) {
+    this->track_object_font_scale = track_object_font_scale;
+    this->m_track_object_font_scale_isSet = true;
+}
+
+QString*
+SWGCameraSettings::getGridLabelFontFamily() {
+    return grid_label_font_family;
+}
+void
+SWGCameraSettings::setGridLabelFontFamily(QString* grid_label_font_family) {
+    this->grid_label_font_family = grid_label_font_family;
+    this->m_grid_label_font_family_isSet = true;
+}
+
+double
+SWGCameraSettings::getGridLabelFontScale() {
+    return grid_label_font_scale;
+}
+void
+SWGCameraSettings::setGridLabelFontScale(double grid_label_font_scale) {
+    this->grid_label_font_scale = grid_label_font_scale;
+    this->m_grid_label_font_scale_isSet = true;
+}
+
 QString*
 SWGCameraSettings::getOverlayTextString() {
     return overlay_text_string;
@@ -2008,6 +3520,16 @@ SWGCameraSettings::setDiffThreshold(qint32 diff_threshold) {
 }
 
 qint32
+SWGCameraSettings::getDiffMaskOpenSize() {
+    return diff_mask_open_size;
+}
+void
+SWGCameraSettings::setDiffMaskOpenSize(qint32 diff_mask_open_size) {
+    this->diff_mask_open_size = diff_mask_open_size;
+    this->m_diff_mask_open_size_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getDilationSize() {
     return dilation_size;
 }
@@ -2035,6 +3557,26 @@ void
 SWGCameraSettings::setDiffMaskCloseSize(qint32 diff_mask_close_size) {
     this->diff_mask_close_size = diff_mask_close_size;
     this->m_diff_mask_close_size_isSet = true;
+}
+
+QString*
+SWGCameraSettings::getOverlayFontFamily() {
+    return overlay_font_family;
+}
+void
+SWGCameraSettings::setOverlayFontFamily(QString* overlay_font_family) {
+    this->overlay_font_family = overlay_font_family;
+    this->m_overlay_font_family_isSet = true;
+}
+
+double
+SWGCameraSettings::getOverlayFontScale() {
+    return overlay_font_scale;
+}
+void
+SWGCameraSettings::setOverlayFontScale(double overlay_font_scale) {
+    this->overlay_font_scale = overlay_font_scale;
+    this->m_overlay_font_scale_isSet = true;
 }
 
 qint32
@@ -2078,6 +3620,16 @@ SWGCameraSettings::setDetectionRoiHeight(qint32 detection_roi_height) {
 }
 
 qint32
+SWGCameraSettings::getShowDetectionRoi() {
+    return show_detection_roi;
+}
+void
+SWGCameraSettings::setShowDetectionRoi(qint32 show_detection_roi) {
+    this->show_detection_roi = show_detection_roi;
+    this->m_show_detection_roi_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getMotionDetect() {
     return motion_detect;
 }
@@ -2085,6 +3637,26 @@ void
 SWGCameraSettings::setMotionDetect(qint32 motion_detect) {
     this->motion_detect = motion_detect;
     this->m_motion_detect_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getMotionBackgroundSubtractor() {
+    return motion_background_subtractor;
+}
+void
+SWGCameraSettings::setMotionBackgroundSubtractor(qint32 motion_background_subtractor) {
+    this->motion_background_subtractor = motion_background_subtractor;
+    this->m_motion_background_subtractor_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getMotionMaskView() {
+    return motion_mask_view;
+}
+void
+SWGCameraSettings::setMotionMaskView(qint32 motion_mask_view) {
+    this->motion_mask_view = motion_mask_view;
+    this->m_motion_mask_view_isSet = true;
 }
 
 qint32
@@ -2105,6 +3677,36 @@ void
 SWGCameraSettings::setMotionVarThreshold(double motion_var_threshold) {
     this->motion_var_threshold = motion_var_threshold;
     this->m_motion_var_threshold_isSet = true;
+}
+
+double
+SWGCameraSettings::getMotionLearningRate() {
+    return motion_learning_rate;
+}
+void
+SWGCameraSettings::setMotionLearningRate(double motion_learning_rate) {
+    this->motion_learning_rate = motion_learning_rate;
+    this->m_motion_learning_rate_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getMotionConfirmFrames() {
+    return motion_confirm_frames;
+}
+void
+SWGCameraSettings::setMotionConfirmFrames(qint32 motion_confirm_frames) {
+    this->motion_confirm_frames = motion_confirm_frames;
+    this->m_motion_confirm_frames_isSet = true;
+}
+
+double
+SWGCameraSettings::getMotionDownscale() {
+    return motion_downscale;
+}
+void
+SWGCameraSettings::setMotionDownscale(double motion_downscale) {
+    this->motion_downscale = motion_downscale;
+    this->m_motion_downscale_isSet = true;
 }
 
 qint32
@@ -2165,6 +3767,226 @@ void
 SWGCameraSettings::setMinContourArea(qint32 min_contour_area) {
     this->min_contour_area = min_contour_area;
     this->m_min_contour_area_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getShowMotionExclusionRects() {
+    return show_motion_exclusion_rects;
+}
+void
+SWGCameraSettings::setShowMotionExclusionRects(qint32 show_motion_exclusion_rects) {
+    this->show_motion_exclusion_rects = show_motion_exclusion_rects;
+    this->m_show_motion_exclusion_rects_isSet = true;
+}
+
+QList<SWGCameraRect*>*
+SWGCameraSettings::getMotionExclusionRects() {
+    return motion_exclusion_rects;
+}
+void
+SWGCameraSettings::setMotionExclusionRects(QList<SWGCameraRect*>* motion_exclusion_rects) {
+    this->motion_exclusion_rects = motion_exclusion_rects;
+    this->m_motion_exclusion_rects_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStarDetect() {
+    return star_detect;
+}
+void
+SWGCameraSettings::setStarDetect(qint32 star_detect) {
+    this->star_detect = star_detect;
+    this->m_star_detect_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStarThreshold() {
+    return star_threshold;
+}
+void
+SWGCameraSettings::setStarThreshold(qint32 star_threshold) {
+    this->star_threshold = star_threshold;
+    this->m_star_threshold_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStarBackgroundBlur() {
+    return star_background_blur;
+}
+void
+SWGCameraSettings::setStarBackgroundBlur(qint32 star_background_blur) {
+    this->star_background_blur = star_background_blur;
+    this->m_star_background_blur_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStarMinArea() {
+    return star_min_area;
+}
+void
+SWGCameraSettings::setStarMinArea(qint32 star_min_area) {
+    this->star_min_area = star_min_area;
+    this->m_star_min_area_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStarMaxArea() {
+    return star_max_area;
+}
+void
+SWGCameraSettings::setStarMaxArea(qint32 star_max_area) {
+    this->star_max_area = star_max_area;
+    this->m_star_max_area_isSet = true;
+}
+
+double
+SWGCameraSettings::getStarMaxAspectRatio() {
+    return star_max_aspect_ratio;
+}
+void
+SWGCameraSettings::setStarMaxAspectRatio(double star_max_aspect_ratio) {
+    this->star_max_aspect_ratio = star_max_aspect_ratio;
+    this->m_star_max_aspect_ratio_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStarDebugView() {
+    return star_debug_view;
+}
+void
+SWGCameraSettings::setStarDebugView(qint32 star_debug_view) {
+    this->star_debug_view = star_debug_view;
+    this->m_star_debug_view_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStarColor() {
+    return star_color;
+}
+void
+SWGCameraSettings::setStarColor(qint32 star_color) {
+    this->star_color = star_color;
+    this->m_star_color_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlateSolve() {
+    return plate_solve;
+}
+void
+SWGCameraSettings::setPlateSolve(qint32 plate_solve) {
+    this->plate_solve = plate_solve;
+    this->m_plate_solve_isSet = true;
+}
+
+double
+SWGCameraSettings::getPlateSolveMaxMagnitude() {
+    return plate_solve_max_magnitude;
+}
+void
+SWGCameraSettings::setPlateSolveMaxMagnitude(double plate_solve_max_magnitude) {
+    this->plate_solve_max_magnitude = plate_solve_max_magnitude;
+    this->m_plate_solve_max_magnitude_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlateSolveMinMatches() {
+    return plate_solve_min_matches;
+}
+void
+SWGCameraSettings::setPlateSolveMinMatches(qint32 plate_solve_min_matches) {
+    this->plate_solve_min_matches = plate_solve_min_matches;
+    this->m_plate_solve_min_matches_isSet = true;
+}
+
+double
+SWGCameraSettings::getPlateSolveMatchRadius() {
+    return plate_solve_match_radius;
+}
+void
+SWGCameraSettings::setPlateSolveMatchRadius(double plate_solve_match_radius) {
+    this->plate_solve_match_radius = plate_solve_match_radius;
+    this->m_plate_solve_match_radius_isSet = true;
+}
+
+double
+SWGCameraSettings::getPlateSolveFinalMatchRadius() {
+    return plate_solve_final_match_radius;
+}
+void
+SWGCameraSettings::setPlateSolveFinalMatchRadius(double plate_solve_final_match_radius) {
+    this->plate_solve_final_match_radius = plate_solve_final_match_radius;
+    this->m_plate_solve_final_match_radius_isSet = true;
+}
+
+double
+SWGCameraSettings::getPlateSolveSearchRadius() {
+    return plate_solve_search_radius;
+}
+void
+SWGCameraSettings::setPlateSolveSearchRadius(double plate_solve_search_radius) {
+    this->plate_solve_search_radius = plate_solve_search_radius;
+    this->m_plate_solve_search_radius_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlateSolveStartMode() {
+    return plate_solve_start_mode;
+}
+void
+SWGCameraSettings::setPlateSolveStartMode(qint32 plate_solve_start_mode) {
+    this->plate_solve_start_mode = plate_solve_start_mode;
+    this->m_plate_solve_start_mode_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlateSolveLabelMode() {
+    return plate_solve_label_mode;
+}
+void
+SWGCameraSettings::setPlateSolveLabelMode(qint32 plate_solve_label_mode) {
+    this->plate_solve_label_mode = plate_solve_label_mode;
+    this->m_plate_solve_label_mode_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlateSolveUseCurrentDateTime() {
+    return plate_solve_use_current_date_time;
+}
+void
+SWGCameraSettings::setPlateSolveUseCurrentDateTime(qint32 plate_solve_use_current_date_time) {
+    this->plate_solve_use_current_date_time = plate_solve_use_current_date_time;
+    this->m_plate_solve_use_current_date_time_isSet = true;
+}
+
+QString*
+SWGCameraSettings::getPlateSolveDateTime() {
+    return plate_solve_date_time;
+}
+void
+SWGCameraSettings::setPlateSolveDateTime(QString* plate_solve_date_time) {
+    this->plate_solve_date_time = plate_solve_date_time;
+    this->m_plate_solve_date_time_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlateSolveUseDownloadedCatalog() {
+    return plate_solve_use_downloaded_catalog;
+}
+void
+SWGCameraSettings::setPlateSolveUseDownloadedCatalog(qint32 plate_solve_use_downloaded_catalog) {
+    this->plate_solve_use_downloaded_catalog = plate_solve_use_downloaded_catalog;
+    this->m_plate_solve_use_downloaded_catalog_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlateSolveApplyMode() {
+    return plate_solve_apply_mode;
+}
+void
+SWGCameraSettings::setPlateSolveApplyMode(qint32 plate_solve_apply_mode) {
+    this->plate_solve_apply_mode = plate_solve_apply_mode;
+    this->m_plate_solve_apply_mode_isSet = true;
 }
 
 qint32
@@ -2573,6 +4395,24 @@ SWGCameraSettings::isSet(){
         if(m_alpaca_readout_mode_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_asi_cooler_on_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_asi_target_temp_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_asi_usb_bandwidth_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_asi_high_speed_mode_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_asi_auto_exposure_gain_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_asi_color_image_type_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_save_image_isSet){
             isObjectUpdated = true; break;
         }
@@ -2591,6 +4431,96 @@ SWGCameraSettings::isSet(){
         if(m_video_hw_acceleration_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_video_loop_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_video_playback_rate_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_video_pre_record_buffer_seconds_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_image_record_limit_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_video_record_limit_seconds_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_enabled_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_frame_count_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_method_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_hdr_algorithm_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_hdr_exposure_count_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_hdr_exposure_times_ms_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(stack_hdr_exposure_times_ms && (stack_hdr_exposure_times_ms->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_alignment_method_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(stack_dark_file_name && *stack_dark_file_name != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(stack_flat_file_name && *stack_flat_file_name != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(stack_bias_file_name && *stack_bias_file_name != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_latitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_longitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_altitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_position_sync_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(owm_api_key && *owm_api_key != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_azimuth_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_elevation_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_roll_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(rotator && *rotator != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_fov_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_lens_projection_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_lens_center_offset_x_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_lens_center_offset_y_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_lens_distortion_k1_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_post_process_white_balance_mode_isSet){
             isObjectUpdated = true; break;
         }
@@ -2601,6 +4531,33 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_post_process_white_balance_blue_gain_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_post_process_white_balance_highlight_protection_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_post_process_unwarp_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_histogram_stretch_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_histogram_stretch_black_point_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_histogram_stretch_white_point_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_histogram_stretch_gamma_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_histogram_stretch_asinh_strength_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_histogram_stretch_log_strength_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_post_process_greyscale_isSet){
             isObjectUpdated = true; break;
         }
         if(m_saturation_isSet){
@@ -2624,7 +4581,13 @@ SWGCameraSettings::isSet(){
         if(m_sharpen_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_edge_display_mode_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_sobel_edge_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_canny_edge_isSet){
             isObjectUpdated = true; break;
         }
         if(m_flip_x_isSet){
@@ -2654,6 +4617,45 @@ SWGCameraSettings::isSet(){
         if(m_overlay_text_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_equatorial_grid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_equatorial_grid_color_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_alt_az_grid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_alt_az_grid_color_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_constellation_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_constellation_color_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_constellation_overlay_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_objects_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_object_min_elevation_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_object_color_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_object_font_scale_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(grid_label_font_family && *grid_label_font_family != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_grid_label_font_scale_isSet){
+            isObjectUpdated = true; break;
+        }
         if(overlay_text_string && *overlay_text_string != QString("")){
             isObjectUpdated = true; break;
         }
@@ -2678,6 +4680,9 @@ SWGCameraSettings::isSet(){
         if(m_diff_threshold_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_diff_mask_open_size_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_dilation_size_isSet){
             isObjectUpdated = true; break;
         }
@@ -2685,6 +4690,12 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_diff_mask_close_size_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(overlay_font_family && *overlay_font_family != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_overlay_font_scale_isSet){
             isObjectUpdated = true; break;
         }
         if(m_detection_roi_x_isSet){
@@ -2699,13 +4710,31 @@ SWGCameraSettings::isSet(){
         if(m_detection_roi_height_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_show_detection_roi_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_motion_detect_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_motion_background_subtractor_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_motion_mask_view_isSet){
             isObjectUpdated = true; break;
         }
         if(m_motion_history_isSet){
             isObjectUpdated = true; break;
         }
         if(m_motion_var_threshold_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_motion_learning_rate_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_motion_confirm_frames_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_motion_downscale_isSet){
             isObjectUpdated = true; break;
         }
         if(m_motion_detect_shadows_isSet){
@@ -2724,6 +4753,72 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_min_contour_area_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_show_motion_exclusion_rects_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(motion_exclusion_rects && (motion_exclusion_rects->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_star_detect_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_star_threshold_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_star_background_blur_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_star_min_area_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_star_max_area_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_star_max_aspect_ratio_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_star_debug_view_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_star_color_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_max_magnitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_min_matches_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_match_radius_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_final_match_radius_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_search_radius_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_start_mode_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_label_mode_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_use_current_date_time_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(plate_solve_date_time && *plate_solve_date_time != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_use_downloaded_catalog_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_plate_solve_apply_mode_isSet){
             isObjectUpdated = true; break;
         }
         if(m_video_post_process_isSet){

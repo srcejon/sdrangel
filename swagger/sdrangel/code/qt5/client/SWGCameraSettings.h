@@ -23,6 +23,7 @@
 
 
 #include "SWGCameraObjectClassSettings.h"
+#include "SWGCameraRect.h"
 #include "SWGRollupState.h"
 #include <QList>
 #include <QString>
@@ -156,6 +157,24 @@ public:
     qint32 getAlpacaReadoutMode();
     void setAlpacaReadoutMode(qint32 alpaca_readout_mode);
 
+    qint32 getAsiCoolerOn();
+    void setAsiCoolerOn(qint32 asi_cooler_on);
+
+    qint32 getAsiTargetTemp();
+    void setAsiTargetTemp(qint32 asi_target_temp);
+
+    qint32 getAsiUsbBandwidth();
+    void setAsiUsbBandwidth(qint32 asi_usb_bandwidth);
+
+    qint32 getAsiHighSpeedMode();
+    void setAsiHighSpeedMode(qint32 asi_high_speed_mode);
+
+    qint32 getAsiAutoExposureGain();
+    void setAsiAutoExposureGain(qint32 asi_auto_exposure_gain);
+
+    qint32 getAsiColorImageType();
+    void setAsiColorImageType(qint32 asi_color_image_type);
+
     qint32 getSaveImage();
     void setSaveImage(qint32 save_image);
 
@@ -174,6 +193,93 @@ public:
     qint32 getVideoHwAcceleration();
     void setVideoHwAcceleration(qint32 video_hw_acceleration);
 
+    qint32 getVideoLoop();
+    void setVideoLoop(qint32 video_loop);
+
+    double getVideoPlaybackRate();
+    void setVideoPlaybackRate(double video_playback_rate);
+
+    qint32 getVideoPreRecordBufferSeconds();
+    void setVideoPreRecordBufferSeconds(qint32 video_pre_record_buffer_seconds);
+
+    qint32 getImageRecordLimit();
+    void setImageRecordLimit(qint32 image_record_limit);
+
+    qint32 getVideoRecordLimitSeconds();
+    void setVideoRecordLimitSeconds(qint32 video_record_limit_seconds);
+
+    qint32 getStackEnabled();
+    void setStackEnabled(qint32 stack_enabled);
+
+    qint32 getStackFrameCount();
+    void setStackFrameCount(qint32 stack_frame_count);
+
+    qint32 getStackMethod();
+    void setStackMethod(qint32 stack_method);
+
+    qint32 getStackHdrAlgorithm();
+    void setStackHdrAlgorithm(qint32 stack_hdr_algorithm);
+
+    qint32 getStackHdrExposureCount();
+    void setStackHdrExposureCount(qint32 stack_hdr_exposure_count);
+
+    QList<double>* getStackHdrExposureTimesMs();
+    void setStackHdrExposureTimesMs(QList<double>* stack_hdr_exposure_times_ms);
+
+    qint32 getStackAlignmentMethod();
+    void setStackAlignmentMethod(qint32 stack_alignment_method);
+
+    QString* getStackDarkFileName();
+    void setStackDarkFileName(QString* stack_dark_file_name);
+
+    QString* getStackFlatFileName();
+    void setStackFlatFileName(QString* stack_flat_file_name);
+
+    QString* getStackBiasFileName();
+    void setStackBiasFileName(QString* stack_bias_file_name);
+
+    float getLatitude();
+    void setLatitude(float latitude);
+
+    float getLongitude();
+    void setLongitude(float longitude);
+
+    float getAltitude();
+    void setAltitude(float altitude);
+
+    qint32 getPositionSync();
+    void setPositionSync(qint32 position_sync);
+
+    QString* getOwmApiKey();
+    void setOwmApiKey(QString* owm_api_key);
+
+    float getAzimuth();
+    void setAzimuth(float azimuth);
+
+    float getElevation();
+    void setElevation(float elevation);
+
+    float getRoll();
+    void setRoll(float roll);
+
+    QString* getRotator();
+    void setRotator(QString* rotator);
+
+    float getFov();
+    void setFov(float fov);
+
+    qint32 getLensProjection();
+    void setLensProjection(qint32 lens_projection);
+
+    double getLensCenterOffsetX();
+    void setLensCenterOffsetX(double lens_center_offset_x);
+
+    double getLensCenterOffsetY();
+    void setLensCenterOffsetY(double lens_center_offset_y);
+
+    double getLensDistortionK1();
+    void setLensDistortionK1(double lens_distortion_k1);
+
     qint32 getPostProcessWhiteBalanceMode();
     void setPostProcessWhiteBalanceMode(qint32 post_process_white_balance_mode);
 
@@ -185,6 +291,33 @@ public:
 
     double getPostProcessWhiteBalanceBlueGain();
     void setPostProcessWhiteBalanceBlueGain(double post_process_white_balance_blue_gain);
+
+    double getPostProcessWhiteBalanceHighlightProtection();
+    void setPostProcessWhiteBalanceHighlightProtection(double post_process_white_balance_highlight_protection);
+
+    qint32 getPostProcessUnwarp();
+    void setPostProcessUnwarp(qint32 post_process_unwarp);
+
+    qint32 getHistogramStretch();
+    void setHistogramStretch(qint32 histogram_stretch);
+
+    double getHistogramStretchBlackPoint();
+    void setHistogramStretchBlackPoint(double histogram_stretch_black_point);
+
+    double getHistogramStretchWhitePoint();
+    void setHistogramStretchWhitePoint(double histogram_stretch_white_point);
+
+    double getHistogramStretchGamma();
+    void setHistogramStretchGamma(double histogram_stretch_gamma);
+
+    double getHistogramStretchAsinhStrength();
+    void setHistogramStretchAsinhStrength(double histogram_stretch_asinh_strength);
+
+    double getHistogramStretchLogStrength();
+    void setHistogramStretchLogStrength(double histogram_stretch_log_strength);
+
+    qint32 getPostProcessGreyscale();
+    void setPostProcessGreyscale(qint32 post_process_greyscale);
 
     double getSaturation();
     void setSaturation(double saturation);
@@ -207,8 +340,14 @@ public:
     double getSharpen();
     void setSharpen(double sharpen);
 
+    qint32 getEdgeDisplayMode();
+    void setEdgeDisplayMode(qint32 edge_display_mode);
+
     double getSobelEdge();
     void setSobelEdge(double sobel_edge);
+
+    double getCannyEdge();
+    void setCannyEdge(double canny_edge);
 
     qint32 getFlipX();
     void setFlipX(qint32 flip_x);
@@ -237,6 +376,45 @@ public:
     qint32 getOverlayText();
     void setOverlayText(qint32 overlay_text);
 
+    qint32 getEquatorialGrid();
+    void setEquatorialGrid(qint32 equatorial_grid);
+
+    qint32 getEquatorialGridColor();
+    void setEquatorialGridColor(qint32 equatorial_grid_color);
+
+    qint32 getAltAzGrid();
+    void setAltAzGrid(qint32 alt_az_grid);
+
+    qint32 getAltAzGridColor();
+    void setAltAzGridColor(qint32 alt_az_grid_color);
+
+    qint32 getConstellation();
+    void setConstellation(qint32 constellation);
+
+    qint32 getConstellationColor();
+    void setConstellationColor(qint32 constellation_color);
+
+    qint32 getConstellationOverlay();
+    void setConstellationOverlay(qint32 constellation_overlay);
+
+    qint32 getTrackObjects();
+    void setTrackObjects(qint32 track_objects);
+
+    double getTrackObjectMinElevation();
+    void setTrackObjectMinElevation(double track_object_min_elevation);
+
+    qint32 getTrackObjectColor();
+    void setTrackObjectColor(qint32 track_object_color);
+
+    double getTrackObjectFontScale();
+    void setTrackObjectFontScale(double track_object_font_scale);
+
+    QString* getGridLabelFontFamily();
+    void setGridLabelFontFamily(QString* grid_label_font_family);
+
+    double getGridLabelFontScale();
+    void setGridLabelFontScale(double grid_label_font_scale);
+
     QString* getOverlayTextString();
     void setOverlayTextString(QString* overlay_text_string);
 
@@ -261,6 +439,9 @@ public:
     qint32 getDiffThreshold();
     void setDiffThreshold(qint32 diff_threshold);
 
+    qint32 getDiffMaskOpenSize();
+    void setDiffMaskOpenSize(qint32 diff_mask_open_size);
+
     qint32 getDilationSize();
     void setDilationSize(qint32 dilation_size);
 
@@ -269,6 +450,12 @@ public:
 
     qint32 getDiffMaskCloseSize();
     void setDiffMaskCloseSize(qint32 diff_mask_close_size);
+
+    QString* getOverlayFontFamily();
+    void setOverlayFontFamily(QString* overlay_font_family);
+
+    double getOverlayFontScale();
+    void setOverlayFontScale(double overlay_font_scale);
 
     qint32 getDetectionRoiX();
     void setDetectionRoiX(qint32 detection_roi_x);
@@ -282,14 +469,32 @@ public:
     qint32 getDetectionRoiHeight();
     void setDetectionRoiHeight(qint32 detection_roi_height);
 
+    qint32 getShowDetectionRoi();
+    void setShowDetectionRoi(qint32 show_detection_roi);
+
     qint32 getMotionDetect();
     void setMotionDetect(qint32 motion_detect);
+
+    qint32 getMotionBackgroundSubtractor();
+    void setMotionBackgroundSubtractor(qint32 motion_background_subtractor);
+
+    qint32 getMotionMaskView();
+    void setMotionMaskView(qint32 motion_mask_view);
 
     qint32 getMotionHistory();
     void setMotionHistory(qint32 motion_history);
 
     double getMotionVarThreshold();
     void setMotionVarThreshold(double motion_var_threshold);
+
+    double getMotionLearningRate();
+    void setMotionLearningRate(double motion_learning_rate);
+
+    qint32 getMotionConfirmFrames();
+    void setMotionConfirmFrames(qint32 motion_confirm_frames);
+
+    double getMotionDownscale();
+    void setMotionDownscale(double motion_downscale);
 
     qint32 getMotionDetectShadows();
     void setMotionDetectShadows(qint32 motion_detect_shadows);
@@ -308,6 +513,72 @@ public:
 
     qint32 getMinContourArea();
     void setMinContourArea(qint32 min_contour_area);
+
+    qint32 getShowMotionExclusionRects();
+    void setShowMotionExclusionRects(qint32 show_motion_exclusion_rects);
+
+    QList<SWGCameraRect*>* getMotionExclusionRects();
+    void setMotionExclusionRects(QList<SWGCameraRect*>* motion_exclusion_rects);
+
+    qint32 getStarDetect();
+    void setStarDetect(qint32 star_detect);
+
+    qint32 getStarThreshold();
+    void setStarThreshold(qint32 star_threshold);
+
+    qint32 getStarBackgroundBlur();
+    void setStarBackgroundBlur(qint32 star_background_blur);
+
+    qint32 getStarMinArea();
+    void setStarMinArea(qint32 star_min_area);
+
+    qint32 getStarMaxArea();
+    void setStarMaxArea(qint32 star_max_area);
+
+    double getStarMaxAspectRatio();
+    void setStarMaxAspectRatio(double star_max_aspect_ratio);
+
+    qint32 getStarDebugView();
+    void setStarDebugView(qint32 star_debug_view);
+
+    qint32 getStarColor();
+    void setStarColor(qint32 star_color);
+
+    qint32 getPlateSolve();
+    void setPlateSolve(qint32 plate_solve);
+
+    double getPlateSolveMaxMagnitude();
+    void setPlateSolveMaxMagnitude(double plate_solve_max_magnitude);
+
+    qint32 getPlateSolveMinMatches();
+    void setPlateSolveMinMatches(qint32 plate_solve_min_matches);
+
+    double getPlateSolveMatchRadius();
+    void setPlateSolveMatchRadius(double plate_solve_match_radius);
+
+    double getPlateSolveFinalMatchRadius();
+    void setPlateSolveFinalMatchRadius(double plate_solve_final_match_radius);
+
+    double getPlateSolveSearchRadius();
+    void setPlateSolveSearchRadius(double plate_solve_search_radius);
+
+    qint32 getPlateSolveStartMode();
+    void setPlateSolveStartMode(qint32 plate_solve_start_mode);
+
+    qint32 getPlateSolveLabelMode();
+    void setPlateSolveLabelMode(qint32 plate_solve_label_mode);
+
+    qint32 getPlateSolveUseCurrentDateTime();
+    void setPlateSolveUseCurrentDateTime(qint32 plate_solve_use_current_date_time);
+
+    QString* getPlateSolveDateTime();
+    void setPlateSolveDateTime(QString* plate_solve_date_time);
+
+    qint32 getPlateSolveUseDownloadedCatalog();
+    void setPlateSolveUseDownloadedCatalog(qint32 plate_solve_use_downloaded_catalog);
+
+    qint32 getPlateSolveApplyMode();
+    void setPlateSolveApplyMode(qint32 plate_solve_apply_mode);
 
     qint32 getVideoPostProcess();
     void setVideoPostProcess(qint32 video_post_process);
@@ -511,6 +782,24 @@ private:
     qint32 alpaca_readout_mode;
     bool m_alpaca_readout_mode_isSet;
 
+    qint32 asi_cooler_on;
+    bool m_asi_cooler_on_isSet;
+
+    qint32 asi_target_temp;
+    bool m_asi_target_temp_isSet;
+
+    qint32 asi_usb_bandwidth;
+    bool m_asi_usb_bandwidth_isSet;
+
+    qint32 asi_high_speed_mode;
+    bool m_asi_high_speed_mode_isSet;
+
+    qint32 asi_auto_exposure_gain;
+    bool m_asi_auto_exposure_gain_isSet;
+
+    qint32 asi_color_image_type;
+    bool m_asi_color_image_type_isSet;
+
     qint32 save_image;
     bool m_save_image_isSet;
 
@@ -529,6 +818,93 @@ private:
     qint32 video_hw_acceleration;
     bool m_video_hw_acceleration_isSet;
 
+    qint32 video_loop;
+    bool m_video_loop_isSet;
+
+    double video_playback_rate;
+    bool m_video_playback_rate_isSet;
+
+    qint32 video_pre_record_buffer_seconds;
+    bool m_video_pre_record_buffer_seconds_isSet;
+
+    qint32 image_record_limit;
+    bool m_image_record_limit_isSet;
+
+    qint32 video_record_limit_seconds;
+    bool m_video_record_limit_seconds_isSet;
+
+    qint32 stack_enabled;
+    bool m_stack_enabled_isSet;
+
+    qint32 stack_frame_count;
+    bool m_stack_frame_count_isSet;
+
+    qint32 stack_method;
+    bool m_stack_method_isSet;
+
+    qint32 stack_hdr_algorithm;
+    bool m_stack_hdr_algorithm_isSet;
+
+    qint32 stack_hdr_exposure_count;
+    bool m_stack_hdr_exposure_count_isSet;
+
+    QList<double>* stack_hdr_exposure_times_ms;
+    bool m_stack_hdr_exposure_times_ms_isSet;
+
+    qint32 stack_alignment_method;
+    bool m_stack_alignment_method_isSet;
+
+    QString* stack_dark_file_name;
+    bool m_stack_dark_file_name_isSet;
+
+    QString* stack_flat_file_name;
+    bool m_stack_flat_file_name_isSet;
+
+    QString* stack_bias_file_name;
+    bool m_stack_bias_file_name_isSet;
+
+    float latitude;
+    bool m_latitude_isSet;
+
+    float longitude;
+    bool m_longitude_isSet;
+
+    float altitude;
+    bool m_altitude_isSet;
+
+    qint32 position_sync;
+    bool m_position_sync_isSet;
+
+    QString* owm_api_key;
+    bool m_owm_api_key_isSet;
+
+    float azimuth;
+    bool m_azimuth_isSet;
+
+    float elevation;
+    bool m_elevation_isSet;
+
+    float roll;
+    bool m_roll_isSet;
+
+    QString* rotator;
+    bool m_rotator_isSet;
+
+    float fov;
+    bool m_fov_isSet;
+
+    qint32 lens_projection;
+    bool m_lens_projection_isSet;
+
+    double lens_center_offset_x;
+    bool m_lens_center_offset_x_isSet;
+
+    double lens_center_offset_y;
+    bool m_lens_center_offset_y_isSet;
+
+    double lens_distortion_k1;
+    bool m_lens_distortion_k1_isSet;
+
     qint32 post_process_white_balance_mode;
     bool m_post_process_white_balance_mode_isSet;
 
@@ -540,6 +916,33 @@ private:
 
     double post_process_white_balance_blue_gain;
     bool m_post_process_white_balance_blue_gain_isSet;
+
+    double post_process_white_balance_highlight_protection;
+    bool m_post_process_white_balance_highlight_protection_isSet;
+
+    qint32 post_process_unwarp;
+    bool m_post_process_unwarp_isSet;
+
+    qint32 histogram_stretch;
+    bool m_histogram_stretch_isSet;
+
+    double histogram_stretch_black_point;
+    bool m_histogram_stretch_black_point_isSet;
+
+    double histogram_stretch_white_point;
+    bool m_histogram_stretch_white_point_isSet;
+
+    double histogram_stretch_gamma;
+    bool m_histogram_stretch_gamma_isSet;
+
+    double histogram_stretch_asinh_strength;
+    bool m_histogram_stretch_asinh_strength_isSet;
+
+    double histogram_stretch_log_strength;
+    bool m_histogram_stretch_log_strength_isSet;
+
+    qint32 post_process_greyscale;
+    bool m_post_process_greyscale_isSet;
 
     double saturation;
     bool m_saturation_isSet;
@@ -562,8 +965,14 @@ private:
     double sharpen;
     bool m_sharpen_isSet;
 
+    qint32 edge_display_mode;
+    bool m_edge_display_mode_isSet;
+
     double sobel_edge;
     bool m_sobel_edge_isSet;
+
+    double canny_edge;
+    bool m_canny_edge_isSet;
 
     qint32 flip_x;
     bool m_flip_x_isSet;
@@ -592,6 +1001,45 @@ private:
     qint32 overlay_text;
     bool m_overlay_text_isSet;
 
+    qint32 equatorial_grid;
+    bool m_equatorial_grid_isSet;
+
+    qint32 equatorial_grid_color;
+    bool m_equatorial_grid_color_isSet;
+
+    qint32 alt_az_grid;
+    bool m_alt_az_grid_isSet;
+
+    qint32 alt_az_grid_color;
+    bool m_alt_az_grid_color_isSet;
+
+    qint32 constellation;
+    bool m_constellation_isSet;
+
+    qint32 constellation_color;
+    bool m_constellation_color_isSet;
+
+    qint32 constellation_overlay;
+    bool m_constellation_overlay_isSet;
+
+    qint32 track_objects;
+    bool m_track_objects_isSet;
+
+    double track_object_min_elevation;
+    bool m_track_object_min_elevation_isSet;
+
+    qint32 track_object_color;
+    bool m_track_object_color_isSet;
+
+    double track_object_font_scale;
+    bool m_track_object_font_scale_isSet;
+
+    QString* grid_label_font_family;
+    bool m_grid_label_font_family_isSet;
+
+    double grid_label_font_scale;
+    bool m_grid_label_font_scale_isSet;
+
     QString* overlay_text_string;
     bool m_overlay_text_string_isSet;
 
@@ -616,6 +1064,9 @@ private:
     qint32 diff_threshold;
     bool m_diff_threshold_isSet;
 
+    qint32 diff_mask_open_size;
+    bool m_diff_mask_open_size_isSet;
+
     qint32 dilation_size;
     bool m_dilation_size_isSet;
 
@@ -624,6 +1075,12 @@ private:
 
     qint32 diff_mask_close_size;
     bool m_diff_mask_close_size_isSet;
+
+    QString* overlay_font_family;
+    bool m_overlay_font_family_isSet;
+
+    double overlay_font_scale;
+    bool m_overlay_font_scale_isSet;
 
     qint32 detection_roi_x;
     bool m_detection_roi_x_isSet;
@@ -637,14 +1094,32 @@ private:
     qint32 detection_roi_height;
     bool m_detection_roi_height_isSet;
 
+    qint32 show_detection_roi;
+    bool m_show_detection_roi_isSet;
+
     qint32 motion_detect;
     bool m_motion_detect_isSet;
+
+    qint32 motion_background_subtractor;
+    bool m_motion_background_subtractor_isSet;
+
+    qint32 motion_mask_view;
+    bool m_motion_mask_view_isSet;
 
     qint32 motion_history;
     bool m_motion_history_isSet;
 
     double motion_var_threshold;
     bool m_motion_var_threshold_isSet;
+
+    double motion_learning_rate;
+    bool m_motion_learning_rate_isSet;
+
+    qint32 motion_confirm_frames;
+    bool m_motion_confirm_frames_isSet;
+
+    double motion_downscale;
+    bool m_motion_downscale_isSet;
 
     qint32 motion_detect_shadows;
     bool m_motion_detect_shadows_isSet;
@@ -663,6 +1138,72 @@ private:
 
     qint32 min_contour_area;
     bool m_min_contour_area_isSet;
+
+    qint32 show_motion_exclusion_rects;
+    bool m_show_motion_exclusion_rects_isSet;
+
+    QList<SWGCameraRect*>* motion_exclusion_rects;
+    bool m_motion_exclusion_rects_isSet;
+
+    qint32 star_detect;
+    bool m_star_detect_isSet;
+
+    qint32 star_threshold;
+    bool m_star_threshold_isSet;
+
+    qint32 star_background_blur;
+    bool m_star_background_blur_isSet;
+
+    qint32 star_min_area;
+    bool m_star_min_area_isSet;
+
+    qint32 star_max_area;
+    bool m_star_max_area_isSet;
+
+    double star_max_aspect_ratio;
+    bool m_star_max_aspect_ratio_isSet;
+
+    qint32 star_debug_view;
+    bool m_star_debug_view_isSet;
+
+    qint32 star_color;
+    bool m_star_color_isSet;
+
+    qint32 plate_solve;
+    bool m_plate_solve_isSet;
+
+    double plate_solve_max_magnitude;
+    bool m_plate_solve_max_magnitude_isSet;
+
+    qint32 plate_solve_min_matches;
+    bool m_plate_solve_min_matches_isSet;
+
+    double plate_solve_match_radius;
+    bool m_plate_solve_match_radius_isSet;
+
+    double plate_solve_final_match_radius;
+    bool m_plate_solve_final_match_radius_isSet;
+
+    double plate_solve_search_radius;
+    bool m_plate_solve_search_radius_isSet;
+
+    qint32 plate_solve_start_mode;
+    bool m_plate_solve_start_mode_isSet;
+
+    qint32 plate_solve_label_mode;
+    bool m_plate_solve_label_mode_isSet;
+
+    qint32 plate_solve_use_current_date_time;
+    bool m_plate_solve_use_current_date_time_isSet;
+
+    QString* plate_solve_date_time;
+    bool m_plate_solve_date_time_isSet;
+
+    qint32 plate_solve_use_downloaded_catalog;
+    bool m_plate_solve_use_downloaded_catalog_isSet;
+
+    qint32 plate_solve_apply_mode;
+    bool m_plate_solve_apply_mode_isSet;
 
     qint32 video_post_process;
     bool m_video_post_process_isSet;

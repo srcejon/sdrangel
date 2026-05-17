@@ -42,6 +42,8 @@ SWGCameraObjectDeviceSettings::SWGCameraObjectDeviceSettings() {
     m_stop_on_disappear_isSet = false;
     start_stop_file_sink = 0;
     m_start_stop_file_sink_isSet = false;
+    save_current_image = 0;
+    m_save_current_image_isSet = false;
     record_video = 0;
     m_record_video_isSet = false;
     detect_command = nullptr;
@@ -74,6 +76,8 @@ SWGCameraObjectDeviceSettings::init() {
     m_stop_on_disappear_isSet = false;
     start_stop_file_sink = 0;
     m_start_stop_file_sink_isSet = false;
+    save_current_image = 0;
+    m_save_current_image_isSet = false;
     record_video = 0;
     m_record_video_isSet = false;
     detect_command = new QString("");
@@ -96,6 +100,7 @@ SWGCameraObjectDeviceSettings::cleanup() {
     if(preset_description != nullptr) { 
         delete preset_description;
     }
+
 
 
 
@@ -138,6 +143,8 @@ SWGCameraObjectDeviceSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&stop_on_disappear, pJson["stopOnDisappear"], "qint32", "");
     
     ::SWGSDRangel::setValue(&start_stop_file_sink, pJson["startStopFileSink"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&save_current_image, pJson["saveCurrentImage"], "qint32", "");
     
     ::SWGSDRangel::setValue(&record_video, pJson["recordVideo"], "qint32", "");
     
@@ -185,6 +192,9 @@ SWGCameraObjectDeviceSettings::asJsonObject() {
     }
     if(m_start_stop_file_sink_isSet){
         obj->insert("startStopFileSink", QJsonValue(start_stop_file_sink));
+    }
+    if(m_save_current_image_isSet){
+        obj->insert("saveCurrentImage", QJsonValue(save_current_image));
     }
     if(m_record_video_isSet){
         obj->insert("recordVideo", QJsonValue(record_video));
@@ -276,6 +286,16 @@ SWGCameraObjectDeviceSettings::setStartStopFileSink(qint32 start_stop_file_sink)
 }
 
 qint32
+SWGCameraObjectDeviceSettings::getSaveCurrentImage() {
+    return save_current_image;
+}
+void
+SWGCameraObjectDeviceSettings::setSaveCurrentImage(qint32 save_current_image) {
+    this->save_current_image = save_current_image;
+    this->m_save_current_image_isSet = true;
+}
+
+qint32
 SWGCameraObjectDeviceSettings::getRecordVideo() {
     return record_video;
 }
@@ -349,6 +369,9 @@ SWGCameraObjectDeviceSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_start_stop_file_sink_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_save_current_image_isSet){
             isObjectUpdated = true; break;
         }
         if(m_record_video_isSet){

@@ -1,0 +1,139 @@
+SchedulerSettings:
+  description: "Scheduler feature settings"
+  properties:
+    title:
+      type: string
+    rgbColor:
+      type: integer
+    workspaceIndex:
+      type: integer
+    rules:
+      description: "Schedule rules"
+      type: array
+      items:
+        $ref: "/doc/swagger/include/Scheduler.yaml#/SchedulerRule"
+    rollupState:
+      $ref: "/doc/swagger/include/RollupState.yaml#/RollupState"
+
+SchedulerRule:
+  description: "Scheduler rule"
+  properties:
+    id:
+      description: "Stable rule identifier"
+      type: string
+    name:
+      type: string
+    enabled:
+      description: "Enable this rule (1 for yes, 0 for no)"
+      type: integer
+    triggerType:
+      description: >
+        Rule trigger type
+          * 0 - Time
+          * 1 - Event
+      type: integer
+    time:
+      description: "Rule time for time-based triggers"
+      type: string
+    recurrence:
+      description: >
+        Time trigger recurrence
+          * 0 - Once
+          * 1 - Daily
+          * 2 - Weekly
+          * 3 - Monthly
+      type: integer
+    eventType:
+      description: "Event type index for event-based triggers"
+      type: integer
+    eventSourceId:
+      description: "Optional event source long ID; empty matches all sources"
+      type: string
+    eventDataRegex:
+      description: "Optional regular expression matched against event data"
+      type: string
+    eventDelay:
+      description: "Delay before executing event-triggered rule"
+      type: integer
+    eventDelayUnit:
+      description: >
+        Event delay unit
+          * 0 - Seconds
+          * 1 - Minutes
+      type: integer
+    command:
+      description: "Detached command to run when the rule fires"
+      type: string
+    speech:
+      description: "Text to speak when the rule fires"
+      type: string
+    deviceSetActions:
+      description: "Device-set actions executed when the rule fires"
+      type: array
+      items:
+        $ref: "/doc/swagger/include/Scheduler.yaml#/SchedulerDeviceSetAction"
+    featureActions:
+      description: "Feature actions executed when the rule fires"
+      type: array
+      items:
+        $ref: "/doc/swagger/include/Scheduler.yaml#/SchedulerFeatureAction"
+    lastRun:
+      description: "Last execution time"
+      type: string
+
+SchedulerDeviceSetAction:
+  description: "Device-set action executed by a scheduler rule"
+  properties:
+    deviceSetIndex:
+      type: integer
+    deviceSetId:
+      type: string
+    presetGroup:
+      description: "Preset group to load before running other device-set actions"
+      type: string
+    presetFrequency:
+      description: "Preset centre frequency in Hz"
+      type: integer
+      format: int64
+    presetDescription:
+      description: "Preset description"
+      type: string
+    acquisitionAction:
+      description: >
+        Device acquisition action
+          * 0 - No change
+          * 1 - Start
+          * 2 - Stop
+      type: integer
+    fileSinkAction:
+      description: >
+        File-sink action
+          * 0 - No change
+          * 1 - Start
+          * 2 - Stop
+      type: integer
+    overrideCenterFrequency:
+      description: "Set centre frequency before run/stop actions (1 for yes, 0 for no)"
+      type: integer
+    centerFrequency:
+      description: "Device-set centre frequency in Hz"
+      type: integer
+      format: int64
+
+SchedulerFeatureAction:
+  description: "Feature action executed by a scheduler rule"
+  properties:
+    featureSetIndex:
+      type: integer
+    featureIndex:
+      type: integer
+    featureId:
+      description: "Feature long ID"
+      type: string
+    action:
+      description: >
+        Feature run action
+          * 0 - No change
+          * 1 - Start
+          * 2 - Stop
+      type: integer

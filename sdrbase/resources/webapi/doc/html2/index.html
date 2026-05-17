@@ -3609,6 +3609,10 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Start/stop file sinks with detection/disappearance (1 for yes, 0 for no)"
     },
+    "saveCurrentImage" : {
+      "type" : "integer",
+      "description" : "Save the current image when the object class is detected (1 for yes, 0 for no)"
+    },
     "recordVideo" : {
       "type" : "integer",
       "description" : "Start video recording on detection and stop when the object disappears (1 for yes, 0 for no)"
@@ -3631,6 +3635,23 @@ margin-bottom: 20px;
     }
   },
   "description" : "SDRangel device set actions triggered by YOLO object detection or disappearance"
+};
+            defs.CameraRect = {
+  "properties" : {
+    "x" : {
+      "type" : "integer"
+    },
+    "y" : {
+      "type" : "integer"
+    },
+    "width" : {
+      "type" : "integer"
+    },
+    "height" : {
+      "type" : "integer"
+    }
+  },
+  "description" : "Rectangle in image pixel coordinates"
 };
             defs.CameraReport = {
   "properties" : {
@@ -3791,6 +3812,30 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "ALPACA camera readout mode index"
     },
+    "asiCoolerOn" : {
+      "type" : "integer",
+      "description" : "ASI cooler control: -1 do not set, 0 off, 1 on"
+    },
+    "asiTargetTemp" : {
+      "type" : "integer",
+      "description" : "ASI cooler target temperature in Celsius"
+    },
+    "asiUsbBandwidth" : {
+      "type" : "integer",
+      "description" : "ASI USB bandwidth setting (-1 = do not set)"
+    },
+    "asiHighSpeedMode" : {
+      "type" : "integer",
+      "description" : "ASI high-speed mode: -1 do not set, 0 off, 1 on"
+    },
+    "asiAutoExposureGain" : {
+      "type" : "integer",
+      "description" : "Enable ASI auto exposure/gain in frame-rate mode (1 for yes, 0 for no)"
+    },
+    "asiColorImageType" : {
+      "type" : "integer",
+      "description" : "ASI colour image type\n  * 0 - RGB24\n  * 1 - RAW16\n"
+    },
     "saveImage" : {
       "type" : "integer",
       "description" : "Save captured frames as still images (1 for yes, 0 for no)"
@@ -3815,6 +3860,137 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Prefer hardware-accelerated video encoding when available (1 for yes, 0 for no)"
     },
+    "videoLoop" : {
+      "type" : "integer",
+      "description" : "Loop file-camera video input (1 for yes, 0 for no)"
+    },
+    "videoPlaybackRate" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Playback rate multiplier for file-camera video input"
+    },
+    "videoPreRecordBufferSeconds" : {
+      "type" : "integer",
+      "description" : "Seconds of live frames to buffer and prepend when video recording starts"
+    },
+    "imageRecordLimit" : {
+      "type" : "integer",
+      "description" : "Number of still images to save before disabling image recording; 0 = unlimited"
+    },
+    "videoRecordLimitSeconds" : {
+      "type" : "integer",
+      "description" : "Seconds of video to record before disabling video recording; 0 = unlimited"
+    },
+    "stackEnabled" : {
+      "type" : "integer",
+      "description" : "Enable frame stacking (1 for yes, 0 for no)"
+    },
+    "stackFrameCount" : {
+      "type" : "integer",
+      "description" : "Number of frames to stack"
+    },
+    "stackMethod" : {
+      "type" : "integer",
+      "description" : "Frame stacking method\n  * 0 - Average\n  * 1 - Median\n  * 2 - Sigma-clipped average\n  * 3 - HDR\n"
+    },
+    "stackHdrAlgorithm" : {
+      "type" : "integer",
+      "description" : "HDR stacking algorithm\n  * 0 - Debevec\n  * 1 - Robertson\n  * 2 - Mertens\n"
+    },
+    "stackHdrExposureCount" : {
+      "type" : "integer",
+      "description" : "Number of HDR exposure times to use"
+    },
+    "stackHdrExposureTimesMs" : {
+      "type" : "array",
+      "description" : "HDR exposure times in milliseconds",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "stackAlignmentMethod" : {
+      "type" : "integer",
+      "description" : "Frame alignment method\n  * 0 - None\n  * 1 - Phase correlation\n  * 2 - Star centroid matching\n"
+    },
+    "stackDarkFileName" : {
+      "type" : "string",
+      "description" : "Dark calibration frame file path"
+    },
+    "stackFlatFileName" : {
+      "type" : "string",
+      "description" : "Flat calibration frame file path"
+    },
+    "stackBiasFileName" : {
+      "type" : "string",
+      "description" : "Bias calibration frame file path"
+    },
+    "latitude" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Camera latitude in degrees"
+    },
+    "longitude" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Camera longitude in degrees"
+    },
+    "altitude" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Camera altitude in metres"
+    },
+    "positionSync" : {
+      "type" : "integer",
+      "description" : "Sync camera location from main settings (1 for yes, 0 for no)"
+    },
+    "owmAPIKey" : {
+      "type" : "string",
+      "description" : "OpenWeatherMap API key"
+    },
+    "azimuth" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Camera pointing azimuth in degrees"
+    },
+    "elevation" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Camera pointing elevation in degrees"
+    },
+    "roll" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Camera roll about optical axis in degrees"
+    },
+    "rotator" : {
+      "type" : "string",
+      "description" : "Rotator feature identifier as featureSetIndex:featureIndex"
+    },
+    "fov" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Camera field of view in degrees"
+    },
+    "lensProjection" : {
+      "type" : "integer",
+      "description" : "Lens projection model\n  * 0 - Rectilinear\n  * 1 - Equidistant\n  * 2 - Equisolid\n"
+    },
+    "lensCenterOffsetX" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Principal point X offset in pixels from image centre"
+    },
+    "lensCenterOffsetY" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Principal point Y offset in pixels from image centre"
+    },
+    "lensDistortionK1" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Radial distortion coefficient"
+    },
     "postProcessWhiteBalanceMode" : {
       "type" : "integer",
       "description" : "Post-processing white balance mode\n  * 0 - Off\n  * 1 - Auto\n  * 2 - Manual\n"
@@ -3833,6 +4009,48 @@ margin-bottom: 20px;
       "type" : "number",
       "format" : "double",
       "description" : "Manual white balance blue channel gain: 0.1 to 8.0"
+    },
+    "postProcessWhiteBalanceHighlightProtection" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Amount to reduce manual white-balance gains toward neutral in highlights"
+    },
+    "postProcessUnwarp" : {
+      "type" : "integer",
+      "description" : "Unwarp fisheye images using lens settings (1 for yes, 0 for no)"
+    },
+    "histogramStretch" : {
+      "type" : "integer",
+      "description" : "Histogram stretch mode\n  * 0 - Off\n  * 1 - Linear\n  * 2 - Gamma\n  * 3 - Asinh\n  * 4 - Log\n  * 5 - CLAHE\n"
+    },
+    "histogramStretchBlackPoint" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Histogram stretch black point normalized to 0..1"
+    },
+    "histogramStretchWhitePoint" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Histogram stretch white point normalized to 0..1"
+    },
+    "histogramStretchGamma" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Histogram stretch gamma exponent"
+    },
+    "histogramStretchAsinhStrength" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Asinh stretch strength"
+    },
+    "histogramStretchLogStrength" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Log stretch strength"
+    },
+    "postProcessGreyscale" : {
+      "type" : "integer",
+      "description" : "Convert post-processed image to greyscale (1 for yes, 0 for no)"
     },
     "saturation" : {
       "type" : "number",
@@ -3867,10 +4085,19 @@ margin-bottom: 20px;
       "format" : "double",
       "description" : "Sharpening amount: 0.0 to 3.0"
     },
+    "edgeDisplayMode" : {
+      "type" : "integer",
+      "description" : "Edge display mode\n  * 0 - Overlay\n  * 1 - Edges only\n"
+    },
     "sobelEdge" : {
       "type" : "number",
       "format" : "double",
       "description" : "Sobel edge blend amount: 0.0 to 3.0"
+    },
+    "cannyEdge" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Canny edge blend amount: 0.0 to 3.0"
     },
     "flipX" : {
       "type" : "integer",
@@ -3908,6 +4135,61 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Draw custom HTML text on each frame (1 for yes, 0 for no)"
     },
+    "equatorialGrid" : {
+      "type" : "integer",
+      "description" : "Draw equatorial sky grid overlay (1 for yes, 0 for no)"
+    },
+    "equatorialGridColor" : {
+      "type" : "integer",
+      "description" : "Equatorial grid colour as 0xRRGGBB integer"
+    },
+    "altAzGrid" : {
+      "type" : "integer",
+      "description" : "Draw alt-az sky grid overlay (1 for yes, 0 for no)"
+    },
+    "altAzGridColor" : {
+      "type" : "integer",
+      "description" : "Alt-az grid colour as 0xRRGGBB integer"
+    },
+    "constellation" : {
+      "type" : "integer",
+      "description" : "Draw constellation overlay (1 for yes, 0 for no)"
+    },
+    "constellationColor" : {
+      "type" : "integer",
+      "description" : "Constellation overlay colour as 0xRRGGBB integer"
+    },
+    "constellationOverlay" : {
+      "type" : "integer",
+      "description" : "Constellation overlay\n  * 0 - Ursa Major\n  * 1 - Orion\n  * 2 - Crux\n"
+    },
+    "trackObjects" : {
+      "type" : "integer",
+      "description" : "Draw tracked object overlay (1 for yes, 0 for no)"
+    },
+    "trackObjectMinElevation" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Minimum elevation in degrees for tracked objects"
+    },
+    "trackObjectColor" : {
+      "type" : "integer",
+      "description" : "Tracked object label colour as 0xRRGGBB integer"
+    },
+    "trackObjectFontScale" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Tracked object label font point size"
+    },
+    "gridLabelFontFamily" : {
+      "type" : "string",
+      "description" : "Font family for sky grid labels"
+    },
+    "gridLabelFontScale" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Font point size for sky grid labels"
+    },
     "overlayTextString" : {
       "type" : "string",
       "description" : "HTML text content to render on the frame"
@@ -3941,6 +4223,10 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Threshold for diff-mask binary classification: 0 to 255"
     },
+    "diffMaskOpenSize" : {
+      "type" : "integer",
+      "description" : "Kernel radius for morphological open on diff mask before accumulation: 0 to 20"
+    },
     "dilationSize" : {
       "type" : "integer",
       "description" : "Kernel radius for diff-mask dilation: 0 to 20"
@@ -3952,6 +4238,15 @@ margin-bottom: 20px;
     "diffMaskCloseSize" : {
       "type" : "integer",
       "description" : "Kernel radius for morphological close on the accumulated diff mask: 0 to 20"
+    },
+    "overlayFontFamily" : {
+      "type" : "string",
+      "description" : "Font family for detector overlays"
+    },
+    "overlayFontScale" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Font point size for detector overlays"
     },
     "detectionRoiX" : {
       "type" : "integer",
@@ -3969,9 +4264,21 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Detection region-of-interest height in pixels (0 = full height)"
     },
+    "showDetectionRoi" : {
+      "type" : "integer",
+      "description" : "Show detection ROI rectangle (1 for yes, 0 for no)"
+    },
     "motionDetect" : {
       "type" : "integer",
       "description" : "Enable MOG2 background subtractor for motion detection (1 for yes, 0 for no)"
+    },
+    "motionBackgroundSubtractor" : {
+      "type" : "integer",
+      "description" : "Motion background subtractor\n  * 0 - MOG2\n  * 1 - KNN\n"
+    },
+    "motionMaskView" : {
+      "type" : "integer",
+      "description" : "Motion mask debug view\n  * 0 - Off\n  * 1 - Raw\n  * 2 - Thresholded\n  * 3 - Opened\n  * 4 - Closed\n  * 5 - Final\n"
     },
     "motionHistory" : {
       "type" : "integer",
@@ -3981,6 +4288,20 @@ margin-bottom: 20px;
       "type" : "number",
       "format" : "double",
       "description" : "Variance threshold for MOG2 foreground classification: 1.0 to 200.0"
+    },
+    "motionLearningRate" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Background subtractor learning rate: -1.0 auto, otherwise 0.0 to 1.0"
+    },
+    "motionConfirmFrames" : {
+      "type" : "integer",
+      "description" : "Consecutive motion frames required before reporting"
+    },
+    "motionDownscale" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Downscale factor for the motion detection path"
     },
     "motionDetectShadows" : {
       "type" : "integer",
@@ -4005,6 +4326,102 @@ margin-bottom: 20px;
     "minContourArea" : {
       "type" : "integer",
       "description" : "Minimum contour area in square pixels to draw: 0 to 10000"
+    },
+    "showMotionExclusionRects" : {
+      "type" : "integer",
+      "description" : "Show motion exclusion rectangles (1 for yes, 0 for no)"
+    },
+    "motionExclusionRects" : {
+      "type" : "array",
+      "description" : "Full-resolution rectangles excluded from diff/motion detection",
+      "items" : {
+        "$ref" : "#/definitions/CameraRect"
+      }
+    },
+    "starDetect" : {
+      "type" : "integer",
+      "description" : "Enable star detection (1 for yes, 0 for no)"
+    },
+    "starThreshold" : {
+      "type" : "integer",
+      "description" : "Threshold for star residual image"
+    },
+    "starBackgroundBlur" : {
+      "type" : "integer",
+      "description" : "Radius used to estimate smooth sky background"
+    },
+    "starMinArea" : {
+      "type" : "integer",
+      "description" : "Minimum star blob area in pixels"
+    },
+    "starMaxArea" : {
+      "type" : "integer",
+      "description" : "Maximum star blob area in pixels"
+    },
+    "starMaxAspectRatio" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Maximum accepted star blob aspect ratio"
+    },
+    "starDebugView" : {
+      "type" : "integer",
+      "description" : "Star detector debug view\n  * 0 - Off\n  * 1 - Background\n  * 2 - Residual\n  * 3 - Thresholded\n  * 4 - Final\n"
+    },
+    "starColor" : {
+      "type" : "integer",
+      "description" : "Detected star overlay colour as 0xRRGGBB integer"
+    },
+    "plateSolve" : {
+      "type" : "integer",
+      "description" : "Enable plate solving from detected stars (1 for yes, 0 for no)"
+    },
+    "plateSolveMaxMagnitude" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Faintest catalog star magnitude to consider"
+    },
+    "plateSolveMinMatches" : {
+      "type" : "integer",
+      "description" : "Minimum star matches for a successful plate solve"
+    },
+    "plateSolveMatchRadius" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Maximum acquisition/coarse match radius in pixels"
+    },
+    "plateSolveFinalMatchRadius" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Maximum final accepted match radius in pixels"
+    },
+    "plateSolveSearchRadius" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Search radius around current pointing estimate in degrees"
+    },
+    "plateSolveStartMode" : {
+      "type" : "integer",
+      "description" : "Plate solve start mode\n  * 0 - Blind\n  * 1 - FoV\n  * 2 - FoV/elevation\n  * 3 - FoV/azimuth/elevation/roll\n  * 4 - FoV/azimuth/elevation/roll/lens\n  * 5 - Current settings only\n"
+    },
+    "plateSolveLabelMode" : {
+      "type" : "integer",
+      "description" : "Plate solve label mode\n  * 0 - Name\n  * 1 - Name/magnitude\n  * 2 - Name/magnitude/spectral type\n"
+    },
+    "plateSolveUseCurrentDateTime" : {
+      "type" : "integer",
+      "description" : "Use current system date/time for plate solving (1 for yes, 0 for no)"
+    },
+    "plateSolveDateTime" : {
+      "type" : "string",
+      "description" : "Fixed local date/time for plate solving recorded media"
+    },
+    "plateSolveUseDownloadedCatalog" : {
+      "type" : "integer",
+      "description" : "Prefer downloaded HYG catalog when available (1 for yes, 0 for no)"
+    },
+    "plateSolveApplyMode" : {
+      "type" : "integer",
+      "description" : "Plate solve apply mode\n  * 0 - Azimuth/elevation\n  * 1 - Azimuth/elevation/roll\n  * 2 - Azimuth/elevation/roll/FoV\n  * 3 - Azimuth/elevation/roll/FoV/lens\n"
     },
     "videoPostProcess" : {
       "type" : "integer",
@@ -4817,6 +5234,9 @@ margin-bottom: 20px;
     },
     "MeshtasticModSettings" : {
       "$ref" : "#/definitions/MeshtasticModSettings"
+    },
+    "MeteorSettings" : {
+      "$ref" : "#/definitions/MeteorSettings"
     },
     "NavtexDemodSettings" : {
       "$ref" : "#/definitions/NavtexDemodSettings"
@@ -7498,6 +7918,9 @@ margin-bottom: 20px;
     },
     "SatelliteTrackerSettings" : {
       "$ref" : "#/definitions/SatelliteTrackerSettings"
+    },
+    "SchedulerSettings" : {
+      "$ref" : "#/definitions/SchedulerSettings"
     },
     "SIDSettings" : {
       "$ref" : "#/definitions/SIDSettings"
@@ -11859,6 +12282,88 @@ margin-bottom: 20px;
   },
   "description" : "MeshtasticMod"
 };
+            defs.MeteorSettings = {
+  "properties" : {
+    "inputFrequencyOffset" : {
+      "type" : "integer",
+      "format" : "int64",
+      "description" : "Channel frequency offset in Hz"
+    },
+    "frequencyMode" : {
+      "type" : "integer",
+      "description" : "Frequency entry mode\n  * 0 - Offset from device centre frequency\n  * 1 - Absolute RF frequency\n"
+    },
+    "frequency" : {
+      "type" : "integer",
+      "format" : "int64",
+      "description" : "Absolute RF frequency in Hz"
+    },
+    "channelSampleRate" : {
+      "type" : "integer",
+      "description" : "Channel sample rate in samples per second"
+    },
+    "powerLPFCutoff" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Power envelope low-pass cutoff in Hz"
+    },
+    "detectionThresholdDB" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Detection threshold above background in dB"
+    },
+    "minDurationMS" : {
+      "type" : "integer",
+      "description" : "Minimum meteor detection duration in milliseconds"
+    },
+    "maxDurationMS" : {
+      "type" : "integer",
+      "description" : "Maximum meteor detection duration in milliseconds"
+    },
+    "maxFrequencyDrift" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Maximum allowed detection frequency drift in Hz"
+    },
+    "detectionsTableColumnHidden" : {
+      "type" : "integer",
+      "description" : "Bit mask of hidden detection table columns"
+    },
+    "detectionBoxPaddingPixels" : {
+      "type" : "integer",
+      "description" : "Padding around detection overlay boxes in pixels"
+    },
+    "rgbColor" : {
+      "type" : "integer"
+    },
+    "title" : {
+      "type" : "string"
+    },
+    "streamIndex" : {
+      "type" : "integer",
+      "description" : "MIMO stream index. Not relevant when connected to a single Rx device."
+    },
+    "workspaceIndex" : {
+      "type" : "integer"
+    },
+    "hidden" : {
+      "type" : "integer"
+    },
+    "channelMarker" : {
+      "$ref" : "#/definitions/ChannelMarker"
+    },
+    "spectrumGUI" : {
+      "$ref" : "#/definitions/GLSpectrum"
+    },
+    "scopeGUI" : {
+      "$ref" : "#/definitions/GLScope"
+    },
+    "rollupState" : {
+      "$ref" : "#/definitions/RollupState"
+    }
+  },
+  "description" : "Meteor detector channel settings"
+};
             defs.MetisMISOSettings = {
   "properties" : {
     "title" : {
@@ -16205,6 +16710,164 @@ margin-bottom: 20px;
     }
   },
   "description" : "Satellite Tracker settings"
+};
+            defs.SchedulerDeviceSetAction = {
+  "properties" : {
+    "deviceSetIndex" : {
+      "type" : "integer"
+    },
+    "deviceSetId" : {
+      "type" : "string"
+    },
+    "presetGroup" : {
+      "type" : "string",
+      "description" : "Preset group to load before running other device-set actions"
+    },
+    "presetFrequency" : {
+      "type" : "integer",
+      "format" : "int64",
+      "description" : "Preset centre frequency in Hz"
+    },
+    "presetDescription" : {
+      "type" : "string",
+      "description" : "Preset description"
+    },
+    "acquisitionAction" : {
+      "type" : "integer",
+      "description" : "Device acquisition action\n  * 0 - No change\n  * 1 - Start\n  * 2 - Stop\n"
+    },
+    "fileSinkAction" : {
+      "type" : "integer",
+      "description" : "File-sink action\n  * 0 - No change\n  * 1 - Start\n  * 2 - Stop\n"
+    },
+    "overrideCenterFrequency" : {
+      "type" : "integer",
+      "description" : "Set centre frequency before run/stop actions (1 for yes, 0 for no)"
+    },
+    "centerFrequency" : {
+      "type" : "integer",
+      "format" : "int64",
+      "description" : "Device-set centre frequency in Hz"
+    }
+  },
+  "description" : "Device-set action executed by a scheduler rule"
+};
+            defs.SchedulerFeatureAction = {
+  "properties" : {
+    "featureSetIndex" : {
+      "type" : "integer"
+    },
+    "featureIndex" : {
+      "type" : "integer"
+    },
+    "featureId" : {
+      "type" : "string",
+      "description" : "Feature long ID"
+    },
+    "action" : {
+      "type" : "integer",
+      "description" : "Feature run action\n  * 0 - No change\n  * 1 - Start\n  * 2 - Stop\n"
+    }
+  },
+  "description" : "Feature action executed by a scheduler rule"
+};
+            defs.SchedulerRule = {
+  "properties" : {
+    "id" : {
+      "type" : "string",
+      "description" : "Stable rule identifier"
+    },
+    "name" : {
+      "type" : "string"
+    },
+    "enabled" : {
+      "type" : "integer",
+      "description" : "Enable this rule (1 for yes, 0 for no)"
+    },
+    "triggerType" : {
+      "type" : "integer",
+      "description" : "Rule trigger type\n  * 0 - Time\n  * 1 - Event\n"
+    },
+    "time" : {
+      "type" : "string",
+      "description" : "Rule time for time-based triggers"
+    },
+    "recurrence" : {
+      "type" : "integer",
+      "description" : "Time trigger recurrence\n  * 0 - Once\n  * 1 - Daily\n  * 2 - Weekly\n  * 3 - Monthly\n"
+    },
+    "eventType" : {
+      "type" : "integer",
+      "description" : "Event type index for event-based triggers"
+    },
+    "eventSourceId" : {
+      "type" : "string",
+      "description" : "Optional event source long ID; empty matches all sources"
+    },
+    "eventDataRegex" : {
+      "type" : "string",
+      "description" : "Optional regular expression matched against event data"
+    },
+    "eventDelay" : {
+      "type" : "integer",
+      "description" : "Delay before executing event-triggered rule"
+    },
+    "eventDelayUnit" : {
+      "type" : "integer",
+      "description" : "Event delay unit\n  * 0 - Seconds\n  * 1 - Minutes\n"
+    },
+    "command" : {
+      "type" : "string",
+      "description" : "Detached command to run when the rule fires"
+    },
+    "speech" : {
+      "type" : "string",
+      "description" : "Text to speak when the rule fires"
+    },
+    "deviceSetActions" : {
+      "type" : "array",
+      "description" : "Device-set actions executed when the rule fires",
+      "items" : {
+        "$ref" : "#/definitions/SchedulerDeviceSetAction"
+      }
+    },
+    "featureActions" : {
+      "type" : "array",
+      "description" : "Feature actions executed when the rule fires",
+      "items" : {
+        "$ref" : "#/definitions/SchedulerFeatureAction"
+      }
+    },
+    "lastRun" : {
+      "type" : "string",
+      "description" : "Last execution time"
+    }
+  },
+  "description" : "Scheduler rule"
+};
+            defs.SchedulerSettings = {
+  "properties" : {
+    "title" : {
+      "type" : "string"
+    },
+    "rgbColor" : {
+      "type" : "integer"
+    },
+    "workspaceIndex" : {
+      "type" : "integer"
+    },
+    "rules" : {
+      "type" : "array",
+      "description" : "Schedule rules",
+      "items" : {
+        "$ref" : "#/definitions/SchedulerRule"
+      }
+    },
+    "rollupState" : {
+      "$ref" : "#/definitions/RollupState"
+    }
+  },
+  "description" : "Scheduler feature settings"
 };
             defs.SigMFFileInputActions = {
   "properties" : {
@@ -60991,7 +61654,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-05-04T18:32:59.710+02:00
+              Generated 2026-05-17T23:56:18.465+02:00
             </div>
           </div>
       </div>

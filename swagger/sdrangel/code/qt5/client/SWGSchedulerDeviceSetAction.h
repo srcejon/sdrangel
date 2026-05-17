@@ -11,13 +11,13 @@
  */
 
 /*
- * SWGCameraObjectDeviceSettings.h
+ * SWGSchedulerDeviceSetAction.h
  *
- * SDRangel device set actions triggered by YOLO object detection or disappearance
+ * Device-set action executed by a scheduler rule
  */
 
-#ifndef SWGCameraObjectDeviceSettings_H_
-#define SWGCameraObjectDeviceSettings_H_
+#ifndef SWGSchedulerDeviceSetAction_H_
+#define SWGSchedulerDeviceSetAction_H_
 
 #include <QJsonObject>
 
@@ -29,21 +29,24 @@
 
 namespace SWGSDRangel {
 
-class SWG_API SWGCameraObjectDeviceSettings: public SWGObject {
+class SWG_API SWGSchedulerDeviceSetAction: public SWGObject {
 public:
-    SWGCameraObjectDeviceSettings();
-    SWGCameraObjectDeviceSettings(QString* json);
-    virtual ~SWGCameraObjectDeviceSettings();
+    SWGSchedulerDeviceSetAction();
+    SWGSchedulerDeviceSetAction(QString* json);
+    virtual ~SWGSchedulerDeviceSetAction();
     void init();
     void cleanup();
 
     virtual QString asJson () override;
     virtual QJsonObject* asJsonObject() override;
     virtual void fromJsonObject(QJsonObject &json) override;
-    virtual SWGCameraObjectDeviceSettings* fromJson(QString &jsonString) override;
+    virtual SWGSchedulerDeviceSetAction* fromJson(QString &jsonString) override;
 
     qint32 getDeviceSetIndex();
     void setDeviceSetIndex(qint32 device_set_index);
+
+    QString* getDeviceSetId();
+    void setDeviceSetId(QString* device_set_id);
 
     QString* getPresetGroup();
     void setPresetGroup(QString* preset_group);
@@ -54,32 +57,17 @@ public:
     QString* getPresetDescription();
     void setPresetDescription(QString* preset_description);
 
-    qint32 getStartOnDetect();
-    void setStartOnDetect(qint32 start_on_detect);
+    qint32 getAcquisitionAction();
+    void setAcquisitionAction(qint32 acquisition_action);
 
-    qint32 getStopOnDisappear();
-    void setStopOnDisappear(qint32 stop_on_disappear);
+    qint32 getFileSinkAction();
+    void setFileSinkAction(qint32 file_sink_action);
 
-    qint32 getStartStopFileSink();
-    void setStartStopFileSink(qint32 start_stop_file_sink);
+    qint32 getOverrideCenterFrequency();
+    void setOverrideCenterFrequency(qint32 override_center_frequency);
 
-    qint32 getSaveCurrentImage();
-    void setSaveCurrentImage(qint32 save_current_image);
-
-    qint32 getRecordVideo();
-    void setRecordVideo(qint32 record_video);
-
-    QString* getDetectCommand();
-    void setDetectCommand(QString* detect_command);
-
-    QString* getDisappearCommand();
-    void setDisappearCommand(QString* disappear_command);
-
-    QString* getDetectSpeech();
-    void setDetectSpeech(QString* detect_speech);
-
-    QString* getDisappearSpeech();
-    void setDisappearSpeech(QString* disappear_speech);
+    qint64 getCenterFrequency();
+    void setCenterFrequency(qint64 center_frequency);
 
 
     virtual bool isSet() override;
@@ -87,6 +75,9 @@ public:
 private:
     qint32 device_set_index;
     bool m_device_set_index_isSet;
+
+    QString* device_set_id;
+    bool m_device_set_id_isSet;
 
     QString* preset_group;
     bool m_preset_group_isSet;
@@ -97,35 +88,20 @@ private:
     QString* preset_description;
     bool m_preset_description_isSet;
 
-    qint32 start_on_detect;
-    bool m_start_on_detect_isSet;
+    qint32 acquisition_action;
+    bool m_acquisition_action_isSet;
 
-    qint32 stop_on_disappear;
-    bool m_stop_on_disappear_isSet;
+    qint32 file_sink_action;
+    bool m_file_sink_action_isSet;
 
-    qint32 start_stop_file_sink;
-    bool m_start_stop_file_sink_isSet;
+    qint32 override_center_frequency;
+    bool m_override_center_frequency_isSet;
 
-    qint32 save_current_image;
-    bool m_save_current_image_isSet;
-
-    qint32 record_video;
-    bool m_record_video_isSet;
-
-    QString* detect_command;
-    bool m_detect_command_isSet;
-
-    QString* disappear_command;
-    bool m_disappear_command_isSet;
-
-    QString* detect_speech;
-    bool m_detect_speech_isSet;
-
-    QString* disappear_speech;
-    bool m_disappear_speech_isSet;
+    qint64 center_frequency;
+    bool m_center_frequency_isSet;
 
 };
 
 }
 
-#endif /* SWGCameraObjectDeviceSettings_H_ */
+#endif /* SWGSchedulerDeviceSetAction_H_ */

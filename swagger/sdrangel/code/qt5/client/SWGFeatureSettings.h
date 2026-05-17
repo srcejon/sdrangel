@@ -41,6 +41,7 @@
 #include "SWGRigCtlServerSettings.h"
 #include "SWGSIDSettings.h"
 #include "SWGSatelliteTrackerSettings.h"
+#include "SWGSchedulerSettings.h"
 #include "SWGSimplePTTSettings.h"
 #include "SWGSkyMapSettings.h"
 #include "SWGStarTrackerSettings.h"
@@ -128,6 +129,9 @@ public:
     SWGSatelliteTrackerSettings* getSatelliteTrackerSettings();
     void setSatelliteTrackerSettings(SWGSatelliteTrackerSettings* satellite_tracker_settings);
 
+    SWGSchedulerSettings* getSchedulerSettings();
+    void setSchedulerSettings(SWGSchedulerSettings* scheduler_settings);
+
     SWGSIDSettings* getSidSettings();
     void setSidSettings(SWGSIDSettings* sid_settings);
 
@@ -209,6 +213,9 @@ private:
 
     SWGSatelliteTrackerSettings* satellite_tracker_settings;
     bool m_satellite_tracker_settings_isSet;
+
+    SWGSchedulerSettings* scheduler_settings;
+    bool m_scheduler_settings_isSet;
 
     SWGSIDSettings* sid_settings;
     bool m_sid_settings_isSet;

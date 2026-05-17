@@ -61,6 +61,7 @@
 #include "SWGM17ModSettings.h"
 #include "SWGMeshtasticDemodSettings.h"
 #include "SWGMeshtasticModSettings.h"
+#include "SWGMeteorSettings.h"
 #include "SWGNFMDemodSettings.h"
 #include "SWGNFMModSettings.h"
 #include "SWGNavtexDemodSettings.h"
@@ -228,6 +229,9 @@ public:
 
     SWGMeshtasticModSettings* getMeshtasticModSettings();
     void setMeshtasticModSettings(SWGMeshtasticModSettings* meshtastic_mod_settings);
+
+    SWGMeteorSettings* getMeteorSettings();
+    void setMeteorSettings(SWGMeteorSettings* meteor_settings);
 
     SWGNavtexDemodSettings* getNavtexDemodSettings();
     void setNavtexDemodSettings(SWGNavtexDemodSettings* navtex_demod_settings);
@@ -436,6 +440,9 @@ private:
 
     SWGMeshtasticModSettings* meshtastic_mod_settings;
     bool m_meshtastic_mod_settings_isSet;
+
+    SWGMeteorSettings* meteor_settings;
+    bool m_meteor_settings_isSet;
 
     SWGNavtexDemodSettings* navtex_demod_settings;
     bool m_navtex_demod_settings_isSet;

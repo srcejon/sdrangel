@@ -1,0 +1,63 @@
+MeteorSettings:
+  description: "Meteor detector channel settings"
+  properties:
+    inputFrequencyOffset:
+      description: "Channel frequency offset in Hz"
+      type: integer
+      format: int64
+    frequencyMode:
+      description: >
+        Frequency entry mode
+          * 0 - Offset from device centre frequency
+          * 1 - Absolute RF frequency
+      type: integer
+    frequency:
+      description: "Absolute RF frequency in Hz"
+      type: integer
+      format: int64
+    channelSampleRate:
+      description: "Channel sample rate in samples per second"
+      type: integer
+    powerLPFCutoff:
+      description: "Power envelope low-pass cutoff in Hz"
+      type: number
+      format: float
+    detectionThresholdDB:
+      description: "Detection threshold above background in dB"
+      type: number
+      format: float
+    minDurationMS:
+      description: "Minimum meteor detection duration in milliseconds"
+      type: integer
+    maxDurationMS:
+      description: "Maximum meteor detection duration in milliseconds"
+      type: integer
+    maxFrequencyDrift:
+      description: "Maximum allowed detection frequency drift in Hz"
+      type: number
+      format: float
+    detectionsTableColumnHidden:
+      description: "Bit mask of hidden detection table columns"
+      type: integer
+    detectionBoxPaddingPixels:
+      description: "Padding around detection overlay boxes in pixels"
+      type: integer
+    rgbColor:
+      type: integer
+    title:
+      type: string
+    streamIndex:
+      description: "MIMO stream index. Not relevant when connected to a single Rx device."
+      type: integer
+    workspaceIndex:
+      type: integer
+    hidden:
+      type: integer
+    channelMarker:
+      $ref: "/doc/swagger/include/ChannelMarker.yaml#/ChannelMarker"
+    spectrumGUI:
+      $ref: "/doc/swagger/include/GLSpectrum.yaml#/GLSpectrum"
+    scopeGUI:
+      $ref: "/doc/swagger/include/GLScope.yaml#/GLScope"
+    rollupState:
+      $ref: "/doc/swagger/include/RollupState.yaml#/RollupState"

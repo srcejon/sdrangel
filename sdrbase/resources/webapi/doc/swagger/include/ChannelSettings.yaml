@@ -91,6 +91,8 @@ ChannelSettings:
       $ref: "/doc/swagger/include/MeshtasticDemod.yaml#/MeshtasticDemodSettings"
     MeshtasticModSettings:
       $ref: "/doc/swagger/include/MeshtasticMod.yaml#/MeshtasticModSettings"
+    MeteorSettings:
+      $ref: "/doc/swagger/include/Meteor.yaml#/MeteorSettings"
     NavtexDemodSettings:
       $ref: "/doc/swagger/include/NavtexDemod.yaml#/NavtexDemodSettings"
     NFMDemodSettings:

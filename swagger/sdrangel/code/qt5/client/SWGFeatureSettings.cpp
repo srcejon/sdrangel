@@ -70,6 +70,8 @@ SWGFeatureSettings::SWGFeatureSettings() {
     m_rig_ctl_server_settings_isSet = false;
     satellite_tracker_settings = nullptr;
     m_satellite_tracker_settings_isSet = false;
+    scheduler_settings = nullptr;
+    m_scheduler_settings_isSet = false;
     sid_settings = nullptr;
     m_sid_settings_isSet = false;
     simple_ptt_settings = nullptr;
@@ -130,6 +132,8 @@ SWGFeatureSettings::init() {
     m_rig_ctl_server_settings_isSet = false;
     satellite_tracker_settings = new SWGSatelliteTrackerSettings();
     m_satellite_tracker_settings_isSet = false;
+    scheduler_settings = new SWGSchedulerSettings();
+    m_scheduler_settings_isSet = false;
     sid_settings = new SWGSIDSettings();
     m_sid_settings_isSet = false;
     simple_ptt_settings = new SWGSimplePTTSettings();
@@ -203,6 +207,9 @@ SWGFeatureSettings::cleanup() {
     if(satellite_tracker_settings != nullptr) { 
         delete satellite_tracker_settings;
     }
+    if(scheduler_settings != nullptr) { 
+        delete scheduler_settings;
+    }
     if(sid_settings != nullptr) { 
         delete sid_settings;
     }
@@ -272,6 +279,8 @@ SWGFeatureSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&rig_ctl_server_settings, pJson["RigCtlServerSettings"], "SWGRigCtlServerSettings", "SWGRigCtlServerSettings");
     
     ::SWGSDRangel::setValue(&satellite_tracker_settings, pJson["SatelliteTrackerSettings"], "SWGSatelliteTrackerSettings", "SWGSatelliteTrackerSettings");
+    
+    ::SWGSDRangel::setValue(&scheduler_settings, pJson["SchedulerSettings"], "SWGSchedulerSettings", "SWGSchedulerSettings");
     
     ::SWGSDRangel::setValue(&sid_settings, pJson["SIDSettings"], "SWGSIDSettings", "SWGSIDSettings");
     
@@ -361,6 +370,9 @@ SWGFeatureSettings::asJsonObject() {
     }
     if((satellite_tracker_settings != nullptr) && (satellite_tracker_settings->isSet())){
         toJsonValue(QString("SatelliteTrackerSettings"), satellite_tracker_settings, obj, QString("SWGSatelliteTrackerSettings"));
+    }
+    if((scheduler_settings != nullptr) && (scheduler_settings->isSet())){
+        toJsonValue(QString("SchedulerSettings"), scheduler_settings, obj, QString("SWGSchedulerSettings"));
     }
     if((sid_settings != nullptr) && (sid_settings->isSet())){
         toJsonValue(QString("SIDSettings"), sid_settings, obj, QString("SWGSIDSettings"));
@@ -591,6 +603,16 @@ SWGFeatureSettings::setSatelliteTrackerSettings(SWGSatelliteTrackerSettings* sat
     this->m_satellite_tracker_settings_isSet = true;
 }
 
+SWGSchedulerSettings*
+SWGFeatureSettings::getSchedulerSettings() {
+    return scheduler_settings;
+}
+void
+SWGFeatureSettings::setSchedulerSettings(SWGSchedulerSettings* scheduler_settings) {
+    this->scheduler_settings = scheduler_settings;
+    this->m_scheduler_settings_isSet = true;
+}
+
 SWGSIDSettings*
 SWGFeatureSettings::getSidSettings() {
     return sid_settings;
@@ -707,6 +729,9 @@ SWGFeatureSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(satellite_tracker_settings && satellite_tracker_settings->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(scheduler_settings && scheduler_settings->isSet()){
             isObjectUpdated = true; break;
         }
         if(sid_settings && sid_settings->isSet()){

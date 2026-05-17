@@ -110,6 +110,8 @@ SWGChannelSettings::SWGChannelSettings() {
     m_meshtastic_demod_settings_isSet = false;
     meshtastic_mod_settings = nullptr;
     m_meshtastic_mod_settings_isSet = false;
+    meteor_settings = nullptr;
+    m_meteor_settings_isSet = false;
     navtex_demod_settings = nullptr;
     m_navtex_demod_settings_isSet = false;
     nfm_demod_settings = nullptr;
@@ -254,6 +256,8 @@ SWGChannelSettings::init() {
     m_meshtastic_demod_settings_isSet = false;
     meshtastic_mod_settings = new SWGMeshtasticModSettings();
     m_meshtastic_mod_settings_isSet = false;
+    meteor_settings = new SWGMeteorSettings();
+    m_meteor_settings_isSet = false;
     navtex_demod_settings = new SWGNavtexDemodSettings();
     m_navtex_demod_settings_isSet = false;
     nfm_demod_settings = new SWGNFMDemodSettings();
@@ -428,6 +432,9 @@ SWGChannelSettings::cleanup() {
     }
     if(meshtastic_mod_settings != nullptr) { 
         delete meshtastic_mod_settings;
+    }
+    if(meteor_settings != nullptr) { 
+        delete meteor_settings;
     }
     if(navtex_demod_settings != nullptr) { 
         delete navtex_demod_settings;
@@ -604,6 +611,8 @@ SWGChannelSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&meshtastic_demod_settings, pJson["MeshtasticDemodSettings"], "SWGMeshtasticDemodSettings", "SWGMeshtasticDemodSettings");
     
     ::SWGSDRangel::setValue(&meshtastic_mod_settings, pJson["MeshtasticModSettings"], "SWGMeshtasticModSettings", "SWGMeshtasticModSettings");
+    
+    ::SWGSDRangel::setValue(&meteor_settings, pJson["MeteorSettings"], "SWGMeteorSettings", "SWGMeteorSettings");
     
     ::SWGSDRangel::setValue(&navtex_demod_settings, pJson["NavtexDemodSettings"], "SWGNavtexDemodSettings", "SWGNavtexDemodSettings");
     
@@ -797,6 +806,9 @@ SWGChannelSettings::asJsonObject() {
     }
     if((meshtastic_mod_settings != nullptr) && (meshtastic_mod_settings->isSet())){
         toJsonValue(QString("MeshtasticModSettings"), meshtastic_mod_settings, obj, QString("SWGMeshtasticModSettings"));
+    }
+    if((meteor_settings != nullptr) && (meteor_settings->isSet())){
+        toJsonValue(QString("MeteorSettings"), meteor_settings, obj, QString("SWGMeteorSettings"));
     }
     if((navtex_demod_settings != nullptr) && (navtex_demod_settings->isSet())){
         toJsonValue(QString("NavtexDemodSettings"), navtex_demod_settings, obj, QString("SWGNavtexDemodSettings"));
@@ -1293,6 +1305,16 @@ SWGChannelSettings::setMeshtasticModSettings(SWGMeshtasticModSettings* meshtasti
     this->m_meshtastic_mod_settings_isSet = true;
 }
 
+SWGMeteorSettings*
+SWGChannelSettings::getMeteorSettings() {
+    return meteor_settings;
+}
+void
+SWGChannelSettings::setMeteorSettings(SWGMeteorSettings* meteor_settings) {
+    this->meteor_settings = meteor_settings;
+    this->m_meteor_settings_isSet = true;
+}
+
 SWGNavtexDemodSettings*
 SWGChannelSettings::getNavtexDemodSettings() {
     return navtex_demod_settings;
@@ -1689,6 +1711,9 @@ SWGChannelSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(meshtastic_mod_settings && meshtastic_mod_settings->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(meteor_settings && meteor_settings->isSet()){
             isObjectUpdated = true; break;
         }
         if(navtex_demod_settings && navtex_demod_settings->isSet()){

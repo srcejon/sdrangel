@@ -80,6 +80,7 @@
 #include "SWGCameraActions.h"
 #include "SWGCameraObjectClassSettings.h"
 #include "SWGCameraObjectDeviceSettings.h"
+#include "SWGCameraRect.h"
 #include "SWGCameraReport.h"
 #include "SWGCameraSettings.h"
 #include "SWGCapture.h"
@@ -237,6 +238,7 @@
 #include "SWGMeshtasticDemodSettings.h"
 #include "SWGMeshtasticModReport.h"
 #include "SWGMeshtasticModSettings.h"
+#include "SWGMeteorSettings.h"
 #include "SWGMetisMISOSettings.h"
 #include "SWGMorseDecoderActions.h"
 #include "SWGMorseDecoderSettings.h"
@@ -335,6 +337,10 @@
 #include "SWGSatelliteTrackerActions.h"
 #include "SWGSatelliteTrackerReport.h"
 #include "SWGSatelliteTrackerSettings.h"
+#include "SWGSchedulerDeviceSetAction.h"
+#include "SWGSchedulerFeatureAction.h"
+#include "SWGSchedulerRule.h"
+#include "SWGSchedulerSettings.h"
 #include "SWGSigMFFileInputActions.h"
 #include "SWGSigMFFileInputReport.h"
 #include "SWGSigMFFileInputSettings.h"
@@ -734,6 +740,11 @@ namespace SWGSDRangel {
     }
     if(QString("SWGCameraObjectDeviceSettings").compare(type) == 0) {
       SWGCameraObjectDeviceSettings *obj = new SWGCameraObjectDeviceSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGCameraRect").compare(type) == 0) {
+      SWGCameraRect *obj = new SWGCameraRect();
       obj->init();
       return obj;
     }
@@ -1522,6 +1533,11 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGMeteorSettings").compare(type) == 0) {
+      SWGMeteorSettings *obj = new SWGMeteorSettings();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGMetisMISOSettings").compare(type) == 0) {
       SWGMetisMISOSettings *obj = new SWGMetisMISOSettings();
       obj->init();
@@ -2009,6 +2025,26 @@ namespace SWGSDRangel {
     }
     if(QString("SWGSatelliteTrackerSettings").compare(type) == 0) {
       SWGSatelliteTrackerSettings *obj = new SWGSatelliteTrackerSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGSchedulerDeviceSetAction").compare(type) == 0) {
+      SWGSchedulerDeviceSetAction *obj = new SWGSchedulerDeviceSetAction();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGSchedulerFeatureAction").compare(type) == 0) {
+      SWGSchedulerFeatureAction *obj = new SWGSchedulerFeatureAction();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGSchedulerRule").compare(type) == 0) {
+      SWGSchedulerRule *obj = new SWGSchedulerRule();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGSchedulerSettings").compare(type) == 0) {
+      SWGSchedulerSettings *obj = new SWGSchedulerSettings();
       obj->init();
       return obj;
     }

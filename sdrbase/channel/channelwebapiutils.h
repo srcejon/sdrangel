@@ -116,11 +116,13 @@ public:
     static bool getDeviceReportValue(unsigned int deviceIndex, const QString &key, QString &value);
     static bool getDeviceReportList(unsigned int deviceIndex, const QString &key, const QString &subKey, QList<int> &values);
     static bool getDevicePosition(unsigned int deviceIndex, float& latitude, float& longitude, float& altitude);
+    static bool patchDeviceSetting(unsigned int deviceIndex, const QString &setting, const QString &value);
     static bool patchDeviceSetting(unsigned int deviceIndex, const QString &setting, int value);
     static bool patchDeviceSetting(unsigned int deviceIndex, const QString &setting, double value);
     static bool runFeature(unsigned int featureSetIndex, unsigned int featureIndex);
     static bool stopFeature(unsigned int featureSetIndex, unsigned int featureIndex);
     static bool patchFeatureSetting(unsigned int featureSetIndex, unsigned int featureIndex, const QString &setting, const QString &value);
+    static bool patchFeatureSetting(unsigned int featureSetIndex, unsigned int featureIndex, const QString &setting, int value);
     static bool patchFeatureSetting(unsigned int featureSetIndex, unsigned int featureIndex, const QString &setting, double value);
     static bool patchFeatureSetting(unsigned int featureSetIndex, unsigned int featureIndex, const QString &setting, const QJsonArray& value);
     static bool patchChannelSetting(ChannelAPI *channel, const QString &setting, const QVariant &value);

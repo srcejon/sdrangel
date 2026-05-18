@@ -64,6 +64,48 @@ QString schedulerDateTimeToString(const QDateTime& dateTime)
 {
     return dateTime.isValid() ? dateTime.toString(Qt::ISODateWithMs) : QString();
 }
+
+bool patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting)
+{
+    switch (setting.m_type)
+    {
+    case SchedulerSettings::SettingInteger:
+        return ChannelWebAPIUtils::patchDeviceSetting(deviceSetIndex, setting.m_name, setting.m_value.toInt());
+    case SchedulerSettings::SettingDouble:
+        return ChannelWebAPIUtils::patchDeviceSetting(deviceSetIndex, setting.m_name, setting.m_value.toDouble());
+    case SchedulerSettings::SettingString:
+    default:
+        return ChannelWebAPIUtils::patchDeviceSetting(deviceSetIndex, setting.m_name, setting.m_value);
+    }
+}
+
+bool patchChannelSetting(int deviceSetIndex, int channelIndex, const SchedulerSettings::SettingValue& setting)
+{
+    switch (setting.m_type)
+    {
+    case SchedulerSettings::SettingInteger:
+        return ChannelWebAPIUtils::patchChannelSetting(deviceSetIndex, channelIndex, setting.m_name, setting.m_value.toInt());
+    case SchedulerSettings::SettingDouble:
+        return ChannelWebAPIUtils::patchChannelSetting(deviceSetIndex, channelIndex, setting.m_name, setting.m_value.toDouble());
+    case SchedulerSettings::SettingString:
+    default:
+        return ChannelWebAPIUtils::patchChannelSetting(deviceSetIndex, channelIndex, setting.m_name, setting.m_value);
+    }
+}
+
+bool patchFeatureSetting(int featureSetIndex, int featureIndex, const SchedulerSettings::SettingValue& setting)
+{
+    switch (setting.m_type)
+    {
+    case SchedulerSettings::SettingInteger:
+        return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value.toInt());
+    case SchedulerSettings::SettingDouble:
+        return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value.toDouble());
+    case SchedulerSettings::SettingString:
+    default:
+        return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value);
+    }
+}
 }
 
 Scheduler::Scheduler(WebAPIAdapterInterface *webAPIAdapterInterface) :
@@ -636,6 +678,10 @@ void Scheduler::executeDeviceActions(const QList<SchedulerSettings::DeviceSetAct
             ChannelWebAPIUtils::run(action.m_deviceSetIndex);
         } else if (action.m_acquisitionAction == SchedulerSettings::ActionStop) {
             ChannelWebAPIUtils::stop(action.m_deviceSetIndex);
+        } else if (action.m_acquisitionAction == SchedulerSettings::ActionApplySetting) {
+            for (const SchedulerSettings::SettingValue& setting : action.m_settings) {
+                patchDeviceSetting(action.m_deviceSetIndex, setting);
+            }
         }
     }
 
@@ -697,6 +743,11 @@ void Scheduler::executeChannelActions(const QList<SchedulerSettings::ChannelActi
         case SchedulerSettings::ActionRadioAstronomyStart:
             ChannelWebAPIUtils::radioAstronomyStart(action.m_deviceSetIndex, action.m_channelIndex);
             break;
+        case SchedulerSettings::ActionApplySetting:
+            for (const SchedulerSettings::SettingValue& setting : action.m_settings) {
+                patchChannelSetting(action.m_deviceSetIndex, action.m_channelIndex, setting);
+            }
+            break;
         default:
             break;
         }
@@ -743,6 +794,11 @@ void Scheduler::executeFeatureActions(const QList<SchedulerSettings::FeatureActi
                 action.m_findTarget,
                 action.m_featureSetIndex,
                 action.m_featureIndex);
+        } else if (action.m_action == SchedulerSettings::ActionApplySetting)
+        {
+            for (const SchedulerSettings::SettingValue& setting : action.m_settings) {
+                patchFeatureSetting(action.m_featureSetIndex, action.m_featureIndex, setting);
+            }
         }
     }
 }

@@ -27,7 +27,7 @@
 namespace
 {
 constexpr int DefaultWeekdayMask = 0x7f;
-int g_deserializingRulesVersion = 4;
+int g_deserializingRulesVersion = 5;
 
 int weekdayBit(const QDate& date)
 {
@@ -130,6 +130,26 @@ QDateTime monthlyDateTime(const QDate& baseDate, const QTime& time, int monthOff
 }
 }
 
+QDataStream& operator<<(QDataStream& out, const SchedulerSettings::SettingValue& setting)
+{
+    out << setting.m_name;
+    out << setting.m_value;
+    out << static_cast<qint32>(setting.m_type);
+    return out;
+}
+
+QDataStream& operator>>(QDataStream& in, SchedulerSettings::SettingValue& setting)
+{
+    qint32 type;
+
+    in >> setting.m_name;
+    in >> setting.m_value;
+    in >> type;
+
+    setting.m_type = static_cast<SchedulerSettings::SettingValueType>(type);
+    return in;
+}
+
 QDataStream& operator<<(QDataStream& out, const SchedulerSettings::DeviceSetAction& action)
 {
     out << action.m_deviceSetIndex;
@@ -141,6 +161,7 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::DeviceSetActi
     out << static_cast<qint32>(action.m_fileSinkAction);
     out << action.m_overrideCenterFrequency;
     out << action.m_centerFrequency;
+    out << action.m_settings;
     return out;
 }
 
@@ -158,6 +179,9 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::DeviceSetAction& act
     in >> fileSinkAction;
     in >> action.m_overrideCenterFrequency;
     in >> action.m_centerFrequency;
+    if (g_deserializingRulesVersion >= 5) {
+        in >> action.m_settings;
+    }
 
     action.m_acquisitionAction = static_cast<SchedulerSettings::RunAction>(acquisitionAction);
     action.m_fileSinkAction = static_cast<SchedulerSettings::RunAction>(fileSinkAction);
@@ -170,6 +194,7 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::FeatureAction
     out << action.m_featureIndex;
     out << action.m_featureId;
     out << static_cast<qint32>(action.m_action);
+    out << action.m_settings;
     return out;
 }
 
@@ -181,6 +206,9 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::FeatureAction& actio
     in >> action.m_featureIndex;
     in >> action.m_featureId;
     in >> runAction;
+    if (g_deserializingRulesVersion >= 5) {
+        in >> action.m_settings;
+    }
 
     action.m_action = static_cast<SchedulerSettings::RunAction>(runAction);
     return in;
@@ -198,6 +226,7 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::ChannelAction
     out << action.m_to;
     out << action.m_via;
     out << action.m_data;
+    out << action.m_settings;
     return out;
 }
 
@@ -215,6 +244,9 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ChannelAction& actio
     in >> action.m_to;
     in >> action.m_via;
     in >> action.m_data;
+    if (g_deserializingRulesVersion >= 5) {
+        in >> action.m_settings;
+    }
 
     action.m_action = static_cast<SchedulerSettings::RunAction>(runAction);
     return in;
@@ -285,6 +317,11 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ScheduleRule& rule)
     return in;
 }
 
+SchedulerSettings::SettingValue::SettingValue() :
+    m_type(SettingString)
+{
+}
+
 SchedulerSettings::DeviceSetAction::DeviceSetAction() :
     m_deviceSetIndex(0),
     m_presetFrequency(0),
@@ -350,7 +387,7 @@ QByteArray SchedulerSettings::serialize() const
     QDataStream rulesStream(&rulesBlob, QIODevice::WriteOnly);
     QDataStream featureActionExtrasStream(&featureActionExtrasBlob, QIODevice::WriteOnly);
 
-    rulesStream << quint32(4);
+    rulesStream << quint32(5);
     rulesStream << m_rules;
     writeFeatureActionExtras(featureActionExtrasStream, m_rules);
 
@@ -401,10 +438,10 @@ bool SchedulerSettings::deserialize(const QByteArray& data)
             quint32 rulesVersion = 0;
             rulesStream >> rulesVersion;
 
-            if ((rulesVersion == 2) || (rulesVersion == 3) || (rulesVersion == 4)) {
+            if ((rulesVersion == 2) || (rulesVersion == 3) || (rulesVersion == 4) || (rulesVersion == 5)) {
                 g_deserializingRulesVersion = rulesVersion;
                 rulesStream >> m_rules;
-                g_deserializingRulesVersion = 4;
+                g_deserializingRulesVersion = 5;
             }
         }
 

@@ -32,9 +32,12 @@ class Preset;
 class QComboBox;
 class QGroupBox;
 class QLabel;
+class QLayout;
 class QLineEdit;
 class QSpinBox;
+class QTableWidget;
 class QTableWidgetItem;
+class QToolButton;
 class Scheduler;
 
 namespace Ui {
@@ -91,6 +94,18 @@ private:
     QSpinBox *m_cameraVideoDuration;
     QGroupBox *m_findActionGroup;
     QLineEdit *m_findTarget;
+    QGroupBox *m_deviceSettingsGroup;
+    QTableWidget *m_deviceSettingsTable;
+    QToolButton *m_addDeviceSetting;
+    QToolButton *m_deleteDeviceSetting;
+    QGroupBox *m_channelSettingsGroup;
+    QTableWidget *m_channelSettingsTable;
+    QToolButton *m_addChannelSetting;
+    QToolButton *m_deleteChannelSetting;
+    QGroupBox *m_featureSettingsGroup;
+    QTableWidget *m_featureSettingsTable;
+    QToolButton *m_addFeatureSetting;
+    QToolButton *m_deleteFeatureSetting;
 
     explicit SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     ~SchedulerGUI() override;
@@ -110,12 +125,18 @@ private:
     void displayFeatureActionEditor();
     void createChannelActionParameterEditors();
     void createFeatureActionParameterEditors();
+    void createDeviceActionParameterEditors();
+    void createApplySettingsEditor(QGroupBox *&group, QTableWidget *&table, QToolButton *&addButton, QToolButton *&deleteButton, QWidget *parent, QLayout *targetLayout);
     void updateChannelActionParameterVisibility();
     void updateFeatureActionParameterVisibility();
+    void updateDeviceActionParameterVisibility();
     bool updateCurrentRuleFromWidgets();
     void updateCurrentDeviceActionFromWidgets();
     void updateCurrentChannelActionFromWidgets();
     void updateCurrentFeatureActionFromWidgets();
+    QList<SchedulerSettings::SettingValue> settingValuesFromTable(QTableWidget *table) const;
+    void setSettingValuesToTable(QTableWidget *table, const QList<SchedulerSettings::SettingValue>& settings, void (SchedulerGUI::*editorChanged)());
+    void connectSettingTable(QTableWidget *table, QToolButton *addButton, QToolButton *deleteButton, void (SchedulerGUI::*editorChanged)());
     void updateEventSourceList(const QString& selectedSource);
     void updateDeviceSetList(const SchedulerSettings::DeviceSetAction *selectedAction);
     void updatePresetList(const SchedulerSettings::DeviceSetAction *selectedAction);

@@ -62,13 +62,30 @@ struct SchedulerSettings
         ActionAISTransmit,
         ActionFreqScannerRun,
         ActionFreqScannerStop,
-        ActionRadioAstronomyStart
+        ActionRadioAstronomyStart,
+        ActionApplySetting
     };
 
     enum DelayUnit
     {
         DelaySeconds = 0,
         DelayMinutes
+    };
+
+    enum SettingValueType
+    {
+        SettingString = 0,
+        SettingInteger,
+        SettingDouble
+    };
+
+    struct SettingValue
+    {
+        QString m_name;
+        QString m_value;
+        SettingValueType m_type;
+
+        SettingValue();
     };
 
     struct DeviceSetAction
@@ -82,6 +99,7 @@ struct SchedulerSettings
         RunAction m_fileSinkAction;
         bool m_overrideCenterFrequency;
         quint64 m_centerFrequency;
+        QList<SettingValue> m_settings;
 
         DeviceSetAction();
     };
@@ -97,6 +115,7 @@ struct SchedulerSettings
         int m_cameraImageCount;
         int m_cameraVideoDuration;
         QString m_findTarget;
+        QList<SettingValue> m_settings;
 
         FeatureAction();
     };
@@ -113,6 +132,7 @@ struct SchedulerSettings
         QString m_to;
         QString m_via;
         QString m_data;
+        QList<SettingValue> m_settings;
 
         ChannelAction();
     };

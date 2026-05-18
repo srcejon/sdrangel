@@ -21,7 +21,9 @@
 #include <QComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QAbstractItemView>
 #include <QHeaderView>
+#include <QHBoxLayout>
 #include <QItemSelectionModel>
 #include <QLineEdit>
 #include <QRegularExpression>
@@ -30,6 +32,7 @@
 #include <QTableWidgetItem>
 #include <QTimeEdit>
 #include <QToolButton>
+#include <QVBoxLayout>
 
 #include "device/deviceset.h"
 #include "channel/channelapi.h"
@@ -79,6 +82,8 @@ bool channelSupportsAction(const QString& channelId, SchedulerSettings::RunActio
 {
     switch (action)
     {
+    case SchedulerSettings::ActionApplySetting:
+        return !channelId.isEmpty();
     case SchedulerSettings::ActionFileSinkRecordStart:
     case SchedulerSettings::ActionFileSinkRecordStop:
         return channelId == "sdrangel.channel.filesink";
@@ -117,6 +122,8 @@ bool featureSupportsAction(const QString& featureId, SchedulerSettings::RunActio
         return featureId == "sdrangel.feature.camera";
     case SchedulerSettings::ActionMapFind:
         return (featureId == "sdrangel.feature.map") || (featureId == "sdrangel.feature.skymap");
+    case SchedulerSettings::ActionApplySetting:
+        return !featureId.isEmpty();
     default:
         return false;
     }
@@ -245,7 +252,19 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     m_cameraVideoDurationLabel(nullptr),
     m_cameraVideoDuration(nullptr),
     m_findActionGroup(nullptr),
-    m_findTarget(nullptr)
+    m_findTarget(nullptr),
+    m_deviceSettingsGroup(nullptr),
+    m_deviceSettingsTable(nullptr),
+    m_addDeviceSetting(nullptr),
+    m_deleteDeviceSetting(nullptr),
+    m_channelSettingsGroup(nullptr),
+    m_channelSettingsTable(nullptr),
+    m_addChannelSetting(nullptr),
+    m_deleteChannelSetting(nullptr),
+    m_featureSettingsGroup(nullptr),
+    m_featureSettingsTable(nullptr),
+    m_addFeatureSetting(nullptr),
+    m_deleteFeatureSetting(nullptr)
 {
     (void) pluginAPI;
     (void) featureUISet;
@@ -256,6 +275,7 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
 
     RollupContents *rollupContents = getRollupContents();
     ui->setupUi(rollupContents);
+    createDeviceActionParameterEditors();
     createChannelActionParameterEditors();
     createFeatureActionParameterEditors();
     rollupContents->arrangeRollups();
@@ -335,6 +355,7 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->acquisitionAction->addItem(tr("No change"), SchedulerSettings::ActionNoChange);
     ui->acquisitionAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
     ui->acquisitionAction->addItem(tr("Stop"), SchedulerSettings::ActionStop);
+    ui->acquisitionAction->addItem(tr("Apply setting"), SchedulerSettings::ActionApplySetting);
     ui->fileSinkAction->addItem(tr("No change"), SchedulerSettings::ActionNoChange);
     ui->fileSinkAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
     ui->fileSinkAction->addItem(tr("Stop"), SchedulerSettings::ActionStop);
@@ -417,6 +438,7 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->fileSinkAction, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onDeviceEditorChanged);
     connect(ui->overrideFrequency, &QCheckBox::toggled, this, &SchedulerGUI::onDeviceEditorChanged);
     connect(ui->centerFrequency, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &SchedulerGUI::onDeviceEditorChanged);
+    connectSettingTable(m_deviceSettingsTable, m_addDeviceSetting, m_deleteDeviceSetting, &SchedulerGUI::onDeviceEditorChanged);
 
     connect(ui->channelDeviceSet, &QComboBox::currentTextChanged, this, [this](const QString&) {
         if (!m_populating) {
@@ -438,6 +460,7 @@ void SchedulerGUI::makeUIConnections()
     connect(m_packetTo, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
     connect(m_packetVia, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
     connect(m_packetData, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
+    connectSettingTable(m_channelSettingsTable, m_addChannelSetting, m_deleteChannelSetting, &SchedulerGUI::onChannelEditorChanged);
 
     connect(ui->featureSelect, &QComboBox::currentTextChanged, this, [this](const QString&) {
         if (!m_populating) {
@@ -451,6 +474,18 @@ void SchedulerGUI::makeUIConnections()
     connect(m_cameraImageCount, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onFeatureEditorChanged);
     connect(m_cameraVideoDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onFeatureEditorChanged);
     connect(m_findTarget, &QLineEdit::editingFinished, this, &SchedulerGUI::onFeatureEditorChanged);
+    connectSettingTable(m_featureSettingsTable, m_addFeatureSetting, m_deleteFeatureSetting, &SchedulerGUI::onFeatureEditorChanged);
+}
+
+void SchedulerGUI::createDeviceActionParameterEditors()
+{
+    createApplySettingsEditor(
+        m_deviceSettingsGroup,
+        m_deviceSettingsTable,
+        m_addDeviceSetting,
+        m_deleteDeviceSetting,
+        ui->deviceGroup,
+        ui->deviceGroupLayout);
 }
 
 void SchedulerGUI::createFeatureActionParameterEditors()
@@ -486,6 +521,14 @@ void SchedulerGUI::createFeatureActionParameterEditors()
     m_findTarget = new QLineEdit(m_findActionGroup);
     findLayout->addRow(tr("Target"), m_findTarget);
     ui->featureGroupLayout->addWidget(m_findActionGroup);
+
+    createApplySettingsEditor(
+        m_featureSettingsGroup,
+        m_featureSettingsTable,
+        m_addFeatureSetting,
+        m_deleteFeatureSetting,
+        ui->featureGroup,
+        ui->featureGroupLayout);
 }
 
 void SchedulerGUI::createChannelActionParameterEditors()
@@ -513,6 +556,144 @@ void SchedulerGUI::createChannelActionParameterEditors()
     packetLayout->addRow(tr("Via"), m_packetVia);
     packetLayout->addRow(tr("Data"), m_packetData);
     ui->channelGroupLayout->addWidget(m_packetActionGroup);
+
+    createApplySettingsEditor(
+        m_channelSettingsGroup,
+        m_channelSettingsTable,
+        m_addChannelSetting,
+        m_deleteChannelSetting,
+        ui->channelGroup,
+        ui->channelGroupLayout);
+}
+
+void SchedulerGUI::createApplySettingsEditor(
+        QGroupBox *&group,
+        QTableWidget *&table,
+        QToolButton *&addButton,
+        QToolButton *&deleteButton,
+        QWidget *parent,
+        QLayout *targetLayout)
+{
+    group = new QGroupBox(tr("Apply Settings"), parent);
+    QVBoxLayout *layout = new QVBoxLayout(group);
+    table = new QTableWidget(group);
+    table->setColumnCount(3);
+    table->setHorizontalHeaderLabels(QStringList({tr("Setting"), tr("Value"), tr("Type")}));
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    table->verticalHeader()->setVisible(false);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    addButton = new QToolButton(group);
+    deleteButton = new QToolButton(group);
+    addButton->setText(QStringLiteral("+"));
+    deleteButton->setText(QStringLiteral("-"));
+    addButton->setToolTip(tr("Add setting"));
+    deleteButton->setToolTip(tr("Delete setting"));
+    buttonLayout->addWidget(addButton);
+    buttonLayout->addWidget(deleteButton);
+    buttonLayout->addStretch(1);
+
+    layout->addWidget(table);
+    layout->addLayout(buttonLayout);
+    targetLayout->addWidget(group);
+}
+
+QList<SchedulerSettings::SettingValue> SchedulerGUI::settingValuesFromTable(QTableWidget *table) const
+{
+    QList<SchedulerSettings::SettingValue> settings;
+
+    for (int row = 0; row < table->rowCount(); ++row)
+    {
+        SchedulerSettings::SettingValue setting;
+        QTableWidgetItem *nameItem = table->item(row, 0);
+        QTableWidgetItem *valueItem = table->item(row, 1);
+        QComboBox *type = qobject_cast<QComboBox *>(table->cellWidget(row, 2));
+
+        setting.m_name = nameItem ? nameItem->text().trimmed() : QString();
+        setting.m_value = valueItem ? valueItem->text() : QString();
+        setting.m_type = type
+            ? static_cast<SchedulerSettings::SettingValueType>(type->currentData().toInt())
+            : SchedulerSettings::SettingString;
+
+        if (!setting.m_name.isEmpty()) {
+            settings.append(setting);
+        }
+    }
+
+    return settings;
+}
+
+void SchedulerGUI::setSettingValuesToTable(QTableWidget *table, const QList<SchedulerSettings::SettingValue>& settings, void (SchedulerGUI::*editorChanged)())
+{
+    table->setRowCount(settings.size());
+
+    for (int row = 0; row < settings.size(); ++row)
+    {
+        const SchedulerSettings::SettingValue& setting = settings[row];
+        table->setItem(row, 0, new QTableWidgetItem(setting.m_name));
+        table->setItem(row, 1, new QTableWidgetItem(setting.m_value));
+
+        QComboBox *type = new QComboBox(table);
+        type->addItem(tr("String"), SchedulerSettings::SettingString);
+        type->addItem(tr("Integer"), SchedulerSettings::SettingInteger);
+        type->addItem(tr("Double"), SchedulerSettings::SettingDouble);
+        type->setCurrentIndex(type->findData(setting.m_type));
+        connect(type, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, editorChanged](int) {
+            if (!m_populating) {
+                (this->*editorChanged)();
+            }
+        });
+        table->setCellWidget(row, 2, type);
+    }
+}
+
+void SchedulerGUI::connectSettingTable(QTableWidget *table, QToolButton *addButton, QToolButton *deleteButton, void (SchedulerGUI::*editorChanged)())
+{
+    connect(table, &QTableWidget::itemChanged, this, [this, editorChanged](QTableWidgetItem *) {
+        if (!m_populating) {
+            (this->*editorChanged)();
+        }
+    });
+
+    connect(addButton, &QToolButton::clicked, this, [this, table, editorChanged]() {
+        if (m_populating) {
+            return;
+        }
+
+        const int row = table->rowCount();
+        table->insertRow(row);
+        table->setItem(row, 0, new QTableWidgetItem());
+        table->setItem(row, 1, new QTableWidgetItem());
+
+        QComboBox *type = new QComboBox(table);
+        type->addItem(tr("String"), SchedulerSettings::SettingString);
+        type->addItem(tr("Integer"), SchedulerSettings::SettingInteger);
+        type->addItem(tr("Double"), SchedulerSettings::SettingDouble);
+        connect(type, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, editorChanged](int) {
+            if (!m_populating) {
+                (this->*editorChanged)();
+            }
+        });
+        table->setCellWidget(row, 2, type);
+        table->selectRow(row);
+        (this->*editorChanged)();
+    });
+
+    connect(deleteButton, &QToolButton::clicked, this, [this, table, editorChanged]() {
+        if (m_populating) {
+            return;
+        }
+
+        const int row = table->currentRow();
+        if (row >= 0) {
+            table->removeRow(row);
+            (this->*editorChanged)();
+        }
+    });
 }
 
 bool SchedulerGUI::handleMessage(const Message& message)
@@ -811,6 +992,7 @@ void SchedulerGUI::displayDeviceActionEditor()
         ui->fileSinkAction->setCurrentIndex(ui->fileSinkAction->findData(action->m_fileSinkAction));
         ui->overrideFrequency->setChecked(action->m_overrideCenterFrequency);
         ui->centerFrequency->setValue(action->m_centerFrequency / 1000000.0);
+        setSettingValuesToTable(m_deviceSettingsTable, action->m_settings, &SchedulerGUI::onDeviceEditorChanged);
     }
     else
     {
@@ -818,8 +1000,10 @@ void SchedulerGUI::displayDeviceActionEditor()
         ui->fileSinkAction->setCurrentIndex(ui->fileSinkAction->findData(SchedulerSettings::ActionNoChange));
         ui->overrideFrequency->setChecked(false);
         ui->centerFrequency->setValue(0.0);
+        setSettingValuesToTable(m_deviceSettingsTable, QList<SchedulerSettings::SettingValue>(), &SchedulerGUI::onDeviceEditorChanged);
     }
 
+    updateDeviceActionParameterVisibility();
     m_populating = false;
 }
 
@@ -846,6 +1030,7 @@ void SchedulerGUI::displayChannelActionEditor()
         m_packetTo->setText(action->m_to);
         m_packetVia->setText(action->m_via);
         m_packetData->setText(action->m_data);
+        setSettingValuesToTable(m_channelSettingsTable, action->m_settings, &SchedulerGUI::onChannelEditorChanged);
     }
     else
     {
@@ -855,6 +1040,7 @@ void SchedulerGUI::displayChannelActionEditor()
         m_packetTo->clear();
         m_packetVia->clear();
         m_packetData->clear();
+        setSettingValuesToTable(m_channelSettingsTable, QList<SchedulerSettings::SettingValue>(), &SchedulerGUI::onChannelEditorChanged);
     }
 
     updateChannelActionParameterVisibility();
@@ -883,6 +1069,7 @@ void SchedulerGUI::displayFeatureActionEditor()
         m_cameraImageCount->setValue(action->m_cameraImageCount);
         m_cameraVideoDuration->setValue(action->m_cameraVideoDuration);
         m_findTarget->setText(action->m_findTarget);
+        setSettingValuesToTable(m_featureSettingsTable, action->m_settings, &SchedulerGUI::onFeatureEditorChanged);
     }
     else
     {
@@ -895,6 +1082,7 @@ void SchedulerGUI::displayFeatureActionEditor()
         m_cameraImageCount->setValue(1);
         m_cameraVideoDuration->setValue(0);
         m_findTarget->clear();
+        setSettingValuesToTable(m_featureSettingsTable, QList<SchedulerSettings::SettingValue>(), &SchedulerGUI::onFeatureEditorChanged);
     }
 
     ui->featureAction->setEnabled(hasAction && (ui->featureAction->count() > 0));
@@ -910,6 +1098,7 @@ void SchedulerGUI::updateChannelActionParameterVisibility()
     const bool data = (action == SchedulerSettings::ActionIEEE_802_15_4Transmit)
         || (action == SchedulerSettings::ActionAISTransmit);
     const bool packet = action == SchedulerSettings::ActionPacketTransmit;
+    const bool settings = action == SchedulerSettings::ActionApplySetting;
 
     m_channelTextGroup->setVisible(text);
     m_channelTextGroup->setEnabled(text);
@@ -917,6 +1106,8 @@ void SchedulerGUI::updateChannelActionParameterVisibility()
     m_channelDataGroup->setEnabled(data);
     m_packetActionGroup->setVisible(packet);
     m_packetActionGroup->setEnabled(packet);
+    m_channelSettingsGroup->setVisible(settings);
+    m_channelSettingsGroup->setEnabled(settings);
     getRollupContents()->arrangeRollups();
 }
 
@@ -930,6 +1121,7 @@ void SchedulerGUI::updateFeatureActionParameterVisibility()
     const bool saveImage = cameraFeature && (featureAction == SchedulerSettings::ActionCameraSaveImage);
     const bool recordVideo = cameraFeature && (featureAction == SchedulerSettings::ActionCameraRecordVideo);
     const bool find = findFeature && (featureAction == SchedulerSettings::ActionMapFind);
+    const bool settings = featureAction == SchedulerSettings::ActionApplySetting;
     const bool showCameraParams = saveImage || recordVideo;
 
     m_cameraActionGroup->setVisible(showCameraParams);
@@ -940,6 +1132,16 @@ void SchedulerGUI::updateFeatureActionParameterVisibility()
     m_cameraVideoDuration->setVisible(recordVideo);
     m_findActionGroup->setVisible(find);
     m_findActionGroup->setEnabled(find);
+    m_featureSettingsGroup->setVisible(settings);
+    m_featureSettingsGroup->setEnabled(settings);
+    getRollupContents()->arrangeRollups();
+}
+
+void SchedulerGUI::updateDeviceActionParameterVisibility()
+{
+    const bool settings = ui->acquisitionAction->currentData().toInt() == SchedulerSettings::ActionApplySetting;
+    m_deviceSettingsGroup->setVisible(settings);
+    m_deviceSettingsGroup->setEnabled(settings);
     getRollupContents()->arrangeRollups();
 }
 
@@ -1040,6 +1242,7 @@ void SchedulerGUI::updateCurrentDeviceActionFromWidgets()
     action->m_fileSinkAction = static_cast<SchedulerSettings::RunAction>(ui->fileSinkAction->currentData().toInt());
     action->m_overrideCenterFrequency = ui->overrideFrequency->isChecked();
     action->m_centerFrequency = qRound64(ui->centerFrequency->value() * 1000000.0);
+    action->m_settings = settingValuesFromTable(m_deviceSettingsTable);
 }
 
 void SchedulerGUI::updateCurrentChannelActionFromWidgets()
@@ -1088,6 +1291,7 @@ void SchedulerGUI::updateCurrentChannelActionFromWidgets()
     action->m_to = m_packetTo->text();
     action->m_via = m_packetVia->text();
     action->m_data = (action->m_action == SchedulerSettings::ActionPacketTransmit) ? m_packetData->text() : m_channelData->text();
+    action->m_settings = settingValuesFromTable(m_channelSettingsTable);
 }
 
 void SchedulerGUI::updateCurrentFeatureActionFromWidgets()
@@ -1130,6 +1334,7 @@ void SchedulerGUI::updateCurrentFeatureActionFromWidgets()
     action->m_cameraImageCount = m_cameraImageCount->value();
     action->m_cameraVideoDuration = m_cameraVideoDuration->value();
     action->m_findTarget = m_findTarget->text();
+    action->m_settings = settingValuesFromTable(m_featureSettingsTable);
 }
 
 void SchedulerGUI::updateEventSourceList(const QString& selectedSource)
@@ -1388,6 +1593,7 @@ void SchedulerGUI::updateChannelActionList(const SchedulerSettings::ChannelActio
     addAction(tr("Run scanner"), SchedulerSettings::ActionFreqScannerRun);
     addAction(tr("Stop scanner"), SchedulerSettings::ActionFreqScannerStop);
     addAction(tr("Start sweep"), SchedulerSettings::ActionRadioAstronomyStart);
+    addAction(tr("Apply setting"), SchedulerSettings::ActionApplySetting);
 
     const int index = ui->channelAction->findData(selected);
     if (index >= 0) {
@@ -1468,6 +1674,7 @@ void SchedulerGUI::updateFeatureActionList(const SchedulerSettings::FeatureActio
     addAction(tr("Save image"), SchedulerSettings::ActionCameraSaveImage);
     addAction(tr("Record video"), SchedulerSettings::ActionCameraRecordVideo);
     addAction(tr("Find"), SchedulerSettings::ActionMapFind);
+    addAction(tr("Apply setting"), SchedulerSettings::ActionApplySetting);
 
     const int index = ui->featureAction->findData(selected);
     if (index >= 0) {
@@ -1833,6 +2040,8 @@ QString SchedulerGUI::runActionText(SchedulerSettings::RunAction action) const
         return tr("Stop scanner");
     case SchedulerSettings::ActionRadioAstronomyStart:
         return tr("Start sweep");
+    case SchedulerSettings::ActionApplySetting:
+        return tr("Apply setting");
     case SchedulerSettings::ActionNoChange:
     default:
         return tr("No change");
@@ -2203,6 +2412,7 @@ void SchedulerGUI::onDeviceEditorChanged()
     }
     refreshDeviceActionsTable();
     selectDeviceAction(row);
+    updateDeviceActionParameterVisibility();
     refreshChannelActionsTable();
     selectChannelAction(m_currentChannelAction);
     displayChannelActionEditor();

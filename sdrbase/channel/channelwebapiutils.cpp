@@ -1759,6 +1759,62 @@ bool ChannelWebAPIUtils::stopFeature(unsigned int featureSetIndex, unsigned int 
     return true;
 }
 
+bool ChannelWebAPIUtils::patchDeviceSetting(unsigned int deviceIndex, const QString &setting, const QString &value)
+{
+    SWGSDRangel::SWGDeviceSettings deviceSettingsResponse;
+    int httpRC;
+    DeviceSet *deviceSet;
+
+    if (getDeviceSettings(deviceIndex, deviceSettingsResponse, deviceSet))
+    {
+        // Patch setting
+        QJsonObject *jsonObj = deviceSettingsResponse.asJsonObject();
+        QString oldValue;
+        if (WebAPIUtils::getSubObjectString(*jsonObj, setting, oldValue))
+        {
+            WebAPIUtils::setSubObjectString(*jsonObj, setting, value);
+            QStringList deviceSettingsKeys;
+            deviceSettingsKeys.append(setting);
+            deviceSettingsResponse.init();
+            deviceSettingsResponse.fromJsonObject(*jsonObj);
+            SWGSDRangel::SWGErrorResponse errorResponse2;
+            delete jsonObj;
+
+            if (DeviceSampleSource *source = deviceSet->m_deviceAPI->getSampleSource()) {
+                httpRC = source->webapiSettingsPutPatch(false, deviceSettingsKeys, deviceSettingsResponse, *errorResponse2.getMessage());
+            } else if (DeviceSampleSink *sink = deviceSet->m_deviceAPI->getSampleSink()) {
+                httpRC = sink->webapiSettingsPutPatch(false, deviceSettingsKeys, deviceSettingsResponse, *errorResponse2.getMessage());
+            } else if (DeviceSampleMIMO *mimo = deviceSet->m_deviceAPI->getSampleMIMO()) {
+                httpRC = mimo->webapiSettingsPutPatch(false, deviceSettingsKeys, deviceSettingsResponse, *errorResponse2.getMessage());
+            } else {
+                httpRC = 404;
+            }
+
+            if (httpRC/100 == 2)
+            {
+                qDebug("ChannelWebAPIUtils::patchDeviceSetting: set device setting %s to %s OK", qPrintable(setting), qPrintable(value));
+                return true;
+            }
+            else
+            {
+                qWarning("ChannelWebAPIUtils::patchDeviceSetting: set device setting %s to %s error %d: %s",
+                    qPrintable(setting), qPrintable(value), httpRC, qPrintable(*errorResponse2.getMessage()));
+                return false;
+            }
+        }
+        else
+        {
+            delete jsonObj;
+            qWarning("ChannelWebAPIUtils::patchDeviceSetting: no key %s in device settings", qPrintable(setting));
+            return false;
+        }
+    }
+    else
+    {
+        return false;
+    }
+}
+
 bool ChannelWebAPIUtils::patchDeviceSetting(unsigned int deviceIndex, const QString &setting, int value)
 {
     SWGSDRangel::SWGDeviceSettings deviceSettingsResponse;
@@ -1906,6 +1962,55 @@ bool ChannelWebAPIUtils::patchFeatureSetting(unsigned int featureSetIndex, unsig
             {
                 qWarning("ChannelWebAPIUtils::patchFeatureSetting: set feature setting %s to %s error %d: %s",
                     qPrintable(setting), qPrintable(value), httpRC, qPrintable(*errorResponse2.getMessage()));
+                return false;
+            }
+        }
+        else
+        {
+            delete jsonObj;
+            qWarning("ChannelWebAPIUtils::patchFeatureSetting: no key %s in feature settings", qPrintable(setting));
+            return false;
+        }
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool ChannelWebAPIUtils::patchFeatureSetting(unsigned int featureSetIndex, unsigned int featureIndex, const QString &setting, int value)
+{
+    SWGSDRangel::SWGFeatureSettings featureSettingsResponse;
+    QString errorResponse;
+    int httpRC;
+    Feature *feature;
+
+    if (getFeatureSettings(featureSetIndex, featureIndex, featureSettingsResponse, feature))
+    {
+        // Patch settings
+        QJsonObject *jsonObj = featureSettingsResponse.asJsonObject();
+        int oldValue;
+        if (WebAPIUtils::getSubObjectInt(*jsonObj, setting, oldValue))
+        {
+            WebAPIUtils::setSubObjectInt(*jsonObj, setting, value);
+            QStringList featureSettingsKeys;
+            featureSettingsKeys.append(setting);
+            featureSettingsResponse.init();
+            featureSettingsResponse.fromJsonObject(*jsonObj);
+            SWGSDRangel::SWGErrorResponse errorResponse2;
+            delete jsonObj;
+
+            httpRC = feature->webapiSettingsPutPatch(false, featureSettingsKeys, featureSettingsResponse, *errorResponse2.getMessage());
+
+            if (httpRC/100 == 2)
+            {
+                qDebug("ChannelWebAPIUtils::patchFeatureSetting: set feature setting %s to %d OK", qPrintable(setting), value);
+                return true;
+            }
+            else
+            {
+                qWarning("ChannelWebAPIUtils::patchFeatureSetting: set feature setting %s to %d error %d: %s",
+                    qPrintable(setting), value, httpRC, qPrintable(*errorResponse2.getMessage()));
                 return false;
             }
         }

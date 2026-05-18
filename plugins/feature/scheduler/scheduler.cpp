@@ -678,10 +678,11 @@ void Scheduler::executeDeviceActions(const QList<SchedulerSettings::DeviceSetAct
             ChannelWebAPIUtils::run(action.m_deviceSetIndex);
         } else if (action.m_acquisitionAction == SchedulerSettings::ActionStop) {
             ChannelWebAPIUtils::stop(action.m_deviceSetIndex);
-        } else if (action.m_acquisitionAction == SchedulerSettings::ActionApplySetting) {
-            for (const SchedulerSettings::SettingValue& setting : action.m_settings) {
-                patchDeviceSetting(action.m_deviceSetIndex, setting);
-            }
+        }
+
+        for (const SchedulerSettings::SettingValue& setting : action.m_settings)
+        {
+            patchDeviceSetting(action.m_deviceSetIndex, setting);
         }
     }
 

@@ -355,7 +355,6 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->acquisitionAction->addItem(tr("No change"), SchedulerSettings::ActionNoChange);
     ui->acquisitionAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
     ui->acquisitionAction->addItem(tr("Stop"), SchedulerSettings::ActionStop);
-    ui->acquisitionAction->addItem(tr("Apply setting"), SchedulerSettings::ActionApplySetting);
     ui->fileSinkAction->addItem(tr("No change"), SchedulerSettings::ActionNoChange);
     ui->fileSinkAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
     ui->fileSinkAction->addItem(tr("Stop"), SchedulerSettings::ActionStop);
@@ -988,7 +987,10 @@ void SchedulerGUI::displayDeviceActionEditor()
 
     if (hasAction)
     {
-        ui->acquisitionAction->setCurrentIndex(ui->acquisitionAction->findData(action->m_acquisitionAction));
+        const int acquisitionIndex = ui->acquisitionAction->findData(action->m_acquisitionAction);
+        ui->acquisitionAction->setCurrentIndex(acquisitionIndex >= 0
+            ? acquisitionIndex
+            : ui->acquisitionAction->findData(SchedulerSettings::ActionNoChange));
         ui->fileSinkAction->setCurrentIndex(ui->fileSinkAction->findData(action->m_fileSinkAction));
         ui->overrideFrequency->setChecked(action->m_overrideCenterFrequency);
         ui->centerFrequency->setValue(action->m_centerFrequency / 1000000.0);
@@ -1139,9 +1141,9 @@ void SchedulerGUI::updateFeatureActionParameterVisibility()
 
 void SchedulerGUI::updateDeviceActionParameterVisibility()
 {
-    const bool settings = ui->acquisitionAction->currentData().toInt() == SchedulerSettings::ActionApplySetting;
-    m_deviceSettingsGroup->setVisible(settings);
-    m_deviceSettingsGroup->setEnabled(settings);
+    const bool hasAction = currentDeviceAction() != nullptr;
+    m_deviceSettingsGroup->setVisible(hasAction);
+    m_deviceSettingsGroup->setEnabled(hasAction);
     getRollupContents()->arrangeRollups();
 }
 

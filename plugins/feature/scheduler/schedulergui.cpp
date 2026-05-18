@@ -102,6 +102,28 @@ bool channelSupportsAction(const QString& channelId, SchedulerSettings::RunActio
     }
 }
 
+bool ruleHasDeviceSetAction(const SchedulerSettings::ScheduleRule& rule, int deviceSetIndex)
+{
+    for (const SchedulerSettings::DeviceSetAction& action : rule.m_deviceSetActions)
+    {
+        if (action.m_deviceSetIndex == deviceSetIndex) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void pruneChannelActionsForDeviceSets(SchedulerSettings::ScheduleRule& rule)
+{
+    for (int i = rule.m_channelActions.size() - 1; i >= 0; --i)
+    {
+        if (!ruleHasDeviceSetAction(rule, rule.m_channelActions[i].m_deviceSetIndex)) {
+            rule.m_channelActions.removeAt(i);
+        }
+    }
+}
+
 bool parseFeatureKey(const QString& key, int& featureSetIndex, int& featureIndex)
 {
     const QStringList parts = key.split(':');
@@ -1178,16 +1200,23 @@ void SchedulerGUI::updateChannelDeviceSetList(const SchedulerSettings::ChannelAc
 {
     ui->channelDeviceSet->clear();
 
-    const std::vector<DeviceSet*>& deviceSets = MainCore::instance()->getDeviceSets();
+    const SchedulerSettings::ScheduleRule *rule = currentRule();
     bool found = false;
 
-    for (int i = 0; i < (int) deviceSets.size(); ++i)
+    if (rule)
     {
-        const QString id = deviceSetId(i);
-        ui->channelDeviceSet->addItem(id, i);
+        for (const SchedulerSettings::DeviceSetAction& deviceAction : rule->m_deviceSetActions)
+        {
+            if (ui->channelDeviceSet->findData(deviceAction.m_deviceSetIndex) >= 0) {
+                continue;
+            }
 
-        if (selectedAction && (selectedAction->m_deviceSetIndex == i)) {
-            found = true;
+            const QString id = deviceActionText(deviceAction);
+            ui->channelDeviceSet->addItem(id, deviceAction.m_deviceSetIndex);
+
+            if (selectedAction && (selectedAction->m_deviceSetIndex == deviceAction.m_deviceSetIndex)) {
+                found = true;
+            }
         }
     }
 
@@ -1907,6 +1936,7 @@ void SchedulerGUI::onAddDeviceAction()
     refreshDeviceActionsTable();
     selectDeviceAction(m_currentDeviceAction);
     displayDeviceActionEditor();
+    displayChannelActionEditor();
     refreshRulesTable();
     applyRules();
 }
@@ -1919,12 +1949,19 @@ void SchedulerGUI::onDeleteDeviceAction()
     }
 
     rule->m_deviceSetActions.removeAt(m_currentDeviceAction);
+    pruneChannelActionsForDeviceSets(*rule);
     if (m_currentDeviceAction >= rule->m_deviceSetActions.size()) {
         m_currentDeviceAction = rule->m_deviceSetActions.size() - 1;
+    }
+    if (m_currentChannelAction >= rule->m_channelActions.size()) {
+        m_currentChannelAction = rule->m_channelActions.size() - 1;
     }
     refreshDeviceActionsTable();
     selectDeviceAction(m_currentDeviceAction);
     displayDeviceActionEditor();
+    refreshChannelActionsTable();
+    selectChannelAction(m_currentChannelAction);
+    displayChannelActionEditor();
     refreshRulesTable();
     applyRules();
 }
@@ -1932,23 +1969,22 @@ void SchedulerGUI::onDeleteDeviceAction()
 void SchedulerGUI::onAddChannelAction()
 {
     SchedulerSettings::ScheduleRule *rule = currentRule();
-    if (!rule) {
+    if (!rule || rule->m_deviceSetActions.isEmpty()) {
         return;
     }
 
     SchedulerSettings::ChannelAction action;
-    const std::vector<DeviceSet*>& deviceSets = MainCore::instance()->getDeviceSets();
-    if (!deviceSets.empty())
-    {
-        action.m_deviceSetIndex = 0;
-        action.m_deviceSetId = deviceSetId(0);
+    const SchedulerSettings::DeviceSetAction& deviceAction = rule->m_deviceSetActions.first();
+    action.m_deviceSetIndex = deviceAction.m_deviceSetIndex;
+    action.m_deviceSetId = deviceActionText(deviceAction);
 
-        if (deviceSets[0]->getNumberOfChannels() > 0)
-        {
-            ChannelAPI *channel = deviceSets[0]->getChannelAt(0);
-            action.m_channelIndex = 0;
-            action.m_channelId = channel ? channel->getURI() : QString();
-        }
+    const std::vector<DeviceSet*>& deviceSets = MainCore::instance()->getDeviceSets();
+    if ((action.m_deviceSetIndex >= 0) && (action.m_deviceSetIndex < (int) deviceSets.size())
+        && (deviceSets[action.m_deviceSetIndex]->getNumberOfChannels() > 0))
+    {
+        ChannelAPI *channel = deviceSets[action.m_deviceSetIndex]->getChannelAt(0);
+        action.m_channelIndex = 0;
+        action.m_channelId = channel ? channel->getURI() : QString();
     }
 
     rule->m_channelActions.append(action);
@@ -2051,8 +2087,18 @@ void SchedulerGUI::onDeviceEditorChanged()
 
     const int row = m_currentDeviceAction;
     updateCurrentDeviceActionFromWidgets();
+    SchedulerSettings::ScheduleRule *rule = currentRule();
+    if (rule) {
+        pruneChannelActionsForDeviceSets(*rule);
+        if (m_currentChannelAction >= rule->m_channelActions.size()) {
+            m_currentChannelAction = rule->m_channelActions.size() - 1;
+        }
+    }
     refreshDeviceActionsTable();
     selectDeviceAction(row);
+    refreshChannelActionsTable();
+    selectChannelAction(m_currentChannelAction);
+    displayChannelActionEditor();
     refreshRulesTable();
     selectRule(m_currentRule);
     applyRules();

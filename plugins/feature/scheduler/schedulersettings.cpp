@@ -282,7 +282,7 @@ SchedulerSettings::FeatureAction::FeatureAction() :
 SchedulerSettings::ChannelAction::ChannelAction() :
     m_deviceSetIndex(0),
     m_channelIndex(0),
-    m_action(ActionFileSinkRecordStart)
+    m_action(ActionNoChange)
 {
 }
 

@@ -1279,8 +1279,8 @@ void SchedulerGUI::updateChannelActionList(const SchedulerSettings::ChannelActio
     const QString channelId = ui->channelSelect->currentData(Qt::UserRole + 1).toString();
     ui->channelAction->clear();
 
-    auto addAction = [this, &channelId, selected](const QString& text, SchedulerSettings::RunAction action) {
-        if (channelSupportsAction(channelId, action) || (selected == action)) {
+    auto addAction = [this, &channelId](const QString& text, SchedulerSettings::RunAction action) {
+        if (channelSupportsAction(channelId, action)) {
             ui->channelAction->addItem(text, action);
         }
     };
@@ -1304,6 +1304,8 @@ void SchedulerGUI::updateChannelActionList(const SchedulerSettings::ChannelActio
     } else if (ui->channelAction->count() > 0) {
         ui->channelAction->setCurrentIndex(0);
     }
+
+    ui->channelAction->setEnabled(ui->channelAction->count() > 0);
 }
 
 void SchedulerGUI::updateFeatureList(const SchedulerSettings::FeatureAction *selectedAction)

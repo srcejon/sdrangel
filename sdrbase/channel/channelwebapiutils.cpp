@@ -26,7 +26,18 @@
 #include "SWGDeviceReport.h"
 #include "SWGChannelSettings.h"
 #include "SWGChannelActions.h"
+#include "SWGAISModActions.h"
 #include "SWGFileSinkActions.h"
+#include "SWGFreqScannerActions.h"
+#include "SWGIEEE_802_15_4_ModActions.h"
+#include "SWGPacketModActions.h"
+#include "SWGPacketModActions_payload.h"
+#include "SWGPSK31ModActions.h"
+#include "SWGPSK31ModActions_payload.h"
+#include "SWGRadioAstronomyActions.h"
+#include "SWGRTTYModActions.h"
+#include "SWGRTTYModActions_payload.h"
+#include "SWGSigMFFileSinkActions.h"
 #include "SWGFeatureSettings.h"
 #include "SWGFeatureReport.h"
 
@@ -1078,6 +1089,349 @@ bool ChannelWebAPIUtils::startStopFileSinks(unsigned int deviceIndex, bool start
         }
         channelIndex++;
     }
+    return true;
+}
+
+bool ChannelWebAPIUtils::fileSinkRecord(unsigned int deviceIndex, unsigned int channelIndex, bool record)
+{
+    ChannelAPI *channel = MainCore::instance()->getChannel(deviceIndex, channelIndex);
+
+    if (!channel)
+    {
+        qWarning("ChannelWebAPIUtils::fileSinkRecord: no channel R%u:%u", deviceIndex, channelIndex);
+        return false;
+    }
+
+    if (!ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channel.filesink"))
+    {
+        qWarning("ChannelWebAPIUtils::fileSinkRecord: channel R%u:%u is not a FileSink", deviceIndex, channelIndex);
+        return false;
+    }
+
+    QStringList channelActionKeys = {"record"};
+    SWGSDRangel::SWGChannelActions channelActions;
+    SWGSDRangel::SWGFileSinkActions *fileSinkActions = new SWGSDRangel::SWGFileSinkActions();
+    QString errorResponse;
+    int httpRC;
+
+    fileSinkActions->setRecord(record ? 1 : 0);
+    channelActions.setFileSinkActions(fileSinkActions);
+    httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+
+    if (httpRC/100 != 2)
+    {
+        qWarning("ChannelWebAPIUtils::fileSinkRecord: webapiActionsPost error %d: %s",
+            httpRC, qPrintable(errorResponse));
+        return false;
+    }
+
+    return true;
+}
+
+bool ChannelWebAPIUtils::sigMFRecord(unsigned int deviceIndex, unsigned int channelIndex, bool record)
+{
+    ChannelAPI *channel = MainCore::instance()->getChannel(deviceIndex, channelIndex);
+
+    if (!channel)
+    {
+        qWarning("ChannelWebAPIUtils::sigMFRecord: no channel R%u:%u", deviceIndex, channelIndex);
+        return false;
+    }
+
+    if (!ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channel.sigmffilesink"))
+    {
+        qWarning("ChannelWebAPIUtils::sigMFRecord: channel R%u:%u is not a SigMFFileSink", deviceIndex, channelIndex);
+        return false;
+    }
+
+    QStringList channelActionKeys = {"record"};
+    SWGSDRangel::SWGChannelActions channelActions;
+    SWGSDRangel::SWGSigMFFileSinkActions *sigMFFileSinkActions = new SWGSDRangel::SWGSigMFFileSinkActions();
+    QString errorResponse;
+    int httpRC;
+
+    sigMFFileSinkActions->setRecord(record ? 1 : 0);
+    channelActions.setSigMfFileSinkActions(sigMFFileSinkActions);
+    httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+
+    if (httpRC/100 != 2)
+    {
+        qWarning("ChannelWebAPIUtils::sigMFRecord: webapiActionsPost error %d: %s",
+            httpRC, qPrintable(errorResponse));
+        return false;
+    }
+
+    return true;
+}
+
+bool ChannelWebAPIUtils::aisModTransmit(unsigned int deviceIndex, unsigned int channelIndex, const QString& data)
+{
+    ChannelAPI *channel = MainCore::instance()->getChannel(deviceIndex, channelIndex);
+
+    if (!channel)
+    {
+        qWarning("ChannelWebAPIUtils::aisModTransmit: no channel R%u:%u", deviceIndex, channelIndex);
+        return false;
+    }
+
+    if (!ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channel.modais"))
+    {
+        qWarning("ChannelWebAPIUtils::aisModTransmit: channel R%u:%u is not an AISMod", deviceIndex, channelIndex);
+        return false;
+    }
+
+    QStringList channelActionKeys = {"tx", "data"};
+    SWGSDRangel::SWGChannelActions channelActions;
+    SWGSDRangel::SWGAISModActions *aisModActions = new SWGSDRangel::SWGAISModActions();
+    QString errorResponse;
+    int httpRC;
+
+    aisModActions->setTx(1);
+    aisModActions->setData(new QString(data));
+    channelActions.setAisModActions(aisModActions);
+    httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+
+    if (httpRC/100 != 2)
+    {
+        qWarning("ChannelWebAPIUtils::aisModTransmit: webapiActionsPost error %d: %s",
+            httpRC, qPrintable(errorResponse));
+        return false;
+    }
+
+    return true;
+}
+
+bool ChannelWebAPIUtils::rttyModTransmit(unsigned int deviceIndex, unsigned int channelIndex, const QString& text)
+{
+    ChannelAPI *channel = MainCore::instance()->getChannel(deviceIndex, channelIndex);
+
+    if (!channel)
+    {
+        qWarning("ChannelWebAPIUtils::rttyModTransmit: no channel R%u:%u", deviceIndex, channelIndex);
+        return false;
+    }
+
+    if (!ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channeltx.modrtty"))
+    {
+        qWarning("ChannelWebAPIUtils::rttyModTransmit: channel R%u:%u is not an RTTYMod", deviceIndex, channelIndex);
+        return false;
+    }
+
+    QStringList channelActionKeys = {"tx", "payload"};
+    SWGSDRangel::SWGChannelActions channelActions;
+    SWGSDRangel::SWGRTTYModActions *rttyModActions = new SWGSDRangel::SWGRTTYModActions();
+    SWGSDRangel::SWGRTTYModActions_payload *payload = new SWGSDRangel::SWGRTTYModActions_payload();
+    QString errorResponse;
+    int httpRC;
+
+    rttyModActions->setTx(1);
+    payload->setText(new QString(text));
+    rttyModActions->setPayload(payload);
+    channelActions.setRttyModActions(rttyModActions);
+    httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+
+    if (httpRC/100 != 2)
+    {
+        qWarning("ChannelWebAPIUtils::rttyModTransmit: webapiActionsPost error %d: %s",
+            httpRC, qPrintable(errorResponse));
+        return false;
+    }
+
+    return true;
+}
+
+bool ChannelWebAPIUtils::psk31ModTransmit(unsigned int deviceIndex, unsigned int channelIndex, const QString& text)
+{
+    ChannelAPI *channel = MainCore::instance()->getChannel(deviceIndex, channelIndex);
+
+    if (!channel)
+    {
+        qWarning("ChannelWebAPIUtils::psk31ModTransmit: no channel R%u:%u", deviceIndex, channelIndex);
+        return false;
+    }
+
+    if (!ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channeltx.modpsk31"))
+    {
+        qWarning("ChannelWebAPIUtils::psk31ModTransmit: channel R%u:%u is not a PSK31Mod", deviceIndex, channelIndex);
+        return false;
+    }
+
+    QStringList channelActionKeys = {"tx", "payload"};
+    SWGSDRangel::SWGChannelActions channelActions;
+    SWGSDRangel::SWGPSK31ModActions *psk31ModActions = new SWGSDRangel::SWGPSK31ModActions();
+    SWGSDRangel::SWGPSK31ModActions_payload *payload = new SWGSDRangel::SWGPSK31ModActions_payload();
+    QString errorResponse;
+    int httpRC;
+
+    psk31ModActions->setTx(1);
+    payload->setText(new QString(text));
+    psk31ModActions->setPayload(payload);
+    channelActions.setPsk31ModActions(psk31ModActions);
+    httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+
+    if (httpRC/100 != 2)
+    {
+        qWarning("ChannelWebAPIUtils::psk31ModTransmit: webapiActionsPost error %d: %s",
+            httpRC, qPrintable(errorResponse));
+        return false;
+    }
+
+    return true;
+}
+
+bool ChannelWebAPIUtils::packetModTransmit(
+    unsigned int deviceIndex,
+    unsigned int channelIndex,
+    const QString& callsign,
+    const QString& to,
+    const QString& via,
+    const QString& data)
+{
+    ChannelAPI *channel = MainCore::instance()->getChannel(deviceIndex, channelIndex);
+
+    if (!channel)
+    {
+        qWarning("ChannelWebAPIUtils::packetModTransmit: no channel R%u:%u", deviceIndex, channelIndex);
+        return false;
+    }
+
+    if (!ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channeltx.modpacket"))
+    {
+        qWarning("ChannelWebAPIUtils::packetModTransmit: channel R%u:%u is not a PacketMod", deviceIndex, channelIndex);
+        return false;
+    }
+
+    QStringList channelActionKeys = {"tx", "payload"};
+    SWGSDRangel::SWGChannelActions channelActions;
+    SWGSDRangel::SWGPacketModActions *packetModActions = new SWGSDRangel::SWGPacketModActions();
+    SWGSDRangel::SWGPacketModActions_payload *payload = new SWGSDRangel::SWGPacketModActions_payload();
+    QString errorResponse;
+    int httpRC;
+
+    packetModActions->setTx(1);
+    payload->setCallsign(new QString(callsign));
+    payload->setTo(new QString(to));
+    payload->setVia(new QString(via));
+    payload->setData(new QString(data));
+    packetModActions->setPayload(payload);
+    channelActions.setPacketModActions(packetModActions);
+    httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+
+    if (httpRC/100 != 2)
+    {
+        qWarning("ChannelWebAPIUtils::packetModTransmit: webapiActionsPost error %d: %s",
+            httpRC, qPrintable(errorResponse));
+        return false;
+    }
+
+    return true;
+}
+
+bool ChannelWebAPIUtils::ieee_802_15_4Transmit(unsigned int deviceIndex, unsigned int channelIndex, const QString& data)
+{
+    ChannelAPI *channel = MainCore::instance()->getChannel(deviceIndex, channelIndex);
+
+    if (!channel)
+    {
+        qWarning("ChannelWebAPIUtils::ieee_802_15_4Transmit: no channel R%u:%u", deviceIndex, channelIndex);
+        return false;
+    }
+
+    if (!ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channeltx.mod802.15.4"))
+    {
+        qWarning("ChannelWebAPIUtils::ieee_802_15_4Transmit: channel R%u:%u is not an IEEE_802_15_4_Mod", deviceIndex, channelIndex);
+        return false;
+    }
+
+    QStringList channelActionKeys = {"tx", "data"};
+    SWGSDRangel::SWGChannelActions channelActions;
+    SWGSDRangel::SWGIEEE_802_15_4_ModActions *ieee802154Actions = new SWGSDRangel::SWGIEEE_802_15_4_ModActions();
+    QString errorResponse;
+    int httpRC;
+
+    ieee802154Actions->setTx(1);
+    ieee802154Actions->setData(new QString(data));
+    channelActions.setIeee802154ModActions(ieee802154Actions);
+    httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+
+    if (httpRC/100 != 2)
+    {
+        qWarning("ChannelWebAPIUtils::ieee_802_15_4Transmit: webapiActionsPost error %d: %s",
+            httpRC, qPrintable(errorResponse));
+        return false;
+    }
+
+    return true;
+}
+
+bool ChannelWebAPIUtils::freqScannerRun(unsigned int deviceIndex, unsigned int channelIndex, bool run)
+{
+    ChannelAPI *channel = MainCore::instance()->getChannel(deviceIndex, channelIndex);
+
+    if (!channel)
+    {
+        qWarning("ChannelWebAPIUtils::freqScannerRun: no channel R%u:%u", deviceIndex, channelIndex);
+        return false;
+    }
+
+    if (!ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channel.freqscanner"))
+    {
+        qWarning("ChannelWebAPIUtils::freqScannerRun: channel R%u:%u is not a FreqScanner", deviceIndex, channelIndex);
+        return false;
+    }
+
+    QStringList channelActionKeys = {"run"};
+    SWGSDRangel::SWGChannelActions channelActions;
+    SWGSDRangel::SWGFreqScannerActions *freqScannerActions = new SWGSDRangel::SWGFreqScannerActions();
+    QString errorResponse;
+    int httpRC;
+
+    freqScannerActions->setRun(run ? 1 : 0);
+    channelActions.setFreqScannerActions(freqScannerActions);
+    httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+
+    if (httpRC/100 != 2)
+    {
+        qWarning("ChannelWebAPIUtils::freqScannerRun: webapiActionsPost error %d: %s",
+            httpRC, qPrintable(errorResponse));
+        return false;
+    }
+
+    return true;
+}
+
+bool ChannelWebAPIUtils::radioAstronomyStart(unsigned int deviceIndex, unsigned int channelIndex)
+{
+    ChannelAPI *channel = MainCore::instance()->getChannel(deviceIndex, channelIndex);
+
+    if (!channel)
+    {
+        qWarning("ChannelWebAPIUtils::radioAstronomyStart: no channel R%u:%u", deviceIndex, channelIndex);
+        return false;
+    }
+
+    if (!ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channel.radioastronomy"))
+    {
+        qWarning("ChannelWebAPIUtils::radioAstronomyStart: channel R%u:%u is not a RadioAstronomy channel", deviceIndex, channelIndex);
+        return false;
+    }
+
+    QStringList channelActionKeys = {"start"};
+    SWGSDRangel::SWGChannelActions channelActions;
+    SWGSDRangel::SWGRadioAstronomyActions *radioAstronomyActions = new SWGSDRangel::SWGRadioAstronomyActions();
+    QString errorResponse;
+    int httpRC;
+
+    channelActions.setRadioAstronomyActions(radioAstronomyActions);
+    httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+
+    if (httpRC/100 != 2)
+    {
+        qWarning("ChannelWebAPIUtils::radioAstronomyStart: webapiActionsPost error %d: %s",
+            httpRC, qPrintable(errorResponse));
+        return false;
+    }
+
     return true;
 }
 

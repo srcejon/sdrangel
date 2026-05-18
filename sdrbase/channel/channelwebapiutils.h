@@ -95,6 +95,15 @@ public:
     static bool getAudioMute(unsigned int deviceIndex, int channelIndex, bool& mute);
     static bool setAudioMute(unsigned int deviceIndex, int channelIndex, bool mute);
     static bool startStopFileSinks(unsigned int deviceIndex, bool start);
+    static bool fileSinkRecord(unsigned int deviceIndex, unsigned int channelIndex, bool record);
+    static bool sigMFRecord(unsigned int deviceIndex, unsigned int channelIndex, bool record);
+    static bool aisModTransmit(unsigned int deviceIndex, unsigned int channelIndex, const QString& data);
+    static bool rttyModTransmit(unsigned int deviceIndex, unsigned int channelIndex, const QString& text);
+    static bool psk31ModTransmit(unsigned int deviceIndex, unsigned int channelIndex, const QString& text);
+    static bool packetModTransmit(unsigned int deviceIndex, unsigned int channelIndex, const QString& callsign, const QString& to, const QString& via, const QString& data);
+    static bool ieee_802_15_4Transmit(unsigned int deviceIndex, unsigned int channelIndex, const QString& data);
+    static bool freqScannerRun(unsigned int deviceIndex, unsigned int channelIndex, bool run);
+    static bool radioAstronomyStart(unsigned int deviceIndex, unsigned int channelIndex);
     static bool satelliteAOS(const QString name, bool northToSouthPass, const QString &tle, QDateTime dateTime);
     static bool satelliteLOS(const QString name);
     static bool getDeviceSetting(unsigned int deviceIndex, const QString &setting, int &value);

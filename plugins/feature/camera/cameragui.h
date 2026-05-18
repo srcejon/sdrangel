@@ -267,6 +267,7 @@ private:
     void updateMotionExclusionRectsTable();
     void applyMotionExclusionRectsFromTable();
     void updateMotionExclusionPreview();
+    void updateYoloButtonEnabled();
     void updatePlateSolveStartModeUi();
     void setPreviewDrawMode(PreviewDrawMode mode);
     void setMotionExclusionDrawMode(bool enabled);

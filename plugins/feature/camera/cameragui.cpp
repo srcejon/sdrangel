@@ -1267,6 +1267,7 @@ void CameraGUI::displaySettings()
     ui->yoloButton->setChecked(m_settings.m_yoloEnabled);
     settingsUI()->yoloModelPathCombo->setCurrentText(m_settings.m_yoloModelPath);
     settingsUI()->yoloLabelsPathCombo->setCurrentText(m_settings.m_yoloLabelsPath);
+    updateYoloButtonEnabled();
     settingsUI()->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
     settingsUI()->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
     settingsUI()->yoloTargetCombo->setCurrentIndex((int) m_settings.m_yoloDnnTarget);
@@ -1692,11 +1693,13 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->yoloModelPathCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloModelPathCombo_currentIndexChanged);
     if (settingsUI()->yoloModelPathCombo->lineEdit()) {
         QObject::connect(settingsUI()->yoloModelPathCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_yoloModelPathEdit_editingFinished);
+        QObject::connect(settingsUI()->yoloModelPathCombo->lineEdit(), &QLineEdit::textChanged, this, [this]() { updateYoloButtonEnabled(); });
     }
     QObject::connect(settingsUI()->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
     QObject::connect(settingsUI()->yoloLabelsPathCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloLabelsPathCombo_currentIndexChanged);
     if (settingsUI()->yoloLabelsPathCombo->lineEdit()) {
         QObject::connect(settingsUI()->yoloLabelsPathCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_yoloLabelsPathEdit_editingFinished);
+        QObject::connect(settingsUI()->yoloLabelsPathCombo->lineEdit(), &QLineEdit::textChanged, this, [this]() { updateYoloButtonEnabled(); });
     }
     QObject::connect(settingsUI()->yoloLabelsPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloLabelsPathButton_clicked);
     QObject::connect(settingsUI()->yoloTargetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloTargetCombo_currentIndexChanged);
@@ -6084,6 +6087,19 @@ void CameraGUI::on_yoloButton_toggled(bool checked)
     applySetting("yoloEnabled");
 }
 
+void CameraGUI::updateYoloButtonEnabled()
+{
+    const bool hasModelPath = !settingsUI()->yoloModelPathCombo->currentText().trimmed().isEmpty();
+    const bool hasLabelsPath = !settingsUI()->yoloLabelsPathCombo->currentText().trimmed().isEmpty();
+    const bool enabled = hasModelPath && hasLabelsPath;
+
+    ui->yoloButton->setEnabled(enabled);
+
+    if (!enabled && ui->yoloButton->isChecked()) {
+        ui->yoloButton->setChecked(false);
+    }
+}
+
 void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& path)
 {
     if (settingKey == "yoloModelPath")
@@ -6101,6 +6117,7 @@ void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& p
         return;
     }
 
+    updateYoloButtonEnabled();
     applySetting(settingKey);
 }
 

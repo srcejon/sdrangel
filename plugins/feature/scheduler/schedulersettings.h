@@ -47,7 +47,10 @@ struct SchedulerSettings
     {
         ActionNoChange = 0,
         ActionStart,
-        ActionStop
+        ActionStop,
+        ActionCameraSaveImage,
+        ActionCameraRecordVideo,
+        ActionMapFind
     };
 
     enum DelayUnit
@@ -77,6 +80,11 @@ struct SchedulerSettings
         int m_featureIndex;
         QString m_featureId;
         RunAction m_action;
+        QString m_cameraFilename;
+        int m_cameraRecordMode;
+        int m_cameraImageCount;
+        int m_cameraVideoDuration;
+        QString m_findTarget;
 
         FeatureAction();
     };

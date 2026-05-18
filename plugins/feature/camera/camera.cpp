@@ -415,18 +415,106 @@ int Camera::webapiActionsPost(
 
     if (swgCameraActions)
     {
+        bool accepted = false;
+        bool startCamera = false;
+        CameraSettings settings = m_settings;
+        QList<QString> settingsKeys;
+        auto addSettingsKey = [&settingsKeys](const QString& key)
+        {
+            if (!settingsKeys.contains(key)) {
+                settingsKeys.append(key);
+            }
+        };
+
         if (featureActionsKeys.contains("run"))
         {
             bool featureRun = swgCameraActions->getRun() != 0;
             MsgStartStop *msg = MsgStartStop::create(featureRun);
             getInputMessageQueue()->push(msg);
-            return 202;
+            accepted = true;
         }
-        else
+
+        if (featureActionsKeys.contains("saveImage"))
+        {
+            SWGSDRangel::SWGCameraActions_saveImage *saveImage = swgCameraActions->getSaveImage();
+
+            if (!saveImage)
+            {
+                errorMessage = "Missing saveImage action";
+                return 400;
+            }
+
+            if (saveImage->getFilename() && !saveImage->getFilename()->isEmpty())
+            {
+                settings.m_imageFileName = *saveImage->getFilename();
+                addSettingsKey("imageFileName");
+            }
+
+            settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
+                static_cast<CameraSettings::SavedMediaMode>(saveImage->getRecordMode()),
+                CameraSettings::SavedMediaBoth);
+            settings.m_imageRecordLimit = qMax(CameraSettings::m_minNonNegative, saveImage->getImages());
+            settings.m_saveImage = true;
+            addSettingsKey("videoPostProcess");
+            addSettingsKey("imageRecordLimit");
+            addSettingsKey("saveImage");
+            startCamera = m_state == StIdle;
+            accepted = true;
+        }
+
+        if (featureActionsKeys.contains("recordVideo"))
+        {
+            SWGSDRangel::SWGCameraActions_recordVideo *recordVideo = swgCameraActions->getRecordVideo();
+
+            if (!recordVideo)
+            {
+                errorMessage = "Missing recordVideo action";
+                return 400;
+            }
+
+            if (recordVideo->getFilename() && !recordVideo->getFilename()->isEmpty())
+            {
+                settings.m_videoFileName = *recordVideo->getFilename();
+                addSettingsKey("videoFileName");
+            }
+
+            settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
+                static_cast<CameraSettings::SavedMediaMode>(recordVideo->getRecordMode()),
+                CameraSettings::SavedMediaBoth);
+            settings.m_videoRecordLimitSeconds = qMax(CameraSettings::m_minNonNegative, recordVideo->getDuration());
+            settings.m_saveVideo = true;
+            addSettingsKey("videoPostProcess");
+            addSettingsKey("videoRecordLimitSeconds");
+            addSettingsKey("saveVideo");
+            startCamera = m_state == StIdle;
+            accepted = true;
+        }
+
+        if (!accepted)
         {
             errorMessage = "Unknown action";
             return 400;
         }
+
+        if (!settingsKeys.isEmpty())
+        {
+            MsgConfigureCamera *msg = MsgConfigureCamera::create(settings, settingsKeys, false);
+            m_inputMessageQueue.push(msg);
+
+            if (m_guiMessageQueue)
+            {
+                MsgConfigureCamera *msgToGUI = MsgConfigureCamera::create(settings, settingsKeys, false);
+                m_guiMessageQueue->push(msgToGUI);
+            }
+        }
+
+        if (startCamera && !featureActionsKeys.contains("run"))
+        {
+            MsgStartStop *msg = MsgStartStop::create(true);
+            getInputMessageQueue()->push(msg);
+        }
+
+        return 202;
     }
     else
     {

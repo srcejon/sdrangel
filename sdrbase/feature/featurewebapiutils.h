@@ -23,6 +23,7 @@
 
 #include <QDateTime>
 #include <QObject>
+#include <QString>
 
 #include "export.h"
 
@@ -51,6 +52,8 @@ public:
     static bool stop(int featureSetIndex, int featureIndex);
     static bool mapFind(const QString& target, int featureSetIndex=-1, int featureIndex=-1);
     static bool mapSetDateTime(const QDateTime& dateTime, int featureSetIndex=-1, int featureIndex=-1);
+    static bool cameraSaveImage(const QString& filename=QString(), int recordMode=0, int images=1, int featureSetIndex=-1, int featureIndex=-1);
+    static bool cameraRecordVideo(const QString& filename=QString(), int recordMode=0, int duration=0, int featureSetIndex=-1, int featureIndex=-1);
     static bool skyMapFind(const QString& target, int featureSetIndex=-1, int featureIndex=-1);
     static bool openSkyMapAndFind(const QString& target);
     static Feature *getFeature(int& featureSetIndex, int& featureIndex, const QString& uri);

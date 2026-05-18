@@ -26,6 +26,84 @@
 
 namespace
 {
+void writeFeatureActionExtras(QDataStream& out, const QList<SchedulerSettings::ScheduleRule>& rules)
+{
+    out << quint32(1);
+    out << rules.size();
+
+    for (const SchedulerSettings::ScheduleRule& rule : rules)
+    {
+        out << rule.m_id;
+        out << rule.m_featureActions.size();
+
+        for (const SchedulerSettings::FeatureAction& action : rule.m_featureActions)
+        {
+            out << action.m_cameraFilename;
+            out << action.m_cameraRecordMode;
+            out << action.m_cameraImageCount;
+            out << action.m_cameraVideoDuration;
+            out << action.m_findTarget;
+        }
+    }
+}
+
+void readFeatureActionExtras(QDataStream& in, QList<SchedulerSettings::ScheduleRule>& rules)
+{
+    quint32 version = 0;
+    int ruleCount = 0;
+
+    in >> version;
+    if (version != 1) {
+        return;
+    }
+
+    in >> ruleCount;
+
+    for (int ruleIndex = 0; ruleIndex < ruleCount; ++ruleIndex)
+    {
+        QString ruleId;
+        int actionCount = 0;
+
+        in >> ruleId;
+        in >> actionCount;
+
+        SchedulerSettings::ScheduleRule *rule = nullptr;
+        for (SchedulerSettings::ScheduleRule& candidate : rules)
+        {
+            if (candidate.m_id == ruleId)
+            {
+                rule = &candidate;
+                break;
+            }
+        }
+
+        for (int actionIndex = 0; actionIndex < actionCount; ++actionIndex)
+        {
+            QString cameraFilename;
+            int cameraRecordMode = 0;
+            int cameraImageCount = 1;
+            int cameraVideoDuration = 0;
+            QString findTarget;
+
+            in >> cameraFilename;
+            in >> cameraRecordMode;
+            in >> cameraImageCount;
+            in >> cameraVideoDuration;
+            in >> findTarget;
+
+            if (rule && (actionIndex >= 0) && (actionIndex < rule->m_featureActions.size()))
+            {
+                SchedulerSettings::FeatureAction& action = rule->m_featureActions[actionIndex];
+                action.m_cameraFilename = cameraFilename;
+                action.m_cameraRecordMode = cameraRecordMode;
+                action.m_cameraImageCount = cameraImageCount;
+                action.m_cameraVideoDuration = cameraVideoDuration;
+                action.m_findTarget = findTarget;
+            }
+        }
+    }
+}
+
 QDateTime monthlyDateTime(const QDate& baseDate, const QTime& time, int monthOffset)
 {
     const QDate monthDate = QDate(baseDate.year(), baseDate.month(), 1).addMonths(monthOffset);
@@ -158,7 +236,10 @@ SchedulerSettings::DeviceSetAction::DeviceSetAction() :
 SchedulerSettings::FeatureAction::FeatureAction() :
     m_featureSetIndex(0),
     m_featureIndex(0),
-    m_action(ActionStart)
+    m_action(ActionStart),
+    m_cameraRecordMode(0),
+    m_cameraImageCount(1),
+    m_cameraVideoDuration(0)
 {
 }
 
@@ -194,10 +275,13 @@ QByteArray SchedulerSettings::serialize() const
 {
     SimpleSerializer s(1);
     QByteArray rulesBlob;
+    QByteArray featureActionExtrasBlob;
     QDataStream rulesStream(&rulesBlob, QIODevice::WriteOnly);
+    QDataStream featureActionExtrasStream(&featureActionExtrasBlob, QIODevice::WriteOnly);
 
     rulesStream << quint32(1);
     rulesStream << m_rules;
+    writeFeatureActionExtras(featureActionExtrasStream, m_rules);
 
     s.writeString(1, m_title);
     s.writeS32(2, m_workspaceIndex);
@@ -207,6 +291,7 @@ QByteArray SchedulerSettings::serialize() const
     }
     s.writeU32(5, m_rgbColor);
     s.writeBlob(6, rulesBlob);
+    s.writeBlob(7, featureActionExtrasBlob);
 
     return s.final();
 }
@@ -248,6 +333,13 @@ bool SchedulerSettings::deserialize(const QByteArray& data)
             if (rulesVersion == 1) {
                 rulesStream >> m_rules;
             }
+        }
+
+        d.readBlob(7, &blob);
+        if (!blob.isEmpty())
+        {
+            QDataStream featureActionExtrasStream(blob);
+            readFeatureActionExtras(featureActionExtrasStream, m_rules);
         }
 
         return true;

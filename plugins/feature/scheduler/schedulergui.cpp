@@ -19,6 +19,7 @@
 #include <QDoubleSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFormLayout>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QItemSelectionModel>
@@ -107,7 +108,16 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     m_populating(false),
     m_currentRule(-1),
     m_currentDeviceAction(-1),
-    m_currentFeatureAction(-1)
+    m_currentFeatureAction(-1),
+    m_cameraActionGroup(nullptr),
+    m_cameraFilename(nullptr),
+    m_cameraRecordMode(nullptr),
+    m_cameraImageCountLabel(nullptr),
+    m_cameraImageCount(nullptr),
+    m_cameraVideoDurationLabel(nullptr),
+    m_cameraVideoDuration(nullptr),
+    m_findActionGroup(nullptr),
+    m_findTarget(nullptr)
 {
     (void) pluginAPI;
     (void) featureUISet;
@@ -118,6 +128,7 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
 
     RollupContents *rollupContents = getRollupContents();
     ui->setupUi(rollupContents);
+    createFeatureActionParameterEditors();
     rollupContents->arrangeRollups();
     connect(rollupContents, SIGNAL(widgetRolled(QWidget*,bool)), this, SLOT(onWidgetRolled(QWidget*,bool)));
     sizeToContents();
@@ -191,6 +202,13 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->fileSinkAction->addItem(tr("Stop"), SchedulerSettings::ActionStop);
     ui->featureAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
     ui->featureAction->addItem(tr("Stop"), SchedulerSettings::ActionStop);
+    ui->featureAction->addItem(tr("Save image"), SchedulerSettings::ActionCameraSaveImage);
+    ui->featureAction->addItem(tr("Record video"), SchedulerSettings::ActionCameraRecordVideo);
+    ui->featureAction->addItem(tr("Find"), SchedulerSettings::ActionMapFind);
+
+    m_cameraRecordMode->addItem(tr("Raw"), 0);
+    m_cameraRecordMode->addItem(tr("Processed"), 1);
+    m_cameraRecordMode->addItem(tr("Both"), 2);
 
     ui->dateTime->setDisplayFormat(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
     ui->command->setToolTip(tr("Detached command. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source} and ${data}."));
@@ -253,6 +271,46 @@ void SchedulerGUI::makeUIConnections()
 
     connect(ui->featureSelect, &QComboBox::currentTextChanged, this, &SchedulerGUI::onFeatureEditorChanged);
     connect(ui->featureAction, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onFeatureEditorChanged);
+    connect(m_cameraFilename, &QLineEdit::editingFinished, this, &SchedulerGUI::onFeatureEditorChanged);
+    connect(m_cameraRecordMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onFeatureEditorChanged);
+    connect(m_cameraImageCount, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onFeatureEditorChanged);
+    connect(m_cameraVideoDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onFeatureEditorChanged);
+    connect(m_findTarget, &QLineEdit::editingFinished, this, &SchedulerGUI::onFeatureEditorChanged);
+}
+
+void SchedulerGUI::createFeatureActionParameterEditors()
+{
+    m_cameraActionGroup = new QGroupBox(tr("Camera Action Parameters"), ui->featureGroup);
+    QFormLayout *layout = new QFormLayout(m_cameraActionGroup);
+
+    m_cameraFilename = new QLineEdit(m_cameraActionGroup);
+    m_cameraFilename->setToolTip(tr("Optional filename. Leave empty to use the Camera feature setting."));
+
+    m_cameraRecordMode = new QComboBox(m_cameraActionGroup);
+
+    m_cameraImageCountLabel = new QLabel(tr("Images"), m_cameraActionGroup);
+    m_cameraImageCount = new QSpinBox(m_cameraActionGroup);
+    m_cameraImageCount->setRange(0, 1000000);
+    m_cameraImageCount->setToolTip(tr("Number of images to save. 0 records until stopped."));
+
+    m_cameraVideoDurationLabel = new QLabel(tr("Duration"), m_cameraActionGroup);
+    m_cameraVideoDuration = new QSpinBox(m_cameraActionGroup);
+    m_cameraVideoDuration->setRange(0, 86400);
+    m_cameraVideoDuration->setSuffix(tr(" s"));
+    m_cameraVideoDuration->setToolTip(tr("Video duration in seconds. 0 records until stopped."));
+
+    layout->addRow(tr("Filename"), m_cameraFilename);
+    layout->addRow(tr("Record mode"), m_cameraRecordMode);
+    layout->addRow(m_cameraImageCountLabel, m_cameraImageCount);
+    layout->addRow(m_cameraVideoDurationLabel, m_cameraVideoDuration);
+
+    ui->featureGroupLayout->addWidget(m_cameraActionGroup);
+
+    m_findActionGroup = new QGroupBox(tr("Find Action Parameters"), ui->featureGroup);
+    QFormLayout *findLayout = new QFormLayout(m_findActionGroup);
+    m_findTarget = new QLineEdit(m_findActionGroup);
+    findLayout->addRow(tr("Target"), m_findTarget);
+    ui->featureGroupLayout->addWidget(m_findActionGroup);
 }
 
 bool SchedulerGUI::handleMessage(const Message& message)
@@ -537,13 +595,50 @@ void SchedulerGUI::displayFeatureActionEditor()
     ui->featureAction->setEnabled(hasAction);
     updateFeatureList(action);
 
-    if (hasAction) {
+    if (hasAction)
+    {
         ui->featureAction->setCurrentIndex(ui->featureAction->findData(action->m_action));
-    } else {
+        m_cameraFilename->setText(action->m_cameraFilename);
+        m_cameraRecordMode->setCurrentIndex(m_cameraRecordMode->findData(action->m_cameraRecordMode));
+        m_cameraImageCount->setValue(action->m_cameraImageCount);
+        m_cameraVideoDuration->setValue(action->m_cameraVideoDuration);
+        m_findTarget->setText(action->m_findTarget);
+    }
+    else
+    {
         ui->featureAction->setCurrentIndex(ui->featureAction->findData(SchedulerSettings::ActionStart));
+        m_cameraFilename->clear();
+        m_cameraRecordMode->setCurrentIndex(m_cameraRecordMode->findData(0));
+        m_cameraImageCount->setValue(1);
+        m_cameraVideoDuration->setValue(0);
+        m_findTarget->clear();
     }
 
+    updateFeatureActionParameterVisibility();
     m_populating = false;
+}
+
+void SchedulerGUI::updateFeatureActionParameterVisibility()
+{
+    SchedulerSettings::FeatureAction *action = currentFeatureAction();
+    const int featureAction = ui->featureAction->currentData().toInt();
+    const bool cameraFeature = action && (action->m_featureId == "sdrangel.feature.camera");
+    const bool findFeature = action
+        && ((action->m_featureId == "sdrangel.feature.map") || (action->m_featureId == "sdrangel.feature.skymap"));
+    const bool saveImage = cameraFeature && (featureAction == SchedulerSettings::ActionCameraSaveImage);
+    const bool recordVideo = cameraFeature && (featureAction == SchedulerSettings::ActionCameraRecordVideo);
+    const bool find = findFeature && (featureAction == SchedulerSettings::ActionMapFind);
+    const bool showCameraParams = saveImage || recordVideo;
+
+    m_cameraActionGroup->setVisible(showCameraParams);
+    m_cameraActionGroup->setEnabled(showCameraParams);
+    m_cameraImageCountLabel->setVisible(saveImage);
+    m_cameraImageCount->setVisible(saveImage);
+    m_cameraVideoDurationLabel->setVisible(recordVideo);
+    m_cameraVideoDuration->setVisible(recordVideo);
+    m_findActionGroup->setVisible(find);
+    m_findActionGroup->setEnabled(find);
+    getRollupContents()->arrangeRollups();
 }
 
 bool SchedulerGUI::updateCurrentRuleFromWidgets()
@@ -678,6 +773,11 @@ void SchedulerGUI::updateCurrentFeatureActionFromWidgets()
     }
 
     action->m_action = static_cast<SchedulerSettings::RunAction>(ui->featureAction->currentData().toInt());
+    action->m_cameraFilename = m_cameraFilename->text();
+    action->m_cameraRecordMode = m_cameraRecordMode->currentData().toInt();
+    action->m_cameraImageCount = m_cameraImageCount->value();
+    action->m_cameraVideoDuration = m_cameraVideoDuration->value();
+    action->m_findTarget = m_findTarget->text();
 }
 
 void SchedulerGUI::updateEventSourceList(const QString& selectedSource)
@@ -1047,6 +1147,12 @@ QString SchedulerGUI::runActionText(SchedulerSettings::RunAction action) const
         return tr("Start");
     case SchedulerSettings::ActionStop:
         return tr("Stop");
+    case SchedulerSettings::ActionCameraSaveImage:
+        return tr("Save image");
+    case SchedulerSettings::ActionCameraRecordVideo:
+        return tr("Record video");
+    case SchedulerSettings::ActionMapFind:
+        return tr("Find");
     case SchedulerSettings::ActionNoChange:
     default:
         return tr("No change");
@@ -1353,6 +1459,7 @@ void SchedulerGUI::onFeatureEditorChanged()
 
     const int row = m_currentFeatureAction;
     updateCurrentFeatureActionFromWidgets();
+    updateFeatureActionParameterVisibility();
     refreshFeatureActionsTable();
     selectFeatureAction(row);
     refreshRulesTable();

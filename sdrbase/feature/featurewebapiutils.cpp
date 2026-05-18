@@ -18,6 +18,9 @@
 #include <QDebug>
 
 #include "SWGFeatureActions.h"
+#include "SWGCameraActions.h"
+#include "SWGCameraActions_recordVideo.h"
+#include "SWGCameraActions_saveImage.h"
 #include "SWGMapActions.h"
 #include "SWGPERTesterActions.h"
 #include "SWGDeviceState.h"
@@ -141,6 +144,80 @@ bool FeatureWebAPIUtils::mapSetDateTime(const QDateTime& dateTime, int featureSe
     else
     {
         qWarning("FeatureWebAPIUtils::mapSetDateTime: no Map feature");
+        return false;
+    }
+}
+
+// Save one or more frames from a Camera feature
+bool FeatureWebAPIUtils::cameraSaveImage(const QString& filename, int recordMode, int images, int featureSetIndex, int featureIndex)
+{
+    Feature *feature = FeatureWebAPIUtils::getFeature(featureSetIndex, featureIndex, "sdrangel.feature.camera");
+    if (feature != nullptr)
+    {
+        QString errorMessage;
+        QStringList featureActionKeys = {"saveImage"};
+        SWGSDRangel::SWGFeatureActions query;
+        SWGSDRangel::SWGCameraActions *cameraActions = new SWGSDRangel::SWGCameraActions();
+        SWGSDRangel::SWGCameraActions_saveImage *saveImage = new SWGSDRangel::SWGCameraActions_saveImage();
+
+        if (!filename.isEmpty()) {
+            saveImage->setFilename(new QString(filename));
+        }
+
+        saveImage->setRecordMode(recordMode);
+        saveImage->setImages(images);
+        cameraActions->setSaveImage(saveImage);
+        query.setCameraActions(cameraActions);
+
+        int httpRC = feature->webapiActionsPost(featureActionKeys, query, errorMessage);
+        if (httpRC/100 != 2)
+        {
+            qWarning() << "FeatureWebAPIUtils::cameraSaveImage: error " << httpRC << ":" << errorMessage;
+            return false;
+        }
+
+        return true;
+    }
+    else
+    {
+        qWarning("FeatureWebAPIUtils::cameraSaveImage: no Camera feature");
+        return false;
+    }
+}
+
+// Start video recording from a Camera feature
+bool FeatureWebAPIUtils::cameraRecordVideo(const QString& filename, int recordMode, int duration, int featureSetIndex, int featureIndex)
+{
+    Feature *feature = FeatureWebAPIUtils::getFeature(featureSetIndex, featureIndex, "sdrangel.feature.camera");
+    if (feature != nullptr)
+    {
+        QString errorMessage;
+        QStringList featureActionKeys = {"recordVideo"};
+        SWGSDRangel::SWGFeatureActions query;
+        SWGSDRangel::SWGCameraActions *cameraActions = new SWGSDRangel::SWGCameraActions();
+        SWGSDRangel::SWGCameraActions_recordVideo *recordVideo = new SWGSDRangel::SWGCameraActions_recordVideo();
+
+        if (!filename.isEmpty()) {
+            recordVideo->setFilename(new QString(filename));
+        }
+
+        recordVideo->setRecordMode(recordMode);
+        recordVideo->setDuration(duration);
+        cameraActions->setRecordVideo(recordVideo);
+        query.setCameraActions(cameraActions);
+
+        int httpRC = feature->webapiActionsPost(featureActionKeys, query, errorMessage);
+        if (httpRC/100 != 2)
+        {
+            qWarning() << "FeatureWebAPIUtils::cameraRecordVideo: error " << httpRC << ":" << errorMessage;
+            return false;
+        }
+
+        return true;
+    }
+    else
+    {
+        qWarning("FeatureWebAPIUtils::cameraRecordVideo: no Camera feature");
         return false;
     }
 }

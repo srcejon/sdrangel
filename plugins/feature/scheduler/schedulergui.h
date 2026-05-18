@@ -29,6 +29,11 @@ class Feature;
 class FeatureUISet;
 class PluginAPI;
 class Preset;
+class QComboBox;
+class QGroupBox;
+class QLabel;
+class QLineEdit;
+class QSpinBox;
 class QTableWidgetItem;
 class Scheduler;
 
@@ -67,6 +72,15 @@ private:
     int m_currentRule;
     int m_currentDeviceAction;
     int m_currentFeatureAction;
+    QGroupBox *m_cameraActionGroup;
+    QLineEdit *m_cameraFilename;
+    QComboBox *m_cameraRecordMode;
+    QLabel *m_cameraImageCountLabel;
+    QSpinBox *m_cameraImageCount;
+    QLabel *m_cameraVideoDurationLabel;
+    QSpinBox *m_cameraVideoDuration;
+    QGroupBox *m_findActionGroup;
+    QLineEdit *m_findTarget;
 
     explicit SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     ~SchedulerGUI() override;
@@ -82,6 +96,8 @@ private:
     void displayRuleEditor();
     void displayDeviceActionEditor();
     void displayFeatureActionEditor();
+    void createFeatureActionParameterEditors();
+    void updateFeatureActionParameterVisibility();
     bool updateCurrentRuleFromWidgets();
     void updateCurrentDeviceActionFromWidgets();
     void updateCurrentFeatureActionFromWidgets();

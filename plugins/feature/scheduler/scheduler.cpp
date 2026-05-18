@@ -651,6 +651,38 @@ void Scheduler::executeFeatureActions(const QList<SchedulerSettings::FeatureActi
             FeatureWebAPIUtils::run(action.m_featureSetIndex, action.m_featureIndex);
         } else if (action.m_action == SchedulerSettings::ActionStop) {
             FeatureWebAPIUtils::stop(action.m_featureSetIndex, action.m_featureIndex);
+        } else if ((action.m_action == SchedulerSettings::ActionCameraSaveImage)
+            && (action.m_featureId == "sdrangel.feature.camera"))
+        {
+            FeatureWebAPIUtils::cameraSaveImage(
+                action.m_cameraFilename,
+                action.m_cameraRecordMode,
+                action.m_cameraImageCount,
+                action.m_featureSetIndex,
+                action.m_featureIndex);
+        } else if ((action.m_action == SchedulerSettings::ActionCameraRecordVideo)
+            && (action.m_featureId == "sdrangel.feature.camera"))
+        {
+            FeatureWebAPIUtils::cameraRecordVideo(
+                action.m_cameraFilename,
+                action.m_cameraRecordMode,
+                action.m_cameraVideoDuration,
+                action.m_featureSetIndex,
+                action.m_featureIndex);
+        } else if ((action.m_action == SchedulerSettings::ActionMapFind)
+            && (action.m_featureId == "sdrangel.feature.map"))
+        {
+            FeatureWebAPIUtils::mapFind(
+                action.m_findTarget,
+                action.m_featureSetIndex,
+                action.m_featureIndex);
+        } else if ((action.m_action == SchedulerSettings::ActionMapFind)
+            && (action.m_featureId == "sdrangel.feature.skymap"))
+        {
+            FeatureWebAPIUtils::skyMapFind(
+                action.m_findTarget,
+                action.m_featureSetIndex,
+                action.m_featureIndex);
         }
     }
 }

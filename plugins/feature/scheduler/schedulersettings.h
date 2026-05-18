@@ -124,7 +124,9 @@ struct SchedulerSettings
         bool m_enabled;
         TriggerType m_triggerType;
         QDateTime m_time;
+        QDate m_dateUntil;
         Recurrence m_recurrence;
+        int m_weekdayMask;
         int m_eventType;
         QString m_eventSourceId;
         QString m_eventDataRegex;

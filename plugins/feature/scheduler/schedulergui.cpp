@@ -15,7 +15,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
-#include <QDateTimeEdit>
+#include <QDateEdit>
 #include <QDoubleSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
@@ -28,6 +28,7 @@
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTimeEdit>
 #include <QToolButton>
 
 #include "device/deviceset.h"
@@ -49,6 +50,8 @@ namespace
 {
 constexpr int PresetNone = -1;
 constexpr int PresetUnresolved = -2;
+constexpr int DefaultWeekdayMask = 0x7f;
+const QDate NoDateUntil(1900, 1, 1);
 
 QString presetText(const QString& group, quint64 frequency, const QString& description)
 {
@@ -100,6 +103,63 @@ bool channelSupportsAction(const QString& channelId, SchedulerSettings::RunActio
     default:
         return false;
     }
+}
+
+bool featureSupportsAction(const QString& featureId, SchedulerSettings::RunAction action)
+{
+    switch (action)
+    {
+    case SchedulerSettings::ActionStart:
+    case SchedulerSettings::ActionStop:
+        return !featureId.isEmpty();
+    case SchedulerSettings::ActionCameraSaveImage:
+    case SchedulerSettings::ActionCameraRecordVideo:
+        return featureId == "sdrangel.feature.camera";
+    case SchedulerSettings::ActionMapFind:
+        return (featureId == "sdrangel.feature.map") || (featureId == "sdrangel.feature.skymap");
+    default:
+        return false;
+    }
+}
+
+int weekdayMaskFromWidgets(const Ui::SchedulerGUI *ui)
+{
+    int mask = 0;
+
+    if (ui->monday->isChecked()) {
+        mask |= 1 << 0;
+    }
+    if (ui->tuesday->isChecked()) {
+        mask |= 1 << 1;
+    }
+    if (ui->wednesday->isChecked()) {
+        mask |= 1 << 2;
+    }
+    if (ui->thursday->isChecked()) {
+        mask |= 1 << 3;
+    }
+    if (ui->friday->isChecked()) {
+        mask |= 1 << 4;
+    }
+    if (ui->saturday->isChecked()) {
+        mask |= 1 << 5;
+    }
+    if (ui->sunday->isChecked()) {
+        mask |= 1 << 6;
+    }
+
+    return mask;
+}
+
+void setWeekdayWidgets(Ui::SchedulerGUI *ui, int mask)
+{
+    ui->monday->setChecked((mask & (1 << 0)) != 0);
+    ui->tuesday->setChecked((mask & (1 << 1)) != 0);
+    ui->wednesday->setChecked((mask & (1 << 2)) != 0);
+    ui->thursday->setChecked((mask & (1 << 3)) != 0);
+    ui->friday->setChecked((mask & (1 << 4)) != 0);
+    ui->saturday->setChecked((mask & (1 << 5)) != 0);
+    ui->sunday->setChecked((mask & (1 << 6)) != 0);
 }
 
 bool ruleHasDeviceSetAction(const SchedulerSettings::ScheduleRule& rule, int deviceSetIndex)
@@ -278,17 +338,16 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->fileSinkAction->addItem(tr("No change"), SchedulerSettings::ActionNoChange);
     ui->fileSinkAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
     ui->fileSinkAction->addItem(tr("Stop"), SchedulerSettings::ActionStop);
-    ui->featureAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
-    ui->featureAction->addItem(tr("Stop"), SchedulerSettings::ActionStop);
-    ui->featureAction->addItem(tr("Save image"), SchedulerSettings::ActionCameraSaveImage);
-    ui->featureAction->addItem(tr("Record video"), SchedulerSettings::ActionCameraRecordVideo);
-    ui->featureAction->addItem(tr("Find"), SchedulerSettings::ActionMapFind);
 
     m_cameraRecordMode->addItem(tr("Raw"), 0);
     m_cameraRecordMode->addItem(tr("Processed"), 1);
     m_cameraRecordMode->addItem(tr("Both"), 2);
 
-    ui->dateTime->setDisplayFormat(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+    ui->dateFrom->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+    ui->dateUntil->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+    ui->dateUntil->setMinimumDate(NoDateUntil);
+    ui->dateUntil->setSpecialValueText(tr("None"));
+    ui->time->setDisplayFormat(QStringLiteral("HH:mm:ss"));
     ui->command->setToolTip(tr("Detached command. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source} and ${data}."));
     ui->speech->setToolTip(tr("Text to speak. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source} and ${data}."));
     ui->eventSource->setToolTip(tr("Optional event source. Leave empty to match all producers on the event pipe."));
@@ -328,8 +387,17 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->ruleName, &QLineEdit::editingFinished, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->ruleEnabled, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->triggerType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
-    connect(ui->dateTime, &QDateTimeEdit::dateTimeChanged, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->dateFrom, &QDateEdit::dateChanged, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->time, &QTimeEdit::timeChanged, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->dateUntil, &QDateEdit::dateChanged, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->recurrence, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->monday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->tuesday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->wednesday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->thursday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->friday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->saturday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->sunday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventSource, &QComboBox::currentTextChanged, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventDataRegex, &QLineEdit::textChanged, this, &SchedulerGUI::onRuleEditorChanged);
@@ -371,7 +439,12 @@ void SchedulerGUI::makeUIConnections()
     connect(m_packetVia, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
     connect(m_packetData, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
 
-    connect(ui->featureSelect, &QComboBox::currentTextChanged, this, &SchedulerGUI::onFeatureEditorChanged);
+    connect(ui->featureSelect, &QComboBox::currentTextChanged, this, [this](const QString&) {
+        if (!m_populating) {
+            updateFeatureActionList(currentFeatureAction());
+            onFeatureEditorChanged();
+        }
+    });
     connect(ui->featureAction, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onFeatureEditorChanged);
     connect(m_cameraFilename, &QLineEdit::editingFinished, this, &SchedulerGUI::onFeatureEditorChanged);
     connect(m_cameraRecordMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onFeatureEditorChanged);
@@ -668,8 +741,12 @@ void SchedulerGUI::displayRuleEditor()
         ui->ruleName->setText(rule->m_name);
         ui->ruleEnabled->setChecked(rule->m_enabled);
         ui->triggerType->setCurrentIndex(ui->triggerType->findData(rule->m_triggerType));
-        ui->dateTime->setDateTime(rule->m_time.isValid() ? rule->m_time : QDateTime::currentDateTime().addSecs(60));
+        const QDateTime time = rule->m_time.isValid() ? rule->m_time : QDateTime::currentDateTime().addSecs(60);
+        ui->dateFrom->setDate(time.date());
+        ui->time->setTime(time.time());
+        ui->dateUntil->setDate(rule->m_dateUntil.isValid() ? rule->m_dateUntil : NoDateUntil);
         ui->recurrence->setCurrentIndex(ui->recurrence->findData(rule->m_recurrence));
+        setWeekdayWidgets(ui, rule->m_weekdayMask);
         ui->eventType->setCurrentIndex(ui->eventType->findData(rule->m_eventType));
         updateEventSourceList(rule->m_eventSourceId);
         ui->eventDataRegex->setText(rule->m_eventDataRegex);
@@ -682,7 +759,11 @@ void SchedulerGUI::displayRuleEditor()
     {
         ui->ruleName->clear();
         ui->ruleEnabled->setChecked(false);
-        ui->dateTime->setDateTime(QDateTime::currentDateTime().addSecs(60));
+        const QDateTime time = QDateTime::currentDateTime().addSecs(60);
+        ui->dateFrom->setDate(time.date());
+        ui->time->setTime(time.time());
+        ui->dateUntil->setDate(NoDateUntil);
+        setWeekdayWidgets(ui, DefaultWeekdayMask);
         updateEventSourceList(QString());
         ui->eventDataRegex->clear();
         ui->eventDelay->setValue(0);
@@ -789,10 +870,14 @@ void SchedulerGUI::displayFeatureActionEditor()
     ui->featureSelect->setEnabled(hasAction);
     ui->featureAction->setEnabled(hasAction);
     updateFeatureList(action);
+    updateFeatureActionList(action);
 
     if (hasAction)
     {
-        ui->featureAction->setCurrentIndex(ui->featureAction->findData(action->m_action));
+        const int actionIndex = ui->featureAction->findData(action->m_action);
+        if (actionIndex >= 0) {
+            ui->featureAction->setCurrentIndex(actionIndex);
+        }
         m_cameraFilename->setText(action->m_cameraFilename);
         m_cameraRecordMode->setCurrentIndex(m_cameraRecordMode->findData(action->m_cameraRecordMode));
         m_cameraImageCount->setValue(action->m_cameraImageCount);
@@ -801,7 +886,10 @@ void SchedulerGUI::displayFeatureActionEditor()
     }
     else
     {
-        ui->featureAction->setCurrentIndex(ui->featureAction->findData(SchedulerSettings::ActionStart));
+        const int actionIndex = ui->featureAction->findData(SchedulerSettings::ActionStart);
+        if (actionIndex >= 0) {
+            ui->featureAction->setCurrentIndex(actionIndex);
+        }
         m_cameraFilename->clear();
         m_cameraRecordMode->setCurrentIndex(m_cameraRecordMode->findData(0));
         m_cameraImageCount->setValue(1);
@@ -809,6 +897,7 @@ void SchedulerGUI::displayFeatureActionEditor()
         m_findTarget->clear();
     }
 
+    ui->featureAction->setEnabled(hasAction && (ui->featureAction->count() > 0));
     updateFeatureActionParameterVisibility();
     m_populating = false;
 }
@@ -877,8 +966,10 @@ bool SchedulerGUI::updateCurrentRuleFromWidgets()
     rule->m_name = ui->ruleName->text();
     rule->m_enabled = ui->ruleEnabled->isChecked();
     rule->m_triggerType = static_cast<SchedulerSettings::TriggerType>(triggerType);
-    rule->m_time = ui->dateTime->dateTime();
+    rule->m_time = QDateTime(ui->dateFrom->date(), ui->time->time());
+    rule->m_dateUntil = ui->dateUntil->date() == NoDateUntil ? QDate() : ui->dateUntil->date();
     rule->m_recurrence = static_cast<SchedulerSettings::Recurrence>(ui->recurrence->currentData().toInt());
+    rule->m_weekdayMask = weekdayMaskFromWidgets(ui);
     rule->m_eventType = ui->eventType->currentData().toInt();
 
     const QVariant sourceData = ui->eventSource->currentData();
@@ -1330,6 +1421,7 @@ void SchedulerGUI::updateFeatureList(const SchedulerSettings::FeatureAction *sel
                 .arg(title);
 
             ui->featureSelect->addItem(text, featureKey(fsi, fi));
+            ui->featureSelect->setItemData(ui->featureSelect->count() - 1, feature->getURI(), Qt::UserRole + 1);
 
             if (selectedAction && (selectedAction->m_featureSetIndex == fsi) && (selectedAction->m_featureIndex == fi)) {
                 found = true;
@@ -1345,6 +1437,7 @@ void SchedulerGUI::updateFeatureList(const SchedulerSettings::FeatureAction *sel
                 .arg(selectedAction->m_featureIndex)
                 .arg(selectedAction->m_featureId),
             QString());
+        ui->featureSelect->setItemData(ui->featureSelect->count() - 1, selectedAction->m_featureId, Qt::UserRole + 1);
     }
 
     if (selectedAction)
@@ -1358,12 +1451,48 @@ void SchedulerGUI::updateFeatureList(const SchedulerSettings::FeatureAction *sel
     }
 }
 
+void SchedulerGUI::updateFeatureActionList(const SchedulerSettings::FeatureAction *selectedAction)
+{
+    const SchedulerSettings::RunAction selected = selectedAction ? selectedAction->m_action : SchedulerSettings::ActionStart;
+    const QString featureId = ui->featureSelect->currentData(Qt::UserRole + 1).toString();
+    ui->featureAction->clear();
+
+    auto addAction = [this, &featureId](const QString& text, SchedulerSettings::RunAction action) {
+        if (featureSupportsAction(featureId, action)) {
+            ui->featureAction->addItem(text, action);
+        }
+    };
+
+    addAction(tr("Start"), SchedulerSettings::ActionStart);
+    addAction(tr("Stop"), SchedulerSettings::ActionStop);
+    addAction(tr("Save image"), SchedulerSettings::ActionCameraSaveImage);
+    addAction(tr("Record video"), SchedulerSettings::ActionCameraRecordVideo);
+    addAction(tr("Find"), SchedulerSettings::ActionMapFind);
+
+    const int index = ui->featureAction->findData(selected);
+    if (index >= 0) {
+        ui->featureAction->setCurrentIndex(index);
+    } else if (ui->featureAction->count() > 0) {
+        ui->featureAction->setCurrentIndex(0);
+    }
+
+    ui->featureAction->setEnabled(ui->featureAction->count() > 0);
+}
+
 void SchedulerGUI::updateTriggerVisibility()
 {
     const bool isTime = ui->triggerType->currentData().toInt() == SchedulerSettings::TriggerTime;
     ui->timeGroup->setVisible(isTime);
     ui->eventGroup->setVisible(!isTime);
+    updateTimeScheduleVisibility();
     getRollupContents()->arrangeRollups();
+}
+
+void SchedulerGUI::updateTimeScheduleVisibility()
+{
+    const bool isDaily = ui->recurrence->currentData().toInt() == SchedulerSettings::RecurrenceDaily;
+    ui->weekdaysLabel->setVisible(isDaily);
+    ui->weekdaysWidget->setVisible(isDaily);
 }
 
 void SchedulerGUI::updateRegexState()
@@ -1557,7 +1686,35 @@ QString SchedulerGUI::ruleTriggerText(const SchedulerSettings::ScheduleRule& rul
 
 QString SchedulerGUI::ruleRecurrenceDelayText(const SchedulerSettings::ScheduleRule& rule) const
 {
-    if (rule.m_triggerType == SchedulerSettings::TriggerTime) {
+    if (rule.m_triggerType == SchedulerSettings::TriggerTime)
+    {
+        if ((rule.m_recurrence == SchedulerSettings::RecurrenceDaily) && (rule.m_weekdayMask != DefaultWeekdayMask))
+        {
+            QStringList days;
+            if ((rule.m_weekdayMask & (1 << 0)) != 0) {
+                days.append(tr("Mon"));
+            }
+            if ((rule.m_weekdayMask & (1 << 1)) != 0) {
+                days.append(tr("Tue"));
+            }
+            if ((rule.m_weekdayMask & (1 << 2)) != 0) {
+                days.append(tr("Wed"));
+            }
+            if ((rule.m_weekdayMask & (1 << 3)) != 0) {
+                days.append(tr("Thu"));
+            }
+            if ((rule.m_weekdayMask & (1 << 4)) != 0) {
+                days.append(tr("Fri"));
+            }
+            if ((rule.m_weekdayMask & (1 << 5)) != 0) {
+                days.append(tr("Sat"));
+            }
+            if ((rule.m_weekdayMask & (1 << 6)) != 0) {
+                days.append(tr("Sun"));
+            }
+            return days.isEmpty() ? tr("Daily (no days)") : tr("Daily (%1)").arg(days.join(QStringLiteral(", ")));
+        }
+
         return recurrenceText(rule.m_recurrence);
     }
 

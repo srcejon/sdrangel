@@ -26,6 +26,24 @@
 
 namespace
 {
+constexpr int DefaultWeekdayMask = 0x7f;
+int g_deserializingRulesVersion = 4;
+
+int weekdayBit(const QDate& date)
+{
+    return 1 << (date.dayOfWeek() - 1);
+}
+
+bool weekdayMaskMatches(int weekdayMask, const QDate& date)
+{
+    return (weekdayMask & weekdayBit(date)) != 0;
+}
+
+bool isAfterDateUntil(const SchedulerSettings::ScheduleRule& rule, const QDateTime& candidate)
+{
+    return rule.m_dateUntil.isValid() && candidate.isValid() && (candidate.date() > rule.m_dateUntil);
+}
+
 void writeFeatureActionExtras(QDataStream& out, const QList<SchedulerSettings::ScheduleRule>& rules)
 {
     out << quint32(1);
@@ -209,7 +227,9 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::ScheduleRule&
     out << rule.m_enabled;
     out << static_cast<qint32>(rule.m_triggerType);
     out << rule.m_time;
+    out << rule.m_dateUntil;
     out << static_cast<qint32>(rule.m_recurrence);
+    out << rule.m_weekdayMask;
     out << rule.m_eventType;
     out << rule.m_eventSourceId;
     out << rule.m_eventDataRegex;
@@ -235,7 +255,13 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ScheduleRule& rule)
     in >> rule.m_enabled;
     in >> triggerType;
     in >> rule.m_time;
+    if (g_deserializingRulesVersion >= 4) {
+        in >> rule.m_dateUntil;
+    }
     in >> recurrence;
+    if (g_deserializingRulesVersion >= 3) {
+        in >> rule.m_weekdayMask;
+    }
     in >> rule.m_eventType;
     in >> rule.m_eventSourceId;
     in >> rule.m_eventDataRegex;
@@ -292,7 +318,9 @@ SchedulerSettings::ScheduleRule::ScheduleRule() :
     m_enabled(true),
     m_triggerType(TriggerTime),
     m_time(QDateTime::currentDateTime().addSecs(60)),
+    m_dateUntil(),
     m_recurrence(RecurrenceOnce),
+    m_weekdayMask(DefaultWeekdayMask),
     m_eventType(0),
     m_eventDelay(0),
     m_eventDelayUnit(DelaySeconds)
@@ -322,7 +350,7 @@ QByteArray SchedulerSettings::serialize() const
     QDataStream rulesStream(&rulesBlob, QIODevice::WriteOnly);
     QDataStream featureActionExtrasStream(&featureActionExtrasBlob, QIODevice::WriteOnly);
 
-    rulesStream << quint32(2);
+    rulesStream << quint32(4);
     rulesStream << m_rules;
     writeFeatureActionExtras(featureActionExtrasStream, m_rules);
 
@@ -373,8 +401,10 @@ bool SchedulerSettings::deserialize(const QByteArray& data)
             quint32 rulesVersion = 0;
             rulesStream >> rulesVersion;
 
-            if (rulesVersion == 2) {
+            if ((rulesVersion == 2) || (rulesVersion == 3) || (rulesVersion == 4)) {
+                g_deserializingRulesVersion = rulesVersion;
                 rulesStream >> m_rules;
+                g_deserializingRulesVersion = 4;
             }
         }
 
@@ -423,20 +453,27 @@ QDateTime SchedulerSettings::nextDateTime(const ScheduleRule& rule, const QDateT
     }
 
     if (rule.m_recurrence == RecurrenceOnce) {
-        return rule.m_time > after ? rule.m_time : QDateTime();
+        return (rule.m_time > after) && !isAfterDateUntil(rule, rule.m_time) ? rule.m_time : QDateTime();
     }
 
     if (rule.m_recurrence == RecurrenceDaily)
     {
+        if (rule.m_weekdayMask == 0) {
+            return QDateTime();
+        }
+
         qint64 days = rule.m_time.daysTo(after);
         if (days < 0) {
             days = 0;
         }
         QDateTime candidate = rule.m_time.addDays(days);
-        while (candidate <= after) {
+        while ((candidate <= after) || !weekdayMaskMatches(rule.m_weekdayMask, candidate.date())) {
             candidate = candidate.addDays(1);
+            if (isAfterDateUntil(rule, candidate)) {
+                return QDateTime();
+            }
         }
-        return candidate;
+        return isAfterDateUntil(rule, candidate) ? QDateTime() : candidate;
     }
 
     if (rule.m_recurrence == RecurrenceWeekly)
@@ -448,8 +485,11 @@ QDateTime SchedulerSettings::nextDateTime(const ScheduleRule& rule, const QDateT
         QDateTime candidate = rule.m_time.addDays((days / 7) * 7);
         while (candidate <= after) {
             candidate = candidate.addDays(7);
+            if (isAfterDateUntil(rule, candidate)) {
+                return QDateTime();
+            }
         }
-        return candidate;
+        return isAfterDateUntil(rule, candidate) ? QDateTime() : candidate;
     }
 
     if (rule.m_recurrence == RecurrenceMonthly)
@@ -464,6 +504,9 @@ QDateTime SchedulerSettings::nextDateTime(const ScheduleRule& rule, const QDateT
         for (int offset = qMax(0, months - 1); offset < months + 24; ++offset)
         {
             QDateTime candidate = monthlyDateTime(baseDate, rule.m_time.time(), offset);
+            if (isAfterDateUntil(rule, candidate)) {
+                return QDateTime();
+            }
             if (candidate > after) {
                 return candidate;
             }

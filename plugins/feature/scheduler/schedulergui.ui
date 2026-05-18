@@ -228,28 +228,126 @@
           </property>
           <layout class="QFormLayout" name="timeForm">
            <item row="0" column="0">
-            <widget class="QLabel" name="dateTimeLabel">
+            <widget class="QLabel" name="dateFromLabel">
              <property name="text">
-              <string>Date/time</string>
+              <string>Date from</string>
              </property>
             </widget>
            </item>
            <item row="0" column="1">
-            <widget class="QDateTimeEdit" name="dateTime">
+            <widget class="QDateEdit" name="dateFrom">
              <property name="calendarPopup">
               <bool>true</bool>
              </property>
             </widget>
            </item>
            <item row="1" column="0">
+            <widget class="QLabel" name="timeLabel">
+             <property name="text">
+              <string>Time</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QTimeEdit" name="time"/>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="dateUntilLabel">
+             <property name="text">
+              <string>Date until</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QDateEdit" name="dateUntil">
+             <property name="calendarPopup">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
             <widget class="QLabel" name="recurrenceLabel">
              <property name="text">
               <string>Recurrence</string>
              </property>
             </widget>
            </item>
-           <item row="1" column="1">
+           <item row="3" column="1">
             <widget class="QComboBox" name="recurrence"/>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="weekdaysLabel">
+             <property name="text">
+              <string>Days</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QWidget" name="weekdaysWidget" native="true">
+             <layout class="QHBoxLayout" name="weekdaysLayout">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QCheckBox" name="monday">
+                <property name="text">
+                 <string>Mon</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="tuesday">
+                <property name="text">
+                 <string>Tue</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="wednesday">
+                <property name="text">
+                 <string>Wed</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="thursday">
+                <property name="text">
+                 <string>Thu</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="friday">
+                <property name="text">
+                 <string>Fri</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="saturday">
+                <property name="text">
+                 <string>Sat</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="sunday">
+                <property name="text">
+                 <string>Sun</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
            </item>
           </layout>
          </widget>

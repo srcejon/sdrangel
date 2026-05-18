@@ -123,7 +123,9 @@ private:
     void updateChannelList(const SchedulerSettings::ChannelAction *selectedAction);
     void updateChannelActionList(const SchedulerSettings::ChannelAction *selectedAction);
     void updateFeatureList(const SchedulerSettings::FeatureAction *selectedAction);
+    void updateFeatureActionList(const SchedulerSettings::FeatureAction *selectedAction);
     void updateTriggerVisibility();
+    void updateTimeScheduleVisibility();
     void updateRegexState();
     void selectRule(int row);
     void selectDeviceAction(int row);

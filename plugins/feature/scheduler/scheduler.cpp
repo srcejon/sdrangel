@@ -426,8 +426,9 @@ QStringList Scheduler::eventTypeNames()
     return QStringList({
         QStringLiteral("Satellite AOS"),
         QStringLiteral("Satellite LOS"),
-        QStringLiteral("ADSB Aircraft Detected"),
-        QStringLiteral("ADSB Aircraft Lost"),
+        QStringLiteral("ADS-B Aircraft Detected"),
+        QStringLiteral("ADS-B Aircraft Lost"),
+        QStringLiteral("ADS-B Notification"),
         QStringLiteral("AIS Ship Detected"),
         QStringLiteral("AIS Ship Lost"),
         QStringLiteral("Star Rise"),
@@ -439,8 +440,8 @@ QStringList Scheduler::eventTypeNames()
         QStringLiteral("Camera Motion Stopped"),
         QStringLiteral("Camera Object In View"),
         QStringLiteral("Camera Object Out Of View"),
-        QStringLiteral("Packet Received")
-    });
+        QStringLiteral("Packet Received"),
+        });
 }
 
 QString Scheduler::eventTypeName(int eventType)

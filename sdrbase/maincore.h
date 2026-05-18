@@ -902,6 +902,7 @@ public:
              SatelliteLOSEvent,
              ADSBAircraftDetectedEvent,  // Data: type=B737 ICAO=123456   - from announcements?
              ADSBAircraftLostEvent,
+             ADSBNotificationEvent,      // When a notification is generated for an ADSB aircraft
              AISShipDetectedEvent,       // From feature, rather than demod
              AISShipLostEvent,
              StarRiseEvent,              // Data: name=Sun
@@ -913,7 +914,7 @@ public:
              CameraMotionStoppedEvent,
              CameraObjectInViewEvent,    // For objects from other features / channels
              CameraObjectOutOfViewEvent,
-             PacketReceivedEvent         // Data: data=deadbeef
+             PacketReceivedEvent,        // Data: data=deadbeef
          };
 
          // Allow matching on regexp of data? So data can be structured?

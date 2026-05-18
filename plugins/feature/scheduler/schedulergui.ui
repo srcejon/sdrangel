@@ -576,38 +576,14 @@
               <widget class="QComboBox" name="fileSinkAction"/>
              </item>
              <item row="4" column="0">
-              <widget class="QLabel" name="overrideFrequencyLabel">
-               <property name="text">
-                <string>Override frequency</string>
-               </property>
-              </widget>
-             </item>
-             <item row="4" column="1">
-              <widget class="QCheckBox" name="overrideFrequency">
-               <property name="text">
-                <string/>
-               </property>
-              </widget>
-             </item>
-             <item row="5" column="0">
               <widget class="QLabel" name="centerFrequencyLabel">
                <property name="text">
                 <string>Center frequency</string>
                </property>
               </widget>
              </item>
-             <item row="5" column="1">
-              <widget class="QDoubleSpinBox" name="centerFrequency">
-               <property name="suffix">
-                <string> MHz</string>
-               </property>
-               <property name="decimals">
-                <number>6</number>
-               </property>
-               <property name="maximum">
-                <double>999999.000000000000000</double>
-               </property>
-              </widget>
+             <item row="4" column="1">
+              <widget class="QLineEdit" name="centerFrequency"/>
              </item>
             </layout>
            </item>

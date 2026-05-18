@@ -65,6 +65,35 @@ QString schedulerDateTimeToString(const QDateTime& dateTime)
     return dateTime.isValid() ? dateTime.toString(Qt::ISODateWithMs) : QString();
 }
 
+bool parseFrequency(const QString& text, double& frequencyInHz)
+{
+    const QRegularExpression re(
+        QStringLiteral("^\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*([kKmMgG]?)(?:[hH][zZ])?\\s*$"));
+    const QRegularExpressionMatch match = re.match(text);
+
+    if (!match.hasMatch()) {
+        return false;
+    }
+
+    bool ok = false;
+    double value = match.captured(1).toDouble(&ok);
+    if (!ok) {
+        return false;
+    }
+
+    const QString unit = match.captured(2).toLower();
+    if (unit == QStringLiteral("k")) {
+        value *= 1e3;
+    } else if (unit == QStringLiteral("m")) {
+        value *= 1e6;
+    } else if (unit == QStringLiteral("g")) {
+        value *= 1e9;
+    }
+
+    frequencyInHz = value;
+    return true;
+}
+
 bool patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting)
 {
     switch (setting.m_type)
@@ -257,8 +286,9 @@ void Scheduler::webapiFormatFeatureSettings(
             swgAction->setPresetDescription(new QString(action.m_presetDescription));
             swgAction->setAcquisitionAction((int) action.m_acquisitionAction);
             swgAction->setFileSinkAction((int) action.m_fileSinkAction);
-            swgAction->setOverrideCenterFrequency(action.m_overrideCenterFrequency ? 1 : 0);
-            swgAction->setCenterFrequency((qint64) action.m_centerFrequency);
+            double centerFrequency = 0.0;
+            swgAction->setOverrideCenterFrequency(parseFrequency(action.m_centerFrequency, centerFrequency) ? 1 : 0);
+            swgAction->setCenterFrequency((qint64) qRound64(centerFrequency));
             swgDeviceActions->append(swgAction);
         }
         swgRule->setDeviceSetActions(swgDeviceActions);
@@ -357,8 +387,9 @@ void Scheduler::webapiUpdateFeatureSettings(
                         action.m_presetDescription = swgAction->getPresetDescription() ? *swgAction->getPresetDescription() : QString();
                         action.m_acquisitionAction = (SchedulerSettings::RunAction) swgAction->getAcquisitionAction();
                         action.m_fileSinkAction = (SchedulerSettings::RunAction) swgAction->getFileSinkAction();
-                        action.m_overrideCenterFrequency = swgAction->getOverrideCenterFrequency() != 0;
-                        action.m_centerFrequency = (quint64) swgAction->getCenterFrequency();
+                        action.m_centerFrequency = swgAction->getOverrideCenterFrequency() != 0
+                            ? QString::number(swgAction->getCenterFrequency())
+                            : QString();
                         rule.m_deviceSetActions.append(action);
                     }
                 }
@@ -664,11 +695,17 @@ void Scheduler::executeDeviceActions(const QList<SchedulerSettings::DeviceSetAct
 {
     for (const SchedulerSettings::DeviceSetAction& action : actions)
     {
-        if (action.m_overrideCenterFrequency)
+        double centerFrequency = 0.0;
+        if (!action.m_centerFrequency.isEmpty() && parseFrequency(action.m_centerFrequency, centerFrequency))
         {
             qDebug() << "Scheduler::executeDeviceActions: set center frequency"
-                     << action.m_centerFrequency << "on device set" << action.m_deviceSetIndex;
-            ChannelWebAPIUtils::setCenterFrequency(action.m_deviceSetIndex, action.m_centerFrequency);
+                     << centerFrequency << "on device set" << action.m_deviceSetIndex;
+            ChannelWebAPIUtils::setCenterFrequency(action.m_deviceSetIndex, centerFrequency);
+        }
+        else if (!action.m_centerFrequency.isEmpty())
+        {
+            qWarning() << "Scheduler::executeDeviceActions: invalid center frequency"
+                       << action.m_centerFrequency << "on device set" << action.m_deviceSetIndex;
         }
     }
 

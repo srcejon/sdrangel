@@ -16,7 +16,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QDateEdit>
-#include <QDoubleSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -435,8 +434,7 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->preset, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onDeviceEditorChanged);
     connect(ui->acquisitionAction, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onDeviceEditorChanged);
     connect(ui->fileSinkAction, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onDeviceEditorChanged);
-    connect(ui->overrideFrequency, &QCheckBox::toggled, this, &SchedulerGUI::onDeviceEditorChanged);
-    connect(ui->centerFrequency, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &SchedulerGUI::onDeviceEditorChanged);
+    connect(ui->centerFrequency, &QLineEdit::editingFinished, this, &SchedulerGUI::onDeviceEditorChanged);
     connectSettingTable(m_deviceSettingsTable, m_addDeviceSetting, m_deleteDeviceSetting, &SchedulerGUI::onDeviceEditorChanged);
 
     connect(ui->channelDeviceSet, &QComboBox::currentTextChanged, this, [this](const QString&) {
@@ -979,7 +977,6 @@ void SchedulerGUI::displayDeviceActionEditor()
     ui->preset->setEnabled(hasAction);
     ui->acquisitionAction->setEnabled(hasAction);
     ui->fileSinkAction->setEnabled(hasAction);
-    ui->overrideFrequency->setEnabled(hasAction);
     ui->centerFrequency->setEnabled(hasAction);
 
     updateDeviceSetList(action);
@@ -992,16 +989,14 @@ void SchedulerGUI::displayDeviceActionEditor()
             ? acquisitionIndex
             : ui->acquisitionAction->findData(SchedulerSettings::ActionNoChange));
         ui->fileSinkAction->setCurrentIndex(ui->fileSinkAction->findData(action->m_fileSinkAction));
-        ui->overrideFrequency->setChecked(action->m_overrideCenterFrequency);
-        ui->centerFrequency->setValue(action->m_centerFrequency / 1000000.0);
+        ui->centerFrequency->setText(action->m_centerFrequency);
         setSettingValuesToTable(m_deviceSettingsTable, action->m_settings, &SchedulerGUI::onDeviceEditorChanged);
     }
     else
     {
         ui->acquisitionAction->setCurrentIndex(ui->acquisitionAction->findData(SchedulerSettings::ActionNoChange));
         ui->fileSinkAction->setCurrentIndex(ui->fileSinkAction->findData(SchedulerSettings::ActionNoChange));
-        ui->overrideFrequency->setChecked(false);
-        ui->centerFrequency->setValue(0.0);
+        ui->centerFrequency->clear();
         setSettingValuesToTable(m_deviceSettingsTable, QList<SchedulerSettings::SettingValue>(), &SchedulerGUI::onDeviceEditorChanged);
     }
 
@@ -1242,8 +1237,7 @@ void SchedulerGUI::updateCurrentDeviceActionFromWidgets()
 
     action->m_acquisitionAction = static_cast<SchedulerSettings::RunAction>(ui->acquisitionAction->currentData().toInt());
     action->m_fileSinkAction = static_cast<SchedulerSettings::RunAction>(ui->fileSinkAction->currentData().toInt());
-    action->m_overrideCenterFrequency = ui->overrideFrequency->isChecked();
-    action->m_centerFrequency = qRound64(ui->centerFrequency->value() * 1000000.0);
+    action->m_centerFrequency = ui->centerFrequency->text().trimmed();
     action->m_settings = settingValuesFromTable(m_deviceSettingsTable);
 }
 

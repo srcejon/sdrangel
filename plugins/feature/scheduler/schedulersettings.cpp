@@ -27,7 +27,6 @@
 namespace
 {
 constexpr int DefaultWeekdayMask = 0x7f;
-int g_deserializingRulesVersion = 5;
 
 int weekdayBit(const QDate& date)
 {
@@ -42,84 +41,6 @@ bool weekdayMaskMatches(int weekdayMask, const QDate& date)
 bool isAfterDateUntil(const SchedulerSettings::ScheduleRule& rule, const QDateTime& candidate)
 {
     return rule.m_dateUntil.isValid() && candidate.isValid() && (candidate.date() > rule.m_dateUntil);
-}
-
-void writeFeatureActionExtras(QDataStream& out, const QList<SchedulerSettings::ScheduleRule>& rules)
-{
-    out << quint32(1);
-    out << rules.size();
-
-    for (const SchedulerSettings::ScheduleRule& rule : rules)
-    {
-        out << rule.m_id;
-        out << rule.m_featureActions.size();
-
-        for (const SchedulerSettings::FeatureAction& action : rule.m_featureActions)
-        {
-            out << action.m_cameraFilename;
-            out << action.m_cameraRecordMode;
-            out << action.m_cameraImageCount;
-            out << action.m_cameraVideoDuration;
-            out << action.m_findTarget;
-        }
-    }
-}
-
-void readFeatureActionExtras(QDataStream& in, QList<SchedulerSettings::ScheduleRule>& rules)
-{
-    quint32 version = 0;
-    int ruleCount = 0;
-
-    in >> version;
-    if (version != 1) {
-        return;
-    }
-
-    in >> ruleCount;
-
-    for (int ruleIndex = 0; ruleIndex < ruleCount; ++ruleIndex)
-    {
-        QString ruleId;
-        int actionCount = 0;
-
-        in >> ruleId;
-        in >> actionCount;
-
-        SchedulerSettings::ScheduleRule *rule = nullptr;
-        for (SchedulerSettings::ScheduleRule& candidate : rules)
-        {
-            if (candidate.m_id == ruleId)
-            {
-                rule = &candidate;
-                break;
-            }
-        }
-
-        for (int actionIndex = 0; actionIndex < actionCount; ++actionIndex)
-        {
-            QString cameraFilename;
-            int cameraRecordMode = 0;
-            int cameraImageCount = 1;
-            int cameraVideoDuration = 0;
-            QString findTarget;
-
-            in >> cameraFilename;
-            in >> cameraRecordMode;
-            in >> cameraImageCount;
-            in >> cameraVideoDuration;
-            in >> findTarget;
-
-            if (rule && (actionIndex >= 0) && (actionIndex < rule->m_featureActions.size()))
-            {
-                SchedulerSettings::FeatureAction& action = rule->m_featureActions[actionIndex];
-                action.m_cameraFilename = cameraFilename;
-                action.m_cameraRecordMode = cameraRecordMode;
-                action.m_cameraImageCount = cameraImageCount;
-                action.m_cameraVideoDuration = cameraVideoDuration;
-                action.m_findTarget = findTarget;
-            }
-        }
-    }
 }
 
 QDateTime monthlyDateTime(const QDate& baseDate, const QTime& time, int monthOffset)
@@ -159,7 +80,6 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::DeviceSetActi
     out << action.m_presetDescription;
     out << static_cast<qint32>(action.m_acquisitionAction);
     out << static_cast<qint32>(action.m_fileSinkAction);
-    out << action.m_overrideCenterFrequency;
     out << action.m_centerFrequency;
     out << action.m_settings;
     return out;
@@ -177,11 +97,8 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::DeviceSetAction& act
     in >> action.m_presetDescription;
     in >> acquisitionAction;
     in >> fileSinkAction;
-    in >> action.m_overrideCenterFrequency;
     in >> action.m_centerFrequency;
-    if (g_deserializingRulesVersion >= 5) {
-        in >> action.m_settings;
-    }
+    in >> action.m_settings;
 
     action.m_acquisitionAction = static_cast<SchedulerSettings::RunAction>(acquisitionAction);
     action.m_fileSinkAction = static_cast<SchedulerSettings::RunAction>(fileSinkAction);
@@ -194,6 +111,11 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::FeatureAction
     out << action.m_featureIndex;
     out << action.m_featureId;
     out << static_cast<qint32>(action.m_action);
+    out << action.m_cameraFilename;
+    out << action.m_cameraRecordMode;
+    out << action.m_cameraImageCount;
+    out << action.m_cameraVideoDuration;
+    out << action.m_findTarget;
     out << action.m_settings;
     return out;
 }
@@ -206,9 +128,12 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::FeatureAction& actio
     in >> action.m_featureIndex;
     in >> action.m_featureId;
     in >> runAction;
-    if (g_deserializingRulesVersion >= 5) {
-        in >> action.m_settings;
-    }
+    in >> action.m_cameraFilename;
+    in >> action.m_cameraRecordMode;
+    in >> action.m_cameraImageCount;
+    in >> action.m_cameraVideoDuration;
+    in >> action.m_findTarget;
+    in >> action.m_settings;
 
     action.m_action = static_cast<SchedulerSettings::RunAction>(runAction);
     return in;
@@ -244,9 +169,7 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ChannelAction& actio
     in >> action.m_to;
     in >> action.m_via;
     in >> action.m_data;
-    if (g_deserializingRulesVersion >= 5) {
-        in >> action.m_settings;
-    }
+    in >> action.m_settings;
 
     action.m_action = static_cast<SchedulerSettings::RunAction>(runAction);
     return in;
@@ -287,13 +210,9 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ScheduleRule& rule)
     in >> rule.m_enabled;
     in >> triggerType;
     in >> rule.m_time;
-    if (g_deserializingRulesVersion >= 4) {
-        in >> rule.m_dateUntil;
-    }
+    in >> rule.m_dateUntil;
     in >> recurrence;
-    if (g_deserializingRulesVersion >= 3) {
-        in >> rule.m_weekdayMask;
-    }
+    in >> rule.m_weekdayMask;
     in >> rule.m_eventType;
     in >> rule.m_eventSourceId;
     in >> rule.m_eventDataRegex;
@@ -326,9 +245,7 @@ SchedulerSettings::DeviceSetAction::DeviceSetAction() :
     m_deviceSetIndex(0),
     m_presetFrequency(0),
     m_acquisitionAction(ActionNoChange),
-    m_fileSinkAction(ActionNoChange),
-    m_overrideCenterFrequency(false),
-    m_centerFrequency(0)
+    m_fileSinkAction(ActionNoChange)
 {
 }
 
@@ -383,13 +300,9 @@ QByteArray SchedulerSettings::serialize() const
 {
     SimpleSerializer s(1);
     QByteArray rulesBlob;
-    QByteArray featureActionExtrasBlob;
     QDataStream rulesStream(&rulesBlob, QIODevice::WriteOnly);
-    QDataStream featureActionExtrasStream(&featureActionExtrasBlob, QIODevice::WriteOnly);
 
-    rulesStream << quint32(5);
     rulesStream << m_rules;
-    writeFeatureActionExtras(featureActionExtrasStream, m_rules);
 
     s.writeString(1, m_title);
     s.writeS32(2, m_workspaceIndex);
@@ -399,7 +312,6 @@ QByteArray SchedulerSettings::serialize() const
     }
     s.writeU32(5, m_rgbColor);
     s.writeBlob(6, rulesBlob);
-    s.writeBlob(7, featureActionExtrasBlob);
 
     return s.final();
 }
@@ -435,21 +347,7 @@ bool SchedulerSettings::deserialize(const QByteArray& data)
         if (!blob.isEmpty())
         {
             QDataStream rulesStream(blob);
-            quint32 rulesVersion = 0;
-            rulesStream >> rulesVersion;
-
-            if ((rulesVersion == 2) || (rulesVersion == 3) || (rulesVersion == 4) || (rulesVersion == 5)) {
-                g_deserializingRulesVersion = rulesVersion;
-                rulesStream >> m_rules;
-                g_deserializingRulesVersion = 5;
-            }
-        }
-
-        d.readBlob(7, &blob);
-        if (!blob.isEmpty())
-        {
-            QDataStream featureActionExtrasStream(blob);
-            readFeatureActionExtras(featureActionExtrasStream, m_rules);
+            rulesStream >> m_rules;
         }
 
         return true;

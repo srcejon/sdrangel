@@ -97,8 +97,7 @@ struct SchedulerSettings
         QString m_presetDescription;
         RunAction m_acquisitionAction;
         RunAction m_fileSinkAction;
-        bool m_overrideCenterFrequency;
-        quint64 m_centerFrequency;
+        QString m_centerFrequency;
         QList<SettingValue> m_settings;
 
         DeviceSetAction();

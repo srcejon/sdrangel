@@ -172,9 +172,6 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::ChannelAction
 {
     out << action.m_deviceSetIndex;
     out << action.m_deviceSetId;
-    out << action.m_presetGroup;
-    out << action.m_presetFrequency;
-    out << action.m_presetDescription;
     out << action.m_channelIndex;
     out << action.m_channelId;
     out << static_cast<qint32>(action.m_action);
@@ -192,9 +189,6 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ChannelAction& actio
 
     in >> action.m_deviceSetIndex;
     in >> action.m_deviceSetId;
-    in >> action.m_presetGroup;
-    in >> action.m_presetFrequency;
-    in >> action.m_presetDescription;
     in >> action.m_channelIndex;
     in >> action.m_channelId;
     in >> runAction;
@@ -287,7 +281,6 @@ SchedulerSettings::FeatureAction::FeatureAction() :
 
 SchedulerSettings::ChannelAction::ChannelAction() :
     m_deviceSetIndex(0),
-    m_presetFrequency(0),
     m_channelIndex(0),
     m_action(ActionFileSinkRecordStart)
 {

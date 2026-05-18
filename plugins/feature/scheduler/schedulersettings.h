@@ -105,9 +105,6 @@ struct SchedulerSettings
     {
         int m_deviceSetIndex;
         QString m_deviceSetId;
-        QString m_presetGroup;
-        quint64 m_presetFrequency;
-        QString m_presetDescription;
         int m_channelIndex;
         QString m_channelId;
         RunAction m_action;

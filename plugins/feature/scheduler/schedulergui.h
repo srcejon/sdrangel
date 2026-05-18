@@ -120,7 +120,6 @@ private:
     void updateDeviceSetList(const SchedulerSettings::DeviceSetAction *selectedAction);
     void updatePresetList(const SchedulerSettings::DeviceSetAction *selectedAction);
     void updateChannelDeviceSetList(const SchedulerSettings::ChannelAction *selectedAction);
-    void updateChannelPresetList(const SchedulerSettings::ChannelAction *selectedAction);
     void updateChannelList(const SchedulerSettings::ChannelAction *selectedAction);
     void updateChannelActionList(const SchedulerSettings::ChannelAction *selectedAction);
     void updateFeatureList(const SchedulerSettings::FeatureAction *selectedAction);
@@ -135,7 +134,8 @@ private:
     SchedulerSettings::ChannelAction *currentChannelAction();
     SchedulerSettings::FeatureAction *currentFeatureAction();
     const Preset *selectedPreset() const;
-    const Preset *selectedChannelPreset() const;
+    const SchedulerSettings::DeviceSetAction *deviceSetActionForChannelAction(const SchedulerSettings::ChannelAction *action) const;
+    const Preset *presetForDeviceSetAction(const SchedulerSettings::DeviceSetAction *action) const;
     QString ruleTriggerText(const SchedulerSettings::ScheduleRule& rule) const;
     QString ruleRecurrenceDelayText(const SchedulerSettings::ScheduleRule& rule) const;
     QString ruleActionSummary(const SchedulerSettings::ScheduleRule& rule) const;

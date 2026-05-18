@@ -609,11 +609,6 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription);
     }
 
-    for (const SchedulerSettings::ChannelAction& action : channelActions)
-    {
-        loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription);
-    }
-
     QTimer::singleShot(1000, this, [this, rule, context, deviceActions, channelActions]() {
         executeDeviceActions(deviceActions);
         executeChannelActions(channelActions);

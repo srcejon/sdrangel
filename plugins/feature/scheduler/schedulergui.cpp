@@ -239,15 +239,14 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->deviceActionsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     ui->deviceActionsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
 
-    ui->channelActionsTable->setColumnCount(4);
+    ui->channelActionsTable->setColumnCount(3);
     ui->channelActionsTable->setHorizontalHeaderLabels(QStringList({
         tr("Device set"),
-        tr("Preset"),
         tr("Channel"),
         tr("Action")
     }));
     ui->channelActionsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    ui->channelActionsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    ui->channelActionsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
 
     ui->featureActionsTable->setColumnCount(2);
     ui->featureActionsTable->setHorizontalHeaderLabels(QStringList({
@@ -352,14 +351,6 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->centerFrequency, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &SchedulerGUI::onDeviceEditorChanged);
 
     connect(ui->channelDeviceSet, &QComboBox::currentTextChanged, this, [this](const QString&) {
-        if (!m_populating) {
-            updateChannelPresetList(currentChannelAction());
-            updateChannelList(currentChannelAction());
-            updateChannelActionList(currentChannelAction());
-            onChannelEditorChanged();
-        }
-    });
-    connect(ui->channelPreset, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         if (!m_populating) {
             updateChannelList(currentChannelAction());
             updateChannelActionList(currentChannelAction());
@@ -647,9 +638,8 @@ void SchedulerGUI::refreshChannelActionsTable()
     {
         const SchedulerSettings::ChannelAction& action = rule->m_channelActions[row];
         ui->channelActionsTable->setItem(row, 0, new QTableWidgetItem(deviceActionText(action)));
-        ui->channelActionsTable->setItem(row, 1, new QTableWidgetItem(presetText(action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription)));
-        ui->channelActionsTable->setItem(row, 2, new QTableWidgetItem(channelActionText(action)));
-        ui->channelActionsTable->setItem(row, 3, new QTableWidgetItem(runActionText(action.m_action)));
+        ui->channelActionsTable->setItem(row, 1, new QTableWidgetItem(channelActionText(action)));
+        ui->channelActionsTable->setItem(row, 2, new QTableWidgetItem(runActionText(action.m_action)));
     }
 
     m_populating = false;
@@ -759,12 +749,10 @@ void SchedulerGUI::displayChannelActionEditor()
 
     m_populating = true;
     ui->channelDeviceSet->setEnabled(hasAction);
-    ui->channelPreset->setEnabled(hasAction);
     ui->channelSelect->setEnabled(hasAction);
     ui->channelAction->setEnabled(hasAction);
 
     updateChannelDeviceSetList(action);
-    updateChannelPresetList(action);
     updateChannelList(action);
     updateChannelActionList(action);
 
@@ -995,21 +983,6 @@ void SchedulerGUI::updateCurrentChannelActionFromWidgets()
         }
     }
 
-    const int presetIndex = ui->channelPreset->currentData().toInt();
-    if (presetIndex >= 0)
-    {
-        const Preset *preset = MainCore::instance()->getSettings().getPreset(presetIndex);
-        action->m_presetGroup = preset->getGroup();
-        action->m_presetFrequency = preset->getCenterFrequency();
-        action->m_presetDescription = preset->getDescription();
-    }
-    else if (presetIndex == PresetNone)
-    {
-        action->m_presetGroup.clear();
-        action->m_presetFrequency = 0;
-        action->m_presetDescription.clear();
-    }
-
     bool parsedChannel = false;
     const int channelIndex = ui->channelSelect->currentData().toInt(&parsedChannel);
     if (parsedChannel)
@@ -1235,84 +1208,13 @@ void SchedulerGUI::updateChannelDeviceSetList(const SchedulerSettings::ChannelAc
     }
 }
 
-void SchedulerGUI::updateChannelPresetList(const SchedulerSettings::ChannelAction *selectedAction)
-{
-    ui->channelPreset->clear();
-    ui->channelPreset->addItem(QString(), PresetNone);
-
-    QChar deviceType;
-    const QString text = ui->channelDeviceSet->currentText();
-    if (text.isEmpty()) {
-        deviceType = 'R';
-    } else {
-        deviceType = text.at(0);
-    }
-
-    const MainSettings& mainSettings = MainCore::instance()->getSettings();
-    const int count = mainSettings.getPresetCount();
-    bool found = false;
-
-    for (int i = 0; i < count; ++i)
-    {
-        const Preset *preset = mainSettings.getPreset(i);
-        if (((preset->isSourcePreset()) && (deviceType == 'R'))
-            || ((preset->isSinkPreset()) && (deviceType == 'T'))
-            || ((preset->isMIMOPreset()) && (deviceType == 'M')))
-        {
-            ui->channelPreset->addItem(presetText(preset->getGroup(), preset->getCenterFrequency(), preset->getDescription()), i);
-            if (selectedAction
-                && (selectedAction->m_presetGroup == preset->getGroup())
-                && (selectedAction->m_presetFrequency == preset->getCenterFrequency())
-                && (selectedAction->m_presetDescription == preset->getDescription()))
-            {
-                found = true;
-            }
-        }
-    }
-
-    if (selectedAction && !selectedAction->m_presetGroup.isEmpty() && !found)
-    {
-        ui->channelPreset->addItem(
-            presetText(selectedAction->m_presetGroup, selectedAction->m_presetFrequency, selectedAction->m_presetDescription) + tr(" (unresolved)"),
-            PresetUnresolved);
-    }
-
-    if (selectedAction && !selectedAction->m_presetGroup.isEmpty())
-    {
-        int selectedIndex = -1;
-        for (int i = 0; i < ui->channelPreset->count(); ++i)
-        {
-            if (ui->channelPreset->itemData(i).toInt() >= 0)
-            {
-                const Preset *preset = mainSettings.getPreset(ui->channelPreset->itemData(i).toInt());
-                if ((selectedAction->m_presetGroup == preset->getGroup())
-                    && (selectedAction->m_presetFrequency == preset->getCenterFrequency())
-                    && (selectedAction->m_presetDescription == preset->getDescription()))
-                {
-                    selectedIndex = i;
-                    break;
-                }
-            }
-        }
-
-        if (selectedIndex < 0) {
-            selectedIndex = ui->channelPreset->findData(PresetUnresolved);
-        }
-
-        ui->channelPreset->setCurrentIndex(selectedIndex >= 0 ? selectedIndex : 0);
-    }
-    else
-    {
-        ui->channelPreset->setCurrentIndex(0);
-    }
-}
-
 void SchedulerGUI::updateChannelList(const SchedulerSettings::ChannelAction *selectedAction)
 {
     ui->channelSelect->clear();
     bool found = false;
 
-    const Preset *preset = selectedChannelPreset();
+    const SchedulerSettings::DeviceSetAction *deviceAction = deviceSetActionForChannelAction(selectedAction);
+    const Preset *preset = presetForDeviceSetAction(deviceAction);
     if (preset)
     {
         for (int i = 0; i < preset->getChannelCount(); ++i)
@@ -1579,14 +1481,60 @@ const Preset *SchedulerGUI::selectedPreset() const
     return MainCore::instance()->getSettings().getPreset(presetIndex);
 }
 
-const Preset *SchedulerGUI::selectedChannelPreset() const
+const SchedulerSettings::DeviceSetAction *SchedulerGUI::deviceSetActionForChannelAction(const SchedulerSettings::ChannelAction *action) const
 {
-    const int presetIndex = ui->channelPreset->currentData().toInt();
-    if (presetIndex < 0) {
+    const SchedulerSettings::ScheduleRule *rule = const_cast<SchedulerGUI *>(this)->currentRule();
+    if (!rule) {
         return nullptr;
     }
 
-    return MainCore::instance()->getSettings().getPreset(presetIndex);
+    bool ok = false;
+    int deviceSetIndex = ui->channelDeviceSet->currentData().toInt(&ok);
+    if (!ok && action) {
+        deviceSetIndex = action->m_deviceSetIndex;
+        ok = true;
+    }
+    if (!ok) {
+        return nullptr;
+    }
+
+    for (const SchedulerSettings::DeviceSetAction& deviceAction : rule->m_deviceSetActions)
+    {
+        if (deviceAction.m_deviceSetIndex == deviceSetIndex) {
+            return &deviceAction;
+        }
+    }
+
+    return nullptr;
+}
+
+const Preset *SchedulerGUI::presetForDeviceSetAction(const SchedulerSettings::DeviceSetAction *action) const
+{
+    if (!action || action->m_presetGroup.isEmpty()) {
+        return nullptr;
+    }
+
+    QChar deviceType;
+    if (!action->m_deviceSetId.isEmpty()) {
+        deviceType = action->m_deviceSetId.at(0);
+    } else {
+        deviceType = deviceSetId(action->m_deviceSetIndex).at(0);
+    }
+
+    QString presetType;
+    if (deviceType == 'R') {
+        presetType = QStringLiteral("R");
+    } else if (deviceType == 'T') {
+        presetType = QStringLiteral("T");
+    } else if (deviceType == 'M') {
+        presetType = QStringLiteral("M");
+    }
+
+    return MainCore::instance()->getSettings().getPreset(
+        action->m_presetGroup,
+        action->m_presetFrequency,
+        action->m_presetDescription,
+        presetType);
 }
 
 QString SchedulerGUI::ruleTriggerText(const SchedulerSettings::ScheduleRule& rule) const

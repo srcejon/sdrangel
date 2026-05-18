@@ -340,7 +340,6 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
 
     ui->recurrence->addItem(tr("Once"), SchedulerSettings::RecurrenceOnce);
     ui->recurrence->addItem(tr("Daily"), SchedulerSettings::RecurrenceDaily);
-    ui->recurrence->addItem(tr("Weekly"), SchedulerSettings::RecurrenceWeekly);
     ui->recurrence->addItem(tr("Monthly"), SchedulerSettings::RecurrenceMonthly);
 
     const QStringList eventNames = Scheduler::eventTypeNames();
@@ -350,6 +349,8 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
 
     ui->eventDelayUnit->addItem(tr("seconds"), SchedulerSettings::DelaySeconds);
     ui->eventDelayUnit->addItem(tr("minutes"), SchedulerSettings::DelayMinutes);
+    ui->durationUnit->addItem(tr("seconds"), SchedulerSettings::DelaySeconds);
+    ui->durationUnit->addItem(tr("minutes"), SchedulerSettings::DelayMinutes);
 
     ui->acquisitionAction->addItem(tr("No change"), SchedulerSettings::ActionNoChange);
     ui->acquisitionAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
@@ -417,6 +418,8 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->friday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->saturday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->sunday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->duration, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->durationUnit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventSource, &QComboBox::currentTextChanged, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventDataRegex, &QLineEdit::textChanged, this, &SchedulerGUI::onRuleEditorChanged);
@@ -925,6 +928,8 @@ void SchedulerGUI::displayRuleEditor()
         ui->dateUntil->setDate(rule->m_dateUntil.isValid() ? rule->m_dateUntil : NoDateUntil);
         ui->recurrence->setCurrentIndex(ui->recurrence->findData(rule->m_recurrence));
         setWeekdayWidgets(ui, rule->m_weekdayMask);
+        ui->duration->setValue(rule->m_duration);
+        ui->durationUnit->setCurrentIndex(ui->durationUnit->findData(rule->m_durationUnit));
         ui->eventType->setCurrentIndex(ui->eventType->findData(rule->m_eventType));
         updateEventSourceList(rule->m_eventSourceId);
         ui->eventDataRegex->setText(rule->m_eventDataRegex);
@@ -942,6 +947,8 @@ void SchedulerGUI::displayRuleEditor()
         ui->time->setTime(time.time());
         ui->dateUntil->setDate(NoDateUntil);
         setWeekdayWidgets(ui, DefaultWeekdayMask);
+        ui->duration->setValue(0);
+        ui->durationUnit->setCurrentIndex(ui->durationUnit->findData(SchedulerSettings::DelaySeconds));
         updateEventSourceList(QString());
         ui->eventDataRegex->clear();
         ui->eventDelay->setValue(0);
@@ -1169,6 +1176,8 @@ bool SchedulerGUI::updateCurrentRuleFromWidgets()
     rule->m_dateUntil = ui->dateUntil->date() == NoDateUntil ? QDate() : ui->dateUntil->date();
     rule->m_recurrence = static_cast<SchedulerSettings::Recurrence>(ui->recurrence->currentData().toInt());
     rule->m_weekdayMask = weekdayMaskFromWidgets(ui);
+    rule->m_duration = ui->duration->value();
+    rule->m_durationUnit = static_cast<SchedulerSettings::DelayUnit>(ui->durationUnit->currentData().toInt());
     rule->m_eventType = ui->eventType->currentData().toInt();
 
     const QVariant sourceData = ui->eventSource->currentData();
@@ -1889,6 +1898,8 @@ QString SchedulerGUI::ruleTriggerText(const SchedulerSettings::ScheduleRule& rul
 
 QString SchedulerGUI::ruleRecurrenceDelayText(const SchedulerSettings::ScheduleRule& rule) const
 {
+    QString text;
+
     if (rule.m_triggerType == SchedulerSettings::TriggerTime)
     {
         if ((rule.m_recurrence == SchedulerSettings::RecurrenceDaily) && (rule.m_weekdayMask != DefaultWeekdayMask))
@@ -1915,20 +1926,36 @@ QString SchedulerGUI::ruleRecurrenceDelayText(const SchedulerSettings::ScheduleR
             if ((rule.m_weekdayMask & (1 << 6)) != 0) {
                 days.append(tr("Sun"));
             }
-            return days.isEmpty() ? tr("Daily (no days)") : tr("Daily (%1)").arg(days.join(QStringLiteral(", ")));
+            text = days.isEmpty() ? tr("Daily (no days)") : tr("Daily (%1)").arg(days.join(QStringLiteral(", ")));
         }
-
-        return recurrenceText(rule.m_recurrence);
+        else
+        {
+            text = recurrenceText(rule.m_recurrence);
+        }
+    }
+    else
+    {
+        const int delay = SchedulerSettings::delaySeconds(rule);
+        if (delay > 0)
+        {
+            if (rule.m_eventDelayUnit == SchedulerSettings::DelayMinutes) {
+                text = tr("%1 min").arg(rule.m_eventDelay);
+            } else {
+                text = tr("%1 s").arg(delay);
+            }
+        }
     }
 
-    const int delay = SchedulerSettings::delaySeconds(rule);
-    if (delay == 0) {
-        return QString();
+    const QString duration = durationText(rule);
+    if (!duration.isEmpty())
+    {
+        if (!text.isEmpty()) {
+            text += QStringLiteral(", ");
+        }
+        text += tr("for %1").arg(duration);
     }
-    if (rule.m_eventDelayUnit == SchedulerSettings::DelayMinutes) {
-        return tr("%1 min").arg(rule.m_eventDelay);
-    }
-    return tr("%1 s").arg(delay);
+
+    return text;
 }
 
 QString SchedulerGUI::ruleActionSummary(const SchedulerSettings::ScheduleRule& rule) const
@@ -1952,6 +1979,18 @@ QString SchedulerGUI::ruleActionSummary(const SchedulerSettings::ScheduleRule& r
     }
 
     return parts.join(QStringLiteral(", "));
+}
+
+QString SchedulerGUI::durationText(const SchedulerSettings::ScheduleRule& rule) const
+{
+    const int duration = SchedulerSettings::durationSeconds(rule);
+    if (duration == 0) {
+        return QString();
+    }
+    if (rule.m_durationUnit == SchedulerSettings::DelayMinutes) {
+        return tr("%1 min").arg(rule.m_duration);
+    }
+    return tr("%1 s").arg(duration);
 }
 
 QString SchedulerGUI::deviceActionText(const SchedulerSettings::DeviceSetAction& action) const
@@ -2050,8 +2089,6 @@ QString SchedulerGUI::recurrenceText(SchedulerSettings::Recurrence recurrence) c
     {
     case SchedulerSettings::RecurrenceDaily:
         return tr("Daily");
-    case SchedulerSettings::RecurrenceWeekly:
-        return tr("Weekly");
     case SchedulerSettings::RecurrenceMonthly:
         return tr("Monthly");
     case SchedulerSettings::RecurrenceOnce:

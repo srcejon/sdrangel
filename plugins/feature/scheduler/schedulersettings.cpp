@@ -190,6 +190,8 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::ScheduleRule&
     out << rule.m_eventDataRegex;
     out << rule.m_eventDelay;
     out << static_cast<qint32>(rule.m_eventDelayUnit);
+    out << rule.m_duration;
+    out << static_cast<qint32>(rule.m_durationUnit);
     out << rule.m_command;
     out << rule.m_speech;
     out << rule.m_deviceSetActions;
@@ -204,6 +206,7 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ScheduleRule& rule)
     qint32 triggerType;
     qint32 recurrence;
     qint32 delayUnit;
+    qint32 durationUnit;
 
     in >> rule.m_id;
     in >> rule.m_name;
@@ -218,6 +221,8 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ScheduleRule& rule)
     in >> rule.m_eventDataRegex;
     in >> rule.m_eventDelay;
     in >> delayUnit;
+    in >> rule.m_duration;
+    in >> durationUnit;
     in >> rule.m_command;
     in >> rule.m_speech;
     in >> rule.m_deviceSetActions;
@@ -228,6 +233,7 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ScheduleRule& rule)
     rule.m_triggerType = static_cast<SchedulerSettings::TriggerType>(triggerType);
     rule.m_recurrence = static_cast<SchedulerSettings::Recurrence>(recurrence);
     rule.m_eventDelayUnit = static_cast<SchedulerSettings::DelayUnit>(delayUnit);
+    rule.m_durationUnit = static_cast<SchedulerSettings::DelayUnit>(durationUnit);
 
     if (rule.m_id.isEmpty()) {
         rule.m_id = SchedulerSettings::newRuleId();
@@ -277,7 +283,9 @@ SchedulerSettings::ScheduleRule::ScheduleRule() :
     m_weekdayMask(DefaultWeekdayMask),
     m_eventType(0),
     m_eventDelay(0),
-    m_eventDelayUnit(DelaySeconds)
+    m_eventDelayUnit(DelaySeconds),
+    m_duration(0),
+    m_durationUnit(DelaySeconds)
 {
 }
 
@@ -411,22 +419,6 @@ QDateTime SchedulerSettings::nextDateTime(const ScheduleRule& rule, const QDateT
         return isAfterDateUntil(rule, candidate) ? QDateTime() : candidate;
     }
 
-    if (rule.m_recurrence == RecurrenceWeekly)
-    {
-        qint64 days = rule.m_time.daysTo(after);
-        if (days < 0) {
-            days = 0;
-        }
-        QDateTime candidate = rule.m_time.addDays((days / 7) * 7);
-        while (candidate <= after) {
-            candidate = candidate.addDays(7);
-            if (isAfterDateUntil(rule, candidate)) {
-                return QDateTime();
-            }
-        }
-        return isAfterDateUntil(rule, candidate) ? QDateTime() : candidate;
-    }
-
     if (rule.m_recurrence == RecurrenceMonthly)
     {
         const QDate baseDate = rule.m_time.date();
@@ -455,4 +447,10 @@ int SchedulerSettings::delaySeconds(const ScheduleRule& rule)
 {
     const int delay = qMax(0, rule.m_eventDelay);
     return rule.m_eventDelayUnit == DelayMinutes ? delay * 60 : delay;
+}
+
+int SchedulerSettings::durationSeconds(const ScheduleRule& rule)
+{
+    const int duration = qMax(0, rule.m_duration);
+    return rule.m_durationUnit == DelayMinutes ? duration * 60 : duration;
 }

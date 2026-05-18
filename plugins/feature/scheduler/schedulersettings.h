@@ -39,7 +39,6 @@ struct SchedulerSettings
     {
         RecurrenceOnce = 0,
         RecurrenceDaily,
-        RecurrenceWeekly,
         RecurrenceMonthly
     };
 
@@ -151,6 +150,8 @@ struct SchedulerSettings
         QString m_eventDataRegex;
         int m_eventDelay;
         DelayUnit m_eventDelayUnit;
+        int m_duration;
+        DelayUnit m_durationUnit;
         QString m_command;
         QString m_speech;
         QList<DeviceSetAction> m_deviceSetActions;
@@ -180,6 +181,7 @@ struct SchedulerSettings
     static QString newRuleId();
     static QDateTime nextDateTime(const ScheduleRule& rule, const QDateTime& after);
     static int delaySeconds(const ScheduleRule& rule);
+    static int durationSeconds(const ScheduleRule& rule);
 };
 
 #endif // INCLUDE_FEATURE_SCHEDULERSETTINGS_H_

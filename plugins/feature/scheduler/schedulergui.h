@@ -162,6 +162,7 @@ private:
     QString ruleTriggerText(const SchedulerSettings::ScheduleRule& rule) const;
     QString ruleRecurrenceDelayText(const SchedulerSettings::ScheduleRule& rule) const;
     QString ruleActionSummary(const SchedulerSettings::ScheduleRule& rule) const;
+    QString durationText(const SchedulerSettings::ScheduleRule& rule) const;
     QString deviceActionText(const SchedulerSettings::DeviceSetAction& action) const;
     QString deviceActionText(const SchedulerSettings::ChannelAction& action) const;
     QString channelActionText(const SchedulerSettings::ChannelAction& action) const;

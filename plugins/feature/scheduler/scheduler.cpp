@@ -634,6 +634,7 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
 {
     const QList<SchedulerSettings::DeviceSetAction> deviceActions = rule.m_deviceSetActions;
     const QList<SchedulerSettings::ChannelAction> channelActions = rule.m_channelActions;
+    const QList<SchedulerSettings::FeatureAction> featureActions = rule.m_featureActions;
 
     auto loadPreset = [](int deviceSetIndex, const QString& presetGroup, quint64 presetFrequency, const QString& presetDescription) {
         if (presetGroup.isEmpty()) {
@@ -682,12 +683,23 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription);
     }
 
-    QTimer::singleShot(1000, this, [this, rule, context, deviceActions, channelActions]() {
+    QTimer::singleShot(1000, this, [this, rule, context, deviceActions, channelActions, featureActions]() {
         executeDeviceActions(deviceActions);
         executeChannelActions(channelActions);
-        executeFeatureActions(rule.m_featureActions);
+        executeFeatureActions(featureActions);
         executeCommand(rule.m_command, rule, context);
         saySpeech(rule.m_speech, rule, context);
+
+        const int durationSeconds = SchedulerSettings::durationSeconds(rule);
+        if (durationSeconds > 0)
+        {
+            const int durationMs = qMin(durationSeconds, 2147483) * 1000;
+            QTimer::singleShot(durationMs, this, [this, deviceActions, channelActions, featureActions]() {
+                executeDeviceDurationStops(deviceActions);
+                executeChannelDurationStops(channelActions);
+                executeFeatureDurationStops(featureActions);
+            });
+        }
     });
 }
 
@@ -837,6 +849,51 @@ void Scheduler::executeFeatureActions(const QList<SchedulerSettings::FeatureActi
             for (const SchedulerSettings::SettingValue& setting : action.m_settings) {
                 patchFeatureSetting(action.m_featureSetIndex, action.m_featureIndex, setting);
             }
+        }
+    }
+}
+
+void Scheduler::executeDeviceDurationStops(const QList<SchedulerSettings::DeviceSetAction>& actions)
+{
+    for (const SchedulerSettings::DeviceSetAction& action : actions)
+    {
+        if (action.m_acquisitionAction == SchedulerSettings::ActionStart) {
+            ChannelWebAPIUtils::stop(action.m_deviceSetIndex);
+        }
+
+        if (action.m_fileSinkAction == SchedulerSettings::ActionStart) {
+            ChannelWebAPIUtils::startStopFileSinks(action.m_deviceSetIndex, false);
+        }
+    }
+}
+
+void Scheduler::executeChannelDurationStops(const QList<SchedulerSettings::ChannelAction>& actions)
+{
+    for (const SchedulerSettings::ChannelAction& action : actions)
+    {
+        switch (action.m_action)
+        {
+        case SchedulerSettings::ActionFileSinkRecordStart:
+            ChannelWebAPIUtils::fileSinkRecord(action.m_deviceSetIndex, action.m_channelIndex, false);
+            break;
+        case SchedulerSettings::ActionSigMFRecordStart:
+            ChannelWebAPIUtils::sigMFRecord(action.m_deviceSetIndex, action.m_channelIndex, false);
+            break;
+        case SchedulerSettings::ActionFreqScannerRun:
+            ChannelWebAPIUtils::freqScannerRun(action.m_deviceSetIndex, action.m_channelIndex, false);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+void Scheduler::executeFeatureDurationStops(const QList<SchedulerSettings::FeatureAction>& actions)
+{
+    for (const SchedulerSettings::FeatureAction& action : actions)
+    {
+        if (action.m_action == SchedulerSettings::ActionStart) {
+            FeatureWebAPIUtils::stop(action.m_featureSetIndex, action.m_featureIndex);
         }
     }
 }

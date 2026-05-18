@@ -138,6 +138,9 @@ private:
     void executeDeviceActions(const QList<SchedulerSettings::DeviceSetAction>& actions);
     void executeChannelActions(const QList<SchedulerSettings::ChannelAction>& actions);
     void executeFeatureActions(const QList<SchedulerSettings::FeatureAction>& actions);
+    void executeDeviceDurationStops(const QList<SchedulerSettings::DeviceSetAction>& actions);
+    void executeChannelDurationStops(const QList<SchedulerSettings::ChannelAction>& actions);
+    void executeFeatureDurationStops(const QList<SchedulerSettings::FeatureAction>& actions);
     void executeCommand(const QString& command, const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
     void saySpeech(const QString& speech, const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
     QString substitute(const QString& text, const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context) const;

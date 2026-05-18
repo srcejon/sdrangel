@@ -40,8 +40,7 @@ SchedulerRule:
         Time trigger recurrence
           * 0 - Once
           * 1 - Daily
-          * 2 - Weekly
-          * 3 - Monthly
+          * 2 - Monthly
       type: integer
     eventType:
       description: "Event type index for event-based triggers"
@@ -58,6 +57,15 @@ SchedulerRule:
     eventDelayUnit:
       description: >
         Event delay unit
+          * 0 - Seconds
+          * 1 - Minutes
+      type: integer
+    duration:
+      description: "Optional rule duration. 0 leaves started actions running."
+      type: integer
+    durationUnit:
+      description: >
+        Rule duration unit
           * 0 - Seconds
           * 1 - Minutes
       type: integer

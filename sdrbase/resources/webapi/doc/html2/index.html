@@ -3558,9 +3558,49 @@ margin-bottom: 20px;
     "run" : {
       "type" : "integer",
       "description" : "Set the plugin running state\n  * 0 - idle\n  * 1 - run\n"
+    },
+    "saveImage" : {
+      "$ref" : "#/definitions/CameraActions_saveImage"
+    },
+    "recordVideo" : {
+      "$ref" : "#/definitions/CameraActions_recordVideo"
     }
   },
   "description" : "Camera feature actions"
+};
+            defs.CameraActions_recordVideo = {
+  "properties" : {
+    "filename" : {
+      "type" : "string",
+      "description" : "Filename for the video"
+    },
+    "recordMode" : {
+      "type" : "integer",
+      "description" : "* 0 - Raw video * 1 - Processed video * 2 - Both\n"
+    },
+    "duration" : {
+      "type" : "integer",
+      "description" : "Duration of recording (0 - Unlimited)"
+    }
+  },
+  "description" : "Record video to file"
+};
+            defs.CameraActions_saveImage = {
+  "properties" : {
+    "filename" : {
+      "type" : "string",
+      "description" : "Filename for the image"
+    },
+    "recordMode" : {
+      "type" : "integer",
+      "description" : "* 0 - Raw images * 1 - Processed images * 2 - Both\n"
+    },
+    "images" : {
+      "type" : "integer",
+      "description" : "Number of images to save (0 - Unlimited)"
+    }
+  },
+  "description" : "Save image to file"
 };
             defs.CameraObjectClassSettings = {
   "properties" : {
@@ -61654,7 +61694,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-05-17T23:56:18.465+02:00
+              Generated 2026-05-18T09:51:00.133+02:00
             </div>
           </div>
       </div>

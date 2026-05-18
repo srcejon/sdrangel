@@ -11,62 +11,61 @@
  */
 
 /*
- * SWGCameraActions.h
+ * SWGCameraActions_saveImage.h
  *
- * Camera feature actions
+ * Save image to file
  */
 
-#ifndef SWGCameraActions_H_
-#define SWGCameraActions_H_
+#ifndef SWGCameraActions_saveImage_H_
+#define SWGCameraActions_saveImage_H_
 
 #include <QJsonObject>
 
 
-#include "SWGCameraActions_recordVideo.h"
-#include "SWGCameraActions_saveImage.h"
+#include <QString>
 
 #include "SWGObject.h"
 #include "export.h"
 
 namespace SWGSDRangel {
 
-class SWG_API SWGCameraActions: public SWGObject {
+class SWG_API SWGCameraActions_saveImage: public SWGObject {
 public:
-    SWGCameraActions();
-    SWGCameraActions(QString* json);
-    virtual ~SWGCameraActions();
+    SWGCameraActions_saveImage();
+    SWGCameraActions_saveImage(QString* json);
+    virtual ~SWGCameraActions_saveImage();
     void init();
     void cleanup();
 
     virtual QString asJson () override;
     virtual QJsonObject* asJsonObject() override;
     virtual void fromJsonObject(QJsonObject &json) override;
-    virtual SWGCameraActions* fromJson(QString &jsonString) override;
+    virtual SWGCameraActions_saveImage* fromJson(QString &jsonString) override;
 
-    qint32 getRun();
-    void setRun(qint32 run);
+    QString* getFilename();
+    void setFilename(QString* filename);
 
-    SWGCameraActions_saveImage* getSaveImage();
-    void setSaveImage(SWGCameraActions_saveImage* save_image);
+    qint32 getRecordMode();
+    void setRecordMode(qint32 record_mode);
 
-    SWGCameraActions_recordVideo* getRecordVideo();
-    void setRecordVideo(SWGCameraActions_recordVideo* record_video);
+    qint32 getImages();
+    void setImages(qint32 images);
 
 
     virtual bool isSet() override;
 
 private:
-    qint32 run;
-    bool m_run_isSet;
+    QString* filename;
+    bool m_filename_isSet;
 
-    SWGCameraActions_saveImage* save_image;
-    bool m_save_image_isSet;
+    qint32 record_mode;
+    bool m_record_mode_isSet;
 
-    SWGCameraActions_recordVideo* record_video;
-    bool m_record_video_isSet;
+    qint32 images;
+    bool m_images_isSet;
 
 };
 
 }
 
-#endif /* SWGCameraActions_H_ */
+#endif /* SWGCameraActions_saveImage_H_ */

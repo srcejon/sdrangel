@@ -78,6 +78,8 @@
 #include "SWGBladeRF2OutputSettings.h"
 #include "SWGCWKeyerSettings.h"
 #include "SWGCameraActions.h"
+#include "SWGCameraActions_recordVideo.h"
+#include "SWGCameraActions_saveImage.h"
 #include "SWGCameraObjectClassSettings.h"
 #include "SWGCameraObjectDeviceSettings.h"
 #include "SWGCameraRect.h"
@@ -730,6 +732,16 @@ namespace SWGSDRangel {
     }
     if(QString("SWGCameraActions").compare(type) == 0) {
       SWGCameraActions *obj = new SWGCameraActions();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGCameraActions_recordVideo").compare(type) == 0) {
+      SWGCameraActions_recordVideo *obj = new SWGCameraActions_recordVideo();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGCameraActions_saveImage").compare(type) == 0) {
+      SWGCameraActions_saveImage *obj = new SWGCameraActions_saveImage();
       obj->init();
       return obj;
     }

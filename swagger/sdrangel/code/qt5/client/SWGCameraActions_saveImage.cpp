@@ -11,7 +11,7 @@
  */
 
 
-#include "SWGCameraActions.h"
+#include "SWGCameraActions_saveImage.h"
 
 #include "SWGHelpers.h"
 
@@ -22,47 +22,45 @@
 
 namespace SWGSDRangel {
 
-SWGCameraActions::SWGCameraActions(QString* json) {
+SWGCameraActions_saveImage::SWGCameraActions_saveImage(QString* json) {
     init();
     this->fromJson(*json);
 }
 
-SWGCameraActions::SWGCameraActions() {
-    run = 0;
-    m_run_isSet = false;
-    save_image = nullptr;
-    m_save_image_isSet = false;
-    record_video = nullptr;
-    m_record_video_isSet = false;
+SWGCameraActions_saveImage::SWGCameraActions_saveImage() {
+    filename = nullptr;
+    m_filename_isSet = false;
+    record_mode = 0;
+    m_record_mode_isSet = false;
+    images = 0;
+    m_images_isSet = false;
 }
 
-SWGCameraActions::~SWGCameraActions() {
+SWGCameraActions_saveImage::~SWGCameraActions_saveImage() {
     this->cleanup();
 }
 
 void
-SWGCameraActions::init() {
-    run = 0;
-    m_run_isSet = false;
-    save_image = new SWGCameraActions_saveImage();
-    m_save_image_isSet = false;
-    record_video = new SWGCameraActions_recordVideo();
-    m_record_video_isSet = false;
+SWGCameraActions_saveImage::init() {
+    filename = new QString("");
+    m_filename_isSet = false;
+    record_mode = 0;
+    m_record_mode_isSet = false;
+    images = 0;
+    m_images_isSet = false;
 }
 
 void
-SWGCameraActions::cleanup() {
+SWGCameraActions_saveImage::cleanup() {
+    if(filename != nullptr) { 
+        delete filename;
+    }
 
-    if(save_image != nullptr) { 
-        delete save_image;
-    }
-    if(record_video != nullptr) { 
-        delete record_video;
-    }
+
 }
 
-SWGCameraActions*
-SWGCameraActions::fromJson(QString &json) {
+SWGCameraActions_saveImage*
+SWGCameraActions_saveImage::fromJson(QString &json) {
     QByteArray array (json.toStdString().c_str());
     QJsonDocument doc = QJsonDocument::fromJson(array);
     QJsonObject jsonObject = doc.object();
@@ -71,17 +69,17 @@ SWGCameraActions::fromJson(QString &json) {
 }
 
 void
-SWGCameraActions::fromJsonObject(QJsonObject &pJson) {
-    ::SWGSDRangel::setValue(&run, pJson["run"], "qint32", "");
+SWGCameraActions_saveImage::fromJsonObject(QJsonObject &pJson) {
+    ::SWGSDRangel::setValue(&filename, pJson["filename"], "QString", "QString");
     
-    ::SWGSDRangel::setValue(&save_image, pJson["saveImage"], "SWGCameraActions_saveImage", "SWGCameraActions_saveImage");
+    ::SWGSDRangel::setValue(&record_mode, pJson["recordMode"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&record_video, pJson["recordVideo"], "SWGCameraActions_recordVideo", "SWGCameraActions_recordVideo");
+    ::SWGSDRangel::setValue(&images, pJson["images"], "qint32", "");
     
 }
 
 QString
-SWGCameraActions::asJson ()
+SWGCameraActions_saveImage::asJson ()
 {
     QJsonObject* obj = this->asJsonObject();
 
@@ -92,63 +90,63 @@ SWGCameraActions::asJson ()
 }
 
 QJsonObject*
-SWGCameraActions::asJsonObject() {
+SWGCameraActions_saveImage::asJsonObject() {
     QJsonObject* obj = new QJsonObject();
-    if(m_run_isSet){
-        obj->insert("run", QJsonValue(run));
+    if(filename != nullptr && *filename != QString("")){
+        toJsonValue(QString("filename"), filename, obj, QString("QString"));
     }
-    if((save_image != nullptr) && (save_image->isSet())){
-        toJsonValue(QString("saveImage"), save_image, obj, QString("SWGCameraActions_saveImage"));
+    if(m_record_mode_isSet){
+        obj->insert("recordMode", QJsonValue(record_mode));
     }
-    if((record_video != nullptr) && (record_video->isSet())){
-        toJsonValue(QString("recordVideo"), record_video, obj, QString("SWGCameraActions_recordVideo"));
+    if(m_images_isSet){
+        obj->insert("images", QJsonValue(images));
     }
 
     return obj;
 }
 
+QString*
+SWGCameraActions_saveImage::getFilename() {
+    return filename;
+}
+void
+SWGCameraActions_saveImage::setFilename(QString* filename) {
+    this->filename = filename;
+    this->m_filename_isSet = true;
+}
+
 qint32
-SWGCameraActions::getRun() {
-    return run;
+SWGCameraActions_saveImage::getRecordMode() {
+    return record_mode;
 }
 void
-SWGCameraActions::setRun(qint32 run) {
-    this->run = run;
-    this->m_run_isSet = true;
+SWGCameraActions_saveImage::setRecordMode(qint32 record_mode) {
+    this->record_mode = record_mode;
+    this->m_record_mode_isSet = true;
 }
 
-SWGCameraActions_saveImage*
-SWGCameraActions::getSaveImage() {
-    return save_image;
+qint32
+SWGCameraActions_saveImage::getImages() {
+    return images;
 }
 void
-SWGCameraActions::setSaveImage(SWGCameraActions_saveImage* save_image) {
-    this->save_image = save_image;
-    this->m_save_image_isSet = true;
-}
-
-SWGCameraActions_recordVideo*
-SWGCameraActions::getRecordVideo() {
-    return record_video;
-}
-void
-SWGCameraActions::setRecordVideo(SWGCameraActions_recordVideo* record_video) {
-    this->record_video = record_video;
-    this->m_record_video_isSet = true;
+SWGCameraActions_saveImage::setImages(qint32 images) {
+    this->images = images;
+    this->m_images_isSet = true;
 }
 
 
 bool
-SWGCameraActions::isSet(){
+SWGCameraActions_saveImage::isSet(){
     bool isObjectUpdated = false;
     do{
-        if(m_run_isSet){
+        if(filename && *filename != QString("")){
             isObjectUpdated = true; break;
         }
-        if(save_image && save_image->isSet()){
+        if(m_record_mode_isSet){
             isObjectUpdated = true; break;
         }
-        if(record_video && record_video->isSet()){
+        if(m_images_isSet){
             isObjectUpdated = true; break;
         }
     }while(false);

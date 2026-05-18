@@ -828,6 +828,38 @@ CameraActions:
         Set the plugin running state
           * 0 - idle
           * 1 - run
+    saveImage:
+      description: "Save image to file"
+      type: object
+      properties:
+        filename:
+          description: "Filename for the image"
+          type: string
+        recordMode:
+          description: >
+            * 0 - Raw images
+            * 1 - Processed images
+            * 2 - Both
+          type: integer
+        images:
+          description: "Number of images to save (0 - Unlimited)"
+          type: integer
+    recordVideo:
+      description: "Record video to file"
+      type: object
+      properties:
+        filename:
+          description: "Filename for the video"
+          type: string
+        recordMode:
+          description: >
+            * 0 - Raw video
+            * 1 - Processed video
+            * 2 - Both
+          type: integer
+        duration:
+          description: "Duration of recording (0 - Unlimited)"
+          type: integer
 
 CameraRect:
   description: "Rectangle in image pixel coordinates"

@@ -560,23 +560,23 @@ void Scheduler::executeRule(SchedulerSettings::ScheduleRule& rule, const Executi
 void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context)
 {
     const QList<SchedulerSettings::DeviceSetAction> deviceActions = rule.m_deviceSetActions;
+    const QList<SchedulerSettings::ChannelAction> channelActions = rule.m_channelActions;
 
-    for (const SchedulerSettings::DeviceSetAction& action : deviceActions)
-    {
-        if (action.m_presetGroup.isEmpty()) {
-            continue;
+    auto loadPreset = [](int deviceSetIndex, const QString& presetGroup, quint64 presetFrequency, const QString& presetDescription) {
+        if (presetGroup.isEmpty()) {
+            return;
         }
 
         MainCore *mainCore = MainCore::instance();
         const std::vector<DeviceSet*>& deviceSets = mainCore->getDeviceSets();
 
-        if ((action.m_deviceSetIndex < 0) || (action.m_deviceSetIndex >= (int) deviceSets.size()))
+        if ((deviceSetIndex < 0) || (deviceSetIndex >= (int) deviceSets.size()))
         {
-            qWarning() << "Scheduler::executeRuleActions: no device set" << action.m_deviceSetIndex;
-            continue;
+            qWarning() << "Scheduler::executeRuleActions: no device set" << deviceSetIndex;
+            return;
         }
 
-        const DeviceSet *deviceSet = deviceSets[action.m_deviceSetIndex];
+        const DeviceSet *deviceSet = deviceSets[deviceSetIndex];
         QString presetType;
 
         if (deviceSet->m_deviceSourceEngine != nullptr) {
@@ -588,24 +588,35 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         }
 
         const Preset *preset = mainCore->getSettings().getPreset(
-            action.m_presetGroup,
-            action.m_presetFrequency,
-            action.m_presetDescription,
+            presetGroup,
+            presetFrequency,
+            presetDescription,
             presetType);
 
         if (preset)
         {
-            mainCore->getMainMessageQueue()->push(MainCore::MsgLoadPreset::create(preset, action.m_deviceSetIndex));
+            mainCore->getMainMessageQueue()->push(MainCore::MsgLoadPreset::create(preset, deviceSetIndex));
         }
         else
         {
             qWarning() << "Scheduler::executeRuleActions: unable to find preset"
-                       << action.m_presetGroup << action.m_presetFrequency << action.m_presetDescription;
+                       << presetGroup << presetFrequency << presetDescription;
         }
+    };
+
+    for (const SchedulerSettings::DeviceSetAction& action : deviceActions)
+    {
+        loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription);
     }
 
-    QTimer::singleShot(1000, this, [this, rule, context, deviceActions]() {
+    for (const SchedulerSettings::ChannelAction& action : channelActions)
+    {
+        loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription);
+    }
+
+    QTimer::singleShot(1000, this, [this, rule, context, deviceActions, channelActions]() {
         executeDeviceActions(deviceActions);
+        executeChannelActions(channelActions);
         executeFeatureActions(rule.m_featureActions);
         executeCommand(rule.m_command, rule, context);
         saySpeech(rule.m_speech, rule, context);
@@ -639,6 +650,60 @@ void Scheduler::executeDeviceActions(const QList<SchedulerSettings::DeviceSetAct
             ChannelWebAPIUtils::startStopFileSinks(action.m_deviceSetIndex, true);
         } else if (action.m_fileSinkAction == SchedulerSettings::ActionStop) {
             ChannelWebAPIUtils::startStopFileSinks(action.m_deviceSetIndex, false);
+        }
+    }
+}
+
+void Scheduler::executeChannelActions(const QList<SchedulerSettings::ChannelAction>& actions)
+{
+    for (const SchedulerSettings::ChannelAction& action : actions)
+    {
+        switch (action.m_action)
+        {
+        case SchedulerSettings::ActionFileSinkRecordStart:
+            ChannelWebAPIUtils::fileSinkRecord(action.m_deviceSetIndex, action.m_channelIndex, true);
+            break;
+        case SchedulerSettings::ActionFileSinkRecordStop:
+            ChannelWebAPIUtils::fileSinkRecord(action.m_deviceSetIndex, action.m_channelIndex, false);
+            break;
+        case SchedulerSettings::ActionSigMFRecordStart:
+            ChannelWebAPIUtils::sigMFRecord(action.m_deviceSetIndex, action.m_channelIndex, true);
+            break;
+        case SchedulerSettings::ActionSigMFRecordStop:
+            ChannelWebAPIUtils::sigMFRecord(action.m_deviceSetIndex, action.m_channelIndex, false);
+            break;
+        case SchedulerSettings::ActionRTTYTransmit:
+            ChannelWebAPIUtils::rttyModTransmit(action.m_deviceSetIndex, action.m_channelIndex, action.m_text);
+            break;
+        case SchedulerSettings::ActionPSK31Transmit:
+            ChannelWebAPIUtils::psk31ModTransmit(action.m_deviceSetIndex, action.m_channelIndex, action.m_text);
+            break;
+        case SchedulerSettings::ActionPacketTransmit:
+            ChannelWebAPIUtils::packetModTransmit(
+                action.m_deviceSetIndex,
+                action.m_channelIndex,
+                action.m_callsign,
+                action.m_to,
+                action.m_via,
+                action.m_data);
+            break;
+        case SchedulerSettings::ActionIEEE_802_15_4Transmit:
+            ChannelWebAPIUtils::ieee_802_15_4Transmit(action.m_deviceSetIndex, action.m_channelIndex, action.m_data);
+            break;
+        case SchedulerSettings::ActionAISTransmit:
+            ChannelWebAPIUtils::aisModTransmit(action.m_deviceSetIndex, action.m_channelIndex, action.m_data);
+            break;
+        case SchedulerSettings::ActionFreqScannerRun:
+            ChannelWebAPIUtils::freqScannerRun(action.m_deviceSetIndex, action.m_channelIndex, true);
+            break;
+        case SchedulerSettings::ActionFreqScannerStop:
+            ChannelWebAPIUtils::freqScannerRun(action.m_deviceSetIndex, action.m_channelIndex, false);
+            break;
+        case SchedulerSettings::ActionRadioAstronomyStart:
+            ChannelWebAPIUtils::radioAstronomyStart(action.m_deviceSetIndex, action.m_channelIndex);
+            break;
+        default:
+            break;
         }
     }
 }

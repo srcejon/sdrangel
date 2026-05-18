@@ -31,6 +31,7 @@
 #include <QToolButton>
 
 #include "device/deviceset.h"
+#include "channel/channelapi.h"
 #include "feature/feature.h"
 #include "feature/featureset.h"
 #include "feature/featureuiset.h"
@@ -64,6 +65,41 @@ QString presetText(const QString& group, quint64 frequency, const QString& descr
 QString featureKey(int featureSetIndex, int featureIndex)
 {
     return QStringLiteral("%1:%2").arg(featureSetIndex).arg(featureIndex);
+}
+
+QString channelKey(int channelIndex, const QString& channelId)
+{
+    return QStringLiteral("%1:%2").arg(channelIndex).arg(channelId);
+}
+
+bool channelSupportsAction(const QString& channelId, SchedulerSettings::RunAction action)
+{
+    switch (action)
+    {
+    case SchedulerSettings::ActionFileSinkRecordStart:
+    case SchedulerSettings::ActionFileSinkRecordStop:
+        return channelId == "sdrangel.channel.filesink";
+    case SchedulerSettings::ActionSigMFRecordStart:
+    case SchedulerSettings::ActionSigMFRecordStop:
+        return channelId == "sdrangel.channel.sigmffilesink";
+    case SchedulerSettings::ActionRTTYTransmit:
+        return channelId == "sdrangel.channeltx.modrtty";
+    case SchedulerSettings::ActionPSK31Transmit:
+        return channelId == "sdrangel.channeltx.modpsk31";
+    case SchedulerSettings::ActionPacketTransmit:
+        return channelId == "sdrangel.channeltx.modpacket";
+    case SchedulerSettings::ActionIEEE_802_15_4Transmit:
+        return channelId == "sdrangel.channeltx.mod802.15.4";
+    case SchedulerSettings::ActionAISTransmit:
+        return channelId == "sdrangel.channel.modais";
+    case SchedulerSettings::ActionFreqScannerRun:
+    case SchedulerSettings::ActionFreqScannerStop:
+        return channelId == "sdrangel.channel.freqscanner";
+    case SchedulerSettings::ActionRadioAstronomyStart:
+        return channelId == "sdrangel.channel.radioastronomy";
+    default:
+        return false;
+    }
 }
 
 bool parseFeatureKey(const QString& key, int& featureSetIndex, int& featureIndex)
@@ -108,7 +144,17 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     m_populating(false),
     m_currentRule(-1),
     m_currentDeviceAction(-1),
+    m_currentChannelAction(-1),
     m_currentFeatureAction(-1),
+    m_channelTextGroup(nullptr),
+    m_channelText(nullptr),
+    m_channelDataGroup(nullptr),
+    m_channelData(nullptr),
+    m_packetActionGroup(nullptr),
+    m_packetCallsign(nullptr),
+    m_packetTo(nullptr),
+    m_packetVia(nullptr),
+    m_packetData(nullptr),
     m_cameraActionGroup(nullptr),
     m_cameraFilename(nullptr),
     m_cameraRecordMode(nullptr),
@@ -128,6 +174,7 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
 
     RollupContents *rollupContents = getRollupContents();
     ui->setupUi(rollupContents);
+    createChannelActionParameterEditors();
     createFeatureActionParameterEditors();
     rollupContents->arrangeRollups();
     connect(rollupContents, SIGNAL(widgetRolled(QWidget*,bool)), this, SLOT(onWidgetRolled(QWidget*,bool)));
@@ -169,6 +216,16 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     }));
     ui->deviceActionsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     ui->deviceActionsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+
+    ui->channelActionsTable->setColumnCount(4);
+    ui->channelActionsTable->setHorizontalHeaderLabels(QStringList({
+        tr("Device set"),
+        tr("Preset"),
+        tr("Channel"),
+        tr("Action")
+    }));
+    ui->channelActionsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    ui->channelActionsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 
     ui->featureActionsTable->setColumnCount(2);
     ui->featureActionsTable->setHorizontalHeaderLabels(QStringList({
@@ -234,6 +291,7 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->rulesTable, &QTableWidget::itemChanged, this, &SchedulerGUI::onRuleItemChanged);
     connect(ui->rulesTable->selectionModel(), &QItemSelectionModel::selectionChanged, this, &SchedulerGUI::onRuleSelectionChanged);
     connect(ui->deviceActionsTable->selectionModel(), &QItemSelectionModel::selectionChanged, this, &SchedulerGUI::onDeviceActionSelectionChanged);
+    connect(ui->channelActionsTable->selectionModel(), &QItemSelectionModel::selectionChanged, this, &SchedulerGUI::onChannelActionSelectionChanged);
     connect(ui->featureActionsTable->selectionModel(), &QItemSelectionModel::selectionChanged, this, &SchedulerGUI::onFeatureActionSelectionChanged);
 
     connect(ui->addRule, &QToolButton::clicked, this, &SchedulerGUI::onAddRule);
@@ -241,6 +299,8 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->refreshLists, &QToolButton::clicked, this, &SchedulerGUI::onRefreshLists);
     connect(ui->addDeviceAction, &QToolButton::clicked, this, &SchedulerGUI::onAddDeviceAction);
     connect(ui->deleteDeviceAction, &QToolButton::clicked, this, &SchedulerGUI::onDeleteDeviceAction);
+    connect(ui->addChannelAction, &QToolButton::clicked, this, &SchedulerGUI::onAddChannelAction);
+    connect(ui->deleteChannelAction, &QToolButton::clicked, this, &SchedulerGUI::onDeleteChannelAction);
     connect(ui->addFeatureAction, &QToolButton::clicked, this, &SchedulerGUI::onAddFeatureAction);
     connect(ui->deleteFeatureAction, &QToolButton::clicked, this, &SchedulerGUI::onDeleteFeatureAction);
 
@@ -268,6 +328,35 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->fileSinkAction, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onDeviceEditorChanged);
     connect(ui->overrideFrequency, &QCheckBox::toggled, this, &SchedulerGUI::onDeviceEditorChanged);
     connect(ui->centerFrequency, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &SchedulerGUI::onDeviceEditorChanged);
+
+    connect(ui->channelDeviceSet, &QComboBox::currentTextChanged, this, [this](const QString&) {
+        if (!m_populating) {
+            updateChannelPresetList(currentChannelAction());
+            updateChannelList(currentChannelAction());
+            updateChannelActionList(currentChannelAction());
+            onChannelEditorChanged();
+        }
+    });
+    connect(ui->channelPreset, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (!m_populating) {
+            updateChannelList(currentChannelAction());
+            updateChannelActionList(currentChannelAction());
+            onChannelEditorChanged();
+        }
+    });
+    connect(ui->channelSelect, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (!m_populating) {
+            updateChannelActionList(currentChannelAction());
+            onChannelEditorChanged();
+        }
+    });
+    connect(ui->channelAction, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onChannelEditorChanged);
+    connect(m_channelText, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
+    connect(m_channelData, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
+    connect(m_packetCallsign, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
+    connect(m_packetTo, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
+    connect(m_packetVia, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
+    connect(m_packetData, &QLineEdit::editingFinished, this, &SchedulerGUI::onChannelEditorChanged);
 
     connect(ui->featureSelect, &QComboBox::currentTextChanged, this, &SchedulerGUI::onFeatureEditorChanged);
     connect(ui->featureAction, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onFeatureEditorChanged);
@@ -311,6 +400,33 @@ void SchedulerGUI::createFeatureActionParameterEditors()
     m_findTarget = new QLineEdit(m_findActionGroup);
     findLayout->addRow(tr("Target"), m_findTarget);
     ui->featureGroupLayout->addWidget(m_findActionGroup);
+}
+
+void SchedulerGUI::createChannelActionParameterEditors()
+{
+    m_channelTextGroup = new QGroupBox(tr("Text Parameters"), ui->channelGroup);
+    QFormLayout *textLayout = new QFormLayout(m_channelTextGroup);
+    m_channelText = new QLineEdit(m_channelTextGroup);
+    textLayout->addRow(tr("Text"), m_channelText);
+    ui->channelGroupLayout->addWidget(m_channelTextGroup);
+
+    m_channelDataGroup = new QGroupBox(tr("Data Parameters"), ui->channelGroup);
+    QFormLayout *dataLayout = new QFormLayout(m_channelDataGroup);
+    m_channelData = new QLineEdit(m_channelDataGroup);
+    dataLayout->addRow(tr("Data"), m_channelData);
+    ui->channelGroupLayout->addWidget(m_channelDataGroup);
+
+    m_packetActionGroup = new QGroupBox(tr("Packet Parameters"), ui->channelGroup);
+    QFormLayout *packetLayout = new QFormLayout(m_packetActionGroup);
+    m_packetCallsign = new QLineEdit(m_packetActionGroup);
+    m_packetTo = new QLineEdit(m_packetActionGroup);
+    m_packetVia = new QLineEdit(m_packetActionGroup);
+    m_packetData = new QLineEdit(m_packetActionGroup);
+    packetLayout->addRow(tr("Callsign"), m_packetCallsign);
+    packetLayout->addRow(tr("To"), m_packetTo);
+    packetLayout->addRow(tr("Via"), m_packetVia);
+    packetLayout->addRow(tr("Data"), m_packetData);
+    ui->channelGroupLayout->addWidget(m_packetActionGroup);
 }
 
 bool SchedulerGUI::handleMessage(const Message& message)
@@ -497,6 +613,30 @@ void SchedulerGUI::refreshFeatureActionsTable()
     }
 }
 
+void SchedulerGUI::refreshChannelActionsTable()
+{
+    SchedulerSettings::ScheduleRule *rule = currentRule();
+    const int actionCount = rule ? rule->m_channelActions.size() : 0;
+
+    m_populating = true;
+    ui->channelActionsTable->setRowCount(actionCount);
+
+    for (int row = 0; row < actionCount; ++row)
+    {
+        const SchedulerSettings::ChannelAction& action = rule->m_channelActions[row];
+        ui->channelActionsTable->setItem(row, 0, new QTableWidgetItem(deviceActionText(action)));
+        ui->channelActionsTable->setItem(row, 1, new QTableWidgetItem(presetText(action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription)));
+        ui->channelActionsTable->setItem(row, 2, new QTableWidgetItem(channelActionText(action)));
+        ui->channelActionsTable->setItem(row, 3, new QTableWidgetItem(runActionText(action.m_action)));
+    }
+
+    m_populating = false;
+
+    if ((m_currentChannelAction >= 0) && (m_currentChannelAction < actionCount)) {
+        ui->channelActionsTable->selectRow(m_currentChannelAction);
+    }
+}
+
 void SchedulerGUI::displayRuleEditor()
 {
     SchedulerSettings::ScheduleRule *rule = currentRule();
@@ -508,6 +648,7 @@ void SchedulerGUI::displayRuleEditor()
     ui->eventGroup->setEnabled(hasRule);
     ui->commandGroup->setEnabled(hasRule);
     ui->deviceGroup->setEnabled(hasRule);
+    ui->channelGroup->setEnabled(hasRule);
     ui->featureGroup->setEnabled(hasRule);
 
     if (hasRule)
@@ -538,16 +679,20 @@ void SchedulerGUI::displayRuleEditor()
     }
 
     m_currentDeviceAction = hasRule && !rule->m_deviceSetActions.isEmpty() ? qBound(0, m_currentDeviceAction, rule->m_deviceSetActions.size() - 1) : -1;
+    m_currentChannelAction = hasRule && !rule->m_channelActions.isEmpty() ? qBound(0, m_currentChannelAction, rule->m_channelActions.size() - 1) : -1;
     m_currentFeatureAction = hasRule && !rule->m_featureActions.isEmpty() ? qBound(0, m_currentFeatureAction, rule->m_featureActions.size() - 1) : -1;
 
     m_populating = false;
     updateTriggerVisibility();
     updateRegexState();
     refreshDeviceActionsTable();
+    refreshChannelActionsTable();
     refreshFeatureActionsTable();
     selectDeviceAction(m_currentDeviceAction);
+    selectChannelAction(m_currentChannelAction);
     selectFeatureAction(m_currentFeatureAction);
     displayDeviceActionEditor();
+    displayChannelActionEditor();
     displayFeatureActionEditor();
 }
 
@@ -585,6 +730,46 @@ void SchedulerGUI::displayDeviceActionEditor()
     m_populating = false;
 }
 
+void SchedulerGUI::displayChannelActionEditor()
+{
+    SchedulerSettings::ChannelAction *action = currentChannelAction();
+    const bool hasAction = action != nullptr;
+
+    m_populating = true;
+    ui->channelDeviceSet->setEnabled(hasAction);
+    ui->channelPreset->setEnabled(hasAction);
+    ui->channelSelect->setEnabled(hasAction);
+    ui->channelAction->setEnabled(hasAction);
+
+    updateChannelDeviceSetList(action);
+    updateChannelPresetList(action);
+    updateChannelList(action);
+    updateChannelActionList(action);
+
+    if (hasAction)
+    {
+        ui->channelAction->setCurrentIndex(ui->channelAction->findData(action->m_action));
+        m_channelText->setText(action->m_text);
+        m_channelData->setText(action->m_data);
+        m_packetCallsign->setText(action->m_callsign);
+        m_packetTo->setText(action->m_to);
+        m_packetVia->setText(action->m_via);
+        m_packetData->setText(action->m_data);
+    }
+    else
+    {
+        m_channelText->clear();
+        m_channelData->clear();
+        m_packetCallsign->clear();
+        m_packetTo->clear();
+        m_packetVia->clear();
+        m_packetData->clear();
+    }
+
+    updateChannelActionParameterVisibility();
+    m_populating = false;
+}
+
 void SchedulerGUI::displayFeatureActionEditor()
 {
     SchedulerSettings::FeatureAction *action = currentFeatureAction();
@@ -616,6 +801,24 @@ void SchedulerGUI::displayFeatureActionEditor()
 
     updateFeatureActionParameterVisibility();
     m_populating = false;
+}
+
+void SchedulerGUI::updateChannelActionParameterVisibility()
+{
+    const int action = ui->channelAction->currentData().toInt();
+    const bool text = (action == SchedulerSettings::ActionRTTYTransmit)
+        || (action == SchedulerSettings::ActionPSK31Transmit);
+    const bool data = (action == SchedulerSettings::ActionIEEE_802_15_4Transmit)
+        || (action == SchedulerSettings::ActionAISTransmit);
+    const bool packet = action == SchedulerSettings::ActionPacketTransmit;
+
+    m_channelTextGroup->setVisible(text);
+    m_channelTextGroup->setEnabled(text);
+    m_channelDataGroup->setVisible(data);
+    m_channelDataGroup->setEnabled(data);
+    m_packetActionGroup->setVisible(packet);
+    m_packetActionGroup->setEnabled(packet);
+    getRollupContents()->arrangeRollups();
 }
 
 void SchedulerGUI::updateFeatureActionParameterVisibility()
@@ -736,6 +939,69 @@ void SchedulerGUI::updateCurrentDeviceActionFromWidgets()
     action->m_fileSinkAction = static_cast<SchedulerSettings::RunAction>(ui->fileSinkAction->currentData().toInt());
     action->m_overrideCenterFrequency = ui->overrideFrequency->isChecked();
     action->m_centerFrequency = qRound64(ui->centerFrequency->value() * 1000000.0);
+}
+
+void SchedulerGUI::updateCurrentChannelActionFromWidgets()
+{
+    SchedulerSettings::ChannelAction *action = currentChannelAction();
+    if (!action) {
+        return;
+    }
+
+    const QVariant deviceData = ui->channelDeviceSet->currentData();
+    bool parsedDeviceSet = false;
+
+    if (deviceData.isValid())
+    {
+        action->m_deviceSetIndex = deviceData.toInt(&parsedDeviceSet);
+        if (parsedDeviceSet) {
+            action->m_deviceSetId = deviceSetId(action->m_deviceSetIndex);
+        }
+    }
+
+    if (!parsedDeviceSet)
+    {
+        unsigned int deviceSetIndex = 0;
+        if (MainCore::getDeviceSetIndexFromId(ui->channelDeviceSet->currentText(), deviceSetIndex))
+        {
+            action->m_deviceSetIndex = static_cast<int>(deviceSetIndex);
+            action->m_deviceSetId = ui->channelDeviceSet->currentText();
+        }
+        else
+        {
+            action->m_deviceSetId = ui->channelDeviceSet->currentText();
+        }
+    }
+
+    const int presetIndex = ui->channelPreset->currentData().toInt();
+    if (presetIndex >= 0)
+    {
+        const Preset *preset = MainCore::instance()->getSettings().getPreset(presetIndex);
+        action->m_presetGroup = preset->getGroup();
+        action->m_presetFrequency = preset->getCenterFrequency();
+        action->m_presetDescription = preset->getDescription();
+    }
+    else if (presetIndex == PresetNone)
+    {
+        action->m_presetGroup.clear();
+        action->m_presetFrequency = 0;
+        action->m_presetDescription.clear();
+    }
+
+    bool parsedChannel = false;
+    const int channelIndex = ui->channelSelect->currentData().toInt(&parsedChannel);
+    if (parsedChannel)
+    {
+        action->m_channelIndex = channelIndex;
+        action->m_channelId = ui->channelSelect->currentData(Qt::UserRole + 1).toString();
+    }
+
+    action->m_action = static_cast<SchedulerSettings::RunAction>(ui->channelAction->currentData().toInt());
+    action->m_text = m_channelText->text();
+    action->m_callsign = m_packetCallsign->text();
+    action->m_to = m_packetTo->text();
+    action->m_via = m_packetVia->text();
+    action->m_data = (action->m_action == SchedulerSettings::ActionPacketTransmit) ? m_packetData->text() : m_channelData->text();
 }
 
 void SchedulerGUI::updateCurrentFeatureActionFromWidgets()
@@ -908,6 +1174,207 @@ void SchedulerGUI::updatePresetList(const SchedulerSettings::DeviceSetAction *se
     }
 }
 
+void SchedulerGUI::updateChannelDeviceSetList(const SchedulerSettings::ChannelAction *selectedAction)
+{
+    ui->channelDeviceSet->clear();
+
+    const std::vector<DeviceSet*>& deviceSets = MainCore::instance()->getDeviceSets();
+    bool found = false;
+
+    for (int i = 0; i < (int) deviceSets.size(); ++i)
+    {
+        const QString id = deviceSetId(i);
+        ui->channelDeviceSet->addItem(id, i);
+
+        if (selectedAction && (selectedAction->m_deviceSetIndex == i)) {
+            found = true;
+        }
+    }
+
+    if (selectedAction && !found && !selectedAction->m_deviceSetId.isEmpty()) {
+        ui->channelDeviceSet->addItem(selectedAction->m_deviceSetId, QVariant());
+    }
+
+    if (selectedAction)
+    {
+        const int index = ui->channelDeviceSet->findData(selectedAction->m_deviceSetIndex);
+        if (index >= 0) {
+            ui->channelDeviceSet->setCurrentIndex(index);
+        } else if (!selectedAction->m_deviceSetId.isEmpty()) {
+            ui->channelDeviceSet->setCurrentText(selectedAction->m_deviceSetId);
+        }
+    }
+}
+
+void SchedulerGUI::updateChannelPresetList(const SchedulerSettings::ChannelAction *selectedAction)
+{
+    ui->channelPreset->clear();
+    ui->channelPreset->addItem(QString(), PresetNone);
+
+    QChar deviceType;
+    const QString text = ui->channelDeviceSet->currentText();
+    if (text.isEmpty()) {
+        deviceType = 'R';
+    } else {
+        deviceType = text.at(0);
+    }
+
+    const MainSettings& mainSettings = MainCore::instance()->getSettings();
+    const int count = mainSettings.getPresetCount();
+    bool found = false;
+
+    for (int i = 0; i < count; ++i)
+    {
+        const Preset *preset = mainSettings.getPreset(i);
+        if (((preset->isSourcePreset()) && (deviceType == 'R'))
+            || ((preset->isSinkPreset()) && (deviceType == 'T'))
+            || ((preset->isMIMOPreset()) && (deviceType == 'M')))
+        {
+            ui->channelPreset->addItem(presetText(preset->getGroup(), preset->getCenterFrequency(), preset->getDescription()), i);
+            if (selectedAction
+                && (selectedAction->m_presetGroup == preset->getGroup())
+                && (selectedAction->m_presetFrequency == preset->getCenterFrequency())
+                && (selectedAction->m_presetDescription == preset->getDescription()))
+            {
+                found = true;
+            }
+        }
+    }
+
+    if (selectedAction && !selectedAction->m_presetGroup.isEmpty() && !found)
+    {
+        ui->channelPreset->addItem(
+            presetText(selectedAction->m_presetGroup, selectedAction->m_presetFrequency, selectedAction->m_presetDescription) + tr(" (unresolved)"),
+            PresetUnresolved);
+    }
+
+    if (selectedAction && !selectedAction->m_presetGroup.isEmpty())
+    {
+        int selectedIndex = -1;
+        for (int i = 0; i < ui->channelPreset->count(); ++i)
+        {
+            if (ui->channelPreset->itemData(i).toInt() >= 0)
+            {
+                const Preset *preset = mainSettings.getPreset(ui->channelPreset->itemData(i).toInt());
+                if ((selectedAction->m_presetGroup == preset->getGroup())
+                    && (selectedAction->m_presetFrequency == preset->getCenterFrequency())
+                    && (selectedAction->m_presetDescription == preset->getDescription()))
+                {
+                    selectedIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (selectedIndex < 0) {
+            selectedIndex = ui->channelPreset->findData(PresetUnresolved);
+        }
+
+        ui->channelPreset->setCurrentIndex(selectedIndex >= 0 ? selectedIndex : 0);
+    }
+    else
+    {
+        ui->channelPreset->setCurrentIndex(0);
+    }
+}
+
+void SchedulerGUI::updateChannelList(const SchedulerSettings::ChannelAction *selectedAction)
+{
+    ui->channelSelect->clear();
+    bool found = false;
+
+    const Preset *preset = selectedChannelPreset();
+    if (preset)
+    {
+        for (int i = 0; i < preset->getChannelCount(); ++i)
+        {
+            const QString channelId = preset->getChannelConfig(i).m_channelIdURI;
+            ui->channelSelect->addItem(QStringLiteral("%1 %2").arg(i).arg(channelId), i);
+            ui->channelSelect->setItemData(ui->channelSelect->count() - 1, channelId, Qt::UserRole + 1);
+            if (selectedAction && (selectedAction->m_channelIndex == i)) {
+                found = true;
+            }
+        }
+    }
+    else
+    {
+        const int deviceSetIndex = ui->channelDeviceSet->currentData().toInt();
+        const std::vector<DeviceSet*>& deviceSets = MainCore::instance()->getDeviceSets();
+        if ((deviceSetIndex >= 0) && (deviceSetIndex < (int) deviceSets.size()))
+        {
+            DeviceSet *deviceSet = deviceSets[deviceSetIndex];
+            for (int i = 0; i < deviceSet->getNumberOfChannels(); ++i)
+            {
+                ChannelAPI *channel = deviceSet->getChannelAt(i);
+                const QString channelId = channel ? channel->getURI() : QString();
+                QString text = QStringLiteral("%1 %2").arg(i).arg(channelId);
+                if (channel)
+                {
+                    text += QStringLiteral(" (%1)").arg(channel->getIdentifier());
+                }
+                ui->channelSelect->addItem(text, i);
+                ui->channelSelect->setItemData(ui->channelSelect->count() - 1, channelId, Qt::UserRole + 1);
+                if (selectedAction && (selectedAction->m_channelIndex == i)) {
+                    found = true;
+                }
+            }
+        }
+    }
+
+    if (selectedAction && !found)
+    {
+        ui->channelSelect->addItem(
+            QStringLiteral("%1 %2 (unresolved)")
+                .arg(selectedAction->m_channelIndex)
+                .arg(selectedAction->m_channelId),
+            selectedAction->m_channelIndex);
+        ui->channelSelect->setItemData(ui->channelSelect->count() - 1, selectedAction->m_channelId, Qt::UserRole + 1);
+    }
+
+    if (selectedAction)
+    {
+        const int index = ui->channelSelect->findData(selectedAction->m_channelIndex);
+        if (index >= 0) {
+            ui->channelSelect->setCurrentIndex(index);
+        } else if (ui->channelSelect->count() > 0) {
+            ui->channelSelect->setCurrentIndex(0);
+        }
+    }
+}
+
+void SchedulerGUI::updateChannelActionList(const SchedulerSettings::ChannelAction *selectedAction)
+{
+    const SchedulerSettings::RunAction selected = selectedAction ? selectedAction->m_action : SchedulerSettings::ActionNoChange;
+    const QString channelId = ui->channelSelect->currentData(Qt::UserRole + 1).toString();
+    ui->channelAction->clear();
+
+    auto addAction = [this, &channelId, selected](const QString& text, SchedulerSettings::RunAction action) {
+        if (channelSupportsAction(channelId, action) || (selected == action)) {
+            ui->channelAction->addItem(text, action);
+        }
+    };
+
+    addAction(tr("Start recording"), SchedulerSettings::ActionFileSinkRecordStart);
+    addAction(tr("Stop recording"), SchedulerSettings::ActionFileSinkRecordStop);
+    addAction(tr("Start SigMF recording"), SchedulerSettings::ActionSigMFRecordStart);
+    addAction(tr("Stop SigMF recording"), SchedulerSettings::ActionSigMFRecordStop);
+    addAction(tr("Transmit RTTY"), SchedulerSettings::ActionRTTYTransmit);
+    addAction(tr("Transmit PSK31"), SchedulerSettings::ActionPSK31Transmit);
+    addAction(tr("Transmit packet"), SchedulerSettings::ActionPacketTransmit);
+    addAction(tr("Transmit IEEE 802.15.4"), SchedulerSettings::ActionIEEE_802_15_4Transmit);
+    addAction(tr("Transmit AIS"), SchedulerSettings::ActionAISTransmit);
+    addAction(tr("Run scanner"), SchedulerSettings::ActionFreqScannerRun);
+    addAction(tr("Stop scanner"), SchedulerSettings::ActionFreqScannerStop);
+    addAction(tr("Start sweep"), SchedulerSettings::ActionRadioAstronomyStart);
+
+    const int index = ui->channelAction->findData(selected);
+    if (index >= 0) {
+        ui->channelAction->setCurrentIndex(index);
+    } else if (ui->channelAction->count() > 0) {
+        ui->channelAction->setCurrentIndex(0);
+    }
+}
+
 void SchedulerGUI::updateFeatureList(const SchedulerSettings::FeatureAction *selectedAction)
 {
     ui->featureSelect->clear();
@@ -1006,6 +1473,20 @@ void SchedulerGUI::selectDeviceAction(int row)
     }
 }
 
+void SchedulerGUI::selectChannelAction(int row)
+{
+    if ((row >= 0) && (row < ui->channelActionsTable->rowCount()))
+    {
+        m_currentChannelAction = row;
+        ui->channelActionsTable->selectRow(row);
+    }
+    else
+    {
+        m_currentChannelAction = -1;
+        ui->channelActionsTable->clearSelection();
+    }
+}
+
 void SchedulerGUI::selectFeatureAction(int row)
 {
     if ((row >= 0) && (row < ui->featureActionsTable->rowCount()))
@@ -1039,6 +1520,16 @@ SchedulerSettings::DeviceSetAction *SchedulerGUI::currentDeviceAction()
     return nullptr;
 }
 
+SchedulerSettings::ChannelAction *SchedulerGUI::currentChannelAction()
+{
+    SchedulerSettings::ScheduleRule *rule = currentRule();
+    if (rule && (m_currentChannelAction >= 0) && (m_currentChannelAction < rule->m_channelActions.size())) {
+        return &rule->m_channelActions[m_currentChannelAction];
+    }
+
+    return nullptr;
+}
+
 SchedulerSettings::FeatureAction *SchedulerGUI::currentFeatureAction()
 {
     SchedulerSettings::ScheduleRule *rule = currentRule();
@@ -1052,6 +1543,16 @@ SchedulerSettings::FeatureAction *SchedulerGUI::currentFeatureAction()
 const Preset *SchedulerGUI::selectedPreset() const
 {
     const int presetIndex = ui->preset->currentData().toInt();
+    if (presetIndex < 0) {
+        return nullptr;
+    }
+
+    return MainCore::instance()->getSettings().getPreset(presetIndex);
+}
+
+const Preset *SchedulerGUI::selectedChannelPreset() const
+{
+    const int presetIndex = ui->channelPreset->currentData().toInt();
     if (presetIndex < 0) {
         return nullptr;
     }
@@ -1098,6 +1599,9 @@ QString SchedulerGUI::ruleActionSummary(const SchedulerSettings::ScheduleRule& r
     if (!rule.m_deviceSetActions.isEmpty()) {
         parts.append(tr("%1 device").arg(rule.m_deviceSetActions.size()));
     }
+    if (!rule.m_channelActions.isEmpty()) {
+        parts.append(tr("%1 channel").arg(rule.m_channelActions.size()));
+    }
     if (!rule.m_featureActions.isEmpty()) {
         parts.append(tr("%1 feature").arg(rule.m_featureActions.size()));
     }
@@ -1118,6 +1622,22 @@ QString SchedulerGUI::deviceActionText(const SchedulerSettings::DeviceSetAction&
     }
 
     return deviceSetId(action.m_deviceSetIndex);
+}
+
+QString SchedulerGUI::deviceActionText(const SchedulerSettings::ChannelAction& action) const
+{
+    if (!action.m_deviceSetId.isEmpty()) {
+        return action.m_deviceSetId;
+    }
+
+    return deviceSetId(action.m_deviceSetIndex);
+}
+
+QString SchedulerGUI::channelActionText(const SchedulerSettings::ChannelAction& action) const
+{
+    return QStringLiteral("%1 %2")
+        .arg(action.m_channelIndex)
+        .arg(action.m_channelId);
 }
 
 QString SchedulerGUI::featureActionText(const SchedulerSettings::FeatureAction& action) const
@@ -1153,6 +1673,30 @@ QString SchedulerGUI::runActionText(SchedulerSettings::RunAction action) const
         return tr("Record video");
     case SchedulerSettings::ActionMapFind:
         return tr("Find");
+    case SchedulerSettings::ActionFileSinkRecordStart:
+        return tr("Start recording");
+    case SchedulerSettings::ActionFileSinkRecordStop:
+        return tr("Stop recording");
+    case SchedulerSettings::ActionSigMFRecordStart:
+        return tr("Start SigMF recording");
+    case SchedulerSettings::ActionSigMFRecordStop:
+        return tr("Stop SigMF recording");
+    case SchedulerSettings::ActionRTTYTransmit:
+        return tr("Transmit RTTY");
+    case SchedulerSettings::ActionPSK31Transmit:
+        return tr("Transmit PSK31");
+    case SchedulerSettings::ActionPacketTransmit:
+        return tr("Transmit packet");
+    case SchedulerSettings::ActionIEEE_802_15_4Transmit:
+        return tr("Transmit IEEE 802.15.4");
+    case SchedulerSettings::ActionAISTransmit:
+        return tr("Transmit AIS");
+    case SchedulerSettings::ActionFreqScannerRun:
+        return tr("Run scanner");
+    case SchedulerSettings::ActionFreqScannerStop:
+        return tr("Stop scanner");
+    case SchedulerSettings::ActionRadioAstronomyStart:
+        return tr("Start sweep");
     case SchedulerSettings::ActionNoChange:
     default:
         return tr("No change");
@@ -1254,6 +1798,7 @@ void SchedulerGUI::onRuleSelectionChanged()
     const QList<QTableWidgetSelectionRange> ranges = ui->rulesTable->selectedRanges();
     m_currentRule = ranges.isEmpty() ? -1 : ranges.first().topRow();
     m_currentDeviceAction = -1;
+    m_currentChannelAction = -1;
     m_currentFeatureAction = -1;
     displayRuleEditor();
 }
@@ -1286,6 +1831,17 @@ void SchedulerGUI::onDeviceActionSelectionChanged()
     displayDeviceActionEditor();
 }
 
+void SchedulerGUI::onChannelActionSelectionChanged()
+{
+    if (m_populating) {
+        return;
+    }
+
+    const QList<QTableWidgetSelectionRange> ranges = ui->channelActionsTable->selectedRanges();
+    m_currentChannelAction = ranges.isEmpty() ? -1 : ranges.first().topRow();
+    displayChannelActionEditor();
+}
+
 void SchedulerGUI::onFeatureActionSelectionChanged()
 {
     if (m_populating) {
@@ -1304,6 +1860,7 @@ void SchedulerGUI::onAddRule()
     m_settings.m_rules.append(rule);
     m_currentRule = m_settings.m_rules.size() - 1;
     m_currentDeviceAction = -1;
+    m_currentChannelAction = -1;
     m_currentFeatureAction = -1;
     refreshRulesTable();
     selectRule(m_currentRule);
@@ -1322,6 +1879,7 @@ void SchedulerGUI::onDeleteRule()
         m_currentRule = m_settings.m_rules.size() - 1;
     }
     m_currentDeviceAction = -1;
+    m_currentChannelAction = -1;
     m_currentFeatureAction = -1;
     refreshRulesTable();
     selectRule(m_currentRule);
@@ -1367,6 +1925,55 @@ void SchedulerGUI::onDeleteDeviceAction()
     refreshDeviceActionsTable();
     selectDeviceAction(m_currentDeviceAction);
     displayDeviceActionEditor();
+    refreshRulesTable();
+    applyRules();
+}
+
+void SchedulerGUI::onAddChannelAction()
+{
+    SchedulerSettings::ScheduleRule *rule = currentRule();
+    if (!rule) {
+        return;
+    }
+
+    SchedulerSettings::ChannelAction action;
+    const std::vector<DeviceSet*>& deviceSets = MainCore::instance()->getDeviceSets();
+    if (!deviceSets.empty())
+    {
+        action.m_deviceSetIndex = 0;
+        action.m_deviceSetId = deviceSetId(0);
+
+        if (deviceSets[0]->getNumberOfChannels() > 0)
+        {
+            ChannelAPI *channel = deviceSets[0]->getChannelAt(0);
+            action.m_channelIndex = 0;
+            action.m_channelId = channel ? channel->getURI() : QString();
+        }
+    }
+
+    rule->m_channelActions.append(action);
+    m_currentChannelAction = rule->m_channelActions.size() - 1;
+    refreshChannelActionsTable();
+    selectChannelAction(m_currentChannelAction);
+    displayChannelActionEditor();
+    refreshRulesTable();
+    applyRules();
+}
+
+void SchedulerGUI::onDeleteChannelAction()
+{
+    SchedulerSettings::ScheduleRule *rule = currentRule();
+    if (!rule || (m_currentChannelAction < 0) || (m_currentChannelAction >= rule->m_channelActions.size())) {
+        return;
+    }
+
+    rule->m_channelActions.removeAt(m_currentChannelAction);
+    if (m_currentChannelAction >= rule->m_channelActions.size()) {
+        m_currentChannelAction = rule->m_channelActions.size() - 1;
+    }
+    refreshChannelActionsTable();
+    selectChannelAction(m_currentChannelAction);
+    displayChannelActionEditor();
     refreshRulesTable();
     applyRules();
 }
@@ -1446,6 +2053,22 @@ void SchedulerGUI::onDeviceEditorChanged()
     updateCurrentDeviceActionFromWidgets();
     refreshDeviceActionsTable();
     selectDeviceAction(row);
+    refreshRulesTable();
+    selectRule(m_currentRule);
+    applyRules();
+}
+
+void SchedulerGUI::onChannelEditorChanged()
+{
+    if (!m_doApplySettings || m_populating) {
+        return;
+    }
+
+    const int row = m_currentChannelAction;
+    updateCurrentChannelActionFromWidgets();
+    updateChannelActionParameterVisibility();
+    refreshChannelActionsTable();
+    selectChannelAction(row);
     refreshRulesTable();
     selectRule(m_currentRule);
     applyRules();

@@ -168,6 +168,46 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::FeatureAction& actio
     return in;
 }
 
+QDataStream& operator<<(QDataStream& out, const SchedulerSettings::ChannelAction& action)
+{
+    out << action.m_deviceSetIndex;
+    out << action.m_deviceSetId;
+    out << action.m_presetGroup;
+    out << action.m_presetFrequency;
+    out << action.m_presetDescription;
+    out << action.m_channelIndex;
+    out << action.m_channelId;
+    out << static_cast<qint32>(action.m_action);
+    out << action.m_text;
+    out << action.m_callsign;
+    out << action.m_to;
+    out << action.m_via;
+    out << action.m_data;
+    return out;
+}
+
+QDataStream& operator>>(QDataStream& in, SchedulerSettings::ChannelAction& action)
+{
+    qint32 runAction;
+
+    in >> action.m_deviceSetIndex;
+    in >> action.m_deviceSetId;
+    in >> action.m_presetGroup;
+    in >> action.m_presetFrequency;
+    in >> action.m_presetDescription;
+    in >> action.m_channelIndex;
+    in >> action.m_channelId;
+    in >> runAction;
+    in >> action.m_text;
+    in >> action.m_callsign;
+    in >> action.m_to;
+    in >> action.m_via;
+    in >> action.m_data;
+
+    action.m_action = static_cast<SchedulerSettings::RunAction>(runAction);
+    return in;
+}
+
 QDataStream& operator<<(QDataStream& out, const SchedulerSettings::ScheduleRule& rule)
 {
     out << rule.m_id;
@@ -184,6 +224,7 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::ScheduleRule&
     out << rule.m_command;
     out << rule.m_speech;
     out << rule.m_deviceSetActions;
+    out << rule.m_channelActions;
     out << rule.m_featureActions;
     out << rule.m_lastRun;
     return out;
@@ -209,6 +250,7 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ScheduleRule& rule)
     in >> rule.m_command;
     in >> rule.m_speech;
     in >> rule.m_deviceSetActions;
+    in >> rule.m_channelActions;
     in >> rule.m_featureActions;
     in >> rule.m_lastRun;
 
@@ -240,6 +282,14 @@ SchedulerSettings::FeatureAction::FeatureAction() :
     m_cameraRecordMode(0),
     m_cameraImageCount(1),
     m_cameraVideoDuration(0)
+{
+}
+
+SchedulerSettings::ChannelAction::ChannelAction() :
+    m_deviceSetIndex(0),
+    m_presetFrequency(0),
+    m_channelIndex(0),
+    m_action(ActionFileSinkRecordStart)
 {
 }
 
@@ -279,7 +329,7 @@ QByteArray SchedulerSettings::serialize() const
     QDataStream rulesStream(&rulesBlob, QIODevice::WriteOnly);
     QDataStream featureActionExtrasStream(&featureActionExtrasBlob, QIODevice::WriteOnly);
 
-    rulesStream << quint32(1);
+    rulesStream << quint32(2);
     rulesStream << m_rules;
     writeFeatureActionExtras(featureActionExtrasStream, m_rules);
 
@@ -330,7 +380,7 @@ bool SchedulerSettings::deserialize(const QByteArray& data)
             quint32 rulesVersion = 0;
             rulesStream >> rulesVersion;
 
-            if (rulesVersion == 1) {
+            if (rulesVersion == 2) {
                 rulesStream >> m_rules;
             }
         }

@@ -50,7 +50,19 @@ struct SchedulerSettings
         ActionStop,
         ActionCameraSaveImage,
         ActionCameraRecordVideo,
-        ActionMapFind
+        ActionMapFind,
+        ActionFileSinkRecordStart,
+        ActionFileSinkRecordStop,
+        ActionSigMFRecordStart,
+        ActionSigMFRecordStop,
+        ActionRTTYTransmit,
+        ActionPSK31Transmit,
+        ActionPacketTransmit,
+        ActionIEEE_802_15_4Transmit,
+        ActionAISTransmit,
+        ActionFreqScannerRun,
+        ActionFreqScannerStop,
+        ActionRadioAstronomyStart
     };
 
     enum DelayUnit
@@ -89,6 +101,25 @@ struct SchedulerSettings
         FeatureAction();
     };
 
+    struct ChannelAction
+    {
+        int m_deviceSetIndex;
+        QString m_deviceSetId;
+        QString m_presetGroup;
+        quint64 m_presetFrequency;
+        QString m_presetDescription;
+        int m_channelIndex;
+        QString m_channelId;
+        RunAction m_action;
+        QString m_text;
+        QString m_callsign;
+        QString m_to;
+        QString m_via;
+        QString m_data;
+
+        ChannelAction();
+    };
+
     struct ScheduleRule
     {
         QString m_id;
@@ -105,6 +136,7 @@ struct SchedulerSettings
         QString m_command;
         QString m_speech;
         QList<DeviceSetAction> m_deviceSetActions;
+        QList<ChannelAction> m_channelActions;
         QList<FeatureAction> m_featureActions;
         QDateTime m_lastRun;
 

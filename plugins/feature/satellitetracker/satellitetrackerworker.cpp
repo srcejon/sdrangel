@@ -605,6 +605,9 @@ void SatelliteTrackerWorker::aos(SatWorkerState *satWorkerState)
     // TODO: Detect if different device sets are used and support multiple sats simultaneously
     if (m_settings.m_target == satWorkerState->m_name)
         applyDeviceAOSSettings(satWorkerState->m_name);
+
+    // Send event to other features
+    sendEvent(satWorkerState, true);
 }
 
 // Determine if we need to flip rotator or use extended azimuth to avoid 360/0 discontinuity
@@ -983,6 +986,9 @@ void SatelliteTrackerWorker::los(SatWorkerState *satWorkerState)
         ChannelWebAPIUtils::satelliteLOS(satWorkerState->m_name);
         FeatureWebAPIUtils::satelliteLOS(satWorkerState->m_name);
 
+        // Send event to other features
+        sendEvent(satWorkerState, false);
+
         if (m_settings.m_deviceSettings.contains(satWorkerState->m_name))
         {
             QList<SatelliteTrackerSettings::SatelliteDeviceSettings *> *m_deviceSettingsList = m_settings.m_deviceSettings.value(satWorkerState->m_name);
@@ -1046,7 +1052,22 @@ void SatelliteTrackerWorker::los(SatWorkerState *satWorkerState)
     m_recalculatePasses = true;
 }
 
+void SatelliteTrackerWorker::sendEvent(const SatWorkerState *satWorkerState, bool aos)
+{
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_satelliteTracker, "event", eventPipes);
+    QString eventData = QString("name=%1").arg(satWorkerState->m_name);
+    MainCore::MsgEvent::EventType eventType = aos ? MainCore::MsgEvent::EventType::SatelliteAOSEvent : MainCore::MsgEvent::SatelliteLOSEvent;
+    QDateTime eventTime = aos ? satWorkerState->m_aos : satWorkerState->m_los;
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_satelliteTracker, eventTime, eventType, eventData));
+    }
+}
+
 bool SatWorkerState::hasAOS(const QDateTime& currentTime)
 {
     return (m_aos <= currentTime) && (m_los > currentTime);
 }
+

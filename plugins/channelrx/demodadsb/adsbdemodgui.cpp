@@ -1726,6 +1726,8 @@ Aircraft *ADSBDemodGUI::getAircraft(int icao, bool &newAircraft)
         }
         // Check to see if we need to emit a notification about this new aircraft
         checkStaticNotification(aircraft);
+        // Send aircraft detected event to other features
+        sendEvent(aircraft, MainCore::MsgEvent::EventType::ADSBAircraftDetectedEvent);
     }
 
     return aircraft;
@@ -5059,6 +5061,7 @@ void ADSBDemodGUI::checkStaticNotification(Aircraft *aircraft)
                     if (m_settings.m_notificationSettings[i]->m_autoTarget) {
                         targetAircraft(aircraft);
                     }
+                    sendEvent(aircraft, MainCore::MsgEvent::ADSBNotificationEvent);
 
                     aircraft->m_notified = true;
                 }
@@ -5138,6 +5141,7 @@ void ADSBDemodGUI::checkDynamicNotification(Aircraft *aircraft)
                             if (m_settings.m_notificationSettings[i]->m_autoTarget) {
                                 targetAircraft(aircraft);
                             }
+                            sendEvent(aircraft, MainCore::MsgEvent::ADSBNotificationEvent);
 
                             aircraft->m_notified = true;
                         }
@@ -7470,6 +7474,8 @@ void ADSBDemodGUI::removeAircraft(QHash<int, Aircraft *>::iterator& i, Aircraft 
         m_trackAircraft = nullptr;
     }
 
+    // Send event to other features that we've lost the aircraft
+    sendEvent(aircraft, MainCore::MsgEvent::ADSBAircraftLostEvent);
     // Remove map model
     m_aircraftModel.removeAircraft(aircraft);
     // Remove row from table
@@ -7481,6 +7487,21 @@ void ADSBDemodGUI::removeAircraft(QHash<int, Aircraft *>::iterator& i, Aircraft 
 
     // And finally free its memory
     delete aircraft;
+}
+
+void ADSBDemodGUI::sendEvent(const Aircraft *aircraft, MainCore::MsgEvent::EventType eventType)
+{
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_adsbDemod, "event", eventPipes);
+    QString eventData = QString("icao=%1").arg(aircraft->m_icaoHex);
+    if (aircraft->m_aircraftInfo) {
+        eventData += QString(",type=%1").arg(aircraft->m_aircraftInfo->m_type);
+    }
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_adsbDemod, aircraft->m_updateTime, eventType, eventData));
+    }
 }
 
 void ADSBDemodGUI::tick()

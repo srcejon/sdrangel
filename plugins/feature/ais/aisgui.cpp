@@ -354,6 +354,8 @@ void AISGUI::removeOldVessels()
                     "", 0.0f, 0.0f,
                     0.0f, 0.0f, QDateTime(),
                     0.0f);
+                // Send event to other features
+                sendEvent(mmsi, false);
                 // Remove from table
                 ui->vessels->removeRow(row);
                 // Remove from hash and free memory
@@ -776,6 +778,8 @@ void AISGUI::updateVessels(AISMessage *ais, QDateTime dateTime)
             vessel->m_model, modelOffset, labelOffset,
             latitudeV.toFloat(), longitudeV.toFloat(), positionUpdateItem->data(Qt::DisplayRole).toDateTime(),
             heading);
+        // Send event to other features
+        sendEvent(mmsiItem->text(), true);
     }
 }
 
@@ -1053,5 +1057,19 @@ void AISGUI::vessels_customContextMenuRequested(QPoint pos)
         }
 
         tableContextMenu->popup(ui->vessels->viewport()->mapToGlobal(pos));
+    }
+}
+
+void AISGUI::sendEvent(const QString& mmsi, bool detected)
+{
+    // Create aircraft lost event
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_ais, "event", eventPipes);
+    QString eventData = QString("mmsi=%1").arg(mmsi);
+    MainCore::MsgEvent::EventType eventType = detected ? MainCore::MsgEvent::EventType::AISShipDetectedEvent : MainCore::MsgEvent::AISShipLostEvent;
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_ais, QDateTime::currentDateTime(), eventType, eventData));
     }
 }

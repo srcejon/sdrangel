@@ -151,6 +151,7 @@ private:
     void executeCommand(const QString &command, const QString &satelliteName);
     void enableDoppler(SatWorkerState *satWorkerState);
     void disableDoppler(SatWorkerState *satWorkerState);
+    void sendEvent(const SatWorkerState *satWorkerState, bool aos);
 
 private slots:
     void stopWork();

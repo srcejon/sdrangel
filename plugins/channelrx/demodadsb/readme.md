@@ -210,6 +210,8 @@ By running a program such as [cmail](https://www.inveigle.net/cmail/download), e
 
 Also you can set the target aircraft to the matching aircraft automatically by checking the box in the "Auto target" column.
 
+Notifcations are also sent as events to the [Scheduler feature](../../feature/scheduler/readme.md), so scheduled tasks can be triggered by aircraft matching rules.
+
 Here are a few examples:
 
 ![Notifications Dialog](../../../doc/img/ADSBDemod_plugin_notifications.png)

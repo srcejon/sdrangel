@@ -1404,6 +1404,7 @@ private:
     void updateNavAids();
     void updateChannelList();
     void removeAircraft(QHash<int, Aircraft *>::iterator& i, Aircraft *aircraft);
+    void sendEvent(const Aircraft *aircraft, MainCore::MsgEvent::EventType eventType);
     QAction *createCheckableItem(QString& text, int idx, bool checked);
     Aircraft* findAircraftByFlight(const QString& flight);
     QString dataTimeToShortString(QDateTime dt);

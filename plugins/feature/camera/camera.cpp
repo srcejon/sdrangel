@@ -52,7 +52,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_imageProcessorThread(new QThread()),
     m_imageProcessor(new CameraImageProcessor()),
     m_detectorThread(new QThread()),
-    m_detector(new CameraDetector()),
+    m_detector(new CameraDetector(this)),
     m_postProcessorThread(new QThread()),
     m_postProcessor(new CameraPostProcessor())
 {

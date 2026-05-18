@@ -39,6 +39,7 @@
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
+class Camera;
 class CameraPostProcessor;
 
 class CameraDetector : public QObject
@@ -144,7 +145,7 @@ public:
         MsgClearObjectDetectionHistory() : Message() {}
     };
 
-    CameraDetector();
+    CameraDetector(Camera *camera);
     ~CameraDetector();
 
     void startWork();
@@ -162,6 +163,7 @@ private:
         QDateTime m_deadline;
     };
 
+    Camera *m_camera;
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
     MessageQueue *m_msgQueueToFeature;
@@ -212,8 +214,9 @@ private:
     void reportObjectDetectionHistoryToGUI() const;
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     [[nodiscard]] QList<CameraDetectionHistoryEntry> getObjectDetectionHistorySnapshot() const;
-    bool applyObjectDetectedSettings(const QString& className);
-    void applyObjectDisappearedSettings(const QString& className);
+    bool applyObjectDetectedSettings(const QString& className, const QDateTime& now);
+    void applyObjectDisappearedSettings(const QString& className, const QDateTime& now);
+    void sendEvent(const QString& className, bool detected, const QDateTime& eventTime);
     void executeCommand(const QString& command, const QString& className);
     void saySpeech(const QString& speech, const QString& className);
     bool shouldRecordVideoForDetectedObjects() const;

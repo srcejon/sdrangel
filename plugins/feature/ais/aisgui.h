@@ -106,6 +106,7 @@ private:
     void getImageAndModel(const QString &type, const QString &shipType, int length, const QString &status, Vessel *vessel);
     void resizeTable();
     QAction *createCheckableItem(QString& text, int idx, bool checked, const char *slot);
+    void sendEvent(const QString& mmsi, bool detected);
 
     enum VesselCol {
         VESSEL_COL_MMSI,

@@ -351,7 +351,8 @@ cv::Size readOnnxInputSize(const QString& modelPath)
 }
 }
 
-CameraDetector::CameraDetector() :
+CameraDetector::CameraDetector(Camera *camera) :
+    m_camera(camera),
     m_msgQueueToGUI(nullptr),
     m_msgQueueToFeature(nullptr),
     m_nextStage(nullptr),
@@ -1594,7 +1595,7 @@ void CameraDetector::processObjectDetections(const QVector<CameraPipelineDetecti
         if (!m_detectedObjectClasses.contains(className))
         {
             m_detectedObjectClasses.insert(className);
-            if (applyObjectDetectedSettings(className)) {
+            if (applyObjectDetectedSettings(className, now)) {
                 frame.m_saveCurrentImage = true;
             }
         }
@@ -1632,7 +1633,7 @@ void CameraDetector::processObjectDetections(const QVector<CameraPipelineDetecti
                 m_activeObjectDetectionHistory.erase(activeHistoryIt);
                 historyChanged = true;
             }
-            applyObjectDisappearedSettings(it.key());
+            applyObjectDisappearedSettings(it.key(), now);
             it.remove();
         }
     }
@@ -1713,8 +1714,10 @@ void CameraDetector::saySpeech(const QString& speech, const QString& className)
 #endif
 }
 
-bool CameraDetector::applyObjectDetectedSettings(const QString& className)
+bool CameraDetector::applyObjectDetectedSettings(const QString& className, const QDateTime& now)
 {
+    sendEvent(className, true, now);
+
     if (!m_settings.m_objectDeviceSettings.contains(className)) {
         return false;
     }
@@ -1817,8 +1820,10 @@ bool CameraDetector::applyObjectDetectedSettings(const QString& className)
     return saveCurrentImage;
 }
 
-void CameraDetector::applyObjectDisappearedSettings(const QString& className)
+void CameraDetector::applyObjectDisappearedSettings(const QString& className, const QDateTime& now)
 {
+    sendEvent(className, false, now);
+
     if (!m_settings.m_objectDeviceSettings.contains(className)) {
         return;
     }
@@ -1854,5 +1859,18 @@ void CameraDetector::applyObjectDisappearedSettings(const QString& className)
 
     if (!shouldRecordVideoForDetectedObjects()) {
         setVideoRecordingEnabled(false);
+    }
+}
+
+void CameraDetector::sendEvent(const QString& className, bool detected, const QDateTime& eventTime)
+{
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_camera, "event", eventPipes);
+    QString eventData = QString("name=%1").arg(className);
+    MainCore::MsgEvent::EventType eventType = detected ? MainCore::MsgEvent::EventType::CameraObjectDetectedEvent : MainCore::MsgEvent::CameraObjectLostEvent;
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_camera, eventTime, eventType, eventData));
     }
 }

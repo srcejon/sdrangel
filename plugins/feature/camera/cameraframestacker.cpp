@@ -520,6 +520,7 @@ void CameraFrameStacker::processNextFrame()
         {
             frame = m_pendingFrames.front();
             m_pendingFrames.pop_front();
+            frame->m_stackQueuedCount += static_cast<int>(m_pendingFrames.size());
         }
 
         if (!frame)

@@ -120,6 +120,7 @@ public:
         const QImage& getImage() const { return m_image; }
         const CameraHistogramData& getHistogramData() const { return m_histogramData; }
         int getStackCount() const { return m_stackCount; }
+        int getStackQueuedCount() const { return m_stackQueuedCount; }
         bool isPlateSolved() const { return m_plateSolved; }
         int getPlateSolvedMatches() const { return m_plateSolvedMatches; }
         int getPlateSolveDetectedStarsConsidered() const { return m_plateSolveDetectedStarsConsidered; }
@@ -140,6 +141,7 @@ public:
         static MsgReportFrame* create(const QImage& image,
                                       const CameraHistogramData& histogramData,
                                       int stackCount,
+                                      int stackQueuedCount,
                                       bool plateSolved,
                                       int plateSolvedMatches,
                                       int plateSolveDetectedStarsConsidered,
@@ -161,6 +163,7 @@ public:
                 image,
                 histogramData,
                 stackCount,
+                stackQueuedCount,
                 plateSolved,
                 plateSolvedMatches,
                 plateSolveDetectedStarsConsidered,
@@ -183,6 +186,7 @@ public:
         QImage m_image;
         CameraHistogramData m_histogramData;
         int m_stackCount;
+        int m_stackQueuedCount;
         bool m_plateSolved;
         int m_plateSolvedMatches;
         int m_plateSolveDetectedStarsConsidered;
@@ -203,6 +207,7 @@ public:
         MsgReportFrame(const QImage& image,
                        const CameraHistogramData& histogramData,
                        int stackCount,
+                       int stackQueuedCount,
                        bool plateSolved,
                        int plateSolvedMatches,
                        int plateSolveDetectedStarsConsidered,
@@ -223,6 +228,7 @@ public:
             m_image(image),
             m_histogramData(histogramData),
             m_stackCount(stackCount),
+            m_stackQueuedCount(stackQueuedCount),
             m_plateSolved(plateSolved),
             m_plateSolvedMatches(plateSolvedMatches),
             m_plateSolveDetectedStarsConsidered(plateSolveDetectedStarsConsidered),

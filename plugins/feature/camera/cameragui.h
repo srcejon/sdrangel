@@ -196,6 +196,7 @@ private:
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
     QList<CameraDetectionHistoryEntry> m_detectionHistory;
     int m_lastStackCount = 1;
+    int m_lastStackQueuedCount = 0;
     CameraSettingsDialog *m_settingsDialog;
     CameraDetectionHistory *m_detectionHistoryDialog;
     CameraHistogramDialog *m_histogramDialog;

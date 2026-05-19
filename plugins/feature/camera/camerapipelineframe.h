@@ -103,6 +103,7 @@ struct CameraPipelineFrame
     QString m_plateSolveCatalogSource;
     bool m_saveCurrentImage = false;
     int m_stackCount = 1;
+    int m_stackQueuedCount = 0;
     BayerPattern m_bayerPattern = BayerNone;
 };
 

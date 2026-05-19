@@ -359,6 +359,7 @@ private:
     static constexpr int PlaybackPositionSliderMaximum = 1000;
 
 private slots:
+    void onMenuDialogCalled(const QPoint &p);
     void handleInputMessages();
     void on_detectionHistoryClearRequested();
     void on_startStop_clicked(bool checked);

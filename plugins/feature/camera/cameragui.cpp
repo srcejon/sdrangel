@@ -73,6 +73,7 @@
 #include "feature/featureuiset.h"
 #include "gui/crightclickenabler.h"
 #include "gui/audioselectdialog.h"
+#include "gui/basicfeaturesettingsdialog.h"
 #include "gui/dialogpositioner.h"
 #include "dsp/dspengine.h"
 #include "maincore.h"
@@ -645,6 +646,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     RollupContents *rollupContents = getRollupContents();
     ui->setupUi(rollupContents);
     rollupContents->arrangeRollups();
+    connect(this, SIGNAL(customContextMenuRequested(const QPoint &)), this, SLOT(onMenuDialogCalled(const QPoint &)));
 
     // Set up the QGraphicsView for camera preview
     m_imageScene = new QGraphicsScene(this);
@@ -761,6 +763,49 @@ void CameraGUI::setWorkspaceIndex(int index)
 {
     m_settings.m_workspaceIndex = index;
     m_feature->setWorkspaceIndex(index);
+}
+
+void CameraGUI::onMenuDialogCalled(const QPoint &p)
+{
+    if (m_contextMenuType == ContextMenuChannelSettings)
+    {
+        BasicFeatureSettingsDialog dialog(this);
+        dialog.setTitle(m_settings.m_title);
+        dialog.setUseReverseAPI(m_settings.m_useReverseAPI);
+        dialog.setReverseAPIAddress(m_settings.m_reverseAPIAddress);
+        dialog.setReverseAPIPort(m_settings.m_reverseAPIPort);
+        dialog.setReverseAPIFeatureSetIndex(m_settings.m_reverseAPIFeatureSetIndex);
+        dialog.setReverseAPIFeatureIndex(m_settings.m_reverseAPIFeatureIndex);
+        dialog.setDefaultTitle(m_displayedName);
+
+        dialog.move(p);
+        new DialogPositioner(&dialog, false);
+        dialog.exec();
+
+        if (dialog.hasChanged())
+        {
+            m_settings.m_title = dialog.getTitle();
+            m_settings.m_useReverseAPI = dialog.useReverseAPI();
+            m_settings.m_reverseAPIAddress = dialog.getReverseAPIAddress();
+            m_settings.m_reverseAPIPort = dialog.getReverseAPIPort();
+            m_settings.m_reverseAPIFeatureSetIndex = dialog.getReverseAPIFeatureSetIndex();
+            m_settings.m_reverseAPIFeatureIndex = dialog.getReverseAPIFeatureIndex();
+
+            setTitle(m_settings.m_title);
+            setWindowTitle(m_settings.m_title);
+
+            applySettings(QStringList({
+                QStringLiteral("title"),
+                QStringLiteral("useReverseAPI"),
+                QStringLiteral("reverseAPIAddress"),
+                QStringLiteral("reverseAPIPort"),
+                QStringLiteral("reverseAPIFeatureSetIndex"),
+                QStringLiteral("reverseAPIFeatureIndex")
+            }));
+        }
+    }
+
+    resetContextMenuType();
 }
 
 void CameraGUI::blockApplySettings(bool block)

@@ -139,8 +139,15 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     [[nodiscard]] QImage applyImageProcessingCuda(CameraPipelineFrame& frame);
     [[nodiscard]] bool canUseCudaImageProcessing() const;
+    void applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu);
+    void applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu) const;
     void applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) const;
+    void applyGreyscaleCuda(cv::cuda::GpuMat& bgrGpu) const;
+    void applySaturationCuda(cv::cuda::GpuMat& bgrGpu) const;
     void applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const;
+    void applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu) const;
+    void applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu) const;
+    void applySharpenCuda(cv::cuda::GpuMat& bgrGpu) const;
     void applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu) const;
     void applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu) const;
 #endif

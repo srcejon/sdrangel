@@ -469,90 +469,23 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
         gpuRgb.upload(rgbMat);
         cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR);
 
-        if (needsUnwarp)
-        {
-            ensureUnwarpMaps(bgrGpu.size());
-            if (!m_unwarpMapX.empty() && !m_unwarpMapY.empty())
-            {
-                cv::cuda::GpuMat mapXGpu;
-                cv::cuda::GpuMat mapYGpu;
-                cv::cuda::GpuMat unwarpedGpu;
-                mapXGpu.upload(m_unwarpMapX);
-                mapYGpu.upload(m_unwarpMapY);
-                cv::cuda::remap(bgrGpu, unwarpedGpu, mapXGpu, mapYGpu, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
-                bgrGpu = unwarpedGpu;
-            }
-        }
-
-        if (needsWhiteBalance)
-        {
-            std::vector<cv::cuda::GpuMat> channels;
-            cv::cuda::split(bgrGpu, channels);
-            channels[0].convertTo(channels[0], -1, m_settings.m_postProcessWhiteBalanceBlueGain, 0.0);
-            channels[1].convertTo(channels[1], -1, m_settings.m_postProcessWhiteBalanceGreenGain, 0.0);
-            channels[2].convertTo(channels[2], -1, m_settings.m_postProcessWhiteBalanceRedGain, 0.0);
-            cv::cuda::merge(channels, bgrGpu);
-        }
+        if (needsUnwarp) { applyLensUnwarpCuda(bgrGpu); }
+        if (needsWhiteBalance) { applyWhiteBalanceCuda(bgrGpu); }
 
         if (needsHistogramStretch) {
             applyHistogramStretchCuda(bgrGpu);
         }
 
-        if (needsGreyscale)
-        {
-            cv::cuda::GpuMat grayGpu;
-            cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
-            cv::cuda::cvtColor(grayGpu, bgrGpu, cv::COLOR_GRAY2BGR);
-        }
-
-        if (needsSaturation)
-        {
-            cv::cuda::GpuMat hsvGpu;
-            std::vector<cv::cuda::GpuMat> channels;
-            cv::cuda::cvtColor(bgrGpu, hsvGpu, cv::COLOR_BGR2HSV);
-            cv::cuda::split(hsvGpu, channels);
-            channels[1].convertTo(channels[1], -1, m_settings.m_saturation, 0.0);
-            cv::cuda::merge(channels, hsvGpu);
-            cv::cuda::cvtColor(hsvGpu, bgrGpu, cv::COLOR_HSV2BGR);
-        }
+        if (needsGreyscale) { applyGreyscaleCuda(bgrGpu); }
+        if (needsSaturation) { applySaturationCuda(bgrGpu); }
 
         if (needsGamma) {
             applyGammaCuda(bgrGpu);
         }
 
-        if (needsGaussianBlur)
-        {
-            const int kernelSize = 2 * m_settings.m_gaussianBlur + 1;
-            cv::cuda::GpuMat blurredGpu;
-            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createGaussianFilter(
-                bgrGpu.type(), bgrGpu.type(), cv::Size(kernelSize, kernelSize), 0.0);
-            filter->apply(bgrGpu, blurredGpu);
-            bgrGpu = blurredGpu;
-        }
-
-        if (needsMedianBlur)
-        {
-            const int kernelSize = 2 * m_settings.m_medianBlur + 1;
-            std::vector<cv::cuda::GpuMat> channels;
-            cv::cuda::split(bgrGpu, channels);
-            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMedianFilter(channels[0].type(), kernelSize);
-            for (cv::cuda::GpuMat& channel : channels)
-            {
-                cv::cuda::GpuMat filteredChannel;
-                filter->apply(channel, filteredChannel);
-                channel = filteredChannel;
-            }
-            cv::cuda::merge(channels, bgrGpu);
-        }
-
-        if (needsSharpen)
-        {
-            cv::cuda::GpuMat blurredGpu;
-            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createGaussianFilter(
-                bgrGpu.type(), bgrGpu.type(), cv::Size(3, 3), 1.0);
-            filter->apply(bgrGpu, blurredGpu);
-            cv::cuda::addWeighted(bgrGpu, 1.0 + m_settings.m_sharpen, blurredGpu, -m_settings.m_sharpen, 0.0, bgrGpu);
-        }
+        if (needsGaussianBlur) { applyGaussianBlurCuda(bgrGpu); }
+        if (needsMedianBlur) { applyMedianBlurCuda(bgrGpu); }
+        if (needsSharpen) { applySharpenCuda(bgrGpu); }
 
         if (needsSobelEdge) {
             applySobelEdgeCuda(bgrGpu);
@@ -598,6 +531,39 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
 
     frame.clearCudaCache();
     return applyImageProcessingCpu(input);
+}
+
+void CameraImageProcessor::applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu)
+{
+    PROFILER_START();
+
+    ensureUnwarpMaps(bgrGpu.size());
+    if (!m_unwarpMapX.empty() && !m_unwarpMapY.empty())
+    {
+        cv::cuda::GpuMat mapXGpu;
+        cv::cuda::GpuMat mapYGpu;
+        cv::cuda::GpuMat unwarpedGpu;
+        mapXGpu.upload(m_unwarpMapX);
+        mapYGpu.upload(m_unwarpMapY);
+        cv::cuda::remap(bgrGpu, unwarpedGpu, mapXGpu, mapYGpu, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+        bgrGpu = unwarpedGpu;
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+
+    std::vector<cv::cuda::GpuMat> channels;
+    cv::cuda::split(bgrGpu, channels);
+    channels[0].convertTo(channels[0], -1, m_settings.m_postProcessWhiteBalanceBlueGain, 0.0);
+    channels[1].convertTo(channels[1], -1, m_settings.m_postProcessWhiteBalanceGreenGain, 0.0);
+    channels[2].convertTo(channels[2], -1, m_settings.m_postProcessWhiteBalanceRedGain, 0.0);
+    cv::cuda::merge(channels, bgrGpu);
+
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) const
@@ -670,6 +636,32 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) c
     PROFILER_STOP(__FUNCTION__);
 }
 
+void CameraImageProcessor::applyGreyscaleCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+
+    cv::cuda::GpuMat grayGpu;
+    cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
+    cv::cuda::cvtColor(grayGpu, bgrGpu, cv::COLOR_GRAY2BGR);
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+
+    cv::cuda::GpuMat hsvGpu;
+    std::vector<cv::cuda::GpuMat> channels;
+    cv::cuda::cvtColor(bgrGpu, hsvGpu, cv::COLOR_BGR2HSV);
+    cv::cuda::split(hsvGpu, channels);
+    channels[1].convertTo(channels[1], -1, m_settings.m_saturation, 0.0);
+    cv::cuda::merge(channels, hsvGpu);
+    cv::cuda::cvtColor(hsvGpu, bgrGpu, cv::COLOR_HSV2BGR);
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
 void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const
 {
     PROFILER_START();
@@ -684,6 +676,52 @@ void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const
     cv::cuda::GpuMat correctedGpu;
     lookup->transform(bgrGpu, correctedGpu);
     bgrGpu = correctedGpu;
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+
+    const int kernelSize = 2 * m_settings.m_gaussianBlur + 1;
+    cv::cuda::GpuMat blurredGpu;
+    cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createGaussianFilter(
+        bgrGpu.type(), bgrGpu.type(), cv::Size(kernelSize, kernelSize), 0.0);
+    filter->apply(bgrGpu, blurredGpu);
+    bgrGpu = blurredGpu;
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+
+    const int kernelSize = 2 * m_settings.m_medianBlur + 1;
+    std::vector<cv::cuda::GpuMat> channels;
+    cv::cuda::split(bgrGpu, channels);
+    cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMedianFilter(channels[0].type(), kernelSize);
+    for (cv::cuda::GpuMat& channel : channels)
+    {
+        cv::cuda::GpuMat filteredChannel;
+        filter->apply(channel, filteredChannel);
+        channel = filteredChannel;
+    }
+    cv::cuda::merge(channels, bgrGpu);
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applySharpenCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+
+    cv::cuda::GpuMat blurredGpu;
+    cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createGaussianFilter(
+        bgrGpu.type(), bgrGpu.type(), cv::Size(3, 3), 1.0);
+    filter->apply(bgrGpu, blurredGpu);
+    cv::cuda::addWeighted(bgrGpu, 1.0 + m_settings.m_sharpen, blurredGpu, -m_settings.m_sharpen, 0.0, bgrGpu);
+
     PROFILER_STOP(__FUNCTION__);
 }
 

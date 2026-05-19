@@ -43,9 +43,7 @@ MESSAGE_CLASS_DEFINITION(Scheduler::MsgConfigureScheduler, Message)
 const char* const Scheduler::m_featureIdURI = "sdrangel.feature.scheduler";
 const char* const Scheduler::m_featureId = "Scheduler";
 
-namespace
-{
-QDateTime schedulerDateTimeFromString(const QString *text)
+QDateTime Scheduler::schedulerDateTimeFromString(const QString *text)
 {
     if (!text) {
         return QDateTime();
@@ -60,12 +58,12 @@ QDateTime schedulerDateTimeFromString(const QString *text)
     return dateTime;
 }
 
-QString schedulerDateTimeToString(const QDateTime& dateTime)
+QString Scheduler::schedulerDateTimeToString(const QDateTime& dateTime)
 {
     return dateTime.isValid() ? dateTime.toString(Qt::ISODateWithMs) : QString();
 }
 
-bool parseFrequency(const QString& text, double& frequencyInHz)
+bool Scheduler::parseFrequency(const QString& text, double& frequencyInHz)
 {
     const QRegularExpression re(
         QStringLiteral("^\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*([kKmMgG]?)(?:[hH][zZ])?\\s*$"));
@@ -94,7 +92,7 @@ bool parseFrequency(const QString& text, double& frequencyInHz)
     return true;
 }
 
-bool patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting)
+bool Scheduler::patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting)
 {
     switch (setting.m_type)
     {
@@ -108,7 +106,7 @@ bool patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValu
     }
 }
 
-bool patchChannelSetting(int deviceSetIndex, int channelIndex, const SchedulerSettings::SettingValue& setting)
+bool Scheduler::patchChannelSetting(int deviceSetIndex, int channelIndex, const SchedulerSettings::SettingValue& setting)
 {
     switch (setting.m_type)
     {
@@ -122,7 +120,7 @@ bool patchChannelSetting(int deviceSetIndex, int channelIndex, const SchedulerSe
     }
 }
 
-bool patchFeatureSetting(int featureSetIndex, int featureIndex, const SchedulerSettings::SettingValue& setting)
+bool Scheduler::patchFeatureSetting(int featureSetIndex, int featureIndex, const SchedulerSettings::SettingValue& setting)
 {
     switch (setting.m_type)
     {
@@ -134,7 +132,6 @@ bool patchFeatureSetting(int featureSetIndex, int featureIndex, const SchedulerS
     default:
         return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value);
     }
-}
 }
 
 Scheduler::Scheduler(WebAPIAdapterInterface *webAPIAdapterInterface) :

@@ -141,6 +141,12 @@ private:
     void executeDeviceDurationStops(const QList<SchedulerSettings::DeviceSetAction>& actions);
     void executeChannelDurationStops(const QList<SchedulerSettings::ChannelAction>& actions);
     void executeFeatureDurationStops(const QList<SchedulerSettings::FeatureAction>& actions);
+    static QDateTime schedulerDateTimeFromString(const QString *text);
+    static QString schedulerDateTimeToString(const QDateTime& dateTime);
+    static bool parseFrequency(const QString& text, double& frequencyInHz);
+    static bool patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting);
+    static bool patchChannelSetting(int deviceSetIndex, int channelIndex, const SchedulerSettings::SettingValue& setting);
+    static bool patchFeatureSetting(int featureSetIndex, int featureIndex, const SchedulerSettings::SettingValue& setting);
     void executeCommand(const QString& command, const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
     void saySpeech(const QString& speech, const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
     QString substitute(const QString& text, const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context) const;

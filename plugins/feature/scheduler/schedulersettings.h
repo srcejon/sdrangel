@@ -182,6 +182,13 @@ struct SchedulerSettings
     static QDateTime nextDateTime(const ScheduleRule& rule, const QDateTime& after);
     static int delaySeconds(const ScheduleRule& rule);
     static int durationSeconds(const ScheduleRule& rule);
+
+private:
+    static constexpr int DefaultWeekdayMask = 0x7f;
+    static int weekdayBit(const QDate& date);
+    static bool weekdayMaskMatches(int weekdayMask, const QDate& date);
+    static bool isAfterDateUntil(const ScheduleRule& rule, const QDateTime& candidate);
+    static QDateTime monthlyDateTime(const QDate& baseDate, const QTime& time, int monthOffset);
 };
 
 #endif // INCLUDE_FEATURE_SCHEDULERSETTINGS_H_

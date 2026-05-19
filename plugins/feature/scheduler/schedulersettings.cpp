@@ -24,31 +24,26 @@
 
 #include "schedulersettings.h"
 
-namespace
-{
-constexpr int DefaultWeekdayMask = 0x7f;
-
-int weekdayBit(const QDate& date)
+int SchedulerSettings::weekdayBit(const QDate& date)
 {
     return 1 << (date.dayOfWeek() - 1);
 }
 
-bool weekdayMaskMatches(int weekdayMask, const QDate& date)
+bool SchedulerSettings::weekdayMaskMatches(int weekdayMask, const QDate& date)
 {
     return (weekdayMask & weekdayBit(date)) != 0;
 }
 
-bool isAfterDateUntil(const SchedulerSettings::ScheduleRule& rule, const QDateTime& candidate)
+bool SchedulerSettings::isAfterDateUntil(const SchedulerSettings::ScheduleRule& rule, const QDateTime& candidate)
 {
     return rule.m_dateUntil.isValid() && candidate.isValid() && (candidate.date() > rule.m_dateUntil);
 }
 
-QDateTime monthlyDateTime(const QDate& baseDate, const QTime& time, int monthOffset)
+QDateTime SchedulerSettings::monthlyDateTime(const QDate& baseDate, const QTime& time, int monthOffset)
 {
     const QDate monthDate = QDate(baseDate.year(), baseDate.month(), 1).addMonths(monthOffset);
     const int day = qMin(baseDate.day(), monthDate.daysInMonth());
     return QDateTime(QDate(monthDate.year(), monthDate.month(), day), time);
-}
 }
 
 QDataStream& operator<<(QDataStream& out, const SchedulerSettings::SettingValue& setting)

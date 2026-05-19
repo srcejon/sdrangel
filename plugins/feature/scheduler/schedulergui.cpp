@@ -48,14 +48,12 @@
 #include "scheduler.h"
 #include "schedulergui.h"
 
-namespace
+QDate SchedulerGUI::noDateUntil()
 {
-constexpr int PresetNone = -1;
-constexpr int PresetUnresolved = -2;
-constexpr int DefaultWeekdayMask = 0x7f;
-const QDate NoDateUntil(1900, 1, 1);
+    return QDate(1900, 1, 1);
+}
 
-QString presetText(const QString& group, quint64 frequency, const QString& description)
+QString SchedulerGUI::presetText(const QString& group, quint64 frequency, const QString& description)
 {
     if (group.isEmpty()) {
         return QString();
@@ -67,17 +65,17 @@ QString presetText(const QString& group, quint64 frequency, const QString& descr
         .arg(description);
 }
 
-QString featureKey(int featureSetIndex, int featureIndex)
+QString SchedulerGUI::featureKey(int featureSetIndex, int featureIndex)
 {
     return QStringLiteral("%1:%2").arg(featureSetIndex).arg(featureIndex);
 }
 
-QString channelKey(int channelIndex, const QString& channelId)
+QString SchedulerGUI::channelKey(int channelIndex, const QString& channelId)
 {
     return QStringLiteral("%1:%2").arg(channelIndex).arg(channelId);
 }
 
-bool channelSupportsAction(const QString& channelId, SchedulerSettings::RunAction action)
+bool SchedulerGUI::channelSupportsAction(const QString& channelId, SchedulerSettings::RunAction action)
 {
     switch (action)
     {
@@ -109,7 +107,7 @@ bool channelSupportsAction(const QString& channelId, SchedulerSettings::RunActio
     }
 }
 
-bool featureSupportsAction(const QString& featureId, SchedulerSettings::RunAction action)
+bool SchedulerGUI::featureSupportsAction(const QString& featureId, SchedulerSettings::RunAction action)
 {
     switch (action)
     {
@@ -128,7 +126,7 @@ bool featureSupportsAction(const QString& featureId, SchedulerSettings::RunActio
     }
 }
 
-int weekdayMaskFromWidgets(const Ui::SchedulerGUI *ui)
+int SchedulerGUI::weekdayMaskFromWidgets(const Ui::SchedulerGUI *ui)
 {
     int mask = 0;
 
@@ -157,7 +155,7 @@ int weekdayMaskFromWidgets(const Ui::SchedulerGUI *ui)
     return mask;
 }
 
-void setWeekdayWidgets(Ui::SchedulerGUI *ui, int mask)
+void SchedulerGUI::setWeekdayWidgets(Ui::SchedulerGUI *ui, int mask)
 {
     ui->monday->setChecked((mask & (1 << 0)) != 0);
     ui->tuesday->setChecked((mask & (1 << 1)) != 0);
@@ -168,7 +166,7 @@ void setWeekdayWidgets(Ui::SchedulerGUI *ui, int mask)
     ui->sunday->setChecked((mask & (1 << 6)) != 0);
 }
 
-bool ruleHasDeviceSetAction(const SchedulerSettings::ScheduleRule& rule, int deviceSetIndex)
+bool SchedulerGUI::ruleHasDeviceSetAction(const SchedulerSettings::ScheduleRule& rule, int deviceSetIndex)
 {
     for (const SchedulerSettings::DeviceSetAction& action : rule.m_deviceSetActions)
     {
@@ -180,7 +178,7 @@ bool ruleHasDeviceSetAction(const SchedulerSettings::ScheduleRule& rule, int dev
     return false;
 }
 
-void pruneChannelActionsForDeviceSets(SchedulerSettings::ScheduleRule& rule)
+void SchedulerGUI::pruneChannelActionsForDeviceSets(SchedulerSettings::ScheduleRule& rule)
 {
     for (int i = rule.m_channelActions.size() - 1; i >= 0; --i)
     {
@@ -190,7 +188,7 @@ void pruneChannelActionsForDeviceSets(SchedulerSettings::ScheduleRule& rule)
     }
 }
 
-bool parseFeatureKey(const QString& key, int& featureSetIndex, int& featureIndex)
+bool SchedulerGUI::parseFeatureKey(const QString& key, int& featureSetIndex, int& featureIndex)
 {
     const QStringList parts = key.split(':');
     if (parts.size() != 2) {
@@ -210,7 +208,6 @@ bool parseFeatureKey(const QString& key, int& featureSetIndex, int& featureIndex
     }
 
     return false;
-}
 }
 
 SchedulerGUI* SchedulerGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
@@ -365,7 +362,7 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
 
     ui->dateFrom->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
     ui->dateUntil->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
-    ui->dateUntil->setMinimumDate(NoDateUntil);
+    ui->dateUntil->setMinimumDate(noDateUntil());
     ui->dateUntil->setSpecialValueText(tr("None"));
     ui->time->setDisplayFormat(QStringLiteral("HH:mm:ss"));
     ui->command->setToolTip(tr("Detached command. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source} and ${data}."));
@@ -925,7 +922,7 @@ void SchedulerGUI::displayRuleEditor()
         const QDateTime time = rule->m_time.isValid() ? rule->m_time : QDateTime::currentDateTime().addSecs(60);
         ui->dateFrom->setDate(time.date());
         ui->time->setTime(time.time());
-        ui->dateUntil->setDate(rule->m_dateUntil.isValid() ? rule->m_dateUntil : NoDateUntil);
+        ui->dateUntil->setDate(rule->m_dateUntil.isValid() ? rule->m_dateUntil : noDateUntil());
         ui->recurrence->setCurrentIndex(ui->recurrence->findData(rule->m_recurrence));
         setWeekdayWidgets(ui, rule->m_weekdayMask);
         ui->duration->setValue(rule->m_duration);
@@ -945,7 +942,7 @@ void SchedulerGUI::displayRuleEditor()
         const QDateTime time = QDateTime::currentDateTime().addSecs(60);
         ui->dateFrom->setDate(time.date());
         ui->time->setTime(time.time());
-        ui->dateUntil->setDate(NoDateUntil);
+        ui->dateUntil->setDate(noDateUntil());
         setWeekdayWidgets(ui, DefaultWeekdayMask);
         ui->duration->setValue(0);
         ui->durationUnit->setCurrentIndex(ui->durationUnit->findData(SchedulerSettings::DelaySeconds));
@@ -1173,7 +1170,7 @@ bool SchedulerGUI::updateCurrentRuleFromWidgets()
     rule->m_enabled = ui->ruleEnabled->isChecked();
     rule->m_triggerType = static_cast<SchedulerSettings::TriggerType>(triggerType);
     rule->m_time = QDateTime(ui->dateFrom->date(), ui->time->time());
-    rule->m_dateUntil = ui->dateUntil->date() == NoDateUntil ? QDate() : ui->dateUntil->date();
+    rule->m_dateUntil = ui->dateUntil->date() == noDateUntil() ? QDate() : ui->dateUntil->date();
     rule->m_recurrence = static_cast<SchedulerSettings::Recurrence>(ui->recurrence->currentData().toInt());
     rule->m_weekdayMask = weekdayMaskFromWidgets(ui);
     rule->m_duration = ui->duration->value();

@@ -18,6 +18,8 @@
 #ifndef INCLUDE_FEATURE_SCHEDULERGUI_H_
 #define INCLUDE_FEATURE_SCHEDULERGUI_H_
 
+#include <QDate>
+
 #include "availablechannelorfeaturehandler.h"
 #include "feature/featuregui.h"
 #include "settings/rollupstate.h"
@@ -170,6 +172,20 @@ private:
     QString runActionText(SchedulerSettings::RunAction action) const;
     QString recurrenceText(SchedulerSettings::Recurrence recurrence) const;
     QString deviceSetId(int deviceSetIndex) const;
+    static constexpr int PresetNone = -1;
+    static constexpr int PresetUnresolved = -2;
+    static constexpr int DefaultWeekdayMask = 0x7f;
+    static QDate noDateUntil();
+    static QString presetText(const QString& group, quint64 frequency, const QString& description);
+    static QString featureKey(int featureSetIndex, int featureIndex);
+    static QString channelKey(int channelIndex, const QString& channelId);
+    static bool channelSupportsAction(const QString& channelId, SchedulerSettings::RunAction action);
+    static bool featureSupportsAction(const QString& featureId, SchedulerSettings::RunAction action);
+    static int weekdayMaskFromWidgets(const Ui::SchedulerGUI *ui);
+    static void setWeekdayWidgets(Ui::SchedulerGUI *ui, int mask);
+    static bool ruleHasDeviceSetAction(const SchedulerSettings::ScheduleRule& rule, int deviceSetIndex);
+    static void pruneChannelActionsForDeviceSets(SchedulerSettings::ScheduleRule& rule);
+    static bool parseFeatureKey(const QString& key, int& featureSetIndex, int& featureIndex);
 
 private slots:
     void onMenuDialogCalled(const QPoint &p);

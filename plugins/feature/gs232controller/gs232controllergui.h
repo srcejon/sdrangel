@@ -76,6 +76,8 @@ private:
     bool m_canFindHome;
     bool m_atHome;
     bool m_homeStateValid;
+    bool m_slewing;
+    bool m_slewingStateValid;
 
     DFMStatusDialog m_dfmStatusDialog;
 

@@ -193,6 +193,8 @@ bool GS232ControllerGUI::handleMessage(const Message& message)
         m_canFindHome = report.canFindHome();
         m_atHome = report.atHome();
         m_homeStateValid = report.homeValid();
+        m_slewing = report.slewing();
+        m_slewingStateValid = report.slewingValid();
         updateParkAndHomeControls();
         return true;
     }
@@ -241,6 +243,8 @@ GS232ControllerGUI::GS232ControllerGUI(PluginAPI* pluginAPI, FeatureUISet *featu
     m_canFindHome(false),
     m_atHome(false),
     m_homeStateValid(false),
+    m_slewing(false),
+    m_slewingStateValid(false),
     m_dfmStatusDialog(),
     m_inputController(nullptr),
     m_inputCoord1(0.0),
@@ -739,16 +743,17 @@ void GS232ControllerGUI::setPrecision()
 void GS232ControllerGUI::updateParkAndHomeControls()
 {
     const bool alpaca = m_settings.m_protocol == GS232ControllerSettings::ALPACA;
+    const bool moving = m_slewingStateValid && m_slewing;
 
     bool oldParkState = ui->park->blockSignals(true);
     ui->park->setChecked(alpaca && m_parkStateValid && m_atPark);
     ui->park->blockSignals(oldParkState);
-    ui->park->setEnabled(alpaca && m_parkStateValid && (m_atPark || m_canPark));
+    ui->park->setEnabled(alpaca && m_parkStateValid && !moving && (m_atPark || m_canPark));
 
     bool oldHomeState = ui->home->blockSignals(true);
     ui->home->setChecked(alpaca && m_homeStateValid && m_atHome);
     ui->home->blockSignals(oldHomeState);
-    ui->home->setEnabled(alpaca && m_homeStateValid && m_canFindHome);
+    ui->home->setEnabled(alpaca && m_homeStateValid && !moving && m_canFindHome);
 }
 
 void GS232ControllerGUI::handlePositionMismatch(const ControllerProtocol::MsgReportPositionMismatch& report)

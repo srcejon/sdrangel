@@ -65,6 +65,8 @@ AlpacaProtocol::AlpacaProtocol() :
     m_atHome(false),
     m_atHomeValid(false),
     m_atHomeQueryPending(false),
+    m_slewing(false),
+    m_slewingValid(false),
     m_slewPending(false),
     m_slewingQueryPending(false),
     m_queuedSlew(false),
@@ -101,6 +103,11 @@ void AlpacaProtocol::update()
         if (m_canFindHome) {
             queryAtHome();
         }
+        querySlewing([this](bool success, bool slewing) {
+            m_slewing = slewing;
+            m_slewingValid = success;
+            reportParkState();
+        });
     });
 }
 
@@ -113,12 +120,23 @@ void AlpacaProtocol::park()
             return;
         }
 
-        m_queuedSlew = false;
-        m_slewRetryTimer.stop();
-        sendSimplePutCommand("park", "Telescope park", [this](bool success) {
-            if (success) {
-                queryAtPark();
+        querySlewing([this](bool success, bool slewing) {
+            if (success && slewing)
+            {
+                m_slewing = true;
+                m_slewingValid = true;
+                reportParkState();
+                reportError("Alpaca telescope is moving. Stop slewing before parking.");
+                return;
             }
+
+            m_queuedSlew = false;
+            m_slewRetryTimer.stop();
+            sendSimplePutCommand("park", "Telescope park", [this](bool success) {
+                if (success) {
+                    queryAtPark();
+                }
+            });
         });
     });
 }
@@ -143,12 +161,23 @@ void AlpacaProtocol::home()
             return;
         }
 
-        m_queuedSlew = false;
-        m_slewRetryTimer.stop();
-        sendSimplePutCommand("findhome", "Telescope findhome", [this](bool success) {
-            if (success) {
-                queryAtHome();
+        querySlewing([this](bool success, bool slewing) {
+            if (success && slewing)
+            {
+                m_slewing = true;
+                m_slewingValid = true;
+                reportParkState();
+                reportError("Alpaca telescope is moving. Stop slewing before finding home.");
+                return;
             }
+
+            m_queuedSlew = false;
+            m_slewRetryTimer.stop();
+            sendSimplePutCommand("findhome", "Telescope findhome", [this](bool success) {
+                if (success) {
+                    queryAtHome();
+                }
+            });
         });
     });
 }
@@ -675,6 +704,8 @@ void AlpacaProtocol::querySlewing(const std::function<void(bool, bool)>& continu
         QJsonObject response;
         const bool success = parseAlpacaResponse(reply, payload, response, "Telescope slewing", false);
         const bool slewing = success && response.value("Value").toBool();
+        m_slewing = slewing;
+        m_slewingValid = success;
         m_slewingQueryPending = false;
 
         if (continuation) {
@@ -960,7 +991,9 @@ void AlpacaProtocol::reportParkState(bool parkValid, bool homeValid)
         parkValid && m_atParkValid,
         m_canFindHome,
         m_atHome,
-        homeValid && m_atHomeValid
+        homeValid && m_atHomeValid,
+        m_slewing,
+        m_slewingValid
     ));
 }
 

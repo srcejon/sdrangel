@@ -99,6 +99,8 @@ private:
     bool m_atHome;
     bool m_atHomeValid;
     bool m_atHomeQueryPending;
+    bool m_slewing;
+    bool m_slewingValid;
     bool m_slewPending;
     bool m_slewingQueryPending;
     bool m_queuedSlew;

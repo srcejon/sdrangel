@@ -42,11 +42,21 @@ public:
         bool canFindHome() const { return m_canFindHome; }
         bool atHome() const { return m_atHome; }
         bool homeValid() const { return m_homeValid; }
+        bool slewing() const { return m_slewing; }
+        bool slewingValid() const { return m_slewingValid; }
         bool valid() const { return m_parkValid; }
 
-        static MsgReportParkState* create(bool canPark, bool atPark, bool parkValid, bool canFindHome, bool atHome, bool homeValid)
+        static MsgReportParkState* create(
+            bool canPark,
+            bool atPark,
+            bool parkValid,
+            bool canFindHome,
+            bool atHome,
+            bool homeValid,
+            bool slewing = false,
+            bool slewingValid = false)
         {
-            return new MsgReportParkState(canPark, atPark, parkValid, canFindHome, atHome, homeValid);
+            return new MsgReportParkState(canPark, atPark, parkValid, canFindHome, atHome, homeValid, slewing, slewingValid);
         }
 
     private:
@@ -56,15 +66,27 @@ public:
         bool m_canFindHome;
         bool m_atHome;
         bool m_homeValid;
+        bool m_slewing;
+        bool m_slewingValid;
 
-        MsgReportParkState(bool canPark, bool atPark, bool parkValid, bool canFindHome, bool atHome, bool homeValid) :
+        MsgReportParkState(
+            bool canPark,
+            bool atPark,
+            bool parkValid,
+            bool canFindHome,
+            bool atHome,
+            bool homeValid,
+            bool slewing,
+            bool slewingValid) :
             Message(),
             m_canPark(canPark),
             m_atPark(atPark),
             m_parkValid(parkValid),
             m_canFindHome(canFindHome),
             m_atHome(atHome),
-            m_homeValid(homeValid)
+            m_homeValid(homeValid),
+            m_slewing(slewing),
+            m_slewingValid(slewingValid)
         {
         }
     };

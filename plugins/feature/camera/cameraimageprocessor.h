@@ -133,6 +133,7 @@ private:
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    cv::cuda::Stream m_cudaStream;
     mutable cv::cuda::GpuMat m_cudaUnwarpMapX;
     mutable cv::cuda::GpuMat m_cudaUnwarpMapY;
     mutable cv::Size m_cudaUnwarpMapSize;

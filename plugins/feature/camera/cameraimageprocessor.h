@@ -24,6 +24,9 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+#include <opencv2/core/cuda.hpp>
+#endif
 
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -136,6 +139,8 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     [[nodiscard]] QImage applyImageProcessingCuda(const QImage& input);
     [[nodiscard]] bool canUseCudaImageProcessing() const;
+    void applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) const;
+    void applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const;
 #endif
     void applyWhiteBalance(cv::Mat& bgrMat);
     void applyLensUnwarp(cv::Mat& bgrMat);

@@ -403,8 +403,6 @@ bool CameraImageProcessor::canUseCudaImageProcessing() const
     const bool unsupported =
         (m_settings.m_postProcessWhiteBalanceMode == 1)
         || manualHighlightProtectedWhiteBalance
-        || (m_settings.m_histogramStretch != CameraSettings::HistogramStretchOff)
-        || (std::abs(m_settings.m_gamma - 1.0) > 1e-4)
         || (m_settings.m_sobelEdge > 1e-4)
         || (m_settings.m_cannyEdge > 1e-4);
 
@@ -427,8 +425,11 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
 
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
+    const bool needsHistogramStretch = (m_settings.m_histogramStretch != CameraSettings::HistogramStretchOff)
+        && (m_settings.m_histogramStretchWhitePoint > m_settings.m_histogramStretchBlackPoint + 1e-6);
     const bool needsGreyscale = m_settings.m_postProcessGreyscale;
     const bool needsSaturation = !needsGreyscale && (std::abs(m_settings.m_saturation - 1.0) > 1e-4);
+    const bool needsGamma = std::abs(m_settings.m_gamma - 1.0) > 1e-4;
     const bool needsGaussianBlur = m_settings.m_gaussianBlur > 0;
     const bool needsMedianBlur = m_settings.m_medianBlur > 0;
     const bool needsSharpen = m_settings.m_sharpen > 1e-4;
@@ -436,7 +437,9 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
         || needsUnwarp
+        || needsHistogramStretch
         || needsSaturation
+        || needsGamma
         || needsGaussianBlur
         || needsMedianBlur
         || needsSharpen
@@ -485,6 +488,10 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
             cv::cuda::merge(channels, bgrGpu);
         }
 
+        if (needsHistogramStretch) {
+            applyHistogramStretchCuda(bgrGpu);
+        }
+
         if (needsGreyscale)
         {
             cv::cuda::GpuMat grayGpu;
@@ -501,6 +508,10 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
             channels[1].convertTo(channels[1], -1, m_settings.m_saturation, 0.0);
             cv::cuda::merge(channels, hsvGpu);
             cv::cuda::cvtColor(hsvGpu, bgrGpu, cv::COLOR_HSV2BGR);
+        }
+
+        if (needsGamma) {
+            applyGammaCuda(bgrGpu);
         }
 
         if (needsGaussianBlur)
@@ -570,6 +581,93 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
     }
 
     return applyImageProcessingCpu(input);
+}
+
+void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+
+    if (m_settings.m_histogramStretch == CameraSettings::HistogramStretchCLAHE)
+    {
+        cv::cuda::GpuMat labGpu;
+        std::vector<cv::cuda::GpuMat> labChannels;
+        cv::cuda::cvtColor(bgrGpu, labGpu, cv::COLOR_BGR2Lab);
+        cv::cuda::split(labGpu, labChannels);
+
+        cv::Ptr<cv::cuda::CLAHE> clahe = cv::cuda::createCLAHE(2.0, cv::Size(8, 8));
+        cv::cuda::GpuMat equalizedL;
+        clahe->apply(labChannels[0], equalizedL);
+        labChannels[0] = equalizedL;
+
+        cv::cuda::merge(labChannels, labGpu);
+        cv::cuda::cvtColor(labGpu, bgrGpu, cv::COLOR_Lab2BGR);
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    const float blackPoint = static_cast<float>(m_settings.m_histogramStretchBlackPoint);
+    const float whitePoint = static_cast<float>(m_settings.m_histogramStretchWhitePoint);
+    const float rangeScale = 1.0f / std::max(0.001f, whitePoint - blackPoint);
+
+    const float gammaValue = static_cast<float>(m_settings.m_histogramStretchGamma);
+    const float asinhStrength = static_cast<float>(m_settings.m_histogramStretchAsinhStrength);
+    const float logStrength = static_cast<float>(m_settings.m_histogramStretchLogStrength);
+    const float asinhNorm = std::asinh(asinhStrength);
+    const float logNorm = std::log1p(logStrength);
+
+    cv::Mat lut(1, 256, CV_8U);
+    uchar *lutData = lut.ptr<uchar>();
+
+    for (int i = 0; i < 256; ++i)
+    {
+        float value = ((static_cast<float>(i) / 255.0f) - blackPoint) * rangeScale;
+        value = std::clamp(value, 0.0f, 1.0f);
+
+        switch (m_settings.m_histogramStretch)
+        {
+        case CameraSettings::HistogramStretchLinear:
+            break;
+        case CameraSettings::HistogramStretchGamma:
+            value = std::pow(value, gammaValue);
+            break;
+        case CameraSettings::HistogramStretchAsinh:
+            value = (asinhNorm > 0.0f) ? (std::asinh(asinhStrength * value) / asinhNorm) : value;
+            break;
+        case CameraSettings::HistogramStretchLog:
+            value = (logNorm > 0.0f) ? (std::log1p(logStrength * value) / logNorm) : value;
+            break;
+        case CameraSettings::HistogramStretchCLAHE:
+        case CameraSettings::HistogramStretchOff:
+        default:
+            break;
+        }
+
+        lutData[i] = cv::saturate_cast<uchar>(std::clamp(value, 0.0f, 1.0f) * 255.0f);
+    }
+
+    cv::Ptr<cv::cuda::LookUpTable> lookup = cv::cuda::createLookUpTable(lut);
+    cv::cuda::GpuMat stretchedGpu;
+    lookup->transform(bgrGpu, stretchedGpu);
+    bgrGpu = stretchedGpu;
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+    cv::Mat lut(1, 256, CV_8U);
+    uchar *lutData = lut.ptr<uchar>();
+
+    for (int i = 0; i < 256; ++i) {
+        lutData[i] = cv::saturate_cast<uchar>(std::pow(static_cast<double>(i) / 255.0, m_settings.m_gamma) * 255.0);
+    }
+
+    cv::Ptr<cv::cuda::LookUpTable> lookup = cv::cuda::createLookUpTable(lut);
+    cv::cuda::GpuMat correctedGpu;
+    lookup->transform(bgrGpu, correctedGpu);
+    bgrGpu = correctedGpu;
+    PROFILER_STOP(__FUNCTION__);
 }
 #endif
 

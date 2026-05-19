@@ -922,7 +922,6 @@ void CameraGUI::resetCameraStatus()
     settingsUI()->plateSolveMatchesLabel->setText("-");
     settingsUI()->plateSolveDetectedLabel->setText("-");
     settingsUI()->plateSolveRmsLabel->setText("-");
-    settingsUI()->plateSolvePointingLabel->setText("-");
     settingsUI()->plateSolveApplyButton->setEnabled(false);
     m_settingsDialog->clearCameraStatus();
 }

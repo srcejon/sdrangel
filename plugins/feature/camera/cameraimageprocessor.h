@@ -26,6 +26,9 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
 #include <opencv2/core/cuda.hpp>
+#include <opencv2/cudaarithm.hpp>
+#include <opencv2/cudafilters.hpp>
+#include <opencv2/cudaimgproc.hpp>
 #endif
 
 #include "util/message.h"
@@ -129,6 +132,33 @@ private:
     double m_unwarpSourceFov;
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    mutable cv::cuda::GpuMat m_cudaUnwarpMapX;
+    mutable cv::cuda::GpuMat m_cudaUnwarpMapY;
+    mutable cv::Size m_cudaUnwarpMapSize;
+    mutable cv::Ptr<cv::cuda::CLAHE> m_cudaClahe;
+    mutable cv::Ptr<cv::cuda::LookUpTable> m_cudaHistogramStretchLookup;
+    mutable CameraSettings::HistogramStretch m_cudaHistogramStretchMode;
+    mutable double m_cudaHistogramStretchBlackPoint;
+    mutable double m_cudaHistogramStretchWhitePoint;
+    mutable double m_cudaHistogramStretchGamma;
+    mutable double m_cudaHistogramStretchAsinhStrength;
+    mutable double m_cudaHistogramStretchLogStrength;
+    mutable cv::Ptr<cv::cuda::LookUpTable> m_cudaGammaLookup;
+    mutable double m_cudaGamma;
+    mutable cv::Ptr<cv::cuda::Filter> m_cudaGaussianBlurFilter;
+    mutable int m_cudaGaussianBlurKernelSize;
+    mutable int m_cudaGaussianBlurType;
+    mutable cv::Ptr<cv::cuda::Filter> m_cudaMedianBlurFilter;
+    mutable int m_cudaMedianBlurKernelSize;
+    mutable int m_cudaMedianBlurChannelType;
+    mutable cv::Ptr<cv::cuda::Filter> m_cudaSharpenBlurFilter;
+    mutable int m_cudaSharpenBlurType;
+    mutable cv::Ptr<cv::cuda::Filter> m_cudaSobelXFilter;
+    mutable cv::Ptr<cv::cuda::Filter> m_cudaSobelYFilter;
+    mutable int m_cudaSobelInputType;
+    mutable cv::Ptr<cv::cuda::CannyEdgeDetector> m_cudaCannyDetector;
+#endif
     bool m_processingFrame;
 
     bool handleMessage(const Message& cmd);
@@ -147,6 +177,8 @@ private:
     void applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const;
     void applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu) const;
     void applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu) const;
+    void invalidateMedianBlurCudaFilter() const;
+    void invalidateCudaProcessingCaches() const;
     void applySharpenCuda(cv::cuda::GpuMat& bgrGpu) const;
     void applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu) const;
     void applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu) const;

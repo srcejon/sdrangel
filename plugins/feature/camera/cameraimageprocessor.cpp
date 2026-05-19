@@ -44,6 +44,22 @@ CameraImageProcessor::CameraImageProcessor() :
     m_autoWhiteBalanceInitialized(false),
     m_unwarpSourceProjection(CameraSettings::LensProjectionRectilinear),
     m_unwarpSourceFov(0.0),
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    m_cudaUnwarpMapSize(),
+    m_cudaHistogramStretchMode(CameraSettings::HistogramStretchOff),
+    m_cudaHistogramStretchBlackPoint(0.0),
+    m_cudaHistogramStretchWhitePoint(0.0),
+    m_cudaHistogramStretchGamma(0.0),
+    m_cudaHistogramStretchAsinhStrength(0.0),
+    m_cudaHistogramStretchLogStrength(0.0),
+    m_cudaGamma(0.0),
+    m_cudaGaussianBlurKernelSize(0),
+    m_cudaGaussianBlurType(-1),
+    m_cudaMedianBlurKernelSize(0),
+    m_cudaMedianBlurChannelType(-1),
+    m_cudaSharpenBlurType(-1),
+    m_cudaSobelInputType(-1),
+#endif
     m_processingFrame(false)
 {
 }
@@ -185,6 +201,29 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     {
         invalidateUnwarpMaps();
     }
+
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    if (force
+        || settingsKeys.contains("postProcessUseCuda")
+        || settingsKeys.contains("postProcessUnwarp")
+        || settingsKeys.contains("lensProjection")
+        || settingsKeys.contains("fov")
+        || settingsKeys.contains("histogramStretch")
+        || settingsKeys.contains("histogramStretchBlackPoint")
+        || settingsKeys.contains("histogramStretchWhitePoint")
+        || settingsKeys.contains("histogramStretchGamma")
+        || settingsKeys.contains("histogramStretchAsinhStrength")
+        || settingsKeys.contains("histogramStretchLogStrength")
+        || settingsKeys.contains("gamma")
+        || settingsKeys.contains("gaussianBlur")
+        || settingsKeys.contains("medianBlur")
+        || settingsKeys.contains("sharpen")
+        || settingsKeys.contains("sobelEdge")
+        || settingsKeys.contains("cannyEdge"))
+    {
+        invalidateCudaProcessingCaches();
+    }
+#endif
 
     if (imageProcessingChanged && !m_lastInputFrame.m_image.isNull()) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
@@ -540,12 +579,16 @@ void CameraImageProcessor::applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu)
     ensureUnwarpMaps(bgrGpu.size());
     if (!m_unwarpMapX.empty() && !m_unwarpMapY.empty())
     {
-        cv::cuda::GpuMat mapXGpu;
-        cv::cuda::GpuMat mapYGpu;
         cv::cuda::GpuMat unwarpedGpu;
-        mapXGpu.upload(m_unwarpMapX);
-        mapYGpu.upload(m_unwarpMapY);
-        cv::cuda::remap(bgrGpu, unwarpedGpu, mapXGpu, mapYGpu, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+        if (m_cudaUnwarpMapX.empty()
+            || m_cudaUnwarpMapY.empty()
+            || (m_cudaUnwarpMapSize != bgrGpu.size()))
+        {
+            m_cudaUnwarpMapX.upload(m_unwarpMapX);
+            m_cudaUnwarpMapY.upload(m_unwarpMapY);
+            m_cudaUnwarpMapSize = bgrGpu.size();
+        }
+        cv::cuda::remap(bgrGpu, unwarpedGpu, m_cudaUnwarpMapX, m_cudaUnwarpMapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
         bgrGpu = unwarpedGpu;
     }
 
@@ -577,9 +620,11 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) c
         cv::cuda::cvtColor(bgrGpu, labGpu, cv::COLOR_BGR2Lab);
         cv::cuda::split(labGpu, labChannels);
 
-        cv::Ptr<cv::cuda::CLAHE> clahe = cv::cuda::createCLAHE(2.0, cv::Size(8, 8));
+        if (!m_cudaClahe) {
+            m_cudaClahe = cv::cuda::createCLAHE(2.0, cv::Size(8, 8));
+        }
         cv::cuda::GpuMat equalizedL;
-        clahe->apply(labChannels[0], equalizedL);
+        m_cudaClahe->apply(labChannels[0], equalizedL);
         labChannels[0] = equalizedL;
 
         cv::cuda::merge(labChannels, labGpu);
@@ -598,39 +643,55 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) c
     const float asinhNorm = std::asinh(asinhStrength);
     const float logNorm = std::log1p(logStrength);
 
-    cv::Mat lut(1, 256, CV_8U);
-    uchar *lutData = lut.ptr<uchar>();
-
-    for (int i = 0; i < 256; ++i)
+    if (!m_cudaHistogramStretchLookup
+        || (m_cudaHistogramStretchMode != m_settings.m_histogramStretch)
+        || (m_cudaHistogramStretchBlackPoint != m_settings.m_histogramStretchBlackPoint)
+        || (m_cudaHistogramStretchWhitePoint != m_settings.m_histogramStretchWhitePoint)
+        || (m_cudaHistogramStretchGamma != m_settings.m_histogramStretchGamma)
+        || (m_cudaHistogramStretchAsinhStrength != m_settings.m_histogramStretchAsinhStrength)
+        || (m_cudaHistogramStretchLogStrength != m_settings.m_histogramStretchLogStrength))
     {
-        float value = ((static_cast<float>(i) / 255.0f) - blackPoint) * rangeScale;
-        value = std::clamp(value, 0.0f, 1.0f);
+        cv::Mat lut(1, 256, CV_8U);
+        uchar *lutData = lut.ptr<uchar>();
 
-        switch (m_settings.m_histogramStretch)
+        for (int i = 0; i < 256; ++i)
         {
-        case CameraSettings::HistogramStretchLinear:
-            break;
-        case CameraSettings::HistogramStretchGamma:
-            value = std::pow(value, gammaValue);
-            break;
-        case CameraSettings::HistogramStretchAsinh:
-            value = (asinhNorm > 0.0f) ? (std::asinh(asinhStrength * value) / asinhNorm) : value;
-            break;
-        case CameraSettings::HistogramStretchLog:
-            value = (logNorm > 0.0f) ? (std::log1p(logStrength * value) / logNorm) : value;
-            break;
-        case CameraSettings::HistogramStretchCLAHE:
-        case CameraSettings::HistogramStretchOff:
-        default:
-            break;
+            float value = ((static_cast<float>(i) / 255.0f) - blackPoint) * rangeScale;
+            value = std::clamp(value, 0.0f, 1.0f);
+
+            switch (m_settings.m_histogramStretch)
+            {
+            case CameraSettings::HistogramStretchLinear:
+                break;
+            case CameraSettings::HistogramStretchGamma:
+                value = std::pow(value, gammaValue);
+                break;
+            case CameraSettings::HistogramStretchAsinh:
+                value = (asinhNorm > 0.0f) ? (std::asinh(asinhStrength * value) / asinhNorm) : value;
+                break;
+            case CameraSettings::HistogramStretchLog:
+                value = (logNorm > 0.0f) ? (std::log1p(logStrength * value) / logNorm) : value;
+                break;
+            case CameraSettings::HistogramStretchCLAHE:
+            case CameraSettings::HistogramStretchOff:
+            default:
+                break;
+            }
+
+            lutData[i] = cv::saturate_cast<uchar>(std::clamp(value, 0.0f, 1.0f) * 255.0f);
         }
 
-        lutData[i] = cv::saturate_cast<uchar>(std::clamp(value, 0.0f, 1.0f) * 255.0f);
+        m_cudaHistogramStretchLookup = cv::cuda::createLookUpTable(lut);
+        m_cudaHistogramStretchMode = m_settings.m_histogramStretch;
+        m_cudaHistogramStretchBlackPoint = m_settings.m_histogramStretchBlackPoint;
+        m_cudaHistogramStretchWhitePoint = m_settings.m_histogramStretchWhitePoint;
+        m_cudaHistogramStretchGamma = m_settings.m_histogramStretchGamma;
+        m_cudaHistogramStretchAsinhStrength = m_settings.m_histogramStretchAsinhStrength;
+        m_cudaHistogramStretchLogStrength = m_settings.m_histogramStretchLogStrength;
     }
 
-    cv::Ptr<cv::cuda::LookUpTable> lookup = cv::cuda::createLookUpTable(lut);
     cv::cuda::GpuMat stretchedGpu;
-    lookup->transform(bgrGpu, stretchedGpu);
+    m_cudaHistogramStretchLookup->transform(bgrGpu, stretchedGpu);
     bgrGpu = stretchedGpu;
 
     PROFILER_STOP(__FUNCTION__);
@@ -665,16 +726,21 @@ void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu) const
 void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const
 {
     PROFILER_START();
-    cv::Mat lut(1, 256, CV_8U);
-    uchar *lutData = lut.ptr<uchar>();
+    if (!m_cudaGammaLookup || (m_cudaGamma != m_settings.m_gamma))
+    {
+        cv::Mat lut(1, 256, CV_8U);
+        uchar *lutData = lut.ptr<uchar>();
 
-    for (int i = 0; i < 256; ++i) {
-        lutData[i] = cv::saturate_cast<uchar>(std::pow(static_cast<double>(i) / 255.0, m_settings.m_gamma) * 255.0);
+        for (int i = 0; i < 256; ++i) {
+            lutData[i] = cv::saturate_cast<uchar>(std::pow(static_cast<double>(i) / 255.0, m_settings.m_gamma) * 255.0);
+        }
+
+        m_cudaGammaLookup = cv::cuda::createLookUpTable(lut);
+        m_cudaGamma = m_settings.m_gamma;
     }
 
-    cv::Ptr<cv::cuda::LookUpTable> lookup = cv::cuda::createLookUpTable(lut);
     cv::cuda::GpuMat correctedGpu;
-    lookup->transform(bgrGpu, correctedGpu);
+    m_cudaGammaLookup->transform(bgrGpu, correctedGpu);
     bgrGpu = correctedGpu;
     PROFILER_STOP(__FUNCTION__);
 }
@@ -685,9 +751,16 @@ void CameraImageProcessor::applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu) const
 
     const int kernelSize = 2 * m_settings.m_gaussianBlur + 1;
     cv::cuda::GpuMat blurredGpu;
-    cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createGaussianFilter(
-        bgrGpu.type(), bgrGpu.type(), cv::Size(kernelSize, kernelSize), 0.0);
-    filter->apply(bgrGpu, blurredGpu);
+    if (!m_cudaGaussianBlurFilter
+        || (m_cudaGaussianBlurKernelSize != kernelSize)
+        || (m_cudaGaussianBlurType != bgrGpu.type()))
+    {
+        m_cudaGaussianBlurFilter = cv::cuda::createGaussianFilter(
+            bgrGpu.type(), bgrGpu.type(), cv::Size(kernelSize, kernelSize), 0.0);
+        m_cudaGaussianBlurKernelSize = kernelSize;
+        m_cudaGaussianBlurType = bgrGpu.type();
+    }
+    m_cudaGaussianBlurFilter->apply(bgrGpu, blurredGpu);
     bgrGpu = blurredGpu;
 
     PROFILER_STOP(__FUNCTION__);
@@ -700,11 +773,20 @@ void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu) const
     const int kernelSize = 2 * m_settings.m_medianBlur + 1;
     std::vector<cv::cuda::GpuMat> channels;
     cv::cuda::split(bgrGpu, channels);
-    cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMedianFilter(channels[0].type(), kernelSize);
+    const int channelType = channels[0].type();
+    if (!m_cudaMedianBlurFilter
+        || (m_cudaMedianBlurKernelSize != kernelSize)
+        || (m_cudaMedianBlurChannelType != channelType))
+    {
+        m_cudaMedianBlurFilter = cv::cuda::createMedianFilter(channelType, kernelSize);
+        m_cudaMedianBlurKernelSize = kernelSize;
+        m_cudaMedianBlurChannelType = channelType;
+    }
+
     for (cv::cuda::GpuMat& channel : channels)
     {
         cv::cuda::GpuMat filteredChannel;
-        filter->apply(channel, filteredChannel);
+        m_cudaMedianBlurFilter->apply(channel, filteredChannel);
         channel = filteredChannel;
     }
     cv::cuda::merge(channels, bgrGpu);
@@ -712,14 +794,52 @@ void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu) const
     PROFILER_STOP(__FUNCTION__);
 }
 
+void CameraImageProcessor::invalidateMedianBlurCudaFilter() const
+{
+    m_cudaMedianBlurFilter.release();
+    m_cudaMedianBlurKernelSize = 0;
+    m_cudaMedianBlurChannelType = -1;
+}
+
+void CameraImageProcessor::invalidateCudaProcessingCaches() const
+{
+    m_cudaUnwarpMapX.release();
+    m_cudaUnwarpMapY.release();
+    m_cudaUnwarpMapSize = cv::Size();
+    m_cudaClahe.release();
+    m_cudaHistogramStretchLookup.release();
+    m_cudaHistogramStretchMode = CameraSettings::HistogramStretchOff;
+    m_cudaHistogramStretchBlackPoint = 0.0;
+    m_cudaHistogramStretchWhitePoint = 0.0;
+    m_cudaHistogramStretchGamma = 0.0;
+    m_cudaHistogramStretchAsinhStrength = 0.0;
+    m_cudaHistogramStretchLogStrength = 0.0;
+    m_cudaGammaLookup.release();
+    m_cudaGamma = 0.0;
+    m_cudaGaussianBlurFilter.release();
+    m_cudaGaussianBlurKernelSize = 0;
+    m_cudaGaussianBlurType = -1;
+    invalidateMedianBlurCudaFilter();
+    m_cudaSharpenBlurFilter.release();
+    m_cudaSharpenBlurType = -1;
+    m_cudaSobelXFilter.release();
+    m_cudaSobelYFilter.release();
+    m_cudaSobelInputType = -1;
+    m_cudaCannyDetector.release();
+}
+
 void CameraImageProcessor::applySharpenCuda(cv::cuda::GpuMat& bgrGpu) const
 {
     PROFILER_START();
 
     cv::cuda::GpuMat blurredGpu;
-    cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createGaussianFilter(
-        bgrGpu.type(), bgrGpu.type(), cv::Size(3, 3), 1.0);
-    filter->apply(bgrGpu, blurredGpu);
+    if (!m_cudaSharpenBlurFilter || (m_cudaSharpenBlurType != bgrGpu.type()))
+    {
+        m_cudaSharpenBlurFilter = cv::cuda::createGaussianFilter(
+            bgrGpu.type(), bgrGpu.type(), cv::Size(3, 3), 1.0);
+        m_cudaSharpenBlurType = bgrGpu.type();
+    }
+    m_cudaSharpenBlurFilter->apply(bgrGpu, blurredGpu);
     cv::cuda::addWeighted(bgrGpu, 1.0 + m_settings.m_sharpen, blurredGpu, -m_settings.m_sharpen, 0.0, bgrGpu);
 
     PROFILER_STOP(__FUNCTION__);
@@ -734,10 +854,14 @@ void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu) const
 
     cv::cuda::GpuMat gradX;
     cv::cuda::GpuMat gradY;
-    cv::Ptr<cv::cuda::Filter> sobelX = cv::cuda::createSobelFilter(grayGpu.type(), CV_16SC1, 1, 0, 3);
-    cv::Ptr<cv::cuda::Filter> sobelY = cv::cuda::createSobelFilter(grayGpu.type(), CV_16SC1, 0, 1, 3);
-    sobelX->apply(grayGpu, gradX);
-    sobelY->apply(grayGpu, gradY);
+    if (!m_cudaSobelXFilter || !m_cudaSobelYFilter || (m_cudaSobelInputType != grayGpu.type()))
+    {
+        m_cudaSobelXFilter = cv::cuda::createSobelFilter(grayGpu.type(), CV_16SC1, 1, 0, 3);
+        m_cudaSobelYFilter = cv::cuda::createSobelFilter(grayGpu.type(), CV_16SC1, 0, 1, 3);
+        m_cudaSobelInputType = grayGpu.type();
+    }
+    m_cudaSobelXFilter->apply(grayGpu, gradX);
+    m_cudaSobelYFilter->apply(grayGpu, gradY);
 
     cv::cuda::GpuMat absGradX;
     cv::cuda::GpuMat absGradY;
@@ -769,9 +893,11 @@ void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu) const
     cv::cuda::GpuMat grayGpu;
     cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
 
-    cv::Ptr<cv::cuda::CannyEdgeDetector> canny = cv::cuda::createCannyEdgeDetector(50.0, 150.0);
+    if (!m_cudaCannyDetector) {
+        m_cudaCannyDetector = cv::cuda::createCannyEdgeDetector(50.0, 150.0);
+    }
     cv::cuda::GpuMat edgesGray;
-    canny->detect(grayGpu, edgesGray);
+    m_cudaCannyDetector->detect(grayGpu, edgesGray);
 
     cv::cuda::GpuMat edgesBgr;
     cv::cuda::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
@@ -963,6 +1089,11 @@ void CameraImageProcessor::invalidateUnwarpMaps()
     m_unwarpMapSize = cv::Size();
     m_unwarpSourceProjection = CameraSettings::LensProjectionRectilinear;
     m_unwarpSourceFov = 0.0;
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    m_cudaUnwarpMapX.release();
+    m_cudaUnwarpMapY.release();
+    m_cudaUnwarpMapSize = cv::Size();
+#endif
 }
 
 void CameraImageProcessor::ensureUnwarpMaps(const cv::Size& frameSize)

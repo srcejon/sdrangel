@@ -409,7 +409,11 @@
          <string>Show object detection history</string>
         </property>
         <property name="text">
-         <string>Hist</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/history.png</normaloff>:/camera/icons/history.png</iconset>
         </property>
        </widget>
       </item>
@@ -451,7 +455,7 @@
         </property>
         <property name="icon">
          <iconset resource="cameraicons.qrc">
-          <normaloff>:/camera/icons/constellation.png</normaloff>:/camera/icons/constellation.png</iconset>
+          <normaloff>:/camera/icons/stars.png</normaloff>:/camera/icons/stars.png</iconset>
         </property>
        </widget>
       </item>

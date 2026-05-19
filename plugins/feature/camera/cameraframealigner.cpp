@@ -33,7 +33,8 @@ MESSAGE_CLASS_DEFINITION(CameraFrameAligner::MsgCaptureActive, Message)
 CameraFrameAligner::CameraFrameAligner() :
     m_nextStage(nullptr),
     m_captureActive(false),
-    m_processingFrame(false)
+    m_processingFrame(false),
+    m_droppedFrameCount(0)
 {
 }
 
@@ -92,6 +93,7 @@ bool CameraFrameAligner::handleMessage(const Message& cmd)
         }
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrames.clear();
+        m_droppedFrameCount = 0;
         if (!m_captureActive) {
             m_processingFrame = false;
         }
@@ -145,6 +147,7 @@ void CameraFrameAligner::applySettings(const CameraSettings& settings, const QLi
     {
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrames.clear();
+        m_droppedFrameCount = 0;
         resetAlignmentState();
     }
     else if (settingsKeys.contains("stackFrameCount"))
@@ -178,6 +181,7 @@ void CameraFrameAligner::submitFrame(const CameraPipelineFramePtr& frame)
             {
                 qDebug() << "CameraFrameAligner: Dropping oldest queued stacking frame";
                 m_pendingFrames.pop_front();
+                ++m_droppedFrameCount;
             }
             m_pendingFrames.push_back(frame);
         }
@@ -185,6 +189,7 @@ void CameraFrameAligner::submitFrame(const CameraPipelineFramePtr& frame)
         {
             if (!m_pendingFrames.empty()) {
                 qDebug() << "CameraFrameAligner: Dropping pending frame in favor of new frame";
+                m_droppedFrameCount += static_cast<int>(m_pendingFrames.size());
             }
             m_pendingFrames.clear();
             m_pendingFrames.push_back(frame);
@@ -213,6 +218,7 @@ void CameraFrameAligner::processNextFrame()
             frame = m_pendingFrames.front();
             m_pendingFrames.pop_front();
             frame->m_stackQueuedCount = static_cast<int>(m_pendingFrames.size());
+            frame->m_stackDroppedCount = m_droppedFrameCount;
         }
 
         if (!frame)

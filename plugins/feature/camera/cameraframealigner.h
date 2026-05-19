@@ -123,6 +123,7 @@ private:
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrame;
+    int m_droppedFrameCount;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);

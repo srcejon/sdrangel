@@ -932,10 +932,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("cameraId");
     const bool captureModeChanged = force
         || settingsKeys.contains("captureMode");
-    const bool captureCadenceChanged = force
-        || settingsKeys.contains("captureInterval")
-        || settingsKeys.contains("captureIntervalUnits")
-        || settingsKeys.contains("framesPerSecond");
     const bool hdrSettingsChanged = force
         || settingsKeys.contains("stackEnabled")
         || settingsKeys.contains("stackMethod")
@@ -945,6 +941,13 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("stackHdrExposure2Ms")
         || settingsKeys.contains("stackHdrExposure3Ms")
         || settingsKeys.contains("stackHdrExposure4Ms");
+    const bool stackCadenceChanged = hdrSettingsChanged
+        || settingsKeys.contains("stackFrameCount");
+    const bool captureCadenceChanged = force
+        || settingsKeys.contains("captureInterval")
+        || settingsKeys.contains("captureIntervalUnits")
+        || settingsKeys.contains("framesPerSecond")
+        || stackCadenceChanged;
 
     if (force) {
         m_settings = settings;
@@ -954,6 +957,9 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
 
     if (hdrSettingsChanged) {
         resetHdrBracketState();
+    }
+    if (stackCadenceChanged) {
+        m_stackFrameIndex = 0;
     }
 
     if (force

@@ -197,6 +197,7 @@ private:
     QList<CameraDetectionHistoryEntry> m_detectionHistory;
     int m_lastStackCount = 1;
     int m_lastStackQueuedCount = 0;
+    int m_lastStackDroppedCount = 0;
     CameraSettingsDialog *m_settingsDialog;
     CameraDetectionHistory *m_detectionHistoryDialog;
     CameraHistogramDialog *m_histogramDialog;

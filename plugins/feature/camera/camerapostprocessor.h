@@ -121,6 +121,7 @@ public:
         const CameraHistogramData& getHistogramData() const { return m_histogramData; }
         int getStackCount() const { return m_stackCount; }
         int getStackQueuedCount() const { return m_stackQueuedCount; }
+        int getStackDroppedCount() const { return m_stackDroppedCount; }
         bool isPlateSolved() const { return m_plateSolved; }
         int getPlateSolvedMatches() const { return m_plateSolvedMatches; }
         int getPlateSolveDetectedStarsConsidered() const { return m_plateSolveDetectedStarsConsidered; }
@@ -142,6 +143,7 @@ public:
                                       const CameraHistogramData& histogramData,
                                       int stackCount,
                                       int stackQueuedCount,
+                                      int stackDroppedCount,
                                       bool plateSolved,
                                       int plateSolvedMatches,
                                       int plateSolveDetectedStarsConsidered,
@@ -164,6 +166,7 @@ public:
                 histogramData,
                 stackCount,
                 stackQueuedCount,
+                stackDroppedCount,
                 plateSolved,
                 plateSolvedMatches,
                 plateSolveDetectedStarsConsidered,
@@ -187,6 +190,7 @@ public:
         CameraHistogramData m_histogramData;
         int m_stackCount;
         int m_stackQueuedCount;
+        int m_stackDroppedCount;
         bool m_plateSolved;
         int m_plateSolvedMatches;
         int m_plateSolveDetectedStarsConsidered;
@@ -208,6 +212,7 @@ public:
                        const CameraHistogramData& histogramData,
                        int stackCount,
                        int stackQueuedCount,
+                       int stackDroppedCount,
                        bool plateSolved,
                        int plateSolvedMatches,
                        int plateSolveDetectedStarsConsidered,
@@ -229,6 +234,7 @@ public:
             m_histogramData(histogramData),
             m_stackCount(stackCount),
             m_stackQueuedCount(stackQueuedCount),
+            m_stackDroppedCount(stackDroppedCount),
             m_plateSolved(plateSolved),
             m_plateSolvedMatches(plateSolvedMatches),
             m_plateSolveDetectedStarsConsidered(plateSolveDetectedStarsConsidered),

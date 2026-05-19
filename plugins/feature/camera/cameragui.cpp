@@ -383,7 +383,8 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastHistogramData = report.getHistogramData();
         m_lastStackCount = report.getStackCount();
         m_lastStackQueuedCount = report.getStackQueuedCount();
-        settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2").arg(m_lastStackCount).arg(m_lastStackQueuedCount));
+        m_lastStackDroppedCount = report.getStackDroppedCount();
+        settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3").arg(m_lastStackCount).arg(m_lastStackQueuedCount).arg(m_lastStackDroppedCount));
         m_pipelineFrameTimes.append(nowMs);
         while ((m_pipelineFrameTimes.size() > 1) && (m_pipelineFrameTimes.first() < nowMs - 5000)) {
             m_pipelineFrameTimes.removeFirst();
@@ -1156,7 +1157,7 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, m_settings.m_postProcessWhiteBalanceBlueGain));
     settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setValue(m_settings.m_postProcessWhiteBalanceHighlightProtection);
     settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin, m_settings.m_postProcessWhiteBalanceHighlightProtection));
-    settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2").arg(m_lastStackCount).arg(m_lastStackQueuedCount));
+    settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3").arg(m_lastStackCount).arg(m_lastStackQueuedCount).arg(m_lastStackDroppedCount));
     settingsUI()->postProcessUnwarpCheck->setChecked(m_settings.m_postProcessUnwarp);
     settingsUI()->histogramStretchModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_histogramStretch));
     settingsUI()->histogramStretchBlackPointSlider->setValue(static_cast<int>(std::lround(m_settings.m_histogramStretchBlackPoint * 1000.0)));

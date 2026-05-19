@@ -916,43 +916,83 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
                 continue;
             }
 
-            for (int channel = 0; channel < 3; ++channel)
+            double sum[3] = {0.0, 0.0, 0.0};
+            double sumSquares[3] = {0.0, 0.0, 0.0};
+
+            for (const cv::Mat& frame : m_stackFrameHistory)
             {
-                double sum = 0.0;
-                double sumSquares = 0.0;
-
-                for (const cv::Mat& frame : m_stackFrameHistory)
+                if (highBitDepthInput)
                 {
-                    const int sample = highBitDepthInput
-                        ? frame.ptr<cv::Vec<uint16_t, 3>>(row)[col][channel]
-                        : frame.ptr<cv::Vec3b>(row)[col][channel];
-                    sum += sample;
-                    sumSquares += static_cast<double>(sample) * sample;
-                }
-
-                const double mean = sum / static_cast<double>(frameCount);
-                const double variance = std::max(0.0, (sumSquares / static_cast<double>(frameCount)) - (mean * mean));
-                const double sigma = std::sqrt(variance);
-                const double minValue = mean - sigmaThreshold * sigma;
-                const double maxValue = mean + sigmaThreshold * sigma;
-
-                double clippedSum = 0.0;
-                int clippedCount = 0;
-                for (const cv::Mat& frame : m_stackFrameHistory)
-                {
-                    const int sample = highBitDepthInput
-                        ? frame.ptr<cv::Vec<uint16_t, 3>>(row)[col][channel]
-                        : frame.ptr<cv::Vec3b>(row)[col][channel];
-                    if ((sample >= minValue) && (sample <= maxValue))
+                    const cv::Vec<uint16_t, 3>& pixel = frame.ptr<cv::Vec<uint16_t, 3>>(row)[col];
+                    for (int channel = 0; channel < 3; ++channel)
                     {
-                        clippedSum += sample;
-                        ++clippedCount;
+                        const double sample = pixel[channel];
+                        sum[channel] += sample;
+                        sumSquares[channel] += sample * sample;
                     }
                 }
+                else
+                {
+                    const cv::Vec3b& pixel = frame.ptr<cv::Vec3b>(row)[col];
+                    for (int channel = 0; channel < 3; ++channel)
+                    {
+                        const double sample = pixel[channel];
+                        sum[channel] += sample;
+                        sumSquares[channel] += sample * sample;
+                    }
+                }
+            }
 
-                const int channelValue = clippedCount > 0
-                    ? static_cast<int>(std::lround(clippedSum / static_cast<double>(clippedCount)))
-                    : static_cast<int>(std::lround(mean));
+            double mean[3];
+            double minValue[3];
+            double maxValue[3];
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                mean[channel] = sum[channel] / static_cast<double>(frameCount);
+                const double variance = std::max(0.0, (sumSquares[channel] / static_cast<double>(frameCount)) - (mean[channel] * mean[channel]));
+                const double sigma = std::sqrt(variance);
+                minValue[channel] = mean[channel] - sigmaThreshold * sigma;
+                maxValue[channel] = mean[channel] + sigmaThreshold * sigma;
+            }
+
+            double clippedSum[3] = {0.0, 0.0, 0.0};
+            int clippedCount[3] = {0, 0, 0};
+
+            for (const cv::Mat& frame : m_stackFrameHistory)
+            {
+                if (highBitDepthInput)
+                {
+                    const cv::Vec<uint16_t, 3>& pixel = frame.ptr<cv::Vec<uint16_t, 3>>(row)[col];
+                    for (int channel = 0; channel < 3; ++channel)
+                    {
+                        const int sample = pixel[channel];
+                        if ((sample >= minValue[channel]) && (sample <= maxValue[channel]))
+                        {
+                            clippedSum[channel] += sample;
+                            ++clippedCount[channel];
+                        }
+                    }
+                }
+                else
+                {
+                    const cv::Vec3b& pixel = frame.ptr<cv::Vec3b>(row)[col];
+                    for (int channel = 0; channel < 3; ++channel)
+                    {
+                        const int sample = pixel[channel];
+                        if ((sample >= minValue[channel]) && (sample <= maxValue[channel]))
+                        {
+                            clippedSum[channel] += sample;
+                            ++clippedCount[channel];
+                        }
+                    }
+                }
+            }
+
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                const int channelValue = clippedCount[channel] > 0
+                    ? static_cast<int>(std::lround(clippedSum[channel] / static_cast<double>(clippedCount[channel])))
+                    : static_cast<int>(std::lround(mean[channel]));
                 const int outputValue = highBitDepthInput
                     ? static_cast<int>(std::lround((channelValue * 255.0) / 65535.0))
                     : channelValue;

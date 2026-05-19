@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
 
 #include <QDebug>
 #include <QFile>
@@ -1165,41 +1166,53 @@ void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& r
             continue;
         }
 
-        cv::Mat contourMask = cv::Mat::zeros(thresholdMask.size(), CV_8UC1);
+        cv::Mat contourMask = cv::Mat::zeros(box.height, box.width, CV_8UC1);
         std::vector<std::vector<cv::Point>> singleContour{contour};
-        cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED);
+        cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED, cv::LINE_8, cv::noArray(), INT_MAX, -box.tl());
 
-        cv::Mat weightedResidual;
-        residual.copyTo(weightedResidual, contourMask);
-        const cv::Scalar residualSum = cv::sum(weightedResidual);
-        const double totalWeight = residualSum[0];
+        const cv::Mat residualRoi = residual(box);
+        const cv::Mat grayRoi = gray(box);
+        double totalWeight = 0.0;
+        double weightedX = 0.0;
+        double weightedY = 0.0;
+        double peakValue = 0.0;
+        double grayPeak = 0.0;
+
+        for (int row = 0; row < box.height; ++row)
+        {
+            const uchar* maskRow = contourMask.ptr<uchar>(row);
+            const uchar* residualRow = residualRoi.ptr<uchar>(row);
+            const uchar* grayRow = grayRoi.ptr<uchar>(row);
+
+            for (int col = 0; col < box.width; ++col)
+            {
+                if (maskRow[col] == 0) {
+                    continue;
+                }
+
+                const double weight = residualRow[col];
+                if (weight > 0.0)
+                {
+                    totalWeight += weight;
+                    weightedX += static_cast<double>(box.x + col) * weight;
+                    weightedY += static_cast<double>(box.y + row) * weight;
+                }
+
+                if (weight > peakValue) {
+                    peakValue = weight;
+                }
+                if (grayRow[col] > grayPeak) {
+                    grayPeak = grayRow[col];
+                }
+            }
+        }
+
         if (totalWeight <= 0.0) {
             continue;
         }
 
-        double weightedX = 0.0;
-        double weightedY = 0.0;
-        for (int row = box.y; row < box.y + box.height; ++row)
-        {
-            const uchar* residualRow = weightedResidual.ptr<uchar>(row);
-            for (int col = box.x; col < box.x + box.width; ++col)
-            {
-                const double weight = residualRow[col];
-                if (weight <= 0.0) {
-                    continue;
-                }
-
-                weightedX += static_cast<double>(col) * weight;
-                weightedY += static_cast<double>(row) * weight;
-            }
-        }
-
         const double centerX = weightedX / totalWeight;
         const double centerY = weightedY / totalWeight;
-        double peakValue = 0.0;
-        cv::minMaxLoc(residual, nullptr, &peakValue, nullptr, nullptr, contourMask);
-        double grayPeak = 0.0;
-        cv::minMaxLoc(gray, nullptr, &grayPeak, nullptr, nullptr, contourMask);
         const bool saturated = grayPeak >= 250.0;
 
         const double qualityScore = peakValue

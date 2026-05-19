@@ -43,97 +43,6 @@ MESSAGE_CLASS_DEFINITION(Scheduler::MsgConfigureScheduler, Message)
 const char* const Scheduler::m_featureIdURI = "sdrangel.feature.scheduler";
 const char* const Scheduler::m_featureId = "Scheduler";
 
-QDateTime Scheduler::schedulerDateTimeFromString(const QString *text)
-{
-    if (!text) {
-        return QDateTime();
-    }
-
-    QDateTime dateTime = QDateTime::fromString(*text, Qt::ISODateWithMs);
-
-    if (!dateTime.isValid()) {
-        dateTime = QDateTime::fromString(*text, Qt::ISODate);
-    }
-
-    return dateTime;
-}
-
-QString Scheduler::schedulerDateTimeToString(const QDateTime& dateTime)
-{
-    return dateTime.isValid() ? dateTime.toString(Qt::ISODateWithMs) : QString();
-}
-
-bool Scheduler::parseFrequency(const QString& text, double& frequencyInHz)
-{
-    const QRegularExpression re(
-        QStringLiteral("^\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*([kKmMgG]?)(?:[hH][zZ])?\\s*$"));
-    const QRegularExpressionMatch match = re.match(text);
-
-    if (!match.hasMatch()) {
-        return false;
-    }
-
-    bool ok = false;
-    double value = match.captured(1).toDouble(&ok);
-    if (!ok) {
-        return false;
-    }
-
-    const QString unit = match.captured(2).toLower();
-    if (unit == QStringLiteral("k")) {
-        value *= 1e3;
-    } else if (unit == QStringLiteral("m")) {
-        value *= 1e6;
-    } else if (unit == QStringLiteral("g")) {
-        value *= 1e9;
-    }
-
-    frequencyInHz = value;
-    return true;
-}
-
-bool Scheduler::patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting)
-{
-    switch (setting.m_type)
-    {
-    case SchedulerSettings::SettingInteger:
-        return ChannelWebAPIUtils::patchDeviceSetting(deviceSetIndex, setting.m_name, setting.m_value.toInt());
-    case SchedulerSettings::SettingDouble:
-        return ChannelWebAPIUtils::patchDeviceSetting(deviceSetIndex, setting.m_name, setting.m_value.toDouble());
-    case SchedulerSettings::SettingString:
-    default:
-        return ChannelWebAPIUtils::patchDeviceSetting(deviceSetIndex, setting.m_name, setting.m_value);
-    }
-}
-
-bool Scheduler::patchChannelSetting(int deviceSetIndex, int channelIndex, const SchedulerSettings::SettingValue& setting)
-{
-    switch (setting.m_type)
-    {
-    case SchedulerSettings::SettingInteger:
-        return ChannelWebAPIUtils::patchChannelSetting(deviceSetIndex, channelIndex, setting.m_name, setting.m_value.toInt());
-    case SchedulerSettings::SettingDouble:
-        return ChannelWebAPIUtils::patchChannelSetting(deviceSetIndex, channelIndex, setting.m_name, setting.m_value.toDouble());
-    case SchedulerSettings::SettingString:
-    default:
-        return ChannelWebAPIUtils::patchChannelSetting(deviceSetIndex, channelIndex, setting.m_name, setting.m_value);
-    }
-}
-
-bool Scheduler::patchFeatureSetting(int featureSetIndex, int featureIndex, const SchedulerSettings::SettingValue& setting)
-{
-    switch (setting.m_type)
-    {
-    case SchedulerSettings::SettingInteger:
-        return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value.toInt());
-    case SchedulerSettings::SettingDouble:
-        return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value.toDouble());
-    case SchedulerSettings::SettingString:
-    default:
-        return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value);
-    }
-}
-
 Scheduler::Scheduler(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),
     m_eventSourceHandler(QStringList(), QStringList({QStringLiteral("event")}), QStringLiteral("RTMF"))
@@ -962,5 +871,96 @@ void Scheduler::notifyGUI(const QStringList& settingsKeys)
 {
     if (m_guiMessageQueue) {
         m_guiMessageQueue->push(MsgConfigureScheduler::create(m_settings, settingsKeys, false));
+    }
+}
+
+QDateTime Scheduler::schedulerDateTimeFromString(const QString *text)
+{
+    if (!text) {
+        return QDateTime();
+    }
+
+    QDateTime dateTime = QDateTime::fromString(*text, Qt::ISODateWithMs);
+
+    if (!dateTime.isValid()) {
+        dateTime = QDateTime::fromString(*text, Qt::ISODate);
+    }
+
+    return dateTime;
+}
+
+QString Scheduler::schedulerDateTimeToString(const QDateTime& dateTime)
+{
+    return dateTime.isValid() ? dateTime.toString(Qt::ISODateWithMs) : QString();
+}
+
+bool Scheduler::parseFrequency(const QString& text, double& frequencyInHz)
+{
+    const QRegularExpression re(
+        QStringLiteral("^\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*([kKmMgG]?)(?:[hH][zZ])?\\s*$"));
+    const QRegularExpressionMatch match = re.match(text);
+
+    if (!match.hasMatch()) {
+        return false;
+    }
+
+    bool ok = false;
+    double value = match.captured(1).toDouble(&ok);
+    if (!ok) {
+        return false;
+    }
+
+    const QString unit = match.captured(2).toLower();
+    if (unit == QStringLiteral("k")) {
+        value *= 1e3;
+    } else if (unit == QStringLiteral("m")) {
+        value *= 1e6;
+    } else if (unit == QStringLiteral("g")) {
+        value *= 1e9;
+    }
+
+    frequencyInHz = value;
+    return true;
+}
+
+bool Scheduler::patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting)
+{
+    switch (setting.m_type)
+    {
+    case SchedulerSettings::SettingInteger:
+        return ChannelWebAPIUtils::patchDeviceSetting(deviceSetIndex, setting.m_name, setting.m_value.toInt());
+    case SchedulerSettings::SettingDouble:
+        return ChannelWebAPIUtils::patchDeviceSetting(deviceSetIndex, setting.m_name, setting.m_value.toDouble());
+    case SchedulerSettings::SettingString:
+    default:
+        return ChannelWebAPIUtils::patchDeviceSetting(deviceSetIndex, setting.m_name, setting.m_value);
+    }
+}
+
+bool Scheduler::patchChannelSetting(int deviceSetIndex, int channelIndex, const SchedulerSettings::SettingValue& setting)
+{
+    switch (setting.m_type)
+    {
+    case SchedulerSettings::SettingInteger:
+        return ChannelWebAPIUtils::patchChannelSetting(deviceSetIndex, channelIndex, setting.m_name, setting.m_value.toInt());
+    case SchedulerSettings::SettingDouble:
+        return ChannelWebAPIUtils::patchChannelSetting(deviceSetIndex, channelIndex, setting.m_name, setting.m_value.toDouble());
+    case SchedulerSettings::SettingString:
+    default:
+        return ChannelWebAPIUtils::patchChannelSetting(deviceSetIndex, channelIndex, setting.m_name, setting.m_value);
+    }
+}
+
+bool Scheduler::patchFeatureSetting(int featureSetIndex, int featureIndex, const SchedulerSettings::SettingValue& setting)
+{
+    switch (setting.m_type)
+    {
+    case SchedulerSettings::SettingInteger:
+        return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value.toInt());
+    case SchedulerSettings::SettingDouble:
+        return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value.toDouble());
+    case SchedulerSettings::SettingString:
+    default:
+        return ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, setting.m_name, setting.m_value);
     }
 }

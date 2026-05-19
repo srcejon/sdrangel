@@ -48,168 +48,6 @@
 #include "scheduler.h"
 #include "schedulergui.h"
 
-QDate SchedulerGUI::noDateUntil()
-{
-    return QDate(1900, 1, 1);
-}
-
-QString SchedulerGUI::presetText(const QString& group, quint64 frequency, const QString& description)
-{
-    if (group.isEmpty()) {
-        return QString();
-    }
-
-    return QStringLiteral("%1: %2 - %3")
-        .arg(group)
-        .arg(frequency / 1000000.0, 0, 'f', 3)
-        .arg(description);
-}
-
-QString SchedulerGUI::featureKey(int featureSetIndex, int featureIndex)
-{
-    return QStringLiteral("%1:%2").arg(featureSetIndex).arg(featureIndex);
-}
-
-QString SchedulerGUI::channelKey(int channelIndex, const QString& channelId)
-{
-    return QStringLiteral("%1:%2").arg(channelIndex).arg(channelId);
-}
-
-bool SchedulerGUI::channelSupportsAction(const QString& channelId, SchedulerSettings::RunAction action)
-{
-    switch (action)
-    {
-    case SchedulerSettings::ActionApplySetting:
-        return !channelId.isEmpty();
-    case SchedulerSettings::ActionFileSinkRecordStart:
-    case SchedulerSettings::ActionFileSinkRecordStop:
-        return channelId == "sdrangel.channel.filesink";
-    case SchedulerSettings::ActionSigMFRecordStart:
-    case SchedulerSettings::ActionSigMFRecordStop:
-        return channelId == "sdrangel.channel.sigmffilesink";
-    case SchedulerSettings::ActionRTTYTransmit:
-        return channelId == "sdrangel.channeltx.modrtty";
-    case SchedulerSettings::ActionPSK31Transmit:
-        return channelId == "sdrangel.channeltx.modpsk31";
-    case SchedulerSettings::ActionPacketTransmit:
-        return channelId == "sdrangel.channeltx.modpacket";
-    case SchedulerSettings::ActionIEEE_802_15_4Transmit:
-        return channelId == "sdrangel.channeltx.mod802.15.4";
-    case SchedulerSettings::ActionAISTransmit:
-        return channelId == "sdrangel.channel.modais";
-    case SchedulerSettings::ActionFreqScannerRun:
-    case SchedulerSettings::ActionFreqScannerStop:
-        return channelId == "sdrangel.channel.freqscanner";
-    case SchedulerSettings::ActionRadioAstronomyStart:
-        return channelId == "sdrangel.channel.radioastronomy";
-    default:
-        return false;
-    }
-}
-
-bool SchedulerGUI::featureSupportsAction(const QString& featureId, SchedulerSettings::RunAction action)
-{
-    switch (action)
-    {
-    case SchedulerSettings::ActionStart:
-    case SchedulerSettings::ActionStop:
-        return !featureId.isEmpty();
-    case SchedulerSettings::ActionCameraSaveImage:
-    case SchedulerSettings::ActionCameraRecordVideo:
-        return featureId == "sdrangel.feature.camera";
-    case SchedulerSettings::ActionMapFind:
-        return (featureId == "sdrangel.feature.map") || (featureId == "sdrangel.feature.skymap");
-    case SchedulerSettings::ActionApplySetting:
-        return !featureId.isEmpty();
-    default:
-        return false;
-    }
-}
-
-int SchedulerGUI::weekdayMaskFromWidgets(const Ui::SchedulerGUI *ui)
-{
-    int mask = 0;
-
-    if (ui->monday->isChecked()) {
-        mask |= 1 << 0;
-    }
-    if (ui->tuesday->isChecked()) {
-        mask |= 1 << 1;
-    }
-    if (ui->wednesday->isChecked()) {
-        mask |= 1 << 2;
-    }
-    if (ui->thursday->isChecked()) {
-        mask |= 1 << 3;
-    }
-    if (ui->friday->isChecked()) {
-        mask |= 1 << 4;
-    }
-    if (ui->saturday->isChecked()) {
-        mask |= 1 << 5;
-    }
-    if (ui->sunday->isChecked()) {
-        mask |= 1 << 6;
-    }
-
-    return mask;
-}
-
-void SchedulerGUI::setWeekdayWidgets(Ui::SchedulerGUI *ui, int mask)
-{
-    ui->monday->setChecked((mask & (1 << 0)) != 0);
-    ui->tuesday->setChecked((mask & (1 << 1)) != 0);
-    ui->wednesday->setChecked((mask & (1 << 2)) != 0);
-    ui->thursday->setChecked((mask & (1 << 3)) != 0);
-    ui->friday->setChecked((mask & (1 << 4)) != 0);
-    ui->saturday->setChecked((mask & (1 << 5)) != 0);
-    ui->sunday->setChecked((mask & (1 << 6)) != 0);
-}
-
-bool SchedulerGUI::ruleHasDeviceSetAction(const SchedulerSettings::ScheduleRule& rule, int deviceSetIndex)
-{
-    for (const SchedulerSettings::DeviceSetAction& action : rule.m_deviceSetActions)
-    {
-        if (action.m_deviceSetIndex == deviceSetIndex) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void SchedulerGUI::pruneChannelActionsForDeviceSets(SchedulerSettings::ScheduleRule& rule)
-{
-    for (int i = rule.m_channelActions.size() - 1; i >= 0; --i)
-    {
-        if (!ruleHasDeviceSetAction(rule, rule.m_channelActions[i].m_deviceSetIndex)) {
-            rule.m_channelActions.removeAt(i);
-        }
-    }
-}
-
-bool SchedulerGUI::parseFeatureKey(const QString& key, int& featureSetIndex, int& featureIndex)
-{
-    const QStringList parts = key.split(':');
-    if (parts.size() != 2) {
-        return false;
-    }
-
-    bool okSet = false;
-    bool okFeature = false;
-    const int parsedSet = parts[0].toInt(&okSet);
-    const int parsedFeature = parts[1].toInt(&okFeature);
-
-    if (okSet && okFeature)
-    {
-        featureSetIndex = parsedSet;
-        featureIndex = parsedFeature;
-        return true;
-    }
-
-    return false;
-}
-
 SchedulerGUI* SchedulerGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
     return new SchedulerGUI(pluginAPI, featureUISet, feature);
@@ -2487,4 +2325,166 @@ void SchedulerGUI::onRefreshLists()
 {
     m_eventSourceHandler.scanAvailableChannelsAndFeatures();
     displayRuleEditor();
+}
+
+QDate SchedulerGUI::noDateUntil()
+{
+    return QDate(1900, 1, 1);
+}
+
+QString SchedulerGUI::presetText(const QString& group, quint64 frequency, const QString& description)
+{
+    if (group.isEmpty()) {
+        return QString();
+    }
+
+    return QStringLiteral("%1: %2 - %3")
+        .arg(group)
+        .arg(frequency / 1000000.0, 0, 'f', 3)
+        .arg(description);
+}
+
+QString SchedulerGUI::featureKey(int featureSetIndex, int featureIndex)
+{
+    return QStringLiteral("%1:%2").arg(featureSetIndex).arg(featureIndex);
+}
+
+QString SchedulerGUI::channelKey(int channelIndex, const QString& channelId)
+{
+    return QStringLiteral("%1:%2").arg(channelIndex).arg(channelId);
+}
+
+bool SchedulerGUI::channelSupportsAction(const QString& channelId, SchedulerSettings::RunAction action)
+{
+    switch (action)
+    {
+    case SchedulerSettings::ActionApplySetting:
+        return !channelId.isEmpty();
+    case SchedulerSettings::ActionFileSinkRecordStart:
+    case SchedulerSettings::ActionFileSinkRecordStop:
+        return channelId == "sdrangel.channel.filesink";
+    case SchedulerSettings::ActionSigMFRecordStart:
+    case SchedulerSettings::ActionSigMFRecordStop:
+        return channelId == "sdrangel.channel.sigmffilesink";
+    case SchedulerSettings::ActionRTTYTransmit:
+        return channelId == "sdrangel.channeltx.modrtty";
+    case SchedulerSettings::ActionPSK31Transmit:
+        return channelId == "sdrangel.channeltx.modpsk31";
+    case SchedulerSettings::ActionPacketTransmit:
+        return channelId == "sdrangel.channeltx.modpacket";
+    case SchedulerSettings::ActionIEEE_802_15_4Transmit:
+        return channelId == "sdrangel.channeltx.mod802.15.4";
+    case SchedulerSettings::ActionAISTransmit:
+        return channelId == "sdrangel.channel.modais";
+    case SchedulerSettings::ActionFreqScannerRun:
+    case SchedulerSettings::ActionFreqScannerStop:
+        return channelId == "sdrangel.channel.freqscanner";
+    case SchedulerSettings::ActionRadioAstronomyStart:
+        return channelId == "sdrangel.channel.radioastronomy";
+    default:
+        return false;
+    }
+}
+
+bool SchedulerGUI::featureSupportsAction(const QString& featureId, SchedulerSettings::RunAction action)
+{
+    switch (action)
+    {
+    case SchedulerSettings::ActionStart:
+    case SchedulerSettings::ActionStop:
+        return !featureId.isEmpty();
+    case SchedulerSettings::ActionCameraSaveImage:
+    case SchedulerSettings::ActionCameraRecordVideo:
+        return featureId == "sdrangel.feature.camera";
+    case SchedulerSettings::ActionMapFind:
+        return (featureId == "sdrangel.feature.map") || (featureId == "sdrangel.feature.skymap");
+    case SchedulerSettings::ActionApplySetting:
+        return !featureId.isEmpty();
+    default:
+        return false;
+    }
+}
+
+int SchedulerGUI::weekdayMaskFromWidgets(const Ui::SchedulerGUI *ui)
+{
+    int mask = 0;
+
+    if (ui->monday->isChecked()) {
+        mask |= 1 << 0;
+    }
+    if (ui->tuesday->isChecked()) {
+        mask |= 1 << 1;
+    }
+    if (ui->wednesday->isChecked()) {
+        mask |= 1 << 2;
+    }
+    if (ui->thursday->isChecked()) {
+        mask |= 1 << 3;
+    }
+    if (ui->friday->isChecked()) {
+        mask |= 1 << 4;
+    }
+    if (ui->saturday->isChecked()) {
+        mask |= 1 << 5;
+    }
+    if (ui->sunday->isChecked()) {
+        mask |= 1 << 6;
+    }
+
+    return mask;
+}
+
+void SchedulerGUI::setWeekdayWidgets(Ui::SchedulerGUI *ui, int mask)
+{
+    ui->monday->setChecked((mask & (1 << 0)) != 0);
+    ui->tuesday->setChecked((mask & (1 << 1)) != 0);
+    ui->wednesday->setChecked((mask & (1 << 2)) != 0);
+    ui->thursday->setChecked((mask & (1 << 3)) != 0);
+    ui->friday->setChecked((mask & (1 << 4)) != 0);
+    ui->saturday->setChecked((mask & (1 << 5)) != 0);
+    ui->sunday->setChecked((mask & (1 << 6)) != 0);
+}
+
+bool SchedulerGUI::ruleHasDeviceSetAction(const SchedulerSettings::ScheduleRule& rule, int deviceSetIndex)
+{
+    for (const SchedulerSettings::DeviceSetAction& action : rule.m_deviceSetActions)
+    {
+        if (action.m_deviceSetIndex == deviceSetIndex) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void SchedulerGUI::pruneChannelActionsForDeviceSets(SchedulerSettings::ScheduleRule& rule)
+{
+    for (int i = rule.m_channelActions.size() - 1; i >= 0; --i)
+    {
+        if (!ruleHasDeviceSetAction(rule, rule.m_channelActions[i].m_deviceSetIndex)) {
+            rule.m_channelActions.removeAt(i);
+        }
+    }
+}
+
+bool SchedulerGUI::parseFeatureKey(const QString& key, int& featureSetIndex, int& featureIndex)
+{
+    const QStringList parts = key.split(':');
+    if (parts.size() != 2) {
+        return false;
+    }
+
+    bool okSet = false;
+    bool okFeature = false;
+    const int parsedSet = parts[0].toInt(&okSet);
+    const int parsedFeature = parts[1].toInt(&okFeature);
+
+    if (okSet && okFeature)
+    {
+        featureSetIndex = parsedSet;
+        featureIndex = parsedFeature;
+        return true;
+    }
+
+    return false;
 }

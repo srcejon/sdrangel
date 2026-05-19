@@ -27,6 +27,10 @@
 #include <QString>
 #include <QVector>
 
+#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+#include <opencv2/core/cuda.hpp>
+#endif
+
 struct CameraPipelineDetection
 {
     QRect m_box;
@@ -106,6 +110,37 @@ struct CameraPipelineFrame
     int m_stackQueuedCount = 0;
     int m_stackDroppedCount = 0;
     BayerPattern m_bayerPattern = BayerNone;
+
+#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+    cv::cuda::GpuMat m_cudaBgrImage;
+    cv::cuda::GpuMat m_cudaGrayImage;
+
+    void clearCudaCache()
+    {
+        m_cudaBgrImage.release();
+        m_cudaGrayImage.release();
+    }
+
+    bool hasCudaBgrImage() const
+    {
+        return !m_cudaBgrImage.empty()
+            && !m_image.isNull()
+            && (m_cudaBgrImage.cols == m_image.width())
+            && (m_cudaBgrImage.rows == m_image.height())
+            && (m_cudaBgrImage.type() == CV_8UC3);
+    }
+
+    bool hasCudaGrayImage() const
+    {
+        return !m_cudaGrayImage.empty()
+            && !m_image.isNull()
+            && (m_cudaGrayImage.cols == m_image.width())
+            && (m_cudaGrayImage.rows == m_image.height())
+            && (m_cudaGrayImage.type() == CV_8UC1);
+    }
+#else
+    void clearCudaCache() {}
+#endif
 };
 
 using CameraPipelineFramePtr = QSharedPointer<CameraPipelineFrame>;

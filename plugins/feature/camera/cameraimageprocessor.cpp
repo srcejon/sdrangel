@@ -261,7 +261,7 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     if (frame->m_unprocessedImage.isNull()) {
         frame->m_unprocessedImage = frame->m_image;
     }
-    frame->m_image = applyImageProcessing(frame->m_image);
+    frame->m_image = applyImageProcessing(*frame);
     frame->m_histogramData = computeHistogramData(frame->m_image);
 
     if (m_nextStage) {
@@ -307,15 +307,16 @@ CameraHistogramData CameraImageProcessor::computeHistogramData(const QImage& ima
     return histogramData;
 }
 
-QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
+QImage CameraImageProcessor::applyImageProcessing(CameraPipelineFrame& frame)
 {
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     if (m_settings.m_postProcessUseCuda && canUseCudaImageProcessing()) {
-        return applyImageProcessingCuda(input);
+        return applyImageProcessingCuda(frame);
     }
 #endif
 
-    return applyImageProcessingCpu(input);
+    frame.clearCudaCache();
+    return applyImageProcessingCpu(frame.m_image);
 }
 
 QImage CameraImageProcessor::applyImageProcessingCpu(const QImage& input)
@@ -417,9 +418,11 @@ bool CameraImageProcessor::canUseCudaImageProcessing() const
     return true;
 }
 
-QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
+QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
 {
     PROFILER_START();
+
+    const QImage& input = frame.m_image;
 
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
@@ -451,6 +454,7 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
         || m_settings.m_invertColors;
 
     if (!needsAny) {
+        frame.clearCudaCache();
         return input;
     }
 
@@ -582,6 +586,8 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
             result.bits(),
             static_cast<size_t>(result.bytesPerLine()));
         rgbGpu.download(resultMat);
+        frame.m_cudaBgrImage = bgrGpu.clone();
+        frame.m_cudaGrayImage.release();
         PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");
         return result;
     }
@@ -590,6 +596,7 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
         qWarning() << "CameraImageProcessor: CUDA post-processing failed; falling back to CPU:" << error.what();
     }
 
+    frame.clearCudaCache();
     return applyImageProcessingCpu(input);
 }
 

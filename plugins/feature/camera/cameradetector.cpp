@@ -770,17 +770,24 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
     const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
+#if defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+    const cv::cuda::GpuMat* cachedBgrGpu = frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr;
+#else
+    const cv::cuda::GpuMat* cachedBgrGpu = nullptr;
+#endif
 
     if (m_settings.m_diffMask && !diffReferenceFrame.m_image.isNull()
         && diffReferenceFrame.m_image.width() == frame->m_image.width()
         && diffReferenceFrame.m_image.height() == frame->m_image.height()) {
-        applyDiffMask(bgrMat, detectionRoi, diffReferenceFrame);
+        applyDiffMask(*frame, bgrMat, detectionRoi, diffReferenceFrame);
+        cachedBgrGpu = nullptr;
     }
 
     if (m_settings.m_motionDetect) {
         cv::Mat motionDebugMask;
         applyMotionDetection(
             bgrMat,
+            cachedBgrGpu,
             detectionRoi,
             frame->m_motionBoxes,
             updateInputHistory,
@@ -802,6 +809,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
         cv::Mat starDebugMask;
         applyStarDetection(
             bgrMat,
+            cachedBgrGpu,
             detectionRoi,
             frame->m_starDetections,
             (m_settings.m_starDebugView != CameraSettings::StarDebugViewOff) ? &starDebugMask : nullptr);
@@ -855,6 +863,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     processObjectDetections(frame->m_detections, detectionTime, *frame);
 
     frame->m_image = convertBgrToRgbImage(bgrMat);
+    frame->clearCudaCache();
 
     if (updateInputHistory)
     {
@@ -882,11 +891,11 @@ cv::Rect CameraDetector::resolveDetectionRoi(const cv::Size& frameSize) const
     return cv::Rect(x, y, width, height);
 }
 
-void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
+void CameraDetector::applyDiffMask(CameraPipelineFrame& frame, cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
 {
     PROFILER_START();
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-    if (canUseCudaDetection() && applyDiffMaskCuda(bgrMat, roi, diffReferenceFrame))
+    if (canUseCudaDetection() && applyDiffMaskCuda(bgrMat, frame.hasCudaBgrImage() ? &frame.m_cudaBgrImage : nullptr, roi, diffReferenceFrame))
     {
         PROFILER_STOP(__FUNCTION__);
         return;
@@ -957,22 +966,35 @@ void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const C
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-bool CameraDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
+bool CameraDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
 {
     try
     {
-        QImage convertedPrevRgb;
-        const QImage& prevRgb = ensureRgb888(diffReferenceFrame.m_image, convertedPrevRgb);
-        cv::Mat prevMat = wrapRgb888Image(prevRgb);
-        cv::Mat prevBgr;
-        cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
-
         cv::cuda::GpuMat bgrGpu;
         cv::cuda::GpuMat prevBgrGpu;
         cv::cuda::GpuMat grayGpu;
         cv::cuda::GpuMat prevGrayGpu;
-        bgrGpu.upload(bgrMat);
-        prevBgrGpu.upload(prevBgr);
+
+        if (sourceBgrGpu && !sourceBgrGpu->empty()) {
+            bgrGpu = *sourceBgrGpu;
+        } else {
+            bgrGpu.upload(bgrMat);
+        }
+
+        if (diffReferenceFrame.hasCudaBgrImage())
+        {
+            prevBgrGpu = diffReferenceFrame.m_cudaBgrImage;
+        }
+        else
+        {
+            QImage convertedPrevRgb;
+            const QImage& prevRgb = ensureRgb888(diffReferenceFrame.m_image, convertedPrevRgb);
+            cv::Mat prevMat = wrapRgb888Image(prevRgb);
+            cv::Mat prevBgr;
+            cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
+            prevBgrGpu.upload(prevBgr);
+        }
+
         cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
         cv::cuda::cvtColor(prevBgrGpu, prevGrayGpu, cv::COLOR_BGR2GRAY);
 
@@ -1173,7 +1195,7 @@ bool CameraDetector::canUseCudaMotionDetection() const
     return true;
 }
 
-bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
+bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -1184,9 +1206,13 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::R
         }
 
         const double downscale = m_settings.m_motionDownscale;
-        cv::Mat motionInput = bgrMat(roi);
         cv::cuda::GpuMat motionInputGpu;
-        motionInputGpu.upload(motionInput);
+        if (sourceBgrGpu && !sourceBgrGpu->empty()) {
+            motionInputGpu = (*sourceBgrGpu)(roi);
+        } else {
+            cv::Mat motionInput = bgrMat(roi);
+            motionInputGpu.upload(motionInput);
+        }
 
         if (downscale < 0.999)
         {
@@ -1323,11 +1349,11 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::R
 }
 #endif
 
-void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
+void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
-    if (canUseCudaMotionDetection() && applyMotionDetectionCuda(bgrMat, roi, motionBoxes, updateBackgroundModel, debugMask))
+    if (canUseCudaMotionDetection() && applyMotionDetectionCuda(bgrMat, sourceBgrGpu, roi, motionBoxes, updateBackgroundModel, debugMask))
     {
         PROFILER_STOP(__FUNCTION__);
         return;
@@ -1444,7 +1470,7 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-bool CameraDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
+bool CameraDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
 {
     try
     {
@@ -1455,7 +1481,11 @@ bool CameraDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv:
         cv::cuda::GpuMat residualGpu;
         cv::cuda::GpuMat thresholdMaskGpu;
 
-        bgrGpu.upload(bgrMat(roi));
+        if (sourceBgrGpu && !sourceBgrGpu->empty()) {
+            bgrGpu = (*sourceBgrGpu)(roi);
+        } else {
+            bgrGpu.upload(bgrMat(roi));
+        }
         cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
 
         cv::Ptr<cv::cuda::Filter> smallBlur = cv::cuda::createGaussianFilter(
@@ -1515,7 +1545,7 @@ bool CameraDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv:
 }
 #endif
 
-void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask) const
+void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask) const
 {
     PROFILER_START();
 
@@ -1524,7 +1554,7 @@ void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& r
     cv::Mat thresholdMask;
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     const bool usedCudaPreprocessing = canUseCudaDetection()
-        && applyStarPreprocessingCuda(bgrMat, roi, gray, residual, thresholdMask, debugMask);
+        && applyStarPreprocessingCuda(bgrMat, sourceBgrGpu, roi, gray, residual, thresholdMask, debugMask);
 #else
     const bool usedCudaPreprocessing = false;
 #endif

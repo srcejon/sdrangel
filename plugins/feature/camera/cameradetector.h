@@ -35,6 +35,7 @@
 #include <opencv2/dnn/dnn.hpp>
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
 #include <opencv2/cudabgsegm.hpp>
+#include <opencv2/cudafilters.hpp>
 #endif
 
 #include "util/message.h"
@@ -185,6 +186,16 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> m_cudaBgSubtractor;
     cv::cuda::GpuMat m_cudaMotionLastFgMaskRaw;
+    cv::Ptr<cv::cuda::Filter> m_cudaMotionOpenFilter;
+    cv::Ptr<cv::cuda::Filter> m_cudaMotionCloseFilter;
+    int m_cudaMotionOpenFilterSize;
+    int m_cudaMotionOpenFilterType;
+    int m_cudaMotionCloseFilterSize;
+    int m_cudaMotionCloseFilterType;
+    cv::cuda::GpuMat m_cudaMotionExclusionMask;
+    cv::Rect m_cudaMotionExclusionRoi;
+    cv::Size m_cudaMotionExclusionWorkSize;
+    QVector<QRect> m_cudaMotionExclusionRects;
 #endif
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;
@@ -221,6 +232,8 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     [[nodiscard]] cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> createCudaBackgroundSubtractor() const;
     [[nodiscard]] bool canUseCudaMotionDetection() const;
+    void invalidateCudaMotionCaches();
+    [[nodiscard]] const cv::cuda::GpuMat& cudaMotionExclusionMask(const cv::Rect& roi, const cv::Size& workSize);
     bool applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
 #endif
     void applyDiffMask(CameraPipelineFrame& frame, cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);

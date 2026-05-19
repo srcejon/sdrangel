@@ -364,6 +364,12 @@ CameraDetector::CameraDetector(Camera *camera) :
     m_msgQueueToFeature(nullptr),
     m_nextStage(nullptr),
     m_captureActive(false),
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+    m_cudaMotionOpenFilterSize(0),
+    m_cudaMotionOpenFilterType(-1),
+    m_cudaMotionCloseFilterSize(0),
+    m_cudaMotionCloseFilterType(-1),
+#endif
     m_motionPersistenceRemaining(0),
     m_motionConfirmCount(0),
     m_yoloInputSize(640, 640)
@@ -418,6 +424,7 @@ bool CameraDetector::handleMessage(const Message& cmd)
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
             m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
             m_cudaMotionLastFgMaskRaw.release();
+            invalidateCudaMotionCaches();
 #endif
             m_lastMotionBoxes.clear();
             m_motionPersistenceRemaining = 0;
@@ -494,6 +501,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
         m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
         m_cudaMotionLastFgMaskRaw.release();
+        invalidateCudaMotionCaches();
 #endif
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
@@ -547,6 +555,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
         m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
         m_cudaMotionLastFgMaskRaw.release();
+        invalidateCudaMotionCaches();
 #endif
     }
 
@@ -573,6 +582,9 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
         m_motionConfirmCount = 0;
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+        invalidateCudaMotionCaches();
+#endif
     }
 
     if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
@@ -1195,6 +1207,37 @@ bool CameraDetector::canUseCudaMotionDetection() const
     return true;
 }
 
+void CameraDetector::invalidateCudaMotionCaches()
+{
+    m_cudaMotionOpenFilter.release();
+    m_cudaMotionCloseFilter.release();
+    m_cudaMotionOpenFilterSize = 0;
+    m_cudaMotionOpenFilterType = -1;
+    m_cudaMotionCloseFilterSize = 0;
+    m_cudaMotionCloseFilterType = -1;
+    m_cudaMotionExclusionMask.release();
+    m_cudaMotionExclusionRoi = cv::Rect();
+    m_cudaMotionExclusionWorkSize = cv::Size();
+    m_cudaMotionExclusionRects.clear();
+}
+
+const cv::cuda::GpuMat& CameraDetector::cudaMotionExclusionMask(const cv::Rect& roi, const cv::Size& workSize)
+{
+    if (m_cudaMotionExclusionMask.empty()
+        || (m_cudaMotionExclusionRoi != roi)
+        || (m_cudaMotionExclusionWorkSize != workSize)
+        || (m_cudaMotionExclusionRects != m_settings.m_motionExclusionRects))
+    {
+        const cv::Mat exclusionMask = buildExclusionMask(roi, workSize);
+        m_cudaMotionExclusionMask.upload(exclusionMask);
+        m_cudaMotionExclusionRoi = roi;
+        m_cudaMotionExclusionWorkSize = workSize;
+        m_cudaMotionExclusionRects = m_settings.m_motionExclusionRects;
+    }
+
+    return m_cudaMotionExclusionMask;
+}
+
 bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
@@ -1250,10 +1293,7 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::c
         cv::cuda::GpuMat thresholdMaskGpu;
         cv::cuda::threshold(fgMaskGpu, thresholdMaskGpu, 200.0, 255.0, cv::THRESH_BINARY);
 
-        cv::Mat exclusionMask = buildExclusionMask(roi, thresholdMaskGpu.size());
-        cv::cuda::GpuMat exclusionMaskGpu;
-        exclusionMaskGpu.upload(exclusionMask);
-        cv::cuda::bitwise_and(thresholdMaskGpu, exclusionMaskGpu, thresholdMaskGpu);
+        cv::cuda::bitwise_and(thresholdMaskGpu, cudaMotionExclusionMask(roi, thresholdMaskGpu.size()), thresholdMaskGpu);
 
         if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewThresholded)) {
             thresholdMaskGpu.download(*debugMask);
@@ -1262,10 +1302,17 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::c
         if (m_settings.m_motionOpenSize > 0)
         {
             const int ksize = 2 * m_settings.m_motionOpenSize + 1;
-            const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
-            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, thresholdMaskGpu.type(), kernel);
+            if (!m_cudaMotionOpenFilter
+                || (m_cudaMotionOpenFilterSize != ksize)
+                || (m_cudaMotionOpenFilterType != thresholdMaskGpu.type()))
+            {
+                const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+                m_cudaMotionOpenFilter = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, thresholdMaskGpu.type(), kernel);
+                m_cudaMotionOpenFilterSize = ksize;
+                m_cudaMotionOpenFilterType = thresholdMaskGpu.type();
+            }
             cv::cuda::GpuMat openedGpu;
-            filter->apply(thresholdMaskGpu, openedGpu);
+            m_cudaMotionOpenFilter->apply(thresholdMaskGpu, openedGpu);
             thresholdMaskGpu = openedGpu;
         }
         if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewOpened)) {
@@ -1275,10 +1322,17 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::c
         if (m_settings.m_motionCloseSize > 0)
         {
             const int ksize = 2 * m_settings.m_motionCloseSize + 1;
-            const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
-            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, thresholdMaskGpu.type(), kernel);
+            if (!m_cudaMotionCloseFilter
+                || (m_cudaMotionCloseFilterSize != ksize)
+                || (m_cudaMotionCloseFilterType != thresholdMaskGpu.type()))
+            {
+                const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+                m_cudaMotionCloseFilter = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, thresholdMaskGpu.type(), kernel);
+                m_cudaMotionCloseFilterSize = ksize;
+                m_cudaMotionCloseFilterType = thresholdMaskGpu.type();
+            }
             cv::cuda::GpuMat closedGpu;
-            filter->apply(thresholdMaskGpu, closedGpu);
+            m_cudaMotionCloseFilter->apply(thresholdMaskGpu, closedGpu);
             thresholdMaskGpu = closedGpu;
         }
         if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewClosed)) {

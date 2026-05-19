@@ -503,62 +503,64 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
         const QImage& rgb = ensureRgb888(input, convertedRgb);
         cv::Mat rgbMat = wrapRgb888Image(rgb);
 
+        cv::cuda::Stream stream;
         cv::cuda::GpuMat gpuRgb;
         cv::cuda::GpuMat bgrGpu;
-        gpuRgb.upload(rgbMat);
-        cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR);
+        gpuRgb.upload(rgbMat, stream);
+        cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR, 0, stream);
 
-        if (needsUnwarp) { applyLensUnwarpCuda(bgrGpu); }
-        if (needsWhiteBalance) { applyWhiteBalanceCuda(bgrGpu); }
+        if (needsUnwarp) { applyLensUnwarpCuda(bgrGpu, stream); }
+        if (needsWhiteBalance) { applyWhiteBalanceCuda(bgrGpu, stream); }
 
         if (needsHistogramStretch) {
-            applyHistogramStretchCuda(bgrGpu);
+            applyHistogramStretchCuda(bgrGpu, stream);
         }
 
-        if (needsGreyscale) { applyGreyscaleCuda(bgrGpu); }
-        if (needsSaturation) { applySaturationCuda(bgrGpu); }
+        if (needsGreyscale) { applyGreyscaleCuda(bgrGpu, stream); }
+        if (needsSaturation) { applySaturationCuda(bgrGpu, stream); }
 
         if (needsGamma) {
-            applyGammaCuda(bgrGpu);
+            applyGammaCuda(bgrGpu, stream);
         }
 
-        if (needsGaussianBlur) { applyGaussianBlurCuda(bgrGpu); }
-        if (needsMedianBlur) { applyMedianBlurCuda(bgrGpu); }
-        if (needsSharpen) { applySharpenCuda(bgrGpu); }
+        if (needsGaussianBlur) { applyGaussianBlurCuda(bgrGpu, stream); }
+        if (needsMedianBlur) { applyMedianBlurCuda(bgrGpu, stream); }
+        if (needsSharpen) { applySharpenCuda(bgrGpu, stream); }
 
         if (needsSobelEdge) {
-            applySobelEdgeCuda(bgrGpu);
+            applySobelEdgeCuda(bgrGpu, stream);
         }
 
         if (needsCannyEdge) {
-            applyCannyEdgeCuda(bgrGpu);
+            applyCannyEdgeCuda(bgrGpu, stream);
         }
 
         if (needsFlip)
         {
             const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
             cv::cuda::GpuMat flippedGpu;
-            cv::cuda::flip(bgrGpu, flippedGpu, flipCode);
+            cv::cuda::flip(bgrGpu, flippedGpu, flipCode, stream);
             bgrGpu = flippedGpu;
         }
 
         if (needsBrightContrast) {
-            bgrGpu.convertTo(bgrGpu, -1, m_settings.m_contrast, m_settings.m_brightness);
+            bgrGpu.convertTo(bgrGpu, -1, m_settings.m_contrast, m_settings.m_brightness, stream);
         }
 
         if (m_settings.m_invertColors) {
-            cv::cuda::bitwise_not(bgrGpu, bgrGpu);
+            cv::cuda::bitwise_not(bgrGpu, bgrGpu, cv::noArray(), stream);
         }
 
         cv::cuda::GpuMat rgbGpu;
-        cv::cuda::cvtColor(bgrGpu, rgbGpu, cv::COLOR_BGR2RGB);
+        cv::cuda::cvtColor(bgrGpu, rgbGpu, cv::COLOR_BGR2RGB, 0, stream);
 
         QImage result(rgbGpu.cols, rgbGpu.rows, QImage::Format_RGB888);
         cv::Mat resultMat(result.height(), result.width(), CV_8UC3,
             result.bits(),
             static_cast<size_t>(result.bytesPerLine()));
-        rgbGpu.download(resultMat);
-        frame.m_cudaBgrImage = bgrGpu.clone();
+        rgbGpu.download(resultMat, stream);
+        bgrGpu.copyTo(frame.m_cudaBgrImage, stream);
+        stream.waitForCompletion();
         frame.m_cudaGrayImage.release();
         PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");
         return result;
@@ -572,7 +574,7 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
     return applyImageProcessingCpu(input);
 }
 
-void CameraImageProcessor::applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu)
+void CameraImageProcessor::applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
@@ -584,32 +586,32 @@ void CameraImageProcessor::applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu)
             || m_cudaUnwarpMapY.empty()
             || (m_cudaUnwarpMapSize != bgrGpu.size()))
         {
-            m_cudaUnwarpMapX.upload(m_unwarpMapX);
-            m_cudaUnwarpMapY.upload(m_unwarpMapY);
+            m_cudaUnwarpMapX.upload(m_unwarpMapX, stream);
+            m_cudaUnwarpMapY.upload(m_unwarpMapY, stream);
             m_cudaUnwarpMapSize = bgrGpu.size();
         }
-        cv::cuda::remap(bgrGpu, unwarpedGpu, m_cudaUnwarpMapX, m_cudaUnwarpMapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+        cv::cuda::remap(bgrGpu, unwarpedGpu, m_cudaUnwarpMapX, m_cudaUnwarpMapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(), stream);
         bgrGpu = unwarpedGpu;
     }
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
 
     std::vector<cv::cuda::GpuMat> channels;
-    cv::cuda::split(bgrGpu, channels);
-    channels[0].convertTo(channels[0], -1, m_settings.m_postProcessWhiteBalanceBlueGain, 0.0);
-    channels[1].convertTo(channels[1], -1, m_settings.m_postProcessWhiteBalanceGreenGain, 0.0);
-    channels[2].convertTo(channels[2], -1, m_settings.m_postProcessWhiteBalanceRedGain, 0.0);
-    cv::cuda::merge(channels, bgrGpu);
+    cv::cuda::split(bgrGpu, channels, stream);
+    channels[0].convertTo(channels[0], -1, m_settings.m_postProcessWhiteBalanceBlueGain, 0.0, stream);
+    channels[1].convertTo(channels[1], -1, m_settings.m_postProcessWhiteBalanceGreenGain, 0.0, stream);
+    channels[2].convertTo(channels[2], -1, m_settings.m_postProcessWhiteBalanceRedGain, 0.0, stream);
+    cv::cuda::merge(channels, bgrGpu, stream);
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
 
@@ -617,18 +619,18 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) c
     {
         cv::cuda::GpuMat labGpu;
         std::vector<cv::cuda::GpuMat> labChannels;
-        cv::cuda::cvtColor(bgrGpu, labGpu, cv::COLOR_BGR2Lab);
-        cv::cuda::split(labGpu, labChannels);
+        cv::cuda::cvtColor(bgrGpu, labGpu, cv::COLOR_BGR2Lab, 0, stream);
+        cv::cuda::split(labGpu, labChannels, stream);
 
         if (!m_cudaClahe) {
             m_cudaClahe = cv::cuda::createCLAHE(2.0, cv::Size(8, 8));
         }
         cv::cuda::GpuMat equalizedL;
-        m_cudaClahe->apply(labChannels[0], equalizedL);
+        m_cudaClahe->apply(labChannels[0], equalizedL, stream);
         labChannels[0] = equalizedL;
 
-        cv::cuda::merge(labChannels, labGpu);
-        cv::cuda::cvtColor(labGpu, bgrGpu, cv::COLOR_Lab2BGR);
+        cv::cuda::merge(labChannels, labGpu, stream);
+        cv::cuda::cvtColor(labGpu, bgrGpu, cv::COLOR_Lab2BGR, 0, stream);
         PROFILER_STOP(__FUNCTION__);
         return;
     }
@@ -691,39 +693,39 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) c
     }
 
     cv::cuda::GpuMat stretchedGpu;
-    m_cudaHistogramStretchLookup->transform(bgrGpu, stretchedGpu);
+    m_cudaHistogramStretchLookup->transform(bgrGpu, stretchedGpu, stream);
     bgrGpu = stretchedGpu;
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyGreyscaleCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applyGreyscaleCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
 
     cv::cuda::GpuMat grayGpu;
-    cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
-    cv::cuda::cvtColor(grayGpu, bgrGpu, cv::COLOR_GRAY2BGR);
+    cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY, 0, stream);
+    cv::cuda::cvtColor(grayGpu, bgrGpu, cv::COLOR_GRAY2BGR, 0, stream);
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
 
     cv::cuda::GpuMat hsvGpu;
     std::vector<cv::cuda::GpuMat> channels;
-    cv::cuda::cvtColor(bgrGpu, hsvGpu, cv::COLOR_BGR2HSV);
-    cv::cuda::split(hsvGpu, channels);
-    channels[1].convertTo(channels[1], -1, m_settings.m_saturation, 0.0);
-    cv::cuda::merge(channels, hsvGpu);
-    cv::cuda::cvtColor(hsvGpu, bgrGpu, cv::COLOR_HSV2BGR);
+    cv::cuda::cvtColor(bgrGpu, hsvGpu, cv::COLOR_BGR2HSV, 0, stream);
+    cv::cuda::split(hsvGpu, channels, stream);
+    channels[1].convertTo(channels[1], -1, m_settings.m_saturation, 0.0, stream);
+    cv::cuda::merge(channels, hsvGpu, stream);
+    cv::cuda::cvtColor(hsvGpu, bgrGpu, cv::COLOR_HSV2BGR, 0, stream);
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
     if (!m_cudaGammaLookup || (m_cudaGamma != m_settings.m_gamma))
@@ -740,12 +742,12 @@ void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const
     }
 
     cv::cuda::GpuMat correctedGpu;
-    m_cudaGammaLookup->transform(bgrGpu, correctedGpu);
+    m_cudaGammaLookup->transform(bgrGpu, correctedGpu, stream);
     bgrGpu = correctedGpu;
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
 
@@ -760,19 +762,19 @@ void CameraImageProcessor::applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu) const
         m_cudaGaussianBlurKernelSize = kernelSize;
         m_cudaGaussianBlurType = bgrGpu.type();
     }
-    m_cudaGaussianBlurFilter->apply(bgrGpu, blurredGpu);
+    m_cudaGaussianBlurFilter->apply(bgrGpu, blurredGpu, stream);
     bgrGpu = blurredGpu;
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
 
     const int kernelSize = 2 * m_settings.m_medianBlur + 1;
     std::vector<cv::cuda::GpuMat> channels;
-    cv::cuda::split(bgrGpu, channels);
+    cv::cuda::split(bgrGpu, channels, stream);
     const int channelType = channels[0].type();
     if (!m_cudaMedianBlurFilter
         || (m_cudaMedianBlurKernelSize != kernelSize)
@@ -786,10 +788,10 @@ void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu) const
     for (cv::cuda::GpuMat& channel : channels)
     {
         cv::cuda::GpuMat filteredChannel;
-        m_cudaMedianBlurFilter->apply(channel, filteredChannel);
+        m_cudaMedianBlurFilter->apply(channel, filteredChannel, stream);
         channel = filteredChannel;
     }
-    cv::cuda::merge(channels, bgrGpu);
+    cv::cuda::merge(channels, bgrGpu, stream);
 
     PROFILER_STOP(__FUNCTION__);
 }
@@ -828,7 +830,7 @@ void CameraImageProcessor::invalidateCudaProcessingCaches() const
     m_cudaCannyDetector.release();
 }
 
-void CameraImageProcessor::applySharpenCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applySharpenCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
 
@@ -839,18 +841,18 @@ void CameraImageProcessor::applySharpenCuda(cv::cuda::GpuMat& bgrGpu) const
             bgrGpu.type(), bgrGpu.type(), cv::Size(3, 3), 1.0);
         m_cudaSharpenBlurType = bgrGpu.type();
     }
-    m_cudaSharpenBlurFilter->apply(bgrGpu, blurredGpu);
-    cv::cuda::addWeighted(bgrGpu, 1.0 + m_settings.m_sharpen, blurredGpu, -m_settings.m_sharpen, 0.0, bgrGpu);
+    m_cudaSharpenBlurFilter->apply(bgrGpu, blurredGpu, stream);
+    cv::cuda::addWeighted(bgrGpu, 1.0 + m_settings.m_sharpen, blurredGpu, -m_settings.m_sharpen, 0.0, bgrGpu, -1, stream);
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
 
     cv::cuda::GpuMat grayGpu;
-    cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
+    cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY, 0, stream);
 
     cv::cuda::GpuMat gradX;
     cv::cuda::GpuMat gradY;
@@ -860,51 +862,51 @@ void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu) const
         m_cudaSobelYFilter = cv::cuda::createSobelFilter(grayGpu.type(), CV_16SC1, 0, 1, 3);
         m_cudaSobelInputType = grayGpu.type();
     }
-    m_cudaSobelXFilter->apply(grayGpu, gradX);
-    m_cudaSobelYFilter->apply(grayGpu, gradY);
+    m_cudaSobelXFilter->apply(grayGpu, gradX, stream);
+    m_cudaSobelYFilter->apply(grayGpu, gradY, stream);
 
     cv::cuda::GpuMat absGradX;
     cv::cuda::GpuMat absGradY;
     cv::cuda::GpuMat absGradX8u;
     cv::cuda::GpuMat absGradY8u;
-    cv::cuda::abs(gradX, absGradX);
-    cv::cuda::abs(gradY, absGradY);
-    absGradX.convertTo(absGradX8u, CV_8U);
-    absGradY.convertTo(absGradY8u, CV_8U);
+    cv::cuda::abs(gradX, absGradX, stream);
+    cv::cuda::abs(gradY, absGradY, stream);
+    absGradX.convertTo(absGradX8u, CV_8U, stream);
+    absGradY.convertTo(absGradY8u, CV_8U, stream);
 
     cv::cuda::GpuMat edgesGray;
-    cv::cuda::addWeighted(absGradX8u, 0.5, absGradY8u, 0.5, 0.0, edgesGray);
+    cv::cuda::addWeighted(absGradX8u, 0.5, absGradY8u, 0.5, 0.0, edgesGray, -1, stream);
 
     cv::cuda::GpuMat edgesBgr;
-    cv::cuda::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
+    cv::cuda::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR, 0, stream);
     if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
         bgrGpu = edgesBgr;
     } else {
-        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrGpu);
+        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrGpu, -1, stream);
     }
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu) const
+void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
 {
     PROFILER_START();
 
     cv::cuda::GpuMat grayGpu;
-    cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
+    cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY, 0, stream);
 
     if (!m_cudaCannyDetector) {
         m_cudaCannyDetector = cv::cuda::createCannyEdgeDetector(50.0, 150.0);
     }
     cv::cuda::GpuMat edgesGray;
-    m_cudaCannyDetector->detect(grayGpu, edgesGray);
+    m_cudaCannyDetector->detect(grayGpu, edgesGray, stream);
 
     cv::cuda::GpuMat edgesBgr;
-    cv::cuda::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
+    cv::cuda::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR, 0, stream);
     if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
         bgrGpu = edgesBgr;
     } else {
-        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, bgrGpu);
+        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, bgrGpu, -1, stream);
     }
 
     PROFILER_STOP(__FUNCTION__);

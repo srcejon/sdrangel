@@ -716,7 +716,6 @@ void Camera::webapiFormatFeatureSettings(
     swg->setMotionPersistenceFrames(settings.m_motionPersistenceFrames);
     swg->setMotionBoxColor((qint32) settings.m_motionBoxColor.rgb());
     swg->setMinContourArea(settings.m_minContourArea);
-    swg->setShowMotionExclusionRects(settings.m_showMotionExclusionRects ? 1 : 0);
     auto *swgMotionExclusionRects = new QList<SWGSDRangel::SWGCameraRect*>();
     for (const QRect& rect : settings.m_motionExclusionRects)
     {
@@ -1334,9 +1333,6 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("minContourArea")) {
         settings.m_minContourArea = swg->getMinContourArea();
-    }
-    if (featureSettingsKeys.contains("showMotionExclusionRects")) {
-        settings.m_showMotionExclusionRects = swg->getShowMotionExclusionRects() != 0;
     }
     if (featureSettingsKeys.contains("motionExclusionRects"))
     {

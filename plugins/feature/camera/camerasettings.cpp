@@ -475,7 +475,6 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(111, m_motionConfirmFrames);
     s.writeDouble(112, m_motionDownscale);
     s.writeBlob(113, serializeMotionExclusionRects(m_motionExclusionRects));
-    s.writeBool(114, m_showMotionExclusionRects);
     s.writeBool(115, m_starDetect);
     s.writeS32(116, m_starThreshold);
     s.writeS32(117, m_starBackgroundBlur);
@@ -804,7 +803,6 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(109, &m_minContourArea, 100);
         d.readBlob(113, &bytetmp);
         deserializeMotionExclusionRects(bytetmp, m_motionExclusionRects);
-        d.readBool(114, &m_showMotionExclusionRects, true);
         d.readBool(115, &m_starDetect, false);
         d.readS32(116, &m_starThreshold, 24);
         d.readS32(117, &m_starBackgroundBlur, 12);
@@ -1475,9 +1473,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("motionExclusionRects")) {
         m_motionExclusionRects = settings.m_motionExclusionRects;
     }
-    if (settingsKeys.contains("showMotionExclusionRects")) {
-        m_showMotionExclusionRects = settings.m_showMotionExclusionRects;
-    }
     if (settingsKeys.contains("starDetect")) {
         m_starDetect = settings.m_starDetect;
     }
@@ -2083,9 +2078,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("motionExclusionRects") || force) {
         ostr << " m_motionExclusionRects: " << m_motionExclusionRects.size();
-    }
-    if (settingsKeys.contains("showMotionExclusionRects") || force) {
-        ostr << " m_showMotionExclusionRects: " << m_showMotionExclusionRects;
     }
     if (settingsKeys.contains("starDetect") || force) {
         ostr << " m_starDetect: " << m_starDetect;

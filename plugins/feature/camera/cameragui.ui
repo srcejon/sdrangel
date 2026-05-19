@@ -462,7 +462,7 @@
       <item>
        <widget class="ButtonSwitch" name="trackObjectsButton">
         <property name="toolTip">
-         <string>Overlay ADS-B / satellite / star tracked objects</string>
+         <string>Overlay ADS-B / satellite / star tracker objects</string>
         </property>
         <property name="text">
          <string/>

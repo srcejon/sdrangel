@@ -417,43 +417,29 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastPlateSolveCenterOffsetY = report.getPlateSolveCenterOffsetY();
         m_lastPlateSolveDistortionK1 = report.getPlateSolveDistortionK1();
         m_lastPlateSolveCatalogSource = report.getPlateSolveCatalogSource();
-        settingsUI()->plateSolveStatusLabel->setText(m_lastPlateSolved ? tr("Solved") : tr("Unsolved"));
+        if (m_lastPlateSolved)
+        {
+            settingsUI()->plateSolveStatusLabel->setText(
+                tr("Az %1  El %2  Roll %3  FoV %4  Cx %5  Cy %6  K1 %7")
+                .arg(QString::number(m_lastPlateSolveAzimuth, 'f', 2))
+                .arg(QString::number(m_lastPlateSolveElevation, 'f', 2))
+                .arg(QString::number(m_lastPlateSolveRoll, 'f', 2))
+                .arg(QString::number(m_lastPlateSolveFov, 'f', 2))
+                .arg(QString::number(m_lastPlateSolveCenterOffsetX, 'f', 1))
+                .arg(QString::number(m_lastPlateSolveCenterOffsetY, 'f', 1))
+                .arg(QString::number(m_lastPlateSolveDistortionK1, 'f', 3)));
+        }
+        else
+        {
+            settingsUI()->plateSolveStatusLabel->setText(tr("Unsolved"));
+        }
         settingsUI()->plateSolveMatchesLabel->setText(
             m_lastPlateSolved ? QString::number(m_lastPlateSolvedMatches) : "-");
         settingsUI()->plateSolveDetectedLabel->setText(
             m_lastPlateSolved ? QString::number(m_lastPlateSolveDetectedStarsConsidered) : "-");
         settingsUI()->plateSolveRmsLabel->setText(
             m_lastPlateSolved ? tr("%1 / %2").arg(QString::number(m_lastPlateSolveRmsError, 'f', 1)).arg(QString::number(m_lastPlateSolveMaxError, 'f', 1)) : "-");
-        settingsUI()->plateSolvePointingLabel->setText(
-            m_lastPlateSolved
-                ? tr("Az %1  El %2  Roll %3  FoV %4  Cx %5  Cy %6  K1 %7")
-                      .arg(QString::number(m_lastPlateSolveAzimuth, 'f', 2))
-                      .arg(QString::number(m_lastPlateSolveElevation, 'f', 2))
-                      .arg(QString::number(m_lastPlateSolveRoll, 'f', 2))
-                      .arg(QString::number(m_lastPlateSolveFov, 'f', 2))
-                      .arg(QString::number(m_lastPlateSolveCenterOffsetX, 'f', 1))
-                      .arg(QString::number(m_lastPlateSolveCenterOffsetY, 'f', 1))
-                      .arg(QString::number(m_lastPlateSolveDistortionK1, 'f', 3))
-                : "-");
-        settingsUI()->plateSolveSolutionLabel->setText(
-            m_lastPlateSolved
-                ? tr("Az %1  El %2  Roll %3  FoV %4  Cx %5  Cy %6  K1 %7  RMS %8 px  Max %9 px  Matches %10/%11  Outliers %12  Catalog %13 (%14/%15)")
-                      .arg(QString::number(m_lastPlateSolveAzimuth, 'f', 2))
-                      .arg(QString::number(m_lastPlateSolveElevation, 'f', 2))
-                      .arg(QString::number(m_lastPlateSolveRoll, 'f', 2))
-                      .arg(QString::number(m_lastPlateSolveFov, 'f', 2))
-                      .arg(QString::number(m_lastPlateSolveCenterOffsetX, 'f', 1))
-                      .arg(QString::number(m_lastPlateSolveCenterOffsetY, 'f', 1))
-                      .arg(QString::number(m_lastPlateSolveDistortionK1, 'f', 3))
-                      .arg(QString::number(m_lastPlateSolveRmsError, 'f', 1))
-                      .arg(QString::number(m_lastPlateSolveMaxError, 'f', 1))
-                      .arg(QString::number(m_lastPlateSolvedMatches))
-                      .arg(QString::number(m_lastPlateSolveDetectedStarsConsidered))
-                      .arg(QString::number(m_lastPlateSolveOutlierStars))
-                      .arg(m_lastPlateSolveCatalogSource.isEmpty() ? tr("Bundled") : m_lastPlateSolveCatalogSource)
-                      .arg(QString::number(m_lastPlateSolveCatalogCandidateStars))
-                      .arg(QString::number(m_lastPlateSolveCatalogStarsLoaded))
-                : tr("No solution"));
+
         settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
         if (m_histogramDialog) {
@@ -937,7 +923,6 @@ void CameraGUI::resetCameraStatus()
     settingsUI()->plateSolveDetectedLabel->setText("-");
     settingsUI()->plateSolveRmsLabel->setText("-");
     settingsUI()->plateSolvePointingLabel->setText("-");
-    settingsUI()->plateSolveSolutionLabel->setText(tr("No solution"));
     settingsUI()->plateSolveApplyButton->setEnabled(false);
     m_settingsDialog->clearCameraStatus();
 }
@@ -1285,8 +1270,6 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
     ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
-    m_showMotionExclusionRects = m_settings.m_showMotionExclusionRects;
-    settingsUI()->motionExclusionShowButton->setChecked(m_showMotionExclusionRects);
     updateMotionExclusionRectsTable();
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
@@ -1727,7 +1710,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveApplyButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveApplyButton_clicked);
     QObject::connect(settingsUI()->motionExclusionAddButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionAddButton_clicked);
     QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
-    QObject::connect(settingsUI()->motionExclusionShowButton, &QToolButton::toggled, this, &CameraGUI::on_motionExclusionShowButton_toggled);
     QObject::connect(settingsUI()->motionExclusionTable, &QTableWidget::itemChanged, this, &CameraGUI::on_motionExclusionTable_itemChanged);
     QObject::connect(ui->spectrumOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_spectrumOverlayButton_toggled);
     QObject::connect(settingsUI()->spectrumDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_spectrumDeviceCombo_currentIndexChanged);
@@ -4804,7 +4786,7 @@ void CameraGUI::updateMotionExclusionPreview()
 
     const QRect imageBounds(0, 0, m_lastImage.width(), m_lastImage.height());
 
-    if (m_showMotionExclusionRects)
+    if (m_settings.m_showDetectionRoi)
     {
         QPen pen(QColor(255, 215, 0));
         pen.setWidth(2);
@@ -5715,7 +5697,6 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_motionPersistenceFrames = defaults.m_motionPersistenceFrames;
     m_settings.m_motionBoxColor = defaults.m_motionBoxColor;
     m_settings.m_minContourArea = defaults.m_minContourArea;
-    m_settings.m_showMotionExclusionRects = defaults.m_showMotionExclusionRects;
     m_settings.m_motionExclusionRects = defaults.m_motionExclusionRects;
 
     m_settings.m_starDetect = defaults.m_starDetect;
@@ -6074,14 +6055,6 @@ void CameraGUI::on_motionExclusionRemoveButton_clicked()
         updateMotionExclusionRectsTable();
         applySetting("motionExclusionRects");
     }
-}
-
-void CameraGUI::on_motionExclusionShowButton_toggled(bool checked)
-{
-    m_showMotionExclusionRects = checked;
-    m_settings.m_showMotionExclusionRects = checked;
-    updateMotionExclusionPreview();
-    applySetting("showMotionExclusionRects");
 }
 
 void CameraGUI::on_motionExclusionTable_itemChanged(QTableWidgetItem *item)

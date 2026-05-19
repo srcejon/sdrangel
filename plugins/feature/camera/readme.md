@@ -5,7 +5,32 @@
 The Camera feature plugin allows SDRangel to capture images and video from cameras and telescopes.
 This is to support multimode observations, such as combing radio and optical observations of meteors, but can also be used for observing remote radio equipment or conditions.
 
-The Camera plugin supports cameras supported by the Qt6 Multimedia API as well as ASCOM Alpaca API. 
+The Camera plugin supports images and video from:
+
+* Qt6 Multimedia API (FFmpeg backend)
+* Qt5 Multimedia API (DirectShow on Windows, GStreamer/V4L2 on Linux)
+* ASCOM Alpaca API (including support for Filter Wheels and Focusers)
+* ASI cameras (ASICamera2 only currently included in Windows builds)
+* Video files such as MP4 (Qt6 only)
+
+The Camera plugin also supports a variety of post-processing, detection and overlay features, such as:
+
+* Image stacking with dark, flat and bias calibration frames
+* HDR stacking with multiple exposure buckets and merging algorithms
+* Histogram stretching and colour adjustment
+* YOLO object detection
+* Motion detection
+* Star detection and plate solving
+* Difference detection between images
+* ADS-B, satellite and star tracker object overlay
+* Date/time and custom HTML overlay
+* Spectrum overlay from SDRangel's SDR devices
+* Azimuth/elevation and right ascension/declination sky grid overlays
+
+Raw and post-processed images can be saved as JPEG files, and video can be recorded in H264-encoded MP4 files.
+
+The Camera feature can send events to the Scheduler feature when motion or specific YOLO object classes are detected, allowing you to automate actions such as recording from SDR devices, sending notifications or running custom commands. 
+Recoding images and video can also be triggered via the Scheduler feature, allowing triggering based on time or RF events.
 
 <h2>Interface</h2>
 

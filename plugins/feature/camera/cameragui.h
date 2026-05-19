@@ -153,7 +153,6 @@ private:
     bool m_forceSettings;
     QTimer m_updateTimer;
     bool m_updatingMotionExclusionRectsTable = false;
-    bool m_showMotionExclusionRects = true;
     QList<qint64> m_pipelineFrameTimes;
     double m_lastPipelineFps = 0.0;
     QSet<QString> m_reportedFeatureErrorKeys;
@@ -578,7 +577,6 @@ private slots:
     void on_plateSolveApplyButton_clicked();
     void on_motionExclusionAddButton_clicked();
     void on_motionExclusionRemoveButton_clicked();
-    void on_motionExclusionShowButton_toggled(bool checked);
     void on_motionExclusionTable_itemChanged(QTableWidgetItem *item);
     void on_spectrumOverlayButton_toggled(bool checked);
     void on_spectrumDeviceCombo_currentIndexChanged(int index);

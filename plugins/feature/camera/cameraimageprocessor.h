@@ -132,6 +132,11 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
     [[nodiscard]] QImage applyImageProcessing(const QImage& input);
+    [[nodiscard]] QImage applyImageProcessingCpu(const QImage& input);
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    [[nodiscard]] QImage applyImageProcessingCuda(const QImage& input);
+    [[nodiscard]] bool canUseCudaImageProcessing() const;
+#endif
     void applyWhiteBalance(cv::Mat& bgrMat);
     void applyLensUnwarp(cv::Mat& bgrMat);
     void applyHistogramStretch(cv::Mat& bgrMat) const;

@@ -1158,6 +1158,11 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setValue(m_settings.m_postProcessWhiteBalanceHighlightProtection);
     settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin, m_settings.m_postProcessWhiteBalanceHighlightProtection));
     settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3").arg(m_lastStackCount).arg(m_lastStackQueuedCount).arg(m_lastStackDroppedCount));
+    settingsUI()->postProcessUseCudaCheck->setChecked(m_settings.m_postProcessUseCuda);
+#ifndef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    settingsUI()->postProcessUseCudaCheck->setEnabled(false);
+    settingsUI()->postProcessUseCudaCheck->setToolTip(tr("OpenCV CUDA post-processing modules are not available in this build"));
+#endif
     settingsUI()->postProcessUnwarpCheck->setChecked(m_settings.m_postProcessUnwarp);
     settingsUI()->histogramStretchModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_histogramStretch));
     settingsUI()->histogramStretchBlackPointSlider->setValue(static_cast<int>(std::lround(m_settings.m_histogramStretchBlackPoint * 1000.0)));
@@ -1595,6 +1600,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->postProcessWhiteBalanceBlueGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceBlueGainSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceHighlightProtectionSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceHighlightProtectionSpin_valueChanged);
+    QObject::connect(settingsUI()->postProcessUseCudaCheck, &QCheckBox::toggled, this, &CameraGUI::on_postProcessUseCudaCheck_toggled);
     QObject::connect(settingsUI()->postProcessUnwarpCheck, &QCheckBox::toggled, this, &CameraGUI::on_postProcessUnwarpCheck_toggled);
     QObject::connect(settingsUI()->histogramStretchModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_histogramStretchModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->histogramStretchBlackPointSlider, &QSlider::valueChanged, this, &CameraGUI::on_histogramStretchBlackPointSlider_valueChanged);
@@ -4961,6 +4967,12 @@ void CameraGUI::on_postProcessWhiteBalanceHighlightProtectionSpin_valueChanged(d
     settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->blockSignals(false);
     m_settings.m_postProcessWhiteBalanceHighlightProtection = value;
     applySetting("postProcessWhiteBalanceHighlightProtection");
+}
+
+void CameraGUI::on_postProcessUseCudaCheck_toggled(bool checked)
+{
+    m_settings.m_postProcessUseCuda = checked;
+    applySetting("postProcessUseCuda");
 }
 
 void CameraGUI::on_postProcessGreyscaleCheck_toggled(bool checked)

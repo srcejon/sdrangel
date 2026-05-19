@@ -231,6 +231,7 @@ void CameraSettings::resetToDefaults()
     m_postProcessWhiteBalanceGreenGain = 1.0;
     m_postProcessWhiteBalanceBlueGain = 1.0;
     m_postProcessWhiteBalanceHighlightProtection = 0.0;
+    m_postProcessUseCuda = false;
     m_postProcessUnwarp = false;
     m_histogramStretch = HistogramStretchOff;
     m_histogramStretchBlackPoint = 0.0;
@@ -573,6 +574,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(209, m_videoPreRecordBufferSeconds);
     s.writeS32(210, m_imageRecordLimit);
     s.writeS32(211, m_videoRecordLimitSeconds);
+    s.writeBool(212, m_postProcessUseCuda);
 
     return s.final();
 }
@@ -879,6 +881,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_recordMode = qBound(SavedMediaRaw, static_cast<SavedMediaMode>(videoPostProcessMode), SavedMediaBoth);
         d.readDouble(208, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
+        d.readBool(212, &m_postProcessUseCuda, false);
         d.readBool(135, &m_overlaySpectrum, false);
         d.readString(136, &m_spectrumDevice, "");
         d.readS32(137, &m_spectrumOffsetX, 0);
@@ -1312,6 +1315,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("postProcessWhiteBalanceHighlightProtection")) {
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, settings.m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
+    }
+    if (settingsKeys.contains("postProcessUseCuda")) {
+        m_postProcessUseCuda = settings.m_postProcessUseCuda;
     }
     if (settingsKeys.contains("postProcessUnwarp")) {
         m_postProcessUnwarp = settings.m_postProcessUnwarp;
@@ -1931,6 +1937,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("postProcessWhiteBalanceHighlightProtection") || force) {
         ostr << " m_postProcessWhiteBalanceHighlightProtection: " << m_postProcessWhiteBalanceHighlightProtection;
+    }
+    if (settingsKeys.contains("postProcessUseCuda") || force) {
+        ostr << " m_postProcessUseCuda: " << m_postProcessUseCuda;
     }
     if (settingsKeys.contains("postProcessUnwarp") || force) {
         ostr << " m_postProcessUnwarp: " << m_postProcessUnwarp;

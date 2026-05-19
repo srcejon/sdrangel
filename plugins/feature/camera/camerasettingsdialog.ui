@@ -2602,6 +2602,23 @@
             </property>
            </widget>
           </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="postProcessUseCudaLabel">
+            <property name="text">
+             <string>CUDA</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QCheckBox" name="postProcessUseCudaCheck">
+            <property name="toolTip">
+             <string>Use OpenCV CUDA functions for supported post-processing steps</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
@@ -5799,6 +5816,7 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>postProcessWhiteBalanceHighlightProtectionSlider</tabstop>
   <tabstop>postProcessWhiteBalanceHighlightProtectionSpin</tabstop>
   <tabstop>postProcessGreyscaleCheck</tabstop>
+  <tabstop>postProcessUseCudaCheck</tabstop>
   <tabstop>brightnessSlider</tabstop>
   <tabstop>brightnessSpin</tabstop>
   <tabstop>contrastSlider</tabstop>

@@ -95,6 +95,10 @@ if(ASICAMERA_FOUND)
     add_compile_definitions(ASICAMERA_FOUND)
 endif()
 
+if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_FOUND AND OpenCV_cudafilters_FOUND)
+    target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_OPENCV_CUDA_IMAGE_PROCESSING)
+endif()
+
 if(NOT BUILD_SHARED_LIBS)
     set_property(GLOBAL APPEND PROPERTY STATIC_PLUGINS_PROPERTY ${TARGET_NAME})
 endif()

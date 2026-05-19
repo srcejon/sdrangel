@@ -379,6 +379,7 @@ struct CameraSettings
     double m_postProcessWhiteBalanceGreenGain; ///< Manual green gain: 0.1..8.0
     double m_postProcessWhiteBalanceBlueGain;  ///< Manual blue gain: 0.1..8.0
     double m_postProcessWhiteBalanceHighlightProtection; ///< Roll manual WB gains back toward neutral in highlights
+    bool m_postProcessUseCuda; ///< Use OpenCV CUDA functions for supported post-processing steps
     bool m_postProcessUnwarp; ///< Unwarp fisheye images using the configured lens projection and FoV
     HistogramStretch m_histogramStretch; ///< Histogram stretch mode
     double m_histogramStretchBlackPoint; ///< Black point normalized to [0,1]

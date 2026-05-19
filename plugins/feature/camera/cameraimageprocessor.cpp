@@ -21,6 +21,14 @@
 
 #include <QDebug>
 
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+#include <opencv2/core/cuda.hpp>
+#include <opencv2/cudaarithm.hpp>
+#include <opencv2/cudafilters.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudawarping.hpp>
+#endif
+
 #include "util/profiler.h"
 #include "cameradetector.h"
 #include "cameraimageprocessor.h"
@@ -111,6 +119,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "postProcessWhiteBalanceGreenGain",
         "postProcessWhiteBalanceBlueGain",
         "postProcessWhiteBalanceHighlightProtection",
+        "postProcessUseCuda",
         "postProcessUnwarp",
         "histogramStretch",
         "histogramStretchBlackPoint",
@@ -300,6 +309,17 @@ CameraHistogramData CameraImageProcessor::computeHistogramData(const QImage& ima
 
 QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
 {
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    if (m_settings.m_postProcessUseCuda && canUseCudaImageProcessing()) {
+        return applyImageProcessingCuda(input);
+    }
+#endif
+
+    return applyImageProcessingCpu(input);
+}
+
+QImage CameraImageProcessor::applyImageProcessingCpu(const QImage& input)
+{
     PROFILER_START();
 
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
@@ -360,6 +380,198 @@ QImage CameraImageProcessor::applyImageProcessing(const QImage& input)
     PROFILER_STOP("CameraImageProcessor::applyImageProcessing");
     return result;
 }
+
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+bool CameraImageProcessor::canUseCudaImageProcessing() const
+{
+    static bool warnedNoDevice = false;
+    static bool warnedUnsupportedSettings = false;
+
+    if (cv::cuda::getCudaEnabledDeviceCount() <= 0)
+    {
+        if (!warnedNoDevice)
+        {
+            qWarning() << "CameraImageProcessor: CUDA post-processing requested, but no CUDA-enabled OpenCV device is available";
+            warnedNoDevice = true;
+        }
+        return false;
+    }
+
+    const bool manualHighlightProtectedWhiteBalance =
+        (m_settings.m_postProcessWhiteBalanceMode == 2)
+        && (m_settings.m_postProcessWhiteBalanceHighlightProtection > 1e-6);
+    const bool unsupported =
+        (m_settings.m_postProcessWhiteBalanceMode == 1)
+        || manualHighlightProtectedWhiteBalance
+        || (m_settings.m_histogramStretch != CameraSettings::HistogramStretchOff)
+        || (std::abs(m_settings.m_gamma - 1.0) > 1e-4)
+        || (m_settings.m_sobelEdge > 1e-4)
+        || (m_settings.m_cannyEdge > 1e-4);
+
+    if (unsupported)
+    {
+        if (!warnedUnsupportedSettings)
+        {
+            qDebug() << "CameraImageProcessor: CUDA post-processing requested, but current settings need CPU-only post-processing";
+            warnedUnsupportedSettings = true;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
+{
+    PROFILER_START();
+
+    const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
+    const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
+    const bool needsGreyscale = m_settings.m_postProcessGreyscale;
+    const bool needsSaturation = !needsGreyscale && (std::abs(m_settings.m_saturation - 1.0) > 1e-4);
+    const bool needsGaussianBlur = m_settings.m_gaussianBlur > 0;
+    const bool needsMedianBlur = m_settings.m_medianBlur > 0;
+    const bool needsSharpen = m_settings.m_sharpen > 1e-4;
+    const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
+    const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
+    const bool needsAny = needsWhiteBalance
+        || needsUnwarp
+        || needsSaturation
+        || needsGaussianBlur
+        || needsMedianBlur
+        || needsSharpen
+        || needsFlip
+        || needsBrightContrast
+        || needsGreyscale
+        || m_settings.m_invertColors;
+
+    if (!needsAny) {
+        return input;
+    }
+
+    try
+    {
+        QImage convertedRgb;
+        const QImage& rgb = ensureRgb888(input, convertedRgb);
+        cv::Mat rgbMat = wrapRgb888Image(rgb);
+
+        cv::cuda::GpuMat gpuRgb;
+        cv::cuda::GpuMat bgrGpu;
+        gpuRgb.upload(rgbMat);
+        cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR);
+
+        if (needsUnwarp)
+        {
+            ensureUnwarpMaps(bgrGpu.size());
+            if (!m_unwarpMapX.empty() && !m_unwarpMapY.empty())
+            {
+                cv::cuda::GpuMat mapXGpu;
+                cv::cuda::GpuMat mapYGpu;
+                cv::cuda::GpuMat unwarpedGpu;
+                mapXGpu.upload(m_unwarpMapX);
+                mapYGpu.upload(m_unwarpMapY);
+                cv::cuda::remap(bgrGpu, unwarpedGpu, mapXGpu, mapYGpu, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+                bgrGpu = unwarpedGpu;
+            }
+        }
+
+        if (needsWhiteBalance)
+        {
+            std::vector<cv::cuda::GpuMat> channels;
+            cv::cuda::split(bgrGpu, channels);
+            channels[0].convertTo(channels[0], -1, m_settings.m_postProcessWhiteBalanceBlueGain, 0.0);
+            channels[1].convertTo(channels[1], -1, m_settings.m_postProcessWhiteBalanceGreenGain, 0.0);
+            channels[2].convertTo(channels[2], -1, m_settings.m_postProcessWhiteBalanceRedGain, 0.0);
+            cv::cuda::merge(channels, bgrGpu);
+        }
+
+        if (needsGreyscale)
+        {
+            cv::cuda::GpuMat grayGpu;
+            cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
+            cv::cuda::cvtColor(grayGpu, bgrGpu, cv::COLOR_GRAY2BGR);
+        }
+
+        if (needsSaturation)
+        {
+            cv::cuda::GpuMat hsvGpu;
+            std::vector<cv::cuda::GpuMat> channels;
+            cv::cuda::cvtColor(bgrGpu, hsvGpu, cv::COLOR_BGR2HSV);
+            cv::cuda::split(hsvGpu, channels);
+            channels[1].convertTo(channels[1], -1, m_settings.m_saturation, 0.0);
+            cv::cuda::merge(channels, hsvGpu);
+            cv::cuda::cvtColor(hsvGpu, bgrGpu, cv::COLOR_HSV2BGR);
+        }
+
+        if (needsGaussianBlur)
+        {
+            const int kernelSize = 2 * m_settings.m_gaussianBlur + 1;
+            cv::cuda::GpuMat blurredGpu;
+            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createGaussianFilter(
+                bgrGpu.type(), bgrGpu.type(), cv::Size(kernelSize, kernelSize), 0.0);
+            filter->apply(bgrGpu, blurredGpu);
+            bgrGpu = blurredGpu;
+        }
+
+        if (needsMedianBlur)
+        {
+            const int kernelSize = 2 * m_settings.m_medianBlur + 1;
+            std::vector<cv::cuda::GpuMat> channels;
+            cv::cuda::split(bgrGpu, channels);
+            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMedianFilter(channels[0].type(), kernelSize);
+            for (cv::cuda::GpuMat& channel : channels)
+            {
+                cv::cuda::GpuMat filteredChannel;
+                filter->apply(channel, filteredChannel);
+                channel = filteredChannel;
+            }
+            cv::cuda::merge(channels, bgrGpu);
+        }
+
+        if (needsSharpen)
+        {
+            cv::cuda::GpuMat blurredGpu;
+            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createGaussianFilter(
+                bgrGpu.type(), bgrGpu.type(), cv::Size(3, 3), 1.0);
+            filter->apply(bgrGpu, blurredGpu);
+            cv::cuda::addWeighted(bgrGpu, 1.0 + m_settings.m_sharpen, blurredGpu, -m_settings.m_sharpen, 0.0, bgrGpu);
+        }
+
+        if (needsFlip)
+        {
+            const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
+            cv::cuda::GpuMat flippedGpu;
+            cv::cuda::flip(bgrGpu, flippedGpu, flipCode);
+            bgrGpu = flippedGpu;
+        }
+
+        if (needsBrightContrast) {
+            bgrGpu.convertTo(bgrGpu, -1, m_settings.m_contrast, m_settings.m_brightness);
+        }
+
+        if (m_settings.m_invertColors) {
+            cv::cuda::bitwise_not(bgrGpu, bgrGpu);
+        }
+
+        cv::cuda::GpuMat rgbGpu;
+        cv::cuda::cvtColor(bgrGpu, rgbGpu, cv::COLOR_BGR2RGB);
+
+        QImage result(rgbGpu.cols, rgbGpu.rows, QImage::Format_RGB888);
+        cv::Mat resultMat(result.height(), result.width(), CV_8UC3,
+            result.bits(),
+            static_cast<size_t>(result.bytesPerLine()));
+        rgbGpu.download(resultMat);
+        PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");
+        return result;
+    }
+    catch (const cv::Exception& error)
+    {
+        qWarning() << "CameraImageProcessor: CUDA post-processing failed; falling back to CPU:" << error.what();
+    }
+
+    return applyImageProcessingCpu(input);
+}
+#endif
 
 void CameraImageProcessor::applyWhiteBalance(cv::Mat& bgrMat)
 {

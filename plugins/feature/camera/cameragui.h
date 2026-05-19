@@ -463,6 +463,7 @@ private slots:
     void on_postProcessWhiteBalanceBlueGainSpin_valueChanged(double value);
     void on_postProcessWhiteBalanceHighlightProtectionSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceHighlightProtectionSpin_valueChanged(double value);
+    void on_postProcessUseCudaCheck_toggled(bool checked);
     void on_postProcessUnwarpCheck_toggled(bool checked);
     void on_histogramStretchModeCombo_currentIndexChanged(int index);
     void on_histogramStretchBlackPointSlider_valueChanged(int value);

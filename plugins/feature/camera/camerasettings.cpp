@@ -292,6 +292,7 @@ void CameraSettings::resetToDefaults()
     m_detectionRoiHeight = 0;
     m_showDetectionRoi = true;
     m_motionDetect = false;
+    m_motionUseCuda = false;
     m_motionBackgroundSubtractor = MotionBackgroundSubtractorMOG2;
     m_motionMaskView = MotionMaskViewOff;
     m_motionHistory = 500;
@@ -575,6 +576,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(210, m_imageRecordLimit);
     s.writeS32(211, m_videoRecordLimitSeconds);
     s.writeBool(212, m_postProcessUseCuda);
+    s.writeBool(213, m_motionUseCuda);
 
     return s.final();
 }
@@ -882,6 +884,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(208, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(212, &m_postProcessUseCuda, false);
+        d.readBool(213, &m_motionUseCuda, false);
         d.readBool(135, &m_overlaySpectrum, false);
         d.readString(136, &m_spectrumDevice, "");
         d.readS32(137, &m_spectrumOffsetX, 0);
@@ -1429,6 +1432,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("motionDetect")) {
         m_motionDetect = settings.m_motionDetect;
+    }
+    if (settingsKeys.contains("motionUseCuda")) {
+        m_motionUseCuda = settings.m_motionUseCuda;
     }
     if (settingsKeys.contains("motionBackgroundSubtractor")) {
         m_motionBackgroundSubtractor = static_cast<MotionBackgroundSubtractor>(qBound(
@@ -2048,6 +2054,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("motionDetect") || force) {
         ostr << " m_motionDetect: " << m_motionDetect;
+    }
+    if (settingsKeys.contains("motionUseCuda") || force) {
+        ostr << " m_motionUseCuda: " << m_motionUseCuda;
     }
     if (settingsKeys.contains("motionBackgroundSubtractor") || force) {
         ostr << " m_motionBackgroundSubtractor: " << m_motionBackgroundSubtractor;

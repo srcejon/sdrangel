@@ -1239,6 +1239,11 @@ void CameraGUI::displaySettings()
     settingsUI()->detectionRoiHeightSpin->setValue(m_settings.m_detectionRoiHeight);
     settingsUI()->detectionRoiShowButton->setChecked(m_settings.m_showDetectionRoi);
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
+    settingsUI()->motionUseCudaCheck->setChecked(m_settings.m_motionUseCuda);
+#ifndef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+    settingsUI()->motionUseCudaCheck->setEnabled(false);
+    settingsUI()->motionUseCudaCheck->setToolTip(tr("OpenCV CUDA motion detection modules are not available in this build"));
+#endif
     settingsUI()->motionBackgroundSubtractorCombo->setCurrentIndex(static_cast<int>(m_settings.m_motionBackgroundSubtractor));
     settingsUI()->motionMaskViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_motionMaskView));
     settingsUI()->motionHistorySpin->setValue(m_settings.m_motionHistory);
@@ -1681,6 +1686,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->detectionRoiDeleteButton, &QToolButton::clicked, this, &CameraGUI::on_detectionRoiDeleteButton_clicked);
     QObject::connect(settingsUI()->detectionResetDefaultsButton, &QToolButton::clicked, this, &CameraGUI::on_detectionResetDefaultsButton_clicked);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
+    QObject::connect(settingsUI()->motionUseCudaCheck, &QCheckBox::toggled, this, &CameraGUI::on_motionUseCudaCheck_toggled);
     QObject::connect(ui->starDetectButton, &QToolButton::toggled, this, &CameraGUI::on_starDetectButton_toggled);
     QObject::connect(settingsUI()->motionBackgroundSubtractorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged);
     QObject::connect(settingsUI()->motionMaskViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionMaskViewCombo_currentIndexChanged);
@@ -5697,6 +5703,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_showDetectionRoi = defaults.m_showDetectionRoi;
 
     m_settings.m_motionDetect = defaults.m_motionDetect;
+    m_settings.m_motionUseCuda = defaults.m_motionUseCuda;
     m_settings.m_motionBackgroundSubtractor = defaults.m_motionBackgroundSubtractor;
     m_settings.m_motionMaskView = defaults.m_motionMaskView;
     m_settings.m_motionHistory = defaults.m_motionHistory;
@@ -5751,6 +5758,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "detectionRoiHeight",
         "showDetectionRoi",
         "motionDetect",
+        "motionUseCuda",
         "motionBackgroundSubtractor",
         "motionMaskView",
         "motionHistory",
@@ -5798,6 +5806,12 @@ void CameraGUI::on_motionDetectButton_toggled(bool checked)
 {
     m_settings.m_motionDetect = checked;
     applySetting("motionDetect");
+}
+
+void CameraGUI::on_motionUseCudaCheck_toggled(bool checked)
+{
+    m_settings.m_motionUseCuda = checked;
+    applySetting("motionUseCuda");
 }
 
 void CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged(int index)

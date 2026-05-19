@@ -440,6 +440,7 @@ struct CameraSettings
     int    m_detectionRoiHeight; ///< Detection ROI height in pixels; 0 disables ROI/full height
     bool   m_showDetectionRoi;  ///< Show detection ROI rectangle on the preview image
     bool   m_motionDetect;      ///< Enable motion background subtraction
+    bool   m_motionUseCuda;     ///< Use OpenCV CUDA functions for supported motion detection steps
     MotionBackgroundSubtractor m_motionBackgroundSubtractor; ///< Background subtractor algorithm
     MotionMaskView m_motionMaskView; ///< Optional debug view of motion fgMask stages
     int    m_motionHistory;     ///< Background subtractor history length: 1..5000

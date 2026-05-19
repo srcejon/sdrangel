@@ -26,6 +26,12 @@
 #include <QTimer>
 #include <QMutableHashIterator>
 #include <QTextStream>
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+#include <opencv2/cudaarithm.hpp>
+#include <opencv2/cudafilters.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudawarping.hpp>
+#endif
 
 #include "maincore.h"
 #include "channel/channelwebapiutils.h"
@@ -406,6 +412,10 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_diffMaskHistory.clear();
             m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
             m_motionLastFgMaskRaw.release();
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+            m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
+            m_cudaMotionLastFgMaskRaw.release();
+#endif
             m_lastMotionBoxes.clear();
             m_motionPersistenceRemaining = 0;
             m_motionConfirmCount = 0;
@@ -475,6 +485,10 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_diffMaskHistory.clear();
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
         m_motionLastFgMaskRaw.release();
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+        m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
+        m_cudaMotionLastFgMaskRaw.release();
+#endif
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
         m_motionConfirmCount = 0;
@@ -507,6 +521,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
 
     if (force
         || settingsKeys.contains("motionDetect")
+        || settingsKeys.contains("motionUseCuda")
         || settingsKeys.contains("motionBackgroundSubtractor")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
@@ -520,10 +535,15 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
     {
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
         m_motionLastFgMaskRaw.release();
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+        m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
+        m_cudaMotionLastFgMaskRaw.release();
+#endif
     }
 
     if (force
         || settingsKeys.contains("motionDetect")
+        || settingsKeys.contains("motionUseCuda")
         || settingsKeys.contains("motionBackgroundSubtractor")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
@@ -576,6 +596,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("diffMaskHistoryFrames")
         || settingsKeys.contains("diffMaskCloseSize")
         || settingsKeys.contains("motionDetect")
+        || settingsKeys.contains("motionUseCuda")
         || settingsKeys.contains("motionBackgroundSubtractor")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
@@ -972,9 +993,208 @@ cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createBackgroundSubtractor() c
         m_settings.m_motionDetectShadows);
 }
 
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> CameraDetector::createCudaBackgroundSubtractor() const
+{
+    return cv::cuda::createBackgroundSubtractorMOG2(
+        m_settings.m_motionHistory,
+        m_settings.m_motionVarThreshold,
+        m_settings.m_motionDetectShadows);
+}
+
+bool CameraDetector::canUseCudaMotionDetection() const
+{
+    static bool warnedNoDevice = false;
+    static bool warnedUnsupportedSettings = false;
+
+    if (!m_settings.m_motionUseCuda) {
+        return false;
+    }
+
+    if (m_settings.m_motionBackgroundSubtractor != CameraSettings::MotionBackgroundSubtractorMOG2)
+    {
+        if (!warnedUnsupportedSettings)
+        {
+            qDebug() << "CameraDetector: CUDA motion detection requested, but only MOG2 is supported; using CPU path";
+            warnedUnsupportedSettings = true;
+        }
+        return false;
+    }
+
+    if (cv::cuda::getCudaEnabledDeviceCount() <= 0)
+    {
+        if (!warnedNoDevice)
+        {
+            qWarning() << "CameraDetector: CUDA motion detection requested, but no CUDA-enabled OpenCV device is available";
+            warnedNoDevice = true;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
+{
+    PROFILER_START();
+
+    try
+    {
+        if (!m_cudaBgSubtractor) {
+            m_cudaBgSubtractor = createCudaBackgroundSubtractor();
+        }
+
+        const double downscale = m_settings.m_motionDownscale;
+        cv::Mat motionInput = bgrMat(roi);
+        cv::cuda::GpuMat motionInputGpu;
+        motionInputGpu.upload(motionInput);
+
+        if (downscale < 0.999)
+        {
+            const cv::Size downscaledSize(
+                std::max(1, static_cast<int>(std::lround(roi.width * downscale))),
+                std::max(1, static_cast<int>(std::lround(roi.height * downscale))));
+            cv::cuda::GpuMat downscaledInputGpu;
+            cv::cuda::resize(motionInputGpu, downscaledInputGpu, downscaledSize, 0.0, 0.0, cv::INTER_LINEAR);
+            motionInputGpu = downscaledInputGpu;
+        }
+
+        cv::cuda::GpuMat fgMaskGpu;
+        if (updateBackgroundModel)
+        {
+            cv::cuda::Stream stream;
+            m_cudaBgSubtractor->apply(motionInputGpu, fgMaskGpu, m_settings.m_motionLearningRate, stream);
+            stream.waitForCompletion();
+            m_cudaMotionLastFgMaskRaw = fgMaskGpu.clone();
+        }
+        else {
+            fgMaskGpu = m_cudaMotionLastFgMaskRaw.clone();
+        }
+
+        if (fgMaskGpu.empty())
+        {
+            cv::cuda::Stream stream;
+            m_cudaBgSubtractor->apply(motionInputGpu, fgMaskGpu, 0.0, stream);
+            stream.waitForCompletion();
+        }
+
+        if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewRaw)) {
+            fgMaskGpu.download(*debugMask);
+        }
+
+        cv::cuda::GpuMat thresholdMaskGpu;
+        cv::cuda::threshold(fgMaskGpu, thresholdMaskGpu, 200.0, 255.0, cv::THRESH_BINARY);
+
+        cv::Mat exclusionMask = buildExclusionMask(roi, thresholdMaskGpu.size());
+        cv::cuda::GpuMat exclusionMaskGpu;
+        exclusionMaskGpu.upload(exclusionMask);
+        cv::cuda::bitwise_and(thresholdMaskGpu, exclusionMaskGpu, thresholdMaskGpu);
+
+        if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewThresholded)) {
+            thresholdMaskGpu.download(*debugMask);
+        }
+
+        if (m_settings.m_motionOpenSize > 0)
+        {
+            const int ksize = 2 * m_settings.m_motionOpenSize + 1;
+            const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, thresholdMaskGpu.type(), kernel);
+            cv::cuda::GpuMat openedGpu;
+            filter->apply(thresholdMaskGpu, openedGpu);
+            thresholdMaskGpu = openedGpu;
+        }
+        if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewOpened)) {
+            thresholdMaskGpu.download(*debugMask);
+        }
+
+        if (m_settings.m_motionCloseSize > 0)
+        {
+            const int ksize = 2 * m_settings.m_motionCloseSize + 1;
+            const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, thresholdMaskGpu.type(), kernel);
+            cv::cuda::GpuMat closedGpu;
+            filter->apply(thresholdMaskGpu, closedGpu);
+            thresholdMaskGpu = closedGpu;
+        }
+        if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewClosed)) {
+            thresholdMaskGpu.download(*debugMask);
+        }
+
+        cv::Mat fgMask;
+        thresholdMaskGpu.download(fgMask);
+        if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewFinal)) {
+            *debugMask = fgMask.clone();
+        }
+
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(fgMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+        QVector<QRect> boxes;
+        boxes.reserve(static_cast<qsizetype>(contours.size()));
+        const double scaledMinArea = static_cast<double>(m_settings.m_minContourArea) * downscale * downscale;
+        for (const auto& contour : contours)
+        {
+            if (cv::contourArea(contour) >= scaledMinArea)
+            {
+                cv::Rect box = cv::boundingRect(contour);
+                if (downscale < 0.999)
+                {
+                    box.x = static_cast<int>(std::floor(box.x / downscale));
+                    box.y = static_cast<int>(std::floor(box.y / downscale));
+                    box.width = std::max(1, static_cast<int>(std::ceil(box.width / downscale)));
+                    box.height = std::max(1, static_cast<int>(std::ceil(box.height / downscale)));
+                }
+                box.x += roi.x;
+                box.y += roi.y;
+                boxes.append(QRect(box.x, box.y, box.width, box.height));
+            }
+        }
+
+        if (!boxes.isEmpty()) {
+            m_motionConfirmCount = std::min(m_settings.m_motionConfirmFrames, m_motionConfirmCount + 1);
+            if (m_motionConfirmCount < m_settings.m_motionConfirmFrames) {
+                boxes.clear();
+            }
+        } else {
+            m_motionConfirmCount = 0;
+        }
+
+        if (!boxes.isEmpty()) {
+            m_lastMotionBoxes = boxes;
+            m_motionPersistenceRemaining = m_settings.m_motionPersistenceFrames;
+        } else if ((m_motionPersistenceRemaining > 0) && !m_lastMotionBoxes.isEmpty()) {
+            boxes = m_lastMotionBoxes;
+            --m_motionPersistenceRemaining;
+        } else {
+            m_lastMotionBoxes.clear();
+            m_motionPersistenceRemaining = 0;
+        }
+
+        motionBoxes = boxes;
+        PROFILER_STOP(__FUNCTION__);
+        return true;
+    }
+    catch (const cv::Exception& error)
+    {
+        qWarning() << "CameraDetector: CUDA motion detection failed; falling back to CPU:" << error.what();
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+    return false;
+}
+#endif
+
 void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+    if (canUseCudaMotionDetection() && applyMotionDetectionCuda(bgrMat, roi, motionBoxes, updateBackgroundModel, debugMask))
+    {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+#endif
+
     if (!m_bgSubtractor) {
         m_bgSubtractor = createBackgroundSubtractor();
     }

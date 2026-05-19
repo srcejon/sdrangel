@@ -544,6 +544,7 @@ private slots:
     void on_detectionRoiDeleteButton_clicked();
     void on_detectionResetDefaultsButton_clicked();
     void on_motionDetectButton_toggled(bool checked);
+    void on_motionUseCudaCheck_toggled(bool checked);
     void on_motionBackgroundSubtractorCombo_currentIndexChanged(int index);
     void on_motionMaskViewCombo_currentIndexChanged(int index);
     void on_motionHistorySpin_valueChanged(int value);

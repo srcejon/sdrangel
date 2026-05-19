@@ -103,6 +103,7 @@ private:
 	Real m_squelchLevel;
 	int m_squelchCount;
 	bool m_squelchOpen;
+    bool m_squelchOpenPrev;
 	DoubleBufferFIFO<Real> m_squelchDelayLine;
 	double m_magsq;
 	double m_magsqSum;
@@ -129,6 +130,7 @@ private:
     int m_demodBufferFill;
 
     void processOneSample(Complex &ci);
+    void sendEvent(bool squelchOpen);
 };
 
 #endif // INCLUDE_AMDEMODSINK_H

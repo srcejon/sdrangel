@@ -88,7 +88,9 @@ StarTrackerWorker::StarTrackerWorker(StarTracker* starTracker, WebAPIAdapterInte
     m_chartLatitude(0.0),
     m_chartLongitude(0.0),
     m_chartL(0.0f),
-    m_chartB(0.0f)
+    m_chartB(0.0f),
+    m_previousValid(false),
+    m_previousAzAlt({0.0, 0.0})
 {
     connect(&m_pollTimer, &QTimer::timeout, this, &StarTrackerWorker::update);
 }
@@ -809,6 +811,19 @@ void StarTrackerWorker::update()
         aa.alt += m_settings.m_elevationOffset;
         aa.az += m_settings.m_azimuthOffset;
 
+        // Send star rise and set events to other features
+        if (m_previousValid && (m_previousTarget == m_settings.m_target) && (m_settings.m_dateTime == ""))
+        {
+            if ((aa.alt >= 0.0) && (m_previousAzAlt.alt < 0.0)) {
+                sendEvent(m_settings.m_target, dt, MainCore::MsgEvent::StarRiseEvent, aa);
+            } else if ((aa.alt < 0.0) && (m_previousAzAlt.alt >= 0.0)) {
+                sendEvent(m_settings.m_target, dt, MainCore::MsgEvent::StarSetEvent, aa);
+            }
+        }
+        m_previousValid = m_settings.m_dateTime == ""; // Only track rise/set events when using current time
+        m_previousAzAlt = aa;
+        m_previousTarget = m_settings.m_target;
+
         // Send to GUI
         if (getMessageQueueToGUI())
         {
@@ -1053,6 +1068,10 @@ void StarTrackerWorker::update()
             }
         }
     }
+    else
+    {
+        m_previousValid = false;
+    }
 
     spiceUnlock();
 
@@ -1260,4 +1279,16 @@ void StarTrackerWorker::horizonsEphemeridesUpdated(const QString &target, const 
 {
     m_ephemeridesTarget = target;
     m_horizonsEphemerides = ephemerides;
+}
+
+void StarTrackerWorker::sendEvent(const QString &target, const QDateTime &eventTime, MainCore::MsgEvent::EventType eventType, const AzAlt& aa)
+{
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_starTracker, "event", eventPipes);
+    QString eventData = QString("name=%1,azimuth=%2,elevation=%3").arg(target).arg(aa.az).arg(aa.alt);
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_starTracker, eventTime, eventType, eventData));
+    }
 }

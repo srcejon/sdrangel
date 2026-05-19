@@ -133,6 +133,7 @@ private:
 
     void processOneSample(Complex &ci);
     MessageQueue *getMessageQueueToChannel() { return m_messageQueueToChannel; }
+    void sendEvent(const QDateTime& eventTime, const QString& eventData);
 };
 
 #endif // INCLUDE_PACKETDEMODSINK_H

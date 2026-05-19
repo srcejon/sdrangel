@@ -206,6 +206,8 @@ void PacketDemodSink::processOneSample(Complex &ci)
 
                                     MainCore::MsgPacket *msg = MainCore::MsgPacket::create(m_packetDemod, rxPacket, dateTime);
                                     getMessageQueueToChannel()->push(msg);
+
+                                    sendEvent(dateTime, rxPacket);
                                 }
                             }
                             else
@@ -358,4 +360,15 @@ void PacketDemodSink::applySettings(const QStringList& settingsKeys, const Packe
         m_settings.applySettings(settingsKeys, settings);
     }
 
+}
+
+void PacketDemodSink::sendEvent(const QDateTime& eventTime, const QString& eventData)
+{
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_channel, "event", eventPipes);
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_channel, eventTime, MainCore::MsgEvent::EventType::PacketReceivedEvent, eventData));
+    }
 }

@@ -29,6 +29,7 @@
 #include "util/messagequeue.h"
 #include "util/astronomy.h"
 #include "util/jplhorizons.h"
+#include "maincore.h"
 
 #include "startrackersettings.h"
 
@@ -109,6 +110,10 @@ private:
     float m_chartL;
     float m_chartB;
 
+    bool m_previousValid;   //!< Whether the previous position was valid, used to determine rise/set events
+    AzAlt m_previousAzAlt;
+    QString m_previousTarget;
+
     bool handleMessage(const Message& cmd);
     void applySettings(const StarTrackerSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void restartServer(bool enabled, uint32_t port);
@@ -129,6 +134,7 @@ private:
     bool getRAFromHorizons(const QDateTime &dateTime, RADec &rdJ2000);
     void calculateSolarSystemPositions(const QDateTime& dateTime);
     void calculateJupiterParameters(const QDateTime& dateTime);
+    void sendEvent(const QString& target, const QDateTime &eventTime, MainCore::MsgEvent::EventType eventType, const AzAlt& aa);
 
 private slots:
     void handleInputMessages();

@@ -50,6 +50,7 @@ NFMDemodSink::NFMDemodSink() :
         m_filterTaps((48000 / 48) | 1),
         m_squelchLevel(-990),
         m_squelchOpen(false),
+        m_squelchOpenPrev(false),
         m_afSquelchOpen(false),
         m_magsq(0.0f),
         m_magsqSum(0.0f),
@@ -210,15 +211,23 @@ void NFMDemodSink::processOneSample(Complex &ci)
         }
     }
 
+    // Send squelch open/closed event to other features
+    if (m_squelchOpen != m_squelchOpenPrev)
+    {
+        MainCore::MsgEvent::EventType eventType = m_squelchOpen ? MainCore::MsgEvent::EventType::SquelchOpenEvent : MainCore::MsgEvent::SquelchClosedEvent;
+        sendEvent(eventType, "");
+    }
+    m_squelchOpenPrev = m_squelchOpen;
+
     if (ctcssIndex != m_ctcssIndex)
     {
         auto *guiQueue = getMessageQueueToGUI();
 
-        if (guiQueue)
-        {
-            guiQueue->push(NFMDemodReport::MsgReportCTCSSFreq::create(
-                ctcssIndex ? m_ctcssDetector.getToneSet()[ctcssIndex - 1] : 0));
+        Real ctcssFreq = ctcssIndex ? m_ctcssDetector.getToneSet()[ctcssIndex - 1] : 0;
+        if (guiQueue) {
+            guiQueue->push(NFMDemodReport::MsgReportCTCSSFreq::create(ctcssFreq));
         }
+        sendEvent(MainCore::MsgEvent::CTCSSEvent, QString("frequency=%1").arg(ctcssFreq));
 
         m_ctcssIndex = ctcssIndex;
     }
@@ -230,6 +239,7 @@ void NFMDemodSink::processOneSample(Complex &ci)
         if (guiQueue) {
             guiQueue->push(NFMDemodReport::MsgReportDCSCode::create(dcsCode));
         }
+        sendEvent(MainCore::MsgEvent::DCSEvent, QString("code=%1").arg(dcsCode));
 
         m_dcsCode = dcsCode;
     }
@@ -404,5 +414,17 @@ void NFMDemodSink::applyAudioSampleRate(unsigned int sampleRate)
             MainCore::MsgChannelDemodReport *msg = MainCore::MsgChannelDemodReport::create(m_channel, sampleRate);
             messageQueue->push(msg);
         }
+    }
+}
+
+void NFMDemodSink::sendEvent(MainCore::MsgEvent::EventType eventType, const QString& eventData)
+{
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_channel, "event", eventPipes);
+    QDateTime eventTime = QDateTime::currentDateTime();
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_channel, eventTime, eventType, eventData));
     }
 }

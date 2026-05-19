@@ -102,6 +102,7 @@ private:
 	Real m_squelchLevel;
 	int m_squelchState;
     bool m_squelchOpen;
+    bool m_squelchOpenPrev;
     double m_magsq; //!< displayed averaged value
     double m_magsqSum;
     double m_magsqPeak;
@@ -121,6 +122,8 @@ private:
     int m_demodBufferFill;
 
     static const unsigned int m_rfFilterFftLength;
+
+    void sendEvent(bool squelchOpen);
 };
 
 #endif // INCLUDE_WFMDEMODSINK_H

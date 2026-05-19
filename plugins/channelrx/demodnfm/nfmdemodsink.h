@@ -33,6 +33,7 @@
 #include "util/movingaverage.h"
 #include "util/doublebufferfifo.h"
 #include "audio/audiofifo.h"
+#include "maincore.h"
 
 #include "dcsdetector.h"
 #include "nfmdemodsettings.h"
@@ -124,6 +125,7 @@ private:
 
     Real m_squelchLevel;
     bool m_squelchOpen;
+    bool m_squelchOpenPrev;
     bool m_afSquelchOpen;
     double m_magsq; //!< displayed averaged value
     double m_magsqSum;
@@ -153,6 +155,7 @@ private:
 
     void processOneSample(Complex &ci);
     MessageQueue *getMessageQueueToGUI() { return m_messageQueueToGUI; }
+    void sendEvent(MainCore::MsgEvent::EventType eventType, const QString& eventData);
 };
 
 #endif // INCLUDE_NFMDEMODSINK_H

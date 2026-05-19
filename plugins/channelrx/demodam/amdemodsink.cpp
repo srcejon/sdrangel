@@ -36,6 +36,7 @@ AMDemodSink::AMDemodSink() :
         m_audioSampleRate(48000),
         m_squelchCount(0),
         m_squelchOpen(false),
+        m_squelchOpenPrev(false),
         m_squelchDelayLine(9600),
         m_magsqSum(0.0f),
         m_magsqPeak(0.0f),
@@ -200,6 +201,12 @@ void AMDemodSink::processOneSample(Complex &ci)
         sample = 0;
     }
 
+    // Send squelch open/closed event to other features
+    if (m_squelchOpen != m_squelchOpenPrev) {
+        sendEvent(m_squelchOpen);
+    }
+    m_squelchOpenPrev = m_squelchOpen;
+
     m_audioBuffer[m_audioBufferFill].l = m_settings.m_audioMute ? 0 : sample;
     m_audioBuffer[m_audioBufferFill].r = m_settings.m_audioMute ? 0 : sample;
     ++m_audioBufferFill;
@@ -351,4 +358,18 @@ void AMDemodSink::applyAudioSampleRate(int sampleRate)
     }
 
     m_audioSampleRate = sampleRate;
+}
+
+void AMDemodSink::sendEvent(bool squelchOpen)
+{
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_channel, "event", eventPipes);
+    MainCore::MsgEvent::EventType eventType = squelchOpen ? MainCore::MsgEvent::EventType::SquelchOpenEvent : MainCore::MsgEvent::SquelchClosedEvent;
+    QDateTime eventTime = QDateTime::currentDateTime();
+    QString eventData = "";
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_channel, eventTime, eventType, eventData));
+    }
 }

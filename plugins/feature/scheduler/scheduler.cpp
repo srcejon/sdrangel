@@ -441,6 +441,10 @@ QStringList Scheduler::eventTypeNames()
         QStringLiteral("Camera Object In View"),
         QStringLiteral("Camera Object Out Of View"),
         QStringLiteral("Packet Received"),
+        QStringLiteral("Squelch Open"),
+        QStringLiteral("Squelch Closed"),
+        QStringLiteral("CTCSS Frequency"),
+        QStringLiteral("DCS Code"),
         });
 }
 

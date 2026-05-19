@@ -748,7 +748,7 @@ void GS232ControllerGUI::updateParkAndHomeControls()
     bool oldHomeState = ui->home->blockSignals(true);
     ui->home->setChecked(alpaca && m_homeStateValid && m_atHome);
     ui->home->blockSignals(oldHomeState);
-    ui->home->setEnabled(alpaca && m_homeStateValid && (m_atHome || m_canFindHome));
+    ui->home->setEnabled(alpaca && m_homeStateValid && m_canFindHome);
 }
 
 void GS232ControllerGUI::handlePositionMismatch(const ControllerProtocol::MsgReportPositionMismatch& report)
@@ -1125,11 +1125,13 @@ void GS232ControllerGUI::on_park_toggled(bool checked)
 
 void GS232ControllerGUI::on_home_clicked(bool checked)
 {
-    if (checked) {
+    (void) checked;
+
+    if (m_canFindHome) {
         m_gs232Controller->getInputMessageQueue()->push(GS232Controller::MsgHome::create());
-    } else {
-        updateParkAndHomeControls();
     }
+
+    updateParkAndHomeControls();
 }
 
 void GS232ControllerGUI::updateStatus()

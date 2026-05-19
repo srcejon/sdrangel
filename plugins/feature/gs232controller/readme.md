@@ -50,7 +50,7 @@ Selects which protocol to use. This can be GS-232, SPID (rot2prog), rotctld, DFM
 Selects whether to use a serial connection or TCP.
 For Alpaca, the Host (11) and Port (12) settings are used directly by the HTTP API and the Connection setting is disabled.
 When the selected Alpaca telescope reports `CanPark` and a valid `AtPark` state, a Park switch is shown for parking control.
-When the telescope reports `CanFindHome`, a Home switch is shown to start the Alpaca `FindHome` operation.
+When the telescope reports `CanFindHome`, a Home button is shown to start the Alpaca `FindHome` operation. Its checked state reflects the reported `AtHome` status; Alpaca does not provide an unhome command.
 
 <h3>9: Serial Port</h3>
 

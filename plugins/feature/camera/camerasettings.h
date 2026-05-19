@@ -348,6 +348,7 @@ struct CameraSettings
     bool m_stackEnabled;
     int m_stackFrameCount;
     StackMethod m_stackMethod;
+    bool m_stackUseCuda; ///< Use OpenCV CUDA functions for supported stacking/calibration/alignment steps
     StackHdrAlgorithm m_stackHdrAlgorithm;
     int m_stackHdrExposureCount;
     std::array<double, 4> m_stackHdrExposureTimesMs;

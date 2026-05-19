@@ -203,6 +203,7 @@ void CameraSettings::resetToDefaults()
     m_stackEnabled = false;
     m_stackFrameCount = 4;
     m_stackMethod = StackMethodAverage;
+    m_stackUseCuda = false;
     m_stackHdrAlgorithm = StackHdrAlgorithmDebevec;
     m_stackHdrExposureCount = 3;
     m_stackHdrExposureTimesMs = {{12.5, 50.0, 200.0, 800.0}};
@@ -577,6 +578,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(211, m_videoRecordLimitSeconds);
     s.writeBool(212, m_postProcessUseCuda);
     s.writeBool(213, m_motionUseCuda);
+    s.writeBool(214, m_stackUseCuda);
 
     return s.final();
 }
@@ -885,6 +887,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(212, &m_postProcessUseCuda, false);
         d.readBool(213, &m_motionUseCuda, false);
+        d.readBool(214, &m_stackUseCuda, false);
         d.readBool(135, &m_overlaySpectrum, false);
         d.readString(136, &m_spectrumDevice, "");
         d.readS32(137, &m_spectrumOffsetX, 0);
@@ -1225,6 +1228,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("stackMethod")) {
         m_stackMethod = qBound(StackMethodAverage, settings.m_stackMethod, StackMethodHDR);
+    }
+    if (settingsKeys.contains("stackUseCuda")) {
+        m_stackUseCuda = settings.m_stackUseCuda;
     }
     if (settingsKeys.contains("stackHdrAlgorithm")) {
         m_stackHdrAlgorithm = qBound(StackHdrAlgorithmDebevec, settings.m_stackHdrAlgorithm, StackHdrAlgorithmMertens);
@@ -1853,6 +1859,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("stackMethod") || force) {
         ostr << " m_stackMethod: " << m_stackMethod;
+    }
+    if (settingsKeys.contains("stackUseCuda") || force) {
+        ostr << " m_stackUseCuda: " << m_stackUseCuda;
     }
     if (settingsKeys.contains("stackHdrAlgorithm") || force) {
         ostr << " m_stackHdrAlgorithm: " << m_stackHdrAlgorithm;

@@ -21,6 +21,10 @@
 #include <cstring>
 
 #include <QDebug>
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+#include <opencv2/core/cuda.hpp>
+#include <opencv2/cudawarping.hpp>
+#endif
 
 #include "util/profiler.h"
 #include "cameraframealigner.h"
@@ -135,6 +139,7 @@ void CameraFrameAligner::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("cameraReadoutMode")
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("stackEnabled")
+        || settingsKeys.contains("stackUseCuda")
         || settingsKeys.contains("stackAlignmentMethod");
 
     if (force) {
@@ -434,6 +439,36 @@ cv::Mat CameraFrameAligner::warpFrameAffine(const cv::Mat& frameMat, const cv::M
     if (transform.empty()) {
         return frameMat.clone();
     }
+
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    if (m_settings.m_stackUseCuda)
+    {
+        static bool warnedNoDevice = false;
+        if (cv::cuda::getCudaEnabledDeviceCount() > 0)
+        {
+            try
+            {
+                cv::cuda::GpuMat frameGpu;
+                cv::cuda::GpuMat alignedGpu;
+                frameGpu.upload(frameMat);
+                cv::cuda::warpAffine(frameGpu, alignedGpu, transform, frameMat.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+
+                cv::Mat aligned;
+                alignedGpu.download(aligned);
+                return aligned;
+            }
+            catch (const cv::Exception& error)
+            {
+                qWarning() << "CameraFrameAligner: CUDA affine warp failed; falling back to CPU:" << error.what();
+            }
+        }
+        else if (!warnedNoDevice)
+        {
+            qWarning() << "CameraFrameAligner: CUDA alignment requested, but no CUDA-enabled OpenCV device is available";
+            warnedNoDevice = true;
+        }
+    }
+#endif
 
     cv::Mat aligned;
     cv::warpAffine(frameMat, aligned, transform, frameMat.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT);

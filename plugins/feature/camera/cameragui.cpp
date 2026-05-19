@@ -1121,6 +1121,11 @@ void CameraGUI::displaySettings()
     ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
     settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
+    settingsUI()->stackUseCudaCheck->setChecked(m_settings.m_stackUseCuda);
+#ifndef CAMERA_OPENCV_CUDA_STACKING
+    settingsUI()->stackUseCudaCheck->setEnabled(false);
+    settingsUI()->stackUseCudaCheck->setToolTip(tr("OpenCV CUDA stacking modules are not available in this build"));
+#endif
     settingsUI()->stackHdrAlgorithmCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackHdrAlgorithm));
     settingsUI()->stackHdrExposureCountSpin->setValue(m_settings.getHdrExposureCount());
     settingsUI()->stackAlignmentCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackAlignmentMethod));
@@ -1554,6 +1559,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->stackUseCudaCheck, &QCheckBox::toggled, this, &CameraGUI::on_stackUseCudaCheck_toggled);
     QObject::connect(settingsUI()->stackHdrAlgorithmCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
         [this](int index)
         {
@@ -4520,6 +4526,12 @@ void CameraGUI::on_stackMethodCombo_currentIndexChanged(int index)
     m_settings.m_stackMethod = static_cast<CameraSettings::StackMethod>(index);
     updateCameraSettingsVisibility();
     applySetting("stackMethod");
+}
+
+void CameraGUI::on_stackUseCudaCheck_toggled(bool checked)
+{
+    m_settings.m_stackUseCuda = checked;
+    applySetting("stackUseCuda");
 }
 
 void CameraGUI::on_stackAlignmentCombo_currentIndexChanged(int index)

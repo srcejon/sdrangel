@@ -26,6 +26,9 @@
 #include <vector>
 
 #include <opencv2/core/core.hpp>
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+#include <opencv2/core/cuda.hpp>
+#endif
 
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -131,6 +134,9 @@ private:
     cv::Mat m_darkCalibrationFrame;
     cv::Mat m_flatCalibrationFrame;
     cv::Mat m_biasCalibrationFrame;
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    cv::cuda::GpuMat m_cudaStackAccumulator;
+#endif
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrame;
@@ -147,6 +153,13 @@ private:
     cv::Mat loadFitsCalibrationFrame(const QString& fileName, const QString& calibrationType, bool normalizeFlat) const;
     void validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName);
     cv::Mat applyCalibration(const cv::Mat& input);
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    [[nodiscard]] bool canUseCudaStacking() const;
+    cv::Mat applyCalibrationCuda(const cv::Mat& input);
+    cv::Mat debayerRawMatCuda(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
+    void subtractFromCudaAccumulator(const cv::Mat& frameMat);
+    [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, double scaleTo8Bit, QImage& outputImage);
+#endif
     static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);

@@ -1525,13 +1525,30 @@
            </layout>
           </item>
           <item row="9" column="0">
+           <widget class="QLabel" name="stackUseCudaLabel">
+            <property name="text">
+             <string>CUDA</string>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="1">
+           <widget class="QCheckBox" name="stackUseCudaCheck">
+            <property name="toolTip">
+             <string>Use OpenCV CUDA functions for supported stacking, calibration, and alignment steps</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="10" column="0">
            <widget class="QLabel" name="stackCurrentCountLabel">
             <property name="text">
              <string>Stacked / queued / dropped</string>
             </property>
            </widget>
           </item>
-          <item row="9" column="1">
+          <item row="10" column="1">
            <widget class="QLabel" name="stackCurrentCountValue">
             <property name="text">
              <string>1</string>
@@ -5833,6 +5850,7 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>postProcessWhiteBalanceHighlightProtectionSlider</tabstop>
   <tabstop>postProcessWhiteBalanceHighlightProtectionSpin</tabstop>
   <tabstop>postProcessGreyscaleCheck</tabstop>
+  <tabstop>stackUseCudaCheck</tabstop>
   <tabstop>postProcessUseCudaCheck</tabstop>
   <tabstop>brightnessSlider</tabstop>
   <tabstop>brightnessSpin</tabstop>

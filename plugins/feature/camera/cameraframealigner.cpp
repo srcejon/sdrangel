@@ -54,6 +54,21 @@ void CameraFrameAligner::resetAlignmentState()
     m_alignmentReferenceHistory.clear();
 }
 
+bool CameraFrameAligner::preserveFrameOrder() const
+{
+    return m_captureActive
+        && ((m_settings.isHdrStackingEnabled() && (m_settings.getHdrExposureCount() > 1))
+            || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1)));
+}
+
+int CameraFrameAligner::pendingFrameLimit() const
+{
+    const int stackFrameCount = m_settings.isHdrStackingEnabled()
+        ? m_settings.getHdrExposureCount()
+        : m_settings.m_stackFrameCount;
+    return qBound(2, stackFrameCount * 2, 512);
+}
+
 bool CameraFrameAligner::handleMessage(const Message& cmd)
 {
     if (MsgConfigureCameraFrameAligner::match(cmd))
@@ -76,7 +91,7 @@ bool CameraFrameAligner::handleMessage(const Message& cmd)
             resetAlignmentState();
         }
         QMutexLocker locker(&m_frameMutex);
-        m_pendingFrame.reset();
+        m_pendingFrames.clear();
         if (!m_captureActive) {
             m_processingFrame = false;
         }
@@ -126,9 +141,14 @@ void CameraFrameAligner::applySettings(const CameraSettings& settings, const QLi
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    if (sourceChanged) {
+    if (sourceChanged)
+    {
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrames.clear();
         resetAlignmentState();
-    } else if (settingsKeys.contains("stackFrameCount")) {
+    }
+    else if (settingsKeys.contains("stackFrameCount"))
+    {
         trimAlignmentHistoryToCurrentLimit();
     }
 }
@@ -150,10 +170,26 @@ void CameraFrameAligner::submitFrame(const CameraPipelineFramePtr& frame)
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
-        if (m_pendingFrame) {
-            qDebug() << "CameraFrameAligner: Dropping pending frame in favor of new frame";
+
+        if (preserveFrameOrder())
+        {
+            const int frameLimit = pendingFrameLimit();
+            if (static_cast<int>(m_pendingFrames.size()) >= frameLimit)
+            {
+                qDebug() << "CameraFrameAligner: Dropping oldest queued stacking frame";
+                m_pendingFrames.pop_front();
+            }
+            m_pendingFrames.push_back(frame);
         }
-        m_pendingFrame = frame;
+        else
+        {
+            if (!m_pendingFrames.empty()) {
+                qDebug() << "CameraFrameAligner: Dropping pending frame in favor of new frame";
+            }
+            m_pendingFrames.clear();
+            m_pendingFrames.push_back(frame);
+        }
+
         if (!m_processingFrame)
         {
             m_processingFrame = true;
@@ -172,8 +208,11 @@ void CameraFrameAligner::processNextFrame()
 
     {
         QMutexLocker locker(&m_frameMutex);
-        frame = m_pendingFrame;
-        m_pendingFrame.reset();
+        if (!m_pendingFrames.empty())
+        {
+            frame = m_pendingFrames.front();
+            m_pendingFrames.pop_front();
+        }
 
         if (!frame)
         {
@@ -187,7 +226,7 @@ void CameraFrameAligner::processNextFrame()
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
-        if (m_pendingFrame) {
+        if (!m_pendingFrames.empty()) {
             schedule = true;
         } else {
             m_processingFrame = false;

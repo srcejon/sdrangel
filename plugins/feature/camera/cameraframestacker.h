@@ -132,12 +132,14 @@ private:
     cv::Mat m_flatCalibrationFrame;
     cv::Mat m_biasCalibrationFrame;
     QMutex m_frameMutex;
-    CameraPipelineFramePtr m_pendingFrame;
+    std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrame;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
+    bool preserveFrameOrder() const;
+    int pendingFrameLimit() const;
     void resetFrameHistoryState();
     void trimFrameHistoryToCurrentLimit();
     void reloadCalibrationFrames();

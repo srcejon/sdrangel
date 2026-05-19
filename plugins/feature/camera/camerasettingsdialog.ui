@@ -1525,30 +1525,13 @@
            </layout>
           </item>
           <item row="9" column="0">
-           <widget class="QLabel" name="stackUseCudaLabel">
-            <property name="text">
-             <string>CUDA</string>
-            </property>
-           </widget>
-          </item>
-          <item row="9" column="1">
-           <widget class="QCheckBox" name="stackUseCudaCheck">
-            <property name="toolTip">
-             <string>Use OpenCV CUDA functions for supported stacking, calibration, and alignment steps</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="10" column="0">
            <widget class="QLabel" name="stackCurrentCountLabel">
             <property name="text">
              <string>Stacked / queued / dropped</string>
             </property>
            </widget>
           </item>
-          <item row="10" column="1">
+          <item row="9" column="1">
            <widget class="QLabel" name="stackCurrentCountValue">
             <property name="text">
              <string>1</string>
@@ -2629,7 +2612,7 @@
           <item row="3" column="1">
            <widget class="QCheckBox" name="postProcessUseCudaCheck">
             <property name="toolTip">
-             <string>Use OpenCV CUDA functions for supported post-processing steps</string>
+             <string>Use OpenCV CUDA functions for supported camera processing steps</string>
             </property>
             <property name="text">
              <string/>
@@ -4347,23 +4330,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </widget>
            </item>
            <item row="8" column="0">
-            <widget class="QLabel" name="motionUseCudaLabel">
-             <property name="text">
-              <string>CUDA</string>
-             </property>
-            </widget>
-           </item>
-           <item row="8" column="1">
-            <widget class="QCheckBox" name="motionUseCudaCheck">
-             <property name="toolTip">
-              <string>Use OpenCV CUDA functions for supported motion detection steps</string>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-            </widget>
-           </item>
-           <item row="9" column="0">
             <spacer name="verticalSpacer_9">
              <property name="orientation">
               <enum>Qt::Orientation::Vertical</enum>
@@ -5850,7 +5816,6 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>postProcessWhiteBalanceHighlightProtectionSlider</tabstop>
   <tabstop>postProcessWhiteBalanceHighlightProtectionSpin</tabstop>
   <tabstop>postProcessGreyscaleCheck</tabstop>
-  <tabstop>stackUseCudaCheck</tabstop>
   <tabstop>postProcessUseCudaCheck</tabstop>
   <tabstop>brightnessSlider</tabstop>
   <tabstop>brightnessSpin</tabstop>
@@ -5889,7 +5854,6 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>detectionRoiYSpin</tabstop>
   <tabstop>detectionRoiWidthSpin</tabstop>
   <tabstop>detectionRoiHeightSpin</tabstop>
-  <tabstop>motionUseCudaCheck</tabstop>
   <tabstop>actionsClassCombo</tabstop>
   <tabstop>actionsDisappearDebounceSpin</tabstop>
   <tabstop>actionsAddButton</tabstop>

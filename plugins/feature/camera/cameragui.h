@@ -432,7 +432,6 @@ private slots:
     void on_stackEnabledCheck_toggled(bool checked);
     void on_stackFrameCountSpin_valueChanged(int value);
     void on_stackMethodCombo_currentIndexChanged(int index);
-    void on_stackUseCudaCheck_toggled(bool checked);
     void on_stackAlignmentCombo_currentIndexChanged(int index);
     void on_stackDarkFileEdit_editingFinished();
     void on_stackDarkFileButton_clicked();
@@ -545,7 +544,6 @@ private slots:
     void on_detectionRoiDeleteButton_clicked();
     void on_detectionResetDefaultsButton_clicked();
     void on_motionDetectButton_toggled(bool checked);
-    void on_motionUseCudaCheck_toggled(bool checked);
     void on_motionBackgroundSubtractorCombo_currentIndexChanged(int index);
     void on_motionMaskViewCombo_currentIndexChanged(int index);
     void on_motionHistorySpin_valueChanged(int value);

@@ -26,7 +26,7 @@
 #include <QTimer>
 #include <QMutableHashIterator>
 #include <QTextStream>
-#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudafilters.hpp>
 #include <opencv2/cudaimgproc.hpp>
@@ -410,6 +410,9 @@ bool CameraDetector::handleMessage(const Message& cmd)
             m_previousInputFrame = CameraPipelineFrame();
             m_lastInputFrame = CameraPipelineFrame();
             m_diffMaskHistory.clear();
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+            m_cudaDiffMaskHistory.clear();
+#endif
             m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
             m_motionLastFgMaskRaw.release();
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
@@ -483,6 +486,9 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         m_previousInputFrame = CameraPipelineFrame();
         m_lastInputFrame = CameraPipelineFrame();
         m_diffMaskHistory.clear();
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+        m_cudaDiffMaskHistory.clear();
+#endif
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
         m_motionLastFgMaskRaw.release();
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
@@ -508,6 +514,9 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("detectionRoiHeight"))
     {
         m_diffMaskHistory.clear();
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+        m_cudaDiffMaskHistory.clear();
+#endif
     }
 
     if ((force && !m_settings.m_diffMask)
@@ -521,7 +530,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
 
     if (force
         || settingsKeys.contains("motionDetect")
-        || settingsKeys.contains("motionUseCuda")
+        || settingsKeys.contains("postProcessUseCuda")
         || settingsKeys.contains("motionBackgroundSubtractor")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
@@ -543,7 +552,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
 
     if (force
         || settingsKeys.contains("motionDetect")
-        || settingsKeys.contains("motionUseCuda")
+        || settingsKeys.contains("postProcessUseCuda")
         || settingsKeys.contains("motionBackgroundSubtractor")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
@@ -596,7 +605,7 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("diffMaskHistoryFrames")
         || settingsKeys.contains("diffMaskCloseSize")
         || settingsKeys.contains("motionDetect")
-        || settingsKeys.contains("motionUseCuda")
+        || settingsKeys.contains("postProcessUseCuda")
         || settingsKeys.contains("motionBackgroundSubtractor")
         || settingsKeys.contains("motionHistory")
         || settingsKeys.contains("motionVarThreshold")
@@ -876,6 +885,14 @@ cv::Rect CameraDetector::resolveDetectionRoi(const cv::Size& frameSize) const
 void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
 {
     PROFILER_START();
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+    if (canUseCudaDetection() && applyDiffMaskCuda(bgrMat, roi, diffReferenceFrame))
+    {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+#endif
+
     QImage convertedPrevRgb;
     const QImage& prevRgb = ensureRgb888(diffReferenceFrame.m_image, convertedPrevRgb);
     cv::Mat prevMat = wrapRgb888Image(prevRgb);
@@ -908,6 +925,9 @@ void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const C
         (m_diffMaskHistory.front().size() != mask.size() || m_diffMaskHistory.front().type() != mask.type()))
     {
         m_diffMaskHistory.clear();
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+        m_cudaDiffMaskHistory.clear();
+#endif
     }
 
     m_diffMaskHistory.push_back(mask.clone());
@@ -935,6 +955,102 @@ void CameraDetector::applyDiffMask(cv::Mat& bgrMat, const cv::Rect& roi, const C
     bgrMat = result;
     PROFILER_STOP(__FUNCTION__);
 }
+
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+bool CameraDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
+{
+    try
+    {
+        QImage convertedPrevRgb;
+        const QImage& prevRgb = ensureRgb888(diffReferenceFrame.m_image, convertedPrevRgb);
+        cv::Mat prevMat = wrapRgb888Image(prevRgb);
+        cv::Mat prevBgr;
+        cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
+
+        cv::cuda::GpuMat bgrGpu;
+        cv::cuda::GpuMat prevBgrGpu;
+        cv::cuda::GpuMat grayGpu;
+        cv::cuda::GpuMat prevGrayGpu;
+        bgrGpu.upload(bgrMat);
+        prevBgrGpu.upload(prevBgr);
+        cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
+        cv::cuda::cvtColor(prevBgrGpu, prevGrayGpu, cv::COLOR_BGR2GRAY);
+
+        cv::cuda::GpuMat diffGpu;
+        cv::cuda::GpuMat maskGpu;
+        cv::cuda::absdiff(grayGpu(roi), prevGrayGpu(roi), diffGpu);
+        cv::cuda::threshold(diffGpu, maskGpu, m_settings.m_diffThreshold, 255.0, cv::THRESH_BINARY);
+
+        if (m_settings.m_diffMaskOpenSize > 0)
+        {
+            const int openKsize = 2 * m_settings.m_diffMaskOpenSize + 1;
+            const cv::Mat openKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(openKsize, openKsize));
+            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, maskGpu.type(), openKernel);
+            cv::cuda::GpuMat openedGpu;
+            filter->apply(maskGpu, openedGpu);
+            maskGpu = openedGpu;
+        }
+
+        if (m_settings.m_dilationSize > 0)
+        {
+            const int ksize = 2 * m_settings.m_dilationSize + 1;
+            const cv::Mat dilationKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(ksize, ksize));
+            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMorphologyFilter(cv::MORPH_DILATE, maskGpu.type(), dilationKernel);
+            cv::cuda::GpuMat dilatedGpu;
+            filter->apply(maskGpu, dilatedGpu);
+            maskGpu = dilatedGpu;
+        }
+
+        if (!m_cudaDiffMaskHistory.empty() &&
+            (m_cudaDiffMaskHistory.front().size() != maskGpu.size() || m_cudaDiffMaskHistory.front().type() != maskGpu.type()))
+        {
+            m_cudaDiffMaskHistory.clear();
+        }
+
+        m_cudaDiffMaskHistory.push_back(maskGpu.clone());
+
+        const size_t historyFrames = static_cast<size_t>(std::max(1, m_settings.m_diffMaskHistoryFrames));
+        while (m_cudaDiffMaskHistory.size() > historyFrames) {
+            m_cudaDiffMaskHistory.pop_front();
+        }
+
+        cv::cuda::GpuMat combinedMaskGpu = m_cudaDiffMaskHistory.front().clone();
+        for (size_t i = 1; i < m_cudaDiffMaskHistory.size(); ++i) {
+            cv::cuda::bitwise_or(combinedMaskGpu, m_cudaDiffMaskHistory[i], combinedMaskGpu);
+        }
+
+        cv::Mat exclusionMask = buildExclusionMask(roi, combinedMaskGpu.size());
+        cv::cuda::GpuMat exclusionMaskGpu;
+        exclusionMaskGpu.upload(exclusionMask);
+        cv::cuda::bitwise_and(combinedMaskGpu, exclusionMaskGpu, combinedMaskGpu);
+
+        if (m_settings.m_diffMaskCloseSize > 0)
+        {
+            const int closeKsize = 2 * m_settings.m_diffMaskCloseSize + 1;
+            const cv::Mat closeKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(closeKsize, closeKsize));
+            cv::Ptr<cv::cuda::Filter> filter = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, combinedMaskGpu.type(), closeKernel);
+            cv::cuda::GpuMat closedGpu;
+            filter->apply(combinedMaskGpu, closedGpu);
+            combinedMaskGpu = closedGpu;
+        }
+
+        cv::cuda::GpuMat fullMaskGpu(bgrMat.size(), combinedMaskGpu.type());
+        fullMaskGpu.setTo(cv::Scalar::all(0));
+        combinedMaskGpu.copyTo(fullMaskGpu(roi));
+
+        cv::cuda::GpuMat resultGpu;
+        cv::cuda::bitwise_and(bgrGpu, bgrGpu, resultGpu, fullMaskGpu);
+        resultGpu.download(bgrMat);
+        return true;
+    }
+    catch (const cv::Exception& error)
+    {
+        qWarning() << "CameraDetector: CUDA diff mask failed; falling back to CPU:" << error.what();
+    }
+
+    return false;
+}
+#endif
 
 cv::Mat CameraDetector::buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
 {
@@ -993,6 +1109,29 @@ cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createBackgroundSubtractor() c
         m_settings.m_motionDetectShadows);
 }
 
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+bool CameraDetector::canUseCudaDetection() const
+{
+    static bool warnedNoDevice = false;
+
+    if (!m_settings.m_postProcessUseCuda) {
+        return false;
+    }
+
+    if (cv::cuda::getCudaEnabledDeviceCount() <= 0)
+    {
+        if (!warnedNoDevice)
+        {
+            qWarning() << "CameraDetector: CUDA detection requested, but no CUDA-enabled OpenCV device is available";
+            warnedNoDevice = true;
+        }
+        return false;
+    }
+
+    return true;
+}
+#endif
+
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
 cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> CameraDetector::createCudaBackgroundSubtractor() const
 {
@@ -1007,7 +1146,7 @@ bool CameraDetector::canUseCudaMotionDetection() const
     static bool warnedNoDevice = false;
     static bool warnedUnsupportedSettings = false;
 
-    if (!m_settings.m_motionUseCuda) {
+    if (!m_settings.m_postProcessUseCuda) {
         return false;
     }
 
@@ -1304,48 +1443,130 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect&
     PROFILER_STOP(__FUNCTION__);
 }
 
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+bool CameraDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
+{
+    try
+    {
+        cv::cuda::GpuMat bgrGpu;
+        cv::cuda::GpuMat grayGpu;
+        cv::cuda::GpuMat blurredGrayGpu;
+        cv::cuda::GpuMat backgroundGpu;
+        cv::cuda::GpuMat residualGpu;
+        cv::cuda::GpuMat thresholdMaskGpu;
+
+        bgrGpu.upload(bgrMat(roi));
+        cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
+
+        cv::Ptr<cv::cuda::Filter> smallBlur = cv::cuda::createGaussianFilter(
+            grayGpu.type(), grayGpu.type(), cv::Size(3, 3), 0.0, 0.0);
+        smallBlur->apply(grayGpu, blurredGrayGpu);
+
+        int maxKernelDimension = std::min(grayGpu.cols, grayGpu.rows);
+        if ((maxKernelDimension % 2) == 0) {
+            --maxKernelDimension;
+        }
+        maxKernelDimension = std::max(1, maxKernelDimension);
+        const int backgroundKernelSize = std::min(2 * m_settings.m_starBackgroundBlur + 1, maxKernelDimension);
+        cv::Ptr<cv::cuda::Filter> backgroundBlur = cv::cuda::createGaussianFilter(
+            blurredGrayGpu.type(), blurredGrayGpu.type(), cv::Size(backgroundKernelSize, backgroundKernelSize), 0.0, 0.0);
+        backgroundBlur->apply(blurredGrayGpu, backgroundGpu);
+
+        if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewBackground)) {
+            backgroundGpu.download(*debugMask);
+        }
+
+        cv::cuda::subtract(blurredGrayGpu, backgroundGpu, residualGpu);
+        residualGpu.download(residual);
+
+        if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))
+        {
+            double minValue = 0.0;
+            double maxValue = 0.0;
+            cv::minMaxLoc(residual, &minValue, &maxValue);
+            if (maxValue > minValue) {
+                cv::normalize(residual, *debugMask, 0, 255, cv::NORM_MINMAX);
+                debugMask->convertTo(*debugMask, CV_8UC1);
+            } else {
+                *debugMask = residual.clone();
+            }
+        }
+
+        cv::cuda::threshold(residualGpu, thresholdMaskGpu, m_settings.m_starThreshold, 255.0, cv::THRESH_BINARY);
+        cv::Mat exclusionMask = buildExclusionMask(roi, thresholdMaskGpu.size());
+        cv::cuda::GpuMat exclusionMaskGpu;
+        exclusionMaskGpu.upload(exclusionMask);
+        cv::cuda::bitwise_and(thresholdMaskGpu, exclusionMaskGpu, thresholdMaskGpu);
+        thresholdMaskGpu.download(thresholdMask);
+
+        if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewThresholded)) {
+            *debugMask = thresholdMask.clone();
+        }
+
+        grayGpu.download(gray);
+        return true;
+    }
+    catch (const cv::Exception& error)
+    {
+        qWarning() << "CameraDetector: CUDA star preprocessing failed; falling back to CPU:" << error.what();
+    }
+
+    return false;
+}
+#endif
+
 void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask) const
 {
     PROFILER_START();
 
     cv::Mat gray;
-    cv::cvtColor(bgrMat(roi), gray, cv::COLOR_BGR2GRAY);
-
-    cv::Mat blurredGray;
-    cv::GaussianBlur(gray, blurredGray, cv::Size(3, 3), 0.0, 0.0);
-
-    int maxKernelDimension = std::min(gray.cols, gray.rows);
-    if ((maxKernelDimension % 2) == 0) {
-        --maxKernelDimension;
-    }
-    maxKernelDimension = std::max(1, maxKernelDimension);
-    const int backgroundKernelSize = std::min(2 * m_settings.m_starBackgroundBlur + 1, maxKernelDimension);
-    cv::Mat background;
-    cv::GaussianBlur(blurredGray, background, cv::Size(backgroundKernelSize, backgroundKernelSize), 0.0, 0.0);
-    if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewBackground)) {
-        *debugMask = background.clone();
-    }
-
     cv::Mat residual;
-    cv::subtract(blurredGray, background, residual);
-    if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))
-    {
-        double minValue = 0.0;
-        double maxValue = 0.0;
-        cv::minMaxLoc(residual, &minValue, &maxValue);
-        if (maxValue > minValue) {
-            cv::normalize(residual, *debugMask, 0, 255, cv::NORM_MINMAX);
-            debugMask->convertTo(*debugMask, CV_8UC1);
-        } else {
-            *debugMask = residual.clone();
-        }
-    }
-
     cv::Mat thresholdMask;
-    cv::threshold(residual, thresholdMask, m_settings.m_starThreshold, 255, cv::THRESH_BINARY);
-    cv::bitwise_and(thresholdMask, buildExclusionMask(roi, thresholdMask.size()), thresholdMask);
-    if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewThresholded)) {
-        *debugMask = thresholdMask.clone();
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+    const bool usedCudaPreprocessing = canUseCudaDetection()
+        && applyStarPreprocessingCuda(bgrMat, roi, gray, residual, thresholdMask, debugMask);
+#else
+    const bool usedCudaPreprocessing = false;
+#endif
+
+    if (!usedCudaPreprocessing)
+    {
+        cv::cvtColor(bgrMat(roi), gray, cv::COLOR_BGR2GRAY);
+
+        cv::Mat blurredGray;
+        cv::GaussianBlur(gray, blurredGray, cv::Size(3, 3), 0.0, 0.0);
+
+        int maxKernelDimension = std::min(gray.cols, gray.rows);
+        if ((maxKernelDimension % 2) == 0) {
+            --maxKernelDimension;
+        }
+        maxKernelDimension = std::max(1, maxKernelDimension);
+        const int backgroundKernelSize = std::min(2 * m_settings.m_starBackgroundBlur + 1, maxKernelDimension);
+        cv::Mat background;
+        cv::GaussianBlur(blurredGray, background, cv::Size(backgroundKernelSize, backgroundKernelSize), 0.0, 0.0);
+        if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewBackground)) {
+            *debugMask = background.clone();
+        }
+
+        cv::subtract(blurredGray, background, residual);
+        if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))
+        {
+            double minValue = 0.0;
+            double maxValue = 0.0;
+            cv::minMaxLoc(residual, &minValue, &maxValue);
+            if (maxValue > minValue) {
+                cv::normalize(residual, *debugMask, 0, 255, cv::NORM_MINMAX);
+                debugMask->convertTo(*debugMask, CV_8UC1);
+            } else {
+                *debugMask = residual.clone();
+            }
+        }
+
+        cv::threshold(residual, thresholdMask, m_settings.m_starThreshold, 255, cv::THRESH_BINARY);
+        cv::bitwise_and(thresholdMask, buildExclusionMask(roi, thresholdMask.size()), thresholdMask);
+        if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewThresholded)) {
+            *debugMask = thresholdMask.clone();
+        }
     }
 
     std::vector<std::vector<cv::Point>> contours;

@@ -402,9 +402,7 @@ bool CameraImageProcessor::canUseCudaImageProcessing() const
         && (m_settings.m_postProcessWhiteBalanceHighlightProtection > 1e-6);
     const bool unsupported =
         (m_settings.m_postProcessWhiteBalanceMode == 1)
-        || manualHighlightProtectedWhiteBalance
-        || (m_settings.m_sobelEdge > 1e-4)
-        || (m_settings.m_cannyEdge > 1e-4);
+        || manualHighlightProtectedWhiteBalance;
 
     if (unsupported)
     {
@@ -433,6 +431,8 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
     const bool needsGaussianBlur = m_settings.m_gaussianBlur > 0;
     const bool needsMedianBlur = m_settings.m_medianBlur > 0;
     const bool needsSharpen = m_settings.m_sharpen > 1e-4;
+    const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
+    const bool needsCannyEdge = m_settings.m_cannyEdge > 1e-4;
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
@@ -443,6 +443,8 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
         || needsGaussianBlur
         || needsMedianBlur
         || needsSharpen
+        || needsSobelEdge
+        || needsCannyEdge
         || needsFlip
         || needsBrightContrast
         || needsGreyscale
@@ -546,6 +548,14 @@ QImage CameraImageProcessor::applyImageProcessingCuda(const QImage& input)
                 bgrGpu.type(), bgrGpu.type(), cv::Size(3, 3), 1.0);
             filter->apply(bgrGpu, blurredGpu);
             cv::cuda::addWeighted(bgrGpu, 1.0 + m_settings.m_sharpen, blurredGpu, -m_settings.m_sharpen, 0.0, bgrGpu);
+        }
+
+        if (needsSobelEdge) {
+            applySobelEdgeCuda(bgrGpu);
+        }
+
+        if (needsCannyEdge) {
+            applyCannyEdgeCuda(bgrGpu);
         }
 
         if (needsFlip)
@@ -667,6 +677,65 @@ void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const
     cv::cuda::GpuMat correctedGpu;
     lookup->transform(bgrGpu, correctedGpu);
     bgrGpu = correctedGpu;
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+
+    cv::cuda::GpuMat grayGpu;
+    cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
+
+    cv::cuda::GpuMat gradX;
+    cv::cuda::GpuMat gradY;
+    cv::Ptr<cv::cuda::Filter> sobelX = cv::cuda::createSobelFilter(grayGpu.type(), CV_16SC1, 1, 0, 3);
+    cv::Ptr<cv::cuda::Filter> sobelY = cv::cuda::createSobelFilter(grayGpu.type(), CV_16SC1, 0, 1, 3);
+    sobelX->apply(grayGpu, gradX);
+    sobelY->apply(grayGpu, gradY);
+
+    cv::cuda::GpuMat absGradX;
+    cv::cuda::GpuMat absGradY;
+    cv::cuda::GpuMat absGradX8u;
+    cv::cuda::GpuMat absGradY8u;
+    cv::cuda::abs(gradX, absGradX);
+    cv::cuda::abs(gradY, absGradY);
+    absGradX.convertTo(absGradX8u, CV_8U);
+    absGradY.convertTo(absGradY8u, CV_8U);
+
+    cv::cuda::GpuMat edgesGray;
+    cv::cuda::addWeighted(absGradX8u, 0.5, absGradY8u, 0.5, 0.0, edgesGray);
+
+    cv::cuda::GpuMat edgesBgr;
+    cv::cuda::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
+    if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
+        bgrGpu = edgesBgr;
+    } else {
+        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrGpu);
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu) const
+{
+    PROFILER_START();
+
+    cv::cuda::GpuMat grayGpu;
+    cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY);
+
+    cv::Ptr<cv::cuda::CannyEdgeDetector> canny = cv::cuda::createCannyEdgeDetector(50.0, 150.0);
+    cv::cuda::GpuMat edgesGray;
+    canny->detect(grayGpu, edgesGray);
+
+    cv::cuda::GpuMat edgesBgr;
+    cv::cuda::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR);
+    if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
+        bgrGpu = edgesBgr;
+    } else {
+        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, bgrGpu);
+    }
+
     PROFILER_STOP(__FUNCTION__);
 }
 #endif

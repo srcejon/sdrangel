@@ -348,7 +348,6 @@ struct CameraSettings
     bool m_stackEnabled;
     int m_stackFrameCount;
     StackMethod m_stackMethod;
-    bool m_stackUseCuda; ///< Use OpenCV CUDA functions for supported stacking/calibration/alignment steps
     StackHdrAlgorithm m_stackHdrAlgorithm;
     int m_stackHdrExposureCount;
     std::array<double, 4> m_stackHdrExposureTimesMs;
@@ -380,7 +379,7 @@ struct CameraSettings
     double m_postProcessWhiteBalanceGreenGain; ///< Manual green gain: 0.1..8.0
     double m_postProcessWhiteBalanceBlueGain;  ///< Manual blue gain: 0.1..8.0
     double m_postProcessWhiteBalanceHighlightProtection; ///< Roll manual WB gains back toward neutral in highlights
-    bool m_postProcessUseCuda; ///< Use OpenCV CUDA functions for supported post-processing steps
+    bool m_postProcessUseCuda; ///< Use OpenCV CUDA functions for supported camera processing steps
     bool m_postProcessUnwarp; ///< Unwarp fisheye images using the configured lens projection and FoV
     HistogramStretch m_histogramStretch; ///< Histogram stretch mode
     double m_histogramStretchBlackPoint; ///< Black point normalized to [0,1]
@@ -441,7 +440,6 @@ struct CameraSettings
     int    m_detectionRoiHeight; ///< Detection ROI height in pixels; 0 disables ROI/full height
     bool   m_showDetectionRoi;  ///< Show detection ROI rectangle on the preview image
     bool   m_motionDetect;      ///< Enable motion background subtraction
-    bool   m_motionUseCuda;     ///< Use OpenCV CUDA functions for supported motion detection steps
     MotionBackgroundSubtractor m_motionBackgroundSubtractor; ///< Background subtractor algorithm
     MotionMaskView m_motionMaskView; ///< Optional debug view of motion fgMask stages
     int    m_motionHistory;     ///< Background subtractor history length: 1..5000

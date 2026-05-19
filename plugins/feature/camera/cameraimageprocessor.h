@@ -141,6 +141,8 @@ private:
     [[nodiscard]] bool canUseCudaImageProcessing() const;
     void applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu) const;
     void applyGammaCuda(cv::cuda::GpuMat& bgrGpu) const;
+    void applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu) const;
+    void applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu) const;
 #endif
     void applyWhiteBalance(cv::Mat& bgrMat);
     void applyLensUnwarp(cv::Mat& bgrMat);

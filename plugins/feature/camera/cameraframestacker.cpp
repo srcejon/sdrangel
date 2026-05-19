@@ -267,7 +267,7 @@ bool CameraFrameStacker::canUseCudaStacking() const
 {
     static bool warnedNoDevice = false;
 
-    if (!m_settings.m_stackUseCuda) {
+    if (!m_settings.m_postProcessUseCuda) {
         return false;
     }
 
@@ -640,7 +640,7 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("stackEnabled")
         || settingsKeys.contains("stackMethod")
-        || settingsKeys.contains("stackUseCuda")
+        || settingsKeys.contains("postProcessUseCuda")
         || settingsKeys.contains("stackHdrAlgorithm")
         || settingsKeys.contains("stackHdrExposureCount")
         || settingsKeys.contains("stackHdrExposure1Ms")

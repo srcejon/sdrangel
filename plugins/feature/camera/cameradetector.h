@@ -32,8 +32,10 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/video/background_segm.hpp>
 #include <opencv2/dnn/dnn.hpp>
-#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
 #include <opencv2/core/cuda.hpp>
+#endif
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
 #include <opencv2/cudabgsegm.hpp>
 #endif
 
@@ -177,6 +179,9 @@ private:
     CameraPipelineFrame m_previousInputFrame;
     CameraPipelineFrame m_lastInputFrame;
     std::deque<cv::Mat> m_diffMaskHistory;
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+    std::deque<cv::cuda::GpuMat> m_cudaDiffMaskHistory;
+#endif
     cv::Ptr<cv::BackgroundSubtractor> m_bgSubtractor;
     cv::Mat m_motionLastFgMaskRaw;
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
@@ -210,6 +215,11 @@ private:
     void processFrame(const CameraPipelineFramePtr& frame, const CameraPipelineFrame& diffReferenceFrame, bool updateInputHistory);
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
     [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createBackgroundSubtractor() const;
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+    [[nodiscard]] bool canUseCudaDetection() const;
+    bool applyDiffMaskCuda(cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
+    bool applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const;
+#endif
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     [[nodiscard]] cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> createCudaBackgroundSubtractor() const;
     [[nodiscard]] bool canUseCudaMotionDetection() const;

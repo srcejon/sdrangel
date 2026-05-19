@@ -1121,11 +1121,6 @@ void CameraGUI::displaySettings()
     ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
     settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
-    settingsUI()->stackUseCudaCheck->setChecked(m_settings.m_stackUseCuda);
-#ifndef CAMERA_OPENCV_CUDA_STACKING
-    settingsUI()->stackUseCudaCheck->setEnabled(false);
-    settingsUI()->stackUseCudaCheck->setToolTip(tr("OpenCV CUDA stacking modules are not available in this build"));
-#endif
     settingsUI()->stackHdrAlgorithmCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackHdrAlgorithm));
     settingsUI()->stackHdrExposureCountSpin->setValue(m_settings.getHdrExposureCount());
     settingsUI()->stackAlignmentCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackAlignmentMethod));
@@ -1166,7 +1161,7 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessUseCudaCheck->setChecked(m_settings.m_postProcessUseCuda);
 #ifndef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     settingsUI()->postProcessUseCudaCheck->setEnabled(false);
-    settingsUI()->postProcessUseCudaCheck->setToolTip(tr("OpenCV CUDA post-processing modules are not available in this build"));
+    settingsUI()->postProcessUseCudaCheck->setToolTip(tr("OpenCV CUDA camera processing modules are not available in this build"));
 #endif
     settingsUI()->postProcessUnwarpCheck->setChecked(m_settings.m_postProcessUnwarp);
     settingsUI()->histogramStretchModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_histogramStretch));
@@ -1244,11 +1239,6 @@ void CameraGUI::displaySettings()
     settingsUI()->detectionRoiHeightSpin->setValue(m_settings.m_detectionRoiHeight);
     settingsUI()->detectionRoiShowButton->setChecked(m_settings.m_showDetectionRoi);
     ui->motionDetectButton->setChecked(m_settings.m_motionDetect);
-    settingsUI()->motionUseCudaCheck->setChecked(m_settings.m_motionUseCuda);
-#ifndef CAMERA_OPENCV_CUDA_MOTION_DETECTION
-    settingsUI()->motionUseCudaCheck->setEnabled(false);
-    settingsUI()->motionUseCudaCheck->setToolTip(tr("OpenCV CUDA motion detection modules are not available in this build"));
-#endif
     settingsUI()->motionBackgroundSubtractorCombo->setCurrentIndex(static_cast<int>(m_settings.m_motionBackgroundSubtractor));
     settingsUI()->motionMaskViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_motionMaskView));
     settingsUI()->motionHistorySpin->setValue(m_settings.m_motionHistory);
@@ -1559,7 +1549,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->stackUseCudaCheck, &QCheckBox::toggled, this, &CameraGUI::on_stackUseCudaCheck_toggled);
     QObject::connect(settingsUI()->stackHdrAlgorithmCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
         [this](int index)
         {
@@ -1692,7 +1681,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->detectionRoiDeleteButton, &QToolButton::clicked, this, &CameraGUI::on_detectionRoiDeleteButton_clicked);
     QObject::connect(settingsUI()->detectionResetDefaultsButton, &QToolButton::clicked, this, &CameraGUI::on_detectionResetDefaultsButton_clicked);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
-    QObject::connect(settingsUI()->motionUseCudaCheck, &QCheckBox::toggled, this, &CameraGUI::on_motionUseCudaCheck_toggled);
     QObject::connect(ui->starDetectButton, &QToolButton::toggled, this, &CameraGUI::on_starDetectButton_toggled);
     QObject::connect(settingsUI()->motionBackgroundSubtractorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged);
     QObject::connect(settingsUI()->motionMaskViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionMaskViewCombo_currentIndexChanged);
@@ -4528,12 +4516,6 @@ void CameraGUI::on_stackMethodCombo_currentIndexChanged(int index)
     applySetting("stackMethod");
 }
 
-void CameraGUI::on_stackUseCudaCheck_toggled(bool checked)
-{
-    m_settings.m_stackUseCuda = checked;
-    applySetting("stackUseCuda");
-}
-
 void CameraGUI::on_stackAlignmentCombo_currentIndexChanged(int index)
 {
     m_settings.m_stackAlignmentMethod = static_cast<CameraSettings::StackAlignmentMethod>(index);
@@ -5715,7 +5697,6 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_showDetectionRoi = defaults.m_showDetectionRoi;
 
     m_settings.m_motionDetect = defaults.m_motionDetect;
-    m_settings.m_motionUseCuda = defaults.m_motionUseCuda;
     m_settings.m_motionBackgroundSubtractor = defaults.m_motionBackgroundSubtractor;
     m_settings.m_motionMaskView = defaults.m_motionMaskView;
     m_settings.m_motionHistory = defaults.m_motionHistory;
@@ -5770,7 +5751,6 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "detectionRoiHeight",
         "showDetectionRoi",
         "motionDetect",
-        "motionUseCuda",
         "motionBackgroundSubtractor",
         "motionMaskView",
         "motionHistory",
@@ -5818,12 +5798,6 @@ void CameraGUI::on_motionDetectButton_toggled(bool checked)
 {
     m_settings.m_motionDetect = checked;
     applySetting("motionDetect");
-}
-
-void CameraGUI::on_motionUseCudaCheck_toggled(bool checked)
-{
-    m_settings.m_motionUseCuda = checked;
-    applySetting("motionUseCuda");
 }
 
 void CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged(int index)

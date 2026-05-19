@@ -139,7 +139,7 @@ void CameraFrameAligner::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("cameraReadoutMode")
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("stackEnabled")
-        || settingsKeys.contains("stackUseCuda")
+        || settingsKeys.contains("postProcessUseCuda")
         || settingsKeys.contains("stackAlignmentMethod");
 
     if (force) {
@@ -441,7 +441,7 @@ cv::Mat CameraFrameAligner::warpFrameAffine(const cv::Mat& frameMat, const cv::M
     }
 
 #ifdef CAMERA_OPENCV_CUDA_STACKING
-    if (m_settings.m_stackUseCuda)
+    if (m_settings.m_postProcessUseCuda)
     {
         static bool warnedNoDevice = false;
         if (cv::cuda::getCudaEnabledDeviceCount() > 0)

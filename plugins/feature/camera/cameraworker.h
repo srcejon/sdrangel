@@ -505,6 +505,7 @@ private:
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
     CameraFinder *m_cameraFinder;
+    int m_stackFrameIndex;
     int m_hdrExposureIndex;
     bool m_alpacaFrameRequestPending;
     quint32 m_alpacaClientId;
@@ -584,10 +585,17 @@ private:
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     bool isHdrBracketingActive() const;
     void resetHdrBracketState();
+    int currentStackBurstFrameCount() const;
+    int currentStackBurstIndex() const;
     int currentHdrExposureCount() const;
     int currentHdrExposureIndex() const;
     double currentCaptureExposureTimeMs() const;
+    void advanceStackBurstState();
     void advanceHdrBracketState();
+    bool useStackIntervalCadence() const;
+    int captureTimerIntervalMs() const;
+    void scheduleNextCaptureAfterFrame();
+    void scheduleNextCaptureAfterFailure();
     void populateFrameExposureMetadata(CameraPipelineFrame& frame) const;
     void startCapture();
     void stopCapture();
@@ -649,7 +657,7 @@ private:
     bool asiOpenCamera();
     void asiCloseCamera();
     bool asiApplyCameraSettings();
-    void asiCaptureExposureFrame();
+    bool asiCaptureExposureFrame();
     void asiCaptureVideoFrame();
     void asiPollStatus();
     void asiCaptureTick();

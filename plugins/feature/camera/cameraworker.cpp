@@ -474,6 +474,7 @@ CameraWorker::CameraWorker() :
     m_captureTimer(this),
     m_networkManager(nullptr),
     m_cameraFinder(new CameraFinder(this)),
+    m_stackFrameIndex(0),
     m_hdrExposureIndex(0),
     m_alpacaFrameRequestPending(false),
     m_alpacaClientId(QRandomGenerator::global()->bounded(quint32(1), quint32(std::numeric_limits<quint32>::max()))),
@@ -755,6 +756,7 @@ bool CameraWorker::isHdrBracketingActive() const
 
 void CameraWorker::resetHdrBracketState()
 {
+    m_stackFrameIndex = 0;
     m_hdrExposureIndex = 0;
 
 #ifdef ASICAMERA_FOUND
@@ -762,6 +764,28 @@ void CameraWorker::resetHdrBracketState()
         m_asiSettingsApplied = false;
     }
 #endif
+}
+
+int CameraWorker::currentStackBurstFrameCount() const
+{
+    if (isHdrBracketingActive()) {
+        return currentHdrExposureCount();
+    }
+
+    if (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1)) {
+        return qBound(1, m_settings.m_stackFrameCount, 256);
+    }
+
+    return 1;
+}
+
+int CameraWorker::currentStackBurstIndex() const
+{
+    if (isHdrBracketingActive()) {
+        return currentHdrExposureIndex();
+    }
+
+    return qBound(0, m_stackFrameIndex, currentStackBurstFrameCount() - 1);
 }
 
 int CameraWorker::currentHdrExposureCount() const
@@ -781,6 +805,18 @@ double CameraWorker::currentCaptureExposureTimeMs() const
         : std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_exposureTimeMs);
 }
 
+void CameraWorker::advanceStackBurstState()
+{
+    if (isHdrBracketingActive())
+    {
+        advanceHdrBracketState();
+        return;
+    }
+
+    const int stackFrameCount = currentStackBurstFrameCount();
+    m_stackFrameIndex = (m_stackFrameIndex + 1) % std::max(1, stackFrameCount);
+}
+
 void CameraWorker::advanceHdrBracketState()
 {
     if (!isHdrBracketingActive()) {
@@ -795,6 +831,45 @@ void CameraWorker::advanceHdrBracketState()
         m_asiSettingsApplied = false;
     }
 #endif
+}
+
+bool CameraWorker::useStackIntervalCadence() const
+{
+    return m_settings.isIntervalCaptureMode() && (currentStackBurstFrameCount() > 1);
+}
+
+int CameraWorker::captureTimerIntervalMs() const
+{
+    return m_settings.isIntervalCaptureMode()
+        ? m_settings.getCaptureIntervalMs()
+        : std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond))));
+}
+
+void CameraWorker::scheduleNextCaptureAfterFrame()
+{
+    if (!m_capturing || !useStackIntervalCadence()) {
+        return;
+    }
+
+    if (currentStackBurstIndex() == 0)
+    {
+        m_captureTimer.start(m_settings.getCaptureIntervalMs());
+    }
+    else
+    {
+        QTimer::singleShot(0, this, [this]() {
+            if (m_capturing && useStackIntervalCadence()) {
+                captureTick();
+            }
+        });
+    }
+}
+
+void CameraWorker::scheduleNextCaptureAfterFailure()
+{
+    if (m_capturing && useStackIntervalCadence()) {
+        m_captureTimer.start(m_settings.getCaptureIntervalMs());
+    }
 }
 
 void CameraWorker::populateFrameExposureMetadata(CameraPipelineFrame& frame) const
@@ -911,9 +986,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     }
     else if (m_capturing && (m_settings.isAlpacaCamera() || m_settings.isAsiCamera()) && captureCadenceChanged)
     {
-        m_captureTimer.start(m_settings.isIntervalCaptureMode()
-            ? m_settings.getCaptureIntervalMs()
-            : std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond)))));
+        m_captureTimer.start(captureTimerIntervalMs());
     }
 
     const bool alpacaEndpointChanged = force
@@ -1069,9 +1142,7 @@ void CameraWorker::startCapture()
     {
         m_alpacaCaptureTimer.start();
         m_alpacaFrameRequestPending = false;
-        m_captureTimer.start(m_settings.isIntervalCaptureMode()
-            ? m_settings.getCaptureIntervalMs()
-            : std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond)))));
+        m_captureTimer.start(captureTimerIntervalMs());
 
         if (m_alpacaConnected && !m_alpacaBootstrapPending && (m_alpacaCameraSizeX > 0) && (m_alpacaCameraSizeY > 0)) {
             captureTick();
@@ -1083,10 +1154,8 @@ void CameraWorker::startCapture()
     else if (m_settings.isAsiCamera())
     {
         invalidateAsiSettings();
-        m_captureTimer.start(m_settings.isIntervalCaptureMode()
-            ? m_settings.getCaptureIntervalMs()
-            : std::max(10, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond)))));
-        asiCaptureTick();
+        m_captureTimer.start(captureTimerIntervalMs());
+        captureTick();
     }
 #endif
     else if (m_settings.isQtCamera())
@@ -1158,6 +1227,9 @@ void CameraWorker::captureTick()
 #ifdef ASICAMERA_FOUND
     if (m_settings.isAsiCamera())
     {
+        if (useStackIntervalCadence()) {
+            m_captureTimer.stop();
+        }
         asiCaptureTick();
         return;
     }
@@ -1175,6 +1247,9 @@ void CameraWorker::captureTick()
 
     if (!m_alpacaCaptureTimer.isValid()) {
         m_alpacaCaptureTimer.start();
+    }
+    if (useStackIntervalCadence()) {
+        m_captureTimer.stop();
     }
     m_alpacaFrameRequestPending = true;
     alpacaSetCameraParams();
@@ -2016,6 +2091,7 @@ void CameraWorker::alpacaStartExposure()
         if (reply->error() != QNetworkReply::NoError) {
             qDebug() << "CameraWorker::alpacaStartExposure: error:" << reply->errorString();
             m_alpacaFrameRequestPending = false;
+            scheduleNextCaptureAfterFailure();
             return;
         }
 
@@ -2135,7 +2211,8 @@ void CameraWorker::alpacaFetchImageArray()
             frame->m_bayerPattern = bayerPattern;
             m_frameAligner->submitFrame(frame);
         }
-        advanceHdrBracketState();
+        advanceStackBurstState();
+        scheduleNextCaptureAfterFrame();
         reply->deleteLater();
     });
 }
@@ -3384,7 +3461,7 @@ QImage CameraWorker::asiFrameToImage(CameraPipelineFrame::BayerPattern *bayerPat
     return image;
 }
 
-void CameraWorker::asiCaptureExposureFrame()
+bool CameraWorker::asiCaptureExposureFrame()
 {
     const int cameraId = m_settings.cameraIdInt();
 
@@ -3395,7 +3472,7 @@ void CameraWorker::asiCaptureExposureFrame()
         {
             setLastAsiError(stopVideoError, asiErrorCodeToString(stopVideoError));
             qDebug() << "CameraWorker: ASIStopVideoCapture failed before exposure:" << stopVideoError << asiErrorCodeToString(stopVideoError);
-            return;
+            return false;
         }
 
         m_asiVideoCaptureStarted = false;
@@ -3410,7 +3487,7 @@ void CameraWorker::asiCaptureExposureFrame()
             QStringLiteral("asiStartExposure:%1").arg(cameraId),
             tr("ASI exposure start failed"),
             tr("Failed to start ASI exposure on camera %1:\n%2").arg(cameraId).arg(asiErrorCodeToString(startExposureError)));
-        return;
+        return false;
     }
 
     setLastAsiError(ASI_SUCCESS, QString());
@@ -3427,7 +3504,7 @@ void CameraWorker::asiCaptureExposureFrame()
         {
             setLastAsiError(statusError, asiErrorCodeToString(statusError));
             qDebug() << "CameraWorker: ASIGetExpStatus failed:" << statusError << asiErrorCodeToString(statusError);
-            return;
+            return false;
         }
 
         if (exposureStatus == ASI_EXP_SUCCESS) {
@@ -3438,7 +3515,7 @@ void CameraWorker::asiCaptureExposureFrame()
         {
             setLastAsiError(ASI_ERROR_GENERAL_ERROR, QStringLiteral("Exposure failed"));
             qDebug() << "CameraWorker: ASI exposure failed";
-            return;
+            return false;
         }
 
         QThread::msleep(50);
@@ -3448,7 +3525,7 @@ void CameraWorker::asiCaptureExposureFrame()
     {
         setLastAsiError(ASI_ERROR_TIMEOUT, asiErrorCodeToString(ASI_ERROR_TIMEOUT));
         qDebug() << "CameraWorker: ASI exposure timed out after" << timeoutMs << "ms";
-        return;
+        return false;
     }
 
     const ASI_ERROR_CODE dataError = ASIGetDataAfterExp(cameraId, m_asiFrameBuffer.data(), m_asiFrameBuffer.size());
@@ -3458,7 +3535,7 @@ void CameraWorker::asiCaptureExposureFrame()
         qDebug() << "CameraWorker: ASIGetDataAfterExp failed:" << dataError << asiErrorCodeToString(dataError)
                  << "bufferSize" << m_asiFrameBuffer.size()
                  << "width" << m_asiFrameWidth << "height" << m_asiFrameHeight;
-        return;
+        return false;
     }
 
     setLastAsiError(ASI_SUCCESS, QString());
@@ -3471,7 +3548,9 @@ void CameraWorker::asiCaptureExposureFrame()
         frame->m_bayerPattern = bayerPattern;
         m_frameAligner->submitFrame(frame);
     }
-    advanceHdrBracketState();
+    advanceStackBurstState();
+    scheduleNextCaptureAfterFrame();
+    return true;
 }
 
 void CameraWorker::asiCaptureVideoFrame()
@@ -3531,7 +3610,9 @@ void CameraWorker::asiCaptureTick()
     }
 
     if (m_settings.isIntervalCaptureMode()) {
-        asiCaptureExposureFrame();
+        if (!asiCaptureExposureFrame()) {
+            scheduleNextCaptureAfterFailure();
+        }
     } else {
         asiCaptureVideoFrame();
     }

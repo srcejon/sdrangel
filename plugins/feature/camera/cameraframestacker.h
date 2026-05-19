@@ -135,6 +135,17 @@ private:
     cv::Mat m_flatCalibrationFrame;
     cv::Mat m_biasCalibrationFrame;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
+    struct CudaCalibrationFrame
+    {
+        cv::cuda::GpuMat m_frame;
+        cv::Size m_sourceSize;
+        int m_sourceType = -1;
+        int m_channels = 0;
+    };
+
+    CudaCalibrationFrame m_cudaDarkCalibrationFrame;
+    CudaCalibrationFrame m_cudaFlatCalibrationFrame;
+    CudaCalibrationFrame m_cudaBiasCalibrationFrame;
     cv::cuda::GpuMat m_cudaStackAccumulator;
 #endif
     QMutex m_frameMutex;
@@ -155,10 +166,20 @@ private:
     cv::Mat applyCalibration(const cv::Mat& input);
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     [[nodiscard]] bool canUseCudaStacking() const;
-    cv::Mat applyCalibrationCuda(const cv::Mat& input);
-    cv::Mat debayerRawMatCuda(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
+    void invalidateCudaCalibrationFrames();
+    cv::cuda::GpuMat uploadCalibrationFrameCuda(
+        CudaCalibrationFrame& cachedFrame,
+        const cv::Mat& calibrationFrame,
+        int channels);
+    bool prepareFrameCuda(
+        const cv::Mat& input,
+        CameraPipelineFrame::BayerPattern bayerPattern,
+        cv::Mat& output,
+        cv::cuda::GpuMat& outputGpu);
+    bool applyCalibrationCuda(cv::cuda::GpuMat& frameGpu, const cv::Size& inputSize, int inputType);
+    bool debayerRawMatCuda(cv::cuda::GpuMat& frameGpu, CameraPipelineFrame::BayerPattern bayerPattern);
     void subtractFromCudaAccumulator(const cv::Mat& frameMat);
-    [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, double scaleTo8Bit, QImage& outputImage);
+    [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* frameGpu, double scaleTo8Bit, QImage& outputImage);
 #endif
     static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);

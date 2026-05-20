@@ -27,6 +27,9 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+#include <opencv2/core/cuda.hpp>
+#endif
 
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -120,6 +123,9 @@ private:
     CameraSettings m_settings;
     bool m_captureActive;
     std::deque<cv::Mat> m_alignmentReferenceHistory;
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    mutable cv::cuda::Stream m_cudaAlignmentStream;
+#endif
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrame;

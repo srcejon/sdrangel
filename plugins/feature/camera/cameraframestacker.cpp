@@ -314,14 +314,14 @@ cv::cuda::GpuMat CameraFrameStacker::uploadCalibrationFrameCuda(
     cv::cuda::GpuMat uploaded;
     if (calibrationFrame.channels() == channels)
     {
-        uploaded.upload(calibrationFrame);
+        uploaded.upload(calibrationFrame, m_cudaStackingStream);
     }
     else if ((calibrationFrame.channels() == 1) && (channels == 3))
     {
         cv::cuda::GpuMat monoGpu;
-        monoGpu.upload(calibrationFrame);
+        monoGpu.upload(calibrationFrame, m_cudaStackingStream);
         std::vector<cv::cuda::GpuMat> planes(3, monoGpu);
-        cv::cuda::merge(planes, uploaded);
+        cv::cuda::merge(planes, uploaded, m_cudaStackingStream);
     }
 
     cachedFrame.m_frame = uploaded;
@@ -347,7 +347,7 @@ bool CameraFrameStacker::applyCalibrationCuda(cv::cuda::GpuMat& frameGpu, const 
         const int floatType = CV_MAKETYPE(CV_32F, channels);
 
         cv::cuda::GpuMat calibratedGpu;
-        frameGpu.convertTo(calibratedGpu, floatType);
+        frameGpu.convertTo(calibratedGpu, floatType, m_cudaStackingStream);
 
         const cv::cuda::GpuMat biasGpu = uploadCalibrationFrameCuda(m_cudaBiasCalibrationFrame, m_biasCalibrationFrame, channels);
         const cv::cuda::GpuMat darkGpu = uploadCalibrationFrameCuda(m_cudaDarkCalibrationFrame, m_darkCalibrationFrame, channels);
@@ -364,20 +364,20 @@ bool CameraFrameStacker::applyCalibrationCuda(cv::cuda::GpuMat& frameGpu, const 
         }
 
         if (!biasGpu.empty()) {
-            cv::cuda::subtract(calibratedGpu, biasGpu, calibratedGpu);
+            cv::cuda::subtract(calibratedGpu, biasGpu, calibratedGpu, cv::noArray(), -1, m_cudaStackingStream);
         }
         if (!darkGpu.empty()) {
-            cv::cuda::subtract(calibratedGpu, darkGpu, calibratedGpu);
+            cv::cuda::subtract(calibratedGpu, darkGpu, calibratedGpu, cv::noArray(), -1, m_cudaStackingStream);
         }
         if (!flatGpu.empty())
         {
             cv::cuda::GpuMat safeFlatGpu;
             cv::cuda::GpuMat epsilonGpu(flatGpu.size(), flatGpu.type(), cv::Scalar::all(1.0e-6));
-            cv::cuda::max(flatGpu, epsilonGpu, safeFlatGpu);
-            cv::cuda::divide(calibratedGpu, safeFlatGpu, calibratedGpu);
+            cv::cuda::max(flatGpu, epsilonGpu, safeFlatGpu, m_cudaStackingStream);
+            cv::cuda::divide(calibratedGpu, safeFlatGpu, calibratedGpu, 1.0, -1, m_cudaStackingStream);
         }
 
-        calibratedGpu.convertTo(frameGpu, inputType);
+        calibratedGpu.convertTo(frameGpu, inputType, m_cudaStackingStream);
         return true;
     }
     catch (const cv::Exception& error)
@@ -402,11 +402,11 @@ bool CameraFrameStacker::debayerRawMatCuda(cv::cuda::GpuMat& frameGpu, CameraPip
     try
     {
         cv::cuda::GpuMat debayeredGpu;
-        cv::cuda::demosaicing(frameGpu, debayeredGpu, cvCode);
+        cv::cuda::demosaicing(frameGpu, debayeredGpu, cvCode, 0, m_cudaStackingStream);
         if (debayeredGpu.channels() == 3)
         {
             cv::cuda::GpuMat rgbGpu;
-            cv::cuda::cvtColor(debayeredGpu, rgbGpu, cv::COLOR_BGR2RGB);
+            cv::cuda::cvtColor(debayeredGpu, rgbGpu, cv::COLOR_BGR2RGB, 0, m_cudaStackingStream);
             debayeredGpu = rgbGpu;
         }
 
@@ -434,7 +434,7 @@ bool CameraFrameStacker::prepareFrameCuda(
 
     try
     {
-        outputGpu.upload(input);
+        outputGpu.upload(input, m_cudaStackingStream);
         if (!applyCalibrationCuda(outputGpu, input.size(), input.type())) {
             output = debayerRawMat(applyCalibration(input), bayerPattern);
             outputGpu.release();
@@ -443,13 +443,15 @@ bool CameraFrameStacker::prepareFrameCuda(
         if (!debayerRawMatCuda(outputGpu, bayerPattern))
         {
             cv::Mat calibrated;
-            outputGpu.download(calibrated);
+            outputGpu.download(calibrated, m_cudaStackingStream);
+            m_cudaStackingStream.waitForCompletion();
             output = debayerRawMat(calibrated, bayerPattern);
             outputGpu.release();
             return false;
         }
 
-        outputGpu.download(output);
+        outputGpu.download(output, m_cudaStackingStream);
+        m_cudaStackingStream.waitForCompletion();
         return true;
     }
     catch (const cv::Exception& error)
@@ -470,9 +472,9 @@ void CameraFrameStacker::subtractFromCudaAccumulator(const cv::Mat& frameMat)
 
     cv::cuda::GpuMat frameGpu;
     cv::cuda::GpuMat floatGpu;
-    frameGpu.upload(frameMat);
-    frameGpu.convertTo(floatGpu, CV_32FC3);
-    cv::cuda::subtract(m_cudaStackAccumulator, floatGpu, m_cudaStackAccumulator);
+    frameGpu.upload(frameMat, m_cudaStackingStream);
+    frameGpu.convertTo(floatGpu, CV_32FC3, m_cudaStackingStream);
+    cv::cuda::subtract(m_cudaStackAccumulator, floatGpu, m_cudaStackAccumulator, cv::noArray(), -1, m_cudaStackingStream);
 }
 
 bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* sourceFrameGpu, double scaleTo8Bit, QImage& outputImage)
@@ -488,18 +490,19 @@ bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const
         if (sourceFrameGpu && !sourceFrameGpu->empty()) {
             frameGpu = *sourceFrameGpu;
         } else {
-            frameGpu.upload(frameMat);
+            frameGpu.upload(frameMat, m_cudaStackingStream);
         }
-        frameGpu.convertTo(floatGpu, CV_32FC3);
-        cv::cuda::add(m_cudaStackAccumulator, floatGpu, m_cudaStackAccumulator);
+        frameGpu.convertTo(floatGpu, CV_32FC3, m_cudaStackingStream);
+        cv::cuda::add(m_cudaStackAccumulator, floatGpu, m_cudaStackAccumulator, cv::noArray(), -1, m_cudaStackingStream);
 
         cv::cuda::GpuMat averagedGpu;
         cv::cuda::GpuMat averaged8uGpu;
-        m_cudaStackAccumulator.convertTo(averagedGpu, CV_32FC3, 1.0 / static_cast<double>(m_stackFrameHistory.size()));
-        averagedGpu.convertTo(averaged8uGpu, CV_8UC3, scaleTo8Bit);
+        m_cudaStackAccumulator.convertTo(averagedGpu, CV_32FC3, 1.0 / static_cast<double>(m_stackFrameHistory.size()), 0.0, m_cudaStackingStream);
+        averagedGpu.convertTo(averaged8uGpu, CV_8UC3, scaleTo8Bit, 0.0, m_cudaStackingStream);
 
         cv::Mat averaged8u;
-        averaged8uGpu.download(averaged8u);
+        averaged8uGpu.download(averaged8u, m_cudaStackingStream);
+        m_cudaStackingStream.waitForCompletion();
         outputImage = workingMatToImage(averaged8u);
         return true;
     }
@@ -1120,7 +1123,7 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
         if (!cudaFrameMat.empty() && (cudaFrameMat.channels() == 1))
         {
             cv::cuda::GpuMat rgbGpu;
-            cv::cuda::cvtColor(cudaFrameMat, rgbGpu, cv::COLOR_GRAY2RGB);
+            cv::cuda::cvtColor(cudaFrameMat, rgbGpu, cv::COLOR_GRAY2RGB, 0, m_cudaStackingStream);
             cudaFrameMat = rgbGpu;
         }
 #endif

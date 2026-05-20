@@ -180,11 +180,13 @@ private:
     std::deque<cv::Mat> m_diffMaskHistory;
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     std::deque<cv::cuda::GpuMat> m_cudaDiffMaskHistory;
+    mutable cv::cuda::Stream m_cudaDetectionStream;
 #endif
     cv::Ptr<cv::BackgroundSubtractor> m_bgSubtractor;
     cv::Mat m_motionLastFgMaskRaw;
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> m_cudaBgSubtractor;
+    cv::cuda::Stream m_cudaMotionStream;
     cv::cuda::GpuMat m_cudaMotionLastFgMaskRaw;
     cv::Ptr<cv::cuda::Filter> m_cudaMotionOpenFilter;
     cv::Ptr<cv::cuda::Filter> m_cudaMotionCloseFilter;

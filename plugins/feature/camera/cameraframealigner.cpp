@@ -450,11 +450,12 @@ cv::Mat CameraFrameAligner::warpFrameAffine(const cv::Mat& frameMat, const cv::M
             {
                 cv::cuda::GpuMat frameGpu;
                 cv::cuda::GpuMat alignedGpu;
-                frameGpu.upload(frameMat);
-                cv::cuda::warpAffine(frameGpu, alignedGpu, transform, frameMat.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+                frameGpu.upload(frameMat, m_cudaAlignmentStream);
+                cv::cuda::warpAffine(frameGpu, alignedGpu, transform, frameMat.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(), m_cudaAlignmentStream);
 
                 cv::Mat aligned;
-                alignedGpu.download(aligned);
+                alignedGpu.download(aligned, m_cudaAlignmentStream);
+                m_cudaAlignmentStream.waitForCompletion();
                 return aligned;
             }
             catch (const cv::Exception& error)

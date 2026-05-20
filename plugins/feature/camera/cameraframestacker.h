@@ -135,6 +135,8 @@ private:
     cv::Mat m_flatCalibrationFrame;
     cv::Mat m_biasCalibrationFrame;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
+    cv::cuda::Stream m_cudaStackingStream;
+
     struct CudaCalibrationFrame
     {
         cv::cuda::GpuMat m_frame;

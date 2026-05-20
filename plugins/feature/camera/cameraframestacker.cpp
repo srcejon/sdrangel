@@ -589,7 +589,7 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
             return false;
         }
 
-        m_hdrFrameSamples.push_back({frameMat.clone(), std::max(CameraSettings::m_minExposureTimeMs, inputFrame.m_exposureTimeMs), inputFrame.m_hdrExposureIndex});
+        m_hdrFrameSamples.push_back({frameMat.clone(), std::max(CameraSettings::m_minExposureTimeMs, inputFrame.m_exposureTimeMs)});
         stackCount = static_cast<int>(m_hdrFrameSamples.size());
 
         if (static_cast<int>(m_hdrFrameSamples.size()) < inputFrame.m_hdrExposureCount)

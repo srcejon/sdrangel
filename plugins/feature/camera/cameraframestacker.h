@@ -121,7 +121,6 @@ private:
     {
         cv::Mat m_frameMat;
         double m_exposureTimeMs = 0.0;
-        int m_exposureIndex = -1;
     };
 
     MessageQueue m_inputMessageQueue;

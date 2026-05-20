@@ -803,9 +803,6 @@ void CameraPostProcessor::updateTrackedMapObject(const QObject* pipeSource, SWGS
         object.m_longitude = swgMapItem->getLongitude();
         object.m_altitude = swgMapItem->getAltitude();
 
-        if (swgMapItem->getPositionDateTime()) {
-            object.m_positionDateTime = QDateTime::fromString(*swgMapItem->getPositionDateTime(), Qt::ISODateWithMs);
-        }
         if (swgMapItem->getAvailableUntil()) {
             object.m_availableUntil = QDateTime::fromString(*swgMapItem->getAvailableUntil(), Qt::ISODateWithMs);
         }

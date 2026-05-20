@@ -28,7 +28,6 @@ MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgCaptureActive, Message)
 CameraDetectionStage::CameraDetectionStage() :
     m_nextStageQueue(nullptr),
-    m_captureActive(false),
     m_processingFrame(false)
 {
 }
@@ -63,11 +62,11 @@ bool CameraDetectionStage::handleMessage(const Message& cmd)
     else if (MsgCaptureActive::match(cmd))
     {
         const MsgCaptureActive& activeMsg = (const MsgCaptureActive&) cmd;
-        m_captureActive = activeMsg.isActive();
-        captureActiveChanged(m_captureActive);
+        const bool active = activeMsg.isActive();
+        captureActiveChanged(active);
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrame.reset();
-        if (!m_captureActive) {
+        if (!active) {
             m_processingFrame = false;
         }
         return true;

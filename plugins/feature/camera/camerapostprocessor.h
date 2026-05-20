@@ -350,7 +350,6 @@ private:
         double m_latitude = 0.0;
         double m_longitude = 0.0;
         double m_altitude = 0.0;
-        QDateTime m_positionDateTime;
         QDateTime m_availableUntil;
     };
 

@@ -115,7 +115,6 @@ protected:
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_nextStageQueue;
     CameraSettings m_settings;
-    bool m_captureActive;
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
     bool m_processingFrame;

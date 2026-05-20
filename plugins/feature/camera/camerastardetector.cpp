@@ -186,11 +186,6 @@ void CameraStarDetector::applySettings(const CameraSettings& settings, const QLi
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
 }
 
-void CameraStarDetector::captureActiveChanged(bool active)
-{
-    (void) active;
-}
-
 void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 {
     if (!frame || !frame->hasImageData()) {

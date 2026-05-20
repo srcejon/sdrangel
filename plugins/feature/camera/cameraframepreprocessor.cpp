@@ -318,6 +318,8 @@ void CameraFramePreprocessor::validateCalibrationFrame(cv::Mat& calibrationFrame
 
 cv::Mat CameraFramePreprocessor::applyCalibration(const cv::Mat& input)
 {
+    PROFILER_START();
+
     if (input.empty()) {
         return input;
     }
@@ -388,6 +390,8 @@ cv::Mat CameraFramePreprocessor::applyCalibration(const cv::Mat& input)
 
     cv::Mat calibratedFrame;
     calibratedFloat.convertTo(calibratedFrame, input.type());
+
+    PROFILER_STOP(__FUNCTION__);
     return calibratedFrame;
 }
 
@@ -416,6 +420,15 @@ void CameraFramePreprocessor::processNewFrame(const CameraPipelineFramePtr& fram
         return;
     }
 #endif
+
+    preprocessFrame(frame, frameMat);
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraFramePreprocessor::preprocessFrame(const CameraPipelineFramePtr& frame, cv::Mat& frameMat)
+{
+    PROFILER_START();
 
     frameMat = applyCalibration(frameMat);
     frameMat = debayerRawMat(frameMat, frame->m_bayerPattern);
@@ -551,6 +564,8 @@ bool CameraFramePreprocessor::applyCalibrationCuda(cv::cuda::GpuMat& frameGpu, c
 
 bool CameraFramePreprocessor::preprocessFrameCuda(CameraPipelineFrame& frame, const cv::Mat& inputMat)
 {
+    PROFILER_START();
+
     try
     {
         cv::cuda::GpuMat frameGpu;
@@ -595,6 +610,7 @@ bool CameraFramePreprocessor::preprocessFrameCuda(CameraPipelineFrame& frame, co
         }
         m_cudaStream.waitForCompletion();
         frame.clearCpuImage();
+        PROFILER_STOP(__FUNCTION__);
         return true;
     }
     catch (const cv::Exception& error)
@@ -603,6 +619,7 @@ bool CameraFramePreprocessor::preprocessFrameCuda(CameraPipelineFrame& frame, co
         frame.clearCudaCache();
     }
 
+    PROFILER_STOP(__FUNCTION__);
     return false;
 }
 

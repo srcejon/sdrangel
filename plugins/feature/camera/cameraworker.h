@@ -40,6 +40,7 @@
 #include "util/messagequeue.h"
 #include "audio/audiofifo.h"
 #include "availabledevicehandler.h"
+#include "cameraasicontroller.h"
 #include "camerainfo.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
@@ -553,35 +554,7 @@ private:
     qint64 m_lastAlpacaCaptureTimeMs;
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
 #ifdef ASICAMERA_FOUND
-    bool m_asiCameraOpen;
-    bool m_asiVideoCaptureStarted;
-    bool m_asiSettingsApplied;
-    bool m_asiContinuousCaptureScheduled;
-    quint64 m_asiContinuousCaptureGeneration;
-    int m_asiOpenCameraId;
-    bool m_asiTriggerCamera;
-    int m_asiCameraSizeX;
-    int m_asiCameraSizeY;
-    int m_asiMaxBinX;
-    int m_asiMaxBinY;
-    int m_asiBayerPattern;
-    bool m_asiColorCamera;
-    int m_asiBitDepth;
-    int m_asiImageType;
-    bool m_asiRgb24Supported;
-    bool m_asiRaw16Supported;
-    bool m_asiRaw8Supported;
-    double m_asiPixelSizeUm;
-    double m_asiExposureMinMs;
-    double m_asiExposureMaxMs;
-    int m_asiFrameWidth;
-    int m_asiFrameHeight;
-    QVector<uchar> m_asiFrameBuffer;
-    double m_lastAsiCcdTemperature;
-    bool m_lastAsiCcdTemperatureValid;
-    qint64 m_lastAsiCaptureTimeMs;
-    int m_lastAsiErrorNumber;
-    QString m_lastAsiErrorMessage;
+    CameraAsiController m_asi;
 #endif
 
     // Audio pass-through (Qt camera only)
@@ -658,14 +631,6 @@ private:
     void resetAlpacaFocuserConnectionState();
     void resetAlpacaFilterWheelConnectionState();
 #ifdef ASICAMERA_FOUND
-    static QString asiErrorCodeToString(ASI_ERROR_CODE errorCode);
-    static bool asiGetCameraInfoById(int cameraId, ASI_CAMERA_INFO& cameraInfo);
-    static bool asiGetControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS& controlCaps);
-    static bool asiGetControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& value, ASI_BOOL& isAuto);
-    static bool asiSupportsImageType(const ASI_CAMERA_INFO& cameraInfo, ASI_IMG_TYPE imageType);
-    static int asiBayerToOpenCvCode(int bayerPattern);
-    static CameraPipelineFrame::BayerPattern asiBayerToPipelinePattern(int bayerPattern);
-    ASI_IMG_TYPE asiSelectImageType(const ASI_CAMERA_INFO& cameraInfo) const;
     void asiQueryCameraCapabilities();
     bool asiOpenCamera();
     void asiCloseCamera();
@@ -676,7 +641,6 @@ private:
     void asiCaptureTick();
     bool useAsiContinuousVideoCadence() const;
     void scheduleNextAsiVideoCapture(int delayMs = 0);
-    QImage asiFrameToImage(CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
     void invalidateAsiSettings();
     void setLastAsiError(int errorCode, const QString& errorMessage);
 #endif

@@ -713,6 +713,30 @@ cv::Mat CameraFramePreprocessor::imageToWorkingMat(const QImage& input)
 
 QImage CameraFramePreprocessor::workingMatToImage(const cv::Mat& frameMat)
 {
+    // Defensive single-channel handling. preprocessFrame always upconverts 1-channel input
+    // to 3 channels via cvtColor(GRAY2RGB) before calling here, so the 8-bit/RGB888 branch
+    // below is safe in the current flow. But the unconditional memcpy of `cols * 3` bytes
+    // assumed 3 channels, so any future code path that hands a single-channel Mat to this
+    // function would overrun the source buffer by 3x. Mirror the aligner/stacker variants
+    // and branch on channels() == 1 explicitly.
+    if (frameMat.channels() == 1)
+    {
+        if (frameMat.depth() == CV_16U)
+        {
+            QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale16);
+            for (int row = 0; row < frameMat.rows; ++row) {
+                std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * sizeof(quint16)));
+            }
+            return image;
+        }
+
+        QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale8);
+        for (int row = 0; row < frameMat.rows; ++row) {
+            std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols));
+        }
+        return image;
+    }
+
     if (frameMat.depth() == CV_16U)
     {
         QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGBA64);

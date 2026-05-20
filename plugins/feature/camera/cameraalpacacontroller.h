@@ -93,6 +93,7 @@ public:
     void resetFilterWheelConnectionState();
     void setLastError(int errorNumber, const QString& errorMessage);
     void resetCaptureState();
+    bool bootstrapPending() const { return m_bootstrapPending; }
     void logRequest(const CameraSettings& settings, const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
     void logResponse(const CameraSettings& settings, const QString& method, const QUrl& url, QNetworkReply *reply,
         const QByteArray& payload = QByteArray(), bool updateLastError = true);
@@ -101,6 +102,13 @@ public:
         std::function<void()> reportStatus, std::function<void()> continuation = {});
     void runWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
         std::function<void()> reportStatus, std::function<void()> continuation);
+    void bootstrap(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void()> reportStatus,
+        std::function<void()> onConnected,
+        std::function<void(const CapabilitiesReport&)> onCapabilities,
+        std::function<void(const StatusReport&)> onStatus,
+        std::function<void()> onComplete,
+        std::function<void()> continuation = {});
     void setFocuserConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings, bool connected,
         std::function<void()> reportStatus, std::function<void()> continuation = {});
     void runFocuserWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
@@ -158,6 +166,7 @@ public:
     static QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit);
 
 private:
+    static void runPendingContinuations(QVector<std::function<void()>>& continuations);
     QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit,
         CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
 

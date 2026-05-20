@@ -136,17 +136,17 @@ void CameraWorker::stopWork()
 
     if (m_settings.isAlpacaCamera() && m_networkManager && m_alpaca.m_connected)
     {
-        alpacaSetConnected(false);
+        setControllerCameraConnected(false);
     }
 
     if (m_settings.isAlpacaCamera() && m_networkManager && m_alpaca.m_focuserConnected)
     {
-        alpacaSetFocuserConnected(false);
+        setControllerFocuserConnected(false);
     }
 
     if (m_settings.isAlpacaCamera() && m_networkManager && m_alpaca.m_filterWheelConnected)
     {
-        alpacaSetFilterWheelConnected(false);
+        setControllerFilterWheelConnected(false);
     }
 
 #ifdef ASICAMERA_FOUND
@@ -491,7 +491,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     }
 
     if (disconnectPreviousAlpaca) {
-        alpacaDisconnectCamera(m_settings);
+        disconnectControllerCamera(m_settings);
     }
 
     if (force) {
@@ -575,7 +575,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         && m_networkManager
         && alpacaEndpointChanged)
     {
-        alpacaBootstrap();
+        bootstrapControllerCamera();
     }
 
     if (m_settings.isAlpacaCamera()
@@ -584,7 +584,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         && (alpacaFocuserEndpointChanged || alpacaFocuserPositionChanged))
     {
         if (settingsKeys.contains("alpacaFocusPosition")) {
-            alpacaSetFocuserPosition();
+            moveControllerFocuser();
         }
     }
 
@@ -594,9 +594,9 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         && (alpacaFilterWheelEndpointChanged || alpacaFilterWheelPositionChanged))
     {
         if (alpacaFilterWheelEndpointChanged) {
-            alpacaQueryFilterWheelInfo();
+            queryControllerFilterWheelInfo();
         } else if (settingsKeys.contains("alpacaFilterWheelPosition")) {
-            alpacaSetFilterWheelPosition();
+            setControllerFilterWheelPosition();
         }
     }
 
@@ -696,10 +696,10 @@ void CameraWorker::startCapture()
         m_alpaca.m_frameRequestPending = false;
         m_captureTimer.start(captureTimerIntervalMs());
 
-        if (m_alpaca.m_connected && !m_alpaca.m_bootstrapPending && (m_alpaca.m_cameraSizeX > 0) && (m_alpaca.m_cameraSizeY > 0)) {
+        if (m_alpaca.m_connected && !m_alpaca.bootstrapPending() && (m_alpaca.m_cameraSizeX > 0) && (m_alpaca.m_cameraSizeY > 0)) {
             captureTick();
         } else {
-            alpacaBootstrap();
+            bootstrapControllerCamera();
         }
     }
 #ifdef ASICAMERA_FOUND
@@ -733,7 +733,7 @@ void CameraWorker::stopCapture()
     resetHdrBracketState();
 
     if (m_settings.isAlpacaCamera() && m_networkManager && m_alpaca.m_frameRequestPending) {
-        alpacaAbortExposure();
+        abortControllerExposure();
     }
 
 #ifdef ASICAMERA_FOUND
@@ -769,9 +769,9 @@ void CameraWorker::captureTick()
         return;
     }
 
-    if (!m_alpaca.m_connected || m_alpaca.m_connectionPending || m_alpaca.m_bootstrapPending)
+    if (!m_alpaca.m_connected || m_alpaca.m_connectionPending || m_alpaca.bootstrapPending())
     {
-        alpacaBootstrap();
+        bootstrapControllerCamera();
         return;
     }
 
@@ -782,15 +782,15 @@ void CameraWorker::captureTick()
         m_captureTimer.stop();
     }
     m_alpaca.m_frameRequestPending = true;
-    alpacaSetCameraParams();
+    applyControllerCameraParams();
 }
 
-void CameraWorker::alpacaDisconnectCamera(const CameraSettings& settings)
+void CameraWorker::disconnectControllerCamera(const CameraSettings& settings)
 {
     m_alpaca.disconnectCamera(m_networkManager, settings);
 }
 
-void CameraWorker::alpacaSetConnected(bool connected, std::function<void()> continuation)
+void CameraWorker::setControllerCameraConnected(bool connected, std::function<void()> continuation)
 {
     m_alpaca.setConnected(
         m_networkManager,
@@ -800,16 +800,7 @@ void CameraWorker::alpacaSetConnected(bool connected, std::function<void()> cont
         continuation);
 }
 
-void CameraWorker::alpacaRunWhenConnected(std::function<void()> continuation)
-{
-    m_alpaca.runWhenConnected(
-        m_networkManager,
-        m_settings,
-        [this]() { reportAlpacaStatusToGUI(); },
-        continuation);
-}
-
-void CameraWorker::alpacaSetFocuserConnected(bool connected, std::function<void()> continuation)
+void CameraWorker::setControllerFocuserConnected(bool connected, std::function<void()> continuation)
 {
     m_alpaca.setFocuserConnected(
         m_networkManager,
@@ -819,16 +810,7 @@ void CameraWorker::alpacaSetFocuserConnected(bool connected, std::function<void(
         continuation);
 }
 
-void CameraWorker::alpacaRunFocuserWhenConnected(std::function<void()> continuation)
-{
-    m_alpaca.runFocuserWhenConnected(
-        m_networkManager,
-        m_settings,
-        [this]() { reportAlpacaStatusToGUI(); },
-        continuation);
-}
-
-void CameraWorker::alpacaSetFocuserPosition()
+void CameraWorker::moveControllerFocuser()
 {
     m_alpaca.moveFocuser(
         m_networkManager,
@@ -836,7 +818,7 @@ void CameraWorker::alpacaSetFocuserPosition()
         [this]() { reportAlpacaStatusToGUI(); });
 }
 
-void CameraWorker::alpacaSetFilterWheelConnected(bool connected, std::function<void()> continuation)
+void CameraWorker::setControllerFilterWheelConnected(bool connected, std::function<void()> continuation)
 {
     m_alpaca.setFilterWheelConnected(
         m_networkManager,
@@ -846,16 +828,7 @@ void CameraWorker::alpacaSetFilterWheelConnected(bool connected, std::function<v
         continuation);
 }
 
-void CameraWorker::alpacaRunFilterWheelWhenConnected(std::function<void()> continuation)
-{
-    m_alpaca.runFilterWheelWhenConnected(
-        m_networkManager,
-        m_settings,
-        [this]() { reportAlpacaStatusToGUI(); },
-        continuation);
-}
-
-void CameraWorker::alpacaQueryFilterWheelInfo()
+void CameraWorker::queryControllerFilterWheelInfo()
 {
     m_alpaca.queryFilterWheelInfo(
         m_networkManager,
@@ -867,18 +840,18 @@ void CameraWorker::alpacaQueryFilterWheelInfo()
         });
 }
 
-void CameraWorker::alpacaQueryFilterWheelPosition(std::function<void(int)> continuation)
+void CameraWorker::queryControllerFilterWheelPosition(std::function<void(int)> continuation)
 {
     m_alpaca.queryFilterWheelPosition(m_networkManager, m_settings, continuation);
 }
 
-void CameraWorker::alpacaWaitForFilterWheelPosition(int retriesRemaining)
+void CameraWorker::waitForControllerFilterWheelPosition(int retriesRemaining)
 {
     if (retriesRemaining <= 0 || !m_networkManager || !m_settings.isAlpacaCamera() || !m_settings.m_alpacaFilterWheelEnabled) {
         return;
     }
 
-    alpacaQueryFilterWheelPosition([this, retriesRemaining](int position) {
+    queryControllerFilterWheelPosition([this, retriesRemaining](int position) {
         if (position >= 0)
         {
             if (m_msgQueueToGUI) {
@@ -888,76 +861,57 @@ void CameraWorker::alpacaWaitForFilterWheelPosition(int retriesRemaining)
         }
 
         QTimer::singleShot(250, this, [this, retriesRemaining]() {
-            alpacaWaitForFilterWheelPosition(retriesRemaining - 1);
+            waitForControllerFilterWheelPosition(retriesRemaining - 1);
         });
     });
 }
 
-void CameraWorker::alpacaSetFilterWheelPosition()
+void CameraWorker::setControllerFilterWheelPosition()
 {
     m_alpaca.setFilterWheelPosition(
         m_networkManager,
         m_settings,
-        [this]() { alpacaWaitForFilterWheelPosition(20); },
+        [this]() { waitForControllerFilterWheelPosition(20); },
         [this]() { reportAlpacaStatusToGUI(); });
 }
 
-void CameraWorker::alpacaBootstrap(std::function<void()> continuation)
+void CameraWorker::bootstrapControllerCamera(std::function<void()> continuation)
 {
-    if (!m_networkManager) {
-        return;
-    }
-
-    if (continuation) {
-        m_alpaca.m_pendingBootstrapContinuations.append(continuation);
-    }
-
-    if (m_alpaca.m_bootstrapPending) {
-        return;
-    }
-
-    m_alpaca.m_bootstrapPending = true;
-
-    alpacaRunWhenConnected([this]() {
-        if (!m_statusTimer.isActive()) {
-            m_statusTimer.start(m_alpacaStatusPollIntervalMs);
-        }
-
-        alpacaQueryCameraCapabilities([this]() {
-            m_alpaca.m_bootstrapPending = false;
-            alpacaPollStatus();
-
-            const auto continuations = std::move(m_alpaca.m_pendingBootstrapContinuations);
-            m_alpaca.m_pendingBootstrapContinuations.clear();
-
-            for (const auto& continuation : continuations)
-            {
-                if (continuation) {
-                    continuation();
-                }
+    m_alpaca.bootstrap(
+        m_networkManager,
+        m_settings,
+        [this]() { reportAlpacaStatusToGUI(); },
+        [this]() {
+            if (!m_statusTimer.isActive()) {
+                m_statusTimer.start(m_alpacaStatusPollIntervalMs);
             }
-
+        },
+        [this](const CameraAlpacaController::CapabilitiesReport& report) { reportAlpacaCameraInfoToGUI(report); },
+        [this](const CameraAlpacaController::StatusReport& status) {
+            reportAlpacaStatusToGUI(status.m_cameraState, status.m_ccdTemperature, status.m_ccdTemperatureValid);
+        },
+        [this]() {
             if (m_capturing && !m_alpaca.m_frameRequestPending) {
                 captureTick();
             }
-        });
-    });
+        },
+        continuation);
 }
 
-void CameraWorker::alpacaSetCameraParams()
+void CameraWorker::applyControllerCameraParams()
 {
     m_alpaca.setCameraParams(
         m_networkManager,
         m_settings,
         [this]() { return m_capturing; },
-        [this]() { alpacaStartExposure(); },
+        [this]() { startControllerExposure(); },
         [this]() {
             reportAlpacaStatusToGUI();
             scheduleNextCaptureAfterFailure();
         });
 }
 
-void CameraWorker::alpacaStartExposure()
+void CameraWorker::startControllerExposure()
 {
     const double exposureTimeMs = currentCaptureExposureTimeMs();
     m_alpaca.startExposure(
@@ -968,7 +922,7 @@ void CameraWorker::alpacaStartExposure()
             // Wait for the exposure duration before polling imageready.
             QTimer::singleShot(static_cast<int>(std::ceil(exposureTimeMs)), this, [this]() {
                 if (m_capturing) {
-                    alpacaCheckImageReady();
+                    checkControllerImageReady();
                 } else {
                     m_alpaca.m_frameRequestPending = false;
                 }
@@ -983,12 +937,12 @@ void CameraWorker::alpacaStartExposure()
         });
 }
 
-void CameraWorker::alpacaAbortExposure()
+void CameraWorker::abortControllerExposure()
 {
     m_alpaca.abortExposure(m_networkManager, m_settings);
 }
 
-void CameraWorker::alpacaCheckImageReady()
+void CameraWorker::checkControllerImageReady()
 {
     m_alpaca.checkImageReady(
         m_networkManager,
@@ -1000,10 +954,10 @@ void CameraWorker::alpacaCheckImageReady()
             }
 
             if (ready) {
-                alpacaFetchImageArray();
+                fetchControllerImage();
             } else {
                 // Some Alpaca devices keep ImageReady false after exposure; CameraState gives us a fallback.
-                alpacaCheckCameraStateForImageReady();
+                checkControllerCameraStateForImageReady();
             }
         },
         [this]() {
@@ -1018,7 +972,7 @@ void CameraWorker::alpacaCheckImageReady()
         });
 }
 
-void CameraWorker::alpacaCheckCameraStateForImageReady()
+void CameraWorker::checkControllerCameraStateForImageReady()
 {
     m_alpaca.checkCameraStateForImageReady(
         m_networkManager,
@@ -1030,11 +984,11 @@ void CameraWorker::alpacaCheckCameraStateForImageReady()
             }
 
             if ((cameraState == 0) && m_alpaca.m_exposureSeenActive) {
-                alpacaFetchImageArray();
+                fetchControllerImage();
             } else {
                 QTimer::singleShot(m_alpacaImageReadyPollIntervalMs, this, [this]() {
                     if (m_capturing) {
-                        alpacaCheckImageReady();
+                        checkControllerImageReady();
                     } else {
                         m_alpaca.m_frameRequestPending = false;
                     }
@@ -1053,7 +1007,7 @@ void CameraWorker::alpacaCheckCameraStateForImageReady()
         });
 }
 
-void CameraWorker::alpacaFetchImageArray()
+void CameraWorker::fetchControllerImage()
 {
     m_alpaca.fetchImageArray(
         m_networkManager,
@@ -1084,36 +1038,10 @@ void CameraWorker::alpacaFetchImageArray()
         });
 }
 
-void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuation)
-{
-    m_alpaca.queryCameraCapabilities(
-        m_networkManager,
-        m_settings,
-        [this, continuation](const CameraAlpacaController::CapabilitiesReport& report) {
-        if (m_msgQueueToGUI) {
-            m_msgQueueToGUI->push(MsgReportAlpacaCameraInfo::create(
-                report.m_name, report.m_description,
-                report.m_maxBinX, report.m_maxBinY,
-                report.m_gains, report.m_gainMin, report.m_gainMax,
-                report.m_offsets, report.m_offsetMin, report.m_offsetMax,
-                report.m_readoutModes,
-                report.m_sensorName, report.m_sensorType,
-                report.m_pixelSizeX, report.m_pixelSizeY,
-                report.m_cameraSizeX, report.m_cameraSizeY,
-                report.m_ccdTemperature, report.m_ccdTemperatureValid,
-                report.m_exposureMinMs, report.m_exposureMaxMs, report.m_exposureResolutionMs));
-        }
-
-        if (continuation) {
-            continuation();
-        }
-        });
-}
-
 void CameraWorker::statusTick()
 {
     if (m_networkManager && m_settings.isAlpacaCamera()) {
-        alpacaPollStatus();
+        pollControllerStatus();
     }
 #ifdef ASICAMERA_FOUND
     else if (m_settings.isAsiCamera()) {
@@ -1122,7 +1050,7 @@ void CameraWorker::statusTick()
 #endif
 }
 
-void CameraWorker::alpacaPollStatus()
+void CameraWorker::pollControllerStatus()
 {
     m_alpaca.pollStatus(
         m_networkManager,
@@ -1130,6 +1058,25 @@ void CameraWorker::alpacaPollStatus()
         [this](const CameraAlpacaController::StatusReport& status) {
             reportAlpacaStatusToGUI(status.m_cameraState, status.m_ccdTemperature, status.m_ccdTemperatureValid);
         });
+}
+
+void CameraWorker::reportAlpacaCameraInfoToGUI(const CameraAlpacaController::CapabilitiesReport& report)
+{
+    if (!m_msgQueueToGUI) {
+        return;
+    }
+
+    m_msgQueueToGUI->push(MsgReportAlpacaCameraInfo::create(
+        report.m_name, report.m_description,
+        report.m_maxBinX, report.m_maxBinY,
+        report.m_gains, report.m_gainMin, report.m_gainMax,
+        report.m_offsets, report.m_offsetMin, report.m_offsetMax,
+        report.m_readoutModes,
+        report.m_sensorName, report.m_sensorType,
+        report.m_pixelSizeX, report.m_pixelSizeY,
+        report.m_cameraSizeX, report.m_cameraSizeY,
+        report.m_ccdTemperature, report.m_ccdTemperatureValid,
+        report.m_exposureMinMs, report.m_exposureMaxMs, report.m_exposureResolutionMs));
 }
 
 void CameraWorker::reportAlpacaStatusToGUI(int cameraState, double ccdTemperature, bool ccdTemperatureValid)

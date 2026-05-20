@@ -111,6 +111,19 @@ void CameraAlpacaController::resetCaptureState()
     m_paramsInitialized = false;
 }
 
+void CameraAlpacaController::runPendingContinuations(QVector<std::function<void()>>& continuations)
+{
+    const auto pendingContinuations = std::move(continuations);
+    continuations.clear();
+
+    for (const auto& continuation : pendingContinuations)
+    {
+        if (continuation) {
+            continuation();
+        }
+    }
+}
+
 void CameraAlpacaController::logRequest(const CameraSettings& settings, const QString& method, const QUrl& url, const QByteArray& payload) const
 {
     if (!settings.m_alpacaApiLogEnabled) {
@@ -118,9 +131,9 @@ void CameraAlpacaController::logRequest(const CameraSettings& settings, const QS
     }
 
     if (payload.isEmpty()) {
-        qDebug() << "CameraWorker::AlpacaAPI request" << method << url.toString();
+        qDebug() << "CameraAlpacaController::AlpacaAPI request" << method << url.toString();
     } else {
-        qDebug() << "CameraWorker::AlpacaAPI request" << method << url.toString() << payload;
+        qDebug() << "CameraAlpacaController::AlpacaAPI request" << method << url.toString() << payload;
     }
 }
 
@@ -156,7 +169,7 @@ void CameraAlpacaController::logResponse(const CameraSettings& settings, const Q
 
     if (path.endsWith(QStringLiteral("/imagearray"), Qt::CaseInsensitive))
     {
-        qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
+        qDebug() << "CameraAlpacaController::AlpacaAPI response" << method << url.toString()
                  << transportError(reply)
                  << "bytes" << payload.size()
                  << "contentType" << reply->header(QNetworkRequest::ContentTypeHeader).toString();
@@ -167,13 +180,13 @@ void CameraAlpacaController::logResponse(const CameraSettings& settings, const Q
     {
         if (optionalCapabilityUnavailable)
         {
-            qDebug() << "CameraWorker::AlpacaAPI optional capability unavailable" << method << url.toString()
+            qDebug() << "CameraAlpacaController::AlpacaAPI optional capability unavailable" << method << url.toString()
                      << transportError(reply)
                      << "alpacaError" << alpacaErrorNumber << alpacaErrorMessage;
         }
         else
         {
-            qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
+            qDebug() << "CameraAlpacaController::AlpacaAPI response" << method << url.toString()
                      << transportError(reply)
                      << "alpacaError" << alpacaErrorNumber << alpacaErrorMessage
                      << payload;
@@ -181,7 +194,7 @@ void CameraAlpacaController::logResponse(const CameraSettings& settings, const Q
     }
     else
     {
-        qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
+        qDebug() << "CameraAlpacaController::AlpacaAPI response" << method << url.toString()
                  << transportError(reply)
                  << payload;
     }
@@ -322,15 +335,55 @@ void CameraAlpacaController::runWhenConnected(QNetworkAccessManager *networkMana
     m_connectionPending = true;
     setConnected(networkManager, settings, true, reportStatus, [this]() {
         m_connectionPending = false;
-        const auto continuations = std::move(m_pendingConnectedContinuations);
-        m_pendingConnectedContinuations.clear();
+        runPendingContinuations(m_pendingConnectedContinuations);
+    });
+}
 
-        for (const auto& pendingContinuation : continuations)
-        {
-            if (pendingContinuation) {
-                pendingContinuation();
-            }
+void CameraAlpacaController::bootstrap(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    std::function<void()> reportStatus,
+    std::function<void()> onConnected,
+    std::function<void(const CapabilitiesReport&)> onCapabilities,
+    std::function<void(const StatusReport&)> onStatus,
+    std::function<void()> onComplete,
+    std::function<void()> continuation)
+{
+    if (!networkManager) {
+        return;
+    }
+
+    if (continuation) {
+        m_pendingBootstrapContinuations.append(continuation);
+    }
+
+    if (m_bootstrapPending) {
+        return;
+    }
+
+    m_bootstrapPending = true;
+
+    runWhenConnected(networkManager, settings, reportStatus, [this, networkManager, settings, onConnected, onCapabilities, onStatus, onComplete]() {
+        if (onConnected) {
+            onConnected();
         }
+
+        queryCameraCapabilities(networkManager, settings, [this, networkManager, settings, onCapabilities, onStatus, onComplete](const CapabilitiesReport& report) {
+            if (onCapabilities) {
+                onCapabilities(report);
+            }
+
+            pollStatus(networkManager, settings, [this, onStatus, onComplete](const StatusReport& status) {
+                if (onStatus) {
+                    onStatus(status);
+                }
+
+                m_bootstrapPending = false;
+                runPendingContinuations(m_pendingBootstrapContinuations);
+
+                if (onComplete) {
+                    onComplete();
+                }
+            });
+        });
     });
 }
 
@@ -435,15 +488,7 @@ void CameraAlpacaController::runFocuserWhenConnected(QNetworkAccessManager *netw
     m_focuserConnectionPending = true;
     setFocuserConnected(networkManager, settings, true, reportStatus, [this]() {
         m_focuserConnectionPending = false;
-        const auto continuations = std::move(m_pendingFocuserConnectedContinuations);
-        m_pendingFocuserConnectedContinuations.clear();
-
-        for (const auto& pendingContinuation : continuations)
-        {
-            if (pendingContinuation) {
-                pendingContinuation();
-            }
-        }
+        runPendingContinuations(m_pendingFocuserConnectedContinuations);
     });
 }
 
@@ -597,15 +642,7 @@ void CameraAlpacaController::runFilterWheelWhenConnected(QNetworkAccessManager *
     m_filterWheelConnectionPending = true;
     setFilterWheelConnected(networkManager, settings, true, reportStatus, [this]() {
         m_filterWheelConnectionPending = false;
-        const auto continuations = std::move(m_pendingFilterWheelConnectedContinuations);
-        m_pendingFilterWheelConnectedContinuations.clear();
-
-        for (const auto& pendingContinuation : continuations)
-        {
-            if (pendingContinuation) {
-                pendingContinuation();
-            }
-        }
+        runPendingContinuations(m_pendingFilterWheelConnectedContinuations);
     });
 }
 
@@ -1166,7 +1203,7 @@ void CameraAlpacaController::startExposure(QNetworkAccessManager *networkManager
 
         if (reply->error() != QNetworkReply::NoError)
         {
-            qDebug() << "CameraWorker::alpacaStartExposure: error:" << reply->errorString();
+            qDebug() << "CameraAlpacaController::startExposure: error:" << reply->errorString();
             setLastError(static_cast<int>(reply->error()), reply->errorString());
             fail();
             return;
@@ -1178,7 +1215,7 @@ void CameraAlpacaController::startExposure(QNetworkAccessManager *networkManager
             && (alpacaErrorNumber != 0))
         {
             setLastError(alpacaErrorNumber, alpacaErrorMessage);
-            qDebug() << "CameraWorker::alpacaStartExposure: Alpaca error"
+            qDebug() << "CameraAlpacaController::startExposure: Alpaca error"
                      << m_lastErrorNumber << m_lastErrorMessage;
             fail();
             return;
@@ -1217,7 +1254,7 @@ void CameraAlpacaController::abortExposure(QNetworkAccessManager *networkManager
 
         if (reply->error() != QNetworkReply::NoError)
         {
-            qDebug() << "CameraWorker::alpacaAbortExposure: error:" << reply->errorString();
+            qDebug() << "CameraAlpacaController::abortExposure: error:" << reply->errorString();
             reply->deleteLater();
             return;
         }
@@ -1227,7 +1264,7 @@ void CameraAlpacaController::abortExposure(QNetworkAccessManager *networkManager
         if (parseErrorPayload(responseBody, alpacaErrorNumber, alpacaErrorMessage)
             && (alpacaErrorNumber != 0))
         {
-            qDebug() << "CameraWorker::alpacaAbortExposure: Alpaca error"
+            qDebug() << "CameraAlpacaController::abortExposure: Alpaca error"
                      << alpacaErrorNumber << alpacaErrorMessage;
         }
 

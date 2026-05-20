@@ -5565,7 +5565,7 @@ void CameraGUI::on_defaultColorSettingsButton_clicked()
     settingsUI()->postProcessWhiteBalanceRedGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceGreenGainSpin->setValue(1);
     settingsUI()->postProcessWhiteBalanceBlueGainSpin->setValue(1);
-    settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setValue(0);
+    settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setValue(1);
     settingsUI()->postProcessUnwarpCheck->setChecked(false);
     settingsUI()->histogramStretchModeCombo->setCurrentIndex(static_cast<int>(CameraSettings::HistogramStretchOff));
     settingsUI()->histogramStretchBlackPointSpin->setValue(0.0);

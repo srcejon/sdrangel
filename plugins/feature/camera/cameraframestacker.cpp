@@ -21,7 +21,6 @@
 #include <cstring>
 
 #include <QDebug>
-#include <QFileInfo>
 #include <QTimer>
 
 #include <opencv2/photo.hpp>
@@ -31,7 +30,6 @@
 #endif
 
 #include "util/profiler.h"
-#include "util/fits.h"
 #include "cameraframestacker.h"
 #include "cameraimageprocessor.h"
 
@@ -114,157 +112,6 @@ void CameraFrameStacker::trimFrameHistoryToCurrentLimit()
     }
 }
 
-void CameraFrameStacker::reloadCalibrationFrames()
-{
-    m_darkCalibrationFrame.release();
-    m_flatCalibrationFrame.release();
-    m_biasCalibrationFrame.release();
-#ifdef CAMERA_OPENCV_CUDA_STACKING
-    invalidateCudaCalibrationFrames();
-#endif
-
-    if (!m_settings.m_stackDarkFileName.isEmpty()) {
-        m_darkCalibrationFrame = loadFitsCalibrationFrame(m_settings.m_stackDarkFileName, QStringLiteral("dark"), false);
-    }
-
-    if (!m_settings.m_stackFlatFileName.isEmpty()) {
-        m_flatCalibrationFrame = loadFitsCalibrationFrame(m_settings.m_stackFlatFileName, QStringLiteral("flat"), true);
-    }
-
-    if (!m_settings.m_stackBiasFileName.isEmpty()) {
-        m_biasCalibrationFrame = loadFitsCalibrationFrame(m_settings.m_stackBiasFileName, QStringLiteral("bias"), false);
-    }
-}
-
-cv::Mat CameraFrameStacker::loadFitsCalibrationFrame(const QString& fileName, const QString& calibrationType, bool normalizeFlat) const
-{
-    FITS fits(fileName);
-
-    if (!fits.valid())
-    {
-        qWarning() << "CameraFrameStacker: Failed to load" << calibrationType << "calibration FITS:" << fileName;
-        return cv::Mat();
-    }
-
-    cv::Mat monoFrame(fits.height(), fits.width(), CV_32FC1);
-    for (int y = 0; y < fits.height(); ++y)
-    {
-        float *outputLine = monoFrame.ptr<float>(y);
-        for (int x = 0; x < fits.width(); ++x) {
-            outputLine[x] = fits.scaledValue(x, y);
-        }
-    }
-
-    if (normalizeFlat)
-    {
-        const double meanValue = cv::mean(monoFrame)[0];
-        constexpr double epsilon = 1.0e-6;
-
-        if (std::abs(meanValue) < epsilon)
-        {
-            qWarning() << "CameraFrameStacker:" << calibrationType << "calibration FITS has near-zero mean and cannot be normalized:" << fileName;
-            return cv::Mat();
-        }
-
-        monoFrame /= static_cast<float>(meanValue);
-    }
-
-    return monoFrame;
-}
-
-void CameraFrameStacker::validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName)
-{
-    if (calibrationFrame.empty()) {
-        return;
-    }
-
-    if (calibrationFrame.size() != expectedSize)
-    {
-        qWarning() << "CameraFrameStacker:" << calibrationType << "calibration FITS size"
-                   << calibrationFrame.cols << "x" << calibrationFrame.rows
-                   << "does not match frame size" << expectedSize.width << "x" << expectedSize.height
-                   << "- disabling calibration file:" << fileName;
-        calibrationFrame.release();
-    }
-}
-
-cv::Mat CameraFrameStacker::applyCalibration(const cv::Mat& input)
-{
-    if (input.empty()) {
-        return input;
-    }
-
-    validateCalibrationFrame(m_darkCalibrationFrame, input.size(), QStringLiteral("dark"), m_settings.m_stackDarkFileName);
-    validateCalibrationFrame(m_flatCalibrationFrame, input.size(), QStringLiteral("flat"), m_settings.m_stackFlatFileName);
-    validateCalibrationFrame(m_biasCalibrationFrame, input.size(), QStringLiteral("bias"), m_settings.m_stackBiasFileName);
-
-    if (m_darkCalibrationFrame.empty() && m_flatCalibrationFrame.empty() && m_biasCalibrationFrame.empty()) {
-        return input;
-    }
-
-    const int channels = input.channels();
-    const int floatType = CV_MAKETYPE(CV_32F, channels);
-    cv::Mat calibratedFloat;
-    input.convertTo(calibratedFloat, floatType);
-
-    auto expandedCalibration = [channels](const cv::Mat& calibrationFrame) -> cv::Mat {
-        if (calibrationFrame.empty()) {
-            return cv::Mat();
-        }
-
-        if (calibrationFrame.channels() == channels) {
-            return calibrationFrame;
-        }
-
-        if ((calibrationFrame.channels() == 1) && (channels == 3))
-        {
-            std::vector<cv::Mat> mats(3, calibrationFrame);
-            cv::Mat merged;
-            cv::merge(mats, merged);
-            return merged;
-        }
-
-        return cv::Mat();
-    };
-
-    const cv::Mat biasFrame = expandedCalibration(m_biasCalibrationFrame);
-    const cv::Mat darkFrame = expandedCalibration(m_darkCalibrationFrame);
-    const cv::Mat flatFrame = expandedCalibration(m_flatCalibrationFrame);
-
-    if (!m_biasCalibrationFrame.empty() && biasFrame.empty()) {
-        qWarning() << "CameraFrameStacker: bias calibration channel count does not match input";
-    }
-    if (!m_darkCalibrationFrame.empty() && darkFrame.empty()) {
-        qWarning() << "CameraFrameStacker: dark calibration channel count does not match input";
-    }
-    if (!m_flatCalibrationFrame.empty() && flatFrame.empty()) {
-        qWarning() << "CameraFrameStacker: flat calibration channel count does not match input";
-    }
-
-    if (!biasFrame.empty()) {
-        calibratedFloat -= biasFrame;
-    }
-
-    if (!darkFrame.empty()) {
-        calibratedFloat -= darkFrame;
-    }
-
-    if (!flatFrame.empty())
-    {
-        cv::Mat safeFlatFrame;
-        cv::max(flatFrame, cv::Scalar::all(1.0e-6), safeFlatFrame);
-        cv::divide(calibratedFloat, safeFlatFrame, calibratedFloat);
-    }
-
-    const double maxValue = input.depth() == CV_16U ? 65535.0 : 255.0;
-    cv::max(calibratedFloat, cv::Scalar::all(0.0), calibratedFloat);
-    cv::min(calibratedFloat, cv::Scalar::all(maxValue), calibratedFloat);
-
-    cv::Mat calibratedFrame;
-    calibratedFloat.convertTo(calibratedFrame, input.type());
-    return calibratedFrame;
-}
-
 #ifdef CAMERA_OPENCV_CUDA_STACKING
 bool CameraFrameStacker::canUseCudaStacking() const
 {
@@ -285,176 +132,6 @@ bool CameraFrameStacker::canUseCudaStacking() const
     }
 
     return true;
-}
-
-void CameraFrameStacker::invalidateCudaCalibrationFrames()
-{
-    m_cudaDarkCalibrationFrame = CudaCalibrationFrame();
-    m_cudaFlatCalibrationFrame = CudaCalibrationFrame();
-    m_cudaBiasCalibrationFrame = CudaCalibrationFrame();
-}
-
-cv::cuda::GpuMat CameraFrameStacker::uploadCalibrationFrameCuda(
-    CudaCalibrationFrame& cachedFrame,
-    const cv::Mat& calibrationFrame,
-    int channels)
-{
-    if (calibrationFrame.empty()) {
-        return cv::cuda::GpuMat();
-    }
-
-    if (!cachedFrame.m_frame.empty()
-        && (cachedFrame.m_sourceSize == calibrationFrame.size())
-        && (cachedFrame.m_sourceType == calibrationFrame.type())
-        && (cachedFrame.m_channels == channels))
-    {
-        return cachedFrame.m_frame;
-    }
-
-    cv::cuda::GpuMat uploaded;
-    if (calibrationFrame.channels() == channels)
-    {
-        uploaded.upload(calibrationFrame, m_cudaStackingStream);
-    }
-    else if ((calibrationFrame.channels() == 1) && (channels == 3))
-    {
-        cv::cuda::GpuMat monoGpu;
-        monoGpu.upload(calibrationFrame, m_cudaStackingStream);
-        std::vector<cv::cuda::GpuMat> planes(3, monoGpu);
-        cv::cuda::merge(planes, uploaded, m_cudaStackingStream);
-    }
-
-    cachedFrame.m_frame = uploaded;
-    cachedFrame.m_sourceSize = calibrationFrame.size();
-    cachedFrame.m_sourceType = calibrationFrame.type();
-    cachedFrame.m_channels = channels;
-    return cachedFrame.m_frame;
-}
-
-bool CameraFrameStacker::applyCalibrationCuda(cv::cuda::GpuMat& frameGpu, const cv::Size& inputSize, int inputType)
-{
-    validateCalibrationFrame(m_darkCalibrationFrame, inputSize, QStringLiteral("dark"), m_settings.m_stackDarkFileName);
-    validateCalibrationFrame(m_flatCalibrationFrame, inputSize, QStringLiteral("flat"), m_settings.m_stackFlatFileName);
-    validateCalibrationFrame(m_biasCalibrationFrame, inputSize, QStringLiteral("bias"), m_settings.m_stackBiasFileName);
-
-    if (m_darkCalibrationFrame.empty() && m_flatCalibrationFrame.empty() && m_biasCalibrationFrame.empty()) {
-        return true;
-    }
-
-    try
-    {
-        const int channels = CV_MAT_CN(inputType);
-        const int floatType = CV_MAKETYPE(CV_32F, channels);
-
-        cv::cuda::GpuMat calibratedGpu;
-        frameGpu.convertTo(calibratedGpu, floatType, m_cudaStackingStream);
-
-        const cv::cuda::GpuMat biasGpu = uploadCalibrationFrameCuda(m_cudaBiasCalibrationFrame, m_biasCalibrationFrame, channels);
-        const cv::cuda::GpuMat darkGpu = uploadCalibrationFrameCuda(m_cudaDarkCalibrationFrame, m_darkCalibrationFrame, channels);
-        const cv::cuda::GpuMat flatGpu = uploadCalibrationFrameCuda(m_cudaFlatCalibrationFrame, m_flatCalibrationFrame, channels);
-
-        if (!m_biasCalibrationFrame.empty() && biasGpu.empty()) {
-            qWarning() << "CameraFrameStacker: bias calibration channel count does not match input";
-        }
-        if (!m_darkCalibrationFrame.empty() && darkGpu.empty()) {
-            qWarning() << "CameraFrameStacker: dark calibration channel count does not match input";
-        }
-        if (!m_flatCalibrationFrame.empty() && flatGpu.empty()) {
-            qWarning() << "CameraFrameStacker: flat calibration channel count does not match input";
-        }
-
-        if (!biasGpu.empty()) {
-            cv::cuda::subtract(calibratedGpu, biasGpu, calibratedGpu, cv::noArray(), -1, m_cudaStackingStream);
-        }
-        if (!darkGpu.empty()) {
-            cv::cuda::subtract(calibratedGpu, darkGpu, calibratedGpu, cv::noArray(), -1, m_cudaStackingStream);
-        }
-        if (!flatGpu.empty())
-        {
-            cv::cuda::GpuMat safeFlatGpu;
-            cv::cuda::GpuMat epsilonGpu(flatGpu.size(), flatGpu.type(), cv::Scalar::all(1.0e-6));
-            cv::cuda::max(flatGpu, epsilonGpu, safeFlatGpu, m_cudaStackingStream);
-            cv::cuda::divide(calibratedGpu, safeFlatGpu, calibratedGpu, 1.0, -1, m_cudaStackingStream);
-        }
-
-        calibratedGpu.convertTo(frameGpu, inputType, m_cudaStackingStream);
-        return true;
-    }
-    catch (const cv::Exception& error)
-    {
-        qWarning() << "CameraFrameStacker: CUDA calibration failed; falling back to CPU:" << error.what();
-        invalidateCudaCalibrationFrames();
-    }
-
-    return false;
-}
-
-bool CameraFrameStacker::debayerRawMatCuda(cv::cuda::GpuMat& frameGpu, CameraPipelineFrame::BayerPattern bayerPattern)
-{
-    const int cvCode = bayerPatternToOpenCvCode(bayerPattern);
-    if (cvCode < 0) {
-        return true;
-    }
-    if (frameGpu.channels() != 1) {
-        return true;
-    }
-
-    try
-    {
-        cv::cuda::GpuMat debayeredGpu;
-        cv::cuda::demosaicing(frameGpu, debayeredGpu, cvCode, 0, m_cudaStackingStream);
-        frameGpu = debayeredGpu;
-        return true;
-    }
-    catch (const cv::Exception& error)
-    {
-        qWarning() << "CameraFrameStacker: CUDA debayer failed; falling back to CPU:" << error.what();
-    }
-
-    return false;
-}
-
-bool CameraFrameStacker::prepareFrameCuda(
-    const cv::Mat& input,
-    CameraPipelineFrame::BayerPattern bayerPattern,
-    cv::Mat& output,
-    cv::cuda::GpuMat& outputGpu)
-{
-    if (input.empty()) {
-        output = input;
-        return true;
-    }
-
-    try
-    {
-        outputGpu.upload(input, m_cudaStackingStream);
-        if (!applyCalibrationCuda(outputGpu, input.size(), input.type())) {
-            output = debayerRawMat(applyCalibration(input), bayerPattern);
-            outputGpu.release();
-            return false;
-        }
-        if (!debayerRawMatCuda(outputGpu, bayerPattern))
-        {
-            cv::Mat calibrated;
-            outputGpu.download(calibrated, m_cudaStackingStream);
-            m_cudaStackingStream.waitForCompletion();
-            output = debayerRawMat(calibrated, bayerPattern);
-            outputGpu.release();
-            return false;
-        }
-
-        outputGpu.download(output, m_cudaStackingStream);
-        m_cudaStackingStream.waitForCompletion();
-        return true;
-    }
-    catch (const cv::Exception& error)
-    {
-        qWarning() << "CameraFrameStacker: CUDA frame preparation failed; falling back to CPU:" << error.what();
-    }
-
-    output = debayerRawMat(applyCalibration(input), bayerPattern);
-    outputGpu.release();
-    return false;
 }
 
 void CameraFrameStacker::subtractFromCudaAccumulator(const cv::Mat& frameMat)
@@ -508,24 +185,6 @@ bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const
     return false;
 }
 #endif
-
-int CameraFrameStacker::bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern)
-{
-    switch (bayerPattern)
-    {
-    case CameraPipelineFrame::BayerRGGB:
-        return cv::COLOR_BayerBG2BGR;
-    case CameraPipelineFrame::BayerBGGR:
-        return cv::COLOR_BayerRG2BGR;
-    case CameraPipelineFrame::BayerGRBG:
-        return cv::COLOR_BayerGB2BGR;
-    case CameraPipelineFrame::BayerGBRG:
-        return cv::COLOR_BayerGR2BGR;
-    case CameraPipelineFrame::BayerNone:
-    default:
-        return -1;
-    }
-}
 
 // Lifetime contract: the returned Mat may alias the source QImage's pixel buffer when no
 // format conversion was needed. Callers must keep `input` alive for at least as long as
@@ -631,21 +290,6 @@ QImage CameraFrameStacker::workingMatToImage(const cv::Mat& frameMat)
         std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * 3));
     }
     return image;
-}
-
-cv::Mat CameraFrameStacker::debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern)
-{
-    const int cvCode = bayerPatternToOpenCvCode(bayerPattern);
-    if ((cvCode < 0) || (input.channels() != 1)) {
-        return input;
-    }
-
-    cv::Mat debayered;
-    cv::cvtColor(input, debayered, cvCode);
-    if (debayered.channels() == 3) {
-        cv::cvtColor(debayered, debayered, cv::COLOR_BGR2RGB);
-    }
-    return debayered;
 }
 
 bool CameraFrameStacker::handleMessage(const Message& cmd)

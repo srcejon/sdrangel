@@ -433,7 +433,16 @@ void CameraFramePreprocessor::preprocessFrame(const CameraPipelineFramePtr& fram
     frameMat = applyCalibration(frameMat);
     frameMat = debayerRawMat(frameMat, frame->m_bayerPattern);
     if (frameMat.channels() == 1) {
-        cv::cvtColor(frameMat, frameMat, cv::COLOR_GRAY2RGB);
+        // Use a separate dst Mat for the GRAY -> RGB conversion. The aliasing form
+        // cvtColor(frameMat, frameMat, ...) happens to be safe with OpenCV's current
+        // Mat::create reallocation semantics (it allocates fresh storage because the
+        // channel count differs), but `frameMat` may still alias the source QImage's
+        // bits at this point — we removed the gratuitous clone in imageToWorkingMat to
+        // save a per-frame copy. Writing through the explicit colorMat makes the
+        // allocation visible and removes any dependency on OpenCV internal behaviour.
+        cv::Mat colorMat;
+        cv::cvtColor(frameMat, colorMat, cv::COLOR_GRAY2RGB);
+        frameMat = colorMat;
     }
 
     frame->m_image = workingMatToImage(frameMat);

@@ -899,7 +899,13 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
     if (hdrStackingEnabled)
     {
         if (frameMat.channels() == 1) {
-            cv::cvtColor(frameMat, frameMat, cv::COLOR_GRAY2RGB);
+            // See companion comment at the second GRAY2RGB site below. frameMat may
+            // alias inputFrame.m_image's bits at this point (clone elided in
+            // imageToWorkingMat). Using an explicit dst Mat keeps the reallocation
+            // visible and decouples us from OpenCV's internal in-place rules.
+            cv::Mat colorMat;
+            cv::cvtColor(frameMat, colorMat, cv::COLOR_GRAY2RGB);
+            frameMat = colorMat;
         }
 
         const bool validHdrMetadata = (inputFrame.m_hdrExposureCount >= CameraSettings::m_minHdrExposureCount)
@@ -1116,7 +1122,15 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
     }
 
     if (frameMat.channels() == 1) {
-        cv::cvtColor(frameMat, frameMat, cv::COLOR_GRAY2RGB);
+        // frameMat may alias inputFrame.m_image's bits when no upstream stage
+        // reallocated (imageToWorkingMat no longer clones the Grayscale paths). The
+        // aliasing in-place form cvtColor(frameMat, frameMat, ...) happens to be safe
+        // today only because cvtColor's internal Mat::create reallocates whenever the
+        // destination type differs from the source. Make that allocation explicit so
+        // we don't depend on OpenCV internals.
+        cv::Mat colorMat;
+        cv::cvtColor(frameMat, colorMat, cv::COLOR_GRAY2RGB);
+        frameMat = colorMat;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
         if (!cudaFrameMat.empty() && (cudaFrameMat.channels() == 1))
         {

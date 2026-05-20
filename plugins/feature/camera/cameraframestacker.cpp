@@ -704,23 +704,12 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("stackHdrExposure2Ms")
         || settingsKeys.contains("stackHdrExposure3Ms")
         || settingsKeys.contains("stackHdrExposure4Ms")
-        || settingsKeys.contains("stackAlignmentMethod")
-        || settingsKeys.contains("stackDarkFileName")
-        || settingsKeys.contains("stackFlatFileName")
-        || settingsKeys.contains("stackBiasFileName");
+        || settingsKeys.contains("stackAlignmentMethod");
 
     if (force) {
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
-    }
-
-    if (force
-        || settingsKeys.contains("stackDarkFileName")
-        || settingsKeys.contains("stackFlatFileName")
-        || settingsKeys.contains("stackBiasFileName"))
-    {
-        reloadCalibrationFrames();
     }
 
     if (sourceChanged)
@@ -819,11 +808,24 @@ void CameraFrameStacker::processNextFrame()
 
 void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (!frame || frame->m_image.isNull()) {
+    if (!frame || !frame->hasImageData()) {
         return;
     }
 
     const bool passThroughFrame = canPassThroughFrame(*frame);
+    if (passThroughFrame)
+    {
+        frame->m_stackCount = 1;
+        if (m_nextStage) {
+            m_nextStage->submitFrame(frame);
+        }
+        return;
+    }
+
+    if (!frame->ensureCpuImageFromCuda()) {
+        return;
+    }
+
     QImage stackedImage;
     int stackCount = 1;
 
@@ -832,10 +834,11 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     frame->m_image = stackedImage;
-    if (!passThroughFrame) {
-        frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
+    frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
+    frame->clearCudaCache();
+    if (!frame->m_unprocessedImage.isNull()) {
+        frame->m_unprocessedImage = frame->m_image;
     }
-    frame->m_unprocessedImage = frame->m_image;
     frame->m_stackCount = std::max(1, stackCount);
 
     if (m_nextStage) {
@@ -848,11 +851,8 @@ bool CameraFrameStacker::canPassThroughFrame(const CameraPipelineFrame& inputFra
     const bool hdrStackingEnabled = m_settings.isHdrStackingEnabled() && (m_settings.getHdrExposureCount() > 1);
     const bool stackEnabled = hdrStackingEnabled
         || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1));
-    const bool calibrationEnabled = !m_darkCalibrationFrame.empty()
-        || !m_flatCalibrationFrame.empty()
-        || !m_biasCalibrationFrame.empty();
 
-    return !stackEnabled && !calibrationEnabled && !inputFrame.m_image.isNull();
+    return !stackEnabled && inputFrame.hasImageData();
 }
 
 bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount)
@@ -862,11 +862,7 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
     const bool stackEnabled = hdrStackingEnabled
         || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1));
 
-    const bool calibrationEnabled = !m_darkCalibrationFrame.empty()
-        || !m_flatCalibrationFrame.empty()
-        || !m_biasCalibrationFrame.empty();
-
-    if (!stackEnabled && !calibrationEnabled)
+    if (!stackEnabled)
     {
         outputImage = inputFrame.m_image;
         stackCount = 1;
@@ -882,29 +878,6 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
 #else
     const bool useCudaStacking = false;
 #endif
-
-#ifdef CAMERA_OPENCV_CUDA_STACKING
-    if (useCudaStacking)
-    {
-        prepareFrameCuda(frameMat, inputFrame.m_bayerPattern, frameMat, cudaFrameMat);
-    }
-    else
-    {
-        frameMat = applyCalibration(frameMat);
-        frameMat = debayerRawMat(frameMat, inputFrame.m_bayerPattern);
-    }
-#else
-    frameMat = applyCalibration(frameMat);
-    frameMat = debayerRawMat(frameMat, inputFrame.m_bayerPattern);
-#endif
-
-    if (!stackEnabled)
-    {
-        PROFILER_STOP(__FUNCTION__);
-        outputImage = workingMatToImage(frameMat);
-        stackCount = 1;
-        return true;
-    }
 
     if (hdrStackingEnabled)
     {

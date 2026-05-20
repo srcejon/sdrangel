@@ -298,9 +298,6 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     m_lastInputFrame = *frame;
 
-    if (frame->m_unprocessedImage.isNull()) {
-        frame->m_unprocessedImage = frame->m_image;
-    }
     applyImageProcessing(*frame);
     frame->m_histogramData = m_settings.m_histogramVisible
         ? computeHistogramData(*frame)
@@ -448,6 +445,7 @@ void CameraImageProcessor::fillHistogramBinsFromCudaMat(const cv::Mat& hist, QVe
         bins[i] = static_cast<float>(histRow.at<int>(i));
     }
 }
+
 #endif
 
 void CameraImageProcessor::applyImageProcessing(CameraPipelineFrame& frame)
@@ -470,7 +468,6 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
 
     frame.ensureCpuImageFromCuda();
     const QImage& input = frame.m_image;
-    const bool needsDebayer = frame.m_bayerPattern != CameraPipelineFrame::BayerNone;
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
     const bool needsHistogramStretch = (m_settings.m_histogramStretch != CameraSettings::HistogramStretchOff)
@@ -500,37 +497,15 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
         || needsGreyscale
         || m_settings.m_invertColors;
 
-    if (!needsAny && !needsDebayer) {
+    if (!needsAny) {
         return;
     }
 
+    QImage convertedRgb;
+    const QImage& rgb = ensureRgb888(input, convertedRgb);
+    cv::Mat mat = wrapRgb888Image(rgb);
     cv::Mat bgrMat;
-
-    if (needsDebayer)
-    {
-        cv::Mat rawMat(input.height(), input.width(),
-            input.format() == QImage::Format_Grayscale16 ? CV_16UC1 : CV_8UC1,
-            const_cast<uchar*>(input.constBits()),
-            static_cast<size_t>(input.bytesPerLine()));
-        bgrMat = debayerRawMat(rawMat, frame.m_bayerPattern);
-        frame.m_bayerPattern = CameraPipelineFrame::BayerNone;
-    }
-    else
-    {
-        QImage convertedRgb;
-        const QImage& rgb = ensureRgb888(input, convertedRgb);
-        cv::Mat mat = wrapRgb888Image(rgb);
-        cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-    }
-
-    if (!needsAny)
-    {
-        QImage result = convertBgrToRgbImage(bgrMat);
-        frame.m_unprocessedImage = result;
-        PROFILER_STOP("CameraImageProcessor::applyImageProcessing");
-        frame.m_image = result;
-        return;
-    }
+    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 
     if (needsUnwarp) {
         applyLensUnwarp(bgrMat);
@@ -621,7 +596,6 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
     PROFILER_START();
 
     const QImage& input = frame.m_image;
-    const bool needsDebayer = frame.m_bayerPattern != CameraPipelineFrame::BayerNone;
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
     const bool needsHistogramStretch = (m_settings.m_histogramStretch != CameraSettings::HistogramStretchOff)
@@ -651,24 +625,16 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
         || needsGreyscale
         || m_settings.m_invertColors;
 
-    if (!needsAny && !needsDebayer) {
-        frame.clearCudaCache();
+    if (!needsAny) {
         return;
     }
 
     try
     {
         cv::cuda::GpuMat bgrGpu;
-        if (needsDebayer)
+        if (frame.hasCudaBgrImage())
         {
-            cv::Mat rawMat(input.height(), input.width(),
-                input.format() == QImage::Format_Grayscale16 ? CV_16UC1 : CV_8UC1,
-                const_cast<uchar*>(input.constBits()),
-                static_cast<size_t>(input.bytesPerLine()));
-            if (!debayerRawMatCuda(bgrGpu, rawMat, frame.m_bayerPattern)) {
-                throw cv::Exception(cv::Error::StsError, "CUDA debayer failed", __FUNCTION__, __FILE__, __LINE__);
-            }
-            frame.m_bayerPattern = CameraPipelineFrame::BayerNone;
+            bgrGpu = frame.m_cudaBgrImage;
         }
         else
         {
@@ -740,26 +706,7 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
     }
 
     frame.clearCudaCache();
-    applyImageProcessingCpu(frame);
-}
-
-bool CameraImageProcessor::debayerRawMatCuda(cv::cuda::GpuMat& bgrGpu, const cv::Mat& rawMat, CameraPipelineFrame::BayerPattern bayerPattern)
-{
-    PROFILER_START();
-
-    const int cvCode = bayerPatternToOpenCvCode(bayerPattern);
-    if (cvCode < 0) {
-        return false;
-    }
-
-    cv::cuda::GpuMat rawGpu;
-    cv::cuda::GpuMat debayeredGpu;
-    rawGpu.upload(rawMat, m_cudaStream);
-    cv::cuda::demosaicing(rawGpu, debayeredGpu, cvCode, 0, m_cudaStream);
-    cv::cuda::cvtColor(debayeredGpu, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
-
-    PROFILER_STOP(__FUNCTION__);
-    return true;
+        applyImageProcessingCpu(frame);
 }
 
 void CameraImageProcessor::applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
@@ -1540,39 +1487,6 @@ void CameraImageProcessor::applyInvertColors(cv::Mat& bgrMat) const
     PROFILER_START();
     cv::bitwise_not(bgrMat, bgrMat);
     PROFILER_STOP(__FUNCTION__);
-}
-
-int CameraImageProcessor::bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern)
-{
-    switch (bayerPattern)
-    {
-    case CameraPipelineFrame::BayerRGGB:
-        return cv::COLOR_BayerBG2BGR;
-    case CameraPipelineFrame::BayerBGGR:
-        return cv::COLOR_BayerRG2BGR;
-    case CameraPipelineFrame::BayerGRBG:
-        return cv::COLOR_BayerGB2BGR;
-    case CameraPipelineFrame::BayerGBRG:
-        return cv::COLOR_BayerGR2BGR;
-    case CameraPipelineFrame::BayerNone:
-    default:
-        return -1;
-    }
-}
-
-cv::Mat CameraImageProcessor::debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern)
-{
-    PROFILER_START();
-
-    const int cvCode = bayerPatternToOpenCvCode(bayerPattern);
-    if ((cvCode < 0) || input.empty()) {
-        return input;
-    }
-
-    cv::Mat debayered;
-    cv::cvtColor(input, debayered, cvCode);
-    PROFILER_STOP(__FUNCTION__);
-    return debayered;
 }
 
 const QImage& CameraImageProcessor::ensureRgb888(const QImage& image, QImage& convertedImage)

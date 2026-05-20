@@ -253,7 +253,7 @@ void CameraFrameAligner::processNextFrame()
 void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
 {
     PROFILER_START();
-    if (!frame || frame->m_image.isNull()) {
+    if (!frame || !frame->hasImageData()) {
         return;
     }
 
@@ -261,7 +261,11 @@ void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
         && (m_settings.m_stackFrameCount > 1)
         && (m_settings.m_stackAlignmentMethod != CameraSettings::StackAlignmentNone))
     {
+        if (!frame->ensureCpuImageFromCuda()) {
+            return;
+        }
         frame->m_image = applyAlignment(frame->m_image);
+        frame->clearCudaCache();
     }
 
     if (m_nextStage) {

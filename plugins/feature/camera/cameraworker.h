@@ -53,7 +53,7 @@ class QNetworkReply;
 class QUrl;
 class AudioDeviceManager;
 class CameraPostProcessor;
-class CameraFrameAligner;
+class CameraFramePreprocessor;
 class CameraFinder;
 
 class CameraWorker : public QObject
@@ -489,14 +489,14 @@ MESSAGE_CLASS_DECLARATION
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setMessageQueueToGUI(MessageQueue *messageQueue);
     void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
-    void setFrameAligner(CameraFrameAligner *frameAligner) { m_frameAligner = frameAligner; }
+    void setFramePreprocessor(CameraFramePreprocessor *framePreprocessor) { m_framePreprocessor = framePreprocessor; }
     void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
 
 private:
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
     MessageQueue *m_msgQueueToFeature;
-    CameraFrameAligner *m_frameAligner;
+    CameraFramePreprocessor *m_framePreprocessor;
     MessageQueue *m_postProcessorInputMessageQueue;
     QRecursiveMutex m_mutex;
     CameraSettings m_settings;

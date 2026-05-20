@@ -7,6 +7,7 @@ set(camera_SOURCES
     camerastardetector.cpp
     cameraobjectdetector.cpp
     cameradiffdetector.cpp
+    cameraframepreprocessor.cpp
     cameraframealigner.cpp
     cameraframestacker.cpp
     cameraimageprocessor.cpp
@@ -26,6 +27,7 @@ set(camera_HEADERS
     camerastardetector.h
     cameraobjectdetector.h
     cameradiffdetector.h
+    cameraframepreprocessor.h
     cameraframealigner.h
     cameraframestacker.h
     cameraimageprocessor.h

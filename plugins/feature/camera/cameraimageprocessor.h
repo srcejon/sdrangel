@@ -170,7 +170,6 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     void applyImageProcessingCuda(CameraPipelineFrame& frame);
     [[nodiscard]] bool canUseCudaImageProcessing() const;
-    [[nodiscard]] bool debayerRawMatCuda(cv::cuda::GpuMat& bgrGpu, const cv::Mat& rawMat, CameraPipelineFrame::BayerPattern bayerPattern);
     void applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream);
     void applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
     void applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
@@ -205,8 +204,6 @@ private:
     static void fillHistogramBinsFromCudaMat(const cv::Mat& hist, QVector<float>& bins);
 #endif
     [[nodiscard]] static CameraHistogramData computeHistogramDataCpu(const QImage& image);
-    [[nodiscard]] static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
-    [[nodiscard]] static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);

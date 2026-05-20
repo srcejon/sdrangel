@@ -29,6 +29,7 @@
 #include "camerastardetector.h"
 #include "cameraobjectdetector.h"
 #include "cameradiffdetector.h"
+#include "cameraframepreprocessor.h"
 #include "cameraframealigner.h"
 #include "cameraframestacker.h"
 #include "cameraimageprocessor.h"
@@ -178,7 +179,9 @@ public:
     static const char* const m_featureId;
 
     MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
+    CameraFramePreprocessor* getFramePreprocessor() { return m_framePreprocessor; }
     CameraFrameAligner* getFrameAligner() { return m_frameAligner; }
+    MessageQueue* getFramePreprocessorInputMessageQueue() { return m_framePreprocessor ? m_framePreprocessor->getInputMessageQueue() : nullptr; }
     MessageQueue* getFrameAlignerInputMessageQueue() { return m_frameAligner ? m_frameAligner->getInputMessageQueue() : nullptr; }
     MessageQueue* getFrameStackerInputMessageQueue() { return m_frameStacker ? m_frameStacker->getInputMessageQueue() : nullptr; }
     MessageQueue* getImageProcessorInputMessageQueue() { return m_imageProcessor ? m_imageProcessor->getInputMessageQueue() : nullptr; }
@@ -189,6 +192,8 @@ public:
 private:
     QThread *m_workerThread;
     CameraWorker *m_worker;
+    QThread *m_framePreprocessorThread;
+    CameraFramePreprocessor *m_framePreprocessor;
     QThread *m_frameAlignerThread;
     CameraFrameAligner *m_frameAligner;
     QThread *m_frameStackerThread;

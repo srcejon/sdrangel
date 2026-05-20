@@ -60,7 +60,7 @@
 #include "util/profiler.h"
 #include "camera.h"
 #include "camerafinder.h"
-#include "cameraframealigner.h"
+#include "cameraframepreprocessor.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
 
@@ -473,7 +473,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
     m_msgQueueToFeature(nullptr),
-    m_frameAligner(nullptr),
+    m_framePreprocessor(nullptr),
     m_postProcessorInputMessageQueue(nullptr),
     m_availableDeviceHandler({}, QStringList{"spectrumview"}),
     m_capturing(false),
@@ -2241,12 +2241,12 @@ void CameraWorker::alpacaFetchImageArray()
             m_alpacaCaptureTimer.invalidate();
         }
 
-        if (m_frameAligner) {
+        if (m_framePreprocessor) {
             CameraPipelineFramePtr frame(new CameraPipelineFrame);
             frame->m_image = image;
             populateFrameExposureMetadata(*frame);
             frame->m_bayerPattern = bayerPattern;
-            m_frameAligner->submitFrame(frame);
+            m_framePreprocessor->submitFrame(frame);
         }
         advanceStackBurstState();
         scheduleNextCaptureAfterFrame();
@@ -3582,13 +3582,13 @@ bool CameraWorker::asiCaptureExposureFrame()
 
     setLastAsiError(ASI_SUCCESS, QString());
     m_lastAsiCaptureTimeMs = captureTimer.elapsed();
-    if (m_frameAligner) {
+    if (m_framePreprocessor) {
         CameraPipelineFrame::BayerPattern bayerPattern = CameraPipelineFrame::BayerNone;
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = asiFrameToImage(&bayerPattern);
         populateFrameExposureMetadata(*frame);
         frame->m_bayerPattern = bayerPattern;
-        m_frameAligner->submitFrame(frame);
+        m_framePreprocessor->submitFrame(frame);
     }
     advanceStackBurstState();
     scheduleNextCaptureAfterFrame();
@@ -3650,13 +3650,13 @@ void CameraWorker::asiCaptureVideoFrame()
     {
         setLastAsiError(ASI_SUCCESS, QString());
         m_lastAsiCaptureTimeMs = captureTimer.elapsed();
-        if (m_frameAligner) {
+        if (m_framePreprocessor) {
             CameraPipelineFrame::BayerPattern bayerPattern = CameraPipelineFrame::BayerNone;
             CameraPipelineFramePtr frame(new CameraPipelineFrame);
             frame->m_image = asiFrameToImage(&bayerPattern);
             populateFrameExposureMetadata(*frame);
             frame->m_bayerPattern = bayerPattern;
-            m_frameAligner->submitFrame(frame);
+            m_framePreprocessor->submitFrame(frame);
         }
     }
     else

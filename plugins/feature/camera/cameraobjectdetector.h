@@ -1,0 +1,112 @@
+///////////////////////////////////////////////////////////////////////////////////
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Some code by AI                                                               //
+//                                                                               //
+// This program is free software; you can redistribute it and/or modify          //
+// it under the terms of the GNU General Public License as published by          //
+// the Free Software Foundation as version 3, or (at your option) later.         //
+///////////////////////////////////////////////////////////////////////////////////
+
+#ifndef INCLUDE_FEATURE_CAMERAOBJECTDETECTOR_H_
+#define INCLUDE_FEATURE_CAMERAOBJECTDETECTOR_H_
+
+#include <QHash>
+#include <QSet>
+#ifdef QT_TEXTTOSPEECH_FOUND
+#include <QTextToSpeech>
+#endif
+
+#include <opencv2/dnn/dnn.hpp>
+
+#include "cameradetectionhistoryentry.h"
+#include "cameradetector.h"
+
+class Camera;
+
+class CameraObjectDetector : public CameraDetectionStage
+{
+    Q_OBJECT
+public:
+    class MsgReportObjectDetectionHistory : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QList<CameraDetectionHistoryEntry>& getHistory() const { return m_history; }
+        static MsgReportObjectDetectionHistory* create(const QList<CameraDetectionHistoryEntry>& history)
+        {
+            return new MsgReportObjectDetectionHistory(history);
+        }
+
+    private:
+        QList<CameraDetectionHistoryEntry> m_history;
+        MsgReportObjectDetectionHistory(const QList<CameraDetectionHistoryEntry>& history) :
+            Message(),
+            m_history(history)
+        { }
+    };
+
+    class MsgClearObjectDetectionHistory : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgClearObjectDetectionHistory* create()
+        {
+            return new MsgClearObjectDetectionHistory();
+        }
+
+    private:
+        MsgClearObjectDetectionHistory() : Message() {}
+    };
+
+    explicit CameraObjectDetector(Camera *camera);
+    ~CameraObjectDetector() override;
+    void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
+
+protected:
+    bool handleStageMessage(const Message& cmd) override;
+    void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;
+    void captureActiveChanged(bool active) override;
+    void processNewFrame(const CameraPipelineFramePtr& frame) override;
+
+private:
+    struct PendingDisappearState
+    {
+        QDateTime m_firstMissing;
+        QDateTime m_deadline;
+    };
+
+    Camera *m_camera;
+    MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_msgQueueToFeature;
+    cv::dnn::Net m_yoloNet;
+    cv::Size m_yoloInputSize;
+    QString m_yoloLoadedModelPath;
+    QSet<QString> m_reportedErrorKeys;
+    QStringList m_yoloLabels;
+    QString m_yoloLoadedLabelsPath;
+    QSet<QString> m_detectedObjectClasses;
+    QHash<QString, PendingDisappearState> m_pendingDisappearStates;
+    QHash<QString, CameraDetectionHistoryEntry> m_activeObjectDetectionHistory;
+    QList<CameraDetectionHistoryEntry> m_completedObjectDetectionHistory;
+#ifdef QT_TEXTTOSPEECH_FOUND
+    QTextToSpeech *m_speech;
+#endif
+
+    void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
+    void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
+    void clearObjectDetectionState(bool clearHistory = true);
+    void clearObjectDetectionHistory();
+    void reportObjectDetectionHistoryToGUI() const;
+    void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
+    [[nodiscard]] QList<CameraDetectionHistoryEntry> getObjectDetectionHistorySnapshot() const;
+    bool applyObjectDetectedSettings(const QString& className, const QDateTime& now);
+    void applyObjectDisappearedSettings(const QString& className, const QDateTime& now);
+    void sendEvent(const QString& className, bool detected, const QDateTime& eventTime);
+    void executeCommand(const QString& command, const QString& className);
+    void saySpeech(const QString& speech, const QString& className);
+    bool shouldRecordVideoForDetectedObjects() const;
+    void setVideoRecordingEnabled(bool enabled);
+};
+
+#endif // INCLUDE_FEATURE_CAMERAOBJECTDETECTOR_H_

@@ -401,20 +401,48 @@ QImage CameraImageProcessor::applyImageProcessingCpu(const QImage& input)
     cv::Mat bgrMat;
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 
-    if (needsUnwarp) { applyLensUnwarp(bgrMat); }
-    if (needsWhiteBalance) { applyWhiteBalance(bgrMat); }
-    if (needsHistogramStretch) { applyHistogramStretch(bgrMat); }
-    if (needsGreyscale) { applyGreyscale(bgrMat); }
-    if (needsSaturation) { applySaturation(bgrMat); }
-    if (needsGamma) { applyGamma(bgrMat); }
-    if (needsGaussianBlur) { applyGaussianBlur(bgrMat); }
-    if (needsMedianBlur) { applyMedianBlur(bgrMat); }
-    if (needsSharpen) { applySharpen(bgrMat); }
-    if (needsSobelEdge) { applySobelEdge(bgrMat); }
-    if (needsCannyEdge) { applyCannyEdge(bgrMat); }
-    if (needsFlip) { applyFlip(bgrMat); }
-    if (needsBrightContrast) { applyBrightnessContrast(bgrMat); }
-    if (m_settings.m_invertColors) { applyInvertColors(bgrMat); }
+    if (needsUnwarp) {
+        applyLensUnwarp(bgrMat);
+    }
+    if (needsWhiteBalance) {
+        applyWhiteBalance(bgrMat);
+    }
+    if (needsHistogramStretch) {
+        applyHistogramStretch(bgrMat);
+    }
+    if (needsGreyscale) {
+        applyGreyscale(bgrMat);
+    }
+    if (needsSaturation) {
+        applySaturation(bgrMat);
+    }
+    if (needsGamma) {
+        applyGamma(bgrMat);
+    }
+    if (needsGaussianBlur) {
+        applyGaussianBlur(bgrMat);
+    }
+    if (needsMedianBlur) {
+        applyMedianBlur(bgrMat);
+    }
+    if (needsSharpen) {
+        applySharpen(bgrMat);
+    }
+    if (needsSobelEdge) {
+        applySobelEdge(bgrMat);
+    }
+    if (needsCannyEdge) {
+        applyCannyEdge(bgrMat);
+    }
+    if (needsFlip) {
+        applyFlip(bgrMat);
+    }
+    if (needsBrightContrast) {
+        applyBrightnessContrast(bgrMat);
+    }
+    if (m_settings.m_invertColors) {
+        applyInvertColors(bgrMat);
+    }
 
     QImage result = convertBgrToRgbImage(bgrMat);
     PROFILER_STOP("CameraImageProcessor::applyImageProcessing");
@@ -508,32 +536,39 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
         gpuRgb.upload(rgbMat, m_cudaStream);
         cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
 
-        if (needsUnwarp) { applyLensUnwarpCuda(bgrGpu, m_cudaStream); }
-        if (needsWhiteBalance) { applyWhiteBalanceCuda(bgrGpu, m_cudaStream); }
-
+        if (needsUnwarp) {
+            applyLensUnwarpCuda(bgrGpu, m_cudaStream);
+        }
+        if (needsWhiteBalance) {
+            applyWhiteBalanceCuda(bgrGpu, m_cudaStream);
+        }
         if (needsHistogramStretch) {
             applyHistogramStretchCuda(bgrGpu, m_cudaStream);
         }
-
-        if (needsGreyscale) { applyGreyscaleCuda(bgrGpu, m_cudaStream); }
-        if (needsSaturation) { applySaturationCuda(bgrGpu, m_cudaStream); }
-
+        if (needsGreyscale) {
+            applyGreyscaleCuda(bgrGpu, m_cudaStream);
+        }
+        if (needsSaturation) {
+            applySaturationCuda(bgrGpu, m_cudaStream);
+        }
         if (needsGamma) {
             applyGammaCuda(bgrGpu, m_cudaStream);
         }
-
-        if (needsGaussianBlur) { applyGaussianBlurCuda(bgrGpu, m_cudaStream); }
-        if (needsMedianBlur) { applyMedianBlurCuda(bgrGpu, m_cudaStream); }
-        if (needsSharpen) { applySharpenCuda(bgrGpu, m_cudaStream); }
-
+        if (needsGaussianBlur) {
+            applyGaussianBlurCuda(bgrGpu, m_cudaStream);
+        }
+        if (needsMedianBlur) {
+            applyMedianBlurCuda(bgrGpu, m_cudaStream);
+        }
+        if (needsSharpen) {
+            applySharpenCuda(bgrGpu, m_cudaStream);
+        }
         if (needsSobelEdge) {
             applySobelEdgeCuda(bgrGpu, m_cudaStream);
         }
-
         if (needsCannyEdge) {
             applyCannyEdgeCuda(bgrGpu, m_cudaStream);
         }
-
         if (needsFlip)
         {
             const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
@@ -541,11 +576,9 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
             cv::cuda::flip(bgrGpu, flippedGpu, flipCode, m_cudaStream);
             bgrGpu = flippedGpu;
         }
-
         if (needsBrightContrast) {
             bgrGpu.convertTo(bgrGpu, -1, m_settings.m_contrast, m_settings.m_brightness, m_cudaStream);
         }
-
         if (m_settings.m_invertColors) {
             cv::cuda::bitwise_not(bgrGpu, bgrGpu, cv::noArray(), m_cudaStream);
         }

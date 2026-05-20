@@ -165,6 +165,7 @@ private:
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
+    void storeLastInputFrame(const CameraPipelineFrame& frame);
     void applyImageProcessing(CameraPipelineFrame& frame);
     void applyImageProcessingCpu(CameraPipelineFrame& frame);
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING

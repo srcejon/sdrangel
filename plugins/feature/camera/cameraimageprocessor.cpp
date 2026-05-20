@@ -296,7 +296,7 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    m_lastInputFrame = *frame;
+    storeLastInputFrame(*frame);
 
     applyImageProcessing(*frame);
     frame->m_histogramData = m_settings.m_histogramVisible
@@ -306,6 +306,29 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     if (m_nextStage) {
         m_nextStage->submitFrame(frame);
     }
+}
+
+void CameraImageProcessor::storeLastInputFrame(const CameraPipelineFrame& frame)
+{
+    CameraPipelineFrame cachedFrame = frame;
+    if (!frame.m_image.isNull()) {
+        cachedFrame.m_image = frame.m_image.copy();
+    }
+    if (!frame.m_unprocessedImage.isNull()) {
+        cachedFrame.m_unprocessedImage = frame.m_unprocessedImage.copy();
+    }
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    cachedFrame.m_cudaBgrImage.release();
+    cachedFrame.m_cudaGrayImage.release();
+    if (!frame.m_cudaBgrImage.empty()) {
+        frame.m_cudaBgrImage.copyTo(cachedFrame.m_cudaBgrImage, m_cudaStream);
+    }
+    if (!frame.m_cudaGrayImage.empty()) {
+        frame.m_cudaGrayImage.copyTo(cachedFrame.m_cudaGrayImage, m_cudaStream);
+    }
+    m_cudaStream.waitForCompletion();
+#endif
+    m_lastInputFrame = cachedFrame;
 }
 
 CameraHistogramData CameraImageProcessor::computeHistogramData(const CameraPipelineFrame& frame)

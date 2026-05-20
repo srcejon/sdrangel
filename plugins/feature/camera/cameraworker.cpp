@@ -525,6 +525,7 @@ CameraWorker::CameraWorker() :
     m_asiSettingsApplied(false),
     m_asiContinuousCaptureScheduled(false),
     m_asiContinuousCaptureGeneration(0),
+    m_asiOpenCameraId(-1),
     m_asiTriggerCamera(false),
     m_asiCameraSizeX(0),
     m_asiCameraSizeY(0),
@@ -1233,7 +1234,8 @@ void CameraWorker::stopCapture()
 
     if (m_asiVideoCaptureStarted)
     {
-        const ASI_ERROR_CODE stopVideoError = ASIStopVideoCapture(m_settings.cameraIdInt());
+        const int cameraId = (m_asiOpenCameraId >= 0) ? m_asiOpenCameraId : m_settings.cameraIdInt();
+        const ASI_ERROR_CODE stopVideoError = ASIStopVideoCapture(cameraId);
         if (stopVideoError != ASI_SUCCESS) {
             qDebug() << "CameraWorker: ASIStopVideoCapture failed:" << stopVideoError << asiErrorCodeToString(stopVideoError);
         }
@@ -1242,7 +1244,8 @@ void CameraWorker::stopCapture()
 
     if (m_settings.isAsiCamera() && m_settings.isIntervalCaptureMode() && m_asiCameraOpen)
     {
-        const ASI_ERROR_CODE stopExposureError = ASIStopExposure(m_settings.cameraIdInt());
+        const int cameraId = (m_asiOpenCameraId >= 0) ? m_asiOpenCameraId : m_settings.cameraIdInt();
+        const ASI_ERROR_CODE stopExposureError = ASIStopExposure(cameraId);
         if ((stopExposureError != ASI_SUCCESS)
             && (stopExposureError != ASI_ERROR_GENERAL_ERROR)
             && (stopExposureError != ASI_ERROR_INVALID_MODE))
@@ -3455,12 +3458,13 @@ bool CameraWorker::asiOpenCamera()
 
     setLastAsiError(ASI_SUCCESS, QString());
     m_asiCameraOpen = true;
+    m_asiOpenCameraId = cameraId;
     return true;
 }
 
 void CameraWorker::asiCloseCamera()
 {
-    const int cameraId = m_settings.cameraIdInt();
+    const int cameraId = (m_asiOpenCameraId >= 0) ? m_asiOpenCameraId : m_settings.cameraIdInt();
 
     if (m_asiVideoCaptureStarted && (cameraId >= 0))
     {
@@ -3480,6 +3484,9 @@ void CameraWorker::asiCloseCamera()
         m_asiCameraOpen = false;
     }
 
+    if (!m_asiCameraOpen) {
+        m_asiOpenCameraId = -1;
+    }
     m_asiSettingsApplied = false;
 }
 

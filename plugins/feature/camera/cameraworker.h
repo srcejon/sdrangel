@@ -556,6 +556,7 @@ private:
     bool m_asiSettingsApplied;
     bool m_asiContinuousCaptureScheduled;
     quint64 m_asiContinuousCaptureGeneration;
+    int m_asiOpenCameraId;
     bool m_asiTriggerCamera;
     int m_asiCameraSizeX;
     int m_asiCameraSizeY;

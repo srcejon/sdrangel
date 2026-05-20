@@ -522,6 +522,8 @@ CameraWorker::CameraWorker() :
     m_asiCameraOpen(false),
     m_asiVideoCaptureStarted(false),
     m_asiSettingsApplied(false),
+    m_asiContinuousCaptureScheduled(false),
+    m_asiContinuousCaptureGeneration(0),
     m_asiTriggerCamera(false),
     m_asiCameraSizeX(0),
     m_asiCameraSizeY(0),
@@ -1000,7 +1002,17 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     }
     else if (m_capturing && (m_settings.isAlpacaCamera() || m_settings.isAsiCamera()) && captureCadenceChanged)
     {
-        m_captureTimer.start(captureTimerIntervalMs());
+        if (m_settings.isAsiCamera() && !m_settings.isIntervalCaptureMode())
+        {
+            m_captureTimer.stop();
+#ifdef ASICAMERA_FOUND
+            scheduleNextAsiVideoCapture();
+#endif
+        }
+        else
+        {
+            m_captureTimer.start(captureTimerIntervalMs());
+        }
     }
 
     const bool alpacaEndpointChanged = force
@@ -1168,8 +1180,16 @@ void CameraWorker::startCapture()
     else if (m_settings.isAsiCamera())
     {
         invalidateAsiSettings();
-        m_captureTimer.start(captureTimerIntervalMs());
-        captureTick();
+        if (m_settings.isIntervalCaptureMode())
+        {
+            m_captureTimer.start(captureTimerIntervalMs());
+            captureTick();
+        }
+        else
+        {
+            m_captureTimer.stop();
+            scheduleNextAsiVideoCapture();
+        }
     }
 #endif
     else if (m_settings.isQtCamera())
@@ -1199,6 +1219,9 @@ void CameraWorker::stopCapture()
     resetHdrBracketState();
 
 #ifdef ASICAMERA_FOUND
+    ++m_asiContinuousCaptureGeneration;
+    m_asiContinuousCaptureScheduled = false;
+
     if (m_asiVideoCaptureStarted)
     {
         const ASI_ERROR_CODE stopVideoError = ASIStopVideoCapture(m_settings.cameraIdInt());
@@ -3572,6 +3595,30 @@ bool CameraWorker::asiCaptureExposureFrame()
     return true;
 }
 
+bool CameraWorker::useAsiContinuousVideoCadence() const
+{
+    return m_capturing && m_settings.isAsiCamera() && !m_settings.isIntervalCaptureMode();
+}
+
+void CameraWorker::scheduleNextAsiVideoCapture(int delayMs)
+{
+    if (!useAsiContinuousVideoCadence() || m_asiContinuousCaptureScheduled) {
+        return;
+    }
+
+    m_asiContinuousCaptureScheduled = true;
+    const quint64 generation = m_asiContinuousCaptureGeneration;
+    QTimer::singleShot(std::max(0, delayMs), this, [this, generation]() {
+        if (generation != m_asiContinuousCaptureGeneration) {
+            return;
+        }
+        m_asiContinuousCaptureScheduled = false;
+        if (useAsiContinuousVideoCadence()) {
+            captureTick();
+        }
+    });
+}
+
 void CameraWorker::asiCaptureVideoFrame()
 {
     const int cameraId = m_settings.cameraIdInt();
@@ -3586,6 +3633,7 @@ void CameraWorker::asiCaptureVideoFrame()
                 QStringLiteral("asiStartVideo:%1").arg(cameraId),
                 tr("ASI video capture start failed"),
                 tr("Failed to start ASI video capture on camera %1:\n%2").arg(cameraId).arg(asiErrorCodeToString(startCaptureError)));
+            scheduleNextAsiVideoCapture(100);
             return;
         }
         setLastAsiError(ASI_SUCCESS, QString());
@@ -3616,6 +3664,8 @@ void CameraWorker::asiCaptureVideoFrame()
                  << "waitMs" << waitMs << "bufferSize" << m_asiFrameBuffer.size()
                  << "width" << m_asiFrameWidth << "height" << m_asiFrameHeight;
     }
+
+    scheduleNextAsiVideoCapture(getVideoError == ASI_SUCCESS ? 0 : 10);
 }
 
 void CameraWorker::asiCaptureTick()
@@ -3624,7 +3674,9 @@ void CameraWorker::asiCaptureTick()
         return;
     }
 
-    if (!m_asiSettingsApplied && !asiApplyCameraSettings()) {
+    if (!m_asiSettingsApplied && !asiApplyCameraSettings())
+    {
+        scheduleNextAsiVideoCapture(100);
         return;
     }
 

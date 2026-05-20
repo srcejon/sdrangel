@@ -553,6 +553,8 @@ private:
     bool m_asiCameraOpen;
     bool m_asiVideoCaptureStarted;
     bool m_asiSettingsApplied;
+    bool m_asiContinuousCaptureScheduled;
+    quint64 m_asiContinuousCaptureGeneration;
     bool m_asiTriggerCamera;
     int m_asiCameraSizeX;
     int m_asiCameraSizeY;
@@ -665,6 +667,8 @@ private:
     void asiCaptureVideoFrame();
     void asiPollStatus();
     void asiCaptureTick();
+    bool useAsiContinuousVideoCadence() const;
+    void scheduleNextAsiVideoCapture(int delayMs = 0);
     QImage asiFrameToImage(CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
     void invalidateAsiSettings();
     void setLastAsiError(int errorCode, const QString& errorMessage);

@@ -75,7 +75,6 @@ void CameraDiffDetector::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
         || settingsKeys.contains("detectionRoiHeight")) {
-        m_previousInputFrame = CameraPipelineFrame();
         m_lastInputFrame = CameraPipelineFrame();
     }
 }
@@ -86,7 +85,6 @@ void CameraDiffDetector::captureActiveChanged(bool active)
         return;
     }
 
-    m_previousInputFrame = CameraPipelineFrame();
     m_lastInputFrame = CameraPipelineFrame();
     m_diffMaskHistory.clear();
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
@@ -132,7 +130,6 @@ void CameraDiffDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->clearCudaCache();
     }
 
-    m_previousInputFrame = m_lastInputFrame;
     m_lastInputFrame = inputFrameSnapshot;
 
     if (m_nextStageQueue) {

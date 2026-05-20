@@ -95,6 +95,26 @@ public:
         { }
     };
 
+    class MsgProcessCurrentFrame : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const CameraPipelineFramePtr& getFrame() const { return m_frame; }
+
+        static MsgProcessCurrentFrame* create(const CameraPipelineFramePtr& frame)
+        {
+            return new MsgProcessCurrentFrame(frame);
+        }
+
+    private:
+        CameraPipelineFramePtr m_frame;
+
+        MsgProcessCurrentFrame(const CameraPipelineFramePtr& frame) :
+            Message(),
+            m_frame(frame)
+        { }
+    };
+
     class MsgRefreshCameraList : public Message {
         MESSAGE_CLASS_DECLARATION
 

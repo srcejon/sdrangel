@@ -40,7 +40,6 @@ protected:
     void processNewFrame(const CameraPipelineFramePtr& frame) override;
 
 private:
-    CameraPipelineFrame m_previousInputFrame;
     CameraPipelineFrame m_lastInputFrame;
     std::deque<cv::Mat> m_diffMaskHistory;
 #ifdef CAMERA_OPENCV_CUDA_DETECTION

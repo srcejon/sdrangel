@@ -5909,7 +5909,16 @@ void CameraGUI::on_starDetectButton_toggled(bool checked)
 {
     m_settings.m_starDetect = checked;
     m_settings.m_plateSolve = checked;
-    applySetting("starDetect");
+    applySettings({"starDetect", "plateSolve"});
+
+    if (!ui->startStop->isChecked() && !m_lastImage.isNull())
+    {
+        updateHardware();
+        CameraPipelineFramePtr frame(new CameraPipelineFrame);
+        frame->m_image = m_lastImage;
+        populateFrameExposureMetadata(*frame, m_settings.m_exposureTimeMs, 0, 1);
+        m_camera->getInputMessageQueue()->push(Camera::MsgProcessCurrentFrame::create(frame));
+    }
 }
 
 void CameraGUI::on_starThresholdSpin_valueChanged(int value)

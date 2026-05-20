@@ -38,6 +38,7 @@
 
 MESSAGE_CLASS_DEFINITION(Camera::MsgConfigureCamera, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgStartStop, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgProcessCurrentFrame, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgReportError, Message)
 
@@ -379,6 +380,14 @@ bool Camera::handleMessage(const Message& cmd)
             stop();
         }
 
+        return true;
+    }
+    else if (MsgProcessCurrentFrame::match(cmd))
+    {
+        const MsgProcessCurrentFrame& msg = (const MsgProcessCurrentFrame&) cmd;
+        if (m_starDetector && msg.getFrame()) {
+            m_starDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgProcessFrame::create(msg.getFrame()));
+        }
         return true;
     }
     else if (MsgRefreshCameraList::match(cmd))

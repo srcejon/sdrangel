@@ -334,6 +334,732 @@ void CameraAlpacaController::runWhenConnected(QNetworkAccessManager *networkMana
     });
 }
 
+void CameraAlpacaController::setFocuserConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    bool connected, std::function<void()> reportStatus, std::function<void()> continuation)
+{
+    if (!networkManager || !settings.isAlpacaCamera() || !settings.m_alpacaFocuserEnabled) {
+        return;
+    }
+
+    const QString baseUrlString = focuserBaseUrl(settings);
+    const int deviceNumber = std::max(0, settings.m_alpacaFocuserDeviceNumber);
+    QUrl url(baseUrlString + QString("/api/v1/focuser/%1/connected").arg(deviceNumber));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QUrlQuery body;
+    body.addQueryItem("Connected", connected ? "true" : "false");
+    body.addQueryItem("ClientID", QString::number(m_clientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_clientTransactionId++));
+
+    const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+    logRequest(settings, "PUT", url, payload);
+
+    QNetworkReply *reply = networkManager->put(request, payload);
+
+    QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, connected, reportStatus, continuation]() {
+        const QByteArray responseBody = reply->readAll();
+        logResponse(settings, "PUT", reply->request().url(), reply, responseBody);
+
+        bool success = false;
+
+        if (reply->error() == QNetworkReply::NoError)
+        {
+            const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+
+            if (doc.isObject()) {
+                success = (doc.object().value("ErrorNumber").toInt(-1) == 0);
+            }
+        }
+
+        if (success) {
+            m_focuserConnected = connected;
+        } else if (connected) {
+            if (reply->error() != QNetworkReply::NoError) {
+                setLastError(static_cast<int>(reply->error()), reply->errorString());
+            }
+            m_focuserConnected = false;
+            if (reportStatus) {
+                reportStatus();
+            }
+        } else {
+            if (reply->error() != QNetworkReply::NoError) {
+                setLastError(static_cast<int>(reply->error()), reply->errorString());
+            }
+            if (reportStatus) {
+                reportStatus();
+            }
+        }
+
+        if (!connected) {
+            m_focuserConnectionPending = false;
+            m_focuserConnected = false;
+            m_pendingFocuserConnectedContinuations.clear();
+        }
+
+        if (success)
+        {
+            if (continuation) {
+                continuation();
+            }
+        }
+        else if (connected)
+        {
+            m_focuserConnectionPending = false;
+            m_pendingFocuserConnectedContinuations.clear();
+        }
+
+        reply->deleteLater();
+    });
+}
+
+void CameraAlpacaController::runFocuserWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    std::function<void()> reportStatus, std::function<void()> continuation)
+{
+    if (m_focuserConnected)
+    {
+        if (continuation) {
+            continuation();
+        }
+        return;
+    }
+
+    if (continuation) {
+        m_pendingFocuserConnectedContinuations.append(continuation);
+    }
+
+    if (m_focuserConnectionPending) {
+        return;
+    }
+
+    m_focuserConnectionPending = true;
+    setFocuserConnected(networkManager, settings, true, reportStatus, [this]() {
+        m_focuserConnectionPending = false;
+        const auto continuations = std::move(m_pendingFocuserConnectedContinuations);
+        m_pendingFocuserConnectedContinuations.clear();
+
+        for (const auto& pendingContinuation : continuations)
+        {
+            if (pendingContinuation) {
+                pendingContinuation();
+            }
+        }
+    });
+}
+
+void CameraAlpacaController::moveFocuser(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    std::function<void()> reportStatus)
+{
+    if (!networkManager || !settings.isAlpacaCamera() || !settings.m_alpacaFocuserEnabled) {
+        return;
+    }
+
+    runFocuserWhenConnected(networkManager, settings, reportStatus, [this, networkManager, settings, reportStatus]() {
+        const QString baseUrlString = focuserBaseUrl(settings);
+        const int deviceNumber = std::max(0, settings.m_alpacaFocuserDeviceNumber);
+        QUrl url(baseUrlString + QString("/api/v1/focuser/%1/move").arg(deviceNumber));
+        QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+        QUrlQuery body;
+        body.addQueryItem("Position", QString::number(std::max(0, settings.m_alpacaFocusPosition)));
+        body.addQueryItem("ClientID", QString::number(m_clientId));
+        body.addQueryItem("ClientTransactionID", QString::number(m_clientTransactionId++));
+
+        const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+        logRequest(settings, "PUT", url, payload);
+
+        QNetworkReply *reply = networkManager->put(request, payload);
+        QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, reportStatus]() {
+            const QByteArray responseBody = reply->readAll();
+            logResponse(settings, "PUT", reply->request().url(), reply, responseBody);
+            int alpacaErrorNumber = 0;
+            QString alpacaErrorMessage;
+            const bool alpacaPayloadParsed = parseErrorPayload(responseBody, alpacaErrorNumber, alpacaErrorMessage);
+            const bool success = (reply->error() == QNetworkReply::NoError)
+                && (!alpacaPayloadParsed || (alpacaErrorNumber == 0));
+
+            if (!success)
+            {
+                if (reply->error() != QNetworkReply::NoError) {
+                    setLastError(static_cast<int>(reply->error()), reply->errorString());
+                } else {
+                    setLastError(alpacaErrorNumber, alpacaErrorMessage);
+                }
+
+                if (reportStatus) {
+                    reportStatus();
+                }
+            }
+            reply->deleteLater();
+        });
+    });
+}
+
+void CameraAlpacaController::setFilterWheelConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    bool connected, std::function<void()> reportStatus, std::function<void()> continuation)
+{
+    if (!networkManager) {
+        return;
+    }
+
+    const QString baseUrlString = filterWheelBaseUrl(settings);
+    const int deviceNumber = std::max(0, settings.m_alpacaFilterWheelDeviceNumber);
+    QUrl url(baseUrlString + QString("/api/v1/filterwheel/%1/connected").arg(deviceNumber));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QUrlQuery body;
+    body.addQueryItem("Connected", connected ? QStringLiteral("true") : QStringLiteral("false"));
+    body.addQueryItem("ClientID", QString::number(m_clientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_clientTransactionId++));
+
+    const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+    logRequest(settings, "PUT", url, payload);
+
+    QNetworkReply *reply = networkManager->put(request, payload);
+
+    QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, connected, reportStatus, continuation]() {
+        const QByteArray responseBody = reply->readAll();
+        logResponse(settings, "PUT", reply->request().url(), reply, responseBody);
+
+        bool success = false;
+
+        if (reply->error() == QNetworkReply::NoError)
+        {
+            const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+
+            if (doc.isObject()) {
+                success = (doc.object().value("ErrorNumber").toInt(-1) == 0);
+            }
+        }
+
+        if (success) {
+            m_filterWheelConnected = connected;
+        } else if (connected) {
+            if (reply->error() != QNetworkReply::NoError) {
+                setLastError(static_cast<int>(reply->error()), reply->errorString());
+            }
+            m_filterWheelConnected = false;
+            if (reportStatus) {
+                reportStatus();
+            }
+        } else {
+            if (reply->error() != QNetworkReply::NoError) {
+                setLastError(static_cast<int>(reply->error()), reply->errorString());
+            }
+            if (reportStatus) {
+                reportStatus();
+            }
+        }
+
+        if (!connected) {
+            m_filterWheelConnectionPending = false;
+            m_filterWheelConnected = false;
+            m_pendingFilterWheelConnectedContinuations.clear();
+        }
+
+        if (success)
+        {
+            if (continuation) {
+                continuation();
+            }
+        }
+        else if (connected)
+        {
+            m_filterWheelConnectionPending = false;
+            m_pendingFilterWheelConnectedContinuations.clear();
+        }
+
+        reply->deleteLater();
+    });
+}
+
+void CameraAlpacaController::runFilterWheelWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    std::function<void()> reportStatus, std::function<void()> continuation)
+{
+    if (m_filterWheelConnected)
+    {
+        if (continuation) {
+            continuation();
+        }
+        return;
+    }
+
+    if (continuation) {
+        m_pendingFilterWheelConnectedContinuations.append(continuation);
+    }
+
+    if (m_filterWheelConnectionPending) {
+        return;
+    }
+
+    m_filterWheelConnectionPending = true;
+    setFilterWheelConnected(networkManager, settings, true, reportStatus, [this]() {
+        m_filterWheelConnectionPending = false;
+        const auto continuations = std::move(m_pendingFilterWheelConnectedContinuations);
+        m_pendingFilterWheelConnectedContinuations.clear();
+
+        for (const auto& pendingContinuation : continuations)
+        {
+            if (pendingContinuation) {
+                pendingContinuation();
+            }
+        }
+    });
+}
+
+void CameraAlpacaController::queryFilterWheelInfo(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    std::function<void(const FilterWheelInfo&)> continuation)
+{
+    if (!networkManager || !settings.isAlpacaCamera() || !settings.m_alpacaFilterWheelEnabled) {
+        return;
+    }
+
+    runFilterWheelWhenConnected(networkManager, settings, nullptr, [this, networkManager, settings, continuation]() {
+        const QString baseUrlString = filterWheelBaseUrl(settings);
+        const int deviceNumber = std::max(0, settings.m_alpacaFilterWheelDeviceNumber);
+        auto info = QSharedPointer<FilterWheelInfo>::create();
+        auto pending = QSharedPointer<int>::create(2);
+
+        auto checkDone = [info, pending, continuation]() {
+            (*pending)--;
+            if (*pending > 0) {
+                return;
+            }
+
+            if (continuation) {
+                continuation(*info);
+            }
+        };
+
+        auto makeGet = [this, networkManager, settings, baseUrlString, deviceNumber](const QString& prop) {
+            QUrl url(baseUrlString + QString("/api/v1/filterwheel/%1/%2").arg(deviceNumber).arg(prop));
+            QUrlQuery q;
+            q.addQueryItem("ClientID", QString::number(m_clientId));
+            q.addQueryItem("ClientTransactionID", QString::number(m_clientTransactionId++));
+            url.setQuery(q);
+            logRequest(settings, "GET", url);
+            return networkManager->get(QNetworkRequest(url));
+        };
+
+        QNetworkReply *namesReply = makeGet("names");
+        QObject::connect(namesReply, &QNetworkReply::finished, namesReply, [this, settings, namesReply, info, checkDone]() {
+            const QByteArray responseBody = namesReply->readAll();
+            logResponse(settings, "GET", namesReply->request().url(), namesReply, responseBody);
+            if (namesReply->error() == QNetworkReply::NoError) {
+                const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+                if (doc.isObject()) {
+                    const QJsonObject root = doc.object();
+                    if (root.value("ErrorNumber").toInt(0) == 0) {
+                        const QJsonValue namesValue = root.contains(QStringLiteral("Value"))
+                            ? root.value(QStringLiteral("Value"))
+                            : root.value(QStringLiteral("value"));
+
+                        if (namesValue.isArray())
+                        {
+                            const QJsonArray values = namesValue.toArray();
+
+                            for (const QJsonValue& value : values)
+                            {
+                                if (value.isString()) {
+                                    info->m_names.append(value.toString());
+                                } else if (value.isObject()) {
+                                    const QJsonObject obj = value.toObject();
+                                    info->m_names.append(obj.value(QStringLiteral("Name")).toString(
+                                        obj.value(QStringLiteral("name")).toString()));
+                                }
+                            }
+                        }
+                        else if (namesValue.isString())
+                        {
+                            info->m_names.append(namesValue.toString());
+                        }
+                    }
+                }
+            }
+            namesReply->deleteLater();
+            checkDone();
+        });
+
+        QNetworkReply *positionReply = makeGet("position");
+        QObject::connect(positionReply, &QNetworkReply::finished, positionReply, [this, settings, positionReply, info, checkDone]() {
+            const QByteArray responseBody = positionReply->readAll();
+            logResponse(settings, "GET", positionReply->request().url(), positionReply, responseBody);
+            if (positionReply->error() == QNetworkReply::NoError) {
+                const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+                if (doc.isObject()) {
+                    const QJsonObject root = doc.object();
+                    if (root.value("ErrorNumber").toInt(0) == 0) {
+                        const QJsonValue positionValue = root.contains(QStringLiteral("Value"))
+                            ? root.value(QStringLiteral("Value"))
+                            : root.value(QStringLiteral("value"));
+                        info->m_position = std::max(0, positionValue.toInt(0));
+                    }
+                }
+            }
+            positionReply->deleteLater();
+            checkDone();
+        });
+    });
+}
+
+void CameraAlpacaController::queryFilterWheelPosition(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    std::function<void(int)> continuation)
+{
+    if (!networkManager || !settings.isAlpacaCamera() || !settings.m_alpacaFilterWheelEnabled) {
+        if (continuation) {
+            continuation(-1);
+        }
+        return;
+    }
+
+    runFilterWheelWhenConnected(networkManager, settings, nullptr, [this, networkManager, settings, continuation]() {
+        const QString baseUrlString = filterWheelBaseUrl(settings);
+        const int deviceNumber = std::max(0, settings.m_alpacaFilterWheelDeviceNumber);
+        QUrl url(baseUrlString + QString("/api/v1/filterwheel/%1/position").arg(deviceNumber));
+        QUrlQuery q;
+        q.addQueryItem("ClientID", QString::number(m_clientId));
+        q.addQueryItem("ClientTransactionID", QString::number(m_clientTransactionId++));
+        url.setQuery(q);
+        logRequest(settings, "GET", url);
+
+        QNetworkReply *reply = networkManager->get(QNetworkRequest(url));
+        QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, continuation]() {
+            int position = -1;
+            const QByteArray responseBody = reply->readAll();
+            logResponse(settings, "GET", reply->request().url(), reply, responseBody);
+            if (reply->error() == QNetworkReply::NoError) {
+                const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+                if (doc.isObject()) {
+                    const QJsonObject root = doc.object();
+                    if (root.value("ErrorNumber").toInt(0) == 0) {
+                        const QJsonValue positionValue = root.contains(QStringLiteral("Value"))
+                            ? root.value(QStringLiteral("Value"))
+                            : root.value(QStringLiteral("value"));
+                        position = positionValue.toInt(-1);
+                    }
+                }
+            }
+            reply->deleteLater();
+            if (continuation) {
+                continuation(position);
+            }
+        });
+    });
+}
+
+void CameraAlpacaController::setFilterWheelPosition(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    std::function<void()> onSuccess, std::function<void()> reportStatus)
+{
+    if (!networkManager || !settings.isAlpacaCamera() || !settings.m_alpacaFilterWheelEnabled) {
+        return;
+    }
+
+    runFilterWheelWhenConnected(networkManager, settings, reportStatus, [this, networkManager, settings, onSuccess, reportStatus]() {
+        const QString baseUrlString = filterWheelBaseUrl(settings);
+        const int deviceNumber = std::max(0, settings.m_alpacaFilterWheelDeviceNumber);
+        QUrl url(baseUrlString + QString("/api/v1/filterwheel/%1/position").arg(deviceNumber));
+        QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+        QUrlQuery body;
+        body.addQueryItem("Position", QString::number(std::max(0, settings.m_alpacaFilterWheelPosition)));
+        body.addQueryItem("ClientID", QString::number(m_clientId));
+        body.addQueryItem("ClientTransactionID", QString::number(m_clientTransactionId++));
+
+        const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+        logRequest(settings, "PUT", url, payload);
+
+        QNetworkReply *reply = networkManager->put(request, payload);
+        QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, onSuccess, reportStatus]() {
+            const QByteArray responseBody = reply->readAll();
+            logResponse(settings, "PUT", reply->request().url(), reply, responseBody);
+            int alpacaErrorNumber = 0;
+            QString alpacaErrorMessage;
+            const bool alpacaPayloadParsed = parseErrorPayload(responseBody, alpacaErrorNumber, alpacaErrorMessage);
+            const bool success = (reply->error() == QNetworkReply::NoError)
+                && (!alpacaPayloadParsed || (alpacaErrorNumber == 0));
+
+            if (success)
+            {
+                if (onSuccess) {
+                    onSuccess();
+                }
+            }
+            else
+            {
+                if (reply->error() != QNetworkReply::NoError) {
+                    setLastError(static_cast<int>(reply->error()), reply->errorString());
+                } else {
+                    setLastError(alpacaErrorNumber, alpacaErrorMessage);
+                }
+
+                if (reportStatus) {
+                    reportStatus();
+                }
+            }
+            reply->deleteLater();
+        });
+    });
+}
+
+void CameraAlpacaController::setCameraParams(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+    std::function<bool()> isCapturing, std::function<void()> onStartExposure, std::function<void()> onFailure)
+{
+    const int camId = settings.cameraIdInt();
+    const bool forceAllParams = !m_paramsInitialized;
+    const int maxSubframeX = std::max(1, m_cameraSizeX / std::max(1, settings.m_cameraBinX));
+    const int maxSubframeY = std::max(1, m_cameraSizeY / std::max(1, settings.m_cameraBinY));
+    const bool fullFrameNumXRequested = (settings.m_cameraNumX == 0);
+    const bool fullFrameNumYRequested = (settings.m_cameraNumY == 0);
+    const bool canResolveNumX = !fullFrameNumXRequested || (m_cameraSizeX > 0);
+    const bool canResolveNumY = !fullFrameNumYRequested || (m_cameraSizeY > 0);
+    const int effectiveNumX = fullFrameNumXRequested
+        ? std::max(1, maxSubframeX - std::max(0, settings.m_cameraStartX))
+        : settings.m_cameraNumX;
+    const int effectiveNumY = fullFrameNumYRequested
+        ? std::max(1, maxSubframeY - std::max(0, settings.m_cameraStartY))
+        : settings.m_cameraNumY;
+    const bool setBinX = forceAllParams || (m_lastBinX != settings.m_cameraBinX);
+    const bool setBinY = forceAllParams || (m_lastBinY != settings.m_cameraBinY);
+    const bool setNumX = canResolveNumX && (forceAllParams || (m_lastEffectiveNumX != effectiveNumX));
+    const bool setNumY = canResolveNumY && (forceAllParams || (m_lastEffectiveNumY != effectiveNumY));
+    const bool setStartX = forceAllParams || (m_lastStartX != settings.m_cameraStartX);
+    const bool setStartY = forceAllParams || (m_lastStartY != settings.m_cameraStartY);
+    const bool setGain = (settings.m_cameraGain >= 0) && (forceAllParams || (m_lastGain != settings.m_cameraGain));
+    const bool setOffset = (settings.m_cameraOffset >= 0) && (forceAllParams || (m_lastOffset != settings.m_cameraOffset));
+    const bool setReadoutMode = forceAllParams || (m_lastReadoutMode != settings.m_cameraReadoutMode);
+
+    auto stillCapturing = [isCapturing]() {
+        return !isCapturing || isCapturing();
+    };
+
+    auto doStartExposure = [this, stillCapturing, onStartExposure]() {
+        if (stillCapturing()) {
+            m_paramsInitialized = true;
+            if (onStartExposure) {
+                onStartExposure();
+            }
+        } else {
+            m_frameRequestPending = false;
+        }
+    };
+
+    auto handleParamFailure = [this, onFailure](int errorNumber, const QString& errorMessage) {
+        m_lastErrorNumber = errorNumber;
+        m_lastErrorMessage = errorMessage;
+        m_frameRequestPending = false;
+        if (onFailure) {
+            onFailure();
+        }
+    };
+
+    auto handleOptionalParamFailure = [this, handleParamFailure](const QString& property, int errorNumber, const QString& errorMessage,
+            const std::function<void()>& markAttempted, const std::function<void()>& continuation) {
+        if (isDriverError(errorNumber))
+        {
+            qDebug() << "CameraWorker:" << property << "Alpaca error is non-fatal for exposure:"
+                     << errorNumber << errorMessage;
+            m_lastErrorNumber = errorNumber;
+            m_lastErrorMessage = errorMessage;
+            if (markAttempted) {
+                markAttempted();
+            }
+            if (continuation) {
+                continuation();
+            }
+            return;
+        }
+
+        handleParamFailure(errorNumber, errorMessage);
+    };
+
+    auto doReadoutMode = [this, networkManager, settings, camId, doStartExposure, setReadoutMode, handleOptionalParamFailure, stillCapturing]() {
+        if (!stillCapturing()) { m_frameRequestPending = false; return; }
+        if (setReadoutMode) {
+            putIntProperty(networkManager, settings, camId, "readoutmode", "ReadoutMode",
+                settings.m_cameraReadoutMode, doStartExposure,
+                [this, settings]() { m_lastReadoutMode = settings.m_cameraReadoutMode; },
+                [this, settings, handleOptionalParamFailure, doStartExposure](int errorNumber, const QString& errorMessage) {
+                    handleOptionalParamFailure(
+                        QStringLiteral("readoutmode"),
+                        errorNumber,
+                        errorMessage,
+                        [this, settings]() { m_lastReadoutMode = settings.m_cameraReadoutMode; },
+                        doStartExposure);
+                });
+        } else {
+            doStartExposure();
+        }
+    };
+
+    auto doOffset = [this, networkManager, settings, camId, doReadoutMode, setOffset, handleOptionalParamFailure, stillCapturing]() {
+        if (!stillCapturing()) { m_frameRequestPending = false; return; }
+        if (setOffset) {
+            putIntProperty(networkManager, settings, camId, "offset", "Offset",
+                settings.m_cameraOffset, doReadoutMode,
+                [this, settings]() { m_lastOffset = settings.m_cameraOffset; },
+                [this, settings, handleOptionalParamFailure, doReadoutMode](int errorNumber, const QString& errorMessage) {
+                    handleOptionalParamFailure(
+                        QStringLiteral("offset"),
+                        errorNumber,
+                        errorMessage,
+                        [this, settings]() { m_lastOffset = settings.m_cameraOffset; },
+                        doReadoutMode);
+                });
+        } else {
+            doReadoutMode();
+        }
+    };
+
+    auto doGain = [this, networkManager, settings, camId, doOffset, setGain, handleOptionalParamFailure, stillCapturing]() {
+        if (!stillCapturing()) { m_frameRequestPending = false; return; }
+        if (setGain) {
+            putIntProperty(networkManager, settings, camId, "gain", "Gain",
+                settings.m_cameraGain, doOffset,
+                [this, settings]() { m_lastGain = settings.m_cameraGain; },
+                [this, settings, handleOptionalParamFailure, doOffset](int errorNumber, const QString& errorMessage) {
+                    handleOptionalParamFailure(
+                        QStringLiteral("gain"),
+                        errorNumber,
+                        errorMessage,
+                        [this, settings]() { m_lastGain = settings.m_cameraGain; },
+                        doOffset);
+                });
+        } else {
+            doOffset();
+        }
+    };
+
+    auto doAxisY = [this, networkManager, settings, camId, doGain, setNumY, setStartY, effectiveNumY, handleParamFailure, stillCapturing]() {
+        if (!stillCapturing()) { m_frameRequestPending = false; return; }
+
+        std::function<void()> maybeSetStartYAfterNum = [this, networkManager, settings, camId, doGain, setStartY, handleParamFailure, stillCapturing]() {
+            if (!stillCapturing()) { m_frameRequestPending = false; return; }
+            if (setStartY) {
+                putIntProperty(networkManager, settings, camId, "starty", "StartY",
+                    settings.m_cameraStartY, doGain,
+                    [this, settings]() { m_lastStartY = settings.m_cameraStartY; },
+                    handleParamFailure);
+            } else {
+                doGain();
+            }
+        };
+
+        std::function<void()> maybeSetNumYAfterStart = [this, networkManager, settings, camId, doGain, setNumY, effectiveNumY, handleParamFailure, stillCapturing]() {
+            if (!stillCapturing()) { m_frameRequestPending = false; return; }
+            if (setNumY) {
+                putIntProperty(networkManager, settings, camId, "numy", "NumY",
+                    effectiveNumY, doGain,
+                    [this, settings, effectiveNumY]() {
+                        m_lastNumY = settings.m_cameraNumY;
+                        m_lastEffectiveNumY = effectiveNumY;
+                    },
+                    handleParamFailure);
+            } else {
+                doGain();
+            }
+        };
+
+        if (setStartY && (settings.m_cameraStartY < m_lastStartY))
+        {
+            putIntProperty(networkManager, settings, camId, "starty", "StartY",
+                settings.m_cameraStartY, maybeSetNumYAfterStart,
+                [this, settings]() { m_lastStartY = settings.m_cameraStartY; },
+                handleParamFailure);
+        }
+        else if (setNumY)
+        {
+            putIntProperty(networkManager, settings, camId, "numy", "NumY",
+                effectiveNumY, maybeSetStartYAfterNum,
+                [this, settings, effectiveNumY]() {
+                    m_lastNumY = settings.m_cameraNumY;
+                    m_lastEffectiveNumY = effectiveNumY;
+                },
+                handleParamFailure);
+        }
+        else
+        {
+            maybeSetStartYAfterNum();
+        }
+    };
+
+    auto doAxisX = [this, networkManager, settings, camId, doAxisY, setNumX, setStartX, effectiveNumX, handleParamFailure, stillCapturing]() {
+        if (!stillCapturing()) { m_frameRequestPending = false; return; }
+
+        std::function<void()> maybeSetStartXAfterNum = [this, networkManager, settings, camId, doAxisY, setStartX, handleParamFailure, stillCapturing]() {
+            if (!stillCapturing()) { m_frameRequestPending = false; return; }
+            if (setStartX) {
+                putIntProperty(networkManager, settings, camId, "startx", "StartX",
+                    settings.m_cameraStartX, doAxisY,
+                    [this, settings]() { m_lastStartX = settings.m_cameraStartX; },
+                    handleParamFailure);
+            } else {
+                doAxisY();
+            }
+        };
+
+        std::function<void()> maybeSetNumXAfterStart = [this, networkManager, settings, camId, doAxisY, setNumX, effectiveNumX, handleParamFailure, stillCapturing]() {
+            if (!stillCapturing()) { m_frameRequestPending = false; return; }
+            if (setNumX) {
+                putIntProperty(networkManager, settings, camId, "numx", "NumX",
+                    effectiveNumX, doAxisY,
+                    [this, settings, effectiveNumX]() {
+                        m_lastNumX = settings.m_cameraNumX;
+                        m_lastEffectiveNumX = effectiveNumX;
+                    },
+                    handleParamFailure);
+            } else {
+                doAxisY();
+            }
+        };
+
+        if (setStartX && (settings.m_cameraStartX < m_lastStartX))
+        {
+            putIntProperty(networkManager, settings, camId, "startx", "StartX",
+                settings.m_cameraStartX, maybeSetNumXAfterStart,
+                [this, settings]() { m_lastStartX = settings.m_cameraStartX; },
+                handleParamFailure);
+        }
+        else if (setNumX)
+        {
+            putIntProperty(networkManager, settings, camId, "numx", "NumX",
+                effectiveNumX, maybeSetStartXAfterNum,
+                [this, settings, effectiveNumX]() {
+                    m_lastNumX = settings.m_cameraNumX;
+                    m_lastEffectiveNumX = effectiveNumX;
+                },
+                handleParamFailure);
+        }
+        else
+        {
+            maybeSetStartXAfterNum();
+        }
+    };
+
+    auto doBinY = [this, networkManager, settings, camId, doAxisX, setBinY, handleParamFailure, stillCapturing]() {
+        if (!stillCapturing()) { m_frameRequestPending = false; return; }
+        if (setBinY) {
+            putIntProperty(networkManager, settings, camId, "biny", "BinY",
+                settings.m_cameraBinY, doAxisX,
+                [this, settings]() { m_lastBinY = settings.m_cameraBinY; },
+                handleParamFailure);
+        } else {
+            doAxisX();
+        }
+    };
+
+    if (setBinX) {
+        putIntProperty(networkManager, settings, camId, "binx", "BinX",
+            settings.m_cameraBinX, doBinY,
+            [this, settings]() { m_lastBinX = settings.m_cameraBinX; },
+            handleParamFailure);
+    } else {
+        doBinY();
+    }
+}
+
 void CameraAlpacaController::putIntProperty(
     QNetworkAccessManager *networkManager,
     const CameraSettings& settings,

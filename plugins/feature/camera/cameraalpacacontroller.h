@@ -80,6 +80,12 @@ public:
         bool m_ccdTemperatureValid = false;
     };
 
+    struct FilterWheelInfo
+    {
+        QStringList m_names;
+        int m_position = -1;
+    };
+
     CameraAlpacaController();
 
     void resetConnectionState();
@@ -95,6 +101,24 @@ public:
         std::function<void()> reportStatus, std::function<void()> continuation = {});
     void runWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
         std::function<void()> reportStatus, std::function<void()> continuation);
+    void setFocuserConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings, bool connected,
+        std::function<void()> reportStatus, std::function<void()> continuation = {});
+    void runFocuserWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void()> reportStatus, std::function<void()> continuation);
+    void moveFocuser(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void()> reportStatus);
+    void setFilterWheelConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings, bool connected,
+        std::function<void()> reportStatus, std::function<void()> continuation = {});
+    void runFilterWheelWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void()> reportStatus, std::function<void()> continuation);
+    void queryFilterWheelInfo(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void(const FilterWheelInfo&)> continuation);
+    void queryFilterWheelPosition(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void(int)> continuation);
+    void setFilterWheelPosition(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void()> onSuccess, std::function<void()> reportStatus);
+    void setCameraParams(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<bool()> isCapturing, std::function<void()> onStartExposure, std::function<void()> onFailure);
     void putIntProperty(
         QNetworkAccessManager *networkManager,
         const CameraSettings& settings,

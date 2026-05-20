@@ -338,6 +338,7 @@ bool CameraGUI::handleMessage(const Message& message)
         m_discoveredAlpacaFocusers = report.getFocusers();
         m_discoveredAlpacaFilterWheels = report.getFilterWheels();
         populateAlpacaAccessoryCombos();
+        updateCameraSettingsVisibility();
 
         {
             QSignalBlocker blocker1(settingsUI()->alpacaFocuserHostEdit);

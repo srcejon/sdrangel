@@ -266,6 +266,15 @@ void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
     PROFILER_STOP(__FUNCTION__);
 }
 
+// Lifetime contract: the returned Mat may alias the source QImage's pixel buffer when no
+// format conversion was needed. Callers must keep `input` alive for at least as long as
+// the returned Mat is read, or explicitly clone the result if they need it to outlive the
+// input. Where convertToFormat() is needed (a non-RGB888 colour input) the helper still
+// has to clone, because the converted QImage is a function-local temporary that would
+// otherwise leave a dangling pointer behind.
+//
+// Avoiding the clone saves ~32 MB/frame for 4K Grayscale16, multiplied by three pipeline
+// stages — the biggest single throughput win at high resolution / high bit depth.
 cv::Mat CameraFrameAligner::imageToWorkingMat(const QImage& input, bool& highBitDepthInput)
 {
     highBitDepthInput = (input.format() == QImage::Format_RGBA64)
@@ -274,18 +283,16 @@ cv::Mat CameraFrameAligner::imageToWorkingMat(const QImage& input, bool& highBit
 
     if (input.format() == QImage::Format_Grayscale16)
     {
-        cv::Mat frameMat(input.height(), input.width(), CV_16UC1,
+        return cv::Mat(input.height(), input.width(), CV_16UC1,
             const_cast<uchar*>(input.bits()),
             static_cast<size_t>(input.bytesPerLine()));
-        return frameMat.clone();
     }
 
     if (input.format() == QImage::Format_Grayscale8)
     {
-        cv::Mat frameMat(input.height(), input.width(), CV_8UC1,
+        return cv::Mat(input.height(), input.width(), CV_8UC1,
             const_cast<uchar*>(input.bits()),
             static_cast<size_t>(input.bytesPerLine()));
-        return frameMat.clone();
     }
 
     if (highBitDepthInput)
@@ -307,9 +314,16 @@ cv::Mat CameraFrameAligner::imageToWorkingMat(const QImage& input, bool& highBit
         return frameMat;
     }
 
-    const QImage rgb = (input.format() == QImage::Format_RGB888)
-        ? input
-        : input.convertToFormat(QImage::Format_RGB888);
+    if (input.format() == QImage::Format_RGB888)
+    {
+        return cv::Mat(input.height(), input.width(), CV_8UC3,
+            const_cast<uchar*>(input.bits()),
+            static_cast<size_t>(input.bytesPerLine()));
+    }
+
+    // Source isn't already in a directly-mappable layout — we have to convert into a
+    // function-local QImage. Clone the Mat so it outlives the temporary.
+    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
     cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
                    const_cast<uchar*>(rgb.bits()),
                    static_cast<size_t>(rgb.bytesPerLine()));

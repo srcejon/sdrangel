@@ -611,6 +611,7 @@ private:
     QString buildAlpacaFilterWheelBaseUrl() const;
     void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
     void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray());
+    void reportAlpacaStatusToGUI(int cameraState = -1, double ccdTemperature = NAN, bool ccdTemperatureValid = false);
     QString transportError(QNetworkReply *reply) const;
     QImage parseAlpacaImageArray(const QByteArray& payload, QString *receiveImageFormat = nullptr,
         CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;

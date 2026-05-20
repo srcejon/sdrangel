@@ -823,6 +823,7 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
+    const bool passThroughFrame = canPassThroughFrame(*frame);
     QImage stackedImage;
     int stackCount = 1;
 
@@ -831,13 +832,27 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     frame->m_image = stackedImage;
-    frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
+    if (!passThroughFrame) {
+        frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
+    }
     frame->m_unprocessedImage = frame->m_image;
     frame->m_stackCount = std::max(1, stackCount);
 
     if (m_nextStage) {
         m_nextStage->submitFrame(frame);
     }
+}
+
+bool CameraFrameStacker::canPassThroughFrame(const CameraPipelineFrame& inputFrame) const
+{
+    const bool hdrStackingEnabled = m_settings.isHdrStackingEnabled() && (m_settings.getHdrExposureCount() > 1);
+    const bool stackEnabled = hdrStackingEnabled
+        || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1));
+    const bool calibrationEnabled = !m_darkCalibrationFrame.empty()
+        || !m_flatCalibrationFrame.empty()
+        || !m_biasCalibrationFrame.empty();
+
+    return !stackEnabled && !calibrationEnabled && !inputFrame.m_image.isNull();
 }
 
 bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount)
@@ -851,7 +866,7 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
         || !m_flatCalibrationFrame.empty()
         || !m_biasCalibrationFrame.empty();
 
-    if (!stackEnabled && !calibrationEnabled && (inputFrame.m_bayerPattern == CameraPipelineFrame::BayerNone))
+    if (!stackEnabled && !calibrationEnabled)
     {
         outputImage = inputFrame.m_image;
         stackCount = 1;

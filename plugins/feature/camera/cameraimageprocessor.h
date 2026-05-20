@@ -166,10 +166,11 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
     [[nodiscard]] QImage applyImageProcessing(CameraPipelineFrame& frame);
-    [[nodiscard]] QImage applyImageProcessingCpu(const QImage& input);
+    [[nodiscard]] QImage applyImageProcessingCpu(CameraPipelineFrame& frame);
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     [[nodiscard]] QImage applyImageProcessingCuda(CameraPipelineFrame& frame);
     [[nodiscard]] bool canUseCudaImageProcessing() const;
+    [[nodiscard]] bool debayerRawMatCuda(cv::cuda::GpuMat& bgrGpu, const cv::Mat& rawMat, CameraPipelineFrame::BayerPattern bayerPattern);
     void applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream);
     void applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
     void applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
@@ -199,6 +200,8 @@ private:
     void applyBrightnessContrast(cv::Mat& bgrMat) const;
     void applyInvertColors(cv::Mat& bgrMat) const;
     [[nodiscard]] static CameraHistogramData computeHistogramData(const QImage& image);
+    [[nodiscard]] static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
+    [[nodiscard]] static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);

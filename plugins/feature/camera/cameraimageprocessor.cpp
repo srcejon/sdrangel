@@ -20,6 +20,7 @@
 #include <cmath>
 
 #include <QDebug>
+#include <QImage>
 
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
 #include <opencv2/core/cuda.hpp>
@@ -355,13 +356,15 @@ QImage CameraImageProcessor::applyImageProcessing(CameraPipelineFrame& frame)
 #endif
 
     frame.clearCudaCache();
-    return applyImageProcessingCpu(frame.m_image);
+    return applyImageProcessingCpu(frame);
 }
 
-QImage CameraImageProcessor::applyImageProcessingCpu(const QImage& input)
+QImage CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
 {
     PROFILER_START();
 
+    const QImage& input = frame.m_image;
+    const bool needsDebayer = frame.m_bayerPattern != CameraPipelineFrame::BayerNone;
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
     const bool needsHistogramStretch = (m_settings.m_histogramStretch != CameraSettings::HistogramStretchOff)
@@ -391,15 +394,36 @@ QImage CameraImageProcessor::applyImageProcessingCpu(const QImage& input)
         || needsGreyscale
         || m_settings.m_invertColors;
 
-    if (!needsAny) {
+    if (!needsAny && !needsDebayer) {
         return input;
     }
 
-    QImage convertedRgb;
-    const QImage& rgb = ensureRgb888(input, convertedRgb);
-    cv::Mat mat = wrapRgb888Image(rgb);
     cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+
+    if (needsDebayer)
+    {
+        cv::Mat rawMat(input.height(), input.width(),
+            input.format() == QImage::Format_Grayscale16 ? CV_16UC1 : CV_8UC1,
+            const_cast<uchar*>(input.constBits()),
+            static_cast<size_t>(input.bytesPerLine()));
+        bgrMat = debayerRawMat(rawMat, frame.m_bayerPattern);
+        frame.m_bayerPattern = CameraPipelineFrame::BayerNone;
+    }
+    else
+    {
+        QImage convertedRgb;
+        const QImage& rgb = ensureRgb888(input, convertedRgb);
+        cv::Mat mat = wrapRgb888Image(rgb);
+        cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+    }
+
+    if (!needsAny)
+    {
+        QImage result = convertBgrToRgbImage(bgrMat);
+        frame.m_unprocessedImage = result;
+        PROFILER_STOP("CameraImageProcessor::applyImageProcessing");
+        return result;
+    }
 
     if (needsUnwarp) {
         applyLensUnwarp(bgrMat);
@@ -490,7 +514,7 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
     PROFILER_START();
 
     const QImage& input = frame.m_image;
-
+    const bool needsDebayer = frame.m_bayerPattern != CameraPipelineFrame::BayerNone;
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
     const bool needsHistogramStretch = (m_settings.m_histogramStretch != CameraSettings::HistogramStretchOff)
@@ -520,21 +544,34 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
         || needsGreyscale
         || m_settings.m_invertColors;
 
-    if (!needsAny) {
+    if (!needsAny && !needsDebayer) {
         frame.clearCudaCache();
         return input;
     }
 
     try
     {
-        QImage convertedRgb;
-        const QImage& rgb = ensureRgb888(input, convertedRgb);
-        cv::Mat rgbMat = wrapRgb888Image(rgb);
-
-        cv::cuda::GpuMat gpuRgb;
         cv::cuda::GpuMat bgrGpu;
-        gpuRgb.upload(rgbMat, m_cudaStream);
-        cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
+        if (needsDebayer)
+        {
+            cv::Mat rawMat(input.height(), input.width(),
+                input.format() == QImage::Format_Grayscale16 ? CV_16UC1 : CV_8UC1,
+                const_cast<uchar*>(input.constBits()),
+                static_cast<size_t>(input.bytesPerLine()));
+            if (!debayerRawMatCuda(bgrGpu, rawMat, frame.m_bayerPattern)) {
+                throw cv::Exception(cv::Error::StsError, "CUDA debayer failed", __FUNCTION__, __FILE__, __LINE__);
+            }
+            frame.m_bayerPattern = CameraPipelineFrame::BayerNone;
+        }
+        else
+        {
+            QImage convertedRgb;
+            const QImage& rgb = ensureRgb888(input, convertedRgb);
+            cv::Mat rgbMat = wrapRgb888Image(rgb);
+            cv::cuda::GpuMat gpuRgb;
+            gpuRgb.upload(rgbMat, m_cudaStream);
+            cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
+        }
 
         if (needsUnwarp) {
             applyLensUnwarpCuda(bgrGpu, m_cudaStream);
@@ -593,6 +630,9 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
         rgbGpu.download(resultMat, m_cudaStream);
         bgrGpu.copyTo(frame.m_cudaBgrImage, m_cudaStream);
         m_cudaStream.waitForCompletion();
+        if (needsDebayer && !needsAny) {
+            frame.m_unprocessedImage = result;
+        }
         frame.m_cudaGrayImage.release();
         PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");
         return result;
@@ -603,7 +643,24 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
     }
 
     frame.clearCudaCache();
-    return applyImageProcessingCpu(input);
+    return applyImageProcessingCpu(frame);
+}
+
+bool CameraImageProcessor::debayerRawMatCuda(cv::cuda::GpuMat& bgrGpu, const cv::Mat& rawMat, CameraPipelineFrame::BayerPattern bayerPattern)
+{
+    PROFILER_START();
+
+    const int cvCode = bayerPatternToOpenCvCode(bayerPattern);
+    if (cvCode < 0) {
+        return false;
+    }
+
+    cv::cuda::GpuMat rawGpu;
+    rawGpu.upload(rawMat, m_cudaStream);
+    cv::cuda::demosaicing(rawGpu, bgrGpu, cvCode, 0, m_cudaStream);
+
+    PROFILER_STOP(__FUNCTION__);
+    return true;
 }
 
 void CameraImageProcessor::applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
@@ -1384,6 +1441,39 @@ void CameraImageProcessor::applyInvertColors(cv::Mat& bgrMat) const
     PROFILER_START();
     cv::bitwise_not(bgrMat, bgrMat);
     PROFILER_STOP(__FUNCTION__);
+}
+
+int CameraImageProcessor::bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern)
+{
+    switch (bayerPattern)
+    {
+    case CameraPipelineFrame::BayerRGGB:
+        return cv::COLOR_BayerBG2BGR;
+    case CameraPipelineFrame::BayerBGGR:
+        return cv::COLOR_BayerRG2BGR;
+    case CameraPipelineFrame::BayerGRBG:
+        return cv::COLOR_BayerGB2BGR;
+    case CameraPipelineFrame::BayerGBRG:
+        return cv::COLOR_BayerGR2BGR;
+    case CameraPipelineFrame::BayerNone:
+    default:
+        return -1;
+    }
+}
+
+cv::Mat CameraImageProcessor::debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern)
+{
+    PROFILER_START();
+
+    const int cvCode = bayerPatternToOpenCvCode(bayerPattern);
+    if ((cvCode < 0) || input.empty()) {
+        return input;
+    }
+
+    cv::Mat debayered;
+    cv::cvtColor(input, debayered, cvCode);
+    PROFILER_STOP(__FUNCTION__);
+    return debayered;
 }
 
 const QImage& CameraImageProcessor::ensureRgb888(const QImage& image, QImage& convertedImage)

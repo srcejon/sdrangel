@@ -973,6 +973,15 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         cameraSourceChanged
         || (m_settings.isQtCamera() && (force || settingsKeys.contains("audioDeviceName")))
         || (m_settings.isAsiCamera() && captureModeChanged));
+    const bool alpacaEndpointChanged = force
+        || settingsKeys.contains("cameraProtocol")
+        || settingsKeys.contains("alpacaHost")
+        || settingsKeys.contains("alpacaPort")
+        || settingsKeys.contains("cameraId");
+    const bool disconnectPreviousAlpaca = m_settings.isAlpacaCamera()
+        && m_networkManager
+        && m_alpacaConnected
+        && alpacaEndpointChanged;
 
     if (recapture)
     {
@@ -982,6 +991,10 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
             asiCloseCamera();
         }
 #endif
+    }
+
+    if (disconnectPreviousAlpaca) {
+        alpacaSetConnected(false);
     }
 
     if (force) {
@@ -1030,11 +1043,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         }
     }
 
-    const bool alpacaEndpointChanged = force
-        || settingsKeys.contains("cameraProtocol")
-        || settingsKeys.contains("alpacaHost")
-        || settingsKeys.contains("alpacaPort")
-        || settingsKeys.contains("cameraId");
     const bool alpacaFocuserEndpointChanged = force
         || settingsKeys.contains("alpacaFocuserEnabled")
         || settingsKeys.contains("alpacaFocuserHost")

@@ -178,7 +178,7 @@ public:
     MessageQueue* getFrameAlignerInputMessageQueue() { return m_frameAligner ? m_frameAligner->getInputMessageQueue() : nullptr; }
     MessageQueue* getFrameStackerInputMessageQueue() { return m_frameStacker ? m_frameStacker->getInputMessageQueue() : nullptr; }
     MessageQueue* getImageProcessorInputMessageQueue() { return m_imageProcessor ? m_imageProcessor->getInputMessageQueue() : nullptr; }
-    MessageQueue* getDetectorInputMessageQueue() { return m_detector ? m_detector->getInputMessageQueue() : nullptr; }
+    MessageQueue* getDetectorInputMessageQueue() { return m_objectDetector ? m_objectDetector->getInputMessageQueue() : nullptr; }
     MessageQueue* getPostProcessorInputMessageQueue() { return m_postProcessor ? m_postProcessor->getInputMessageQueue() : nullptr; }
     void setMessageQueueToGUI(MessageQueue *queue) override;
 
@@ -191,8 +191,12 @@ private:
     CameraFrameStacker *m_frameStacker;
     QThread *m_imageProcessorThread;
     CameraImageProcessor *m_imageProcessor;
-    QThread *m_detectorThread;
-    CameraDetector *m_detector;
+    QThread *m_motionDiffDetectorThread;
+    CameraMotionDiffDetector *m_motionDiffDetector;
+    QThread *m_starDetectorThread;
+    CameraStarDetector *m_starDetector;
+    QThread *m_objectDetectorThread;
+    CameraObjectDetector *m_objectDetector;
     QThread *m_postProcessorThread;
     CameraPostProcessor *m_postProcessor;
     CameraSettings m_settings;

@@ -453,9 +453,9 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         return true;
     }
-    else if (CameraDetector::MsgReportObjectDetectionHistory::match(message))
+    else if (CameraObjectDetector::MsgReportObjectDetectionHistory::match(message))
     {
-        const CameraDetector::MsgReportObjectDetectionHistory& report = (CameraDetector::MsgReportObjectDetectionHistory&) message;
+        const CameraObjectDetector::MsgReportObjectDetectionHistory& report = (CameraObjectDetector::MsgReportObjectDetectionHistory&) message;
         m_detectionHistory = report.getHistory();
         if (m_detectionHistoryDialog) {
             m_detectionHistoryDialog->updateHistory(m_detectionHistory);
@@ -5555,7 +5555,7 @@ void CameraGUI::on_detectionHistoryClearRequested()
 {
     MessageQueue *detectorQueue = m_camera ? m_camera->getDetectorInputMessageQueue() : nullptr;
     if (detectorQueue) {
-        detectorQueue->push(CameraDetector::MsgClearObjectDetectionHistory::create());
+        detectorQueue->push(CameraObjectDetector::MsgClearObjectDetectionHistory::create());
     }
 }
 

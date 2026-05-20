@@ -36,7 +36,7 @@
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
-class CameraDetector;
+class CameraDetectionStage;
 
 class CameraImageProcessor : public QObject
 {
@@ -115,11 +115,11 @@ public:
     void stopWork();
     void submitFrame(const CameraPipelineFramePtr& frame);
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
-    void setNextStage(CameraDetector *nextStage) { m_nextStage = nextStage; }
+    void setNextStage(CameraDetectionStage *nextStage) { m_nextStage = nextStage; }
 
 private:
     MessageQueue m_inputMessageQueue;
-    CameraDetector *m_nextStage;
+    CameraDetectionStage *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
     CameraPipelineFrame m_lastInputFrame;

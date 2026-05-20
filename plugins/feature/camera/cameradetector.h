@@ -4,16 +4,7 @@
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
-// the Free Software Foundation as version 3 of the License, or                  //
-// (at your option) any later version.                                           //
-//                                                                               //
-// This program is distributed in the hope that it will be useful,               //
-// but WITHOUT ANY WARRANTY; without even the implied warranty of                //
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                  //
-// GNU General Public License V3 for more details.                               //
-//                                                                               //
-// You should have received a copy of the GNU General Public License             //
-// along with this program. If not, see <http://www.gnu.org/licenses/>.          //
+// the Free Software Foundation as version 3, or (at your option) later.         //
 ///////////////////////////////////////////////////////////////////////////////////
 
 #ifndef INCLUDE_FEATURE_CAMERADETECTOR_H_
@@ -47,13 +38,12 @@
 #include "camerasettings.h"
 
 class Camera;
-class CameraPostProcessor;
 
-class CameraDetector : public QObject
+class CameraDetectionStage : public QObject
 {
     Q_OBJECT
 public:
-    class MsgConfigureCameraDetector : public Message {
+    class MsgConfigureCameraDetectionStage : public Message {
         MESSAGE_CLASS_DECLARATION
 
     public:
@@ -61,9 +51,9 @@ public:
         const QList<QString>& getSettingsKeys() const { return m_settingsKeys; }
         bool getForce() const { return m_force; }
 
-        static MsgConfigureCameraDetector* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
+        static MsgConfigureCameraDetectionStage* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
         {
-            return new MsgConfigureCameraDetector(settings, settingsKeys, force);
+            return new MsgConfigureCameraDetectionStage(settings, settingsKeys, force);
         }
 
     private:
@@ -71,7 +61,7 @@ public:
         QList<QString> m_settingsKeys;
         bool m_force;
 
-        MsgConfigureCameraDetector(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
+        MsgConfigureCameraDetectionStage(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
             Message(),
             m_settings(settings),
             m_settingsKeys(settingsKeys),
@@ -119,79 +109,70 @@ public:
         { }
     };
 
-    class MsgReportObjectDetectionHistory : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const QList<CameraDetectionHistoryEntry>& getHistory() const { return m_history; }
-
-        static MsgReportObjectDetectionHistory* create(const QList<CameraDetectionHistoryEntry>& history)
-        {
-            return new MsgReportObjectDetectionHistory(history);
-        }
-
-    private:
-        QList<CameraDetectionHistoryEntry> m_history;
-
-        MsgReportObjectDetectionHistory(const QList<CameraDetectionHistoryEntry>& history) :
-            Message(),
-            m_history(history)
-        { }
-    };
-
-    class MsgClearObjectDetectionHistory : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        static MsgClearObjectDetectionHistory* create()
-        {
-            return new MsgClearObjectDetectionHistory();
-        }
-
-    private:
-        MsgClearObjectDetectionHistory() : Message() {}
-    };
-
-    CameraDetector(Camera *camera);
-    ~CameraDetector();
+    CameraDetectionStage();
+    ~CameraDetectionStage() override;
 
     void startWork();
     void stopWork();
     void submitFrame(const CameraPipelineFramePtr& frame);
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
-    void setNextStage(CameraPostProcessor *nextStage) { m_nextStage = nextStage; }
-    void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
-    void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
+    void setNextStage(CameraDetectionStage *nextStage) { m_nextStageQueue = nextStage ? nextStage->getInputMessageQueue() : nullptr; }
+    void setNextStageInputMessageQueue(MessageQueue *messageQueue) { m_nextStageQueue = messageQueue; }
 
-private:
-    struct PendingDisappearState
-    {
-        QDateTime m_firstMissing;
-        QDateTime m_deadline;
-    };
-
-    Camera *m_camera;
+protected:
     MessageQueue m_inputMessageQueue;
-    MessageQueue *m_msgQueueToGUI;
-    MessageQueue *m_msgQueueToFeature;
-    CameraPostProcessor *m_nextStage;
+    MessageQueue *m_nextStageQueue;
     CameraSettings m_settings;
     bool m_captureActive;
+    QMutex m_frameMutex;
+    CameraPipelineFramePtr m_pendingFrame;
+    bool m_processingFrame;
+
+    virtual bool handleStageMessage(const Message& cmd);
+    virtual void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
+    virtual void captureActiveChanged(bool active);
+    virtual void processNewFrame(const CameraPipelineFramePtr& frame) = 0;
+    void forwardFrame(const CameraPipelineFramePtr& frame);
+    [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
+    [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
+    [[nodiscard]] const cv::Mat& cachedExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
+    [[nodiscard]] bool intersectsExclusionRects(const QRect& rect) const;
+    [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
+    [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
+    [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
+
+private:
+    mutable cv::Mat m_exclusionMask;
+    mutable cv::Rect m_exclusionMaskRoi;
+    mutable cv::Size m_exclusionMaskWorkSize;
+    mutable QVector<QRect> m_exclusionMaskRects;
+
+    bool handleMessage(const Message& cmd);
+
+private slots:
+    void handleInputMessages();
+    void processNextFrame();
+};
+
+class CameraMotionDiffDetector : public CameraDetectionStage
+{
+    Q_OBJECT
+public:
+    CameraMotionDiffDetector();
+    ~CameraMotionDiffDetector() override;
+
+protected:
+    void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;
+    void captureActiveChanged(bool active) override;
+    void processNewFrame(const CameraPipelineFramePtr& frame) override;
+
+private:
     CameraPipelineFrame m_previousInputFrame;
     CameraPipelineFrame m_lastInputFrame;
     std::deque<cv::Mat> m_diffMaskHistory;
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     std::deque<cv::cuda::GpuMat> m_cudaDiffMaskHistory;
-    mutable cv::cuda::Stream m_cudaDetectionStream;
-    mutable cv::Ptr<cv::cuda::Filter> m_cudaStarSmallBlurFilter;
-    mutable cv::Ptr<cv::cuda::Filter> m_cudaStarBackgroundBlurFilter;
-    mutable int m_cudaStarSmallBlurFilterType;
-    mutable int m_cudaStarBackgroundBlurFilterType;
-    mutable int m_cudaStarBackgroundBlurFilterSize;
-    mutable cv::cuda::GpuMat m_cudaStarExclusionMask;
-    mutable cv::Rect m_cudaStarExclusionRoi;
-    mutable cv::Size m_cudaStarExclusionWorkSize;
-    mutable QVector<QRect> m_cudaStarExclusionRects;
+    cv::cuda::Stream m_cudaDetectionStream;
     cv::Ptr<cv::cuda::Filter> m_cudaDiffOpenFilter;
     cv::Ptr<cv::cuda::Filter> m_cudaDiffDilationFilter;
     cv::Ptr<cv::cuda::Filter> m_cudaDiffCloseFilter;
@@ -226,33 +207,8 @@ private:
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;
     int m_motionConfirmCount;
-    cv::dnn::Net m_yoloNet;
-    cv::Size m_yoloInputSize;
-    QString m_yoloLoadedModelPath;
-    QSet<QString> m_reportedErrorKeys;
-    QStringList m_yoloLabels;
-    QString m_yoloLoadedLabelsPath;
-    QSet<QString> m_detectedObjectClasses;
-    QHash<QString, PendingDisappearState> m_pendingDisappearStates;
-    QHash<QString, CameraDetectionHistoryEntry> m_activeObjectDetectionHistory;
-    QList<CameraDetectionHistoryEntry> m_completedObjectDetectionHistory;
-    mutable cv::Mat m_exclusionMask;
-    mutable cv::Rect m_exclusionMaskRoi;
-    mutable cv::Size m_exclusionMaskWorkSize;
-    mutable QVector<QRect> m_exclusionMaskRects;
-#ifdef QT_TEXTTOSPEECH_FOUND
-    QTextToSpeech *m_speech;
-#endif
-    QMutex m_frameMutex;
-    CameraPipelineFramePtr m_pendingFrame;
-    bool m_processingFrame;
 
-    bool handleMessage(const Message& cmd);
-    void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
-    void reprocessLastFrame();
-    void processNewFrame(const CameraPipelineFramePtr& frame);
-    void processFrame(const CameraPipelineFramePtr& frame, const CameraPipelineFrame& diffReferenceFrame, bool updateInputHistory);
-    [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
+    void resetDetectionState();
     [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createBackgroundSubtractor() const;
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     [[nodiscard]] bool canUseCudaDetection() const;
@@ -261,10 +217,6 @@ private:
     [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaDiffDilationFilter(int inputType, int kernelSize);
     [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaDiffCloseFilter(int inputType, int kernelSize);
     [[nodiscard]] const cv::cuda::GpuMat& cudaDiffExclusionMask(const cv::Rect& roi, const cv::Size& workSize);
-    [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaStarSmallBlurFilter(int inputType) const;
-    [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaStarBackgroundBlurFilter(int inputType, int kernelSize) const;
-    [[nodiscard]] const cv::cuda::GpuMat& cudaStarExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
-    bool applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const;
 #endif
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     [[nodiscard]] cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> createCudaBackgroundSubtractor() const;
@@ -275,11 +227,113 @@ private:
 #endif
     void applyDiffMask(CameraPipelineFrame& frame, cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
+};
+
+class CameraStarDetector : public CameraDetectionStage
+{
+    Q_OBJECT
+public:
+    CameraStarDetector();
+    ~CameraStarDetector() override;
+
+protected:
+    void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;
+    void captureActiveChanged(bool active) override;
+    void processNewFrame(const CameraPipelineFramePtr& frame) override;
+
+private:
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+    mutable cv::cuda::Stream m_cudaDetectionStream;
+    mutable cv::Ptr<cv::cuda::Filter> m_cudaStarSmallBlurFilter;
+    mutable cv::Ptr<cv::cuda::Filter> m_cudaStarBackgroundBlurFilter;
+    mutable int m_cudaStarSmallBlurFilterType;
+    mutable int m_cudaStarBackgroundBlurFilterType;
+    mutable int m_cudaStarBackgroundBlurFilterSize;
+    mutable cv::cuda::GpuMat m_cudaStarExclusionMask;
+    mutable cv::Rect m_cudaStarExclusionRoi;
+    mutable cv::Size m_cudaStarExclusionWorkSize;
+    mutable QVector<QRect> m_cudaStarExclusionRects;
+
+    [[nodiscard]] bool canUseCudaDetection() const;
+    [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaStarSmallBlurFilter(int inputType) const;
+    [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaStarBackgroundBlurFilter(int inputType, int kernelSize) const;
+    [[nodiscard]] const cv::cuda::GpuMat& cudaStarExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
+    bool applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const;
+#endif
     void applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask = nullptr) const;
     void applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const;
-    [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
-    [[nodiscard]] const cv::Mat& cachedExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
-    [[nodiscard]] bool intersectsExclusionRects(const QRect& rect) const;
+};
+
+class CameraObjectDetector : public CameraDetectionStage
+{
+    Q_OBJECT
+public:
+    class MsgReportObjectDetectionHistory : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QList<CameraDetectionHistoryEntry>& getHistory() const { return m_history; }
+        static MsgReportObjectDetectionHistory* create(const QList<CameraDetectionHistoryEntry>& history)
+        {
+            return new MsgReportObjectDetectionHistory(history);
+        }
+
+    private:
+        QList<CameraDetectionHistoryEntry> m_history;
+        MsgReportObjectDetectionHistory(const QList<CameraDetectionHistoryEntry>& history) :
+            Message(),
+            m_history(history)
+        { }
+    };
+
+    class MsgClearObjectDetectionHistory : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgClearObjectDetectionHistory* create()
+        {
+            return new MsgClearObjectDetectionHistory();
+        }
+
+    private:
+        MsgClearObjectDetectionHistory() : Message() {}
+    };
+
+    explicit CameraObjectDetector(Camera *camera);
+    ~CameraObjectDetector() override;
+    void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
+
+protected:
+    bool handleStageMessage(const Message& cmd) override;
+    void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;
+    void captureActiveChanged(bool active) override;
+    void processNewFrame(const CameraPipelineFramePtr& frame) override;
+
+private:
+    struct PendingDisappearState
+    {
+        QDateTime m_firstMissing;
+        QDateTime m_deadline;
+    };
+
+    Camera *m_camera;
+    MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_msgQueueToFeature;
+    cv::dnn::Net m_yoloNet;
+    cv::Size m_yoloInputSize;
+    QString m_yoloLoadedModelPath;
+    QSet<QString> m_reportedErrorKeys;
+    QStringList m_yoloLabels;
+    QString m_yoloLoadedLabelsPath;
+    QSet<QString> m_detectedObjectClasses;
+    QHash<QString, PendingDisappearState> m_pendingDisappearStates;
+    QHash<QString, CameraDetectionHistoryEntry> m_activeObjectDetectionHistory;
+    QList<CameraDetectionHistoryEntry> m_completedObjectDetectionHistory;
+#ifdef QT_TEXTTOSPEECH_FOUND
+    QTextToSpeech *m_speech;
+#endif
+
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
     void clearObjectDetectionState(bool clearHistory = true);
@@ -294,13 +348,6 @@ private:
     void saySpeech(const QString& speech, const QString& className);
     bool shouldRecordVideoForDetectedObjects() const;
     void setVideoRecordingEnabled(bool enabled);
-    [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
-    [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
-    [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
-
-private slots:
-    void handleInputMessages();
-    void processNextFrame();
 };
 
 #endif // INCLUDE_FEATURE_CAMERADETECTOR_H_

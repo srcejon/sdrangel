@@ -44,11 +44,11 @@
 #include "camerapostprocessor.h"
 #include "camera.h"
 
-MESSAGE_CLASS_DEFINITION(CameraDetector::MsgConfigureCameraDetector, Message)
-MESSAGE_CLASS_DEFINITION(CameraDetector::MsgProcessFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraDetector::MsgCaptureActive, Message)
-MESSAGE_CLASS_DEFINITION(CameraDetector::MsgReportObjectDetectionHistory, Message)
-MESSAGE_CLASS_DEFINITION(CameraDetector::MsgClearObjectDetectionHistory, Message)
+MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgConfigureCameraDetectionStage, Message)
+MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgProcessFrame, Message)
+MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgCaptureActive, Message)
+MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgReportObjectDetectionHistory, Message)
+MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgClearObjectDetectionHistory, Message)
 
 namespace {
 QString substituteObjectClass(QString text, const QString& className)
@@ -358,16 +358,97 @@ cv::Size readOnnxInputSize(const QString& modelPath)
 }
 }
 
-CameraDetector::CameraDetector(Camera *camera) :
-    m_camera(camera),
-    m_msgQueueToGUI(nullptr),
-    m_msgQueueToFeature(nullptr),
-    m_nextStage(nullptr),
+CameraDetectionStage::CameraDetectionStage() :
+    m_nextStageQueue(nullptr),
     m_captureActive(false),
+    m_processingFrame(false)
+{
+}
+
+CameraDetectionStage::~CameraDetectionStage() = default;
+
+void CameraDetectionStage::startWork()
+{
+    QObject::connect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraDetectionStage::handleInputMessages);
+    handleInputMessages();
+}
+
+void CameraDetectionStage::stopWork()
+{
+    QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraDetectionStage::handleInputMessages);
+}
+
+bool CameraDetectionStage::handleMessage(const Message& cmd)
+{
+    if (MsgConfigureCameraDetectionStage::match(cmd))
+    {
+        const MsgConfigureCameraDetectionStage& cfg = (const MsgConfigureCameraDetectionStage&) cmd;
+        applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
+        return true;
+    }
+    else if (MsgProcessFrame::match(cmd))
+    {
+        const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
+        submitFrame(frameMsg.getFrame());
+        return true;
+    }
+    else if (MsgCaptureActive::match(cmd))
+    {
+        const MsgCaptureActive& activeMsg = (const MsgCaptureActive&) cmd;
+        m_captureActive = activeMsg.isActive();
+        captureActiveChanged(m_captureActive);
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrame.reset();
+        if (!m_captureActive) {
+            m_processingFrame = false;
+        }
+        return true;
+    }
+
+    return handleStageMessage(cmd);
+}
+
+bool CameraDetectionStage::handleStageMessage(const Message& cmd)
+{
+    (void) cmd;
+    return false;
+}
+
+void CameraDetectionStage::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
+{
+    if (force) {
+        m_settings = settings;
+    } else {
+        m_settings.applySettings(settingsKeys, settings);
+    }
+}
+
+void CameraDetectionStage::captureActiveChanged(bool active)
+{
+    (void) active;
+}
+
+void CameraDetectionStage::handleInputMessages()
+{
+    Message *message;
+
+    while ((message = m_inputMessageQueue.pop()) != nullptr)
+    {
+        if (handleMessage(*message)) {
+            delete message;
+        }
+    }
+}
+
+void CameraDetectionStage::forwardFrame(const CameraPipelineFramePtr& frame)
+{
+    if (m_nextStageQueue) {
+        m_nextStageQueue->push(MsgProcessFrame::create(frame));
+    }
+}
+
+CameraMotionDiffDetector::CameraMotionDiffDetector() :
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-    m_cudaStarSmallBlurFilterType(-1),
-    m_cudaStarBackgroundBlurFilterType(-1),
-    m_cudaStarBackgroundBlurFilterSize(0),
     m_cudaDiffOpenFilterSize(0),
     m_cudaDiffOpenFilterType(-1),
     m_cudaDiffDilationFilterSize(0),
@@ -382,143 +463,42 @@ CameraDetector::CameraDetector(Camera *camera) :
     m_cudaMotionCloseFilterType(-1),
 #endif
     m_motionPersistenceRemaining(0),
-    m_motionConfirmCount(0),
+    m_motionConfirmCount(0)
+{
+}
+
+CameraMotionDiffDetector::~CameraMotionDiffDetector() = default;
+
+CameraStarDetector::CameraStarDetector()
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+    :
+    m_cudaStarSmallBlurFilterType(-1),
+    m_cudaStarBackgroundBlurFilterType(-1),
+    m_cudaStarBackgroundBlurFilterSize(0)
+#endif
+{
+}
+
+CameraStarDetector::~CameraStarDetector() = default;
+
+CameraObjectDetector::CameraObjectDetector(Camera *camera) :
+    m_camera(camera),
+    m_msgQueueToGUI(nullptr),
+    m_msgQueueToFeature(nullptr),
     m_yoloInputSize(640, 640)
 #ifdef QT_TEXTTOSPEECH_FOUND
     , m_speech(new QTextToSpeech(this))
 #endif
-    , m_processingFrame(false)
 {
 }
 
-CameraDetector::~CameraDetector() = default;
+CameraObjectDetector::~CameraObjectDetector() = default;
 
-void CameraDetector::startWork()
+void CameraMotionDiffDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    QObject::connect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraDetector::handleInputMessages);
-    handleInputMessages();
-}
+    qDebug() << "CameraMotionDiffDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
-void CameraDetector::stopWork()
-{
-    QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraDetector::handleInputMessages);
-}
-
-bool CameraDetector::handleMessage(const Message& cmd)
-{
-    if (MsgConfigureCameraDetector::match(cmd))
-    {
-        const MsgConfigureCameraDetector& cfg = (const MsgConfigureCameraDetector&) cmd;
-        applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
-        return true;
-    }
-    else if (MsgProcessFrame::match(cmd))
-    {
-        const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
-        submitFrame(frameMsg.getFrame());
-        return true;
-    }
-    else if (MsgCaptureActive::match(cmd))
-    {
-        const MsgCaptureActive& activeMsg = (const MsgCaptureActive&) cmd;
-        m_captureActive = activeMsg.isActive();
-        if (m_captureActive)
-        {
-            m_previousInputFrame = CameraPipelineFrame();
-            m_lastInputFrame = CameraPipelineFrame();
-            m_diffMaskHistory.clear();
-#ifdef CAMERA_OPENCV_CUDA_DETECTION
-            m_cudaDiffMaskHistory.clear();
-#endif
-            m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
-            m_motionLastFgMaskRaw.release();
-#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
-            m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
-            m_cudaMotionLastFgMaskRaw.release();
-            invalidateCudaMotionCaches();
-#endif
-            m_lastMotionBoxes.clear();
-            m_motionPersistenceRemaining = 0;
-            m_motionConfirmCount = 0;
-            clearObjectDetectionState();
-        }
-        QMutexLocker locker(&m_frameMutex);
-        m_pendingFrame.reset();
-        if (!m_captureActive) {
-            m_processingFrame = false;
-        }
-        return true;
-    }
-    else if (MsgClearObjectDetectionHistory::match(cmd))
-    {
-        clearObjectDetectionHistory();
-        return true;
-    }
-
-    return false;
-}
-
-void CameraDetector::handleInputMessages()
-{
-    Message *message;
-
-    while ((message = m_inputMessageQueue.pop()) != nullptr)
-    {
-        if (handleMessage(*message)) {
-            delete message;
-        }
-    }
-}
-
-void CameraDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
-{
-    qDebug() << "CameraDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
-
-    const bool sourceChanged = force
-        || settingsKeys.contains("cameraId")
-        || settingsKeys.contains("cameraProtocol")
-        || settingsKeys.contains("resolutionWidth")
-        || settingsKeys.contains("resolutionHeight")
-        || settingsKeys.contains("cameraBinX")
-        || settingsKeys.contains("cameraBinY")
-        || settingsKeys.contains("cameraNumX")
-        || settingsKeys.contains("cameraNumY")
-        || settingsKeys.contains("cameraStartX")
-        || settingsKeys.contains("cameraStartY")
-        || settingsKeys.contains("cameraGain")
-        || settingsKeys.contains("cameraOffset")
-        || settingsKeys.contains("cameraReadoutMode")
-        || settingsKeys.contains("exposureTimeMs")
-        || settingsKeys.contains("stackEnabled")
-        || settingsKeys.contains("stackFrameCount")
-        || settingsKeys.contains("stackMethod")
-        || settingsKeys.contains("stackAlignmentMethod");
-
-    if (force) {
-        m_settings = settings;
-    } else {
-        m_settings.applySettings(settingsKeys, settings);
-    }
-
-    if (sourceChanged) {
-        m_previousInputFrame = CameraPipelineFrame();
-        m_lastInputFrame = CameraPipelineFrame();
-        m_diffMaskHistory.clear();
-#ifdef CAMERA_OPENCV_CUDA_DETECTION
-        m_cudaDiffMaskHistory.clear();
-#endif
-        m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
-        m_motionLastFgMaskRaw.release();
-#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
-        m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
-        m_cudaMotionLastFgMaskRaw.release();
-        invalidateCudaMotionCaches();
-#endif
-        m_lastMotionBoxes.clear();
-        m_motionPersistenceRemaining = 0;
-        m_motionConfirmCount = 0;
-        clearObjectDetectionState();
-    }
+    CameraDetectionStage::applySettings(settings, settingsKeys, force);
 
     if (force
         || settingsKeys.contains("diffMask")
@@ -597,103 +577,33 @@ void CameraDetector::applySettings(const CameraSettings& settings, const QList<Q
         invalidateCudaMotionCaches();
 #endif
     }
-
-    if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
-    {
-        m_yoloNet = cv::dnn::Net();
-        m_yoloLoadedModelPath.clear();
-        m_reportedErrorKeys.clear();
-    }
-
-    if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath))
-    {
-        m_yoloLabels.clear();
-        m_yoloLoadedLabelsPath.clear();
-        m_reportedErrorKeys.clear();
-    }
-
-    if ((force && !m_settings.m_yoloEnabled)
-        || settingsKeys.contains("yoloEnabled")
-        || settingsKeys.contains("yoloLabelsPath")
-        || settingsKeys.contains("objectDeviceSettings"))
-    {
-        clearObjectDetectionState(false);
-    }
-
-    const bool detectorVisualsChanged = force
-        || settingsKeys.contains("diffMask")
-        || settingsKeys.contains("diffThreshold")
-        || settingsKeys.contains("diffMaskOpenSize")
-        || settingsKeys.contains("dilationSize")
-        || settingsKeys.contains("diffMaskHistoryFrames")
-        || settingsKeys.contains("diffMaskCloseSize")
-        || settingsKeys.contains("motionDetect")
-        || settingsKeys.contains("postProcessUseCuda")
-        || settingsKeys.contains("motionBackgroundSubtractor")
-        || settingsKeys.contains("motionHistory")
-        || settingsKeys.contains("motionVarThreshold")
-        || settingsKeys.contains("motionLearningRate")
-        || settingsKeys.contains("motionConfirmFrames")
-        || settingsKeys.contains("motionDownscale")
-        || settingsKeys.contains("motionDetectShadows")
-        || settingsKeys.contains("motionOpenSize")
-        || settingsKeys.contains("motionCloseSize")
-        || settingsKeys.contains("motionPersistenceFrames")
-        || settingsKeys.contains("minContourArea")
-        || settingsKeys.contains("motionExclusionRects")
-        || settingsKeys.contains("starDetect")
-        || settingsKeys.contains("starThreshold")
-        || settingsKeys.contains("starBackgroundBlur")
-        || settingsKeys.contains("starMinArea")
-        || settingsKeys.contains("starMaxArea")
-        || settingsKeys.contains("starMaxAspectRatio")
-        || settingsKeys.contains("starDebugView")
-        || settingsKeys.contains("starColor")
-        || settingsKeys.contains("plateSolve")
-        || settingsKeys.contains("plateSolveMaxMagnitude")
-        || settingsKeys.contains("plateSolveMinMatches")
-        || settingsKeys.contains("plateSolveMatchRadius")
-        || settingsKeys.contains("plateSolveFinalMatchRadius")
-        || settingsKeys.contains("plateSolveSearchRadius")
-        || settingsKeys.contains("plateSolveStartMode")
-        || settingsKeys.contains("plateSolveUseCurrentDateTime")
-        || settingsKeys.contains("plateSolveDateTime")
-        || settingsKeys.contains("plateSolveUseDownloadedCatalog")
-        || settingsKeys.contains("latitude")
-        || settingsKeys.contains("longitude")
-        || settingsKeys.contains("azimuth")
-        || settingsKeys.contains("elevation")
-        || settingsKeys.contains("roll")
-        || settingsKeys.contains("fov")
-        || settingsKeys.contains("lensCenterOffsetX")
-        || settingsKeys.contains("lensCenterOffsetY")
-        || settingsKeys.contains("lensDistortionK1")
-        || settingsKeys.contains("yoloEnabled")
-        || settingsKeys.contains("yoloModelPath")
-        || settingsKeys.contains("yoloLabelsPath")
-        || settingsKeys.contains("yoloConfThreshold")
-        || settingsKeys.contains("yoloNmsThreshold")
-        || settingsKeys.contains("detectionRoiX")
-        || settingsKeys.contains("detectionRoiY")
-        || settingsKeys.contains("detectionRoiWidth")
-        || settingsKeys.contains("detectionRoiHeight");
-
-    if (detectorVisualsChanged) {
-        reprocessLastFrame();
-    }
 }
 
-void CameraDetector::reprocessLastFrame()
+void CameraMotionDiffDetector::captureActiveChanged(bool active)
 {
-    if (m_lastInputFrame.m_image.isNull()) {
+    if (!active) {
         return;
     }
 
-    CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
-    processFrame(frame, m_previousInputFrame, false);
+    m_previousInputFrame = CameraPipelineFrame();
+    m_lastInputFrame = CameraPipelineFrame();
+    m_diffMaskHistory.clear();
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+    m_cudaDiffMaskHistory.clear();
+#endif
+    m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
+    m_motionLastFgMaskRaw.release();
+#ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
+    m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
+    m_cudaMotionLastFgMaskRaw.release();
+    invalidateCudaMotionCaches();
+#endif
+    m_lastMotionBoxes.clear();
+    m_motionPersistenceRemaining = 0;
+    m_motionConfirmCount = 0;
 }
 
-void CameraDetector::submitFrame(const CameraPipelineFramePtr& frame)
+void CameraDetectionStage::submitFrame(const CameraPipelineFramePtr& frame)
 {
     if (!frame) {
         return;
@@ -703,7 +613,7 @@ void CameraDetector::submitFrame(const CameraPipelineFramePtr& frame)
     {
         QMutexLocker locker(&m_frameMutex);
         if (m_pendingFrame) {
-            qDebug() << "CameraDetector: Dropping pending frame in favor of new frame";
+            qDebug() << "CameraDetectionStage: Dropping pending frame in favor of new frame";
         }
         m_pendingFrame = frame;
         if (!m_processingFrame)
@@ -714,11 +624,11 @@ void CameraDetector::submitFrame(const CameraPipelineFramePtr& frame)
     }
 
     if (schedule) {
-        QMetaObject::invokeMethod(this, &CameraDetector::processNextFrame, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, &CameraDetectionStage::processNextFrame, Qt::QueuedConnection);
     }
 }
 
-void CameraDetector::processNextFrame()
+void CameraDetectionStage::processNextFrame()
 {
     CameraPipelineFramePtr frame;
 
@@ -747,20 +657,11 @@ void CameraDetector::processNextFrame()
     }
 
     if (schedule) {
-        QMetaObject::invokeMethod(this, &CameraDetector::processNextFrame, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, &CameraDetectionStage::processNextFrame, Qt::QueuedConnection);
     }
 }
 
-void CameraDetector::processNewFrame(const CameraPipelineFramePtr& frame)
-{
-    if (!frame || frame->m_image.isNull()) {
-        return;
-    }
-
-    processFrame(frame, m_lastInputFrame, true);
-}
-
-void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const CameraPipelineFrame& diffReferenceFrame, bool updateInputHistory)
+void CameraMotionDiffDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 {
     if (!frame || frame->m_image.isNull()) {
         return;
@@ -768,24 +669,6 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
 
     CameraPipelineFrame inputFrameSnapshot(*frame);
     frame->m_motionBoxes.clear();
-    frame->m_detections.clear();
-    frame->m_starDetections.clear();
-    frame->m_plateSolved = false;
-    frame->m_plateSolvedMatches = 0;
-    frame->m_plateSolveDetectedStarsConsidered = 0;
-    frame->m_plateSolveCatalogStarsLoaded = 0;
-    frame->m_plateSolveCatalogCandidateStars = 0;
-    frame->m_plateSolveOutlierStars = 0;
-    frame->m_plateSolveRmsError = 0.0f;
-    frame->m_plateSolveMaxError = 0.0f;
-    frame->m_plateSolveAzimuth = 0.0f;
-    frame->m_plateSolveElevation = 0.0f;
-    frame->m_plateSolveRoll = 0.0f;
-    frame->m_plateSolveFov = 0.0f;
-    frame->m_plateSolveCenterOffsetX = 0.0f;
-    frame->m_plateSolveCenterOffsetY = 0.0f;
-    frame->m_plateSolveDistortionK1 = 0.0f;
-    frame->m_plateSolveCatalogSource.clear();
 
     QImage convertedRgb;
     const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
@@ -799,19 +682,19 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
     const cv::cuda::GpuMat* cachedBgrGpu = nullptr;
 #endif
 
-    if (m_settings.m_diffMask && !diffReferenceFrame.m_image.isNull()
-        && diffReferenceFrame.m_image.width() == frame->m_image.width()
-        && diffReferenceFrame.m_image.height() == frame->m_image.height())
+    if (m_settings.m_diffMask && !m_lastInputFrame.m_image.isNull()
+        && m_lastInputFrame.m_image.width() == frame->m_image.width()
+        && m_lastInputFrame.m_image.height() == frame->m_image.height())
     {
         bool useCPUDiffMask = true;
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-        if (canUseCudaDetection() && applyDiffMaskCuda(bgrMat, frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr, detectionRoi, diffReferenceFrame)){
+        if (canUseCudaDetection() && applyDiffMaskCuda(bgrMat, frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr, detectionRoi, m_lastInputFrame)){
             useCPUDiffMask = false;
         }
 #endif
         if (useCPUDiffMask) {
-            applyDiffMask(*frame, bgrMat, detectionRoi, diffReferenceFrame);
+            applyDiffMask(*frame, bgrMat, detectionRoi, m_lastInputFrame);
         }
         cachedBgrGpu = nullptr;
     }
@@ -828,7 +711,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
                 cachedBgrGpu,
                 detectionRoi,
                 frame->m_motionBoxes,
-                updateInputHistory,
+                true,
                 (m_settings.m_motionMaskView != CameraSettings::MotionMaskViewOff) ? &motionDebugMask : nullptr))
         {
             useCPUMotionDetection = false;
@@ -841,7 +724,7 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
                 cachedBgrGpu,
                 detectionRoi,
                 frame->m_motionBoxes,
-                updateInputHistory,
+                true,
                 (m_settings.m_motionMaskView != CameraSettings::MotionMaskViewOff) ? &motionDebugMask : nullptr);
         }
 
@@ -857,79 +740,15 @@ void CameraDetector::processFrame(const CameraPipelineFramePtr& frame, const Cam
         }
     }
 
-    if (m_settings.m_starDetect)
-    {
-        cv::Mat starDebugMask;
-        applyStarDetection(
-            bgrMat,
-            cachedBgrGpu,
-            detectionRoi,
-            frame->m_starDetections,
-            (m_settings.m_starDebugView != CameraSettings::StarDebugViewOff) ? &starDebugMask : nullptr);
-
-        if (!starDebugMask.empty())
-        {
-            cv::Mat maskCanvas = cv::Mat::zeros(bgrMat.size(), starDebugMask.type());
-            cv::Mat roiMask = starDebugMask;
-            if (starDebugMask.size() != detectionRoi.size()) {
-                cv::resize(starDebugMask, roiMask, detectionRoi.size(), 0.0, 0.0, cv::INTER_NEAREST);
-            }
-            roiMask.copyTo(maskCanvas(detectionRoi));
-            if (maskCanvas.channels() == 1) {
-                cv::cvtColor(maskCanvas, bgrMat, cv::COLOR_GRAY2BGR);
-            } else {
-                bgrMat = maskCanvas;
-            }
-        }
-    }
-
-    if (!frame->m_starDetections.isEmpty())
-    {
-        const CameraPlateSolveResult plateSolveResult = CameraPlateSolver::solve(
-            m_settings,
-            frame->m_image.size(),
-            frame->m_captureDateTime,
-            frame->m_starDetections);
-        frame->m_plateSolved = plateSolveResult.m_solved;
-        frame->m_plateSolvedMatches = plateSolveResult.m_matchedStars;
-        frame->m_plateSolveDetectedStarsConsidered = plateSolveResult.m_detectedStarsConsidered;
-        frame->m_plateSolveCatalogStarsLoaded = plateSolveResult.m_catalogStarsLoaded;
-        frame->m_plateSolveCatalogCandidateStars = plateSolveResult.m_catalogCandidateStars;
-        frame->m_plateSolveOutlierStars = plateSolveResult.m_outlierStars;
-        frame->m_plateSolveRmsError = static_cast<float>(plateSolveResult.m_rmsErrorPixels);
-        frame->m_plateSolveMaxError = static_cast<float>(plateSolveResult.m_maxErrorPixels);
-        frame->m_plateSolveAzimuth = static_cast<float>(plateSolveResult.m_azimuthDegrees);
-        frame->m_plateSolveElevation = static_cast<float>(plateSolveResult.m_elevationDegrees);
-        frame->m_plateSolveRoll = static_cast<float>(plateSolveResult.m_rollDegrees);
-        frame->m_plateSolveFov = static_cast<float>(plateSolveResult.m_fovDegrees);
-        frame->m_plateSolveCenterOffsetX = static_cast<float>(plateSolveResult.m_centerOffsetXPixels);
-        frame->m_plateSolveCenterOffsetY = static_cast<float>(plateSolveResult.m_centerOffsetYPixels);
-        frame->m_plateSolveDistortionK1 = static_cast<float>(plateSolveResult.m_distortionK1);
-        frame->m_plateSolveCatalogSource = plateSolveResult.m_catalogSource;
-    }
-
-    if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
-        runYoloDetections(bgrMat, detectionRoi, frame->m_detections);
-    }
-
-    const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
-    processObjectDetections(frame->m_detections, detectionTime, *frame);
-
     frame->m_image = convertBgrToRgbImage(bgrMat);
     frame->clearCudaCache();
+    m_previousInputFrame = m_lastInputFrame;
+    m_lastInputFrame = inputFrameSnapshot;
 
-    if (updateInputHistory)
-    {
-        m_previousInputFrame = m_lastInputFrame;
-        m_lastInputFrame = inputFrameSnapshot;
-    }
-
-    if (m_nextStage) {
-        m_nextStage->submitFrame(frame);
-    }
+    forwardFrame(frame);
 }
 
-cv::Rect CameraDetector::resolveDetectionRoi(const cv::Size& frameSize) const
+cv::Rect CameraDetectionStage::resolveDetectionRoi(const cv::Size& frameSize) const
 {
     const int frameWidth = std::max(1, frameSize.width);
     const int frameHeight = std::max(1, frameSize.height);
@@ -944,7 +763,7 @@ cv::Rect CameraDetector::resolveDetectionRoi(const cv::Size& frameSize) const
     return cv::Rect(x, y, width, height);
 }
 
-void CameraDetector::applyDiffMask(CameraPipelineFrame& frame, cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
+void CameraMotionDiffDetector::applyDiffMask(CameraPipelineFrame& frame, cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
 {
     PROFILER_START();
 
@@ -1013,7 +832,7 @@ void CameraDetector::applyDiffMask(CameraPipelineFrame& frame, cv::Mat& bgrMat, 
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-bool CameraDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
+bool CameraMotionDiffDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
 {
     PROFILER_START();
     try
@@ -1108,7 +927,7 @@ bool CameraDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuMat* 
     }
     catch (const cv::Exception& error)
     {
-        qWarning() << "CameraDetector: CUDA diff mask failed; falling back to CPU:" << error.what();
+        qWarning() << "CameraMotionDiffDetector: CUDA diff mask failed; falling back to CPU:" << error.what();
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1116,7 +935,7 @@ bool CameraDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuMat* 
 }
 #endif
 
-cv::Mat CameraDetector::buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
+cv::Mat CameraDetectionStage::buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
 {
     cv::Mat mask(workSize, CV_8UC1, cv::Scalar(255));
 
@@ -1145,7 +964,7 @@ cv::Mat CameraDetector::buildExclusionMask(const cv::Rect& roi, const cv::Size& 
     return mask;
 }
 
-const cv::Mat& CameraDetector::cachedExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
+const cv::Mat& CameraDetectionStage::cachedExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
 {
     if (m_exclusionMask.empty()
         || (m_exclusionMaskRoi != roi)
@@ -1161,7 +980,7 @@ const cv::Mat& CameraDetector::cachedExclusionMask(const cv::Rect& roi, const cv
     return m_exclusionMask;
 }
 
-bool CameraDetector::intersectsExclusionRects(const QRect& rect) const
+bool CameraDetectionStage::intersectsExclusionRects(const QRect& rect) const
 {
     for (const QRect& exclusionRect : m_settings.m_motionExclusionRects)
     {
@@ -1173,7 +992,7 @@ bool CameraDetector::intersectsExclusionRects(const QRect& rect) const
     return false;
 }
 
-cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createBackgroundSubtractor() const
+cv::Ptr<cv::BackgroundSubtractor> CameraMotionDiffDetector::createBackgroundSubtractor() const
 {
     if (m_settings.m_motionBackgroundSubtractor == CameraSettings::MotionBackgroundSubtractorKNN)
     {
@@ -1190,7 +1009,7 @@ cv::Ptr<cv::BackgroundSubtractor> CameraDetector::createBackgroundSubtractor() c
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-bool CameraDetector::canUseCudaDetection() const
+bool CameraMotionDiffDetector::canUseCudaDetection() const
 {
     static bool warnedNoDevice = false;
 
@@ -1202,7 +1021,7 @@ bool CameraDetector::canUseCudaDetection() const
     {
         if (!warnedNoDevice)
         {
-            qWarning() << "CameraDetector: CUDA detection requested, but no CUDA-enabled OpenCV device is available";
+            qWarning() << "CameraMotionDiffDetector: CUDA detection requested, but no CUDA-enabled OpenCV device is available";
             warnedNoDevice = true;
         }
         return false;
@@ -1211,7 +1030,7 @@ bool CameraDetector::canUseCudaDetection() const
     return true;
 }
 
-cv::Ptr<cv::cuda::Filter> CameraDetector::cudaDiffOpenFilter(int inputType, int kernelSize)
+cv::Ptr<cv::cuda::Filter> CameraMotionDiffDetector::cudaDiffOpenFilter(int inputType, int kernelSize)
 {
     if (!m_cudaDiffOpenFilter
         || (m_cudaDiffOpenFilterType != inputType)
@@ -1226,7 +1045,7 @@ cv::Ptr<cv::cuda::Filter> CameraDetector::cudaDiffOpenFilter(int inputType, int 
     return m_cudaDiffOpenFilter;
 }
 
-cv::Ptr<cv::cuda::Filter> CameraDetector::cudaDiffDilationFilter(int inputType, int kernelSize)
+cv::Ptr<cv::cuda::Filter> CameraMotionDiffDetector::cudaDiffDilationFilter(int inputType, int kernelSize)
 {
     if (!m_cudaDiffDilationFilter
         || (m_cudaDiffDilationFilterType != inputType)
@@ -1241,7 +1060,7 @@ cv::Ptr<cv::cuda::Filter> CameraDetector::cudaDiffDilationFilter(int inputType, 
     return m_cudaDiffDilationFilter;
 }
 
-cv::Ptr<cv::cuda::Filter> CameraDetector::cudaDiffCloseFilter(int inputType, int kernelSize)
+cv::Ptr<cv::cuda::Filter> CameraMotionDiffDetector::cudaDiffCloseFilter(int inputType, int kernelSize)
 {
     if (!m_cudaDiffCloseFilter
         || (m_cudaDiffCloseFilterType != inputType)
@@ -1256,7 +1075,7 @@ cv::Ptr<cv::cuda::Filter> CameraDetector::cudaDiffCloseFilter(int inputType, int
     return m_cudaDiffCloseFilter;
 }
 
-const cv::cuda::GpuMat& CameraDetector::cudaDiffExclusionMask(const cv::Rect& roi, const cv::Size& workSize)
+const cv::cuda::GpuMat& CameraMotionDiffDetector::cudaDiffExclusionMask(const cv::Rect& roi, const cv::Size& workSize)
 {
     if (m_cudaDiffExclusionMask.empty()
         || (m_cudaDiffExclusionRoi != roi)
@@ -1273,7 +1092,28 @@ const cv::cuda::GpuMat& CameraDetector::cudaDiffExclusionMask(const cv::Rect& ro
     return m_cudaDiffExclusionMask;
 }
 
-cv::Ptr<cv::cuda::Filter> CameraDetector::cudaStarSmallBlurFilter(int inputType) const
+bool CameraStarDetector::canUseCudaDetection() const
+{
+    static bool warnedNoDevice = false;
+
+    if (!m_settings.m_postProcessUseCuda) {
+        return false;
+    }
+
+    if (cv::cuda::getCudaEnabledDeviceCount() <= 0)
+    {
+        if (!warnedNoDevice)
+        {
+            qWarning() << "CameraStarDetector: CUDA detection requested, but no CUDA-enabled OpenCV device is available";
+            warnedNoDevice = true;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+cv::Ptr<cv::cuda::Filter> CameraStarDetector::cudaStarSmallBlurFilter(int inputType) const
 {
     if (!m_cudaStarSmallBlurFilter || (m_cudaStarSmallBlurFilterType != inputType))
     {
@@ -1285,7 +1125,7 @@ cv::Ptr<cv::cuda::Filter> CameraDetector::cudaStarSmallBlurFilter(int inputType)
     return m_cudaStarSmallBlurFilter;
 }
 
-cv::Ptr<cv::cuda::Filter> CameraDetector::cudaStarBackgroundBlurFilter(int inputType, int kernelSize) const
+cv::Ptr<cv::cuda::Filter> CameraStarDetector::cudaStarBackgroundBlurFilter(int inputType, int kernelSize) const
 {
     if (!m_cudaStarBackgroundBlurFilter
         || (m_cudaStarBackgroundBlurFilterType != inputType)
@@ -1300,7 +1140,7 @@ cv::Ptr<cv::cuda::Filter> CameraDetector::cudaStarBackgroundBlurFilter(int input
     return m_cudaStarBackgroundBlurFilter;
 }
 
-const cv::cuda::GpuMat& CameraDetector::cudaStarExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
+const cv::cuda::GpuMat& CameraStarDetector::cudaStarExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
 {
     if (m_cudaStarExclusionMask.empty()
         || (m_cudaStarExclusionRoi != roi)
@@ -1319,7 +1159,7 @@ const cv::cuda::GpuMat& CameraDetector::cudaStarExclusionMask(const cv::Rect& ro
 #endif
 
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
-cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> CameraDetector::createCudaBackgroundSubtractor() const
+cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> CameraMotionDiffDetector::createCudaBackgroundSubtractor() const
 {
     return cv::cuda::createBackgroundSubtractorMOG2(
         m_settings.m_motionHistory,
@@ -1327,7 +1167,7 @@ cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> CameraDetector::createCudaBackground
         m_settings.m_motionDetectShadows);
 }
 
-bool CameraDetector::canUseCudaMotionDetection() const
+bool CameraMotionDiffDetector::canUseCudaMotionDetection() const
 {
     static bool warnedNoDevice = false;
     static bool warnedUnsupportedSettings = false;
@@ -1340,7 +1180,7 @@ bool CameraDetector::canUseCudaMotionDetection() const
     {
         if (!warnedUnsupportedSettings)
         {
-            qDebug() << "CameraDetector: CUDA motion detection requested, but only MOG2 is supported; using CPU path";
+            qDebug() << "CameraMotionDiffDetector: CUDA motion detection requested, but only MOG2 is supported; using CPU path";
             warnedUnsupportedSettings = true;
         }
         return false;
@@ -1350,7 +1190,7 @@ bool CameraDetector::canUseCudaMotionDetection() const
     {
         if (!warnedNoDevice)
         {
-            qWarning() << "CameraDetector: CUDA motion detection requested, but no CUDA-enabled OpenCV device is available";
+            qWarning() << "CameraMotionDiffDetector: CUDA motion detection requested, but no CUDA-enabled OpenCV device is available";
             warnedNoDevice = true;
         }
         return false;
@@ -1359,7 +1199,7 @@ bool CameraDetector::canUseCudaMotionDetection() const
     return true;
 }
 
-void CameraDetector::invalidateCudaMotionCaches()
+void CameraMotionDiffDetector::invalidateCudaMotionCaches()
 {
     m_cudaMotionOpenFilter.release();
     m_cudaMotionCloseFilter.release();
@@ -1373,7 +1213,7 @@ void CameraDetector::invalidateCudaMotionCaches()
     m_cudaMotionExclusionRects.clear();
 }
 
-const cv::cuda::GpuMat& CameraDetector::cudaMotionExclusionMask(const cv::Rect& roi, const cv::Size& workSize)
+const cv::cuda::GpuMat& CameraMotionDiffDetector::cudaMotionExclusionMask(const cv::Rect& roi, const cv::Size& workSize)
 {
     if (m_cudaMotionExclusionMask.empty()
         || (m_cudaMotionExclusionRoi != roi)
@@ -1390,7 +1230,7 @@ const cv::cuda::GpuMat& CameraDetector::cudaMotionExclusionMask(const cv::Rect& 
     return m_cudaMotionExclusionMask;
 }
 
-bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
+bool CameraMotionDiffDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -1559,7 +1399,7 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::c
     }
     catch (const cv::Exception& error)
     {
-        qWarning() << "CameraDetector: CUDA motion detection failed; falling back to CPU:" << error.what();
+        qWarning() << "CameraMotionDiffDetector: CUDA motion detection failed; falling back to CPU:" << error.what();
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1567,7 +1407,7 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::c
 }
 #endif
 
-void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
+void CameraMotionDiffDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -1680,7 +1520,110 @@ void CameraDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda:
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
+void CameraStarDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
+{
+    qDebug() << "CameraStarDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    CameraDetectionStage::applySettings(settings, settingsKeys, force);
+}
+
+void CameraStarDetector::captureActiveChanged(bool active)
+{
+    (void) active;
+}
+
+void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
+{
+    if (!frame || frame->m_image.isNull()) {
+        return;
+    }
+
+    frame->m_starDetections.clear();
+    frame->m_plateSolved = false;
+    frame->m_plateSolvedMatches = 0;
+    frame->m_plateSolveDetectedStarsConsidered = 0;
+    frame->m_plateSolveCatalogStarsLoaded = 0;
+    frame->m_plateSolveCatalogCandidateStars = 0;
+    frame->m_plateSolveOutlierStars = 0;
+    frame->m_plateSolveRmsError = 0.0f;
+    frame->m_plateSolveMaxError = 0.0f;
+    frame->m_plateSolveAzimuth = 0.0f;
+    frame->m_plateSolveElevation = 0.0f;
+    frame->m_plateSolveRoll = 0.0f;
+    frame->m_plateSolveFov = 0.0f;
+    frame->m_plateSolveCenterOffsetX = 0.0f;
+    frame->m_plateSolveCenterOffsetY = 0.0f;
+    frame->m_plateSolveDistortionK1 = 0.0f;
+    frame->m_plateSolveCatalogSource.clear();
+
+    QImage convertedRgb;
+    const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
+    cv::Mat mat = wrapRgb888Image(rgb);
+    cv::Mat bgrMat;
+    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+    const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
+#if defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+    const cv::cuda::GpuMat* cachedBgrGpu = frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr;
+#else
+    const cv::cuda::GpuMat* cachedBgrGpu = nullptr;
+#endif
+
+    if (m_settings.m_starDetect)
+    {
+        cv::Mat starDebugMask;
+        applyStarDetection(
+            bgrMat,
+            cachedBgrGpu,
+            detectionRoi,
+            frame->m_starDetections,
+            (m_settings.m_starDebugView != CameraSettings::StarDebugViewOff) ? &starDebugMask : nullptr);
+
+        if (!starDebugMask.empty())
+        {
+            cv::Mat maskCanvas = cv::Mat::zeros(bgrMat.size(), starDebugMask.type());
+            cv::Mat roiMask = starDebugMask;
+            if (starDebugMask.size() != detectionRoi.size()) {
+                cv::resize(starDebugMask, roiMask, detectionRoi.size(), 0.0, 0.0, cv::INTER_NEAREST);
+            }
+            roiMask.copyTo(maskCanvas(detectionRoi));
+            if (maskCanvas.channels() == 1) {
+                cv::cvtColor(maskCanvas, bgrMat, cv::COLOR_GRAY2BGR);
+            } else {
+                bgrMat = maskCanvas;
+            }
+            frame->m_image = convertBgrToRgbImage(bgrMat);
+            frame->clearCudaCache();
+        }
+    }
+
+    if (!frame->m_starDetections.isEmpty())
+    {
+        const CameraPlateSolveResult plateSolveResult = CameraPlateSolver::solve(
+            m_settings,
+            frame->m_image.size(),
+            frame->m_captureDateTime,
+            frame->m_starDetections);
+        frame->m_plateSolved = plateSolveResult.m_solved;
+        frame->m_plateSolvedMatches = plateSolveResult.m_matchedStars;
+        frame->m_plateSolveDetectedStarsConsidered = plateSolveResult.m_detectedStarsConsidered;
+        frame->m_plateSolveCatalogStarsLoaded = plateSolveResult.m_catalogStarsLoaded;
+        frame->m_plateSolveCatalogCandidateStars = plateSolveResult.m_catalogCandidateStars;
+        frame->m_plateSolveOutlierStars = plateSolveResult.m_outlierStars;
+        frame->m_plateSolveRmsError = static_cast<float>(plateSolveResult.m_rmsErrorPixels);
+        frame->m_plateSolveMaxError = static_cast<float>(plateSolveResult.m_maxErrorPixels);
+        frame->m_plateSolveAzimuth = static_cast<float>(plateSolveResult.m_azimuthDegrees);
+        frame->m_plateSolveElevation = static_cast<float>(plateSolveResult.m_elevationDegrees);
+        frame->m_plateSolveRoll = static_cast<float>(plateSolveResult.m_rollDegrees);
+        frame->m_plateSolveFov = static_cast<float>(plateSolveResult.m_fovDegrees);
+        frame->m_plateSolveCenterOffsetX = static_cast<float>(plateSolveResult.m_centerOffsetXPixels);
+        frame->m_plateSolveCenterOffsetY = static_cast<float>(plateSolveResult.m_centerOffsetYPixels);
+        frame->m_plateSolveDistortionK1 = static_cast<float>(plateSolveResult.m_distortionK1);
+        frame->m_plateSolveCatalogSource = plateSolveResult.m_catalogSource;
+    }
+
+    forwardFrame(frame);
+}
+
+void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
 {
     PROFILER_START();
 
@@ -1724,7 +1667,7 @@ void CameraDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cud
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-bool CameraDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
+bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
 {
     PROFILER_START();
 
@@ -1793,14 +1736,14 @@ bool CameraDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv:
     }
     catch (const cv::Exception& error)
     {
-        qWarning() << "CameraDetector: CUDA star preprocessing failed; falling back to CPU:" << error.what();
+        qWarning() << "CameraStarDetector: CUDA star preprocessing failed; falling back to CPU:" << error.what();
     }
     PROFILER_STOP(__FUNCTION__);
     return false;
 }
 #endif
 
-void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask) const
+void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask) const
 {
     PROFILER_START();
 
@@ -1934,7 +1877,79 @@ void CameraDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::G
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections)
+bool CameraObjectDetector::handleStageMessage(const Message& cmd)
+{
+    if (MsgClearObjectDetectionHistory::match(cmd))
+    {
+        clearObjectDetectionHistory();
+        return true;
+    }
+
+    return false;
+}
+
+void CameraObjectDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
+{
+    qDebug() << "CameraObjectDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    CameraDetectionStage::applySettings(settings, settingsKeys, force);
+
+    if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
+    {
+        m_yoloNet = cv::dnn::Net();
+        m_yoloLoadedModelPath.clear();
+        m_reportedErrorKeys.clear();
+    }
+
+    if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath))
+    {
+        m_yoloLabels.clear();
+        m_yoloLoadedLabelsPath.clear();
+        m_reportedErrorKeys.clear();
+    }
+
+    if ((force && !m_settings.m_yoloEnabled)
+        || settingsKeys.contains("yoloEnabled")
+        || settingsKeys.contains("yoloLabelsPath")
+        || settingsKeys.contains("objectDeviceSettings"))
+    {
+        clearObjectDetectionState(false);
+    }
+}
+
+void CameraObjectDetector::captureActiveChanged(bool active)
+{
+    if (active) {
+        clearObjectDetectionState();
+    }
+}
+
+void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
+{
+    if (!frame || frame->m_image.isNull()) {
+        return;
+    }
+
+    frame->m_detections.clear();
+
+    QImage convertedRgb;
+    const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
+    cv::Mat mat = wrapRgb888Image(rgb);
+    cv::Mat bgrMat;
+    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+    const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
+
+    if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
+        runYoloDetections(bgrMat, detectionRoi, frame->m_detections);
+    }
+
+    const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
+    processObjectDetections(frame->m_detections, detectionTime, *frame);
+    if (m_nextStageQueue) {
+        m_nextStageQueue->push(CameraPostProcessor::MsgProcessFrame::create(frame));
+    }
+}
+
+void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections)
 {
     PROFILER_START();
 
@@ -1960,7 +1975,7 @@ void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& ro
             }
             else
             {
-                qWarning() << "CameraDetector::runYoloDetections: cannot open labels file:" << m_settings.m_yoloLabelsPath;
+                qWarning() << "CameraObjectDetector::runYoloDetections: cannot open labels file:" << m_settings.m_yoloLabelsPath;
                 reportErrorToFeature(
                     QStringLiteral("yoloLabels:%1").arg(m_settings.m_yoloLabelsPath),
                     tr("YOLO labels file load failed"),
@@ -1990,17 +2005,17 @@ void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& ro
                 }
                 else
                 {
-                    qWarning() << "CameraDetector::runYoloDetections: unable to read model input size, using fallback 640x640 for"
+                    qWarning() << "CameraObjectDetector::runYoloDetections: unable to read model input size, using fallback 640x640 for"
                                << localFile;
                 }
 
                 m_yoloLoadedModelPath = m_settings.m_yoloModelPath;
-                qDebug() << "CameraDetector::runYoloDetections: loaded model" << localFile
+                qDebug() << "CameraObjectDetector::runYoloDetections: loaded model" << localFile
                          << "with input size" << m_yoloInputSize.width << "x" << m_yoloInputSize.height;
             }
             catch (const cv::Exception& e)
             {
-                qWarning() << "CameraDetector::runYoloDetections: failed to load model:" << e.what();
+                qWarning() << "CameraObjectDetector::runYoloDetections: failed to load model:" << e.what();
                 reportErrorToFeature(
                     QStringLiteral("yoloModelLoad:%1").arg(localFile),
                     tr("YOLO model load failed"),
@@ -2049,7 +2064,7 @@ void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& ro
     }
     catch (const cv::Exception& e)
     {
-        qWarning() << "CameraDetector::runYoloDetections: inference failed:" << e.what();
+        qWarning() << "CameraObjectDetector::runYoloDetections: inference failed:" << e.what();
         return;
     }
 
@@ -2177,7 +2192,7 @@ void CameraDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& ro
     PROFILER_STOP("YOLO");
 }
 
-const QImage& CameraDetector::ensureRgb888(const QImage& image, QImage& convertedImage)
+const QImage& CameraDetectionStage::ensureRgb888(const QImage& image, QImage& convertedImage)
 {
     if (image.format() == QImage::Format_RGB888) {
         return image;
@@ -2187,14 +2202,14 @@ const QImage& CameraDetector::ensureRgb888(const QImage& image, QImage& converte
     return convertedImage;
 }
 
-cv::Mat CameraDetector::wrapRgb888Image(const QImage& image)
+cv::Mat CameraDetectionStage::wrapRgb888Image(const QImage& image)
 {
     return cv::Mat(image.height(), image.width(), CV_8UC3,
                    const_cast<uchar*>(image.constBits()),
                    static_cast<size_t>(image.bytesPerLine()));
 }
 
-QImage CameraDetector::convertBgrToRgbImage(const cv::Mat& bgrMat)
+QImage CameraDetectionStage::convertBgrToRgbImage(const cv::Mat& bgrMat)
 {
     PROFILER_START();
     QImage result(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);
@@ -2205,7 +2220,7 @@ QImage CameraDetector::convertBgrToRgbImage(const cv::Mat& bgrMat)
     return result;
 }
 
-void CameraDetector::clearObjectDetectionState(bool clearHistory)
+void CameraObjectDetector::clearObjectDetectionState(bool clearHistory)
 {
     m_detectedObjectClasses.clear();
     m_pendingDisappearStates.clear();
@@ -2214,14 +2229,14 @@ void CameraDetector::clearObjectDetectionState(bool clearHistory)
     }
 }
 
-void CameraDetector::clearObjectDetectionHistory()
+void CameraObjectDetector::clearObjectDetectionHistory()
 {
     m_activeObjectDetectionHistory.clear();
     m_completedObjectDetectionHistory.clear();
     reportObjectDetectionHistoryToGUI();
 }
 
-QList<CameraDetectionHistoryEntry> CameraDetector::getObjectDetectionHistorySnapshot() const
+QList<CameraDetectionHistoryEntry> CameraObjectDetector::getObjectDetectionHistorySnapshot() const
 {
     QList<CameraDetectionHistoryEntry> history = m_completedObjectDetectionHistory;
     for (auto it = m_activeObjectDetectionHistory.cbegin(); it != m_activeObjectDetectionHistory.cend(); ++it) {
@@ -2239,14 +2254,14 @@ QList<CameraDetectionHistoryEntry> CameraDetector::getObjectDetectionHistorySnap
     return history;
 }
 
-void CameraDetector::reportObjectDetectionHistoryToGUI() const
+void CameraObjectDetector::reportObjectDetectionHistoryToGUI() const
 {
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportObjectDetectionHistory::create(getObjectDetectionHistorySnapshot()));
     }
 }
 
-void CameraDetector::reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage)
+void CameraObjectDetector::reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage)
 {
     if (!m_msgQueueToFeature || m_reportedErrorKeys.contains(errorKey)) {
         return;
@@ -2256,7 +2271,7 @@ void CameraDetector::reportErrorToFeature(const QString& errorKey, const QString
     m_msgQueueToFeature->push(Camera::MsgReportError::create(title, errorMessage));
 }
 
-void CameraDetector::processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame)
+void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame)
 {
     QHash<QString, float> currentDetectedScores;
     QSet<QString> currentDetectedClasses;
@@ -2346,7 +2361,7 @@ void CameraDetector::processObjectDetections(const QVector<CameraPipelineDetecti
     }
 }
 
-bool CameraDetector::shouldRecordVideoForDetectedObjects() const
+bool CameraObjectDetector::shouldRecordVideoForDetectedObjects() const
 {
     for (const QString& className : m_detectedObjectClasses)
     {
@@ -2366,7 +2381,7 @@ bool CameraDetector::shouldRecordVideoForDetectedObjects() const
     return false;
 }
 
-void CameraDetector::setVideoRecordingEnabled(bool enabled)
+void CameraObjectDetector::setVideoRecordingEnabled(bool enabled)
 {
     if (m_settings.m_saveVideo == enabled) {
         return;
@@ -2374,12 +2389,12 @@ void CameraDetector::setVideoRecordingEnabled(bool enabled)
 
     m_settings.m_saveVideo = enabled;
 
-    if (m_nextStage) {
-        m_nextStage->getInputMessageQueue()->push(CameraPostProcessor::MsgSetVideoRecordingEnabled::create(enabled));
+    if (m_nextStageQueue) {
+        m_nextStageQueue->push(CameraPostProcessor::MsgSetVideoRecordingEnabled::create(enabled));
     }
 }
 
-void CameraDetector::executeCommand(const QString& command, const QString& className)
+void CameraObjectDetector::executeCommand(const QString& command, const QString& className)
 {
     if (command.isEmpty()) {
         return;
@@ -2393,16 +2408,16 @@ void CameraDetector::executeCommand(const QString& command, const QString& class
         return;
     }
 
-    qDebug() << "CameraDetector::executeCommand: Executing:" << allArgs;
+    qDebug() << "CameraObjectDetector::executeCommand: Executing:" << allArgs;
     const QString program = allArgs.takeFirst();
     QProcess::startDetached(program, allArgs);
 #else
-    qWarning() << "CameraDetector::executeCommand: QProcess not supported. Can't run:" << command;
+    qWarning() << "CameraObjectDetector::executeCommand: QProcess not supported. Can't run:" << command;
     (void) className;
 #endif
 }
 
-void CameraDetector::saySpeech(const QString& speech, const QString& className)
+void CameraObjectDetector::saySpeech(const QString& speech, const QString& className)
 {
     if (speech.isEmpty()) {
         return;
@@ -2413,11 +2428,11 @@ void CameraDetector::saySpeech(const QString& speech, const QString& className)
 #ifdef QT_TEXTTOSPEECH_FOUND
     m_speech->say(expandedSpeech);
 #else
-    qWarning() << "CameraDetector::saySpeech: TextToSpeech not supported. Unable to say" << expandedSpeech;
+    qWarning() << "CameraObjectDetector::saySpeech: TextToSpeech not supported. Unable to say" << expandedSpeech;
 #endif
 }
 
-bool CameraDetector::applyObjectDetectedSettings(const QString& className, const QDateTime& now)
+bool CameraObjectDetector::applyObjectDetectedSettings(const QString& className, const QDateTime& now)
 {
     sendEvent(className, true, now);
 
@@ -2444,7 +2459,7 @@ bool CameraDetector::applyObjectDetectedSettings(const QString& className, const
 
         if (devSettings->m_deviceSetIndex < 0 || devSettings->m_deviceSetIndex >= static_cast<int>(deviceSets.size()))
         {
-            qWarning() << "CameraDetector::applyObjectDetectedSettings: device set at"
+            qWarning() << "CameraObjectDetector::applyObjectDetectedSettings: device set at"
                        << devSettings->m_deviceSetIndex << "does not exist";
             continue;
         }
@@ -2469,7 +2484,7 @@ bool CameraDetector::applyObjectDetectedSettings(const QString& className, const
 
             if (preset != nullptr)
             {
-                qDebug() << "CameraDetector::applyObjectDetectedSettings: loading preset"
+                qDebug() << "CameraObjectDetector::applyObjectDetectedSettings: loading preset"
                          << preset->getDescription() << "for class" << className
                          << "to device set" << devSettings->m_deviceSetIndex;
                 mainCore->getMainMessageQueue()->push(
@@ -2477,7 +2492,7 @@ bool CameraDetector::applyObjectDetectedSettings(const QString& className, const
             }
             else
             {
-                qWarning() << "CameraDetector::applyObjectDetectedSettings: unable to get preset"
+                qWarning() << "CameraObjectDetector::applyObjectDetectedSettings: unable to get preset"
                            << devSettings->m_presetGroup
                            << devSettings->m_presetFrequency
                            << devSettings->m_presetDescription;
@@ -2523,7 +2538,7 @@ bool CameraDetector::applyObjectDetectedSettings(const QString& className, const
     return saveCurrentImage;
 }
 
-void CameraDetector::applyObjectDisappearedSettings(const QString& className, const QDateTime& now)
+void CameraObjectDetector::applyObjectDisappearedSettings(const QString& className, const QDateTime& now)
 {
     sendEvent(className, false, now);
 
@@ -2565,7 +2580,7 @@ void CameraDetector::applyObjectDisappearedSettings(const QString& className, co
     }
 }
 
-void CameraDetector::sendEvent(const QString& className, bool detected, const QDateTime& eventTime)
+void CameraObjectDetector::sendEvent(const QString& className, bool detected, const QDateTime& eventTime)
 {
     QList<ObjectPipe*> eventPipes;
     MainCore::instance()->getMessagePipes().getMessagePipes(m_camera, "event", eventPipes);
@@ -2577,3 +2592,6 @@ void CameraDetector::sendEvent(const QString& className, bool detected, const QD
         messageQueue->push(MainCore::MsgEvent::create(m_camera, eventTime, eventType, eventData));
     }
 }
+
+
+

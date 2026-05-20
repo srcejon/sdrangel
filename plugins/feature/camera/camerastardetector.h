@@ -28,6 +28,10 @@ protected:
     void processNewFrame(const CameraPipelineFramePtr& frame) override;
 
 private:
+    CameraPipelineFramePtr m_lastInputFrame;
+
+    [[nodiscard]] static bool starDisplaySettingsChanged(const QList<QString>& settingsKeys);
+
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     mutable cv::cuda::Stream m_cudaDetectionStream;
     mutable cv::Ptr<cv::cuda::Filter> m_cudaStarSmallBlurFilter;

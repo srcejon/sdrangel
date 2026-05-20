@@ -190,7 +190,6 @@ static constexpr int kMaxDetectionsForSolve = 32;
 static constexpr double kBlindSeedRatioTolerance = 0.035;
 static constexpr double kBlindSeedMaxRmsPixels = 18.0;
 static constexpr double kBlindSeedMaxMedianPixels = 14.0;
-static constexpr double kUnnamedCatalogMagnitudeLimit = 4.5;
 static constexpr bool kLogPlateSolveCandidates = false;
 static constexpr bool kLogWeakModeCandidatePools = true;
 static constexpr bool kLogWeakModeTailRejects = false;
@@ -539,13 +538,6 @@ static QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text)
     return stars;
 }
 
-static bool isGenericCatalogName(const QString& name)
-{
-    return name.startsWith(QStringLiteral("HIP "))
-        || name.startsWith(QStringLiteral("HR "))
-        || name.startsWith(QStringLiteral("HD "));
-}
-
 QVector<CatalogStar> filterCatalogStars(const QVector<CatalogStar>& stars)
 {
     QVector<CatalogStar> filtered;
@@ -560,10 +552,6 @@ QVector<CatalogStar> filterCatalogStars(const QVector<CatalogStar>& stars)
             || star.name.trimmed().isEmpty()
             || (star.magnitude > CameraSettings::m_maxPlateSolveMagnitude))
         {
-            continue;
-        }
-
-        if (isGenericCatalogName(star.name) && (star.magnitude > kUnnamedCatalogMagnitudeLimit)) {
             continue;
         }
 

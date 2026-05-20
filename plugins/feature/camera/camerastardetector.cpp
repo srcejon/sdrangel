@@ -112,6 +112,26 @@ CameraStarDetector::CameraStarDetector()
 
 CameraStarDetector::~CameraStarDetector() = default;
 
+bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys)
+{
+    return settingsKeys.contains("starDebugView")
+        || settingsKeys.contains("starThreshold")
+        || settingsKeys.contains("starBackgroundBlur")
+        || settingsKeys.contains("starMinArea")
+        || settingsKeys.contains("starMaxArea")
+        || settingsKeys.contains("starMaxAspectRatio")
+        || settingsKeys.contains("starColor")
+        || settingsKeys.contains("plateSolve")
+        || settingsKeys.contains("plateSolveMaxMagnitude")
+        || settingsKeys.contains("plateSolveMinMatches")
+        || settingsKeys.contains("plateSolveMatchRadius")
+        || settingsKeys.contains("plateSolveFinalMatchRadius")
+        || settingsKeys.contains("plateSolveSearchRadius")
+        || settingsKeys.contains("plateSolveStartMode")
+        || settingsKeys.contains("plateSolveUseCurrentDateTime")
+        || settingsKeys.contains("plateSolveDateTime");
+}
+
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
 bool CameraStarDetector::canUseCudaDetection() const
 {
@@ -184,6 +204,12 @@ void CameraStarDetector::applySettings(const CameraSettings& settings, const QLi
 {
     qDebug() << "CameraStarDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
+
+    if (!force && starDisplaySettingsChanged(settingsKeys) && m_lastInputFrame)
+    {
+        CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
+        submitFrame(frame);
+    }
 }
 
 void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
@@ -191,6 +217,8 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     if (!frame || !frame->hasImageData()) {
         return;
     }
+
+    m_lastInputFrame.reset(new CameraPipelineFrame(*frame));
 
     frame->m_starDetections.clear();
     frame->m_plateSolved = false;
@@ -590,4 +618,3 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
 
     PROFILER_STOP(__FUNCTION__);
 }
-

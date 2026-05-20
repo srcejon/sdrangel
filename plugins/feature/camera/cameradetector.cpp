@@ -1426,24 +1426,21 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::c
         if (updateBackgroundModel)
         {
             m_cudaBgSubtractor->apply(motionInputGpu, fgMaskGpu, m_settings.m_motionLearningRate, m_cudaMotionStream);
-            m_cudaMotionStream.waitForCompletion();
-            m_cudaMotionLastFgMaskRaw = fgMaskGpu.clone();
+            fgMaskGpu.copyTo(m_cudaMotionLastFgMaskRaw, m_cudaMotionStream);
         }
         else
         {
-            fgMaskGpu = m_cudaMotionLastFgMaskRaw.clone();
+            fgMaskGpu = m_cudaMotionLastFgMaskRaw;
         }
 
         if (fgMaskGpu.empty())
         {
             m_cudaBgSubtractor->apply(motionInputGpu, fgMaskGpu, 0.0, m_cudaMotionStream);
-            m_cudaMotionStream.waitForCompletion();
         }
 
         if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewRaw))
         {
             fgMaskGpu.download(*debugMask, m_cudaMotionStream);
-            m_cudaMotionStream.waitForCompletion();
         }
 
         cv::cuda::GpuMat thresholdMaskGpu;
@@ -1454,7 +1451,6 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::c
         if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewThresholded))
         {
             thresholdMaskGpu.download(*debugMask, m_cudaMotionStream);
-            m_cudaMotionStream.waitForCompletion();
         }
 
         if (m_settings.m_motionOpenSize > 0)
@@ -1476,7 +1472,6 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::c
         if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewOpened))
         {
             thresholdMaskGpu.download(*debugMask, m_cudaMotionStream);
-            m_cudaMotionStream.waitForCompletion();
         }
 
         if (m_settings.m_motionCloseSize > 0)
@@ -1497,7 +1492,6 @@ bool CameraDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::c
         }
         if (debugMask && (m_settings.m_motionMaskView == CameraSettings::MotionMaskViewClosed)) {
             thresholdMaskGpu.download(*debugMask, m_cudaMotionStream);
-            m_cudaMotionStream.waitForCompletion();
         }
 
         cv::Mat fgMask;
@@ -1762,7 +1756,6 @@ bool CameraDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv:
 
         if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewBackground)) {
             backgroundGpu.download(*debugMask, m_cudaDetectionStream);
-            m_cudaDetectionStream.waitForCompletion();
         }
 
         cv::cuda::subtract(blurredGrayGpu, backgroundGpu, residualGpu, cv::noArray(), -1, m_cudaDetectionStream);

@@ -656,8 +656,10 @@ bool CameraImageProcessor::debayerRawMatCuda(cv::cuda::GpuMat& bgrGpu, const cv:
     }
 
     cv::cuda::GpuMat rawGpu;
+    cv::cuda::GpuMat debayeredGpu;
     rawGpu.upload(rawMat, m_cudaStream);
-    cv::cuda::demosaicing(rawGpu, bgrGpu, cvCode, 0, m_cudaStream);
+    cv::cuda::demosaicing(rawGpu, debayeredGpu, cvCode, 0, m_cudaStream);
+    cv::cuda::cvtColor(debayeredGpu, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
 
     PROFILER_STOP(__FUNCTION__);
     return true;

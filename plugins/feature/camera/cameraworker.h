@@ -548,6 +548,7 @@ private:
     void alpacaQueryCameraCapabilities(std::function<void()> continuation = {});
     void alpacaSetCameraParams();
     void alpacaPollStatus();
+    void alpacaDisconnectCamera(const CameraSettings& settings);
     void alpacaSetConnected(bool connected, std::function<void()> continuation = {});
     void alpacaRunWhenConnected(std::function<void()> continuation);
     void alpacaSetFocuserConnected(bool connected, std::function<void()> continuation = {});

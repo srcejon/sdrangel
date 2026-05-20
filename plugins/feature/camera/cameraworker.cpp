@@ -499,7 +499,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     }
 
     if (disconnectPreviousAlpaca) {
-        alpacaSetConnected(false);
+        alpacaDisconnectCamera(m_settings);
     }
 
     if (force) {
@@ -871,6 +871,40 @@ static void alpacaPutIntProperty(
 static bool isAlpacaDriverError(int errorNumber)
 {
     return errorNumber >= 1024;
+}
+
+void CameraWorker::alpacaDisconnectCamera(const CameraSettings& settings)
+{
+    if (!m_networkManager) {
+        return;
+    }
+
+    const QString baseUrl = CameraAlpacaController::baseUrl(settings);
+    const int camId = settings.cameraIdInt();
+    QUrl url(baseUrl + QString("/api/v1/camera/%1/connected").arg(camId));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QUrlQuery body;
+    body.addQueryItem("Connected", QStringLiteral("false"));
+    body.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
+
+    const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+    logAlpacaRequest("PUT", url, payload);
+
+    QNetworkReply *reply = m_networkManager->put(request, payload);
+
+    QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply]() {
+        const QByteArray responseBody = reply->readAll();
+        if (m_settings.m_alpacaApiLogEnabled)
+        {
+            qDebug() << "CameraWorker::AlpacaAPI stale disconnect response" << "PUT" << reply->request().url().toString()
+                     << CameraAlpacaController::transportError(reply)
+                     << responseBody;
+        }
+        reply->deleteLater();
+    });
 }
 
 void CameraWorker::alpacaSetConnected(bool connected, std::function<void()> continuation)

@@ -987,7 +987,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_asiCoolerOn = qBound(m_minAsiControl, m_asiCoolerOn, m_maxAsiControl);
         m_asiUsbBandwidth = std::max(m_minAsiControl, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(m_minAsiControl, m_asiHighSpeedMode, m_maxAsiControl);
-        m_asiColorImageType = qBound(AsiColorImageTypeRgb24, m_asiColorImageType, AsiColorImageTypeRaw16);
+        m_asiColorImageType = qBound(AsiColorImageTypeRgb24, m_asiColorImageType, AsiColorImageTypeRaw8);
         m_stackFrameCount = qBound(m_minStackFrameCount, m_stackFrameCount, m_maxStackFrameCount);
         m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodHDR);
         m_stackHdrAlgorithm = qBound(StackHdrAlgorithmDebevec, m_stackHdrAlgorithm, StackHdrAlgorithmMertens);
@@ -1179,7 +1179,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_asiAutoExposureGain = settings.m_asiAutoExposureGain;
     }
     if (settingsKeys.contains("asiColorImageType")) {
-        m_asiColorImageType = qBound(AsiColorImageTypeRgb24, settings.m_asiColorImageType, AsiColorImageTypeRaw16);
+        m_asiColorImageType = qBound(AsiColorImageTypeRgb24, settings.m_asiColorImageType, AsiColorImageTypeRaw8);
     }
     if (settingsKeys.contains("saveImage")) {
         m_saveImage = settings.m_saveImage;

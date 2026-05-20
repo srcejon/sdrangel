@@ -326,7 +326,7 @@
          <item row="17" column="1">
           <widget class="QComboBox" name="asiColorImageTypeCombo">
            <property name="toolTip">
-            <string>Select RGB24 for camera-side colour conversion or RAW16 for 16-bit Bayer data debayered in SDRangel.</string>
+            <string>Select RGB24 for camera-side colour conversion, RAW16 for 16-bit Bayer data or RAW8 for 8-bit Bayer data debayered in SDRangel.</string>
            </property>
           </widget>
          </item>

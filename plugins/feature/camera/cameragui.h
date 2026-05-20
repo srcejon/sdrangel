@@ -221,6 +221,7 @@ private:
     bool m_asiColorCameraActive;
     bool m_asiRgb24Supported;
     bool m_asiRaw16Supported;
+    bool m_asiRaw8Supported;
     QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
     QList<CameraObjectDeviceSettingsGUI *> m_actionDeviceSettingsGUIs;
 

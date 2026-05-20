@@ -206,12 +206,19 @@ ASI_IMG_TYPE CameraWorker::asiSelectImageType(const ASI_CAMERA_INFO& cameraInfo)
 {
     if (cameraInfo.IsColorCam == ASI_TRUE)
     {
-        const bool wantsRaw16 = m_settings.m_asiColorImageType == CameraSettings::AsiColorImageTypeRaw16;
-
-        if (wantsRaw16 && asiSupportsImageType(cameraInfo, ASI_IMG_RAW16)) {
+        if ((m_settings.m_asiColorImageType == CameraSettings::AsiColorImageTypeRaw16)
+            && asiSupportsImageType(cameraInfo, ASI_IMG_RAW16))
+        {
             return ASI_IMG_RAW16;
         }
-        if (!wantsRaw16 && asiSupportsImageType(cameraInfo, ASI_IMG_RGB24)) {
+        if ((m_settings.m_asiColorImageType == CameraSettings::AsiColorImageTypeRaw8)
+            && asiSupportsImageType(cameraInfo, ASI_IMG_RAW8))
+        {
+            return ASI_IMG_RAW8;
+        }
+        if ((m_settings.m_asiColorImageType == CameraSettings::AsiColorImageTypeRgb24)
+            && asiSupportsImageType(cameraInfo, ASI_IMG_RGB24))
+        {
             return ASI_IMG_RGB24;
         }
         if (asiSupportsImageType(cameraInfo, ASI_IMG_RGB24)) {
@@ -526,6 +533,7 @@ CameraWorker::CameraWorker() :
     m_asiImageType(ASI_IMG_Y8),
     m_asiRgb24Supported(false),
     m_asiRaw16Supported(false),
+    m_asiRaw8Supported(false),
     m_asiPixelSizeUm(0.0),
     m_asiExposureMinMs(0.001),
     m_asiExposureMaxMs(60000.0),
@@ -3190,6 +3198,7 @@ void CameraWorker::asiQueryCameraCapabilities()
     m_asiExposureMaxMs = hasExposureRange ? std::max(m_asiExposureMinMs, exposureRange.MaxValue / 1000.0) : 60000.0;
     m_asiRgb24Supported = asiSupportsImageType(cameraInfo, ASI_IMG_RGB24);
     m_asiRaw16Supported = asiSupportsImageType(cameraInfo, ASI_IMG_RAW16);
+    m_asiRaw8Supported = asiSupportsImageType(cameraInfo, ASI_IMG_RAW8);
     m_asiImageType = asiSelectImageType(cameraInfo);
 
     if (m_msgQueueToGUI)
@@ -3222,7 +3231,8 @@ void CameraWorker::asiQueryCameraCapabilities()
             hasHighSpeedMode && highSpeedModeCaps.IsWritable == ASI_TRUE,
             hasHighSpeedModeValue ? (highSpeedModeValue != 0) : false,
             m_asiRgb24Supported,
-            m_asiRaw16Supported));
+            m_asiRaw16Supported,
+            m_asiRaw8Supported));
     }
 
     asiPollStatus();

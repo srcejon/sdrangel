@@ -324,6 +324,7 @@ MESSAGE_CLASS_DECLARATION
         bool isHighSpeedMode() const { return m_highSpeedMode; }
         bool isRgb24Supported() const { return m_rgb24Supported; }
         bool isRaw16Supported() const { return m_raw16Supported; }
+        bool isRaw8Supported() const { return m_raw8Supported; }
 
         static MsgReportAsiCameraInfo* create(const QString& name, int maxBinX, int maxBinY,
             int gainMin, int gainMax, int offsetMin, int offsetMax,
@@ -333,13 +334,13 @@ MESSAGE_CLASS_DECLARATION
             bool targetTempSupported, int targetTempMin, int targetTempMax, int targetTemp,
             bool usbBandwidthSupported, int usbBandwidthMin, int usbBandwidthMax, int usbBandwidth,
             bool highSpeedModeSupported, bool highSpeedMode,
-            bool rgb24Supported, bool raw16Supported)
+            bool rgb24Supported, bool raw16Supported, bool raw8Supported)
         {
             return new MsgReportAsiCameraInfo(name, maxBinX, maxBinY, gainMin, gainMax, offsetMin, offsetMax,
                 cameraSizeX, cameraSizeY, pixelSizeUm, bitDepth, isColor, exposureMinMs, exposureMaxMs,
                 coolerSupported, coolerOn, targetTempSupported, targetTempMin, targetTempMax, targetTemp,
                 usbBandwidthSupported, usbBandwidthMin, usbBandwidthMax, usbBandwidth,
-                highSpeedModeSupported, highSpeedMode, rgb24Supported, raw16Supported);
+                highSpeedModeSupported, highSpeedMode, rgb24Supported, raw16Supported, raw8Supported);
         }
 
     private:
@@ -371,6 +372,7 @@ MESSAGE_CLASS_DECLARATION
         bool m_highSpeedMode;
         bool m_rgb24Supported;
         bool m_raw16Supported;
+        bool m_raw8Supported;
 
         MsgReportAsiCameraInfo(const QString& name, int maxBinX, int maxBinY,
             int gainMin, int gainMax, int offsetMin, int offsetMax,
@@ -380,7 +382,7 @@ MESSAGE_CLASS_DECLARATION
             bool targetTempSupported, int targetTempMin, int targetTempMax, int targetTemp,
             bool usbBandwidthSupported, int usbBandwidthMin, int usbBandwidthMax, int usbBandwidth,
             bool highSpeedModeSupported, bool highSpeedMode,
-            bool rgb24Supported, bool raw16Supported) :
+            bool rgb24Supported, bool raw16Supported, bool raw8Supported) :
             Message(),
             m_name(name),
             m_maxBinX(maxBinX),
@@ -409,7 +411,8 @@ MESSAGE_CLASS_DECLARATION
             m_highSpeedModeSupported(highSpeedModeSupported),
             m_highSpeedMode(highSpeedMode),
             m_rgb24Supported(rgb24Supported),
-            m_raw16Supported(raw16Supported)
+            m_raw16Supported(raw16Supported),
+            m_raw8Supported(raw8Supported)
         {}
     };
 
@@ -561,6 +564,7 @@ private:
     int m_asiImageType;
     bool m_asiRgb24Supported;
     bool m_asiRaw16Supported;
+    bool m_asiRaw8Supported;
     double m_asiPixelSizeUm;
     double m_asiExposureMinMs;
     double m_asiExposureMaxMs;

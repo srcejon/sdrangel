@@ -138,6 +138,7 @@ CameraSettings:
         ASI colour image type
           * 0 - RGB24
           * 1 - RAW16
+          * 2 - RAW8
       type: integer
     saveImage:
       description: "Save captured frames as still images (1 for yes, 0 for no)"

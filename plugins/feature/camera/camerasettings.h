@@ -71,7 +71,8 @@ struct CameraSettings
     enum AsiColorImageType
     {
         AsiColorImageTypeRgb24 = 0,
-        AsiColorImageTypeRaw16
+        AsiColorImageTypeRaw16,
+        AsiColorImageTypeRaw8
     };
 
     enum SavedMediaMode

@@ -613,6 +613,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_asiColorCameraActive(false),
     m_asiRgb24Supported(false),
     m_asiRaw16Supported(false),
+    m_asiRaw8Supported(false),
     m_imageScene(nullptr),
     m_imagePixmapItem(nullptr),
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -3367,8 +3368,8 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->asiHighSpeedModeCheck->setVisible(asi && m_asiHighSpeedModeSupported);
     settingsUI()->asiAutoExposureGainLabel->setVisible(asi);
     settingsUI()->asiAutoExposureGainCheck->setVisible(asi);
-    settingsUI()->asiColorImageTypeLabel->setVisible(asi && m_asiColorCameraActive && (m_asiRgb24Supported || m_asiRaw16Supported));
-    settingsUI()->asiColorImageTypeCombo->setVisible(asi && m_asiColorCameraActive && (m_asiRgb24Supported || m_asiRaw16Supported));
+    settingsUI()->asiColorImageTypeLabel->setVisible(asi && m_asiColorCameraActive && (m_asiRgb24Supported || m_asiRaw16Supported || m_asiRaw8Supported));
+    settingsUI()->asiColorImageTypeCombo->setVisible(asi && m_asiColorCameraActive && (m_asiRgb24Supported || m_asiRaw16Supported || m_asiRaw8Supported));
     settingsUI()->alpacaFocusPositionLabel->setVisible(alpaca);
     settingsUI()->alpacaFocusPositionSpin->setVisible(alpaca);
     settingsUI()->alpacaFocusStepSizeLabel->setVisible(alpaca);
@@ -3683,6 +3684,7 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
     m_asiColorCameraActive = info.isColor();
     m_asiRgb24Supported = info.isRgb24Supported();
     m_asiRaw16Supported = info.isRaw16Supported();
+    m_asiRaw8Supported = info.isRaw8Supported();
     m_alpacaCameraSizeX = std::max(0, info.getCameraSizeX());
     m_alpacaCameraSizeY = std::max(0, info.getCameraSizeY());
 
@@ -3750,6 +3752,9 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
         }
         if (info.isRaw16Supported()) {
             settingsUI()->asiColorImageTypeCombo->addItem(QStringLiteral("RAW16"), CameraSettings::AsiColorImageTypeRaw16);
+        }
+        if (info.isRaw8Supported()) {
+            settingsUI()->asiColorImageTypeCombo->addItem(QStringLiteral("RAW8"), CameraSettings::AsiColorImageTypeRaw8);
         }
 
         int comboIndex = settingsUI()->asiColorImageTypeCombo->findData(m_settings.m_asiColorImageType);

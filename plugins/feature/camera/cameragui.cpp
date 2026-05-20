@@ -744,7 +744,12 @@ CameraGUI::~CameraGUI()
         m_camera->setMessageQueueToGUI(nullptr);
     }
     cleanupQtCapture();
-    delete m_histogramDialog;
+    if (m_histogramDialog)
+    {
+        disconnect(m_histogramDialog, nullptr, this, nullptr);
+        delete m_histogramDialog;
+        m_histogramDialog = nullptr;
+    }
     delete ui;
 }
 
@@ -5518,23 +5523,33 @@ void CameraGUI::on_diffMaskCloseSizeSpin_valueChanged(int value)
 
 void CameraGUI::on_histogramButton_clicked()
 {
-    if (m_lastHistogramData.isValid())
+    if (!m_settings.m_histogramVisible)
     {
-        if (!m_histogramDialog)
-        {
-            m_histogramDialog = new CameraHistogramDialog(m_lastHistogramData, this);
-            m_histogramDialog->setAttribute(Qt::WA_DeleteOnClose); // Delete when closed, so we don't waste CPU calculating the histogram when not visible
-            connect(m_histogramDialog, &QObject::destroyed, this, [this]() { m_histogramDialog = nullptr; });
-        }
-        else
-        {
-            m_histogramDialog->updateHistogram(m_lastHistogramData);
-        }
-
-        m_histogramDialog->show();
-        m_histogramDialog->raise();
-        m_histogramDialog->activateWindow();
+        m_settings.m_histogramVisible = true;
+        applySetting("histogramVisible");
     }
+
+    if (!m_histogramDialog)
+    {
+        m_histogramDialog = new CameraHistogramDialog(m_lastHistogramData, this);
+        m_histogramDialog->setAttribute(Qt::WA_DeleteOnClose);
+        connect(m_histogramDialog, &QObject::destroyed, this, [this]() {
+            m_histogramDialog = nullptr;
+            if (m_settings.m_histogramVisible)
+            {
+                m_settings.m_histogramVisible = false;
+                applySetting("histogramVisible");
+            }
+        });
+    }
+    else
+    {
+        m_histogramDialog->updateHistogram(m_lastHistogramData);
+    }
+
+    m_histogramDialog->show();
+    m_histogramDialog->raise();
+    m_histogramDialog->activateWindow();
 }
 
 void CameraGUI::on_detectionHistoryButton_clicked()

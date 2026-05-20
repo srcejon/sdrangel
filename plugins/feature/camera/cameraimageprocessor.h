@@ -199,7 +199,12 @@ private:
     void applyFlip(cv::Mat& bgrMat) const;
     void applyBrightnessContrast(cv::Mat& bgrMat) const;
     void applyInvertColors(cv::Mat& bgrMat) const;
-    [[nodiscard]] static CameraHistogramData computeHistogramData(const QImage& image);
+    [[nodiscard]] CameraHistogramData computeHistogramData(const CameraPipelineFrame& frame);
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    [[nodiscard]] CameraHistogramData computeHistogramDataCuda(const CameraPipelineFrame& frame);
+    static void fillHistogramBinsFromCudaMat(const cv::Mat& hist, QVector<float>& bins);
+#endif
+    [[nodiscard]] static CameraHistogramData computeHistogramDataCpu(const QImage& image);
     [[nodiscard]] static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
     [[nodiscard]] static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);

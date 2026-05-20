@@ -388,6 +388,7 @@ struct CameraSettings
     double m_histogramStretchGamma;      ///< Gamma stretch exponent
     double m_histogramStretchAsinhStrength; ///< Asinh stretch strength
     double m_histogramStretchLogStrength;   ///< Log stretch strength
+    bool m_histogramVisible; ///< Transient: compute histogram data only while the histogram dialog is visible
     bool m_postProcessGreyscale; ///< Convert the post-processed image to greyscale after white balance
     double m_saturation;      ///< Saturation multiplier: 0.0..3.0
     double m_gamma;           ///< Gamma correction exponent: 0.1..3.0

@@ -302,14 +302,31 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->m_unprocessedImage = frame->m_image;
     }
     frame->m_image = applyImageProcessing(*frame);
-    frame->m_histogramData = computeHistogramData(frame->m_image);
+    frame->m_histogramData = m_settings.m_histogramVisible
+        ? computeHistogramData(*frame)
+        : CameraHistogramData();
 
     if (m_nextStage) {
         m_nextStage->submitFrame(frame);
     }
 }
 
-CameraHistogramData CameraImageProcessor::computeHistogramData(const QImage& image)
+CameraHistogramData CameraImageProcessor::computeHistogramData(const CameraPipelineFrame& frame)
+{
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    if (m_settings.m_postProcessUseCuda && (cv::cuda::getCudaEnabledDeviceCount() > 0))
+    {
+        const CameraHistogramData histogramData = computeHistogramDataCuda(frame);
+        if (histogramData.isValid()) {
+            return histogramData;
+        }
+    }
+#endif
+
+    return computeHistogramDataCpu(frame.m_image);
+}
+
+CameraHistogramData CameraImageProcessor::computeHistogramDataCpu(const QImage& image)
 {
     PROFILER_START();
     CameraHistogramData histogramData;
@@ -349,6 +366,85 @@ CameraHistogramData CameraImageProcessor::computeHistogramData(const QImage& ima
     PROFILER_STOP(__FUNCTION__);
     return histogramData;
 }
+
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+CameraHistogramData CameraImageProcessor::computeHistogramDataCuda(const CameraPipelineFrame& frame)
+{
+    PROFILER_START();
+    CameraHistogramData histogramData;
+
+    if (frame.m_image.isNull()) {
+        return histogramData;
+    }
+
+    try
+    {
+        cv::cuda::GpuMat bgrGpu;
+
+        if (frame.hasCudaBgrImage())
+        {
+            bgrGpu = frame.m_cudaBgrImage;
+        }
+        else
+        {
+            QImage convertedRgb;
+            const QImage& rgb = ensureRgb888(frame.m_image, convertedRgb);
+            cv::Mat rgbMat = wrapRgb888Image(rgb);
+            cv::cuda::GpuMat rgbGpu;
+            rgbGpu.upload(rgbMat, m_cudaStream);
+            cv::cuda::cvtColor(rgbGpu, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
+        }
+
+        std::vector<cv::cuda::GpuMat> channels;
+        cv::cuda::split(bgrGpu, channels, m_cudaStream);
+
+        if (channels.size() < 3) {
+            return histogramData;
+        }
+
+        cv::cuda::GpuMat blueHistGpu;
+        cv::cuda::GpuMat greenHistGpu;
+        cv::cuda::GpuMat redHistGpu;
+        cv::cuda::calcHist(channels[0], blueHistGpu, m_cudaStream);
+        cv::cuda::calcHist(channels[1], greenHistGpu, m_cudaStream);
+        cv::cuda::calcHist(channels[2], redHistGpu, m_cudaStream);
+
+        cv::Mat blueHist;
+        cv::Mat greenHist;
+        cv::Mat redHist;
+        blueHistGpu.download(blueHist, m_cudaStream);
+        greenHistGpu.download(greenHist, m_cudaStream);
+        redHistGpu.download(redHist, m_cudaStream);
+        m_cudaStream.waitForCompletion();
+
+        fillHistogramBinsFromCudaMat(redHist, histogramData.m_redBins);
+        fillHistogramBinsFromCudaMat(greenHist, histogramData.m_greenBins);
+        fillHistogramBinsFromCudaMat(blueHist, histogramData.m_blueBins);
+    }
+    catch (const cv::Exception& error)
+    {
+        qWarning() << "CameraImageProcessor: CUDA histogram failed; falling back to CPU:" << error.what();
+        histogramData = CameraHistogramData();
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+    return histogramData;
+}
+
+void CameraImageProcessor::fillHistogramBinsFromCudaMat(const cv::Mat& hist, QVector<float>& bins)
+{
+    constexpr int histSize = 256;
+    if (hist.empty()) {
+        return;
+    }
+
+    bins.resize(histSize);
+    cv::Mat histRow = hist.reshape(1, 1);
+    for (int i = 0; i < histSize; ++i) {
+        bins[i] = static_cast<float>(histRow.at<int>(i));
+    }
+}
+#endif
 
 QImage CameraImageProcessor::applyImageProcessing(CameraPipelineFrame& frame)
 {

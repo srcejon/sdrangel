@@ -239,6 +239,7 @@ void CameraSettings::resetToDefaults()
     m_histogramStretchGamma = 1.0;
     m_histogramStretchAsinhStrength = 10.0;
     m_histogramStretchLogStrength = 10.0;
+    m_histogramVisible = false;
     m_postProcessGreyscale = false;
     m_saturation = 1.0;
     m_gamma = 1.0;
@@ -1340,6 +1341,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("histogramStretchLogStrength")) {
         m_histogramStretchLogStrength = qBound(m_minHistogramStrength, settings.m_histogramStretchLogStrength, m_maxHistogramStrength);
     }
+    if (settingsKeys.contains("histogramVisible")) {
+        m_histogramVisible = settings.m_histogramVisible;
+    }
     if (settingsKeys.contains("postProcessGreyscale")) {
         m_postProcessGreyscale = settings.m_postProcessGreyscale;
     }
@@ -1961,6 +1965,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("histogramStretchLogStrength") || force) {
         ostr << " m_histogramStretchLogStrength: " << m_histogramStretchLogStrength;
+    }
+    if (settingsKeys.contains("histogramVisible") || force) {
+        ostr << " m_histogramVisible: " << m_histogramVisible;
     }
     if (settingsKeys.contains("postProcessGreyscale") || force) {
         ostr << " m_postProcessGreyscale: " << m_postProcessGreyscale;

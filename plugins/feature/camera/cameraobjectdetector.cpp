@@ -408,11 +408,23 @@ void CameraObjectDetector::captureActiveChanged(bool active)
 
 void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (!frame || frame->m_image.isNull()) {
+    if (!frame || !frame->hasImageData()) {
         return;
     }
 
     frame->m_detections.clear();
+
+    if (!m_settings.m_yoloEnabled || m_settings.m_yoloModelPath.isEmpty())
+    {
+        const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
+        processObjectDetections(frame->m_detections, detectionTime, *frame);
+        forwardFrame(frame);
+        return;
+    }
+
+    if (!frame->ensureCpuImageFromCuda()) {
+        return;
+    }
 
     QImage convertedRgb;
     const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
@@ -421,9 +433,7 @@ void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
     const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
 
-    if (m_settings.m_yoloEnabled && !m_settings.m_yoloModelPath.isEmpty()) {
-        runYoloDetections(bgrMat, detectionRoi, frame->m_detections);
-    }
+    runYoloDetections(bgrMat, detectionRoi, frame->m_detections);
 
     const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     processObjectDetections(frame->m_detections, detectionTime, *frame);

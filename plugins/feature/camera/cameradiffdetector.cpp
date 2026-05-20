@@ -96,16 +96,21 @@ void CameraDiffDetector::captureActiveChanged(bool active)
 
 void CameraDiffDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (!frame || frame->m_image.isNull()) {
+    if (!frame || !frame->hasImageData()) {
         return;
     }
 
     CameraPipelineFrame inputFrameSnapshot(*frame);
 
-    if (m_settings.m_diffMask && !m_lastInputFrame.m_image.isNull()
-        && m_lastInputFrame.m_image.width() == frame->m_image.width()
-        && m_lastInputFrame.m_image.height() == frame->m_image.height())
+    if (m_settings.m_diffMask
+        && m_lastInputFrame.hasImageData()
+        && (m_lastInputFrame.imageSize() == frame->imageSize()))
     {
+        if (!frame->ensureCpuImageFromCuda()) {
+            return;
+        }
+        m_lastInputFrame.ensureCpuImageFromCuda();
+
         QImage convertedRgb;
         const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
         cv::Mat mat = wrapRgb888Image(rgb);

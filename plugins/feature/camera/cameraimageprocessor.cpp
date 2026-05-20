@@ -226,7 +226,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     }
 #endif
 
-    if (imageProcessingChanged && !m_lastInputFrame.m_image.isNull()) {
+    if (imageProcessingChanged && m_lastInputFrame.hasImageData()) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
         submitFrame(frame);
     }
@@ -292,7 +292,7 @@ void CameraImageProcessor::processNextFrame()
 
 void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (!frame || frame->m_image.isNull()) {
+    if (!frame || !frame->hasImageData()) {
         return;
     }
 
@@ -301,7 +301,7 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     if (frame->m_unprocessedImage.isNull()) {
         frame->m_unprocessedImage = frame->m_image;
     }
-    frame->m_image = applyImageProcessing(*frame);
+    applyImageProcessing(*frame);
     frame->m_histogramData = m_settings.m_histogramVisible
         ? computeHistogramData(*frame)
         : CameraHistogramData();
@@ -323,7 +323,11 @@ CameraHistogramData CameraImageProcessor::computeHistogramData(const CameraPipel
     }
 #endif
 
-    return computeHistogramDataCpu(frame.m_image);
+    CameraPipelineFrame& mutableFrame = const_cast<CameraPipelineFrame&>(frame);
+    if (mutableFrame.ensureCpuImageFromCuda()) {
+        return computeHistogramDataCpu(mutableFrame.m_image);
+    }
+    return CameraHistogramData();
 }
 
 CameraHistogramData CameraImageProcessor::computeHistogramDataCpu(const QImage& image)
@@ -373,7 +377,7 @@ CameraHistogramData CameraImageProcessor::computeHistogramDataCuda(const CameraP
     PROFILER_START();
     CameraHistogramData histogramData;
 
-    if (frame.m_image.isNull()) {
+    if (!frame.hasImageData()) {
         return histogramData;
     }
 
@@ -446,22 +450,25 @@ void CameraImageProcessor::fillHistogramBinsFromCudaMat(const cv::Mat& hist, QVe
 }
 #endif
 
-QImage CameraImageProcessor::applyImageProcessing(CameraPipelineFrame& frame)
+void CameraImageProcessor::applyImageProcessing(CameraPipelineFrame& frame)
 {
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
-    if (m_settings.m_postProcessUseCuda && canUseCudaImageProcessing()) {
-        return applyImageProcessingCuda(frame);
+    if (m_settings.m_postProcessUseCuda && canUseCudaImageProcessing())
+    {
+        applyImageProcessingCuda(frame);
+        return;
     }
 #endif
 
     frame.clearCudaCache();
-    return applyImageProcessingCpu(frame);
+    applyImageProcessingCpu(frame);
 }
 
-QImage CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
+void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
 {
     PROFILER_START();
 
+    frame.ensureCpuImageFromCuda();
     const QImage& input = frame.m_image;
     const bool needsDebayer = frame.m_bayerPattern != CameraPipelineFrame::BayerNone;
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
@@ -494,7 +501,7 @@ QImage CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
         || m_settings.m_invertColors;
 
     if (!needsAny && !needsDebayer) {
-        return input;
+        return;
     }
 
     cv::Mat bgrMat;
@@ -521,7 +528,8 @@ QImage CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
         QImage result = convertBgrToRgbImage(bgrMat);
         frame.m_unprocessedImage = result;
         PROFILER_STOP("CameraImageProcessor::applyImageProcessing");
-        return result;
+        frame.m_image = result;
+        return;
     }
 
     if (needsUnwarp) {
@@ -569,7 +577,7 @@ QImage CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
 
     QImage result = convertBgrToRgbImage(bgrMat);
     PROFILER_STOP("CameraImageProcessor::applyImageProcessing");
-    return result;
+    frame.m_image = result;
 }
 
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
@@ -608,7 +616,7 @@ bool CameraImageProcessor::canUseCudaImageProcessing() const
     return true;
 }
 
-QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
+void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
 {
     PROFILER_START();
 
@@ -645,7 +653,7 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
 
     if (!needsAny && !needsDebayer) {
         frame.clearCudaCache();
-        return input;
+        return;
     }
 
     try
@@ -719,22 +727,12 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
             cv::cuda::bitwise_not(bgrGpu, bgrGpu, cv::noArray(), m_cudaStream);
         }
 
-        cv::cuda::GpuMat rgbGpu;
-        cv::cuda::cvtColor(bgrGpu, rgbGpu, cv::COLOR_BGR2RGB, 0, m_cudaStream);
-
-        QImage result(rgbGpu.cols, rgbGpu.rows, QImage::Format_RGB888);
-        cv::Mat resultMat(result.height(), result.width(), CV_8UC3,
-            result.bits(),
-            static_cast<size_t>(result.bytesPerLine()));
-        rgbGpu.download(resultMat, m_cudaStream);
         bgrGpu.copyTo(frame.m_cudaBgrImage, m_cudaStream);
         m_cudaStream.waitForCompletion();
-        if (needsDebayer && !needsAny) {
-            frame.m_unprocessedImage = result;
-        }
         frame.m_cudaGrayImage.release();
+        frame.clearCpuImage();
         PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");
-        return result;
+        return;
     }
     catch (const cv::Exception& error)
     {
@@ -742,7 +740,7 @@ QImage CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame
     }
 
     frame.clearCudaCache();
-    return applyImageProcessingCpu(frame);
+    applyImageProcessingCpu(frame);
 }
 
 bool CameraImageProcessor::debayerRawMatCuda(cv::cuda::GpuMat& bgrGpu, const cv::Mat& rawMat, CameraPipelineFrame::BayerPattern bayerPattern)

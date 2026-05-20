@@ -19,13 +19,18 @@
 #ifndef INCLUDE_FEATURE_CAMERAPIPELINEFRAME_H_
 #define INCLUDE_FEATURE_CAMERAPIPELINEFRAME_H_
 
+#include <cstring>
+
 #include <QDateTime>
 #include <QImage>
 #include <QPointF>
 #include <QRect>
 #include <QSharedPointer>
+#include <QSize>
 #include <QString>
 #include <QVector>
+
+#include <opencv2/imgproc.hpp>
 
 #if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
 #include <opencv2/core/cuda.hpp>
@@ -124,23 +129,100 @@ struct CameraPipelineFrame
     bool hasCudaBgrImage() const
     {
         return !m_cudaBgrImage.empty()
-            && !m_image.isNull()
-            && (m_cudaBgrImage.cols == m_image.width())
-            && (m_cudaBgrImage.rows == m_image.height())
             && (m_cudaBgrImage.type() == CV_8UC3);
     }
 
     bool hasCudaGrayImage() const
     {
         return !m_cudaGrayImage.empty()
-            && !m_image.isNull()
-            && (m_cudaGrayImage.cols == m_image.width())
-            && (m_cudaGrayImage.rows == m_image.height())
             && (m_cudaGrayImage.type() == CV_8UC1);
+    }
+
+    bool ensureCpuImageFromCuda()
+    {
+        if (!m_image.isNull()) {
+            return true;
+        }
+
+        if (hasCudaBgrImage())
+        {
+            cv::Mat bgrMat;
+            m_cudaBgrImage.download(bgrMat);
+            m_image = bgrMatToRgbImage(bgrMat);
+            return !m_image.isNull();
+        }
+
+        if (hasCudaGrayImage())
+        {
+            cv::Mat grayMat;
+            m_cudaGrayImage.download(grayMat);
+            m_image = grayMatToImage(grayMat);
+            return !m_image.isNull();
+        }
+
+        return false;
     }
 #else
     void clearCudaCache() {}
 #endif
+
+    bool hasImageData() const
+    {
+        return !m_image.isNull()
+#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+            || hasCudaBgrImage()
+            || hasCudaGrayImage()
+#endif
+            ;
+    }
+
+    QSize imageSize() const
+    {
+        if (!m_image.isNull()) {
+            return m_image.size();
+        }
+#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+        if (hasCudaBgrImage()) {
+            return QSize(m_cudaBgrImage.cols, m_cudaBgrImage.rows);
+        }
+        if (hasCudaGrayImage()) {
+            return QSize(m_cudaGrayImage.cols, m_cudaGrayImage.rows);
+        }
+#endif
+        return QSize();
+    }
+
+    void clearCpuImage()
+    {
+        m_image = QImage();
+    }
+
+    static QImage bgrMatToRgbImage(const cv::Mat& bgrMat)
+    {
+        if (bgrMat.empty()) {
+            return QImage();
+        }
+
+        QImage result(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);
+        cv::Mat rgbMat(result.height(), result.width(), CV_8UC3,
+                       result.bits(),
+                       static_cast<size_t>(result.bytesPerLine()));
+        cv::cvtColor(bgrMat, rgbMat, cv::COLOR_BGR2RGB);
+        return result;
+    }
+
+    static QImage grayMatToImage(const cv::Mat& grayMat)
+    {
+        if (grayMat.empty()) {
+            return QImage();
+        }
+
+        QImage result(grayMat.cols, grayMat.rows, QImage::Format_Grayscale8);
+        for (int row = 0; row < grayMat.rows; ++row) {
+            std::memcpy(result.scanLine(row), grayMat.ptr(row), static_cast<size_t>(grayMat.cols));
+        }
+        return result;
+    }
 };
 
 using CameraPipelineFramePtr = QSharedPointer<CameraPipelineFrame>;

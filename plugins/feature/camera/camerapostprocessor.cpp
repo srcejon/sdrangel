@@ -858,7 +858,11 @@ void CameraPostProcessor::processNextFrame()
 
 void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (!frame || frame->m_image.isNull()) {
+    if (!frame || !frame->hasImageData()) {
+        return;
+    }
+
+    if (!frame->ensureCpuImageFromCuda()) {
         return;
     }
 

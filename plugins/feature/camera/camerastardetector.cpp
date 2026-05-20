@@ -123,7 +123,7 @@ void CameraStarDetector::captureActiveChanged(bool active)
 
 void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (!frame || frame->m_image.isNull()) {
+    if (!frame || !frame->hasImageData()) {
         return;
     }
 
@@ -145,17 +145,25 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     frame->m_plateSolveDistortionK1 = 0.0f;
     frame->m_plateSolveCatalogSource.clear();
 
-    QImage convertedRgb;
-    const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
-    cv::Mat mat = wrapRgb888Image(rgb);
     cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-    const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
-#if defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
-    const cv::cuda::GpuMat* cachedBgrGpu = frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr;
-#else
+    cv::Rect detectionRoi;
     const cv::cuda::GpuMat* cachedBgrGpu = nullptr;
+
+    if (m_settings.m_starDetect)
+    {
+        if (!frame->ensureCpuImageFromCuda()) {
+            return;
+        }
+
+        QImage convertedRgb;
+        const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
+        cv::Mat mat = wrapRgb888Image(rgb);
+        cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+        detectionRoi = resolveDetectionRoi(bgrMat.size());
+#if defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+        cachedBgrGpu = frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr;
 #endif
+    }
 
     if (m_settings.m_starDetect)
     {

@@ -136,7 +136,7 @@ void CameraMotionDetector::captureActiveChanged(bool active)
 
 void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 {
-    if (!frame || frame->m_image.isNull()) {
+    if (!frame || !frame->hasImageData()) {
         return;
     }
 
@@ -146,6 +146,10 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     {
         updateMotionEventState(false, frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime(), QStringLiteral("boxes=0"));
         forwardFrame(frame);
+        return;
+    }
+
+    if (!frame->ensureCpuImageFromCuda()) {
         return;
     }
 

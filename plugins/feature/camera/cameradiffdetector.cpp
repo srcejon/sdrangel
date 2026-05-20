@@ -150,11 +150,14 @@ void CameraDiffDetector::applyDiffMask(CameraPipelineFrame& frame, cv::Mat& bgrM
     cv::Mat prevBgr;
     cv::cvtColor(prevMat, prevBgr, cv::COLOR_RGB2BGR);
 
+    // Convert only the ROI to gray. Previously this converted the entire frame even though
+    // the absdiff below only consumed the ROI — for a 25% sky-region ROI on a 4K frame
+    // that's 4x more pixel work per call than necessary.
     cv::Mat gray, prevGray;
-    cv::cvtColor(bgrMat, gray, cv::COLOR_BGR2GRAY);
-    cv::cvtColor(prevBgr, prevGray, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(bgrMat(roi), gray, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(prevBgr(roi), prevGray, cv::COLOR_BGR2GRAY);
     cv::Mat diff;
-    cv::absdiff(gray(roi), prevGray(roi), diff);
+    cv::absdiff(gray, prevGray, diff);
     cv::Mat mask;
     cv::threshold(diff, mask, m_settings.m_diffThreshold, 255, cv::THRESH_BINARY);
 
@@ -242,12 +245,14 @@ bool CameraDiffDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuM
             prevBgrGpu.upload(prevBgr, m_cudaDetectionStream);
         }
 
-        cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY, 0, m_cudaDetectionStream);
-        cv::cuda::cvtColor(prevBgrGpu, prevGrayGpu, cv::COLOR_BGR2GRAY, 0, m_cudaDetectionStream);
+        // See CPU comment: convert only the ROI rather than the full frame, since absdiff
+        // only consumes the ROI.
+        cv::cuda::cvtColor(bgrGpu(roi), grayGpu, cv::COLOR_BGR2GRAY, 0, m_cudaDetectionStream);
+        cv::cuda::cvtColor(prevBgrGpu(roi), prevGrayGpu, cv::COLOR_BGR2GRAY, 0, m_cudaDetectionStream);
 
         cv::cuda::GpuMat diffGpu;
         cv::cuda::GpuMat maskGpu;
-        cv::cuda::absdiff(grayGpu(roi), prevGrayGpu(roi), diffGpu, m_cudaDetectionStream);
+        cv::cuda::absdiff(grayGpu, prevGrayGpu, diffGpu, m_cudaDetectionStream);
         cv::cuda::threshold(diffGpu, maskGpu, m_settings.m_diffThreshold, 255.0, cv::THRESH_BINARY, m_cudaDetectionStream);
 
         if (m_settings.m_diffMaskOpenSize > 0)

@@ -56,7 +56,7 @@ void CameraFrameAligner::stopWork()
 
 void CameraFrameAligner::resetAlignmentState()
 {
-    m_alignmentReferenceHistory.clear();
+    m_alignmentReference = cv::Mat();
 }
 
 bool CameraFrameAligner::preserveFrameOrder() const
@@ -155,18 +155,10 @@ void CameraFrameAligner::applySettings(const CameraSettings& settings, const QLi
         m_droppedFrameCount = 0;
         resetAlignmentState();
     }
-    else if (settingsKeys.contains("stackFrameCount"))
-    {
-        trimAlignmentHistoryToCurrentLimit();
-    }
-}
-
-void CameraFrameAligner::trimAlignmentHistoryToCurrentLimit()
-{
-    const int maxFrames = qBound(1, m_settings.m_stackFrameCount, 256);
-    while (static_cast<int>(m_alignmentReferenceHistory.size()) > maxFrames) {
-        m_alignmentReferenceHistory.pop_front();
-    }
+    // stackFrameCount changes no longer affect alignment — the reference is a single fixed
+    // frame and is unaffected by the rolling stack window size. (Previously this branch
+    // trimmed an over-loaded deque of warped frames, which was itself the source of the
+    // alignment-drift bug.)
 }
 
 void CameraFrameAligner::submitFrame(const CameraPipelineFramePtr& frame)
@@ -374,28 +366,34 @@ QImage CameraFrameAligner::applyAlignment(const QImage& input)
     bool highBitDepthInput = false;
     cv::Mat frameMat = imageToWorkingMat(input, highBitDepthInput);
 
-    if (!m_alignmentReferenceHistory.empty()
-        && (m_alignmentReferenceHistory.front().size() != frameMat.size()
-            || m_alignmentReferenceHistory.front().type() != frameMat.type()))
+    // If the frame geometry/type has changed (e.g. ROI, binning, depth), drop the
+    // stale reference so we re-anchor on the next frame.
+    if (!m_alignmentReference.empty()
+        && (m_alignmentReference.size() != frameMat.size()
+            || m_alignmentReference.type() != frameMat.type()))
     {
-        m_alignmentReferenceHistory.clear();
+        m_alignmentReference = cv::Mat();
     }
 
     cv::Mat alignedFrameMat = alignFrame(frameMat);
 
-    m_alignmentReferenceHistory.push_back(alignedFrameMat.clone());
-    trimAlignmentHistoryToCurrentLimit();
+    // Anchor the reference once on the first frame after a reset. Use the *input*
+    // (unaligned) frame so subsequent warps don't compound. We keep this reference for
+    // the whole sequence — there is no drift, no discontinuity when the stack rolls.
+    if (m_alignmentReference.empty()) {
+        m_alignmentReference = frameMat.clone();
+    }
 
     return workingMatToImage(alignedFrameMat, highBitDepthInput);
 }
 
 cv::Mat CameraFrameAligner::alignFrame(const cv::Mat& frameMat) const
 {
-    if (m_alignmentReferenceHistory.empty()) {
+    if (m_alignmentReference.empty()) {
         return frameMat.clone();
     }
 
-    const cv::Mat& referenceFrame = m_alignmentReferenceHistory.front();
+    const cv::Mat& referenceFrame = m_alignmentReference;
     if (referenceFrame.size() != frameMat.size() || referenceFrame.type() != frameMat.type()) {
         return frameMat.clone();
     }

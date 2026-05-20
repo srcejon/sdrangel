@@ -683,12 +683,28 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_preRecordVideoFrames.clear();
         m_preRecordBufferFlushed = false;
         resetRecordingLimits();
+        // The video writers were opened with a fixed cv::Size from the previous frame
+        // geometry; any further writes would silently produce a corrupted file. Close them
+        // so ensureVideoWriter reopens at the new size on the next frame.
+        closeVideoWriters();
     }
 
+    // Reset the per-recording counters whenever the saveImage / saveVideo key arrives and
+    // the action is requested true. The previous condition (m_saveImage != wasSaveImage)
+    // only reset on *state transition*; a follow-up REST saveImage while already enabled
+    // would either stop immediately or record (limit - previouslySaved) extra frames
+    // instead of the requested count. Same bug for recordVideo.
     if (force
-        || (settingsKeys.contains("saveImage") && m_settings.m_saveImage != wasSaveImage)
+        || (settingsKeys.contains("saveImage") && m_settings.m_saveImage)
+        || (settingsKeys.contains("saveVideo") && m_settings.m_saveVideo))
+    {
+        resetRecordingLimits();
+    }
+    else if ((settingsKeys.contains("saveImage") && m_settings.m_saveImage != wasSaveImage)
         || (settingsKeys.contains("saveVideo") && m_settings.m_saveVideo != wasSaveVideo))
     {
+        // saveImage / saveVideo was explicitly switched off — also reset so a later
+        // turn-on starts cleanly even if it doesn't carry an explicit key.
         resetRecordingLimits();
     }
 
@@ -1620,6 +1636,8 @@ void CameraPostProcessor::closeVideoWriters()
     if (m_processedVideoWriter.isOpened()) {
         m_processedVideoWriter.release();
     }
+    m_rawVideoWriterSize = QSize();
+    m_processedVideoWriterSize = QSize();
 }
 
 int CameraPostProcessor::preRecordBufferFrameLimit() const
@@ -1632,15 +1650,48 @@ int CameraPostProcessor::preRecordBufferFrameLimit() const
     return std::max(1, static_cast<int>(std::ceil(m_settings.getCaptureFrameRate() * seconds)));
 }
 
+namespace {
+
+// Upper bound on bytes the pre-record buffer is allowed to hold. At default 1080p RGB
+// that's ~330 frames (~11 s at 30 fps); at 4K mono16 it's ~33 frames. The previous
+// implementation could exceed 22 GB at high resolution with SavedMediaBoth — frame count
+// alone is not a safe bound when a single 4K-RGB frame can be 24 MB.
+constexpr qint64 kPreRecordBufferMaxBytes = 2LL * 1024LL * 1024LL * 1024LL; // 2 GB
+
+qint64 imageSizeBytes(const QImage& image)
+{
+    return image.isNull() ? 0
+        : static_cast<qint64>(image.sizeInBytes());
+}
+
+qint64 bufferedFrameSizeBytes(const QImage& raw, const QImage& processed)
+{
+    return imageSizeBytes(raw) + imageSizeBytes(processed);
+}
+
+} // namespace
+
 void CameraPostProcessor::trimPreRecordBuffer()
 {
     const int frameLimit = preRecordBufferFrameLimit();
+    if (frameLimit == 0) {
+        m_preRecordVideoFrames.clear();
+        return;
+    }
     while (static_cast<int>(m_preRecordVideoFrames.size()) > frameLimit) {
         m_preRecordVideoFrames.pop_front();
     }
 
-    if (frameLimit == 0) {
-        m_preRecordVideoFrames.clear();
+    // Also enforce a global byte cap — drop oldest frames until total bytes <= cap.
+    qint64 totalBytes = 0;
+    for (const BufferedVideoFrame& f : m_preRecordVideoFrames) {
+        totalBytes += bufferedFrameSizeBytes(f.m_rawImage, f.m_processedImage);
+    }
+    while (!m_preRecordVideoFrames.empty() && (totalBytes > kPreRecordBufferMaxBytes))
+    {
+        const BufferedVideoFrame& front = m_preRecordVideoFrames.front();
+        totalBytes -= bufferedFrameSizeBytes(front.m_rawImage, front.m_processedImage);
+        m_preRecordVideoFrames.pop_front();
     }
 }
 
@@ -1651,7 +1702,21 @@ void CameraPostProcessor::appendPreRecordFrame(const QImage& rawImage, const QIm
         return;
     }
 
-    m_preRecordVideoFrames.push_back({rawImage.copy(), processedImage.copy()});
+    // Only buffer the variant(s) that the current m_recordMode will actually write. At
+    // default settings (e.g. SavedMediaRaw) we save half the memory; at SavedMediaBoth we
+    // still buffer both, but the trimPreRecordBuffer byte cap below caps total growth.
+    BufferedVideoFrame entry;
+    if (shouldSaveRawMedia() && !rawImage.isNull()) {
+        entry.m_rawImage = rawImage.copy();
+    }
+    if (shouldSaveProcessedMedia() && !processedImage.isNull()) {
+        entry.m_processedImage = processedImage.copy();
+    }
+    if (entry.m_rawImage.isNull() && entry.m_processedImage.isNull()) {
+        // Nothing to buffer for the current record mode.
+        return;
+    }
+    m_preRecordVideoFrames.push_back(std::move(entry));
     trimPreRecordBuffer();
 }
 
@@ -1689,8 +1754,18 @@ void CameraPostProcessor::flushPreRecordFrames(const QImage& currentRawImage, co
 
 bool CameraPostProcessor::ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant)
 {
-    if (writer.isOpened()) {
+    QSize& openedSize = rawVariant ? m_rawVideoWriterSize : m_processedVideoWriterSize;
+    const QSize requestedSize = frameForSize.size();
+
+    // If a writer is already open but the frame size changed since it was opened, close
+    // and reopen. Mid-stream resolution / binning changes would otherwise corrupt the file
+    // (the cv::VideoWriter has no way to query its own configured size, so we track it).
+    if (writer.isOpened() && (openedSize == requestedSize)) {
         return true;
+    }
+    if (writer.isOpened() && (openedSize != requestedSize)) {
+        writer.release();
+        openedSize = QSize();
     }
 
     const QString filename = createTimestampedOutputFilename(baseFileName, rawVariant);
@@ -1704,10 +1779,11 @@ bool CameraPostProcessor::ensureVideoWriter(cv::VideoWriter& writer, const QStri
         filename.toStdString(),
         fourcc,
         m_settings.getCaptureFrameRate(),
-        cv::Size(frameForSize.width(), frameForSize.height()),
+        cv::Size(requestedSize.width(), requestedSize.height()),
         params);
 
     if (writer.isOpened()) {
+        openedSize = requestedSize;
         qDebug() << "CameraPostProcessor opened:" << filename << "backend:" << QString::fromStdString(writer.getBackendName());
     } else {
         qWarning() << "CameraPostProcessor failed to open:" << filename;

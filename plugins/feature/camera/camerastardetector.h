@@ -47,8 +47,13 @@ private:
     [[nodiscard]] const cv::cuda::GpuMat& cudaStarExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     bool applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const;
 #endif
-    void applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask = nullptr) const;
-    void applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const;
+    // highBitDepthGray, when non-empty, is a CV_16UC1 luminance image (at full image size,
+    // *not* roi-cropped) extracted directly from the original QImage. When supplied the
+    // detector preserves 16-bit precision in the residual and centroid weighting; the
+    // saturation cutoff is scaled accordingly. When empty the detector falls back to the
+    // legacy 8-bit pipeline derived from bgrMat.
+    void applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask = nullptr) const;
+    void applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const;
 };
 
 #endif // INCLUDE_FEATURE_CAMERASTARDETECTOR_H_

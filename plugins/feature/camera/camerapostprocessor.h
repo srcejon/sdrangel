@@ -369,6 +369,11 @@ private:
     QDateTime m_captureDateTime;
     cv::VideoWriter m_rawVideoWriter;
     cv::VideoWriter m_processedVideoWriter;
+    // Frame size each writer was opened with. We re-open on size mismatch so a stray
+    // resolution change between when the writer was opened and the next frame doesn't
+    // silently corrupt the file (the cv::VideoWriter has no API to query its own size).
+    QSize m_rawVideoWriterSize;
+    QSize m_processedVideoWriterSize;
     std::deque<BufferedVideoFrame> m_preRecordVideoFrames;
     bool m_preRecordBufferFlushed;
     int m_recordedImageFrames;

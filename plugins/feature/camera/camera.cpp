@@ -16,8 +16,11 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <memory>
+
 #include <QCoreApplication>
 #include <QDebug>
+#include <QJsonObject>
 
 #include "SWGFeatureSettings.h"
 #include "SWGFeatureReport.h"
@@ -556,19 +559,33 @@ int Camera::webapiActionsPost(
                 return 400;
             }
 
+            // Determine which fields the caller actually supplied. Without this gate, a
+            // request like {"saveImage":{}} would clobber the user's saved recordMode and
+            // imageRecordLimit with the SWG defaults (0). asJsonObject() emits a key only
+            // when the corresponding *_isSet flag is true (set by fromJsonObject).
+            std::unique_ptr<QJsonObject> saveImageJson(saveImage->asJsonObject());
+            const bool hasRecordMode = saveImageJson && saveImageJson->contains("recordMode");
+            const bool hasImages = saveImageJson && saveImageJson->contains("images");
+
             if (saveImage->getFilename() && !saveImage->getFilename()->isEmpty())
             {
                 settings.m_imageFileName = *saveImage->getFilename();
                 addSettingsKey("imageFileName");
             }
 
-            settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
-                static_cast<CameraSettings::SavedMediaMode>(saveImage->getRecordMode()),
-                CameraSettings::SavedMediaBoth);
-            settings.m_imageRecordLimit = qMax(CameraSettings::m_minNonNegative, saveImage->getImages());
+            if (hasRecordMode)
+            {
+                settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
+                    static_cast<CameraSettings::SavedMediaMode>(saveImage->getRecordMode()),
+                    CameraSettings::SavedMediaBoth);
+                addSettingsKey("videoPostProcess");
+            }
+            if (hasImages)
+            {
+                settings.m_imageRecordLimit = qMax(CameraSettings::m_minNonNegative, saveImage->getImages());
+                addSettingsKey("imageRecordLimit");
+            }
             settings.m_saveImage = true;
-            addSettingsKey("videoPostProcess");
-            addSettingsKey("imageRecordLimit");
             addSettingsKey("saveImage");
             startCamera = m_state == StIdle;
             accepted = true;
@@ -584,19 +601,30 @@ int Camera::webapiActionsPost(
                 return 400;
             }
 
+            // Same isSet-via-JSON pattern as saveImage above — see the comment there.
+            std::unique_ptr<QJsonObject> recordVideoJson(recordVideo->asJsonObject());
+            const bool hasRecordMode = recordVideoJson && recordVideoJson->contains("recordMode");
+            const bool hasDuration = recordVideoJson && recordVideoJson->contains("duration");
+
             if (recordVideo->getFilename() && !recordVideo->getFilename()->isEmpty())
             {
                 settings.m_videoFileName = *recordVideo->getFilename();
                 addSettingsKey("videoFileName");
             }
 
-            settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
-                static_cast<CameraSettings::SavedMediaMode>(recordVideo->getRecordMode()),
-                CameraSettings::SavedMediaBoth);
-            settings.m_videoRecordLimitSeconds = qMax(CameraSettings::m_minNonNegative, recordVideo->getDuration());
+            if (hasRecordMode)
+            {
+                settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
+                    static_cast<CameraSettings::SavedMediaMode>(recordVideo->getRecordMode()),
+                    CameraSettings::SavedMediaBoth);
+                addSettingsKey("videoPostProcess");
+            }
+            if (hasDuration)
+            {
+                settings.m_videoRecordLimitSeconds = qMax(CameraSettings::m_minNonNegative, recordVideo->getDuration());
+                addSettingsKey("videoRecordLimitSeconds");
+            }
             settings.m_saveVideo = true;
-            addSettingsKey("videoPostProcess");
-            addSettingsKey("videoRecordLimitSeconds");
             addSettingsKey("saveVideo");
             startCamera = m_state == StIdle;
             accepted = true;

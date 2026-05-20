@@ -122,7 +122,13 @@ private:
     CameraFrameStacker *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
-    std::deque<cv::Mat> m_alignmentReferenceHistory;
+    // Single fixed alignment reference, holding the UNALIGNED first frame of the current
+    // sequence. Storing one frame (instead of a rolling deque of warped output frames)
+    // avoids accumulating registration error and the discontinuity that occurred when the
+    // deque rolled past stackFrameCount and the "reference" jumped to a previously-warped
+    // frame. Reset on capture start, on settings changes that invalidate the source, or
+    // when the frame geometry changes.
+    cv::Mat m_alignmentReference;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     mutable cv::cuda::Stream m_cudaAlignmentStream;
 #endif
@@ -137,7 +143,6 @@ private:
     bool preserveFrameOrder() const;
     int pendingFrameLimit() const;
     void resetAlignmentState();
-    void trimAlignmentHistoryToCurrentLimit();
     [[nodiscard]] QImage applyAlignment(const QImage& input);
     [[nodiscard]] static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     [[nodiscard]] static QImage workingMatToImage(const cv::Mat& frameMat, bool highBitDepthInput);

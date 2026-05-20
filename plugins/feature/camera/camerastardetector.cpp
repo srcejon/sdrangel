@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include <QDebug>
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
@@ -30,6 +31,52 @@
 #include "util/profiler.h"
 #include "cameraplatesolver.h"
 #include "camerastardetector.h"
+
+namespace {
+
+// Returns true and fills outGray with a CV_16UC1 view (with backing memory cloned) if the
+// source QImage natively carries 16-bit dynamic range. Returns false otherwise — callers
+// then fall through to the existing 8-bit pipeline. We preserve the original 16-bit
+// precision because plate-solve centroid accuracy on faint stars depends on the per-pixel
+// weight subtlety that a 16->8 truncation would destroy.
+bool extractGrayMat16(const QImage& image, cv::Mat& outGray)
+{
+    if (image.format() == QImage::Format_Grayscale16)
+    {
+        cv::Mat grayView(image.height(), image.width(), CV_16UC1,
+            const_cast<uchar*>(image.constBits()),
+            static_cast<size_t>(image.bytesPerLine()));
+        outGray = grayView.clone();
+        return true;
+    }
+
+    if ((image.format() == QImage::Format_RGBA64) || (image.format() == QImage::Format_RGBX64))
+    {
+        // Convert 16-bit RGBA64 to 16-bit luminance with the standard BT.601 weights.
+        // We keep the result in CV_16UC1 so subsequent residual/threshold/centroid work
+        // sees the full dynamic range.
+        outGray = cv::Mat(image.height(), image.width(), CV_16UC1);
+        for (int y = 0; y < image.height(); ++y)
+        {
+            const QRgba64* in = reinterpret_cast<const QRgba64*>(image.constScanLine(y));
+            uint16_t* out = outGray.ptr<uint16_t>(y);
+            for (int x = 0; x < image.width(); ++x)
+            {
+                const uint32_t r = in[x].red();
+                const uint32_t g = in[x].green();
+                const uint32_t b = in[x].blue();
+                // 0.299 R + 0.587 G + 0.114 B in fixed-point, with rounding.
+                const uint32_t y16 = (19595u * r + 38470u * g + 7471u * b + 32768u) >> 16;
+                out[x] = static_cast<uint16_t>(std::min<uint32_t>(65535u, y16));
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
+
+} // namespace
 CameraStarDetector::CameraStarDetector()
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     :
@@ -147,6 +194,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 
     cv::Mat bgrMat;
     cv::Rect detectionRoi;
+    cv::Mat highBitDepthGray;
     const cv::cuda::GpuMat* cachedBgrGpu = nullptr;
 
     if (m_settings.m_starDetect)
@@ -154,6 +202,11 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         if (!frame->ensureCpuImageFromCuda()) {
             return;
         }
+
+        // Capture a 16-bit luminance Mat *before* the RGB888 conversion truncates the
+        // source. Plate-solve centroid accuracy on faint stars depends on full 16-bit
+        // precision being preserved through residual computation and weighted centroid.
+        extractGrayMat16(frame->m_image, highBitDepthGray);
 
         QImage convertedRgb;
         const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
@@ -172,6 +225,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             bgrMat,
             cachedBgrGpu,
             detectionRoi,
+            highBitDepthGray,
             frame->m_starDetections,
             (m_settings.m_starDebugView != CameraSettings::StarDebugViewOff) ? &starDebugMask : nullptr);
 
@@ -221,11 +275,21 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     forwardFrame(frame);
 }
 
-void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
+void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
 {
     PROFILER_START();
 
-    cv::cvtColor(bgrMat(roi), gray, cv::COLOR_BGR2GRAY);
+    // Use the 16-bit luminance Mat when supplied; otherwise fall back to the 8-bit
+    // BGR->gray conversion. The threshold and the residual subtraction operate at the
+    // native depth, so the centroid loop later sees full 16-bit weights for faint stars.
+    const bool useHighBitDepth = !highBitDepthGray.empty()
+        && (highBitDepthGray.depth() == CV_16U)
+        && (highBitDepthGray.size() == bgrMat.size());
+    if (useHighBitDepth) {
+        gray = highBitDepthGray(roi).clone();
+    } else {
+        cv::cvtColor(bgrMat(roi), gray, cv::COLOR_BGR2GRAY);
+    }
 
     cv::Mat blurredGray;
     cv::GaussianBlur(gray, blurredGray, cv::Size(3, 3), 0.0, 0.0);
@@ -256,7 +320,21 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
         }
     }
 
-    cv::threshold(residual, thresholdMask, m_settings.m_starThreshold, 255, cv::THRESH_BINARY);
+    // Threshold scaled to the native bit depth. The user-facing m_starThreshold remains
+    // expressed on the 0-255 scale; we shift left by 8 when running 16-bit so the same
+    // slider value gives consistent visual behaviour.
+    const double thresholdScaled = useHighBitDepth
+        ? static_cast<double>(m_settings.m_starThreshold) * 256.0
+        : static_cast<double>(m_settings.m_starThreshold);
+    const double maxValueScaled = useHighBitDepth ? 65535.0 : 255.0;
+    cv::threshold(residual, thresholdMask, thresholdScaled, maxValueScaled, cv::THRESH_BINARY);
+    // findContours only accepts CV_8U; downscale the binary mask (it's still a binary
+    // mask, no precision lost).
+    if (thresholdMask.depth() != CV_8U) {
+        cv::Mat thresholdMask8;
+        thresholdMask.convertTo(thresholdMask8, CV_8U, 255.0 / 65535.0);
+        thresholdMask = thresholdMask8;
+    }
     cv::bitwise_and(thresholdMask, cachedExclusionMask(roi, thresholdMask.size()), thresholdMask);
     if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewThresholded)) {
         *debugMask = thresholdMask.clone();
@@ -341,7 +419,7 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
 }
 #endif
 
-void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask) const
+void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask) const
 {
     PROFILER_START();
 
@@ -351,12 +429,18 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
     bool useCPUStarPreprocessing = true;
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-    if (canUseCudaDetection() && applyStarPreprocessingCuda(bgrMat, sourceBgrGpu, roi, gray, residual, thresholdMask, debugMask)) {
+    // The CUDA preprocessing path operates only on 8-bit inputs today, so only consult it
+    // when no 16-bit luminance was supplied. Otherwise fall through to the CPU path which
+    // honours full 16-bit precision.
+    if (highBitDepthGray.empty()
+        && canUseCudaDetection()
+        && applyStarPreprocessingCuda(bgrMat, sourceBgrGpu, roi, gray, residual, thresholdMask, debugMask))
+    {
         useCPUStarPreprocessing = false;
     }
 #endif
     if (useCPUStarPreprocessing) {
-        applyStarPreprocessing(bgrMat, sourceBgrGpu, roi, gray, residual, thresholdMask, debugMask);
+        applyStarPreprocessing(bgrMat, sourceBgrGpu, roi, highBitDepthGray, gray, residual, thresholdMask, debugMask);
     }
 
     std::vector<std::vector<cv::Point>> contours;
@@ -409,11 +493,16 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
         double peakValue = 0.0;
         double grayPeak = 0.0;
 
+        // Branch on depth so 16-bit inputs preserve per-pixel precision in the weighted
+        // centroid (faint stars benefit substantially from the extra bits).
+        const bool is16Bit = (residual.depth() == CV_16U);
         for (int row = 0; row < box.height; ++row)
         {
             const uchar* maskRow = contourMask.ptr<uchar>(row);
-            const uchar* residualRow = residualRoi.ptr<uchar>(row);
-            const uchar* grayRow = grayRoi.ptr<uchar>(row);
+            const uchar* residualRow8 = is16Bit ? nullptr : residualRoi.ptr<uchar>(row);
+            const uint16_t* residualRow16 = is16Bit ? residualRoi.ptr<uint16_t>(row) : nullptr;
+            const uchar* grayRow8 = is16Bit ? nullptr : grayRoi.ptr<uchar>(row);
+            const uint16_t* grayRow16 = is16Bit ? grayRoi.ptr<uint16_t>(row) : nullptr;
 
             for (int col = 0; col < box.width; ++col)
             {
@@ -421,7 +510,9 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
                     continue;
                 }
 
-                const double weight = residualRow[col];
+                const double weight = is16Bit
+                    ? static_cast<double>(residualRow16[col])
+                    : static_cast<double>(residualRow8[col]);
                 if (weight > 0.0)
                 {
                     totalWeight += weight;
@@ -432,8 +523,11 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
                 if (weight > peakValue) {
                     peakValue = weight;
                 }
-                if (grayRow[col] > grayPeak) {
-                    grayPeak = grayRow[col];
+                const double grayValue = is16Bit
+                    ? static_cast<double>(grayRow16[col])
+                    : static_cast<double>(grayRow8[col]);
+                if (grayValue > grayPeak) {
+                    grayPeak = grayValue;
                 }
             }
         }
@@ -444,7 +538,11 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
 
         const double centerX = weightedX / totalWeight;
         const double centerY = weightedY / totalWeight;
-        const bool saturated = grayPeak >= 250.0;
+        // Saturation threshold scales with the input depth — 250/255 on 8-bit translates
+        // to ~64000/65535 on 16-bit. We keep the m_saturated flag depth-agnostic for the
+        // plate solver's downstream quality scoring.
+        const double saturationThreshold = is16Bit ? 64000.0 : 250.0;
+        const bool saturated = grayPeak >= saturationThreshold;
 
         const double qualityScore = peakValue
             * std::max(0.25, roundness)

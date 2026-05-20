@@ -75,10 +75,8 @@ void CameraMotionDetector::applySettings(const CameraSettings& settings, const Q
         || settingsKeys.contains("detectionRoiHeight"))
     {
         m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
-        m_motionLastFgMaskRaw.release();
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
         m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
-        m_cudaMotionLastFgMaskRaw.release();
         invalidateCudaMotionCaches();
 #endif
     }
@@ -122,10 +120,8 @@ void CameraMotionDetector::captureActiveChanged(bool active)
     }
 
     m_bgSubtractor = cv::Ptr<cv::BackgroundSubtractor>();
-    m_motionLastFgMaskRaw.release();
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     m_cudaBgSubtractor = cv::Ptr<cv::cuda::BackgroundSubtractorMOG2>();
-    m_cudaMotionLastFgMaskRaw.release();
     invalidateCudaMotionCaches();
 #endif
     m_lastMotionBoxes.clear();
@@ -175,7 +171,6 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             cachedBgrGpu,
             detectionRoi,
             frame->m_motionBoxes,
-            true,
             (m_settings.m_motionMaskView != CameraSettings::MotionMaskViewOff) ? &motionDebugMask : nullptr))
     {
         useCPUMotionDetection = false;
@@ -188,7 +183,6 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             cachedBgrGpu,
             detectionRoi,
             frame->m_motionBoxes,
-            true,
             (m_settings.m_motionMaskView != CameraSettings::MotionMaskViewOff) ? &motionDebugMask : nullptr);
     }
 
@@ -340,7 +334,7 @@ const cv::cuda::GpuMat& CameraMotionDetector::cudaMotionExclusionMask(const cv::
     return m_cudaMotionExclusionMask;
 }
 
-bool CameraMotionDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
+bool CameraMotionDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -373,15 +367,7 @@ bool CameraMotionDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const
         }
 
         cv::cuda::GpuMat fgMaskGpu;
-        if (updateBackgroundModel)
-        {
-            m_cudaBgSubtractor->apply(motionInputGpu, fgMaskGpu, m_settings.m_motionLearningRate, m_cudaMotionStream);
-            fgMaskGpu.copyTo(m_cudaMotionLastFgMaskRaw, m_cudaMotionStream);
-        }
-        else
-        {
-            fgMaskGpu = m_cudaMotionLastFgMaskRaw;
-        }
+        m_cudaBgSubtractor->apply(motionInputGpu, fgMaskGpu, m_settings.m_motionLearningRate, m_cudaMotionStream);
 
         if (fgMaskGpu.empty())
         {
@@ -517,7 +503,7 @@ bool CameraMotionDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const
 }
 #endif
 
-void CameraMotionDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask)
+void CameraMotionDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -538,15 +524,7 @@ void CameraMotionDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv:
     }
 
     cv::Mat fgMask;
-    if (updateBackgroundModel)
-    {
-        m_bgSubtractor->apply(motionInput, fgMask, m_settings.m_motionLearningRate);
-        m_motionLastFgMaskRaw = fgMask.clone();
-    }
-    else
-    {
-        fgMask = m_motionLastFgMaskRaw.clone();
-    }
+    m_bgSubtractor->apply(motionInput, fgMask, m_settings.m_motionLearningRate);
 
     if (fgMask.empty()) {
         m_bgSubtractor->apply(motionInput, fgMask, 0.0);

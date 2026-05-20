@@ -44,11 +44,9 @@ protected:
 private:
     Camera *m_camera;
     cv::Ptr<cv::BackgroundSubtractor> m_bgSubtractor;
-    cv::Mat m_motionLastFgMaskRaw;
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> m_cudaBgSubtractor;
     cv::cuda::Stream m_cudaMotionStream;
-    cv::cuda::GpuMat m_cudaMotionLastFgMaskRaw;
     cv::Ptr<cv::cuda::Filter> m_cudaMotionOpenFilter;
     cv::Ptr<cv::cuda::Filter> m_cudaMotionCloseFilter;
     int m_cudaMotionOpenFilterSize;
@@ -71,9 +69,9 @@ private:
     [[nodiscard]] bool canUseCudaMotionDetection() const;
     void invalidateCudaMotionCaches();
     [[nodiscard]] const cv::cuda::GpuMat& cudaMotionExclusionMask(const cv::Rect& roi, const cv::Size& workSize);
-    bool applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
+    bool applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
 #endif
-    void applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
+    void applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
     void updateMotionEventState(bool motionDetected, const QDateTime& eventTime, const QString& eventData);
     void sendEvent(bool detected, const QDateTime& eventTime, const QString& eventData);
 };

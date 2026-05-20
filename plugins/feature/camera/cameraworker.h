@@ -28,7 +28,6 @@
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QRecursiveMutex>
-#include <QVector>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -38,22 +37,17 @@
 
 #include "util/message.h"
 #include "util/messagequeue.h"
-#include "audio/audiofifo.h"
 #include "availabledevicehandler.h"
 #include "cameraalpacacontroller.h"
 #include "cameraasicontroller.h"
 #include "camerainfo.h"
 #include "camerapipelineframe.h"
+#include "cameraqtaudiocontroller.h"
 #include "camerasettings.h"
-
-#ifdef ASICAMERA_FOUND
-#include <ASICamera2.h>
-#endif
 
 class QNetworkAccessManager;
 class QNetworkReply;
 class QUrl;
-class AudioDeviceManager;
 class CameraPostProcessor;
 class CameraFramePreprocessor;
 class CameraFinder;
@@ -506,23 +500,18 @@ private:
     AvailableDeviceList m_availableDevices;
     QSet<QString> m_reportedFeatureErrorKeys;
     bool m_capturing;
-    bool m_capturingAudio;
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
     CameraFinder *m_cameraFinder;
     int m_stackFrameIndex;
     int m_hdrExposureIndex;
     CameraAlpacaController m_alpaca;
+    CameraQtAudioController m_qtAudio;
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
 #ifdef ASICAMERA_FOUND
     CameraAsiController m_asi;
 #endif
-
-    // Audio pass-through (Qt camera only)
-    AudioFifo m_captureAudioFifo;  ///< Receives captured microphone samples from AudioDeviceManager
-    AudioFifo m_outputAudioFifo;   ///< Feeds samples to AudioDeviceManager for playback
-    QVector<quint8> m_audioTransferBuffer; ///< Scratch buffer for the capture→output copy
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
@@ -548,13 +537,6 @@ private:
     void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
     void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray());
     void reportAlpacaStatusToGUI(int cameraState = -1, double ccdTemperature = NAN, bool ccdTemperatureValid = false);
-    static QString normalizeAudioMatchName(QString text);
-    static int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName);
-    static void alignQtCameraAudioInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    static int findQtCameraAudioInputIndex(const CameraSettings& settings);
-#endif
-
     static const int m_alpacaStatusPollIntervalMs = 2000;
     static const int m_alpacaImageReadyPollIntervalMs = 100;
 
@@ -593,7 +575,6 @@ private:
     bool useAsiContinuousVideoCadence() const;
     void scheduleNextAsiVideoCapture(int delayMs = 0);
     void invalidateAsiSettings();
-    void setLastAsiError(int errorCode, const QString& errorMessage);
 #endif
 
 private slots:
@@ -603,7 +584,6 @@ private slots:
     void statusTick();
     void onAvailableDevicesChanged(const QStringList& renameFrom, const QStringList& renameTo,
                                    const QStringList& removed, const QStringList& added);
-    void onCaptureAudioDataReady(); ///< Called when microphone samples are available in m_captureAudioFifo
 };
 
 #endif // INCLUDE_FEATURE_CAMERAWORKER_H_

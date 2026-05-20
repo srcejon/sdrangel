@@ -30,29 +30,10 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSharedPointer>
-#include <QThread>
 #include <QUrl>
 #include <QUrlQuery>
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#include <QCamera>
-#include <QCameraDevice>
-#include <QCameraFormat>
-#include <QMediaDevices>
-#include <QSet>
-#else
-#include <QCamera>
-#include <QCameraInfo>
-#include <QSet>
-#endif
-
-#ifdef ASICAMERA_FOUND
-#include <ASICamera2.h>
-#endif
-
 #include "maincore.h"
-#include "dsp/dspengine.h"
-#include "audio/audiodevicemanager.h"
 #include "util/profiler.h"
 #include "camera.h"
 #include "cameraalpacacontroller.h"
@@ -61,171 +42,6 @@
 #include "cameraframepreprocessor.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
-
-QString CameraWorker::normalizeAudioMatchName(QString text)
-{
-    text = text.toLower();
-
-    for (int i = 0; i < text.size(); ++i)
-    {
-        if (!text[i].isLetterOrNumber()) {
-            text[i] = QLatin1Char(' ');
-        }
-    }
-
-    const QStringList skipTokens = {
-        QStringLiteral("audio"),
-        QStringLiteral("camera"),
-        QStringLiteral("device"),
-        QStringLiteral("input"),
-        QStringLiteral("microphone"),
-        QStringLiteral("mic"),
-        QStringLiteral("video"),
-        QStringLiteral("webcam")
-    };
-
-    QStringList tokens = text.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts);
-    tokens.erase(
-        std::remove_if(
-            tokens.begin(),
-            tokens.end(),
-            [&skipTokens](const QString& token) { return skipTokens.contains(token); }),
-        tokens.end());
-    return tokens.join(QLatin1Char(' '));
-}
-
-int CameraWorker::scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName)
-{
-    if (cameraName.isEmpty() || audioName.isEmpty()) {
-        return -1;
-    }
-
-    const QString cameraLower = cameraName.toLower();
-    const QString audioLower = audioName.toLower();
-
-    if (cameraLower == audioLower) {
-        return 1000;
-    }
-
-    int score = 0;
-
-    if (audioLower.contains(cameraLower) || cameraLower.contains(audioLower)) {
-        score += 400;
-    }
-
-    const QString normalizedCamera = normalizeAudioMatchName(cameraName);
-    const QString normalizedAudio = normalizeAudioMatchName(audioName);
-
-    if (!normalizedCamera.isEmpty() && normalizedCamera == normalizedAudio) {
-        score += 300;
-    } else if (!normalizedCamera.isEmpty() && !normalizedAudio.isEmpty()
-            && (normalizedAudio.contains(normalizedCamera) || normalizedCamera.contains(normalizedAudio))) {
-        score += 150;
-    }
-
-    const QStringList cameraTokens = normalizedCamera.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-    const QStringList audioTokens = normalizedAudio.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-    int tokenMatches = 0;
-
-    for (const QString& token : cameraTokens)
-    {
-        if (audioTokens.contains(token)) {
-            ++tokenMatches;
-        }
-    }
-
-    score += tokenMatches * 25;
-    return score;
-}
-
-void CameraWorker::alignQtCameraAudioInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex)
-{
-    if ((audioDeviceManager == nullptr) || (inputDeviceIndex < 0)) {
-        return;
-    }
-
-    const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
-
-    if (outputSampleRate <= 0) {
-        return;
-    }
-
-    const QList<AudioDeviceInfo>& inputDevices = AudioDeviceInfo::availableInputDevices();
-
-    if (inputDeviceIndex >= inputDevices.size()) {
-        return;
-    }
-
-    const AudioDeviceInfo& inputDeviceInfo = inputDevices.at(inputDeviceIndex);
-    const QList<int> supportedSampleRates = inputDeviceInfo.supportedSampleRates();
-
-    if (!supportedSampleRates.contains(outputSampleRate))
-    {
-        qWarning() << "CameraWorker: input audio device" << inputDeviceInfo.deviceName()
-                   << "does not support output sample rate" << outputSampleRate
-                   << "supported sample rates:" << supportedSampleRates;
-        return;
-    }
-
-    AudioDeviceManager::InputDeviceInfo configuredInputInfo;
-    audioDeviceManager->getInputDeviceInfo(inputDeviceInfo.deviceName(), configuredInputInfo);
-
-    if (configuredInputInfo.sampleRate == outputSampleRate) {
-        return;
-    }
-
-    configuredInputInfo.sampleRate = outputSampleRate;
-    audioDeviceManager->setInputDeviceInfo(inputDeviceIndex, configuredInputInfo);
-
-    qDebug() << "CameraWorker: aligned input audio device" << inputDeviceInfo.deviceName()
-             << "sample rate to output rate" << outputSampleRate;
-}
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-int CameraWorker::findQtCameraAudioInputIndex(const CameraSettings& settings)
-{
-    if (!settings.isQtCamera()) {
-        return -1;
-    }
-
-    const QString targetId = settings.cameraIdString();
-    const QString targetDescription = settings.cameraDescription();
-    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
-
-    QString cameraDescription = targetDescription;
-
-    for (const QCameraDevice& device : cameras)
-    {
-        const QString id = QString::fromUtf8(device.id());
-
-        if ((id == targetId) || (device.description() == targetDescription))
-        {
-            cameraDescription = device.description();
-            break;
-        }
-    }
-
-    const QList<AudioDeviceInfo>& audioInputs = AudioDeviceInfo::availableInputDevices();
-    int bestIndex = -1;
-    int bestScore = -1;
-
-    for (int i = 0; i < audioInputs.size(); ++i)
-    {
-        const QString audioName = audioInputs[i].deviceName();
-        const int descriptionScore = scoreAudioDeviceMatch(cameraDescription, audioName);
-        const int idScore = scoreAudioDeviceMatch(targetId, audioName);
-        const int score = std::max(descriptionScore, idScore);
-
-        if (score > bestScore)
-        {
-            bestScore = score;
-            bestIndex = i;
-        }
-    }
-
-    return bestScore >= 150 ? bestIndex : -1;
-}
-#endif
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
@@ -245,13 +61,13 @@ CameraWorker::CameraWorker() :
     m_postProcessorInputMessageQueue(nullptr),
     m_availableDeviceHandler({}, QStringList{"spectrumview"}),
     m_capturing(false),
-    m_capturingAudio(false),
     m_captureTimer(this),
     m_networkManager(nullptr),
     m_cameraFinder(new CameraFinder(this)),
     m_stackFrameIndex(0),
     m_hdrExposureIndex(0),
     m_alpaca(),
+    m_qtAudio(this),
     m_statusTimer(this),
     m_spectrumPipeSource(nullptr)
 #ifdef ASICAMERA_FOUND
@@ -271,12 +87,6 @@ CameraWorker::CameraWorker() :
         &CameraWorker::onAvailableDevicesChanged);
     m_availableDeviceHandler.scanAvailableDevices();
 
-    // Audio FIFO: stereo 16-bit PCM at 48 kHz; 4800 sample frames × 4 bytes each
-    static constexpr int audioFifoFrames = 4800*4;
-    static constexpr int bytesPerSampleFrame = 4; // 2 channels × 2 bytes (int16)
-    m_captureAudioFifo.setSize(audioFifoFrames);
-    m_outputAudioFifo.setSize(audioFifoFrames);
-    m_audioTransferBuffer.resize(audioFifoFrames * bytesPerSampleFrame);
 }
 
 CameraWorker::~CameraWorker()
@@ -471,7 +281,7 @@ void CameraWorker::resetHdrBracketState()
 
 #ifdef ASICAMERA_FOUND
     if (m_settings.isAsiCamera()) {
-        m_asi.m_settingsApplied = false;
+        m_asi.invalidateSettings();
     }
 #endif
 }
@@ -544,7 +354,7 @@ void CameraWorker::advanceHdrBracketState()
 
 #ifdef ASICAMERA_FOUND
     if (m_settings.isAsiCamera()) {
-        m_asi.m_settingsApplied = false;
+        m_asi.invalidateSettings();
     }
 #endif
 }
@@ -696,6 +506,10 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
+    }
+
+    if (force || settingsKeys.contains("audioMute")) {
+        m_qtAudio.setMuted(m_settings.m_audioMute);
     }
 
     if (hdrSettingsChanged) {
@@ -914,20 +728,8 @@ void CameraWorker::startCapture()
 #endif
     else if (m_settings.isQtCamera())
     {
-        // Qt camera capture is mainly managed by CameraGUI on the main thread. We just do audio
-        AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
-        const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(m_settings.m_audioDeviceName);
-        int inputDeviceIndex = -1;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        inputDeviceIndex = findQtCameraAudioInputIndex(m_settings);
-        alignQtCameraAudioInputRate(audioDeviceManager, inputDeviceIndex, outputDeviceIndex);
-#endif
-        qDebug() << "CameraWorker: starting audio capture: outputDeviceIndex" << outputDeviceIndex
-                 << "inputDeviceIndex" << inputDeviceIndex;
-        audioDeviceManager->addAudioSink(&m_outputAudioFifo, getInputMessageQueue(), outputDeviceIndex);
-        audioDeviceManager->addAudioSource(&m_captureAudioFifo, getInputMessageQueue(), inputDeviceIndex);
-        QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraWorker::onCaptureAudioDataReady);
-        m_capturingAudio = true;
+        // Qt camera capture is mainly managed by CameraGUI on the main thread. The worker only bridges audio.
+        m_qtAudio.start(m_settings, getInputMessageQueue());
     }
 }
 
@@ -943,24 +745,15 @@ void CameraWorker::stopCapture()
     }
 
 #ifdef ASICAMERA_FOUND
-    ++m_asi.m_continuousCaptureGeneration;
-    m_asi.m_continuousCaptureScheduled = false;
+    m_asi.cancelContinuousCapture();
     m_asi.stopVideoCapture(m_settings.cameraIdInt());
     if (m_settings.isAsiCamera() && m_settings.isIntervalCaptureMode()) {
         m_asi.stopExposure(m_settings.cameraIdInt());
     }
-    m_asi.m_settingsApplied = false;
+    m_asi.invalidateSettings();
 #endif
 
-    if (m_capturingAudio)
-    {
-        qDebug() << "CameraWorker: stopping audio capture";
-        QObject::disconnect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraWorker::onCaptureAudioDataReady);
-        AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
-        audioDeviceManager->removeAudioSource(&m_captureAudioFifo);
-        audioDeviceManager->removeAudioSink(&m_outputAudioFifo);
-        m_capturingAudio = false;
-    }
+    m_qtAudio.stop();
 }
 
 void CameraWorker::captureTick()
@@ -2650,25 +2443,25 @@ bool CameraWorker::asiOpenCamera()
         return true;
     }
 
-    switch (m_asi.m_lastOpenFailureStage)
+    switch (m_asi.lastOpenFailureStage())
     {
     case CameraAsiController::OpenFailureOpen:
         reportErrorToFeature(
             QStringLiteral("asiOpen:%1").arg(cameraId),
             tr("ASI camera open failed"),
-            tr("Failed to open ASI camera %1:\n%2").arg(cameraId).arg(m_asi.m_lastErrorMessage));
+            tr("Failed to open ASI camera %1:\n%2").arg(cameraId).arg(m_asi.lastErrorMessage()));
         break;
     case CameraAsiController::OpenFailureInit:
         reportErrorToFeature(
             QStringLiteral("asiInit:%1").arg(cameraId),
             tr("ASI camera initialization failed"),
-            tr("Failed to initialize ASI camera %1:\n%2").arg(cameraId).arg(m_asi.m_lastErrorMessage));
+            tr("Failed to initialize ASI camera %1:\n%2").arg(cameraId).arg(m_asi.lastErrorMessage()));
         break;
     case CameraAsiController::OpenFailureMode:
         reportErrorToFeature(
             QStringLiteral("asiMode:%1").arg(cameraId),
             tr("ASI camera mode setup failed"),
-            tr("Failed to set ASI camera %1 to normal mode:\n%2").arg(cameraId).arg(m_asi.m_lastErrorMessage));
+            tr("Failed to set ASI camera %1 to normal mode:\n%2").arg(cameraId).arg(m_asi.lastErrorMessage()));
         break;
     case CameraAsiController::OpenFailureNone:
         break;
@@ -2695,93 +2488,43 @@ void CameraWorker::asiQueryCameraCapabilities()
         return;
     }
 
-    ASI_CAMERA_INFO cameraInfo {};
-
-    if (!CameraAsiController::getCameraInfoById(cameraId, cameraInfo)) {
+    CameraAsiController::CapabilitiesReport report;
+    if (!m_asi.queryCameraCapabilities(cameraId, m_settings, report)) {
         return;
     }
-
-    ASI_CONTROL_CAPS gainRange {};
-    ASI_CONTROL_CAPS offsetRange {};
-    ASI_CONTROL_CAPS exposureRange {};
-    ASI_CONTROL_CAPS coolerOnCaps {};
-    ASI_CONTROL_CAPS targetTempCaps {};
-    ASI_CONTROL_CAPS usbBandwidthCaps {};
-    ASI_CONTROL_CAPS highSpeedModeCaps {};
-    const bool hasGainRange = CameraAsiController::getControlCapsByType(cameraId, ASI_GAIN, gainRange);
-    const bool hasOffsetRange = CameraAsiController::getControlCapsByType(cameraId, ASI_OFFSET, offsetRange);
-    const bool hasExposureRange = CameraAsiController::getControlCapsByType(cameraId, ASI_EXPOSURE, exposureRange);
-    const bool hasCoolerOn = CameraAsiController::getControlCapsByType(cameraId, ASI_COOLER_ON, coolerOnCaps);
-    const bool hasTargetTemp = CameraAsiController::getControlCapsByType(cameraId, ASI_TARGET_TEMP, targetTempCaps);
-    const bool hasUsbBandwidth = CameraAsiController::getControlCapsByType(cameraId, ASI_BANDWIDTHOVERLOAD, usbBandwidthCaps);
-    const bool hasHighSpeedMode = CameraAsiController::getControlCapsByType(cameraId, ASI_HIGH_SPEED_MODE, highSpeedModeCaps);
-    long coolerOnValue = 0;
-    long targetTempValue = 0;
-    long usbBandwidthValue = 0;
-    long highSpeedModeValue = 0;
-    ASI_BOOL isAuto = ASI_FALSE;
-    const bool hasCoolerOnValue = hasCoolerOn && CameraAsiController::getControlValueByType(cameraId, ASI_COOLER_ON, coolerOnValue, isAuto);
-    const bool hasTargetTempValue = hasTargetTemp && CameraAsiController::getControlValueByType(cameraId, ASI_TARGET_TEMP, targetTempValue, isAuto);
-    const bool hasUsbBandwidthValue = hasUsbBandwidth && CameraAsiController::getControlValueByType(cameraId, ASI_BANDWIDTHOVERLOAD, usbBandwidthValue, isAuto);
-    const bool hasHighSpeedModeValue = hasHighSpeedMode && CameraAsiController::getControlValueByType(cameraId, ASI_HIGH_SPEED_MODE, highSpeedModeValue, isAuto);
-
-    m_asi.m_cameraSizeX = static_cast<int>(cameraInfo.MaxWidth);
-    m_asi.m_cameraSizeY = static_cast<int>(cameraInfo.MaxHeight);
-    m_asi.m_maxBinX = 1;
-    m_asi.m_maxBinY = 1;
-    for (int bin : cameraInfo.SupportedBins)
-    {
-        if (bin <= 0) {
-            break;
-        }
-
-        m_asi.m_maxBinX = std::max(m_asi.m_maxBinX, bin);
-        m_asi.m_maxBinY = std::max(m_asi.m_maxBinY, bin);
-    }
-    m_asi.m_bayerPattern = cameraInfo.BayerPattern;
-    m_asi.m_colorCamera = cameraInfo.IsColorCam == ASI_TRUE;
-    m_asi.m_triggerCamera = cameraInfo.IsTriggerCam == ASI_TRUE;
-    m_asi.m_bitDepth = cameraInfo.BitDepth;
-    m_asi.m_pixelSizeUm = cameraInfo.PixelSize;
-    m_asi.m_exposureMinMs = hasExposureRange ? std::max(0.001, exposureRange.MinValue / 1000.0) : 0.001;
-    m_asi.m_exposureMaxMs = hasExposureRange ? std::max(m_asi.m_exposureMinMs, exposureRange.MaxValue / 1000.0) : 60000.0;
-    m_asi.m_rgb24Supported = CameraAsiController::supportsImageType(cameraInfo, ASI_IMG_RGB24);
-    m_asi.m_raw16Supported = CameraAsiController::supportsImageType(cameraInfo, ASI_IMG_RAW16);
-    m_asi.m_raw8Supported = CameraAsiController::supportsImageType(cameraInfo, ASI_IMG_RAW8);
-    m_asi.m_imageType = CameraAsiController::selectImageType(cameraInfo, m_settings);
 
     if (m_msgQueueToGUI)
     {
         m_msgQueueToGUI->push(MsgReportAsiCameraInfo::create(
-            QString::fromUtf8(cameraInfo.Name),
-            m_asi.m_maxBinX,
-            m_asi.m_maxBinY,
-            hasGainRange ? static_cast<int>(gainRange.MinValue) : 0,
-            hasGainRange ? static_cast<int>(gainRange.MaxValue) : 100,
-            hasOffsetRange ? static_cast<int>(offsetRange.MinValue) : 0,
-            hasOffsetRange ? static_cast<int>(offsetRange.MaxValue) : 100,
-            m_asi.m_cameraSizeX,
-            m_asi.m_cameraSizeY,
-            m_asi.m_pixelSizeUm,
-            m_asi.m_bitDepth,
-            m_asi.m_colorCamera,
-            m_asi.m_exposureMinMs,
-            m_asi.m_exposureMaxMs,
-            hasCoolerOn && coolerOnCaps.IsWritable == ASI_TRUE,
-            hasCoolerOnValue ? (coolerOnValue != 0) : false,
-            hasTargetTemp && targetTempCaps.IsWritable == ASI_TRUE,
-            hasTargetTemp ? static_cast<int>(targetTempCaps.MinValue) : 0,
-            hasTargetTemp ? static_cast<int>(targetTempCaps.MaxValue) : 0,
-            hasTargetTempValue ? static_cast<int>(targetTempValue) : 0,
-            hasUsbBandwidth && usbBandwidthCaps.IsWritable == ASI_TRUE,
-            hasUsbBandwidth ? static_cast<int>(usbBandwidthCaps.MinValue) : 0,
-            hasUsbBandwidth ? static_cast<int>(usbBandwidthCaps.MaxValue) : 0,
-            hasUsbBandwidthValue ? static_cast<int>(usbBandwidthValue) : 0,
-            hasHighSpeedMode && highSpeedModeCaps.IsWritable == ASI_TRUE,
-            hasHighSpeedModeValue ? (highSpeedModeValue != 0) : false,
-            m_asi.m_rgb24Supported,
-            m_asi.m_raw16Supported,
-            m_asi.m_raw8Supported));
+            report.m_name,
+            report.m_maxBinX,
+            report.m_maxBinY,
+            report.m_gainMin,
+            report.m_gainMax,
+            report.m_offsetMin,
+            report.m_offsetMax,
+            report.m_cameraSizeX,
+            report.m_cameraSizeY,
+            report.m_pixelSizeUm,
+            report.m_bitDepth,
+            report.m_colorCamera,
+            report.m_exposureMinMs,
+            report.m_exposureMaxMs,
+            report.m_coolerSupported,
+            report.m_coolerOn,
+            report.m_targetTempSupported,
+            report.m_targetTempMin,
+            report.m_targetTempMax,
+            report.m_targetTemp,
+            report.m_usbBandwidthSupported,
+            report.m_usbBandwidthMin,
+            report.m_usbBandwidthMax,
+            report.m_usbBandwidth,
+            report.m_highSpeedModeSupported,
+            report.m_highSpeedMode,
+            report.m_rgb24Supported,
+            report.m_raw16Supported,
+            report.m_raw8Supported));
     }
 
     asiPollStatus();
@@ -2789,7 +2532,7 @@ void CameraWorker::asiQueryCameraCapabilities()
 
 bool CameraWorker::asiApplyCameraSettings()
 {
-    if ((m_asi.m_cameraSizeX <= 0) || (m_asi.m_cameraSizeY <= 0)) {
+    if (!m_asi.hasCameraSize()) {
         asiQueryCameraCapabilities();
     }
 
@@ -2797,237 +2540,26 @@ bool CameraWorker::asiApplyCameraSettings()
         return false;
     }
 
-    const int cameraId = m_settings.cameraIdInt();
-    ASI_CAMERA_INFO cameraInfo {};
-    if (CameraAsiController::getCameraInfoById(cameraId, cameraInfo)) {
-        m_asi.m_imageType = CameraAsiController::selectImageType(cameraInfo, m_settings);
-    }
-    const int bin = std::max(1, std::min(m_settings.m_cameraBinX, m_settings.m_cameraBinY));
-    const int roiWidthStep = 8;
-    const int roiHeightStep = 2;
-    const int minWidth = 16;
-    const int minHeight = 16;
-    const int maxWidth = std::max(minWidth, m_asi.m_cameraSizeX / std::max(1, bin));
-    const int maxHeight = std::max(minHeight, m_asi.m_cameraSizeY / std::max(1, bin));
-
-    auto alignDown = [](int value, int step, int minimum) {
-        const int aligned = (value / step) * step;
-        return std::max(minimum, aligned);
-    };
-
-    const int requestedWidth = (m_settings.m_cameraNumX == 0)
-        ? maxWidth
-        : qBound(minWidth, m_settings.m_cameraNumX, maxWidth);
-    const int requestedHeight = (m_settings.m_cameraNumY == 0)
-        ? maxHeight
-        : qBound(minHeight, m_settings.m_cameraNumY, maxHeight);
-
-    const int width = alignDown(requestedWidth, roiWidthStep, minWidth);
-    const int height = alignDown(requestedHeight, roiHeightStep, minHeight);
-    const int startX = qBound(0, m_settings.m_cameraStartX, std::max(0, maxWidth - width));
-    const int startY = qBound(0, m_settings.m_cameraStartY, std::max(0, maxHeight - height));
-
-    const ASI_ERROR_CODE roiError = ASISetROIFormat(cameraId, width, height, bin, static_cast<ASI_IMG_TYPE>(m_asi.m_imageType));
-    if (roiError != ASI_SUCCESS) {
-        setLastAsiError(roiError, CameraAsiController::errorCodeToString(roiError));
-        qDebug() << "CameraWorker: ASISetROIFormat failed:" << roiError << CameraAsiController::errorCodeToString(roiError)
-                   << "width" << width << "height" << height << "bin" << bin << "imageType" << m_asi.m_imageType;
-        return false;
-    }
-
-    const ASI_ERROR_CODE startPosError = ASISetStartPos(cameraId, startX, startY);
-    if (startPosError != ASI_SUCCESS) {
-        setLastAsiError(startPosError, CameraAsiController::errorCodeToString(startPosError));
-        qDebug() << "CameraWorker: ASISetStartPos failed:" << startPosError << CameraAsiController::errorCodeToString(startPosError)
-                 << "startX" << startX << "startY" << startY << "width" << width << "height" << height << "bin" << bin;
-        return false;
-    }
-
-    const ASI_BOOL autoExposureGain = (m_settings.m_asiAutoExposureGain
-            && (m_settings.m_captureMode == CameraSettings::CaptureModeFrameRate))
-        ? ASI_TRUE
-        : ASI_FALSE;
-    auto writableControl = [cameraId](ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS *controlCaps = nullptr) -> bool {
-        ASI_CONTROL_CAPS caps {};
-        if (!CameraAsiController::getControlCapsByType(cameraId, controlType, caps) || (caps.IsWritable != ASI_TRUE)) {
-            return false;
-        }
-
-        if (controlCaps) {
-            *controlCaps = caps;
-        }
-        return true;
-    };
-
-    ASI_CONTROL_CAPS coolerOnCaps {};
-    ASI_CONTROL_CAPS targetTempCaps {};
-    ASI_CONTROL_CAPS usbBandwidthCaps {};
-    ASI_CONTROL_CAPS highSpeedModeCaps {};
-    const bool canSetCoolerOn = writableControl(ASI_COOLER_ON, &coolerOnCaps);
-    const bool canSetTargetTemp = writableControl(ASI_TARGET_TEMP, &targetTempCaps);
-    const bool canSetUsbBandwidth = writableControl(ASI_BANDWIDTHOVERLOAD, &usbBandwidthCaps);
-    const bool canSetHighSpeedMode = writableControl(ASI_HIGH_SPEED_MODE, &highSpeedModeCaps);
-
-    const ASI_ERROR_CODE exposureError = ASISetControlValue(cameraId, ASI_EXPOSURE,
-        std::max(1L, static_cast<long>(std::llround(currentCaptureExposureTimeMs() * 1000.0))), autoExposureGain);
-    const ASI_ERROR_CODE gainError = ASISetControlValue(cameraId, ASI_GAIN,
-        std::max(0L, static_cast<long>(m_settings.m_cameraGain)), autoExposureGain);
-    const ASI_ERROR_CODE offsetError = ASISetControlValue(cameraId, ASI_OFFSET,
-        std::max(0L, static_cast<long>(m_settings.m_cameraOffset)), ASI_FALSE);
-    const ASI_ERROR_CODE coolerOnError = ((m_settings.m_asiCoolerOn >= 0) && canSetCoolerOn)
-        ? ASISetControlValue(cameraId, ASI_COOLER_ON, m_settings.m_asiCoolerOn != 0 ? 1L : 0L, ASI_FALSE)
-        : ASI_SUCCESS;
-    const ASI_ERROR_CODE targetTempError = ((m_settings.m_asiTargetTemp != std::numeric_limits<int>::min()) && canSetTargetTemp)
-        ? ASISetControlValue(cameraId, ASI_TARGET_TEMP,
-            qBound(targetTempCaps.MinValue, static_cast<long>(m_settings.m_asiTargetTemp), targetTempCaps.MaxValue),
-            ASI_FALSE)
-        : ASI_SUCCESS;
-    const ASI_ERROR_CODE usbBandwidthError = ((m_settings.m_asiUsbBandwidth >= 0) && canSetUsbBandwidth)
-        ? ASISetControlValue(cameraId, ASI_BANDWIDTHOVERLOAD,
-            qBound(usbBandwidthCaps.MinValue, static_cast<long>(m_settings.m_asiUsbBandwidth), usbBandwidthCaps.MaxValue),
-            ASI_FALSE)
-        : ASI_SUCCESS;
-    const ASI_ERROR_CODE highSpeedModeError = ((m_settings.m_asiHighSpeedMode >= 0) && canSetHighSpeedMode)
-        ? ASISetControlValue(cameraId, ASI_HIGH_SPEED_MODE, m_settings.m_asiHighSpeedMode != 0 ? 1L : 0L, ASI_FALSE)
-        : ASI_SUCCESS;
-
-    if (exposureError != ASI_SUCCESS) {
-        setLastAsiError(exposureError, CameraAsiController::errorCodeToString(exposureError));
-        qDebug() << "CameraWorker: ASISetControlValue(EXPOSURE) failed:" << exposureError << CameraAsiController::errorCodeToString(exposureError);
-        return false;
-    }
-
-    if (gainError != ASI_SUCCESS) {
-        setLastAsiError(gainError, CameraAsiController::errorCodeToString(gainError));
-        qDebug() << "CameraWorker: ASISetControlValue(GAIN) failed:" << gainError << CameraAsiController::errorCodeToString(gainError);
-        return false;
-    }
-
-    if (offsetError != ASI_SUCCESS) {
-        setLastAsiError(offsetError, CameraAsiController::errorCodeToString(offsetError));
-        qDebug() << "CameraWorker: ASISetControlValue(OFFSET) failed:" << offsetError << CameraAsiController::errorCodeToString(offsetError);
-        return false;
-    }
-    if (coolerOnError != ASI_SUCCESS) {
-        setLastAsiError(coolerOnError, CameraAsiController::errorCodeToString(coolerOnError));
-        qDebug() << "CameraWorker: ASISetControlValue(COOLER_ON) failed:" << coolerOnError << CameraAsiController::errorCodeToString(coolerOnError);
-        return false;
-    }
-    if (targetTempError != ASI_SUCCESS) {
-        setLastAsiError(targetTempError, CameraAsiController::errorCodeToString(targetTempError));
-        qDebug() << "CameraWorker: ASISetControlValue(TARGET_TEMP) failed:" << targetTempError << CameraAsiController::errorCodeToString(targetTempError);
-        return false;
-    }
-    if (usbBandwidthError != ASI_SUCCESS) {
-        setLastAsiError(usbBandwidthError, CameraAsiController::errorCodeToString(usbBandwidthError));
-        qDebug() << "CameraWorker: ASISetControlValue(BANDWIDTHOVERLOAD) failed:" << usbBandwidthError << CameraAsiController::errorCodeToString(usbBandwidthError);
-        return false;
-    }
-    if (highSpeedModeError != ASI_SUCCESS) {
-        setLastAsiError(highSpeedModeError, CameraAsiController::errorCodeToString(highSpeedModeError));
-        qDebug() << "CameraWorker: ASISetControlValue(HIGH_SPEED_MODE) failed:" << highSpeedModeError << CameraAsiController::errorCodeToString(highSpeedModeError);
-        return false;
-    }
-
-    m_asi.m_frameWidth = width;
-    m_asi.m_frameHeight = height;
-
-    int bytesPerPixel = 1;
-    switch (m_asi.m_imageType)
-    {
-    case ASI_IMG_RGB24:
-        bytesPerPixel = 3;
-        break;
-    case ASI_IMG_RAW16:
-        bytesPerPixel = 2;
-        break;
-    default:
-        bytesPerPixel = 1;
-        break;
-    }
-
-    m_asi.m_frameBuffer.resize(width * height * bytesPerPixel);
-    m_asi.m_settingsApplied = true;
-    setLastAsiError(ASI_SUCCESS, QString());
-    return true;
+    return m_asi.applyCameraSettings(m_settings.cameraIdInt(), m_settings, currentCaptureExposureTimeMs());
 }
-
 bool CameraWorker::asiCaptureExposureFrame()
 {
     const int cameraId = m_settings.cameraIdInt();
+    const CameraAsiController::CaptureResult result = m_asi.captureExposureFrame(cameraId, currentCaptureExposureTimeMs());
 
-    if (m_asi.m_videoCaptureStarted)
+    if (result == CameraAsiController::CaptureStartFailed)
     {
-        if (!m_asi.stopVideoCapture(cameraId)) {
-            return false;
-        }
-    }
-
-    const ASI_ERROR_CODE startExposureError = ASIStartExposure(cameraId, ASI_FALSE);
-    if (startExposureError != ASI_SUCCESS)
-    {
-        setLastAsiError(startExposureError, CameraAsiController::errorCodeToString(startExposureError));
-        qDebug() << "CameraWorker: ASIStartExposure failed:" << startExposureError << CameraAsiController::errorCodeToString(startExposureError);
         reportErrorToFeature(
             QStringLiteral("asiStartExposure:%1").arg(cameraId),
             tr("ASI exposure start failed"),
-            tr("Failed to start ASI exposure on camera %1:\n%2").arg(cameraId).arg(CameraAsiController::errorCodeToString(startExposureError)));
+            tr("Failed to start ASI exposure on camera %1:\n%2").arg(cameraId).arg(m_asi.lastErrorMessage()));
         return false;
     }
 
-    setLastAsiError(ASI_SUCCESS, QString());
-    QElapsedTimer captureTimer;
-    captureTimer.start();
-
-    const double exposureTimeMs = currentCaptureExposureTimeMs();
-    const qint64 timeoutMs = std::max<qint64>(1000, static_cast<qint64>(std::ceil(exposureTimeMs)) + 5000);
-    const unsigned long pollSleepMs = static_cast<unsigned long>(
-        std::min<qint64>(50, std::max<qint64>(2, static_cast<qint64>(std::ceil(exposureTimeMs / 4.0)))));
-    ASI_EXPOSURE_STATUS exposureStatus = ASI_EXP_IDLE;
-
-    while (captureTimer.elapsed() <= timeoutMs)
-    {
-        const ASI_ERROR_CODE statusError = ASIGetExpStatus(cameraId, &exposureStatus);
-        if (statusError != ASI_SUCCESS)
-        {
-            setLastAsiError(statusError, CameraAsiController::errorCodeToString(statusError));
-            qDebug() << "CameraWorker: ASIGetExpStatus failed:" << statusError << CameraAsiController::errorCodeToString(statusError);
-            return false;
-        }
-
-        if (exposureStatus == ASI_EXP_SUCCESS) {
-            break;
-        }
-
-        if (exposureStatus == ASI_EXP_FAILED)
-        {
-            setLastAsiError(ASI_ERROR_GENERAL_ERROR, QStringLiteral("Exposure failed"));
-            qDebug() << "CameraWorker: ASI exposure failed";
-            return false;
-        }
-
-        QThread::msleep(pollSleepMs);
-    }
-
-    if (exposureStatus != ASI_EXP_SUCCESS)
-    {
-        setLastAsiError(ASI_ERROR_TIMEOUT, CameraAsiController::errorCodeToString(ASI_ERROR_TIMEOUT));
-        qDebug() << "CameraWorker: ASI exposure timed out after" << timeoutMs << "ms";
+    if (result != CameraAsiController::CaptureSuccess) {
         return false;
     }
 
-    const ASI_ERROR_CODE dataError = ASIGetDataAfterExp(cameraId, m_asi.m_frameBuffer.data(), m_asi.m_frameBuffer.size());
-    if (dataError != ASI_SUCCESS)
-    {
-        setLastAsiError(dataError, CameraAsiController::errorCodeToString(dataError));
-        qDebug() << "CameraWorker: ASIGetDataAfterExp failed:" << dataError << CameraAsiController::errorCodeToString(dataError)
-                 << "bufferSize" << m_asi.m_frameBuffer.size()
-                 << "width" << m_asi.m_frameWidth << "height" << m_asi.m_frameHeight;
-        return false;
-    }
-
-    setLastAsiError(ASI_SUCCESS, QString());
-    m_asi.m_lastCaptureTimeMs = captureTimer.elapsed();
     if (m_framePreprocessor) {
         CameraPipelineFrame::BayerPattern bayerPattern = CameraPipelineFrame::BayerNone;
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
@@ -3048,17 +2580,16 @@ bool CameraWorker::useAsiContinuousVideoCadence() const
 
 void CameraWorker::scheduleNextAsiVideoCapture(int delayMs)
 {
-    if (!useAsiContinuousVideoCadence() || m_asi.m_continuousCaptureScheduled) {
+    if (!useAsiContinuousVideoCadence() || m_asi.continuousCaptureScheduled()) {
         return;
     }
 
-    m_asi.m_continuousCaptureScheduled = true;
-    const quint64 generation = m_asi.m_continuousCaptureGeneration;
+    m_asi.markContinuousCaptureScheduled();
+    const quint64 generation = m_asi.continuousCaptureGeneration();
     QTimer::singleShot(std::max(0, delayMs), this, [this, generation]() {
-        if (generation != m_asi.m_continuousCaptureGeneration) {
+        if (!m_asi.clearContinuousCaptureScheduled(generation)) {
             return;
         }
-        m_asi.m_continuousCaptureScheduled = false;
         if (useAsiContinuousVideoCadence()) {
             captureTick();
         }
@@ -3070,32 +2601,22 @@ void CameraWorker::asiCaptureVideoFrame()
     PROFILER_START();
 
     const int cameraId = m_settings.cameraIdInt();
+    const int waitMs = std::max(1000, static_cast<int>(std::ceil(currentCaptureExposureTimeMs())) + 500);
+    const CameraAsiController::CaptureResult result = m_asi.captureVideoFrame(cameraId, waitMs);
 
-    if (!m_asi.m_videoCaptureStarted)
+    if (result == CameraAsiController::CaptureStartFailed)
     {
-        const ASI_ERROR_CODE startCaptureError = ASIStartVideoCapture(cameraId);
-        if (startCaptureError != ASI_SUCCESS) {
-            setLastAsiError(startCaptureError, CameraAsiController::errorCodeToString(startCaptureError));
-            qDebug() << "CameraWorker: ASIStartVideoCapture failed:" << startCaptureError << CameraAsiController::errorCodeToString(startCaptureError);
-            reportErrorToFeature(
-                QStringLiteral("asiStartVideo:%1").arg(cameraId),
-                tr("ASI video capture start failed"),
-                tr("Failed to start ASI video capture on camera %1:\n%2").arg(cameraId).arg(CameraAsiController::errorCodeToString(startCaptureError)));
-            scheduleNextAsiVideoCapture(100);
-            return;
-        }
-        setLastAsiError(ASI_SUCCESS, QString());
-        m_asi.m_videoCaptureStarted = true;
+        reportErrorToFeature(
+            QStringLiteral("asiStartVideo:%1").arg(cameraId),
+            tr("ASI video capture start failed"),
+            tr("Failed to start ASI video capture on camera %1:\n%2").arg(cameraId).arg(m_asi.lastErrorMessage()));
+        scheduleNextAsiVideoCapture(100);
+        PROFILER_STOP(__FUNCTION__);
+        return;
     }
 
-    const int waitMs = std::max(1000, static_cast<int>(std::ceil(currentCaptureExposureTimeMs())) + 500);
-    QElapsedTimer captureTimer;
-    captureTimer.start();
-    const ASI_ERROR_CODE getVideoError = ASIGetVideoData(cameraId, m_asi.m_frameBuffer.data(), m_asi.m_frameBuffer.size(), waitMs);
-    if (getVideoError == ASI_SUCCESS)
+    if (result == CameraAsiController::CaptureSuccess)
     {
-        setLastAsiError(ASI_SUCCESS, QString());
-        m_asi.m_lastCaptureTimeMs = captureTimer.elapsed();
         if (m_framePreprocessor) {
             CameraPipelineFrame::BayerPattern bayerPattern = CameraPipelineFrame::BayerNone;
             CameraPipelineFramePtr frame(new CameraPipelineFrame);
@@ -3105,15 +2626,8 @@ void CameraWorker::asiCaptureVideoFrame()
             m_framePreprocessor->submitFrame(frame);
         }
     }
-    else
-    {
-        setLastAsiError(getVideoError, CameraAsiController::errorCodeToString(getVideoError));
-        qDebug() << "CameraWorker: ASIGetVideoData failed:" << getVideoError << CameraAsiController::errorCodeToString(getVideoError)
-                 << "waitMs" << waitMs << "bufferSize" << m_asi.m_frameBuffer.size()
-                 << "width" << m_asi.m_frameWidth << "height" << m_asi.m_frameHeight;
-    }
 
-    scheduleNextAsiVideoCapture(getVideoError == ASI_SUCCESS ? 0 : 10);
+    scheduleNextAsiVideoCapture(result == CameraAsiController::CaptureSuccess ? 0 : 10);
 
     PROFILER_STOP(__FUNCTION__);
 }
@@ -3124,7 +2638,7 @@ void CameraWorker::asiCaptureTick()
         return;
     }
 
-    if (!m_asi.m_settingsApplied && !asiApplyCameraSettings())
+    if (!m_asi.settingsApplied() && !asiApplyCameraSettings())
     {
         scheduleNextAsiVideoCapture(100);
         return;
@@ -3141,7 +2655,7 @@ void CameraWorker::asiCaptureTick()
 
 void CameraWorker::invalidateAsiSettings()
 {
-    m_asi.m_settingsApplied = false;
+    m_asi.invalidateSettings();
 }
 
 void CameraWorker::asiPollStatus()
@@ -3151,67 +2665,23 @@ void CameraWorker::asiPollStatus()
     }
 
     const int cameraId = m_settings.cameraIdInt();
-    long temperatureTenthsC = 0;
-    ASI_BOOL isAuto = ASI_FALSE;
-    bool temperatureValid = false;
+    CameraAsiController::StatusReport report = m_asi.statusReport();
 
-    if ((cameraId >= 0) && asiOpenCamera())
-    {
-        const ASI_ERROR_CODE temperatureError = ASIGetControlValue(cameraId, ASI_TEMPERATURE, &temperatureTenthsC, &isAuto);
-        if (temperatureError == ASI_SUCCESS)
-        {
-            setLastAsiError(ASI_SUCCESS, QString());
-            m_asi.m_lastCcdTemperature = temperatureTenthsC / 10.0;
-            m_asi.m_lastCcdTemperatureValid = true;
-            temperatureValid = true;
-        }
-        else
-        {
-            setLastAsiError(temperatureError, CameraAsiController::errorCodeToString(temperatureError));
-            m_asi.m_lastCcdTemperatureValid = false;
-        }
-    }
-    else
-    {
-        m_asi.m_lastCcdTemperatureValid = false;
+    if ((cameraId >= 0) && asiOpenCamera()) {
+        report = m_asi.pollStatus(cameraId);
     }
 
     if (m_msgQueueToGUI)
     {
         m_msgQueueToGUI->push(MsgReportAlpacaStatus::create(
             m_capturing ? 1 : 0,
-            m_asi.m_lastCcdTemperature,
-            temperatureValid,
-            m_asi.m_lastCaptureTimeMs,
-            m_asi.m_imageType == ASI_IMG_RGB24 ? QStringLiteral("RGB24")
-                : m_asi.m_imageType == ASI_IMG_RAW16 ? QStringLiteral("RAW16")
-                : m_asi.m_imageType == ASI_IMG_RAW8 ? QStringLiteral("RAW8")
-                : QStringLiteral("Y8"),
-            m_asi.m_lastErrorNumber,
-            m_asi.m_lastErrorMessage));
+            report.m_ccdTemperature,
+            report.m_ccdTemperatureValid,
+            report.m_lastCaptureTimeMs,
+            report.m_imageTypeName,
+            report.m_lastErrorNumber,
+            report.m_lastErrorMessage));
     }
-}
-
-void CameraWorker::setLastAsiError(int errorCode, const QString& errorMessage)
-{
-    m_asi.setLastError(errorCode, errorMessage);
 }
 
 #endif
-
-void CameraWorker::onCaptureAudioDataReady()
-{
-    if (m_settings.m_audioMute)
-    {
-        m_captureAudioFifo.clear();
-        return;
-    }
-
-    // Each audio sample frame is 4 bytes: stereo 16-bit PCM (2 channels × 2 bytes)
-    static constexpr int bytesPerSampleFrame = 4;
-    unsigned int nbRead;
-
-    while ((nbRead = m_captureAudioFifo.read(m_audioTransferBuffer.data(), m_audioTransferBuffer.size() / bytesPerSampleFrame)) != 0) {
-        m_outputAudioFifo.write(m_audioTransferBuffer.data(), nbRead);
-    }
-}

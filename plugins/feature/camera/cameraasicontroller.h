@@ -42,6 +42,56 @@ public:
         OpenFailureMode
     };
 
+    enum CaptureResult
+    {
+        CaptureSuccess,
+        CaptureStartFailed,
+        CaptureDataFailed
+    };
+
+    struct CapabilitiesReport
+    {
+        QString m_name;
+        int m_maxBinX = 1;
+        int m_maxBinY = 1;
+        int m_gainMin = 0;
+        int m_gainMax = 100;
+        int m_offsetMin = 0;
+        int m_offsetMax = 100;
+        int m_cameraSizeX = 0;
+        int m_cameraSizeY = 0;
+        double m_pixelSizeUm = 0.0;
+        int m_bitDepth = 8;
+        bool m_colorCamera = false;
+        double m_exposureMinMs = 0.001;
+        double m_exposureMaxMs = 60000.0;
+        bool m_coolerSupported = false;
+        bool m_coolerOn = false;
+        bool m_targetTempSupported = false;
+        int m_targetTempMin = 0;
+        int m_targetTempMax = 0;
+        int m_targetTemp = 0;
+        bool m_usbBandwidthSupported = false;
+        int m_usbBandwidthMin = 0;
+        int m_usbBandwidthMax = 0;
+        int m_usbBandwidth = 0;
+        bool m_highSpeedModeSupported = false;
+        bool m_highSpeedMode = false;
+        bool m_rgb24Supported = false;
+        bool m_raw16Supported = false;
+        bool m_raw8Supported = false;
+    };
+
+    struct StatusReport
+    {
+        double m_ccdTemperature = 0.0;
+        bool m_ccdTemperatureValid = false;
+        qint64 m_lastCaptureTimeMs = -1;
+        QString m_imageTypeName;
+        int m_lastErrorNumber = 0;
+        QString m_lastErrorMessage;
+    };
+
     CameraAsiController();
 
     bool openCamera(int cameraId);
@@ -49,6 +99,24 @@ public:
     bool stopVideoCapture(int fallbackCameraId);
     bool stopExposure(int fallbackCameraId);
     void setLastError(int errorCode, const QString& errorMessage);
+    bool queryCameraCapabilities(int cameraId, const CameraSettings& settings, CapabilitiesReport& report);
+    bool applyCameraSettings(int cameraId, const CameraSettings& settings, double exposureTimeMs);
+    CaptureResult captureExposureFrame(int cameraId, double exposureTimeMs);
+    CaptureResult captureVideoFrame(int cameraId, int waitMs);
+    StatusReport pollStatus(int cameraId);
+    StatusReport statusReport() const;
+
+    bool hasCameraSize() const { return (m_cameraSizeX > 0) && (m_cameraSizeY > 0); }
+    bool settingsApplied() const { return m_settingsApplied; }
+    void invalidateSettings() { m_settingsApplied = false; }
+    bool continuousCaptureScheduled() const { return m_continuousCaptureScheduled; }
+    quint64 continuousCaptureGeneration() const { return m_continuousCaptureGeneration; }
+    void cancelContinuousCapture();
+    void markContinuousCaptureScheduled();
+    bool clearContinuousCaptureScheduled(quint64 generation);
+    OpenFailureStage lastOpenFailureStage() const { return m_lastOpenFailureStage; }
+    int lastErrorNumber() const { return m_lastErrorNumber; }
+    const QString& lastErrorMessage() const { return m_lastErrorMessage; }
 
     static QString errorCodeToString(ASI_ERROR_CODE errorCode);
     static bool getCameraInfoById(int cameraId, ASI_CAMERA_INFO& cameraInfo);
@@ -60,6 +128,9 @@ public:
     static ASI_IMG_TYPE selectImageType(const ASI_CAMERA_INFO& cameraInfo, const CameraSettings& settings);
 
     QImage frameToImage(const QImage& fallbackImage, CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
+
+private:
+    QString imageTypeName() const;
 
     bool m_cameraOpen;
     bool m_videoCaptureStarted;

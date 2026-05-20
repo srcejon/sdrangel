@@ -14,6 +14,7 @@ set(camera_SOURCES
     cameraplatesolver.cpp
     camerapostprocessor.cpp
     camerafinder.cpp
+    cameraqtaudiocontroller.cpp
     cameraalpacacontroller.cpp
     cameraasicontroller.cpp
     camerasettings.cpp
@@ -37,6 +38,7 @@ set(camera_HEADERS
     camerapipelineframe.h
     camerapostprocessor.h
     camerafinder.h
+    cameraqtaudiocontroller.h
     cameraalpacacontroller.h
     cameraasicontroller.h
     camerasettings.h

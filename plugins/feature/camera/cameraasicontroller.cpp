@@ -20,9 +20,14 @@
 
 #ifdef ASICAMERA_FOUND
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
 
 #include <QDebug>
+#include <QElapsedTimer>
+#include <QThread>
 
 #include <opencv2/imgproc/imgproc.hpp>
 
@@ -188,6 +193,404 @@ void CameraAsiController::setLastError(int errorCode, const QString& errorMessag
 {
     m_lastErrorNumber = errorCode;
     m_lastErrorMessage = errorMessage;
+}
+
+bool CameraAsiController::queryCameraCapabilities(int cameraId, const CameraSettings& settings, CapabilitiesReport& report)
+{
+    ASI_CAMERA_INFO cameraInfo {};
+
+    if (!getCameraInfoById(cameraId, cameraInfo)) {
+        return false;
+    }
+
+    ASI_CONTROL_CAPS gainRange {};
+    ASI_CONTROL_CAPS offsetRange {};
+    ASI_CONTROL_CAPS exposureRange {};
+    ASI_CONTROL_CAPS coolerOnCaps {};
+    ASI_CONTROL_CAPS targetTempCaps {};
+    ASI_CONTROL_CAPS usbBandwidthCaps {};
+    ASI_CONTROL_CAPS highSpeedModeCaps {};
+    const bool hasGainRange = getControlCapsByType(cameraId, ASI_GAIN, gainRange);
+    const bool hasOffsetRange = getControlCapsByType(cameraId, ASI_OFFSET, offsetRange);
+    const bool hasExposureRange = getControlCapsByType(cameraId, ASI_EXPOSURE, exposureRange);
+    const bool hasCoolerOn = getControlCapsByType(cameraId, ASI_COOLER_ON, coolerOnCaps);
+    const bool hasTargetTemp = getControlCapsByType(cameraId, ASI_TARGET_TEMP, targetTempCaps);
+    const bool hasUsbBandwidth = getControlCapsByType(cameraId, ASI_BANDWIDTHOVERLOAD, usbBandwidthCaps);
+    const bool hasHighSpeedMode = getControlCapsByType(cameraId, ASI_HIGH_SPEED_MODE, highSpeedModeCaps);
+    long coolerOnValue = 0;
+    long targetTempValue = 0;
+    long usbBandwidthValue = 0;
+    long highSpeedModeValue = 0;
+    ASI_BOOL isAuto = ASI_FALSE;
+    const bool hasCoolerOnValue = hasCoolerOn && getControlValueByType(cameraId, ASI_COOLER_ON, coolerOnValue, isAuto);
+    const bool hasTargetTempValue = hasTargetTemp && getControlValueByType(cameraId, ASI_TARGET_TEMP, targetTempValue, isAuto);
+    const bool hasUsbBandwidthValue = hasUsbBandwidth && getControlValueByType(cameraId, ASI_BANDWIDTHOVERLOAD, usbBandwidthValue, isAuto);
+    const bool hasHighSpeedModeValue = hasHighSpeedMode && getControlValueByType(cameraId, ASI_HIGH_SPEED_MODE, highSpeedModeValue, isAuto);
+
+    m_cameraSizeX = static_cast<int>(cameraInfo.MaxWidth);
+    m_cameraSizeY = static_cast<int>(cameraInfo.MaxHeight);
+    m_maxBinX = 1;
+    m_maxBinY = 1;
+    for (int bin : cameraInfo.SupportedBins)
+    {
+        if (bin <= 0) {
+            break;
+        }
+
+        m_maxBinX = std::max(m_maxBinX, bin);
+        m_maxBinY = std::max(m_maxBinY, bin);
+    }
+    m_bayerPattern = cameraInfo.BayerPattern;
+    m_colorCamera = cameraInfo.IsColorCam == ASI_TRUE;
+    m_triggerCamera = cameraInfo.IsTriggerCam == ASI_TRUE;
+    m_bitDepth = cameraInfo.BitDepth;
+    m_pixelSizeUm = cameraInfo.PixelSize;
+    m_exposureMinMs = hasExposureRange ? std::max(0.001, exposureRange.MinValue / 1000.0) : 0.001;
+    m_exposureMaxMs = hasExposureRange ? std::max(m_exposureMinMs, exposureRange.MaxValue / 1000.0) : 60000.0;
+    m_rgb24Supported = supportsImageType(cameraInfo, ASI_IMG_RGB24);
+    m_raw16Supported = supportsImageType(cameraInfo, ASI_IMG_RAW16);
+    m_raw8Supported = supportsImageType(cameraInfo, ASI_IMG_RAW8);
+    m_imageType = selectImageType(cameraInfo, settings);
+
+    report.m_name = QString::fromUtf8(cameraInfo.Name);
+    report.m_maxBinX = m_maxBinX;
+    report.m_maxBinY = m_maxBinY;
+    report.m_gainMin = hasGainRange ? static_cast<int>(gainRange.MinValue) : 0;
+    report.m_gainMax = hasGainRange ? static_cast<int>(gainRange.MaxValue) : 100;
+    report.m_offsetMin = hasOffsetRange ? static_cast<int>(offsetRange.MinValue) : 0;
+    report.m_offsetMax = hasOffsetRange ? static_cast<int>(offsetRange.MaxValue) : 100;
+    report.m_cameraSizeX = m_cameraSizeX;
+    report.m_cameraSizeY = m_cameraSizeY;
+    report.m_pixelSizeUm = m_pixelSizeUm;
+    report.m_bitDepth = m_bitDepth;
+    report.m_colorCamera = m_colorCamera;
+    report.m_exposureMinMs = m_exposureMinMs;
+    report.m_exposureMaxMs = m_exposureMaxMs;
+    report.m_coolerSupported = hasCoolerOn && coolerOnCaps.IsWritable == ASI_TRUE;
+    report.m_coolerOn = hasCoolerOnValue ? (coolerOnValue != 0) : false;
+    report.m_targetTempSupported = hasTargetTemp && targetTempCaps.IsWritable == ASI_TRUE;
+    report.m_targetTempMin = hasTargetTemp ? static_cast<int>(targetTempCaps.MinValue) : 0;
+    report.m_targetTempMax = hasTargetTemp ? static_cast<int>(targetTempCaps.MaxValue) : 0;
+    report.m_targetTemp = hasTargetTempValue ? static_cast<int>(targetTempValue) : 0;
+    report.m_usbBandwidthSupported = hasUsbBandwidth && usbBandwidthCaps.IsWritable == ASI_TRUE;
+    report.m_usbBandwidthMin = hasUsbBandwidth ? static_cast<int>(usbBandwidthCaps.MinValue) : 0;
+    report.m_usbBandwidthMax = hasUsbBandwidth ? static_cast<int>(usbBandwidthCaps.MaxValue) : 0;
+    report.m_usbBandwidth = hasUsbBandwidthValue ? static_cast<int>(usbBandwidthValue) : 0;
+    report.m_highSpeedModeSupported = hasHighSpeedMode && highSpeedModeCaps.IsWritable == ASI_TRUE;
+    report.m_highSpeedMode = hasHighSpeedModeValue ? (highSpeedModeValue != 0) : false;
+    report.m_rgb24Supported = m_rgb24Supported;
+    report.m_raw16Supported = m_raw16Supported;
+    report.m_raw8Supported = m_raw8Supported;
+    return true;
+}
+
+bool CameraAsiController::applyCameraSettings(int cameraId, const CameraSettings& settings, double exposureTimeMs)
+{
+    ASI_CAMERA_INFO cameraInfo {};
+    if (getCameraInfoById(cameraId, cameraInfo)) {
+        m_imageType = selectImageType(cameraInfo, settings);
+    }
+
+    const int bin = std::max(1, std::min(settings.m_cameraBinX, settings.m_cameraBinY));
+    const int roiWidthStep = 8;
+    const int roiHeightStep = 2;
+    const int minWidth = 16;
+    const int minHeight = 16;
+    const int maxWidth = std::max(minWidth, m_cameraSizeX / std::max(1, bin));
+    const int maxHeight = std::max(minHeight, m_cameraSizeY / std::max(1, bin));
+
+    auto alignDown = [](int value, int step, int minimum) {
+        const int aligned = (value / step) * step;
+        return std::max(minimum, aligned);
+    };
+
+    const int requestedWidth = (settings.m_cameraNumX == 0)
+        ? maxWidth
+        : qBound(minWidth, settings.m_cameraNumX, maxWidth);
+    const int requestedHeight = (settings.m_cameraNumY == 0)
+        ? maxHeight
+        : qBound(minHeight, settings.m_cameraNumY, maxHeight);
+
+    const int width = alignDown(requestedWidth, roiWidthStep, minWidth);
+    const int height = alignDown(requestedHeight, roiHeightStep, minHeight);
+    const int startX = qBound(0, settings.m_cameraStartX, std::max(0, maxWidth - width));
+    const int startY = qBound(0, settings.m_cameraStartY, std::max(0, maxHeight - height));
+
+    const ASI_ERROR_CODE roiError = ASISetROIFormat(cameraId, width, height, bin, static_cast<ASI_IMG_TYPE>(m_imageType));
+    if (roiError != ASI_SUCCESS) {
+        setLastError(roiError, errorCodeToString(roiError));
+        qDebug() << "CameraAsiController: ASISetROIFormat failed:" << roiError << errorCodeToString(roiError)
+                 << "width" << width << "height" << height << "bin" << bin << "imageType" << m_imageType;
+        return false;
+    }
+
+    const ASI_ERROR_CODE startPosError = ASISetStartPos(cameraId, startX, startY);
+    if (startPosError != ASI_SUCCESS) {
+        setLastError(startPosError, errorCodeToString(startPosError));
+        qDebug() << "CameraAsiController: ASISetStartPos failed:" << startPosError << errorCodeToString(startPosError)
+                 << "startX" << startX << "startY" << startY << "width" << width << "height" << height << "bin" << bin;
+        return false;
+    }
+
+    const ASI_BOOL autoExposureGain = (settings.m_asiAutoExposureGain
+            && (settings.m_captureMode == CameraSettings::CaptureModeFrameRate))
+        ? ASI_TRUE
+        : ASI_FALSE;
+    auto writableControl = [cameraId](ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS *controlCaps = nullptr) -> bool {
+        ASI_CONTROL_CAPS caps {};
+        if (!getControlCapsByType(cameraId, controlType, caps) || (caps.IsWritable != ASI_TRUE)) {
+            return false;
+        }
+
+        if (controlCaps) {
+            *controlCaps = caps;
+        }
+        return true;
+    };
+
+    ASI_CONTROL_CAPS coolerOnCaps {};
+    ASI_CONTROL_CAPS targetTempCaps {};
+    ASI_CONTROL_CAPS usbBandwidthCaps {};
+    ASI_CONTROL_CAPS highSpeedModeCaps {};
+    const bool canSetCoolerOn = writableControl(ASI_COOLER_ON, &coolerOnCaps);
+    const bool canSetTargetTemp = writableControl(ASI_TARGET_TEMP, &targetTempCaps);
+    const bool canSetUsbBandwidth = writableControl(ASI_BANDWIDTHOVERLOAD, &usbBandwidthCaps);
+    const bool canSetHighSpeedMode = writableControl(ASI_HIGH_SPEED_MODE, &highSpeedModeCaps);
+
+    const ASI_ERROR_CODE exposureError = ASISetControlValue(cameraId, ASI_EXPOSURE,
+        std::max(1L, static_cast<long>(std::llround(exposureTimeMs * 1000.0))), autoExposureGain);
+    const ASI_ERROR_CODE gainError = ASISetControlValue(cameraId, ASI_GAIN,
+        std::max(0L, static_cast<long>(settings.m_cameraGain)), autoExposureGain);
+    const ASI_ERROR_CODE offsetError = ASISetControlValue(cameraId, ASI_OFFSET,
+        std::max(0L, static_cast<long>(settings.m_cameraOffset)), ASI_FALSE);
+    const ASI_ERROR_CODE coolerOnError = ((settings.m_asiCoolerOn >= 0) && canSetCoolerOn)
+        ? ASISetControlValue(cameraId, ASI_COOLER_ON, settings.m_asiCoolerOn != 0 ? 1L : 0L, ASI_FALSE)
+        : ASI_SUCCESS;
+    const ASI_ERROR_CODE targetTempError = ((settings.m_asiTargetTemp != std::numeric_limits<int>::min()) && canSetTargetTemp)
+        ? ASISetControlValue(cameraId, ASI_TARGET_TEMP,
+            qBound(targetTempCaps.MinValue, static_cast<long>(settings.m_asiTargetTemp), targetTempCaps.MaxValue),
+            ASI_FALSE)
+        : ASI_SUCCESS;
+    const ASI_ERROR_CODE usbBandwidthError = ((settings.m_asiUsbBandwidth >= 0) && canSetUsbBandwidth)
+        ? ASISetControlValue(cameraId, ASI_BANDWIDTHOVERLOAD,
+            qBound(usbBandwidthCaps.MinValue, static_cast<long>(settings.m_asiUsbBandwidth), usbBandwidthCaps.MaxValue),
+            ASI_FALSE)
+        : ASI_SUCCESS;
+    const ASI_ERROR_CODE highSpeedModeError = ((settings.m_asiHighSpeedMode >= 0) && canSetHighSpeedMode)
+        ? ASISetControlValue(cameraId, ASI_HIGH_SPEED_MODE, settings.m_asiHighSpeedMode != 0 ? 1L : 0L, ASI_FALSE)
+        : ASI_SUCCESS;
+
+    auto handleControlError = [this](ASI_ERROR_CODE error, const char *name) -> bool {
+        if (error == ASI_SUCCESS) {
+            return true;
+        }
+        setLastError(error, errorCodeToString(error));
+        qDebug() << "CameraAsiController: ASISetControlValue(" << name << ") failed:" << error << errorCodeToString(error);
+        return false;
+    };
+
+    if (!handleControlError(exposureError, "EXPOSURE")
+        || !handleControlError(gainError, "GAIN")
+        || !handleControlError(offsetError, "OFFSET")
+        || !handleControlError(coolerOnError, "COOLER_ON")
+        || !handleControlError(targetTempError, "TARGET_TEMP")
+        || !handleControlError(usbBandwidthError, "BANDWIDTHOVERLOAD")
+        || !handleControlError(highSpeedModeError, "HIGH_SPEED_MODE"))
+    {
+        return false;
+    }
+
+    m_frameWidth = width;
+    m_frameHeight = height;
+
+    int bytesPerPixel = 1;
+    switch (m_imageType)
+    {
+    case ASI_IMG_RGB24:
+        bytesPerPixel = 3;
+        break;
+    case ASI_IMG_RAW16:
+        bytesPerPixel = 2;
+        break;
+    default:
+        bytesPerPixel = 1;
+        break;
+    }
+
+    m_frameBuffer.resize(width * height * bytesPerPixel);
+    m_settingsApplied = true;
+    setLastError(ASI_SUCCESS, QString());
+    return true;
+}
+
+CameraAsiController::CaptureResult CameraAsiController::captureExposureFrame(int cameraId, double exposureTimeMs)
+{
+    if (m_videoCaptureStarted && !stopVideoCapture(cameraId)) {
+        return CaptureDataFailed;
+    }
+
+    const ASI_ERROR_CODE startExposureError = ASIStartExposure(cameraId, ASI_FALSE);
+    if (startExposureError != ASI_SUCCESS)
+    {
+        setLastError(startExposureError, errorCodeToString(startExposureError));
+        qDebug() << "CameraAsiController: ASIStartExposure failed:" << startExposureError << errorCodeToString(startExposureError);
+        return CaptureStartFailed;
+    }
+
+    setLastError(ASI_SUCCESS, QString());
+    QElapsedTimer captureTimer;
+    captureTimer.start();
+
+    const qint64 timeoutMs = std::max<qint64>(1000, static_cast<qint64>(std::ceil(exposureTimeMs)) + 5000);
+    const unsigned long pollSleepMs = static_cast<unsigned long>(
+        std::min<qint64>(50, std::max<qint64>(2, static_cast<qint64>(std::ceil(exposureTimeMs / 4.0)))));
+    ASI_EXPOSURE_STATUS exposureStatus = ASI_EXP_IDLE;
+
+    while (captureTimer.elapsed() <= timeoutMs)
+    {
+        const ASI_ERROR_CODE statusError = ASIGetExpStatus(cameraId, &exposureStatus);
+        if (statusError != ASI_SUCCESS)
+        {
+            setLastError(statusError, errorCodeToString(statusError));
+            qDebug() << "CameraAsiController: ASIGetExpStatus failed:" << statusError << errorCodeToString(statusError);
+            return CaptureDataFailed;
+        }
+
+        if (exposureStatus == ASI_EXP_SUCCESS) {
+            break;
+        }
+
+        if (exposureStatus == ASI_EXP_FAILED)
+        {
+            setLastError(ASI_ERROR_GENERAL_ERROR, QStringLiteral("Exposure failed"));
+            qDebug() << "CameraAsiController: ASI exposure failed";
+            return CaptureDataFailed;
+        }
+
+        QThread::msleep(pollSleepMs);
+    }
+
+    if (exposureStatus != ASI_EXP_SUCCESS)
+    {
+        setLastError(ASI_ERROR_TIMEOUT, errorCodeToString(ASI_ERROR_TIMEOUT));
+        qDebug() << "CameraAsiController: ASI exposure timed out after" << timeoutMs << "ms";
+        return CaptureDataFailed;
+    }
+
+    const ASI_ERROR_CODE dataError = ASIGetDataAfterExp(cameraId, m_frameBuffer.data(), m_frameBuffer.size());
+    if (dataError != ASI_SUCCESS)
+    {
+        setLastError(dataError, errorCodeToString(dataError));
+        qDebug() << "CameraAsiController: ASIGetDataAfterExp failed:" << dataError << errorCodeToString(dataError)
+                 << "bufferSize" << m_frameBuffer.size()
+                 << "width" << m_frameWidth << "height" << m_frameHeight;
+        return CaptureDataFailed;
+    }
+
+    setLastError(ASI_SUCCESS, QString());
+    m_lastCaptureTimeMs = captureTimer.elapsed();
+    return CaptureSuccess;
+}
+
+CameraAsiController::CaptureResult CameraAsiController::captureVideoFrame(int cameraId, int waitMs)
+{
+    if (!m_videoCaptureStarted)
+    {
+        const ASI_ERROR_CODE startCaptureError = ASIStartVideoCapture(cameraId);
+        if (startCaptureError != ASI_SUCCESS)
+        {
+            setLastError(startCaptureError, errorCodeToString(startCaptureError));
+            qDebug() << "CameraAsiController: ASIStartVideoCapture failed:" << startCaptureError << errorCodeToString(startCaptureError);
+            return CaptureStartFailed;
+        }
+        setLastError(ASI_SUCCESS, QString());
+        m_videoCaptureStarted = true;
+    }
+
+    QElapsedTimer captureTimer;
+    captureTimer.start();
+    const ASI_ERROR_CODE getVideoError = ASIGetVideoData(cameraId, m_frameBuffer.data(), m_frameBuffer.size(), waitMs);
+    if (getVideoError != ASI_SUCCESS)
+    {
+        setLastError(getVideoError, errorCodeToString(getVideoError));
+        qDebug() << "CameraAsiController: ASIGetVideoData failed:" << getVideoError << errorCodeToString(getVideoError)
+                 << "waitMs" << waitMs << "bufferSize" << m_frameBuffer.size()
+                 << "width" << m_frameWidth << "height" << m_frameHeight;
+        return CaptureDataFailed;
+    }
+
+    setLastError(ASI_SUCCESS, QString());
+    m_lastCaptureTimeMs = captureTimer.elapsed();
+    return CaptureSuccess;
+}
+
+CameraAsiController::StatusReport CameraAsiController::pollStatus(int cameraId)
+{
+    long temperatureTenthsC = 0;
+    ASI_BOOL isAuto = ASI_FALSE;
+    const ASI_ERROR_CODE temperatureError = ASIGetControlValue(cameraId, ASI_TEMPERATURE, &temperatureTenthsC, &isAuto);
+
+    if (temperatureError == ASI_SUCCESS)
+    {
+        setLastError(ASI_SUCCESS, QString());
+        m_lastCcdTemperature = temperatureTenthsC / 10.0;
+        m_lastCcdTemperatureValid = true;
+    }
+    else
+    {
+        setLastError(temperatureError, errorCodeToString(temperatureError));
+        m_lastCcdTemperatureValid = false;
+    }
+
+    return statusReport();
+}
+
+CameraAsiController::StatusReport CameraAsiController::statusReport() const
+{
+    StatusReport report;
+    report.m_ccdTemperature = m_lastCcdTemperature;
+    report.m_ccdTemperatureValid = m_lastCcdTemperatureValid;
+    report.m_lastCaptureTimeMs = m_lastCaptureTimeMs;
+    report.m_imageTypeName = imageTypeName();
+    report.m_lastErrorNumber = m_lastErrorNumber;
+    report.m_lastErrorMessage = m_lastErrorMessage;
+    return report;
+}
+
+void CameraAsiController::cancelContinuousCapture()
+{
+    ++m_continuousCaptureGeneration;
+    m_continuousCaptureScheduled = false;
+}
+
+void CameraAsiController::markContinuousCaptureScheduled()
+{
+    m_continuousCaptureScheduled = true;
+}
+
+bool CameraAsiController::clearContinuousCaptureScheduled(quint64 generation)
+{
+    if (generation != m_continuousCaptureGeneration) {
+        return false;
+    }
+
+    m_continuousCaptureScheduled = false;
+    return true;
+}
+
+QString CameraAsiController::imageTypeName() const
+{
+    switch (m_imageType)
+    {
+    case ASI_IMG_RGB24:
+        return QStringLiteral("RGB24");
+    case ASI_IMG_RAW16:
+        return QStringLiteral("RAW16");
+    case ASI_IMG_RAW8:
+        return QStringLiteral("RAW8");
+    default:
+        return QStringLiteral("Y8");
+    }
 }
 
 QString CameraAsiController::errorCodeToString(ASI_ERROR_CODE errorCode)

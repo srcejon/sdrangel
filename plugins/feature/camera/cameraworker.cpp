@@ -868,6 +868,11 @@ static void alpacaPutIntProperty(
     });
 }
 
+static bool isAlpacaDriverError(int errorNumber)
+{
+    return errorNumber >= 1024;
+}
+
 void CameraWorker::alpacaSetConnected(bool connected, std::function<void()> continuation)
 {
     if (!m_networkManager) {
@@ -1570,37 +1575,79 @@ void CameraWorker::alpacaSetCameraParams()
         scheduleNextCaptureAfterFailure();
     };
 
-    auto doReadoutMode = [this, baseUrl, camId, doStartExposure, setReadoutMode, handleParamFailure]() {
+    auto handleOptionalParamFailure = [this, handleParamFailure](const QString& property, int errorNumber, const QString& errorMessage,
+            const std::function<void()>& markAttempted, const std::function<void()>& continuation) {
+        if (isAlpacaDriverError(errorNumber))
+        {
+            qDebug() << "CameraWorker:" << property << "Alpaca error is non-fatal for exposure:"
+                     << errorNumber << errorMessage;
+            m_alpaca.m_lastErrorNumber = errorNumber;
+            m_alpaca.m_lastErrorMessage = errorMessage;
+            if (markAttempted) {
+                markAttempted();
+            }
+            reportAlpacaStatusToGUI();
+            if (continuation) {
+                continuation();
+            }
+            return;
+        }
+
+        handleParamFailure(errorNumber, errorMessage);
+    };
+
+    auto doReadoutMode = [this, baseUrl, camId, doStartExposure, setReadoutMode, handleOptionalParamFailure]() {
         if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
         if (setReadoutMode) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "readoutmode", "ReadoutMode",
                 m_settings.m_cameraReadoutMode, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doStartExposure,
                 [this]() { m_alpaca.m_lastReadoutMode = m_settings.m_cameraReadoutMode; },
-                handleParamFailure);
+                [this, handleOptionalParamFailure, doStartExposure](int errorNumber, const QString& errorMessage) {
+                    handleOptionalParamFailure(
+                        QStringLiteral("readoutmode"),
+                        errorNumber,
+                        errorMessage,
+                        [this]() { m_alpaca.m_lastReadoutMode = m_settings.m_cameraReadoutMode; },
+                        doStartExposure);
+                });
         } else {
             doStartExposure();
         }
     };
 
-    auto doOffset = [this, baseUrl, camId, doReadoutMode, setOffset, handleParamFailure]() {
+    auto doOffset = [this, baseUrl, camId, doReadoutMode, setOffset, handleOptionalParamFailure]() {
         if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
         if (setOffset) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "offset", "Offset",
                 m_settings.m_cameraOffset, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doReadoutMode,
                 [this]() { m_alpaca.m_lastOffset = m_settings.m_cameraOffset; },
-                handleParamFailure);
+                [this, handleOptionalParamFailure, doReadoutMode](int errorNumber, const QString& errorMessage) {
+                    handleOptionalParamFailure(
+                        QStringLiteral("offset"),
+                        errorNumber,
+                        errorMessage,
+                        [this]() { m_alpaca.m_lastOffset = m_settings.m_cameraOffset; },
+                        doReadoutMode);
+                });
         } else {
             doReadoutMode();
         }
     };
 
-    auto doGain = [this, baseUrl, camId, doOffset, setGain, handleParamFailure]() {
+    auto doGain = [this, baseUrl, camId, doOffset, setGain, handleOptionalParamFailure]() {
         if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
         if (setGain) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "gain", "Gain",
                 m_settings.m_cameraGain, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doOffset,
                 [this]() { m_alpaca.m_lastGain = m_settings.m_cameraGain; },
-                handleParamFailure);
+                [this, handleOptionalParamFailure, doOffset](int errorNumber, const QString& errorMessage) {
+                    handleOptionalParamFailure(
+                        QStringLiteral("gain"),
+                        errorNumber,
+                        errorMessage,
+                        [this]() { m_alpaca.m_lastGain = m_settings.m_cameraGain; },
+                        doOffset);
+                });
         } else {
             doOffset();
         }

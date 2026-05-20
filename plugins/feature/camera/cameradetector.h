@@ -35,6 +35,8 @@
 #include <opencv2/dnn/dnn.hpp>
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
 #include <opencv2/cudabgsegm.hpp>
+#endif
+#if defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
 #include <opencv2/cudafilters.hpp>
 #endif
 
@@ -181,6 +183,28 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     std::deque<cv::cuda::GpuMat> m_cudaDiffMaskHistory;
     mutable cv::cuda::Stream m_cudaDetectionStream;
+    mutable cv::Ptr<cv::cuda::Filter> m_cudaStarSmallBlurFilter;
+    mutable cv::Ptr<cv::cuda::Filter> m_cudaStarBackgroundBlurFilter;
+    mutable int m_cudaStarSmallBlurFilterType;
+    mutable int m_cudaStarBackgroundBlurFilterType;
+    mutable int m_cudaStarBackgroundBlurFilterSize;
+    mutable cv::cuda::GpuMat m_cudaStarExclusionMask;
+    mutable cv::Rect m_cudaStarExclusionRoi;
+    mutable cv::Size m_cudaStarExclusionWorkSize;
+    mutable QVector<QRect> m_cudaStarExclusionRects;
+    cv::Ptr<cv::cuda::Filter> m_cudaDiffOpenFilter;
+    cv::Ptr<cv::cuda::Filter> m_cudaDiffDilationFilter;
+    cv::Ptr<cv::cuda::Filter> m_cudaDiffCloseFilter;
+    int m_cudaDiffOpenFilterSize;
+    int m_cudaDiffOpenFilterType;
+    int m_cudaDiffDilationFilterSize;
+    int m_cudaDiffDilationFilterType;
+    int m_cudaDiffCloseFilterSize;
+    int m_cudaDiffCloseFilterType;
+    cv::cuda::GpuMat m_cudaDiffExclusionMask;
+    cv::Rect m_cudaDiffExclusionRoi;
+    cv::Size m_cudaDiffExclusionWorkSize;
+    QVector<QRect> m_cudaDiffExclusionRects;
 #endif
     cv::Ptr<cv::BackgroundSubtractor> m_bgSubtractor;
     cv::Mat m_motionLastFgMaskRaw;
@@ -212,6 +236,10 @@ private:
     QHash<QString, PendingDisappearState> m_pendingDisappearStates;
     QHash<QString, CameraDetectionHistoryEntry> m_activeObjectDetectionHistory;
     QList<CameraDetectionHistoryEntry> m_completedObjectDetectionHistory;
+    mutable cv::Mat m_exclusionMask;
+    mutable cv::Rect m_exclusionMaskRoi;
+    mutable cv::Size m_exclusionMaskWorkSize;
+    mutable QVector<QRect> m_exclusionMaskRects;
 #ifdef QT_TEXTTOSPEECH_FOUND
     QTextToSpeech *m_speech;
 #endif
@@ -229,6 +257,13 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     [[nodiscard]] bool canUseCudaDetection() const;
     bool applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
+    [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaDiffOpenFilter(int inputType, int kernelSize);
+    [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaDiffDilationFilter(int inputType, int kernelSize);
+    [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaDiffCloseFilter(int inputType, int kernelSize);
+    [[nodiscard]] const cv::cuda::GpuMat& cudaDiffExclusionMask(const cv::Rect& roi, const cv::Size& workSize);
+    [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaStarSmallBlurFilter(int inputType) const;
+    [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaStarBackgroundBlurFilter(int inputType, int kernelSize) const;
+    [[nodiscard]] const cv::cuda::GpuMat& cudaStarExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     bool applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const;
 #endif
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
@@ -243,6 +278,7 @@ private:
     void applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask = nullptr) const;
     void applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const;
     [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
+    [[nodiscard]] const cv::Mat& cachedExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
     [[nodiscard]] bool intersectsExclusionRects(const QRect& rect) const;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);

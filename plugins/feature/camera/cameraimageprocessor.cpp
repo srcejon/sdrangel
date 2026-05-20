@@ -458,7 +458,6 @@ void CameraImageProcessor::applyImageProcessing(CameraPipelineFrame& frame)
     }
 #endif
 
-    frame.clearCudaCache();
     applyImageProcessingCpu(frame);
 }
 
@@ -466,7 +465,14 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
 {
     PROFILER_START();
 
-    frame.ensureCpuImageFromCuda();
+    if (!frame.ensureCpuImageFromCuda())
+    {
+        qWarning() << "CameraImageProcessor: CPU image processing received a frame with no CPU image data";
+        PROFILER_STOP("CameraImageProcessor::applyImageProcessing");
+        return;
+    }
+
+    frame.clearCudaCache();
     const QImage& input = frame.m_image;
     const bool needsWhiteBalance = m_settings.m_postProcessWhiteBalanceMode != 0;
     const bool needsUnwarp = m_settings.m_postProcessUnwarp && (m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
@@ -497,7 +503,9 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
         || needsGreyscale
         || m_settings.m_invertColors;
 
-    if (!needsAny) {
+    if (!needsAny)
+    {
+        PROFILER_STOP("CameraImageProcessor::applyImageProcessing");
         return;
     }
 
@@ -705,8 +713,7 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
         qWarning() << "CameraImageProcessor: CUDA post-processing failed; falling back to CPU:" << error.what();
     }
 
-    frame.clearCudaCache();
-        applyImageProcessingCpu(frame);
+    applyImageProcessingCpu(frame);
 }
 
 void CameraImageProcessor::applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)

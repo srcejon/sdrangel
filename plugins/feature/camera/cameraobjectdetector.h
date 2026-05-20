@@ -92,6 +92,12 @@ private:
     MessageQueue *m_postProcessorInputMessageQueue;
     cv::dnn::Net m_yoloNet;
     cv::Size m_yoloInputSize;
+    // Last YOLO DNN target (as CameraSettings::YoloDnnTarget value cast to int) that we
+    // successfully applied to m_yoloNet via setPreferable{Backend,Target}. -1 = not yet
+    // applied (e.g. just after the net was loaded). We re-apply only when this differs
+    // from the current setting, avoiding a per-frame call that can rebuild the network's
+    // compute graph when targets change.
+    int m_appliedYoloDnnTarget = -1;
     QString m_yoloLoadedModelPath;
     QSet<QString> m_reportedErrorKeys;
     QStringList m_yoloLabels;

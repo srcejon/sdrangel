@@ -381,6 +381,7 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
         m_yoloNet = cv::dnn::Net();
         m_yoloLoadedModelPath.clear();
         m_reportedErrorKeys.clear();
+        m_appliedYoloDnnTarget = -1;
     }
 
     if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath))
@@ -480,6 +481,8 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         m_yoloNet = cv::dnn::Net();
         m_yoloInputSize = cv::Size(640, 640);
         m_yoloLoadedModelPath.clear();
+        // A newly-loaded net has default backend/target; force re-apply on next inference.
+        m_appliedYoloDnnTarget = -1;
 
         if (!m_settings.m_yoloModelPath.isEmpty() && !(m_settings.m_yoloModelPath.startsWith("http://") || m_settings.m_yoloModelPath.startsWith("https://")))
         {
@@ -524,28 +527,55 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         return;
     }
 
-    if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
+    // Only push backend/target into the net when they change. The previous unconditional
+    // setter on every frame can cause the network to rebuild its compute graph (especially
+    // when transitioning between CPU and CUDA), and is a measurable cost even when the
+    // values are identical.
+    const int requestedTarget = static_cast<int>(m_settings.m_yoloDnnTarget);
+    if (m_appliedYoloDnnTarget != requestedTarget)
     {
-        m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-        m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
-    }
-    else if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16)
-    {
-        m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-        m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
-    }
-    else
-    {
-        m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
-        m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+        if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
+        {
+            m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+            m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+        }
+        else if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16)
+        {
+            m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+            m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
+        }
+        else
+        {
+            m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
+            m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+        }
+        m_appliedYoloDnnTarget = requestedTarget;
     }
 
     cv::Mat roiMat = bgrMat(roi);
-    const float scaleX = static_cast<float>(roiMat.cols) / m_yoloInputSize.width;
-    const float scaleY = static_cast<float>(roiMat.rows) / m_yoloInputSize.height;
+
+    // Letterbox preprocessing: scale the ROI uniformly so the longest side matches the
+    // YOLO input dimension, pad the remainder with neutral grey (114) to fill the square
+    // model input. YOLOv5/v8 are trained with letterbox-padded input — feeding them a
+    // stretched non-square ROI (the previous behaviour) measurably degrades detection
+    // accuracy and produces wrong aspect ratios in the output boxes.
+    const int targetW = m_yoloInputSize.width;
+    const int targetH = m_yoloInputSize.height;
+    const float scale = std::min(
+        static_cast<float>(targetW) / static_cast<float>(std::max(1, roiMat.cols)),
+        static_cast<float>(targetH) / static_cast<float>(std::max(1, roiMat.rows)));
+    const int newW = std::max(1, static_cast<int>(std::round(roiMat.cols * scale)));
+    const int newH = std::max(1, static_cast<int>(std::round(roiMat.rows * scale)));
+    const int padX = (targetW - newW) / 2;
+    const int padY = (targetH - newH) / 2;
+
+    cv::Mat letterbox(targetH, targetW, roiMat.type(), cv::Scalar(114, 114, 114));
+    cv::Mat resized;
+    cv::resize(roiMat, resized, cv::Size(newW, newH), 0.0, 0.0, cv::INTER_LINEAR);
+    resized.copyTo(letterbox(cv::Rect(padX, padY, newW, newH)));
 
     cv::Mat blob;
-    cv::dnn::blobFromImage(roiMat, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
+    cv::dnn::blobFromImage(letterbox, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
     m_yoloNet.setInput(blob);
 
     std::vector<cv::Mat> outputs;
@@ -575,23 +605,36 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
     std::vector<int> classIds;
     const bool isV8Style = (det.rows < det.cols);
 
+    // Inverse-letterbox factor: divide letterbox coords by `scale` after subtracting the
+    // pad offset to recover ROI-local pixel coordinates.
+    const float invScale = (scale > 0.0f) ? (1.0f / scale) : 1.0f;
+
     if (isV8Style)
     {
-        const int numAnchors = det.cols;
-        const int numClasses = det.rows - 4;
+        // YOLOv8 layout is [4 + numClasses, numAnchors]: rows are features, columns
+        // are anchors. Walking the original layout per-anchor via Mat::at performs a
+        // ranged access for every (class, anchor) pair (~80 * 8400 = 672k calls). The
+        // memory access pattern is also stride-unfriendly. Transposing once gives a
+        // [numAnchors, 4 + numClasses] layout where each row is contiguous in memory
+        // for one anchor, letting us use a single ptr() per row.
+        cv::Mat detT;
+        cv::transpose(det, detT);
+        const int numAnchors = detT.rows;
+        const int numClasses = detT.cols - 4;
         if (numClasses <= 0) {
             return;
         }
 
         for (int a = 0; a < numAnchors; ++a)
         {
+            const float* row = detT.ptr<float>(a);
             float bestScore = 0.0f;
             int bestClass = 0;
+            const float* classes = row + 4;
             for (int c = 0; c < numClasses; ++c)
             {
-                const float s = det.at<float>(4 + c, a);
-                if (s > bestScore) {
-                    bestScore = s;
+                if (classes[c] > bestScore) {
+                    bestScore = classes[c];
                     bestClass = c;
                 }
             }
@@ -599,10 +642,14 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
                 continue;
             }
 
-            const float cx = det.at<float>(0, a) * scaleX;
-            const float cy = det.at<float>(1, a) * scaleY;
-            const float w = det.at<float>(2, a) * scaleX;
-            const float h = det.at<float>(3, a) * scaleY;
+            const float cxLb = row[0];
+            const float cyLb = row[1];
+            const float wLb = row[2];
+            const float hLb = row[3];
+            const float cx = (cxLb - padX) * invScale;
+            const float cy = (cyLb - padY) * invScale;
+            const float w = wLb * invScale;
+            const float h = hLb * invScale;
 
             boxes.push_back(cv::Rect(
                 roi.x + static_cast<int>(cx - w / 2.0f),
@@ -615,6 +662,8 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
     }
     else
     {
+        // YOLOv5 layout is [numAnchors, 5 + numClasses]: rows are anchors, columns are
+        // features. Already row-contiguous per-anchor; just walk with ptr<float>().
         const int numAnchors = det.rows;
         const int numClasses = det.cols - 5;
         if (numClasses < 0) {
@@ -623,16 +672,18 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
 
         for (int a = 0; a < numAnchors; ++a)
         {
-            const float objectness = det.at<float>(a, 4);
+            const float* row = det.ptr<float>(a);
+            const float objectness = row[4];
             if (objectness < confThresh) {
                 continue;
             }
 
             float bestScore = 0.0f;
             int bestClass = 0;
+            const float* classes = row + 5;
             for (int c = 0; c < numClasses; ++c)
             {
-                const float s = objectness * det.at<float>(a, 5 + c);
+                const float s = objectness * classes[c];
                 if (s > bestScore) {
                     bestScore = s;
                     bestClass = c;
@@ -642,10 +693,14 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
                 continue;
             }
 
-            const float cx = det.at<float>(a, 0) * scaleX;
-            const float cy = det.at<float>(a, 1) * scaleY;
-            const float w = det.at<float>(a, 2) * scaleX;
-            const float h = det.at<float>(a, 3) * scaleY;
+            const float cxLb = row[0];
+            const float cyLb = row[1];
+            const float wLb = row[2];
+            const float hLb = row[3];
+            const float cx = (cxLb - padX) * invScale;
+            const float cy = (cyLb - padY) * invScale;
+            const float w = wLb * invScale;
+            const float h = hLb * invScale;
 
             boxes.push_back(cv::Rect(
                 roi.x + static_cast<int>(cx - w / 2.0f),

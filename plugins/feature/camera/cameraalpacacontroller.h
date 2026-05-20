@@ -21,10 +21,16 @@
 
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QImage>
 #include <QString>
 #include <QVector>
 
 #include <functional>
+
+#include "camerapipelineframe.h"
+#include "camerasettings.h"
+
+class QNetworkReply;
 
 class CameraAlpacaController
 {
@@ -36,11 +42,25 @@ public:
     void resetFilterWheelConnectionState();
     void setLastError(int errorNumber, const QString& errorMessage);
     void resetCaptureState();
+    QImage parseImageArray(const QByteArray& payload, const QImage& fallbackImage, QString *receiveImageFormat = nullptr,
+        CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
+    QImage parseImageBytes(const QByteArray& payload, const QImage& fallbackImage, QString *receiveImageFormat = nullptr,
+        CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
 
     static bool parseErrorPayload(const QByteArray& payload, int& errorNumber, QString& errorMessage);
     static bool parseImageBytesError(const QByteArray& payload, int& errorNumber);
     static bool isOptionalCapabilityPath(const QString& path);
+    static QString baseUrl(const CameraSettings& settings);
+    static QString focuserBaseUrl(const CameraSettings& settings);
+    static QString filterWheelBaseUrl(const CameraSettings& settings);
+    static QString transportError(QNetworkReply *reply);
+    static QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit);
 
+private:
+    QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit,
+        CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
+
+public:
     bool m_frameRequestPending;
     quint32 m_clientId;
     quint32 m_clientTransactionId;

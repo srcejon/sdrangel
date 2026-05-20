@@ -545,20 +545,9 @@ private:
     void startCapture();
     void stopCapture();
     QImage createPlaceholderFrame() const;
-    QString buildAlpacaBaseUrl() const;
-    QString buildAlpacaFocuserBaseUrl() const;
-    QString buildAlpacaFilterWheelBaseUrl() const;
     void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
     void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray());
     void reportAlpacaStatusToGUI(int cameraState = -1, double ccdTemperature = NAN, bool ccdTemperatureValid = false);
-    QString transportError(QNetworkReply *reply) const;
-    QImage parseAlpacaImageArray(const QByteArray& payload, QString *receiveImageFormat = nullptr,
-        CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
-    QImage parseAlpacaImageBytes(const QByteArray& payload, QString *receiveImageFormat = nullptr,
-        CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
-    QImage renderRawPixelArray(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit,
-        CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
-    static QImage renderGrayscaleRaw(const QVector<QVector<int>>& raw, int width, int height, bool use16Bit);
     static QString normalizeAudioMatchName(QString text);
     static int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName);
     static void alignQtCameraAudioInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex);

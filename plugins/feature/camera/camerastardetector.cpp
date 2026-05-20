@@ -76,6 +76,29 @@ bool extractGrayMat16(const QImage& image, cv::Mat& outGray)
     return false;
 }
 
+cv::Mat debugMaskTo8Bit(const cv::Mat& mask)
+{
+    if (mask.empty() || (mask.depth() == CV_8U)) {
+        return mask.clone();
+    }
+
+    double minValue = 0.0;
+    double maxValue = 0.0;
+    cv::minMaxLoc(mask, &minValue, &maxValue);
+
+    if (maxValue > minValue)
+    {
+        cv::Mat normalized;
+        cv::normalize(mask, normalized, 0, 255, cv::NORM_MINMAX);
+        normalized.convertTo(normalized, CV_8UC1);
+        return normalized;
+    }
+
+    cv::Mat converted;
+    mask.convertTo(converted, CV_8UC1);
+    return converted;
+}
+
 } // namespace
 CameraStarDetector::CameraStarDetector()
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
@@ -303,7 +326,7 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
     cv::Mat background;
     cv::GaussianBlur(blurredGray, background, cv::Size(backgroundKernelSize, backgroundKernelSize), 0.0, 0.0);
     if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewBackground)) {
-        *debugMask = background.clone();
+        *debugMask = debugMaskTo8Bit(background);
     }
 
     cv::subtract(blurredGray, background, residual);
@@ -316,7 +339,7 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
             cv::normalize(residual, *debugMask, 0, 255, cv::NORM_MINMAX);
             debugMask->convertTo(*debugMask, CV_8UC1);
         } else {
-            *debugMask = residual.clone();
+            *debugMask = debugMaskTo8Bit(residual);
         }
     }
 
@@ -399,7 +422,7 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
             }
             else
             {
-                *debugMask = residual.clone();
+                *debugMask = debugMaskTo8Bit(residual);
             }
         }
         else if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewThresholded))

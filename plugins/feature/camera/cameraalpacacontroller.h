@@ -22,6 +22,8 @@
 #include <QByteArray>
 #include <QElapsedTimer>
 #include <QImage>
+#include <QStringList>
+#include <QUrl>
 #include <QString>
 #include <QVector>
 
@@ -31,10 +33,53 @@
 #include "camerasettings.h"
 
 class QNetworkReply;
+class QNetworkAccessManager;
 
 class CameraAlpacaController
 {
 public:
+    struct ImageFetchResult
+    {
+        QImage m_image;
+        CameraPipelineFrame::BayerPattern m_bayerPattern = CameraPipelineFrame::BayerNone;
+        QString m_receiveImageFormat;
+    };
+
+    struct CapabilitiesReport
+    {
+        QString m_name;
+        QString m_description;
+        int m_maxBinX = 1;
+        int m_maxBinY = 1;
+        QStringList m_gains;
+        int m_gainMin = 0;
+        int m_gainMax = 0;
+        QStringList m_offsets;
+        int m_offsetMin = 0;
+        int m_offsetMax = 0;
+        QStringList m_readoutModes;
+        QString m_sensorName;
+        int m_sensorType = 0;
+        int m_bayerOffsetX = 0;
+        int m_bayerOffsetY = 0;
+        double m_pixelSizeX = 0.0;
+        double m_pixelSizeY = 0.0;
+        int m_cameraSizeX = 0;
+        int m_cameraSizeY = 0;
+        double m_ccdTemperature = 0.0;
+        bool m_ccdTemperatureValid = false;
+        double m_exposureMinMs = 1.0;
+        double m_exposureMaxMs = 60000.0;
+        double m_exposureResolutionMs = 1.0;
+    };
+
+    struct StatusReport
+    {
+        int m_cameraState = -1;
+        double m_ccdTemperature = 0.0;
+        bool m_ccdTemperatureValid = false;
+    };
+
     CameraAlpacaController();
 
     void resetConnectionState();
@@ -42,6 +87,37 @@ public:
     void resetFilterWheelConnectionState();
     void setLastError(int errorNumber, const QString& errorMessage);
     void resetCaptureState();
+    void logRequest(const CameraSettings& settings, const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
+    void logResponse(const CameraSettings& settings, const QString& method, const QUrl& url, QNetworkReply *reply,
+        const QByteArray& payload = QByteArray(), bool updateLastError = true);
+    void disconnectCamera(QNetworkAccessManager *networkManager, const CameraSettings& settings);
+    void setConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings, bool connected,
+        std::function<void()> reportStatus, std::function<void()> continuation = {});
+    void runWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void()> reportStatus, std::function<void()> continuation);
+    void putIntProperty(
+        QNetworkAccessManager *networkManager,
+        const CameraSettings& settings,
+        int cameraId,
+        const QString& property,
+        const QString& bodyKey,
+        int value,
+        std::function<void()> continuation,
+        std::function<void()> onSuccess = {},
+        std::function<void(int, const QString&)> onFailure = {});
+    void startExposure(QNetworkAccessManager *networkManager, const CameraSettings& settings, double exposureTimeMs,
+        std::function<void()> onSuccess, std::function<void()> onFailure);
+    void abortExposure(QNetworkAccessManager *networkManager, const CameraSettings& settings);
+    void checkImageReady(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void(bool)> onSuccess, std::function<void()> onFailure);
+    void checkCameraStateForImageReady(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void(int)> onSuccess, std::function<void()> onFailure);
+    void fetchImageArray(QNetworkAccessManager *networkManager, const CameraSettings& settings, const QImage& fallbackImage,
+        std::function<void(const ImageFetchResult&)> onSuccess, std::function<void()> onFailure);
+    void queryCameraCapabilities(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void(const CapabilitiesReport&)> continuation);
+    void pollStatus(QNetworkAccessManager *networkManager, const CameraSettings& settings,
+        std::function<void(const StatusReport&)> continuation);
     QImage parseImageArray(const QByteArray& payload, const QImage& fallbackImage, QString *receiveImageFormat = nullptr,
         CameraPipelineFrame::BayerPattern *bayerPattern = nullptr) const;
     QImage parseImageBytes(const QByteArray& payload, const QImage& fallbackImage, QString *receiveImageFormat = nullptr,
@@ -49,6 +125,7 @@ public:
 
     static bool parseErrorPayload(const QByteArray& payload, int& errorNumber, QString& errorMessage);
     static bool parseImageBytesError(const QByteArray& payload, int& errorNumber);
+    static bool isDriverError(int errorNumber);
     static bool isOptionalCapabilityPath(const QString& path);
     static QString baseUrl(const CameraSettings& settings);
     static QString focuserBaseUrl(const CameraSettings& settings);

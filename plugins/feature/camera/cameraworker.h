@@ -534,8 +534,6 @@ private:
     void startCapture();
     void stopCapture();
     QImage createPlaceholderFrame() const;
-    void logAlpacaRequest(const QString& method, const QUrl& url, const QByteArray& payload = QByteArray()) const;
-    void logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload = QByteArray());
     void reportAlpacaStatusToGUI(int cameraState = -1, double ccdTemperature = NAN, bool ccdTemperatureValid = false);
     static const int m_alpacaStatusPollIntervalMs = 2000;
     static const int m_alpacaImageReadyPollIntervalMs = 100;

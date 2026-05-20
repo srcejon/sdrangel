@@ -214,7 +214,10 @@ bool CameraDiffDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuM
         cv::cuda::GpuMat grayGpu;
         cv::cuda::GpuMat prevGrayGpu;
 
-        if (sourceBgrGpu && !sourceBgrGpu->empty()) {
+        if (sourceBgrGpu
+            && !sourceBgrGpu->empty()
+            && (sourceBgrGpu->size() == bgrMat.size())
+            && (sourceBgrGpu->type() == bgrMat.type())) {
             bgrGpu = *sourceBgrGpu;
         } else {
             bgrGpu.upload(bgrMat, m_cudaDetectionStream);
@@ -286,7 +289,7 @@ bool CameraDiffDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuM
             combinedMaskGpu = closedGpu;
         }
 
-        cv::cuda::GpuMat fullMaskGpu(bgrMat.size(), combinedMaskGpu.type());
+        cv::cuda::GpuMat fullMaskGpu(bgrGpu.size(), combinedMaskGpu.type());
         fullMaskGpu.setTo(cv::Scalar::all(0), m_cudaDetectionStream);
         combinedMaskGpu.copyTo(fullMaskGpu(roi), m_cudaDetectionStream);
 

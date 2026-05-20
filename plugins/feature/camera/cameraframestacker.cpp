@@ -403,13 +403,6 @@ bool CameraFrameStacker::debayerRawMatCuda(cv::cuda::GpuMat& frameGpu, CameraPip
     {
         cv::cuda::GpuMat debayeredGpu;
         cv::cuda::demosaicing(frameGpu, debayeredGpu, cvCode, 0, m_cudaStackingStream);
-        if (debayeredGpu.channels() == 3)
-        {
-            cv::cuda::GpuMat rgbGpu;
-            cv::cuda::cvtColor(debayeredGpu, rgbGpu, cv::COLOR_BGR2RGB, 0, m_cudaStackingStream);
-            debayeredGpu = rgbGpu;
-        }
-
         frameGpu = debayeredGpu;
         return true;
     }

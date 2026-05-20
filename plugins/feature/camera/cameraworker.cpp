@@ -517,7 +517,6 @@ CameraWorker::CameraWorker() :
     m_lastAlpacaReadoutMode(0),
     m_alpacaExposureMinMs(0.001),
     m_alpacaExposureMaxMs(60000.0),
-    m_alpacaExposureResolutionMs(0.001),
     m_statusTimer(this),
     m_lastAlpacaCaptureTimeMs(-1),
     m_spectrumPipeSource(nullptr)
@@ -2710,7 +2709,6 @@ void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuat
         info->exposureMaxMs = std::max(info->exposureMinMs, info->exposureMaxMs);
         m_alpacaExposureMinMs = info->exposureMinMs;
         m_alpacaExposureMaxMs = info->exposureMaxMs;
-        m_alpacaExposureResolutionMs = info->exposureResolutionMs;
 
         if (m_msgQueueToGUI) {
             m_msgQueueToGUI->push(MsgReportAlpacaCameraInfo::create(
@@ -2940,6 +2938,19 @@ void CameraWorker::logAlpacaRequest(const QString& method, const QUrl& url, cons
     }
 }
 
+static bool isOptionalAlpacaCapabilityPath(const QString& path)
+{
+    const QString prop = path.section('/', -1).toLower();
+    return (prop == QStringLiteral("gains"))
+        || (prop == QStringLiteral("gainmin"))
+        || (prop == QStringLiteral("gainmax"))
+        || (prop == QStringLiteral("offsets"))
+        || (prop == QStringLiteral("offsetmin"))
+        || (prop == QStringLiteral("offsetmax"))
+        || (prop == QStringLiteral("readoutmodes"))
+        || (prop == QStringLiteral("ccdtemperature"));
+}
+
 void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNetworkReply *reply, const QByteArray& payload)
 {
     const QString path = url.path();
@@ -2949,13 +2960,16 @@ void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNe
     bool alpacaPayloadParsed = false;
 
     alpacaPayloadParsed = parseAlpacaErrorPayload(payload, alpacaErrorNumber, alpacaErrorMessage);
+    const bool optionalCapabilityUnavailable = alpacaPayloadParsed
+        && (alpacaErrorNumber != 0)
+        && isOptionalAlpacaCapabilityPath(path);
 
     if (reply->error() != QNetworkReply::NoError)
     {
         m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
         m_lastAlpacaErrorMessage = reply->errorString();
     }
-    else if (alpacaPayloadParsed)
+    else if (alpacaPayloadParsed && !optionalCapabilityUnavailable)
     {
         m_lastAlpacaErrorNumber = alpacaErrorNumber;
         m_lastAlpacaErrorMessage = alpacaErrorMessage;
@@ -2976,10 +2990,18 @@ void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNe
 
     if (alpacaPayloadParsed)
     {
-        qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
-                 << transportError(reply)
-                 << "alpacaError" << alpacaErrorNumber << alpacaErrorMessage
-                 << payload;
+        if (optionalCapabilityUnavailable)
+        {
+            qDebug() << "CameraWorker::AlpacaAPI optional capability unavailable" << method << url.toString()
+                     << "alpacaError" << alpacaErrorNumber << alpacaErrorMessage;
+        }
+        else
+        {
+            qDebug() << "CameraWorker::AlpacaAPI response" << method << url.toString()
+                     << transportError(reply)
+                     << "alpacaError" << alpacaErrorNumber << alpacaErrorMessage
+                     << payload;
+        }
     }
     else
     {

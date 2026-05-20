@@ -548,7 +548,6 @@ private:
     int m_lastAlpacaReadoutMode;
     double m_alpacaExposureMinMs;
     double m_alpacaExposureMaxMs;
-    double m_alpacaExposureResolutionMs;
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature
     QElapsedTimer m_alpacaCaptureTimer;
     qint64 m_lastAlpacaCaptureTimeMs;

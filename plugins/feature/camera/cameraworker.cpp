@@ -3500,7 +3500,10 @@ bool CameraWorker::asiCaptureExposureFrame()
     QElapsedTimer captureTimer;
     captureTimer.start();
 
-    const qint64 timeoutMs = std::max<qint64>(1000, static_cast<qint64>(std::ceil(currentCaptureExposureTimeMs())) + 5000);
+    const double exposureTimeMs = currentCaptureExposureTimeMs();
+    const qint64 timeoutMs = std::max<qint64>(1000, static_cast<qint64>(std::ceil(exposureTimeMs)) + 5000);
+    const unsigned long pollSleepMs = static_cast<unsigned long>(
+        std::min<qint64>(50, std::max<qint64>(2, static_cast<qint64>(std::ceil(exposureTimeMs / 4.0)))));
     ASI_EXPOSURE_STATUS exposureStatus = ASI_EXP_IDLE;
 
     while (captureTimer.elapsed() <= timeoutMs)
@@ -3524,7 +3527,7 @@ bool CameraWorker::asiCaptureExposureFrame()
             return false;
         }
 
-        QThread::msleep(50);
+        QThread::msleep(pollSleepMs);
     }
 
     if (exposureStatus != ASI_EXP_SUCCESS)

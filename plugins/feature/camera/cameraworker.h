@@ -534,6 +534,7 @@ private:
     bool m_alpacaBootstrapPending;
     QVector<std::function<void()>> m_alpacaPendingBootstrapContinuations;
     bool m_alpacaParamsInitialized;
+    bool m_alpacaExposureSeenActive;
     int m_lastAlpacaBinX;
     int m_lastAlpacaBinY;
     int m_lastAlpacaNumX;
@@ -632,6 +633,7 @@ private:
 
     void alpacaStartExposure();
     void alpacaCheckImageReady();
+    void alpacaCheckCameraStateForImageReady();
     void alpacaFetchImageArray();
     void alpacaQueryCameraCapabilities(std::function<void()> continuation = {});
     void alpacaSetCameraParams();

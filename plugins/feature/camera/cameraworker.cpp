@@ -503,6 +503,7 @@ CameraWorker::CameraWorker() :
     m_alpacaFilterWheelConnectionPending(false),
     m_alpacaBootstrapPending(false),
     m_alpacaParamsInitialized(false),
+    m_alpacaExposureSeenActive(false),
     m_lastAlpacaBinX(0),
     m_lastAlpacaBinY(0),
     m_lastAlpacaNumX(0),
@@ -2335,6 +2336,8 @@ void CameraWorker::alpacaStartExposure()
             return;
         }
 
+        m_alpacaExposureSeenActive = false;
+
         // Wait for the exposure duration before polling imageready
         QTimer::singleShot(static_cast<int>(std::ceil(exposureTimeMs)), this, [this]() {
             if (m_capturing) {
@@ -2399,7 +2402,69 @@ void CameraWorker::alpacaCheckImageReady()
         if (ready) {
             alpacaFetchImageArray();
         } else {
-            // Image not yet ready — poll again after a short delay
+            // Some Alpaca devices keep ImageReady false after exposure; CameraState gives us a fallback.
+            alpacaCheckCameraStateForImageReady();
+        }
+    });
+}
+
+void CameraWorker::alpacaCheckCameraStateForImageReady()
+{
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/camerastate").arg(m_settings.cameraIdInt()));
+    QUrlQuery query;
+    query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+    query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    url.setQuery(query);
+
+    logAlpacaRequest("GET", url);
+    QNetworkReply *reply = m_networkManager->get(QNetworkRequest(url));
+
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const QByteArray responseBody = reply->readAll();
+        logAlpacaResponse("GET", reply->request().url(), reply, responseBody);
+        reply->deleteLater();
+
+        if (!m_capturing) {
+            m_alpacaFrameRequestPending = false;
+            return;
+        }
+
+        if (reply->error() != QNetworkReply::NoError)
+        {
+            m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
+            m_lastAlpacaErrorMessage = reply->errorString();
+            m_alpacaFrameRequestPending = false;
+            reportAlpacaStatusToGUI();
+            scheduleNextCaptureAfterFailure();
+            return;
+        }
+
+        int alpacaErrorNumber = 0;
+        QString alpacaErrorMessage;
+        if (parseAlpacaErrorPayload(responseBody, alpacaErrorNumber, alpacaErrorMessage)
+            && (alpacaErrorNumber != 0))
+        {
+            m_lastAlpacaErrorNumber = alpacaErrorNumber;
+            m_lastAlpacaErrorMessage = alpacaErrorMessage;
+            m_alpacaFrameRequestPending = false;
+            reportAlpacaStatusToGUI();
+            scheduleNextCaptureAfterFailure();
+            return;
+        }
+
+        int cameraState = -1;
+        const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+        if (doc.isObject()) {
+            cameraState = doc.object().value("Value").toInt(-1);
+        }
+
+        if (cameraState > 0) {
+            m_alpacaExposureSeenActive = true;
+        }
+
+        if ((cameraState == 0) && m_alpacaExposureSeenActive) {
+            alpacaFetchImageArray();
+        } else {
             QTimer::singleShot(m_alpacaImageReadyPollIntervalMs, this, [this]() {
                 if (m_capturing) {
                     alpacaCheckImageReady();

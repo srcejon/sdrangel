@@ -62,6 +62,7 @@ public:
     ~CameraObjectDetector() override;
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
     void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
+    void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
 
 protected:
     bool handleStageMessage(const Message& cmd) override;
@@ -79,6 +80,7 @@ private:
     Camera *m_camera;
     MessageQueue *m_msgQueueToGUI;
     MessageQueue *m_msgQueueToFeature;
+    MessageQueue *m_postProcessorInputMessageQueue;
     cv::dnn::Net m_yoloNet;
     cv::Size m_yoloInputSize;
     QString m_yoloLoadedModelPath;

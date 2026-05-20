@@ -25,9 +25,10 @@
 #include "util/message.h"
 #include "camerasettings.h"
 #include "cameradetector.h"
-#include "cameramotiondiffdetector.h"
+#include "cameramotiondetector.h"
 #include "camerastardetector.h"
 #include "cameraobjectdetector.h"
+#include "cameradiffdetector.h"
 #include "cameraframealigner.h"
 #include "cameraframestacker.h"
 #include "cameraimageprocessor.h"
@@ -194,12 +195,14 @@ private:
     CameraFrameStacker *m_frameStacker;
     QThread *m_imageProcessorThread;
     CameraImageProcessor *m_imageProcessor;
-    QThread *m_motionDiffDetectorThread;
-    CameraMotionDiffDetector *m_motionDiffDetector;
+    QThread *m_motionDetectorThread;
+    CameraMotionDetector *m_motionDetector;
     QThread *m_starDetectorThread;
     CameraStarDetector *m_starDetector;
     QThread *m_objectDetectorThread;
     CameraObjectDetector *m_objectDetector;
+    QThread *m_diffDetectorThread;
+    CameraDiffDetector *m_diffDetector;
     QThread *m_postProcessorThread;
     CameraPostProcessor *m_postProcessor;
     CameraSettings m_settings;

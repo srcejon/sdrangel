@@ -3,9 +3,10 @@ project(camera)
 set(camera_SOURCES
     camera.cpp
     cameradetector.cpp
-    cameramotiondiffdetector.cpp
+    cameramotiondetector.cpp
     camerastardetector.cpp
     cameraobjectdetector.cpp
+    cameradiffdetector.cpp
     cameraframealigner.cpp
     cameraframestacker.cpp
     cameraimageprocessor.cpp
@@ -21,9 +22,10 @@ set(camera_SOURCES
 set(camera_HEADERS
     camera.h
     cameradetector.h
-    cameramotiondiffdetector.h
+    cameramotiondetector.h
     camerastardetector.h
     cameraobjectdetector.h
+    cameradiffdetector.h
     cameraframealigner.h
     cameraframestacker.h
     cameraimageprocessor.h

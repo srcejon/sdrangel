@@ -349,6 +349,7 @@ CameraObjectDetector::CameraObjectDetector(Camera *camera) :
     m_camera(camera),
     m_msgQueueToGUI(nullptr),
     m_msgQueueToFeature(nullptr),
+    m_postProcessorInputMessageQueue(nullptr),
     m_yoloInputSize(640, 640)
 #ifdef QT_TEXTTOSPEECH_FOUND
     , m_speech(new QTextToSpeech(this))
@@ -425,9 +426,7 @@ void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 
     const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     processObjectDetections(frame->m_detections, detectionTime, *frame);
-    if (m_nextStageQueue) {
-        m_nextStageQueue->push(CameraPostProcessor::MsgProcessFrame::create(frame));
-    }
+    forwardFrame(frame);
 }
 
 void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections)
@@ -842,8 +841,8 @@ void CameraObjectDetector::setVideoRecordingEnabled(bool enabled)
 
     m_settings.m_saveVideo = enabled;
 
-    if (m_nextStageQueue) {
-        m_nextStageQueue->push(CameraPostProcessor::MsgSetVideoRecordingEnabled::create(enabled));
+    if (m_postProcessorInputMessageQueue) {
+        m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSetVideoRecordingEnabled::create(enabled));
     }
 }
 

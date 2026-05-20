@@ -297,42 +297,8 @@ CameraWorker::CameraWorker() :
     m_cameraFinder(new CameraFinder(this)),
     m_stackFrameIndex(0),
     m_hdrExposureIndex(0),
-    m_alpacaFrameRequestPending(false),
-    m_alpacaClientId(QRandomGenerator::global()->bounded(quint32(1), quint32(std::numeric_limits<quint32>::max()))),
-    m_alpacaClientTransactionId(1),
-    m_alpacaSensorType(0),
-    m_alpacaCameraSizeX(0),
-    m_alpacaCameraSizeY(0),
-    m_alpacaBayerOffsetX(0),
-    m_alpacaBayerOffsetY(0),
-    m_alpacaImageBytesSupported(true),
-    m_lastAlpacaErrorNumber(0),
-    m_lastAlpacaErrorMessage(),
-    m_lastAlpacaReceiveImageFormat(),
-    m_alpacaConnected(false),
-    m_alpacaConnectionPending(false),
-    m_alpacaFocuserConnected(false),
-    m_alpacaFocuserConnectionPending(false),
-    m_alpacaFilterWheelConnected(false),
-    m_alpacaFilterWheelConnectionPending(false),
-    m_alpacaBootstrapPending(false),
-    m_alpacaParamsInitialized(false),
-    m_alpacaExposureSeenActive(false),
-    m_lastAlpacaBinX(0),
-    m_lastAlpacaBinY(0),
-    m_lastAlpacaNumX(0),
-    m_lastAlpacaNumY(0),
-    m_lastAlpacaEffectiveNumX(-1),
-    m_lastAlpacaEffectiveNumY(-1),
-    m_lastAlpacaStartX(0),
-    m_lastAlpacaStartY(0),
-    m_lastAlpacaGain(-1),
-    m_lastAlpacaOffset(-1),
-    m_lastAlpacaReadoutMode(0),
-    m_alpacaExposureMinMs(0.001),
-    m_alpacaExposureMaxMs(60000.0),
+    m_alpaca(),
     m_statusTimer(this),
-    m_lastAlpacaCaptureTimeMs(-1),
     m_spectrumPipeSource(nullptr)
 #ifdef ASICAMERA_FOUND
     ,
@@ -412,17 +378,17 @@ void CameraWorker::stopWork()
     QObject::disconnect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
     stopCapture();
 
-    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaConnected)
+    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpaca.m_connected)
     {
         alpacaSetConnected(false);
     }
 
-    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaFocuserConnected)
+    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpaca.m_focuserConnected)
     {
         alpacaSetFocuserConnected(false);
     }
 
-    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaFilterWheelConnected)
+    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpaca.m_filterWheelConnected)
     {
         alpacaSetFilterWheelConnected(false);
     }
@@ -436,27 +402,17 @@ void CameraWorker::stopWork()
 
 void CameraWorker::resetAlpacaConnectionState()
 {
-    m_alpacaConnected = false;
-    m_alpacaConnectionPending = false;
-    m_alpacaPendingConnectedContinuations.clear();
-    m_alpacaBootstrapPending = false;
-    m_alpacaPendingBootstrapContinuations.clear();
-    m_lastAlpacaErrorNumber = 0;
-    m_lastAlpacaErrorMessage.clear();
+    m_alpaca.resetConnectionState();
 }
 
 void CameraWorker::resetAlpacaFilterWheelConnectionState()
 {
-    m_alpacaFilterWheelConnected = false;
-    m_alpacaFilterWheelConnectionPending = false;
-    m_alpacaPendingFilterWheelConnectedContinuations.clear();
+    m_alpaca.resetFilterWheelConnectionState();
 }
 
 void CameraWorker::resetAlpacaFocuserConnectionState()
 {
-    m_alpacaFocuserConnected = false;
-    m_alpacaFocuserConnectionPending = false;
-    m_alpacaPendingFocuserConnectedContinuations.clear();
+    m_alpaca.resetFocuserConnectionState();
 }
 
 void CameraWorker::handleInputMessages()
@@ -605,7 +561,7 @@ double CameraWorker::currentCaptureExposureTimeMs() const
         : std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_exposureTimeMs);
 
     if (m_settings.isAlpacaCamera()) {
-        return qBound(m_alpacaExposureMinMs, exposureTimeMs, m_alpacaExposureMaxMs);
+        return qBound(m_alpaca.m_exposureMinMs, exposureTimeMs, m_alpaca.m_exposureMaxMs);
     }
 
     return exposureTimeMs;
@@ -765,7 +721,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("cameraId");
     const bool disconnectPreviousAlpaca = m_settings.isAlpacaCamera()
         && m_networkManager
-        && m_alpacaConnected
+        && m_alpaca.m_connected
         && alpacaEndpointChanged;
 
     if (recapture)
@@ -961,28 +917,26 @@ void CameraWorker::startCapture()
 
     resetHdrBracketState();
     m_capturing = true;
-    m_lastAlpacaCaptureTimeMs = -1;
-    m_alpacaCaptureTimer.invalidate();
-    m_alpacaParamsInitialized = false;
-    m_lastAlpacaBinX = m_settings.m_cameraBinX;
-    m_lastAlpacaBinY = m_settings.m_cameraBinY;
-    m_lastAlpacaNumX = m_settings.m_cameraNumX;
-    m_lastAlpacaNumY = m_settings.m_cameraNumY;
-    m_lastAlpacaEffectiveNumX = -1;
-    m_lastAlpacaEffectiveNumY = -1;
-    m_lastAlpacaStartX = m_settings.m_cameraStartX;
-    m_lastAlpacaStartY = m_settings.m_cameraStartY;
-    m_lastAlpacaGain = m_settings.m_cameraGain;
-    m_lastAlpacaOffset = m_settings.m_cameraOffset;
-    m_lastAlpacaReadoutMode = m_settings.m_cameraReadoutMode;
+    m_alpaca.resetCaptureState();
+    m_alpaca.m_lastBinX = m_settings.m_cameraBinX;
+    m_alpaca.m_lastBinY = m_settings.m_cameraBinY;
+    m_alpaca.m_lastNumX = m_settings.m_cameraNumX;
+    m_alpaca.m_lastNumY = m_settings.m_cameraNumY;
+    m_alpaca.m_lastEffectiveNumX = -1;
+    m_alpaca.m_lastEffectiveNumY = -1;
+    m_alpaca.m_lastStartX = m_settings.m_cameraStartX;
+    m_alpaca.m_lastStartY = m_settings.m_cameraStartY;
+    m_alpaca.m_lastGain = m_settings.m_cameraGain;
+    m_alpaca.m_lastOffset = m_settings.m_cameraOffset;
+    m_alpaca.m_lastReadoutMode = m_settings.m_cameraReadoutMode;
 
     if (m_settings.isAlpacaCamera())
     {
-        m_alpacaCaptureTimer.start();
-        m_alpacaFrameRequestPending = false;
+        m_alpaca.m_captureTimer.start();
+        m_alpaca.m_frameRequestPending = false;
         m_captureTimer.start(captureTimerIntervalMs());
 
-        if (m_alpacaConnected && !m_alpacaBootstrapPending && (m_alpacaCameraSizeX > 0) && (m_alpacaCameraSizeY > 0)) {
+        if (m_alpaca.m_connected && !m_alpaca.m_bootstrapPending && (m_alpaca.m_cameraSizeX > 0) && (m_alpaca.m_cameraSizeY > 0)) {
             captureTick();
         } else {
             alpacaBootstrap();
@@ -1027,10 +981,10 @@ void CameraWorker::stopCapture()
 {
     m_capturing = false;
     m_captureTimer.stop();
-    m_alpacaCaptureTimer.invalidate();
+    m_alpaca.m_captureTimer.invalidate();
     resetHdrBracketState();
 
-    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaFrameRequestPending) {
+    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpaca.m_frameRequestPending) {
         alpacaAbortExposure();
     }
 
@@ -1072,23 +1026,23 @@ void CameraWorker::captureTick()
     }
 #endif
 
-    if (!m_networkManager || m_alpacaFrameRequestPending) {
+    if (!m_networkManager || m_alpaca.m_frameRequestPending) {
         return;
     }
 
-    if (!m_alpacaConnected || m_alpacaConnectionPending || m_alpacaBootstrapPending)
+    if (!m_alpaca.m_connected || m_alpaca.m_connectionPending || m_alpaca.m_bootstrapPending)
     {
         alpacaBootstrap();
         return;
     }
 
-    if (!m_alpacaCaptureTimer.isValid()) {
-        m_alpacaCaptureTimer.start();
+    if (!m_alpaca.m_captureTimer.isValid()) {
+        m_alpaca.m_captureTimer.start();
     }
     if (useStackIntervalCadence()) {
         m_captureTimer.stop();
     }
-    m_alpacaFrameRequestPending = true;
+    m_alpaca.m_frameRequestPending = true;
     alpacaSetCameraParams();
 }
 
@@ -1181,8 +1135,8 @@ void CameraWorker::alpacaSetConnected(bool connected, std::function<void()> cont
 
     QUrlQuery body;
     body.addQueryItem("Connected", connected ? QStringLiteral("true") : QStringLiteral("false"));
-    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    body.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
 
     const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
     logAlpacaRequest("PUT", url, payload);
@@ -1206,33 +1160,33 @@ void CameraWorker::alpacaSetConnected(bool connected, std::function<void()> cont
 
         if (success)
         {
-            m_alpacaConnected = connected;
+            m_alpaca.m_connected = connected;
         }
         else if (connected)
         {
             if (reply->error() != QNetworkReply::NoError)
             {
-                m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-                m_lastAlpacaErrorMessage = reply->errorString();
+                m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+                m_alpaca.m_lastErrorMessage = reply->errorString();
             }
-            m_alpacaConnected = false;
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_connected = false;
+            m_alpaca.m_frameRequestPending = false;
             reportAlpacaStatusToGUI();
         }
         else
         {
             if (reply->error() != QNetworkReply::NoError)
             {
-                m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-                m_lastAlpacaErrorMessage = reply->errorString();
+                m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+                m_alpaca.m_lastErrorMessage = reply->errorString();
             }
             reportAlpacaStatusToGUI();
         }
 
         if (!connected) {
-            m_alpacaConnectionPending = false;
-            m_alpacaConnected = false;
-            m_alpacaPendingConnectedContinuations.clear();
+            m_alpaca.m_connectionPending = false;
+            m_alpaca.m_connected = false;
+            m_alpaca.m_pendingConnectedContinuations.clear();
         }
 
         if (success)
@@ -1243,8 +1197,8 @@ void CameraWorker::alpacaSetConnected(bool connected, std::function<void()> cont
         }
         else if (connected)
         {
-            m_alpacaConnectionPending = false;
-            m_alpacaPendingConnectedContinuations.clear();
+            m_alpaca.m_connectionPending = false;
+            m_alpaca.m_pendingConnectedContinuations.clear();
         }
 
         reply->deleteLater();
@@ -1253,7 +1207,7 @@ void CameraWorker::alpacaSetConnected(bool connected, std::function<void()> cont
 
 void CameraWorker::alpacaRunWhenConnected(std::function<void()> continuation)
 {
-    if (m_alpacaConnected)
+    if (m_alpaca.m_connected)
     {
         if (continuation) {
             continuation();
@@ -1262,18 +1216,18 @@ void CameraWorker::alpacaRunWhenConnected(std::function<void()> continuation)
     }
 
     if (continuation) {
-        m_alpacaPendingConnectedContinuations.append(continuation);
+        m_alpaca.m_pendingConnectedContinuations.append(continuation);
     }
 
-    if (m_alpacaConnectionPending) {
+    if (m_alpaca.m_connectionPending) {
         return;
     }
 
-    m_alpacaConnectionPending = true;
+    m_alpaca.m_connectionPending = true;
     alpacaSetConnected(true, [this]() {
-        m_alpacaConnectionPending = false;
-        const auto continuations = std::move(m_alpacaPendingConnectedContinuations);
-        m_alpacaPendingConnectedContinuations.clear();
+        m_alpaca.m_connectionPending = false;
+        const auto continuations = std::move(m_alpaca.m_pendingConnectedContinuations);
+        m_alpaca.m_pendingConnectedContinuations.clear();
 
         for (const auto& continuation : continuations)
         {
@@ -1298,8 +1252,8 @@ void CameraWorker::alpacaSetFocuserConnected(bool connected, std::function<void(
 
     QUrlQuery body;
     body.addQueryItem("Connected", connected ? "true" : "false");
-    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    body.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
 
     const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
     logAlpacaRequest("PUT", url, payload);
@@ -1322,28 +1276,28 @@ void CameraWorker::alpacaSetFocuserConnected(bool connected, std::function<void(
         }
 
         if (success) {
-            m_alpacaFocuserConnected = connected;
+            m_alpaca.m_focuserConnected = connected;
         } else if (connected) {
             if (reply->error() != QNetworkReply::NoError)
             {
-                m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-                m_lastAlpacaErrorMessage = reply->errorString();
+                m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+                m_alpaca.m_lastErrorMessage = reply->errorString();
             }
-            m_alpacaFocuserConnected = false;
+            m_alpaca.m_focuserConnected = false;
             reportAlpacaStatusToGUI();
         } else {
             if (reply->error() != QNetworkReply::NoError)
             {
-                m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-                m_lastAlpacaErrorMessage = reply->errorString();
+                m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+                m_alpaca.m_lastErrorMessage = reply->errorString();
             }
             reportAlpacaStatusToGUI();
         }
 
         if (!connected) {
-            m_alpacaFocuserConnectionPending = false;
-            m_alpacaFocuserConnected = false;
-            m_alpacaPendingFocuserConnectedContinuations.clear();
+            m_alpaca.m_focuserConnectionPending = false;
+            m_alpaca.m_focuserConnected = false;
+            m_alpaca.m_pendingFocuserConnectedContinuations.clear();
         }
 
         if (success)
@@ -1354,8 +1308,8 @@ void CameraWorker::alpacaSetFocuserConnected(bool connected, std::function<void(
         }
         else if (connected)
         {
-            m_alpacaFocuserConnectionPending = false;
-            m_alpacaPendingFocuserConnectedContinuations.clear();
+            m_alpaca.m_focuserConnectionPending = false;
+            m_alpaca.m_pendingFocuserConnectedContinuations.clear();
         }
 
         reply->deleteLater();
@@ -1364,7 +1318,7 @@ void CameraWorker::alpacaSetFocuserConnected(bool connected, std::function<void(
 
 void CameraWorker::alpacaRunFocuserWhenConnected(std::function<void()> continuation)
 {
-    if (m_alpacaFocuserConnected)
+    if (m_alpaca.m_focuserConnected)
     {
         if (continuation) {
             continuation();
@@ -1373,18 +1327,18 @@ void CameraWorker::alpacaRunFocuserWhenConnected(std::function<void()> continuat
     }
 
     if (continuation) {
-        m_alpacaPendingFocuserConnectedContinuations.append(continuation);
+        m_alpaca.m_pendingFocuserConnectedContinuations.append(continuation);
     }
 
-    if (m_alpacaFocuserConnectionPending) {
+    if (m_alpaca.m_focuserConnectionPending) {
         return;
     }
 
-    m_alpacaFocuserConnectionPending = true;
+    m_alpaca.m_focuserConnectionPending = true;
     alpacaSetFocuserConnected(true, [this]() {
-        m_alpacaFocuserConnectionPending = false;
-        const auto continuations = std::move(m_alpacaPendingFocuserConnectedContinuations);
-        m_alpacaPendingFocuserConnectedContinuations.clear();
+        m_alpaca.m_focuserConnectionPending = false;
+        const auto continuations = std::move(m_alpaca.m_pendingFocuserConnectedContinuations);
+        m_alpaca.m_pendingFocuserConnectedContinuations.clear();
 
         for (const auto& continuation : continuations)
         {
@@ -1410,8 +1364,8 @@ void CameraWorker::alpacaSetFocuserPosition()
 
         QUrlQuery body;
         body.addQueryItem("Position", QString::number(std::max(0, m_settings.m_alpacaFocusPosition)));
-        body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-        body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+        body.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+        body.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
 
         const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
         logAlpacaRequest("PUT", url, payload);
@@ -1430,13 +1384,13 @@ void CameraWorker::alpacaSetFocuserPosition()
             {
                 if (reply->error() != QNetworkReply::NoError)
                 {
-                    m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-                    m_lastAlpacaErrorMessage = reply->errorString();
+                    m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+                    m_alpaca.m_lastErrorMessage = reply->errorString();
                 }
                 else
                 {
-                    m_lastAlpacaErrorNumber = alpacaErrorNumber;
-                    m_lastAlpacaErrorMessage = alpacaErrorMessage;
+                    m_alpaca.m_lastErrorNumber = alpacaErrorNumber;
+                    m_alpaca.m_lastErrorMessage = alpacaErrorMessage;
                 }
 
                 reportAlpacaStatusToGUI();
@@ -1460,8 +1414,8 @@ void CameraWorker::alpacaSetFilterWheelConnected(bool connected, std::function<v
 
     QUrlQuery body;
     body.addQueryItem("Connected", connected ? QStringLiteral("true") : QStringLiteral("false"));
-    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    body.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
 
     const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
     logAlpacaRequest("PUT", url, payload);
@@ -1484,28 +1438,28 @@ void CameraWorker::alpacaSetFilterWheelConnected(bool connected, std::function<v
         }
 
         if (success) {
-            m_alpacaFilterWheelConnected = connected;
+            m_alpaca.m_filterWheelConnected = connected;
         } else if (connected) {
             if (reply->error() != QNetworkReply::NoError)
             {
-                m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-                m_lastAlpacaErrorMessage = reply->errorString();
+                m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+                m_alpaca.m_lastErrorMessage = reply->errorString();
             }
-            m_alpacaFilterWheelConnected = false;
+            m_alpaca.m_filterWheelConnected = false;
             reportAlpacaStatusToGUI();
         } else {
             if (reply->error() != QNetworkReply::NoError)
             {
-                m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-                m_lastAlpacaErrorMessage = reply->errorString();
+                m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+                m_alpaca.m_lastErrorMessage = reply->errorString();
             }
             reportAlpacaStatusToGUI();
         }
 
         if (!connected) {
-            m_alpacaFilterWheelConnectionPending = false;
-            m_alpacaFilterWheelConnected = false;
-            m_alpacaPendingFilterWheelConnectedContinuations.clear();
+            m_alpaca.m_filterWheelConnectionPending = false;
+            m_alpaca.m_filterWheelConnected = false;
+            m_alpaca.m_pendingFilterWheelConnectedContinuations.clear();
         }
 
         if (success)
@@ -1516,8 +1470,8 @@ void CameraWorker::alpacaSetFilterWheelConnected(bool connected, std::function<v
         }
         else if (connected)
         {
-            m_alpacaFilterWheelConnectionPending = false;
-            m_alpacaPendingFilterWheelConnectedContinuations.clear();
+            m_alpaca.m_filterWheelConnectionPending = false;
+            m_alpaca.m_pendingFilterWheelConnectedContinuations.clear();
         }
 
         reply->deleteLater();
@@ -1526,7 +1480,7 @@ void CameraWorker::alpacaSetFilterWheelConnected(bool connected, std::function<v
 
 void CameraWorker::alpacaRunFilterWheelWhenConnected(std::function<void()> continuation)
 {
-    if (m_alpacaFilterWheelConnected)
+    if (m_alpaca.m_filterWheelConnected)
     {
         if (continuation) {
             continuation();
@@ -1535,18 +1489,18 @@ void CameraWorker::alpacaRunFilterWheelWhenConnected(std::function<void()> conti
     }
 
     if (continuation) {
-        m_alpacaPendingFilterWheelConnectedContinuations.append(continuation);
+        m_alpaca.m_pendingFilterWheelConnectedContinuations.append(continuation);
     }
 
-    if (m_alpacaFilterWheelConnectionPending) {
+    if (m_alpaca.m_filterWheelConnectionPending) {
         return;
     }
 
-    m_alpacaFilterWheelConnectionPending = true;
+    m_alpaca.m_filterWheelConnectionPending = true;
     alpacaSetFilterWheelConnected(true, [this]() {
-        m_alpacaFilterWheelConnectionPending = false;
-        const auto continuations = std::move(m_alpacaPendingFilterWheelConnectedContinuations);
-        m_alpacaPendingFilterWheelConnectedContinuations.clear();
+        m_alpaca.m_filterWheelConnectionPending = false;
+        const auto continuations = std::move(m_alpaca.m_pendingFilterWheelConnectedContinuations);
+        m_alpaca.m_pendingFilterWheelConnectedContinuations.clear();
 
         for (const auto& continuation : continuations)
         {
@@ -1590,8 +1544,8 @@ void CameraWorker::alpacaQueryFilterWheelInfo()
         auto makeGet = [this, baseUrl, deviceNumber](const QString& prop) {
             QUrl url(baseUrl + QString("/api/v1/filterwheel/%1/%2").arg(deviceNumber).arg(prop));
             QUrlQuery q;
-            q.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-            q.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+            q.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+            q.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
             url.setQuery(q);
             logAlpacaRequest("GET", url);
             return m_networkManager->get(QNetworkRequest(url));
@@ -1672,8 +1626,8 @@ void CameraWorker::alpacaQueryFilterWheelPosition(std::function<void(int)> conti
         const int deviceNumber = std::max(0, m_settings.m_alpacaFilterWheelDeviceNumber);
         QUrl url(baseUrl + QString("/api/v1/filterwheel/%1/position").arg(deviceNumber));
         QUrlQuery q;
-        q.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-        q.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+        q.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+        q.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
         url.setQuery(q);
         logAlpacaRequest("GET", url);
 
@@ -1738,8 +1692,8 @@ void CameraWorker::alpacaSetFilterWheelPosition()
 
         QUrlQuery body;
         body.addQueryItem("Position", QString::number(std::max(0, m_settings.m_alpacaFilterWheelPosition)));
-        body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-        body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+        body.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+        body.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
 
         const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
         logAlpacaRequest("PUT", url, payload);
@@ -1762,13 +1716,13 @@ void CameraWorker::alpacaSetFilterWheelPosition()
             {
                 if (reply->error() != QNetworkReply::NoError)
                 {
-                    m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-                    m_lastAlpacaErrorMessage = reply->errorString();
+                    m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+                    m_alpaca.m_lastErrorMessage = reply->errorString();
                 }
                 else
                 {
-                    m_lastAlpacaErrorNumber = alpacaErrorNumber;
-                    m_lastAlpacaErrorMessage = alpacaErrorMessage;
+                    m_alpaca.m_lastErrorNumber = alpacaErrorNumber;
+                    m_alpaca.m_lastErrorMessage = alpacaErrorMessage;
                 }
 
                 reportAlpacaStatusToGUI();
@@ -1785,14 +1739,14 @@ void CameraWorker::alpacaBootstrap(std::function<void()> continuation)
     }
 
     if (continuation) {
-        m_alpacaPendingBootstrapContinuations.append(continuation);
+        m_alpaca.m_pendingBootstrapContinuations.append(continuation);
     }
 
-    if (m_alpacaBootstrapPending) {
+    if (m_alpaca.m_bootstrapPending) {
         return;
     }
 
-    m_alpacaBootstrapPending = true;
+    m_alpaca.m_bootstrapPending = true;
 
     alpacaRunWhenConnected([this]() {
         if (!m_statusTimer.isActive()) {
@@ -1800,11 +1754,11 @@ void CameraWorker::alpacaBootstrap(std::function<void()> continuation)
         }
 
         alpacaQueryCameraCapabilities([this]() {
-            m_alpacaBootstrapPending = false;
+            m_alpaca.m_bootstrapPending = false;
             alpacaPollStatus();
 
-            const auto continuations = std::move(m_alpacaPendingBootstrapContinuations);
-            m_alpacaPendingBootstrapContinuations.clear();
+            const auto continuations = std::move(m_alpaca.m_pendingBootstrapContinuations);
+            m_alpaca.m_pendingBootstrapContinuations.clear();
 
             for (const auto& continuation : continuations)
             {
@@ -1813,7 +1767,7 @@ void CameraWorker::alpacaBootstrap(std::function<void()> continuation)
                 }
             }
 
-            if (m_capturing && !m_alpacaFrameRequestPending) {
+            if (m_capturing && !m_alpaca.m_frameRequestPending) {
                 captureTick();
             }
         });
@@ -1825,56 +1779,56 @@ void CameraWorker::alpacaSetCameraParams()
     // Chain: binX -> binY -> subframe ROI -> gain -> offset -> readoutMode -> startExposure
     const QString baseUrl = buildAlpacaBaseUrl();
     const int camId = m_settings.cameraIdInt();
-    const bool forceAllParams = !m_alpacaParamsInitialized;
-    const int maxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_settings.m_cameraBinX));
-    const int maxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_settings.m_cameraBinY));
+    const bool forceAllParams = !m_alpaca.m_paramsInitialized;
+    const int maxSubframeX = std::max(1, m_alpaca.m_cameraSizeX / std::max(1, m_settings.m_cameraBinX));
+    const int maxSubframeY = std::max(1, m_alpaca.m_cameraSizeY / std::max(1, m_settings.m_cameraBinY));
     const bool fullFrameNumXRequested = (m_settings.m_cameraNumX == 0);
     const bool fullFrameNumYRequested = (m_settings.m_cameraNumY == 0);
-    const bool canResolveNumX = !fullFrameNumXRequested || (m_alpacaCameraSizeX > 0);
-    const bool canResolveNumY = !fullFrameNumYRequested || (m_alpacaCameraSizeY > 0);
+    const bool canResolveNumX = !fullFrameNumXRequested || (m_alpaca.m_cameraSizeX > 0);
+    const bool canResolveNumY = !fullFrameNumYRequested || (m_alpaca.m_cameraSizeY > 0);
     const int effectiveNumX = fullFrameNumXRequested
         ? std::max(1, maxSubframeX - std::max(0, m_settings.m_cameraStartX))
         : m_settings.m_cameraNumX;
     const int effectiveNumY = fullFrameNumYRequested
         ? std::max(1, maxSubframeY - std::max(0, m_settings.m_cameraStartY))
         : m_settings.m_cameraNumY;
-    const bool setBinX = forceAllParams || (m_lastAlpacaBinX != m_settings.m_cameraBinX);
-    const bool setBinY = forceAllParams || (m_lastAlpacaBinY != m_settings.m_cameraBinY);
+    const bool setBinX = forceAllParams || (m_alpaca.m_lastBinX != m_settings.m_cameraBinX);
+    const bool setBinY = forceAllParams || (m_alpaca.m_lastBinY != m_settings.m_cameraBinY);
     const bool setNumX = canResolveNumX
-        && (forceAllParams || (m_lastAlpacaEffectiveNumX != effectiveNumX));
+        && (forceAllParams || (m_alpaca.m_lastEffectiveNumX != effectiveNumX));
     const bool setNumY = canResolveNumY
-        && (forceAllParams || (m_lastAlpacaEffectiveNumY != effectiveNumY));
-    const bool setStartX = forceAllParams || (m_lastAlpacaStartX != m_settings.m_cameraStartX);
-    const bool setStartY = forceAllParams || (m_lastAlpacaStartY != m_settings.m_cameraStartY);
+        && (forceAllParams || (m_alpaca.m_lastEffectiveNumY != effectiveNumY));
+    const bool setStartX = forceAllParams || (m_alpaca.m_lastStartX != m_settings.m_cameraStartX);
+    const bool setStartY = forceAllParams || (m_alpaca.m_lastStartY != m_settings.m_cameraStartY);
     const bool setGain = (m_settings.m_cameraGain >= 0)
-        && (forceAllParams || (m_lastAlpacaGain != m_settings.m_cameraGain));
+        && (forceAllParams || (m_alpaca.m_lastGain != m_settings.m_cameraGain));
     const bool setOffset = (m_settings.m_cameraOffset >= 0)
-        && (forceAllParams || (m_lastAlpacaOffset != m_settings.m_cameraOffset));
-    const bool setReadoutMode = forceAllParams || (m_lastAlpacaReadoutMode != m_settings.m_cameraReadoutMode);
+        && (forceAllParams || (m_alpaca.m_lastOffset != m_settings.m_cameraOffset));
+    const bool setReadoutMode = forceAllParams || (m_alpaca.m_lastReadoutMode != m_settings.m_cameraReadoutMode);
 
     auto doStartExposure = [this]() {
         if (m_capturing) {
-            m_alpacaParamsInitialized = true;
+            m_alpaca.m_paramsInitialized = true;
             alpacaStartExposure();
         } else {
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_frameRequestPending = false;
         }
     };
 
     auto handleParamFailure = [this](int errorNumber, const QString& errorMessage) {
-        m_lastAlpacaErrorNumber = errorNumber;
-        m_lastAlpacaErrorMessage = errorMessage;
-        m_alpacaFrameRequestPending = false;
+        m_alpaca.m_lastErrorNumber = errorNumber;
+        m_alpaca.m_lastErrorMessage = errorMessage;
+        m_alpaca.m_frameRequestPending = false;
         reportAlpacaStatusToGUI();
         scheduleNextCaptureAfterFailure();
     };
 
     auto doReadoutMode = [this, baseUrl, camId, doStartExposure, setReadoutMode, handleParamFailure]() {
-        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
         if (setReadoutMode) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "readoutmode", "ReadoutMode",
-                m_settings.m_cameraReadoutMode, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doStartExposure,
-                [this]() { m_lastAlpacaReadoutMode = m_settings.m_cameraReadoutMode; },
+                m_settings.m_cameraReadoutMode, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doStartExposure,
+                [this]() { m_alpaca.m_lastReadoutMode = m_settings.m_cameraReadoutMode; },
                 handleParamFailure);
         } else {
             doStartExposure();
@@ -1882,11 +1836,11 @@ void CameraWorker::alpacaSetCameraParams()
     };
 
     auto doOffset = [this, baseUrl, camId, doReadoutMode, setOffset, handleParamFailure]() {
-        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
         if (setOffset) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "offset", "Offset",
-                m_settings.m_cameraOffset, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doReadoutMode,
-                [this]() { m_lastAlpacaOffset = m_settings.m_cameraOffset; },
+                m_settings.m_cameraOffset, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doReadoutMode,
+                [this]() { m_alpaca.m_lastOffset = m_settings.m_cameraOffset; },
                 handleParamFailure);
         } else {
             doReadoutMode();
@@ -1894,11 +1848,11 @@ void CameraWorker::alpacaSetCameraParams()
     };
 
     auto doGain = [this, baseUrl, camId, doOffset, setGain, handleParamFailure]() {
-        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
         if (setGain) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "gain", "Gain",
-                m_settings.m_cameraGain, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doOffset,
-                [this]() { m_lastAlpacaGain = m_settings.m_cameraGain; },
+                m_settings.m_cameraGain, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doOffset,
+                [this]() { m_alpaca.m_lastGain = m_settings.m_cameraGain; },
                 handleParamFailure);
         } else {
             doOffset();
@@ -1906,14 +1860,14 @@ void CameraWorker::alpacaSetCameraParams()
     };
 
     auto doAxisY = [this, baseUrl, camId, doGain, setNumY, setStartY, effectiveNumY, handleParamFailure]() {
-        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
 
         std::function<void()> maybeSetStartYAfterNum = [this, baseUrl, camId, doGain, setStartY, handleParamFailure]() {
-            if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+            if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
             if (setStartY) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "starty", "StartY",
-                    m_settings.m_cameraStartY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doGain,
-                    [this]() { m_lastAlpacaStartY = m_settings.m_cameraStartY; },
+                    m_settings.m_cameraStartY, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doGain,
+                    [this]() { m_alpaca.m_lastStartY = m_settings.m_cameraStartY; },
                     handleParamFailure);
             } else {
                 doGain();
@@ -1921,13 +1875,13 @@ void CameraWorker::alpacaSetCameraParams()
         };
 
         std::function<void()> maybeSetNumYAfterStart = [this, baseUrl, camId, doGain, setNumY, effectiveNumY, handleParamFailure]() {
-            if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+            if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
             if (setNumY) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
-                    effectiveNumY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doGain,
+                    effectiveNumY, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doGain,
                     [this, effectiveNumY]() {
-                        m_lastAlpacaNumY = m_settings.m_cameraNumY;
-                        m_lastAlpacaEffectiveNumY = effectiveNumY;
+                        m_alpaca.m_lastNumY = m_settings.m_cameraNumY;
+                        m_alpaca.m_lastEffectiveNumY = effectiveNumY;
                     },
                     handleParamFailure);
             } else {
@@ -1935,20 +1889,20 @@ void CameraWorker::alpacaSetCameraParams()
             }
         };
 
-        if (setStartY && (m_settings.m_cameraStartY < m_lastAlpacaStartY))
+        if (setStartY && (m_settings.m_cameraStartY < m_alpaca.m_lastStartY))
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "starty", "StartY",
-                m_settings.m_cameraStartY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetNumYAfterStart,
-                [this]() { m_lastAlpacaStartY = m_settings.m_cameraStartY; },
+                m_settings.m_cameraStartY, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetNumYAfterStart,
+                [this]() { m_alpaca.m_lastStartY = m_settings.m_cameraStartY; },
                 handleParamFailure);
         }
         else if (setNumY)
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numy", "NumY",
-                effectiveNumY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetStartYAfterNum,
+                effectiveNumY, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetStartYAfterNum,
                 [this, effectiveNumY]() {
-                    m_lastAlpacaNumY = m_settings.m_cameraNumY;
-                    m_lastAlpacaEffectiveNumY = effectiveNumY;
+                    m_alpaca.m_lastNumY = m_settings.m_cameraNumY;
+                    m_alpaca.m_lastEffectiveNumY = effectiveNumY;
                 },
                 handleParamFailure);
         }
@@ -1959,14 +1913,14 @@ void CameraWorker::alpacaSetCameraParams()
     };
 
     auto doAxisX = [this, baseUrl, camId, doAxisY, setNumX, setStartX, effectiveNumX, handleParamFailure]() {
-        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
 
         std::function<void()> maybeSetStartXAfterNum = [this, baseUrl, camId, doAxisY, setStartX, handleParamFailure]() {
-            if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+            if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
             if (setStartX) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "startx", "StartX",
-                    m_settings.m_cameraStartX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisY,
-                    [this]() { m_lastAlpacaStartX = m_settings.m_cameraStartX; },
+                    m_settings.m_cameraStartX, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisY,
+                    [this]() { m_alpaca.m_lastStartX = m_settings.m_cameraStartX; },
                     handleParamFailure);
             } else {
                 doAxisY();
@@ -1974,13 +1928,13 @@ void CameraWorker::alpacaSetCameraParams()
         };
 
         std::function<void()> maybeSetNumXAfterStart = [this, baseUrl, camId, doAxisY, setNumX, effectiveNumX, handleParamFailure]() {
-            if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+            if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
             if (setNumX) {
                 alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
-                    effectiveNumX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisY,
+                    effectiveNumX, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisY,
                     [this, effectiveNumX]() {
-                        m_lastAlpacaNumX = m_settings.m_cameraNumX;
-                        m_lastAlpacaEffectiveNumX = effectiveNumX;
+                        m_alpaca.m_lastNumX = m_settings.m_cameraNumX;
+                        m_alpaca.m_lastEffectiveNumX = effectiveNumX;
                     },
                     handleParamFailure);
             } else {
@@ -1988,20 +1942,20 @@ void CameraWorker::alpacaSetCameraParams()
             }
         };
 
-        if (setStartX && (m_settings.m_cameraStartX < m_lastAlpacaStartX))
+        if (setStartX && (m_settings.m_cameraStartX < m_alpaca.m_lastStartX))
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "startx", "StartX",
-                m_settings.m_cameraStartX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetNumXAfterStart,
-                [this]() { m_lastAlpacaStartX = m_settings.m_cameraStartX; },
+                m_settings.m_cameraStartX, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetNumXAfterStart,
+                [this]() { m_alpaca.m_lastStartX = m_settings.m_cameraStartX; },
                 handleParamFailure);
         }
         else if (setNumX)
         {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "numx", "NumX",
-                effectiveNumX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetStartXAfterNum,
+                effectiveNumX, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, maybeSetStartXAfterNum,
                 [this, effectiveNumX]() {
-                    m_lastAlpacaNumX = m_settings.m_cameraNumX;
-                    m_lastAlpacaEffectiveNumX = effectiveNumX;
+                    m_alpaca.m_lastNumX = m_settings.m_cameraNumX;
+                    m_alpaca.m_lastEffectiveNumX = effectiveNumX;
                 },
                 handleParamFailure);
         }
@@ -2012,11 +1966,11 @@ void CameraWorker::alpacaSetCameraParams()
     };
 
     auto doBinY = [this, baseUrl, camId, doAxisX, setBinY, handleParamFailure]() {
-        if (!m_capturing) { m_alpacaFrameRequestPending = false; return; }
+        if (!m_capturing) { m_alpaca.m_frameRequestPending = false; return; }
         if (setBinY) {
             alpacaPutIntProperty(m_networkManager, baseUrl, camId, "biny", "BinY",
-                m_settings.m_cameraBinY, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisX,
-                [this]() { m_lastAlpacaBinY = m_settings.m_cameraBinY; },
+                m_settings.m_cameraBinY, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doAxisX,
+                [this]() { m_alpaca.m_lastBinY = m_settings.m_cameraBinY; },
                 handleParamFailure);
         } else {
             doAxisX();
@@ -2025,8 +1979,8 @@ void CameraWorker::alpacaSetCameraParams()
 
     if (setBinX) {
         alpacaPutIntProperty(m_networkManager, baseUrl, camId, "binx", "BinX",
-            m_settings.m_cameraBinX, m_alpacaClientId, m_alpacaClientTransactionId, m_settings.m_alpacaApiLogEnabled, doBinY,
-            [this]() { m_lastAlpacaBinX = m_settings.m_cameraBinX; },
+            m_settings.m_cameraBinX, m_alpaca.m_clientId, m_alpaca.m_clientTransactionId, m_settings.m_alpacaApiLogEnabled, doBinY,
+            [this]() { m_alpaca.m_lastBinX = m_settings.m_cameraBinX; },
             handleParamFailure);
     } else {
         doBinY();
@@ -2044,8 +1998,8 @@ void CameraWorker::alpacaStartExposure()
     QUrlQuery body;
     body.addQueryItem("Duration", QString::number(durationSecs, 'f', 6)); // 6 needed for microsecond precision
     body.addQueryItem("Light", "True");
-    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    body.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
 
     const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
     logAlpacaRequest("PUT", url, payload);
@@ -2057,15 +2011,15 @@ void CameraWorker::alpacaStartExposure()
         reply->deleteLater();
 
         if (!m_capturing) {
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_frameRequestPending = false;
             return;
         }
 
         if (reply->error() != QNetworkReply::NoError) {
             qDebug() << "CameraWorker::alpacaStartExposure: error:" << reply->errorString();
-            m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-            m_lastAlpacaErrorMessage = reply->errorString();
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+            m_alpaca.m_lastErrorMessage = reply->errorString();
+            m_alpaca.m_frameRequestPending = false;
             reportAlpacaStatusToGUI();
             scheduleNextCaptureAfterFailure();
             return;
@@ -2076,24 +2030,24 @@ void CameraWorker::alpacaStartExposure()
         if (CameraAlpacaController::parseErrorPayload(responseBody, alpacaErrorNumber, alpacaErrorMessage)
             && (alpacaErrorNumber != 0))
         {
-            m_lastAlpacaErrorNumber = alpacaErrorNumber;
-            m_lastAlpacaErrorMessage = alpacaErrorMessage;
+            m_alpaca.m_lastErrorNumber = alpacaErrorNumber;
+            m_alpaca.m_lastErrorMessage = alpacaErrorMessage;
             qDebug() << "CameraWorker::alpacaStartExposure: Alpaca error"
-                     << m_lastAlpacaErrorNumber << m_lastAlpacaErrorMessage;
-            m_alpacaFrameRequestPending = false;
+                     << m_alpaca.m_lastErrorNumber << m_alpaca.m_lastErrorMessage;
+            m_alpaca.m_frameRequestPending = false;
             reportAlpacaStatusToGUI();
             scheduleNextCaptureAfterFailure();
             return;
         }
 
-        m_alpacaExposureSeenActive = false;
+        m_alpaca.m_exposureSeenActive = false;
 
         // Wait for the exposure duration before polling imageready
         QTimer::singleShot(static_cast<int>(std::ceil(exposureTimeMs)), this, [this]() {
             if (m_capturing) {
                 alpacaCheckImageReady();
             } else {
-                m_alpacaFrameRequestPending = false;
+                m_alpaca.m_frameRequestPending = false;
             }
         });
     });
@@ -2106,8 +2060,8 @@ void CameraWorker::alpacaAbortExposure()
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
     QUrlQuery body;
-    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    body.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
 
     const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
     logAlpacaRequest("PUT", url, payload);
@@ -2139,8 +2093,8 @@ void CameraWorker::alpacaCheckImageReady()
 {
     QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imageready").arg(m_settings.cameraIdInt()));
     QUrlQuery query;
-    query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-    query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    query.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+    query.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
     url.setQuery(query);
 
     logAlpacaRequest("GET", url);
@@ -2152,15 +2106,15 @@ void CameraWorker::alpacaCheckImageReady()
         reply->deleteLater();
 
         if (!m_capturing) {
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_frameRequestPending = false;
             return;
         }
 
         if (reply->error() != QNetworkReply::NoError)
         {
-            m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-            m_lastAlpacaErrorMessage = reply->errorString();
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+            m_alpaca.m_lastErrorMessage = reply->errorString();
+            m_alpaca.m_frameRequestPending = false;
             reportAlpacaStatusToGUI();
             scheduleNextCaptureAfterFailure();
             return;
@@ -2171,9 +2125,9 @@ void CameraWorker::alpacaCheckImageReady()
         if (CameraAlpacaController::parseErrorPayload(responseBody, alpacaErrorNumber, alpacaErrorMessage)
             && (alpacaErrorNumber != 0))
         {
-            m_lastAlpacaErrorNumber = alpacaErrorNumber;
-            m_lastAlpacaErrorMessage = alpacaErrorMessage;
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_lastErrorNumber = alpacaErrorNumber;
+            m_alpaca.m_lastErrorMessage = alpacaErrorMessage;
+            m_alpaca.m_frameRequestPending = false;
             reportAlpacaStatusToGUI();
             scheduleNextCaptureAfterFailure();
             return;
@@ -2198,8 +2152,8 @@ void CameraWorker::alpacaCheckCameraStateForImageReady()
 {
     QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/camerastate").arg(m_settings.cameraIdInt()));
     QUrlQuery query;
-    query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-    query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    query.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+    query.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
     url.setQuery(query);
 
     logAlpacaRequest("GET", url);
@@ -2211,15 +2165,15 @@ void CameraWorker::alpacaCheckCameraStateForImageReady()
         reply->deleteLater();
 
         if (!m_capturing) {
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_frameRequestPending = false;
             return;
         }
 
         if (reply->error() != QNetworkReply::NoError)
         {
-            m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-            m_lastAlpacaErrorMessage = reply->errorString();
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+            m_alpaca.m_lastErrorMessage = reply->errorString();
+            m_alpaca.m_frameRequestPending = false;
             reportAlpacaStatusToGUI();
             scheduleNextCaptureAfterFailure();
             return;
@@ -2230,9 +2184,9 @@ void CameraWorker::alpacaCheckCameraStateForImageReady()
         if (CameraAlpacaController::parseErrorPayload(responseBody, alpacaErrorNumber, alpacaErrorMessage)
             && (alpacaErrorNumber != 0))
         {
-            m_lastAlpacaErrorNumber = alpacaErrorNumber;
-            m_lastAlpacaErrorMessage = alpacaErrorMessage;
-            m_alpacaFrameRequestPending = false;
+            m_alpaca.m_lastErrorNumber = alpacaErrorNumber;
+            m_alpaca.m_lastErrorMessage = alpacaErrorMessage;
+            m_alpaca.m_frameRequestPending = false;
             reportAlpacaStatusToGUI();
             scheduleNextCaptureAfterFailure();
             return;
@@ -2245,17 +2199,17 @@ void CameraWorker::alpacaCheckCameraStateForImageReady()
         }
 
         if (cameraState > 0) {
-            m_alpacaExposureSeenActive = true;
+            m_alpaca.m_exposureSeenActive = true;
         }
 
-        if ((cameraState == 0) && m_alpacaExposureSeenActive) {
+        if ((cameraState == 0) && m_alpaca.m_exposureSeenActive) {
             alpacaFetchImageArray();
         } else {
             QTimer::singleShot(m_alpacaImageReadyPollIntervalMs, this, [this]() {
                 if (m_capturing) {
                     alpacaCheckImageReady();
                 } else {
-                    m_alpacaFrameRequestPending = false;
+                    m_alpaca.m_frameRequestPending = false;
                 }
             });
         }
@@ -2266,13 +2220,13 @@ void CameraWorker::alpacaFetchImageArray()
 {
     QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imagearray").arg(m_settings.cameraIdInt()));
     QUrlQuery query;
-    query.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-    query.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+    query.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+    query.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
     url.setQuery(query);
 
     QNetworkRequest request(url);
     // Signal support for the faster binary ImageBytes protocol; server falls back to JSON if unsupported
-    if (m_alpacaImageBytesSupported) {
+    if (m_alpaca.m_imageBytesSupported) {
         request.setRawHeader("Accept", "application/imagebytes");
     }
 
@@ -2280,7 +2234,7 @@ void CameraWorker::alpacaFetchImageArray()
     QNetworkReply *reply = m_networkManager->get(request);
 
     QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        m_alpacaFrameRequestPending = false;
+        m_alpaca.m_frameRequestPending = false;
         const QByteArray data = reply->readAll();
         logAlpacaResponse("GET", reply->request().url(), reply, data);
 
@@ -2291,8 +2245,8 @@ void CameraWorker::alpacaFetchImageArray()
 
         if (reply->error() != QNetworkReply::NoError)
         {
-            m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-            m_lastAlpacaErrorMessage = reply->errorString();
+            m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+            m_alpaca.m_lastErrorMessage = reply->errorString();
             reportAlpacaStatusToGUI();
             scheduleNextCaptureAfterFailure();
             reply->deleteLater();
@@ -2309,15 +2263,15 @@ void CameraWorker::alpacaFetchImageArray()
             int imageBytesErrorNumber = 0;
             if (CameraAlpacaController::parseImageBytesError(data, imageBytesErrorNumber) && (imageBytesErrorNumber != 0))
             {
-                m_lastAlpacaErrorNumber = imageBytesErrorNumber;
-                m_lastAlpacaErrorMessage = QStringLiteral("ImageBytes Alpaca error %1").arg(imageBytesErrorNumber);
+                m_alpaca.m_lastErrorNumber = imageBytesErrorNumber;
+                m_alpaca.m_lastErrorMessage = QStringLiteral("ImageBytes Alpaca error %1").arg(imageBytesErrorNumber);
                 reportAlpacaStatusToGUI();
                 scheduleNextCaptureAfterFailure();
                 reply->deleteLater();
                 return;
             }
 
-            m_alpacaImageBytesSupported = true;
+            m_alpaca.m_imageBytesSupported = true;
             image = parseAlpacaImageBytes(data, &receiveImageFormat, &bayerPattern);
         }
         else
@@ -2327,8 +2281,8 @@ void CameraWorker::alpacaFetchImageArray()
             if (CameraAlpacaController::parseErrorPayload(data, alpacaErrorNumber, alpacaErrorMessage)
                 && (alpacaErrorNumber != 0))
             {
-                m_lastAlpacaErrorNumber = alpacaErrorNumber;
-                m_lastAlpacaErrorMessage = alpacaErrorMessage;
+                m_alpaca.m_lastErrorNumber = alpacaErrorNumber;
+                m_alpaca.m_lastErrorMessage = alpacaErrorMessage;
                 reportAlpacaStatusToGUI();
                 scheduleNextCaptureAfterFailure();
                 reply->deleteLater();
@@ -2336,19 +2290,19 @@ void CameraWorker::alpacaFetchImageArray()
             }
 
             // Server returned JSON - either it doesn't support ImageBytes or we didn't request it
-            if (m_alpacaImageBytesSupported) {
+            if (m_alpaca.m_imageBytesSupported) {
                 qDebug() << "CameraWorker::alpacaFetchImageArray: server returned JSON; disabling ImageBytes for this camera";
-                m_alpacaImageBytesSupported = false;
+                m_alpaca.m_imageBytesSupported = false;
             }
             image = parseAlpacaImageArray(data, &receiveImageFormat, &bayerPattern);
         }
 
-        m_lastAlpacaReceiveImageFormat = receiveImageFormat;
+        m_alpaca.m_lastReceiveImageFormat = receiveImageFormat;
 
-        if (m_alpacaCaptureTimer.isValid())
+        if (m_alpaca.m_captureTimer.isValid())
         {
-            m_lastAlpacaCaptureTimeMs = m_alpacaCaptureTimer.elapsed();
-            m_alpacaCaptureTimer.invalidate();
+            m_alpaca.m_lastCaptureTimeMs = m_alpaca.m_captureTimer.elapsed();
+            m_alpaca.m_captureTimer.invalidate();
         }
 
         if (m_framePreprocessor) {
@@ -2372,7 +2326,7 @@ void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuat
 
     // Reset ImageBytes support flag so we re-probe support for the new camera;
     // cameras on the same Alpaca server may have different capabilities.
-    m_alpacaImageBytesSupported = true;
+    m_alpaca.m_imageBytesSupported = true;
 
     const QString baseUrl = buildAlpacaBaseUrl();
     const int camId = m_settings.cameraIdInt();
@@ -2426,16 +2380,16 @@ void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuat
             return;
         }
 
-        m_alpacaSensorType = info->sensorType;
-        m_alpacaCameraSizeX = std::max(0, info->cameraSizeX);
-        m_alpacaCameraSizeY = std::max(0, info->cameraSizeY);
-        m_alpacaBayerOffsetX = info->bayerOffsetX;
-        m_alpacaBayerOffsetY = info->bayerOffsetY;
+        m_alpaca.m_sensorType = info->sensorType;
+        m_alpaca.m_cameraSizeX = std::max(0, info->cameraSizeX);
+        m_alpaca.m_cameraSizeY = std::max(0, info->cameraSizeY);
+        m_alpaca.m_bayerOffsetX = info->bayerOffsetX;
+        m_alpaca.m_bayerOffsetY = info->bayerOffsetY;
         info->exposureMinMs = std::max(0.001, info->exposureMinMs);
         info->exposureResolutionMs = std::max(0.001, info->exposureResolutionMs);
         info->exposureMaxMs = std::max(info->exposureMinMs, info->exposureMaxMs);
-        m_alpacaExposureMinMs = info->exposureMinMs;
-        m_alpacaExposureMaxMs = info->exposureMaxMs;
+        m_alpaca.m_exposureMinMs = info->exposureMinMs;
+        m_alpaca.m_exposureMaxMs = info->exposureMaxMs;
 
         if (m_msgQueueToGUI) {
             m_msgQueueToGUI->push(MsgReportAlpacaCameraInfo::create(
@@ -2459,8 +2413,8 @@ void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuat
     auto query = [this, baseUrl, camId, info, checkDone](const QString& prop) {
         QUrl url(baseUrl + QString("/api/v1/camera/%1/%2").arg(camId).arg(prop));
         QUrlQuery q;
-        q.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-        q.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+        q.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+        q.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
         url.setQuery(q);
         logAlpacaRequest("GET", url);
 
@@ -2588,8 +2542,8 @@ void CameraWorker::alpacaPollStatus()
     auto makeGet = [this, baseUrl, camId](const QString& prop) {
         QUrl url(baseUrl + QString("/api/v1/camera/%1/%2").arg(camId).arg(prop));
         QUrlQuery q;
-        q.addQueryItem("ClientID", QString::number(m_alpacaClientId));
-        q.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+        q.addQueryItem("ClientID", QString::number(m_alpaca.m_clientId));
+        q.addQueryItem("ClientTransactionID", QString::number(m_alpaca.m_clientTransactionId++));
         url.setQuery(q);
         logAlpacaRequest("GET", url);
         return m_networkManager->get(QNetworkRequest(url));
@@ -2680,13 +2634,13 @@ void CameraWorker::logAlpacaResponse(const QString& method, const QUrl& url, QNe
 
     if (reply->error() != QNetworkReply::NoError)
     {
-        m_lastAlpacaErrorNumber = static_cast<int>(reply->error());
-        m_lastAlpacaErrorMessage = reply->errorString();
+        m_alpaca.m_lastErrorNumber = static_cast<int>(reply->error());
+        m_alpaca.m_lastErrorMessage = reply->errorString();
     }
     else if (alpacaPayloadParsed && !optionalCapabilityUnavailable)
     {
-        m_lastAlpacaErrorNumber = alpacaErrorNumber;
-        m_lastAlpacaErrorMessage = alpacaErrorMessage;
+        m_alpaca.m_lastErrorNumber = alpacaErrorNumber;
+        m_alpaca.m_lastErrorMessage = alpacaErrorMessage;
     }
 
     if (!m_settings.m_alpacaApiLogEnabled) {
@@ -2744,10 +2698,10 @@ void CameraWorker::reportAlpacaStatusToGUI(int cameraState, double ccdTemperatur
         cameraState,
         ccdTemperature,
         ccdTemperatureValid,
-        m_lastAlpacaCaptureTimeMs,
-        m_lastAlpacaReceiveImageFormat,
-        m_lastAlpacaErrorNumber,
-        m_lastAlpacaErrorMessage));
+        m_alpaca.m_lastCaptureTimeMs,
+        m_alpaca.m_lastReceiveImageFormat,
+        m_alpaca.m_lastErrorNumber,
+        m_alpaca.m_lastErrorMessage));
 }
 
 QImage CameraWorker::parseAlpacaImageArray(const QByteArray& payload, QString *receiveImageFormat,
@@ -2897,10 +2851,10 @@ QImage CameraWorker::renderRawPixelArray(const QVector<QVector<int>>& raw, int w
         }
     }
 
-    if (m_alpacaSensorType == 2)
+    if (m_alpaca.m_sensorType == 2)
     {
-        const int phaseX = ((m_alpacaBayerOffsetX % 2) + 2) % 2;
-        const int phaseY = ((m_alpacaBayerOffsetY % 2) + 2) % 2;
+        const int phaseX = ((m_alpaca.m_bayerOffsetX % 2) + 2) % 2;
+        const int phaseY = ((m_alpaca.m_bayerOffsetY % 2) + 2) % 2;
 
         if (bayerPattern)
         {

@@ -40,6 +40,7 @@
 #include "util/messagequeue.h"
 #include "audio/audiofifo.h"
 #include "availabledevicehandler.h"
+#include "cameraalpacacontroller.h"
 #include "cameraasicontroller.h"
 #include "camerainfo.h"
 #include "camerapipelineframe.h"
@@ -511,47 +512,8 @@ private:
     CameraFinder *m_cameraFinder;
     int m_stackFrameIndex;
     int m_hdrExposureIndex;
-    bool m_alpacaFrameRequestPending;
-    quint32 m_alpacaClientId;
-    quint32 m_alpacaClientTransactionId;
-    int m_alpacaSensorType;          // 0=Mono, 1=Colour, 2=RGGB, 3=CMYG, 4=CMYG2, 5=LRGB
-    int m_alpacaCameraSizeX;
-    int m_alpacaCameraSizeY;
-    int m_alpacaBayerOffsetX;
-    int m_alpacaBayerOffsetY;
-    bool m_alpacaImageBytesSupported; // true = try ImageBytes binary protocol; false = use JSON
-    int m_lastAlpacaErrorNumber;
-    QString m_lastAlpacaErrorMessage;
-    QString m_lastAlpacaReceiveImageFormat;
-    bool m_alpacaConnected;
-    bool m_alpacaConnectionPending;
-    QVector<std::function<void()>> m_alpacaPendingConnectedContinuations;
-    bool m_alpacaFocuserConnected;
-    bool m_alpacaFocuserConnectionPending;
-    QVector<std::function<void()>> m_alpacaPendingFocuserConnectedContinuations;
-    bool m_alpacaFilterWheelConnected;
-    bool m_alpacaFilterWheelConnectionPending;
-    QVector<std::function<void()>> m_alpacaPendingFilterWheelConnectedContinuations;
-    bool m_alpacaBootstrapPending;
-    QVector<std::function<void()>> m_alpacaPendingBootstrapContinuations;
-    bool m_alpacaParamsInitialized;
-    bool m_alpacaExposureSeenActive;
-    int m_lastAlpacaBinX;
-    int m_lastAlpacaBinY;
-    int m_lastAlpacaNumX;
-    int m_lastAlpacaNumY;
-    int m_lastAlpacaEffectiveNumX;
-    int m_lastAlpacaEffectiveNumY;
-    int m_lastAlpacaStartX;
-    int m_lastAlpacaStartY;
-    int m_lastAlpacaGain;
-    int m_lastAlpacaOffset;
-    int m_lastAlpacaReadoutMode;
-    double m_alpacaExposureMinMs;
-    double m_alpacaExposureMaxMs;
+    CameraAlpacaController m_alpaca;
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature
-    QElapsedTimer m_alpacaCaptureTimer;
-    qint64 m_lastAlpacaCaptureTimeMs;
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
 #ifdef ASICAMERA_FOUND
     CameraAsiController m_asi;

@@ -27,9 +27,12 @@
 #endif
 
 #include "util/profiler.h"
+#include "maincore.h"
+#include "camera.h"
 #include "cameramotiondetector.h"
 
-CameraMotionDetector::CameraMotionDetector() :
+CameraMotionDetector::CameraMotionDetector(Camera *camera) :
+    m_camera(camera),
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     m_cudaMotionOpenFilterSize(0),
     m_cudaMotionOpenFilterType(-1),
@@ -37,7 +40,8 @@ CameraMotionDetector::CameraMotionDetector() :
     m_cudaMotionCloseFilterType(-1),
 #endif
     m_motionPersistenceRemaining(0),
-    m_motionConfirmCount(0)
+    m_motionConfirmCount(0),
+    m_motionEventActive(false)
 {
 }
 
@@ -48,6 +52,13 @@ void CameraMotionDetector::applySettings(const CameraSettings& settings, const Q
     qDebug() << "CameraMotionDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
+
+    if (m_motionEventActive
+        && ((force && !m_settings.m_motionDetect)
+            || (settingsKeys.contains("motionDetect") && !m_settings.m_motionDetect)))
+    {
+        updateMotionEventState(false, QDateTime::currentDateTime(), QStringLiteral("boxes=0"));
+    }
 
     if (force
         || settingsKeys.contains("motionDetect")
@@ -95,6 +106,7 @@ void CameraMotionDetector::applySettings(const CameraSettings& settings, const Q
         m_lastMotionBoxes.clear();
         m_motionPersistenceRemaining = 0;
         m_motionConfirmCount = 0;
+        updateMotionEventState(false, QDateTime::currentDateTime(), QStringLiteral("boxes=0"));
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
         invalidateCudaMotionCaches();
 #endif
@@ -103,7 +115,9 @@ void CameraMotionDetector::applySettings(const CameraSettings& settings, const Q
 
 void CameraMotionDetector::captureActiveChanged(bool active)
 {
-    if (!active) {
+    if (!active)
+    {
+        updateMotionEventState(false, QDateTime::currentDateTime(), QStringLiteral("boxes=0"));
         return;
     }
 
@@ -117,6 +131,7 @@ void CameraMotionDetector::captureActiveChanged(bool active)
     m_lastMotionBoxes.clear();
     m_motionPersistenceRemaining = 0;
     m_motionConfirmCount = 0;
+    m_motionEventActive = false;
 }
 
 void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
@@ -129,6 +144,7 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 
     if (!m_settings.m_motionDetect)
     {
+        updateMotionEventState(false, frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime(), QStringLiteral("boxes=0"));
         forwardFrame(frame);
         return;
     }
@@ -185,7 +201,51 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->clearCudaCache();
     }
 
+    QString eventData = QStringLiteral("boxes=%1").arg(frame->m_motionBoxes.size());
+    if (!frame->m_motionBoxes.isEmpty())
+    {
+        const QRect& box = frame->m_motionBoxes.first();
+        eventData += QStringLiteral(",x=%1,y=%2,width=%3,height=%4")
+            .arg(box.x())
+            .arg(box.y())
+            .arg(box.width())
+            .arg(box.height());
+    }
+
+    updateMotionEventState(
+        !frame->m_motionBoxes.isEmpty(),
+        frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime(),
+        eventData);
+
     forwardFrame(frame);
+}
+
+void CameraMotionDetector::updateMotionEventState(bool motionDetected, const QDateTime& eventTime, const QString& eventData)
+{
+    if (motionDetected == m_motionEventActive) {
+        return;
+    }
+
+    sendEvent(motionDetected, eventTime, eventData);
+    m_motionEventActive = motionDetected;
+}
+
+void CameraMotionDetector::sendEvent(bool detected, const QDateTime& eventTime, const QString& eventData)
+{
+    if (!m_camera) {
+        return;
+    }
+
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_camera, "event", eventPipes);
+    MainCore::MsgEvent::EventType eventType = detected
+        ? MainCore::MsgEvent::EventType::CameraMotionDetectedEvent
+        : MainCore::MsgEvent::EventType::CameraMotionStoppedEvent;
+    for (const auto& pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        messageQueue->push(MainCore::MsgEvent::create(m_camera, eventTime, eventType, eventData));
+    }
 }
 
 cv::Ptr<cv::BackgroundSubtractor> CameraMotionDetector::createBackgroundSubtractor() const

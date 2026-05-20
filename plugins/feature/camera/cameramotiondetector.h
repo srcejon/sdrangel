@@ -27,11 +27,13 @@
 
 #include "cameradetector.h"
 
+class Camera;
+
 class CameraMotionDetector : public CameraDetectionStage
 {
     Q_OBJECT
 public:
-    CameraMotionDetector();
+    explicit CameraMotionDetector(Camera *camera);
     ~CameraMotionDetector() override;
 
 protected:
@@ -40,6 +42,7 @@ protected:
     void processNewFrame(const CameraPipelineFramePtr& frame) override;
 
 private:
+    Camera *m_camera;
     cv::Ptr<cv::BackgroundSubtractor> m_bgSubtractor;
     cv::Mat m_motionLastFgMaskRaw;
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
@@ -60,6 +63,7 @@ private:
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;
     int m_motionConfirmCount;
+    bool m_motionEventActive;
 
     [[nodiscard]] cv::Ptr<cv::BackgroundSubtractor> createBackgroundSubtractor() const;
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
@@ -70,6 +74,8 @@ private:
     bool applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
 #endif
     void applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, bool updateBackgroundModel, cv::Mat* debugMask = nullptr);
+    void updateMotionEventState(bool motionDetected, const QDateTime& eventTime, const QString& eventData);
+    void sendEvent(bool detected, const QDateTime& eventTime, const QString& eventData);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAMOTIONDETECTOR_H_

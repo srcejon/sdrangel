@@ -515,6 +515,9 @@ CameraWorker::CameraWorker() :
     m_lastAlpacaGain(-1),
     m_lastAlpacaOffset(-1),
     m_lastAlpacaReadoutMode(0),
+    m_alpacaExposureMinMs(0.001),
+    m_alpacaExposureMaxMs(60000.0),
+    m_alpacaExposureResolutionMs(0.001),
     m_statusTimer(this),
     m_lastAlpacaCaptureTimeMs(-1),
     m_spectrumPipeSource(nullptr)
@@ -812,9 +815,15 @@ int CameraWorker::currentHdrExposureIndex() const
 
 double CameraWorker::currentCaptureExposureTimeMs() const
 {
-    return isHdrBracketingActive()
+    const double exposureTimeMs = isHdrBracketingActive()
         ? m_settings.getHdrExposureTimeMs(currentHdrExposureIndex())
         : std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_exposureTimeMs);
+
+    if (m_settings.isAlpacaCamera()) {
+        return qBound(m_alpacaExposureMinMs, exposureTimeMs, m_alpacaExposureMaxMs);
+    }
+
+    return exposureTimeMs;
 }
 
 void CameraWorker::advanceStackBurstState()
@@ -1227,6 +1236,10 @@ void CameraWorker::stopCapture()
     m_captureTimer.stop();
     m_alpacaCaptureTimer.invalidate();
     resetHdrBracketState();
+
+    if (m_settings.isAlpacaCamera() && m_networkManager && m_alpacaFrameRequestPending) {
+        alpacaAbortExposure();
+    }
 
 #ifdef ASICAMERA_FOUND
     ++m_asiContinuousCaptureGeneration;
@@ -2352,6 +2365,42 @@ void CameraWorker::alpacaStartExposure()
     });
 }
 
+void CameraWorker::alpacaAbortExposure()
+{
+    QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/abortexposure").arg(m_settings.cameraIdInt()));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QUrlQuery body;
+    body.addQueryItem("ClientID", QString::number(m_alpacaClientId));
+    body.addQueryItem("ClientTransactionID", QString::number(m_alpacaClientTransactionId++));
+
+    const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
+    logAlpacaRequest("PUT", url, payload);
+    QNetworkReply *reply = m_networkManager->put(request, payload);
+
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const QByteArray responseBody = reply->readAll();
+        logAlpacaResponse("PUT", reply->request().url(), reply, responseBody);
+        reply->deleteLater();
+
+        if (reply->error() != QNetworkReply::NoError)
+        {
+            qDebug() << "CameraWorker::alpacaAbortExposure: error:" << reply->errorString();
+            return;
+        }
+
+        int alpacaErrorNumber = 0;
+        QString alpacaErrorMessage;
+        if (parseAlpacaErrorPayload(responseBody, alpacaErrorNumber, alpacaErrorMessage)
+            && (alpacaErrorNumber != 0))
+        {
+            qDebug() << "CameraWorker::alpacaAbortExposure: Alpaca error"
+                     << alpacaErrorNumber << alpacaErrorMessage;
+        }
+    });
+}
+
 void CameraWorker::alpacaCheckImageReady()
 {
     QUrl url(buildAlpacaBaseUrl() + QString("/api/v1/camera/%1/imageready").arg(m_settings.cameraIdInt()));
@@ -2651,6 +2700,9 @@ void CameraWorker::alpacaQueryCameraCapabilities(std::function<void()> continuat
         info->exposureMinMs = std::max(0.001, info->exposureMinMs);
         info->exposureResolutionMs = std::max(0.001, info->exposureResolutionMs);
         info->exposureMaxMs = std::max(info->exposureMinMs, info->exposureMaxMs);
+        m_alpacaExposureMinMs = info->exposureMinMs;
+        m_alpacaExposureMaxMs = info->exposureMaxMs;
+        m_alpacaExposureResolutionMs = info->exposureResolutionMs;
 
         if (m_msgQueueToGUI) {
             m_msgQueueToGUI->push(MsgReportAlpacaCameraInfo::create(

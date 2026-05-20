@@ -546,6 +546,9 @@ private:
     int m_lastAlpacaGain;
     int m_lastAlpacaOffset;
     int m_lastAlpacaReadoutMode;
+    double m_alpacaExposureMinMs;
+    double m_alpacaExposureMaxMs;
+    double m_alpacaExposureResolutionMs;
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature
     QElapsedTimer m_alpacaCaptureTimer;
     qint64 m_lastAlpacaCaptureTimeMs;
@@ -633,6 +636,7 @@ private:
     static const int m_alpacaImageReadyPollIntervalMs = 100;
 
     void alpacaStartExposure();
+    void alpacaAbortExposure();
     void alpacaCheckImageReady();
     void alpacaCheckCameraStateForImageReady();
     void alpacaFetchImageArray();

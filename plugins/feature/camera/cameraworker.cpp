@@ -3621,6 +3621,8 @@ void CameraWorker::scheduleNextAsiVideoCapture(int delayMs)
 
 void CameraWorker::asiCaptureVideoFrame()
 {
+    PROFILER_START();
+
     const int cameraId = m_settings.cameraIdInt();
 
     if (!m_asiVideoCaptureStarted)
@@ -3666,6 +3668,8 @@ void CameraWorker::asiCaptureVideoFrame()
     }
 
     scheduleNextAsiVideoCapture(getVideoError == ASI_SUCCESS ? 0 : 10);
+
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraWorker::asiCaptureTick()

@@ -311,6 +311,7 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
 CameraHistogramData CameraImageProcessor::computeHistogramData(const QImage& image)
 {
+    PROFILER_START();
     CameraHistogramData histogramData;
 
     if (image.isNull()) {
@@ -344,6 +345,8 @@ CameraHistogramData CameraImageProcessor::computeHistogramData(const QImage& ima
     fillBins(2, histogramData.m_redBins);
     fillBins(1, histogramData.m_greenBins);
     fillBins(0, histogramData.m_blueBins);
+
+    PROFILER_STOP(__FUNCTION__);
     return histogramData;
 }
 

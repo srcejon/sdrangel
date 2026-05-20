@@ -958,6 +958,20 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         || settingsKeys.contains("captureIntervalUnits")
         || settingsKeys.contains("framesPerSecond")
         || stackCadenceChanged;
+    const bool recapture = m_capturing && (
+        cameraSourceChanged
+        || (m_settings.isQtCamera() && (force || settingsKeys.contains("audioDeviceName")))
+        || (m_settings.isAsiCamera() && captureModeChanged));
+
+    if (recapture)
+    {
+        stopCapture();
+#ifdef ASICAMERA_FOUND
+        if (cameraSourceChanged && m_settings.isAsiCamera()) {
+            asiCloseCamera();
+        }
+#endif
+    }
 
     if (force) {
         m_settings = settings;
@@ -990,17 +1004,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         m_cameraFinder->reportCameraList(m_settings);
     }
 
-    const bool recapture = m_capturing && (
-        cameraSourceChanged
-        || (m_settings.isQtCamera() && (force || settingsKeys.contains("audioDeviceName")))
-        || (m_settings.isAsiCamera() && captureModeChanged));
-
-    if (recapture)
-    {
-        stopCapture();
-        startCapture();
-    }
-    else if (m_capturing && (m_settings.isAlpacaCamera() || m_settings.isAsiCamera()) && captureCadenceChanged)
+    if (!recapture && m_capturing && (m_settings.isAlpacaCamera() || m_settings.isAsiCamera()) && captureCadenceChanged)
     {
         if (m_settings.isAsiCamera() && !m_settings.isIntervalCaptureMode())
         {
@@ -1138,6 +1142,10 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         if (m_postProcessorInputMessageQueue) {
             m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSpectrumFrame::create(QImage()));
         }
+    }
+
+    if (recapture) {
+        startCapture();
     }
 }
 

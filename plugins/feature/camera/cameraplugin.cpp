@@ -29,7 +29,7 @@
 const PluginDescriptor CameraPlugin::m_pluginDescriptor = {
     Camera::m_featureId,
     QStringLiteral("Camera"),
-    QStringLiteral("7.24.0"),
+    QStringLiteral("7.26.0"),
     QStringLiteral("(c) Jon Beniston, M7RCE"),
     QStringLiteral("https://github.com/srcejon/sdrangel"),
     true,

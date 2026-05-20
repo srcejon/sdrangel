@@ -26,6 +26,7 @@ The Camera plugin also supports a variety of post-processing, detection and over
 * Date/time and custom HTML overlay
 * Spectrum overlay from SDRangel's SDR devices
 * Azimuth/elevation and right ascension/declination sky grid overlays
+* CUDA acceleration is supported for most operations and the processing runs in multiple threads.
 
 Raw and post-processed images can be saved as JPEG files, and video can be recorded in H264-encoded MP4 files.
 

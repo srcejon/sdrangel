@@ -659,12 +659,16 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_settingsDialog = new CameraSettingsDialog(this);
     new DialogPositioner(m_settingsDialog, false);
 
+    settingsUI()->azimuthSpin->setDecimals(4);
     settingsUI()->azimuthSpin->setRange(
         static_cast<double>(CameraSettings::m_minAzimuth),
         static_cast<double>(CameraSettings::m_maxAzimuth));
+    settingsUI()->azimuthSpin->setSingleStep(0.01);
+    settingsUI()->elevationSpin->setDecimals(4);
     settingsUI()->elevationSpin->setRange(
         static_cast<double>(CameraSettings::m_minElevation),
         static_cast<double>(CameraSettings::m_maxElevation));
+    settingsUI()->elevationSpin->setSingleStep(0.01);
     settingsUI()->rollSpin->setRange(
         static_cast<double>(CameraSettings::m_minRoll),
         static_cast<double>(CameraSettings::m_maxRoll));
@@ -2355,8 +2359,10 @@ void CameraGUI::syncFromSelectedGs232Controller()
 
     double azimuth = 0.0;
     double elevation = 0.0;
-    if (!ChannelWebAPIUtils::getFeatureSetting(indices.first, indices.second, "azimuth", azimuth)
-        || !ChannelWebAPIUtils::getFeatureSetting(indices.first, indices.second, "elevation", elevation))
+    if ((!ChannelWebAPIUtils::getFeatureReportValue(indices.first, indices.second, "currentAzimuth", azimuth)
+            || !ChannelWebAPIUtils::getFeatureReportValue(indices.first, indices.second, "currentElevation", elevation))
+        && (!ChannelWebAPIUtils::getFeatureSetting(indices.first, indices.second, "azimuth", azimuth)
+            || !ChannelWebAPIUtils::getFeatureSetting(indices.first, indices.second, "elevation", elevation)))
     {
         return;
     }

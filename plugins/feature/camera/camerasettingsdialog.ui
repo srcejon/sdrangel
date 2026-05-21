@@ -5606,7 +5606,7 @@ Right-click: toggle continual synchronization from My Position.</string>
           <item row="1" column="1">
            <widget class="QDoubleSpinBox" name="azimuthSpin">
             <property name="decimals">
-             <number>2</number>
+             <number>4</number>
             </property>
             <property name="minimum">
              <double>0.000000000000000</double>
@@ -5615,7 +5615,7 @@ Right-click: toggle continual synchronization from My Position.</string>
              <double>180.000000000000000</double>
             </property>
             <property name="singleStep">
-             <double>0.100000000000000</double>
+             <double>0.010000000000000</double>
             </property>
            </widget>
           </item>
@@ -5629,7 +5629,7 @@ Right-click: toggle continual synchronization from My Position.</string>
           <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="elevationSpin">
             <property name="decimals">
-             <number>2</number>
+             <number>4</number>
             </property>
             <property name="minimum">
              <double>-90.000000000000000</double>
@@ -5638,7 +5638,7 @@ Right-click: toggle continual synchronization from My Position.</string>
              <double>90.000000000000000</double>
             </property>
             <property name="singleStep">
-             <double>0.100000000000000</double>
+             <double>0.010000000000000</double>
             </property>
            </widget>
           </item>

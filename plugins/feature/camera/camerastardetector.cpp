@@ -131,7 +131,9 @@ bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settin
         || settingsKeys.contains("plateSolveStartMode")
         || settingsKeys.contains("plateSolveUseCurrentDateTime")
         || settingsKeys.contains("plateSolveDateTime")
-        || settingsKeys.contains("plateSolveDateTimeUtc");
+        || settingsKeys.contains("plateSolveDateTimeUtc")
+        || settingsKeys.contains("plateSolveUseDownloadedCatalog")
+        || settingsKeys.contains("plateSolveCatalogSource");
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION

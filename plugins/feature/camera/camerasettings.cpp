@@ -328,6 +328,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveDateTime = QDateTime::currentDateTime();
     m_plateSolveDateTimeUtc = false;
     m_plateSolveUseDownloadedCatalog = false;
+    m_plateSolveCatalogSource = PlateSolveCatalogAuto;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
     m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
@@ -578,6 +579,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(210, m_videoRecordLimitSeconds);
     s.writeBool(211, m_postProcessUseCuda);
     s.writeBool(212, m_plateSolveDateTimeUtc);
+    s.writeS32(213, static_cast<qint32>(m_plateSolveCatalogSource));
 
     return s.final();
 }
@@ -832,6 +834,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(129, &m_plateSolveUseDownloadedCatalog, false);
         d.readBool(130, &m_plateSolveUseCurrentDateTime, true);
         d.readBool(212, &m_plateSolveDateTimeUtc, false);
+        qint32 plateSolveCatalogSource = static_cast<qint32>(PlateSolveCatalogAuto);
+        d.readS32(213, &plateSolveCatalogSource, plateSolveCatalogSource);
+        m_plateSolveCatalogSource = static_cast<PlateSolveCatalogSource>(plateSolveCatalogSource);
         qint64 plateSolveDateTimeMs = QDateTime::currentDateTime().toMSecsSinceEpoch();
         d.readS64(131, &plateSolveDateTimeMs, plateSolveDateTimeMs);
         m_plateSolveDateTime = QDateTime::fromMSecsSinceEpoch(
@@ -864,6 +869,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(qBound(0, static_cast<int>(m_plateSolveApplyMode), 3));
         m_plateSolveStartMode = static_cast<PlateSolveStartMode>(qBound(0, static_cast<int>(m_plateSolveStartMode), 6));
         m_plateSolveLabelMode = static_cast<PlateSolveLabelMode>(qBound(0, static_cast<int>(m_plateSolveLabelMode), 2));
+        m_plateSolveCatalogSource = static_cast<PlateSolveCatalogSource>(qBound(0, static_cast<int>(m_plateSolveCatalogSource), 2));
         m_lensCenterOffsetX = qBound(m_minLensCenterOffset, m_lensCenterOffsetX, m_maxLensCenterOffset);
         m_lensCenterOffsetY = qBound(m_minLensCenterOffset, m_lensCenterOffsetY, m_maxLensCenterOffset);
         m_lensDistortionK1 = qBound(m_minLensDistortionK1, m_lensDistortionK1, m_maxLensDistortionK1);
@@ -1551,6 +1557,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveUseDownloadedCatalog")) {
         m_plateSolveUseDownloadedCatalog = settings.m_plateSolveUseDownloadedCatalog;
     }
+    if (settingsKeys.contains("plateSolveCatalogSource")) {
+        m_plateSolveCatalogSource = settings.m_plateSolveCatalogSource;
+    }
     if (settingsKeys.contains("plateSolveApplyMode")) {
         m_plateSolveApplyMode = settings.m_plateSolveApplyMode;
     }
@@ -2159,6 +2168,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveUseDownloadedCatalog") || force) {
         ostr << " m_plateSolveUseDownloadedCatalog: " << m_plateSolveUseDownloadedCatalog;
+    }
+    if (settingsKeys.contains("plateSolveCatalogSource") || force) {
+        ostr << " m_plateSolveCatalogSource: " << static_cast<int>(m_plateSolveCatalogSource);
     }
     if (settingsKeys.contains("plateSolveLabelMode") || force) {
         ostr << " m_plateSolveLabelMode: " << static_cast<int>(m_plateSolveLabelMode);

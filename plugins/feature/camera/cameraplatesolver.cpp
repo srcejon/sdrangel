@@ -26,17 +26,25 @@
 
 #include <QDir>
 #include <QDebug>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QPointF>
 #include <QRectF>
+#include <QSet>
 #include <QStandardPaths>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
+#include <QUrl>
 #include <QVector>
+#include <QtEndian>
 
 #include <zlib.h>
 
@@ -81,7 +89,8 @@ struct VisibleCatalogStar
 
 struct PlateSolveCatalogContext
 {
-    const QVector<CatalogStar>* catalogStars = nullptr;
+    QVector<CatalogStar> catalogStars;
+    QString catalogSource;
     QVector<VisibleCatalogStar> visibleStars;
     QHash<int, int> visibleStarIndexByCatalogIndex;
 };
@@ -208,6 +217,17 @@ static constexpr const char* kDownloadedCatalogDir = "camera";
 static constexpr const char* kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
 static constexpr const char* kDownloadedCatalogCsvFile = "hyg_v42.csv";
 static constexpr const char* kDownloadedCatalogReducedFile = "hyg_v42_reduced.txt";
+static constexpr const char* kSirilSpccBaseUrl = "https://huggingface.co/datasets/siril-spcc/gaia/resolve/main";
+static constexpr const char* kSirilSpccFileNamePattern = "siril_cat1_healpix8_xpsamp_%1.dat";
+static constexpr int kSirilHealpixLevel = 8;
+static constexpr int kSirilNside = 1 << kSirilHealpixLevel;
+static constexpr int kSirilChunkLevel = 1;
+static constexpr int kSirilPixelsPerChunk = 1 << (2 * (kSirilHealpixLevel - kSirilChunkLevel));
+static constexpr int kSirilHeaderSize = 128;
+static constexpr int kSirilRecordSize = 701;
+static constexpr double kSirilAngleScale = 360.0 / 2147483647.0;
+static constexpr double kSirilAutoMaxFovDegrees = 15.0;
+static constexpr double kSirilMaxQueryRadiusDegrees = 20.0;
 
 CameraPlateSolveResult solve(const CameraSettings& settings,
                              const QSize& imageSize,
@@ -675,6 +695,332 @@ static QString currentCatalogSource(const CameraSettings& settings)
         : QStringLiteral("Bundled");
 }
 
+static QString sirilSpccChunkUrl(int chunkIndex)
+{
+    return QStringLiteral("%1/%2").arg(
+        QString::fromUtf8(kSirilSpccBaseUrl),
+        QString::fromUtf8(kSirilSpccFileNamePattern).arg(chunkIndex));
+}
+
+static QString sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastByte)
+{
+    return QStringLiteral("%1:%2:%3").arg(chunkIndex).arg(firstByte).arg(lastByte);
+}
+
+static QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastByte)
+{
+    static QMutex s_rangeCacheMutex;
+    static QHash<QString, QByteArray> s_rangeCache;
+
+    if ((chunkIndex < 0) || (firstByte < 0) || (lastByte < firstByte)) {
+        return {};
+    }
+
+    const QString cacheKey = sirilRangeCacheKey(chunkIndex, firstByte, lastByte);
+    {
+        QMutexLocker locker(&s_rangeCacheMutex);
+        const auto it = s_rangeCache.constFind(cacheKey);
+        if (it != s_rangeCache.constEnd()) {
+            return it.value();
+        }
+    }
+
+    QNetworkAccessManager manager;
+    QNetworkRequest request(QUrl(sirilSpccChunkUrl(chunkIndex)));
+    request.setRawHeader("Range", QByteArray("bytes=%1-%2").replace("%1", QByteArray::number(firstByte)).replace("%2", QByteArray::number(lastByte)));
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    QNetworkReply *reply = manager.get(request);
+    QEventLoop loop;
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start(30000);
+    loop.exec();
+
+    QByteArray data;
+    const bool timedOut = timeoutTimer.isActive() == false && !reply->isFinished();
+    if (timedOut)
+    {
+        reply->abort();
+        qWarning() << "CameraPlateSolver: Siril SPCC range request timed out"
+                   << "chunk" << chunkIndex << "bytes" << firstByte << lastByte;
+    }
+    else if (reply->error() != QNetworkReply::NoError)
+    {
+        qWarning() << "CameraPlateSolver: Siril SPCC range request failed"
+                   << "chunk" << chunkIndex << "bytes" << firstByte << lastByte
+                   << reply->errorString();
+    }
+    else
+    {
+        const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        data = reply->readAll();
+        if (((httpStatus != 206) && (httpStatus != 200)) || data.isEmpty())
+        {
+            qWarning() << "CameraPlateSolver: Siril SPCC range request returned unexpected response"
+                       << "chunk" << chunkIndex << "status" << httpStatus
+                       << "bytes" << firstByte << lastByte << "size" << data.size();
+            data.clear();
+        }
+    }
+    reply->deleteLater();
+
+    if (!data.isEmpty())
+    {
+        QMutexLocker locker(&s_rangeCacheMutex);
+        s_rangeCache.insert(cacheKey, data);
+    }
+
+    return data;
+}
+
+static quint32 interleaveHealpixBits(int x, int y)
+{
+    quint32 pixel = 0;
+    for (int bit = 0; bit < kSirilHealpixLevel; ++bit)
+    {
+        pixel |= ((static_cast<quint32>(x) >> bit) & 1u) << (2 * bit);
+        pixel |= ((static_cast<quint32>(y) >> bit) & 1u) << (2 * bit + 1);
+    }
+    return pixel;
+}
+
+static quint32 healpixNestedPixel(double rightAscensionDegrees, double declinationDegrees)
+{
+    const double z = std::sin(degToRad(declinationDegrees));
+    const double za = std::fabs(z);
+    double tt = normalizeDegrees(rightAscensionDegrees) / 90.0;
+    if (tt >= 4.0) {
+        tt -= 4.0;
+    }
+
+    int face = 0;
+    int ix = 0;
+    int iy = 0;
+    if (za <= (2.0 / 3.0))
+    {
+        const int jp = static_cast<int>(std::floor(kSirilNside * (0.5 + tt - z * 0.75)));
+        const int jm = static_cast<int>(std::floor(kSirilNside * (0.5 + tt + z * 0.75)));
+        const int ifp = jp / kSirilNside;
+        const int ifm = jm / kSirilNside;
+        face = (ifp == ifm) ? (ifp | 4) : ((ifp < ifm) ? ifp : ifm + 8);
+        ix = jm & (kSirilNside - 1);
+        iy = kSirilNside - (jp & (kSirilNside - 1)) - 1;
+    }
+    else
+    {
+        int ntt = static_cast<int>(std::floor(tt));
+        if (ntt >= 4) {
+            ntt = 3;
+        }
+        const double tp = tt - ntt;
+        const double tmp = kSirilNside * std::sqrt(3.0 * (1.0 - za));
+        const int jp = std::min(kSirilNside - 1, static_cast<int>(std::floor(tp * tmp)));
+        const int jm = std::min(kSirilNside - 1, static_cast<int>(std::floor((1.0 - tp) * tmp)));
+        if (z >= 0.0)
+        {
+            face = ntt;
+            ix = kSirilNside - jm - 1;
+            iy = kSirilNside - jp - 1;
+        }
+        else
+        {
+            face = ntt + 8;
+            ix = jp;
+            iy = jm;
+        }
+    }
+
+    return static_cast<quint32>(face * kSirilNside * kSirilNside) + interleaveHealpixBits(ix, iy);
+}
+
+static double angularSeparationDegrees(double raDegreesA, double decDegreesA, double raDegreesB, double decDegreesB)
+{
+    const double raA = degToRad(raDegreesA);
+    const double decA = degToRad(decDegreesA);
+    const double raB = degToRad(raDegreesB);
+    const double decB = degToRad(decDegreesB);
+    const double cosSeparation = std::sin(decA) * std::sin(decB)
+        + std::cos(decA) * std::cos(decB) * std::cos(raA - raB);
+    return std::acos(std::clamp(cosSeparation, -1.0, 1.0)) * 180.0 / kPi;
+}
+
+static QSet<quint32> sampleSirilHealpixPixels(double centerRaDegrees,
+                                               double centerDecDegrees,
+                                               double radiusDegrees)
+{
+    QSet<quint32> pixels;
+    const double boundedRadius = std::max(0.1, radiusDegrees);
+    const double stepDegrees = std::clamp(boundedRadius / 35.0, 0.03, 0.20);
+    const double minDec = std::max(-90.0, centerDecDegrees - boundedRadius);
+    const double maxDec = std::min(90.0, centerDecDegrees + boundedRadius);
+
+    for (double dec = minDec; dec <= maxDec; dec += stepDegrees)
+    {
+        const double cosDec = std::max(0.05, std::cos(degToRad(dec)));
+        const double raHalfWidth = std::min(180.0, boundedRadius / cosDec);
+        const double raStep = std::max(stepDegrees, stepDegrees / cosDec);
+        for (double raOffset = -raHalfWidth; raOffset <= raHalfWidth; raOffset += raStep)
+        {
+            const double ra = normalizeDegrees(centerRaDegrees + raOffset);
+            if (angularSeparationDegrees(centerRaDegrees, centerDecDegrees, ra, dec) <= (boundedRadius + stepDegrees)) {
+                pixels.insert(healpixNestedPixel(ra, dec));
+            }
+        }
+    }
+
+    pixels.insert(healpixNestedPixel(centerRaDegrees, centerDecDegrees));
+    pixels.insert(healpixNestedPixel(centerRaDegrees - boundedRadius, centerDecDegrees));
+    pixels.insert(healpixNestedPixel(centerRaDegrees + boundedRadius, centerDecDegrees));
+    pixels.insert(healpixNestedPixel(centerRaDegrees, minDec));
+    pixels.insert(healpixNestedPixel(centerRaDegrees, maxDec));
+    return pixels;
+}
+
+static bool sirilCellRecordRange(quint32 pixel, int& chunkIndex, qint64& firstRecord, qint64& recordCount)
+{
+    chunkIndex = static_cast<int>(pixel / kSirilPixelsPerChunk);
+    const int localPixel = static_cast<int>(pixel % kSirilPixelsPerChunk);
+    const qint64 firstIndexByte = kSirilHeaderSize + static_cast<qint64>(localPixel) * sizeof(quint32);
+    if (localPixel > 0)
+    {
+        const QByteArray indexBytes = fetchSirilRange(chunkIndex, firstIndexByte - sizeof(quint32), firstIndexByte + sizeof(quint32) - 1);
+        if (indexBytes.size() < static_cast<int>(sizeof(quint32) * 2)) {
+            return false;
+        }
+        const quint32 cellStart = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(indexBytes.constData()));
+        const quint32 cellEnd = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(indexBytes.constData() + sizeof(quint32)));
+        firstRecord = cellStart;
+        recordCount = cellEnd - cellStart;
+        return true;
+    }
+
+    const QByteArray indexBytes = fetchSirilRange(chunkIndex, firstIndexByte, firstIndexByte + sizeof(quint32) - 1);
+    if (indexBytes.size() < static_cast<int>(sizeof(quint32))) {
+        return false;
+    }
+    const quint32 cellEnd = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(indexBytes.constData()));
+    firstRecord = 0;
+    recordCount = cellEnd;
+    return true;
+}
+
+static QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
+                                                  const QSize& imageSize,
+                                                  const QDateTime& captureDateTimeUtc,
+                                                  double maxMagnitude,
+                                                  QString* catalogSource)
+{
+    QVector<CatalogStar> stars;
+    if (!plateSolveStartUsesDirection(settings))
+    {
+        if (catalogSource) {
+            *catalogSource = QStringLiteral("Siril SPCC Gaia DR3 unavailable for start mode");
+        }
+        return stars;
+    }
+
+    const RADec centerRaDec = Astronomy::azAltToRaDec(
+        AzAlt{settings.m_azimuth, settings.m_elevation},
+        settings.m_latitude,
+        settings.m_longitude,
+        captureDateTimeUtc);
+    const double centerRaDegrees = normalizeDegrees(centerRaDec.ra * 15.0);
+    const double centerDecDegrees = centerRaDec.dec;
+    if (!std::isfinite(centerRaDegrees) || !std::isfinite(centerDecDegrees))
+    {
+        if (catalogSource) {
+            *catalogSource = QStringLiteral("Siril SPCC Gaia DR3 unavailable for invalid pointing");
+        }
+        return stars;
+    }
+
+    const double aspect = (imageSize.width() > 0) ? static_cast<double>(std::max(1, imageSize.height())) / imageSize.width() : 1.0;
+    const double diagonalFov = settings.m_fov * std::sqrt(1.0 + aspect * aspect);
+    const double queryRadius = std::max(0.5, diagonalFov * 0.5 + settings.m_plateSolveSearchRadius + 1.0);
+    if (queryRadius > kSirilMaxQueryRadiusDegrees)
+    {
+        if (catalogSource) {
+            *catalogSource = QStringLiteral("Siril SPCC Gaia DR3 unavailable for wide query");
+        }
+        qWarning() << "CameraPlateSolver: Siril SPCC Gaia query is too wide, falling back to HYG/bundled"
+                   << "radius" << queryRadius
+                   << "max" << kSirilMaxQueryRadiusDegrees;
+        return stars;
+    }
+    const QSet<quint32> pixels = sampleSirilHealpixPixels(centerRaDegrees, centerDecDegrees, queryRadius);
+    QSet<QString> seenStars;
+    stars.reserve(pixels.size() * 8);
+
+    for (quint32 pixel : pixels)
+    {
+        int chunkIndex = 0;
+        qint64 firstRecord = 0;
+        qint64 recordCount = 0;
+        if (!sirilCellRecordRange(pixel, chunkIndex, firstRecord, recordCount) || (recordCount <= 0)) {
+            continue;
+        }
+
+        const qint64 dataStart = kSirilHeaderSize
+            + static_cast<qint64>(kSirilPixelsPerChunk) * sizeof(quint32)
+            + firstRecord * kSirilRecordSize;
+        const QByteArray recordBytes = fetchSirilRange(chunkIndex, dataStart, dataStart + recordCount * kSirilRecordSize - 1);
+        if (recordBytes.size() < recordCount * kSirilRecordSize) {
+            continue;
+        }
+
+        for (qint64 recordIndex = 0; recordIndex < recordCount; ++recordIndex)
+        {
+            const char *record = recordBytes.constData() + recordIndex * kSirilRecordSize;
+            const qint32 rawRa = qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(record));
+            const qint32 rawDec = qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(record + 4));
+            const qint16 rawMag = qFromLittleEndian<qint16>(reinterpret_cast<const uchar *>(record + 12));
+            const double starRaDegrees = normalizeDegrees(static_cast<double>(rawRa) * kSirilAngleScale);
+            const double starDecDegrees = static_cast<double>(rawDec) * kSirilAngleScale;
+            const double magnitude = static_cast<double>(rawMag) / 1000.0;
+            if (!std::isfinite(starRaDegrees)
+                || !std::isfinite(starDecDegrees)
+                || !std::isfinite(magnitude)
+                || (magnitude > maxMagnitude)
+                || (angularSeparationDegrees(centerRaDegrees, centerDecDegrees, starRaDegrees, starDecDegrees) > queryRadius))
+            {
+                continue;
+            }
+
+            const QString starKey = QStringLiteral("%1:%2").arg(rawRa).arg(rawDec);
+            if (seenStars.contains(starKey)) {
+                continue;
+            }
+            seenStars.insert(starKey);
+            stars.append({
+                QStringLiteral("Gaia SPCC %1:%2").arg(chunkIndex).arg(firstRecord + recordIndex),
+                starRaDegrees,
+                starDecDegrees,
+                magnitude,
+                QString()
+            });
+        }
+    }
+
+    std::sort(stars.begin(), stars.end(), [](const CatalogStar& lhs, const CatalogStar& rhs) {
+        return lhs.magnitude < rhs.magnitude;
+    });
+
+    if (catalogSource) {
+        *catalogSource = QStringLiteral("Siril SPCC Gaia DR3");
+    }
+    qDebug() << "CameraPlateSolver: loaded Siril SPCC Gaia stars"
+             << stars.size()
+             << "pixels" << pixels.size()
+             << "center RA" << centerRaDegrees
+             << "Dec" << centerDecDegrees
+             << "radius" << queryRadius
+             << "maxMag" << maxMagnitude;
+    return stars;
+}
+
 static bool plateSolveStartUsesFov(const CameraSettings& settings)
 {
     return settings.m_plateSolveStartMode != CameraSettings::PlateSolveStartBlind;
@@ -977,11 +1323,11 @@ static QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatal
 }
 
 static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& settings,
+                                                const QVector<CatalogStar>& catalogStars,
                                                 const QDateTime& captureDateTimeUtc,
                                                 double maxMagnitude)
 {
     QVector<VisibleCatalogStar> visibleStars;
-    const QVector<CatalogStar>& catalogStars = brightStarCatalog(settings);
     visibleStars.reserve(catalogStars.size());
 
     for (int i = 0; i < catalogStars.size(); ++i)
@@ -1019,12 +1365,35 @@ static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& set
 }
 
 static PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& settings,
+                                                       const QSize& imageSize,
                                                        const QDateTime& captureDateTimeUtc,
                                                        double maxMagnitude)
 {
     PlateSolveCatalogContext context;
-    context.catalogStars = &brightStarCatalog(settings);
-    context.visibleStars = buildVisibleCatalog(settings, captureDateTimeUtc, maxMagnitude);
+    const bool requestSiril = (settings.m_plateSolveCatalogSource == CameraSettings::PlateSolveCatalogSirilSpccGaia)
+        || ((settings.m_plateSolveCatalogSource == CameraSettings::PlateSolveCatalogAuto)
+            && plateSolveStartUsesDirection(settings)
+            && (settings.m_fov <= kSirilAutoMaxFovDegrees));
+    if (requestSiril)
+    {
+        context.catalogStars = loadSirilSpccCatalog(settings, imageSize, captureDateTimeUtc, maxMagnitude, &context.catalogSource);
+        if (context.catalogStars.size() < settings.m_plateSolveMinMatches)
+        {
+            qWarning() << "CameraPlateSolver: Siril SPCC Gaia catalog did not provide enough stars, falling back to HYG/bundled"
+                       << "stars" << context.catalogStars.size()
+                       << "minMatches" << settings.m_plateSolveMinMatches;
+            context.catalogStars.clear();
+            context.catalogSource.clear();
+        }
+    }
+
+    if (context.catalogStars.isEmpty())
+    {
+        context.catalogStars = brightStarCatalog(settings);
+        context.catalogSource = currentCatalogSource(settings);
+    }
+
+    context.visibleStars = buildVisibleCatalog(settings, context.catalogStars, captureDateTimeUtc, maxMagnitude);
     context.visibleStarIndexByCatalogIndex.reserve(context.visibleStars.size());
     for (int i = 0; i < context.visibleStars.size(); ++i) {
         context.visibleStarIndexByCatalogIndex.insert(context.visibleStars[i].catalogIndex, i);
@@ -1905,7 +2274,7 @@ static QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContex
                             double matchRadiusPixels)
 {
     QVector<CandidatePair> candidatePairs;
-    const QVector<CatalogStar>& catalogStars = *catalogContext.catalogStars;
+    const QVector<CatalogStar>& catalogStars = catalogContext.catalogStars;
     const double maxDistanceSquared = matchRadiusPixels * matchRadiusPixels;
     const double cellSize = std::max(1.0, matchRadiusPixels);
     QHash<quint64, QVector<int>> projectedStarGrid;
@@ -2154,7 +2523,7 @@ static void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>
     }
 }
 
-void logUnmatchedDetections(const CameraSettings& settings,
+void logUnmatchedDetections(const PlateSolveCatalogContext& catalogContext,
                             const QVector<CameraPipelineStarDetection>& starDetections,
                             const QVector<ProjectedCatalogStar>& projectedStars,
                             const QVector<Match>& matches,
@@ -2172,7 +2541,7 @@ void logUnmatchedDetections(const CameraSettings& settings,
         catalogMatched.insert(match.catalogIndex, true);
     }
 
-    const QVector<CatalogStar>& catalogStars = brightStarCatalog(settings);
+    const QVector<CatalogStar>& catalogStars = catalogContext.catalogStars;
     for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex)
     {
         if (detectionMatched[detectionIndex]) {
@@ -3968,8 +4337,6 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
 
     CameraPlateSolveResult result;
     clearSolvedStars(starDetections);
-    result.m_catalogSource = currentCatalogSource(settings);
-    result.m_catalogStarsLoaded = brightStarCatalog(settings).size();
     result.m_detectedStarsConsidered = starDetections.size();
     const bool useCurrentSettingsOnly = plateSolveStartUsesCurrentSettingsOnly(settings);
     const bool useStartFov = plateSolveStartUsesFov(settings);
@@ -4000,8 +4367,11 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     const QDateTime captureDateTimeUtc = (solveDateTime.isValid() ? solveDateTime : QDateTime::currentDateTime()).toUTC();
     const PlateSolveCatalogContext catalogContext = buildPlateSolveCatalogContext(
         settings,
+        imageSize,
         captureDateTimeUtc,
         settings.m_plateSolveMaxMagnitude);
+    result.m_catalogSource = catalogContext.catalogSource;
+    result.m_catalogStarsLoaded = catalogContext.catalogStars.size();
 
     const QVector<int> allDetectionIndices = [&starDetections]() {
         QVector<int> indices;
@@ -4070,7 +4440,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         for (const Match& match : finalMatches)
         {
             CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
-            const CatalogStar& catalogStar = brightStarCatalog(settings)[match.catalogIndex];
+            const CatalogStar& catalogStar = catalogContext.catalogStars[match.catalogIndex];
             detection.m_label = catalogStar.name;
             detection.m_projectedCenter = projectedPointsByCatalogIndex.value(match.catalogIndex);
             detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
@@ -4106,7 +4476,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         result.m_distortionK1 = settings.m_lensDistortionK1;
 
         logUnmatchedDetections(
-            settings,
+            catalogContext,
             starDetections,
             projectedStars,
             finalMatches,
@@ -4288,7 +4658,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     for (const Match& match : finalMatches)
     {
         CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
-        const CatalogStar& catalogStar = brightStarCatalog(settings)[match.catalogIndex];
+        const CatalogStar& catalogStar = catalogContext.catalogStars[match.catalogIndex];
         detection.m_label = catalogStar.name;
         detection.m_projectedCenter = projectedPointsByCatalogIndex.value(match.catalogIndex);
         detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
@@ -4335,7 +4705,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     result.m_distortionK1 = selectedFinalPass.pose.distortionK1;
 
     logUnmatchedDetections(
-        settings,
+        catalogContext,
         starDetections,
         projectedStars,
         finalMatches,

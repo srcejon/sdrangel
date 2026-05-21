@@ -4809,6 +4809,35 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </property>
             </widget>
            </item>
+           <item row="9" column="0">
+            <widget class="QLabel" name="plateSolveCatalogSourceLabel">
+             <property name="text">
+              <string>Catalog</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="1" colspan="3">
+            <widget class="QComboBox" name="plateSolveCatalogSourceCombo">
+             <property name="toolTip">
+              <string>Select the star catalog used for plate solving</string>
+             </property>
+             <item>
+              <property name="text">
+               <string>Auto</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>HYG / bundled</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Siril SPCC Gaia DR3</string>
+              </property>
+             </item>
+            </widget>
+           </item>
            <item row="5" column="0">
             <widget class="QLabel" name="plateSolveStartModeLabel">
              <property name="text">

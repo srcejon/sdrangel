@@ -163,6 +163,13 @@ struct CameraSettings
         PlateSolveLabelNameMagnitudeSpectralType
     };
 
+    enum PlateSolveCatalogSource
+    {
+        PlateSolveCatalogAuto = 0,
+        PlateSolveCatalogHyg,
+        PlateSolveCatalogSirilSpccGaia
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -478,6 +485,7 @@ struct CameraSettings
     QDateTime m_plateSolveDateTime; ///< User-specified date/time for plate solving recorded media
     bool   m_plateSolveDateTimeUtc; ///< Treat the user-specified plate solve date/time as UTC instead of local time
     bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available
+    PlateSolveCatalogSource m_plateSolveCatalogSource; ///< Catalog source used for plate solving
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
 

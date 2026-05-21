@@ -42,7 +42,6 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
-#include <QThread>
 #include <QUrl>
 #include <QVector>
 #include <QtEndian>
@@ -724,90 +723,57 @@ static QString sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastB
     return QStringLiteral("%1:%2:%3").arg(chunkIndex).arg(firstByte).arg(lastByte);
 }
 
-static QObject *sirilNetworkWorker()
-{
-    static QMutex s_networkThreadMutex;
-    static QThread *s_networkThread = nullptr;
-    static QObject *s_worker = nullptr;
-
-    QMutexLocker locker(&s_networkThreadMutex);
-    if (!s_worker)
-    {
-        s_networkThread = new QThread();
-        s_networkThread->setObjectName(QStringLiteral("CameraPlateSolverSirilNetwork"));
-        s_worker = new QObject();
-        s_worker->moveToThread(s_networkThread);
-        s_networkThread->start();
-    }
-
-    return s_worker;
-}
-
 static QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 lastByte, int sourceIndex)
 {
+    QNetworkAccessManager manager;
+    QNetworkRequest request(QUrl(sirilSpccChunkUrl(chunkIndex, sourceIndex)));
+    request.setRawHeader("Range", QByteArray("bytes=%1-%2").replace("%1", QByteArray::number(firstByte)).replace("%2", QByteArray::number(lastByte)));
+    request.setRawHeader("Accept-Encoding", "identity");
+    request.setRawHeader("User-Agent", "SDRangel CameraPlateSolver/1.0");
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+
+    QNetworkReply *reply = manager.get(request);
+    QEventLoop loop;
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start(30000);
+    loop.exec();
+
     QByteArray data;
-    QObject *worker = sirilNetworkWorker();
-    const bool invoked = QMetaObject::invokeMethod(worker, [worker, &data, chunkIndex, firstByte, lastByte, sourceIndex]() {
-        static QNetworkAccessManager *s_manager = nullptr;
-        if (!s_manager) {
-            s_manager = new QNetworkAccessManager(worker);
-        }
-
-        QNetworkRequest request(QUrl(sirilSpccChunkUrl(chunkIndex, sourceIndex)));
-        request.setRawHeader("Range", QByteArray("bytes=%1-%2").replace("%1", QByteArray::number(firstByte)).replace("%2", QByteArray::number(lastByte)));
-        request.setRawHeader("Accept-Encoding", "identity");
-        request.setRawHeader("User-Agent", "SDRangel CameraPlateSolver/1.0");
-        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-        request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
-
-        QNetworkReply *reply = s_manager->get(request);
-        QEventLoop loop;
-        QTimer timeoutTimer;
-        timeoutTimer.setSingleShot(true);
-        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-        QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
-        timeoutTimer.start(30000);
-        loop.exec();
-
-        const bool timedOut = timeoutTimer.isActive() == false && !reply->isFinished();
-        if (timedOut)
-        {
-            reply->abort();
-            qWarning() << "CameraPlateSolver: Siril SPCC range request timed out"
-                       << "source" << sirilSpccSourceName(sourceIndex)
-                       << "chunk" << chunkIndex << "bytes" << firstByte << lastByte;
-        }
-        else if (reply->error() != QNetworkReply::NoError)
-        {
-            qWarning() << "CameraPlateSolver: Siril SPCC range request failed"
-                       << "source" << sirilSpccSourceName(sourceIndex)
-                       << "chunk" << chunkIndex << "bytes" << firstByte << lastByte
-                       << reply->errorString();
-        }
-        else
-        {
-            const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            data = reply->readAll();
-            if ((httpStatus != 206) || data.isEmpty())
-            {
-                qWarning() << "CameraPlateSolver: Siril SPCC range request returned unexpected response"
-                           << "source" << sirilSpccSourceName(sourceIndex)
-                           << "chunk" << chunkIndex << "status" << httpStatus
-                           << "bytes" << firstByte << lastByte << "size" << data.size()
-                           << "contentRange" << reply->rawHeader("Content-Range")
-                           << "url" << reply->url();
-                data.clear();
-            }
-        }
-        reply->deleteLater();
-    }, Qt::BlockingQueuedConnection);
-
-    if (!invoked)
+    const bool timedOut = timeoutTimer.isActive() == false && !reply->isFinished();
+    if (timedOut)
     {
-        qWarning() << "CameraPlateSolver: failed to invoke Siril SPCC range request"
+        reply->abort();
+        qWarning() << "CameraPlateSolver: Siril SPCC range request timed out"
                    << "source" << sirilSpccSourceName(sourceIndex)
                    << "chunk" << chunkIndex << "bytes" << firstByte << lastByte;
     }
+    else if (reply->error() != QNetworkReply::NoError)
+    {
+        qWarning() << "CameraPlateSolver: Siril SPCC range request failed"
+                   << "source" << sirilSpccSourceName(sourceIndex)
+                   << "chunk" << chunkIndex << "bytes" << firstByte << lastByte
+                   << reply->errorString();
+    }
+    else
+    {
+        const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        data = reply->readAll();
+        if ((httpStatus != 206) || data.isEmpty())
+        {
+            qWarning() << "CameraPlateSolver: Siril SPCC range request returned unexpected response"
+                       << "source" << sirilSpccSourceName(sourceIndex)
+                       << "chunk" << chunkIndex << "status" << httpStatus
+                       << "bytes" << firstByte << lastByte << "size" << data.size()
+                       << "contentRange" << reply->rawHeader("Content-Range");
+            data.clear();
+        }
+    }
+    reply->deleteLater();
+
     return data;
 }
 

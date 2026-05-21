@@ -3201,7 +3201,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         {
             for (double elFactor : coarseOffsetsOrdered)
             {
-                for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += azimuthStepDegrees)
+                for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += fovGridAzimuthStepDegrees)
                 {
                     for (double rollDegrees : wideRollOffsetsOrdered)
                     {
@@ -3224,9 +3224,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
             const std::array<double, 3> elevationOffsets = {{-1.0, 0.0, 1.0}};
             const std::array<double, 5> rollOffsets = {{-2.0, -1.0, 0.0, 1.0, 2.0}};
             const std::array<double, 3> refineFovScales = {{0.92, 1.00, 1.08}};
-            const double azimuthRefineStep = 5.0;
-            const double elevationRefineStep = std::max(1.0, coarseSearchRadius * 0.25);
-            const double rollRefineStep = 5.0;
+            const double azimuthRefineStep = fovGridAzimuthStepDegrees;
+            const double elevationRefineStep = std::max(0.25, std::min(fovGridElevationStepDegrees, coarseSearchRadius * 0.25));
+            const double rollRefineStep = std::max(0.25, std::min(5.0, static_cast<double>(settings.m_fov) * 0.5));
 
             for (double azimuthOffset : azimuthOffsets)
             {
@@ -3358,8 +3358,27 @@ Evaluation searchBestPose(const CameraSettings& settings,
     {
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
         const std::array<double, 8> wideBlindFovs = {{15.0, 25.0, 40.0, 60.0, 90.0, 130.0, 160.0, 180.0}};
-        const double fallbackAzimuthStepDegrees = useStartFov ? fovGridAzimuthStepDegrees : azimuthStepDegrees;
-        const double fallbackElevationStepDegrees = useStartFov ? fovGridElevationStepDegrees : elevationStepDegrees;
+        QVector<double> blindFallbackFovs;
+        blindFallbackFovs.reserve(static_cast<int>(wideBlindFovs.size()) + 3);
+        if (settings.m_fov < 15.0)
+        {
+            for (double fovScale : wideFovScales)
+            {
+                blindFallbackFovs.append(std::clamp(static_cast<double>(settings.m_fov) * fovScale,
+                    static_cast<double>(CameraSettings::m_minFov),
+                    static_cast<double>(CameraSettings::m_maxFov)));
+            }
+        }
+        for (double fovDegrees : wideBlindFovs) {
+            blindFallbackFovs.append(fovDegrees);
+        }
+        const bool useNarrowBlindFallbackGrid = !useStartFov && (settings.m_fov < 15.0);
+        const double fallbackAzimuthStepDegrees = (useStartFov || useNarrowBlindFallbackGrid)
+            ? fovGridAzimuthStepDegrees
+            : azimuthStepDegrees;
+        const double fallbackElevationStepDegrees = (useStartFov || useNarrowBlindFallbackGrid)
+            ? fovGridElevationStepDegrees
+            : elevationStepDegrees;
         for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += fallbackAzimuthStepDegrees)
         {
             for (double elevationDegrees = minElevationDegrees; elevationDegrees <= maxElevationDegrees; elevationDegrees += fallbackElevationStepDegrees)
@@ -3382,7 +3401,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     }
                     else
                     {
-                        for (double fovDegrees : wideBlindFovs)
+                        for (double fovDegrees : blindFallbackFovs)
                         {
                             evaluateSeed(
                                 "wide-fallback-blind",

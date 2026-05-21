@@ -751,6 +751,40 @@ static QString sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastB
     return QStringLiteral("%1:%2:%3").arg(chunkIndex).arg(firstByte).arg(lastByte);
 }
 
+static double fovLongEdgeDiagonalDegrees(const QSize& imageSize, double fovDegrees)
+{
+    const int longEdge = std::max(imageSize.width(), imageSize.height());
+    const int shortEdge = std::min(imageSize.width(), imageSize.height());
+    if ((longEdge <= 0) || (shortEdge <= 0)) {
+        return fovDegrees;
+    }
+
+    const double shortToLong = static_cast<double>(shortEdge) / static_cast<double>(longEdge);
+    return fovDegrees * std::sqrt(1.0 + shortToLong * shortToLong);
+}
+
+static double halfHorizontalFovFromLongEdgeFov(CameraSettings::LensProjection lensProjection,
+                                               const QSize& imageSize,
+                                               double fovDegrees)
+{
+    const double halfLongEdgeFov = degToRad(fovDegrees) * 0.5;
+    if ((imageSize.width() <= 0) || (imageSize.height() <= 0) || (imageSize.width() >= imageSize.height())) {
+        return halfLongEdgeFov;
+    }
+
+    const double aspect = static_cast<double>(imageSize.height()) / static_cast<double>(imageSize.width());
+    switch (lensProjection)
+    {
+    case CameraSettings::LensProjectionEquidistant:
+        return halfLongEdgeFov / aspect;
+    case CameraSettings::LensProjectionEquisolid:
+        return 2.0 * std::asin(std::clamp(std::sin(halfLongEdgeFov * 0.5) / aspect, -1.0, 1.0));
+    case CameraSettings::LensProjectionRectilinear:
+    default:
+        return std::atan(std::tan(halfLongEdgeFov) / aspect);
+    }
+}
+
 QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 lastByte, int sourceIndex)
 {
     if (!m_networkManager)
@@ -1071,8 +1105,7 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
         return stars;
     }
 
-    const double aspect = (imageSize.width() > 0) ? static_cast<double>(std::max(1, imageSize.height())) / imageSize.width() : 1.0;
-    const double diagonalFov = settings.m_fov * std::sqrt(1.0 + aspect * aspect);
+    const double diagonalFov = fovLongEdgeDiagonalDegrees(imageSize, settings.m_fov);
     const double queryRadius = std::max(0.5, diagonalFov * 0.5 + settings.m_plateSolveSearchRadius + 1.0);
     if (queryRadius > kSirilMaxQueryRadiusDegrees)
     {
@@ -1379,7 +1412,10 @@ static SkyProjector createProjector(const CameraSettings& settings,
         projector.up = normalize(rotateAroundAxis(projector.up, projector.center, rollRadians));
     }
 
-    const double halfHorizontalFov = degToRad(fovDegrees) * 0.5;
+    const double halfHorizontalFov = halfHorizontalFovFromLongEdgeFov(
+        settings.m_lensProjection,
+        size,
+        fovDegrees);
     if ((halfHorizontalFov <= 0.0) || (halfHorizontalFov >= (kPi * 0.5))) {
         return projector;
     }
@@ -2134,7 +2170,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
             }
 
             const double baseSeedFov = std::clamp(
-                catalogAngularDistance * static_cast<double>(imageSize.width()) / std::max(1.0, detectionTriangle.longestDistance),
+                catalogAngularDistance * static_cast<double>(std::max(imageSize.width(), imageSize.height())) / std::max(1.0, detectionTriangle.longestDistance),
                 static_cast<double>(CameraSettings::m_minFov),
                 static_cast<double>(CameraSettings::m_maxFov));
 
@@ -2169,7 +2205,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
             };
 
             // Sweep FoV around the seed estimate. The base estimate is derived from a
-            // rectilinear scale model (image_width / longest_pixel_distance), which biases
+            // rectilinear scale model (long_edge_pixels / longest_pixel_distance), which biases
             // the result low for fisheye lenses; widen the sweep accordingly. Also clamp to
             // CameraSettings::m_maxFov for consistency with the base-clamp above — the
             // earlier hard-coded 180.0 ceiling was inconsistent with the rest of the file.
@@ -2359,7 +2395,7 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
             }
 
             const double baseSeedFov = std::clamp(
-                maxAngularDistance * static_cast<double>(imageSize.width()) / std::max(1.0, detectionQuad.longestDistance),
+                maxAngularDistance * static_cast<double>(std::max(imageSize.width(), imageSize.height())) / std::max(1.0, detectionQuad.longestDistance),
                 static_cast<double>(CameraSettings::m_minFov),
                 static_cast<double>(CameraSettings::m_maxFov));
 

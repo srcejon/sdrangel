@@ -15,6 +15,7 @@
 #endif
 
 #include "cameradetector.h"
+#include "cameraplatesolver.h"
 
 class CameraStarDetector : public CameraDetectionStage
 {
@@ -29,6 +30,7 @@ protected:
 
 private:
     CameraPipelineFramePtr m_lastInputFrame;
+    CameraPlateSolver m_plateSolver;
 
     [[nodiscard]] static bool starDisplaySettingsChanged(const QList<QString>& settingsKeys);
 

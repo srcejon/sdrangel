@@ -103,9 +103,13 @@ cv::Mat debugMaskTo8Bit(const cv::Mat& mask)
 CameraStarDetector::CameraStarDetector()
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     :
+    m_plateSolver(this),
     m_cudaStarSmallBlurFilterType(-1),
     m_cudaStarBackgroundBlurFilterType(-1),
     m_cudaStarBackgroundBlurFilterSize(0)
+#else
+    :
+    m_plateSolver(this)
 #endif
 {
 }
@@ -299,7 +303,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 
     if (!frame->m_starDetections.isEmpty())
     {
-        const CameraPlateSolveResult plateSolveResult = CameraPlateSolver::solve(
+        const CameraPlateSolveResult plateSolveResult = m_plateSolver.solve(
             m_settings,
             frame->m_image.size(),
             frame->m_captureDateTime,

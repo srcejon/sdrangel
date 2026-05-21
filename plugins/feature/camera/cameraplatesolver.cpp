@@ -723,9 +723,18 @@ static QString sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastB
     return QStringLiteral("%1:%2:%3").arg(chunkIndex).arg(firstByte).arg(lastByte);
 }
 
+static thread_local QNetworkAccessManager *s_activeSirilNetworkManager;
+
 static QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 lastByte, int sourceIndex)
 {
-    QNetworkAccessManager manager;
+    if (!s_activeSirilNetworkManager)
+    {
+        qWarning() << "CameraPlateSolver: Siril SPCC range request has no active network manager"
+                   << "source" << sirilSpccSourceName(sourceIndex)
+                   << "chunk" << chunkIndex << "bytes" << firstByte << lastByte;
+        return {};
+    }
+
     QNetworkRequest request(QUrl(sirilSpccChunkUrl(chunkIndex, sourceIndex)));
     request.setRawHeader("Range", QByteArray("bytes=%1-%2").replace("%1", QByteArray::number(firstByte)).replace("%2", QByteArray::number(lastByte)));
     request.setRawHeader("Accept-Encoding", "identity");
@@ -733,7 +742,7 @@ static QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qi
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 
-    QNetworkReply *reply = manager.get(request);
+    QNetworkReply *reply = s_activeSirilNetworkManager->get(request);
     QEventLoop loop;
     QTimer timeoutTimer;
     timeoutTimer.setSingleShot(true);
@@ -4344,6 +4353,16 @@ static void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetection
 
 };
 
+thread_local QNetworkAccessManager *CameraPlateSolver::SolverContext::s_activeSirilNetworkManager = nullptr;
+
+CameraPlateSolver::CameraPlateSolver(QObject *parent) :
+    QObject(parent),
+    m_networkManager(new QNetworkAccessManager(this))
+{
+}
+
+CameraPlateSolver::~CameraPlateSolver() = default;
+
 QString CameraPlateSolver::downloadedCatalogArchivePath()
 {
     SolverContext context;
@@ -4811,6 +4830,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                                                 const QDateTime& captureDateTime,
                                                 QVector<CameraPipelineStarDetection>& starDetections)
 {
+    QNetworkAccessManager *previousNetworkManager = SolverContext::s_activeSirilNetworkManager;
+    SolverContext::s_activeSirilNetworkManager = m_networkManager;
     SolverContext context;
-    return context.solve(settings, imageSize, captureDateTime, starDetections);
+    const CameraPlateSolveResult result = context.solve(settings, imageSize, captureDateTime, starDetections);
+    SolverContext::s_activeSirilNetworkManager = previousNetworkManager;
+    return result;
 }

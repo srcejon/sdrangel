@@ -21,6 +21,7 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QObject>
 #include <QSize>
 #include <QString>
 #include <QVector>
@@ -48,19 +49,25 @@ struct CameraPlateSolveResult
     QString m_catalogSource;
 };
 
-class CameraPlateSolver
+class QNetworkAccessManager;
+
+class CameraPlateSolver : public QObject
 {
 public:
+    explicit CameraPlateSolver(QObject *parent = nullptr);
+    ~CameraPlateSolver() override;
+
     static QString downloadedCatalogArchivePath();
     static QString downloadedCatalogCsvPath();
     static bool importDownloadedCatalogArchive(const QString& archivePath, QString* errorMessage = nullptr);
-    static CameraPlateSolveResult solve(const CameraSettings& settings,
-                                        const QSize& imageSize,
-                                        const QDateTime& captureDateTime,
-                                        QVector<CameraPipelineStarDetection>& starDetections);
+    CameraPlateSolveResult solve(const CameraSettings& settings,
+                                 const QSize& imageSize,
+                                 const QDateTime& captureDateTime,
+                                 QVector<CameraPipelineStarDetection>& starDetections);
 
 private:
     class SolverContext;
+    QNetworkAccessManager *m_networkManager = nullptr;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAPLATESOLVER_H_

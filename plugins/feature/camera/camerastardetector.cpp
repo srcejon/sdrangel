@@ -114,7 +114,8 @@ CameraStarDetector::~CameraStarDetector() = default;
 
 bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys)
 {
-    return settingsKeys.contains("starDebugView")
+    return settingsKeys.contains("starDetect")
+        || settingsKeys.contains("starDebugView")
         || settingsKeys.contains("starThreshold")
         || settingsKeys.contains("starBackgroundBlur")
         || settingsKeys.contains("starMinArea")

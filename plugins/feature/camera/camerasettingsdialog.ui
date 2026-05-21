@@ -4656,6 +4656,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </item>
            <item row="7" column="3">
             <widget class="QDoubleSpinBox" name="plateSolveMatchRadiusSpin">
+             <property name="suffix">
+              <string> px</string>
+             </property>
              <property name="minimum">
               <double>1.000000000000000</double>
              </property>
@@ -4693,6 +4696,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </item>
            <item row="8" column="1">
             <widget class="QDoubleSpinBox" name="plateSolveFinalMatchRadiusSpin">
+             <property name="suffix">
+              <string> px</string>
+             </property>
              <property name="minimum">
               <double>1.000000000000000</double>
              </property>
@@ -4931,6 +4937,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </item>
            <item row="7" column="1">
             <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
+             <property name="suffix">
+              <string>°</string>
+             </property>
              <property name="minimum">
               <double>0.000000000000000</double>
              </property>
@@ -5058,7 +5067,10 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </widget>
            </item>
            <item row="2" column="1">
-            <widget class="QSpinBox" name="starMinAreaSpin">
+           <widget class="QSpinBox" name="starMinAreaSpin">
+             <property name="suffix">
+              <string> px²</string>
+             </property>
              <property name="maximum">
               <number>10000</number>
              </property>
@@ -5072,7 +5084,10 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </widget>
            </item>
            <item row="2" column="3">
-            <widget class="QSpinBox" name="starMaxAreaSpin">
+           <widget class="QSpinBox" name="starMaxAreaSpin">
+             <property name="suffix">
+              <string> px²</string>
+             </property>
              <property name="maximum">
               <number>10000</number>
              </property>

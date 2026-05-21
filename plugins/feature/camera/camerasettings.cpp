@@ -312,7 +312,7 @@ void CameraSettings::resetToDefaults()
     m_starThreshold = 24;
     m_starBackgroundBlur = 12;
     m_starMinArea = 1;
-    m_starMaxArea = 36;
+    m_starMaxArea = 1000;
     m_starMaxAspectRatio = 2.5;
     m_starDebugView = StarDebugViewOff;
     m_starColor = QColor(120, 255, 255);
@@ -812,7 +812,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(115, &m_starThreshold, 24);
         d.readS32(116, &m_starBackgroundBlur, 12);
         d.readS32(117, &m_starMinArea, 1);
-        d.readS32(118, &m_starMaxArea, 36);
+        d.readS32(118, &m_starMaxArea, 1000);
         d.readDouble(119, &m_starMaxAspectRatio, 2.5);
         qint32 starDebugView = static_cast<qint32>(StarDebugViewOff);
         d.readS32(120, &starDebugView, static_cast<qint32>(StarDebugViewOff));

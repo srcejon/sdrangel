@@ -235,10 +235,30 @@ static constexpr int kSirilPixelsPerChunk = 1 << (2 * (kSirilHealpixLevel - kSir
 static constexpr int kSirilHeaderSize = 128;
 static constexpr int kSirilIndexSize = kSirilPixelsPerChunk * static_cast<int>(sizeof(quint32));
 static constexpr int kSirilRecordSize = 701;
+static constexpr qint64 kSirilMaxRecordsPerCell = 250000;
 static constexpr qint64 kSirilMinRangeRequestSize = 64 * 1024;
+static constexpr qint64 kSirilMaxMergedRangeRequestSize = 1024 * 1024;
+static constexpr qint64 kSirilMaxMergedRangeGapBytes = 64 * 1024;
 static constexpr double kSirilAngleScale = 360.0 / 2147483647.0;
 static constexpr double kSirilAutoMaxFovDegrees = 15.0;
 static constexpr double kSirilMaxQueryRadiusDegrees = 20.0;
+
+struct SirilCellRange
+{
+    int chunkIndex = 0;
+    qint64 firstRecord = 0;
+    qint64 recordCount = 0;
+    qint64 firstByte = 0;
+    qint64 lastByte = 0;
+};
+
+struct SirilMergedRange
+{
+    int chunkIndex = 0;
+    qint64 firstByte = 0;
+    qint64 lastByte = 0;
+    QVector<int> cellIndexes;
+};
 
 CameraPlateSolveResult solve(const CameraSettings& settings,
                              const QSize& imageSize,
@@ -868,6 +888,7 @@ QByteArray fetchSirilChunkIndex(int chunkIndex)
                    << "chunk" << chunkIndex
                    << "expected" << kSirilIndexSize
                    << "got" << indexBytes.size();
+        m_sirilIndexCache.insert(chunkIndex, QByteArray());
         return {};
     }
 
@@ -992,8 +1013,31 @@ bool sirilCellRecordRange(quint32 pixel, int& chunkIndex, qint64& firstRecord, q
         ? qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(cellEndBytes - sizeof(quint32)))
         : 0;
     const quint32 cellEnd = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(cellEndBytes));
+    const quint32 chunkRecordCount = qFromLittleEndian<quint32>(
+        reinterpret_cast<const uchar *>(indexBytes.constData() + kSirilIndexSize - sizeof(quint32)));
+    if ((cellEnd < cellStart) || (cellEnd > chunkRecordCount))
+    {
+        qWarning() << "CameraPlateSolver: Siril SPCC invalid cell index"
+                   << "chunk" << chunkIndex
+                   << "localPixel" << localPixel
+                   << "cellStart" << cellStart
+                   << "cellEnd" << cellEnd
+                   << "chunkRecords" << chunkRecordCount;
+        return false;
+    }
+
     firstRecord = cellStart;
-    recordCount = cellEnd - cellStart;
+    recordCount = static_cast<qint64>(cellEnd) - static_cast<qint64>(cellStart);
+    if (recordCount > kSirilMaxRecordsPerCell)
+    {
+        qWarning() << "CameraPlateSolver: Siril SPCC cell has too many records"
+                   << "chunk" << chunkIndex
+                   << "localPixel" << localPixel
+                   << "records" << recordCount
+                   << "max" << kSirilMaxRecordsPerCell;
+        return false;
+    }
+
     return true;
 }
 
@@ -1041,9 +1085,8 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
         return stars;
     }
     const QSet<quint32> pixels = sampleSirilHealpixPixels(centerRaDegrees, centerDecDegrees, queryRadius);
-    QSet<QString> seenStars;
-    stars.reserve(pixels.size() * 8);
-
+    QVector<SirilCellRange> cellRanges;
+    cellRanges.reserve(pixels.size());
     for (quint32 pixel : pixels)
     {
         int chunkIndex = 0;
@@ -1056,41 +1099,141 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
         const qint64 dataStart = kSirilHeaderSize
             + static_cast<qint64>(kSirilPixelsPerChunk) * sizeof(quint32)
             + firstRecord * kSirilRecordSize;
-        const QByteArray recordBytes = fetchSirilRange(chunkIndex, dataStart, dataStart + recordCount * kSirilRecordSize - 1);
-        if (recordBytes.size() < recordCount * kSirilRecordSize) {
+        const qint64 recordByteCount = recordCount * kSirilRecordSize;
+        if (recordByteCount > std::numeric_limits<int>::max())
+        {
+            qWarning() << "CameraPlateSolver: Siril SPCC record range is too large"
+                       << "chunk" << chunkIndex
+                       << "firstRecord" << firstRecord
+                       << "records" << recordCount
+                       << "bytes" << recordByteCount;
             continue;
         }
 
-        for (qint64 recordIndex = 0; recordIndex < recordCount; ++recordIndex)
-        {
-            const char *record = recordBytes.constData() + recordIndex * kSirilRecordSize;
-            const qint32 rawRa = qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(record));
-            const qint32 rawDec = qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(record + 4));
-            const qint16 rawMag = qFromLittleEndian<qint16>(reinterpret_cast<const uchar *>(record + 12));
-            const double starRaDegrees = normalizeDegrees(static_cast<double>(rawRa) * kSirilAngleScale);
-            const double starDecDegrees = static_cast<double>(rawDec) * kSirilAngleScale;
-            const double magnitude = static_cast<double>(rawMag) / 1000.0;
-            if (!std::isfinite(starRaDegrees)
-                || !std::isfinite(starDecDegrees)
-                || !std::isfinite(magnitude)
-                || (magnitude > maxMagnitude)
-                || (angularSeparationDegrees(centerRaDegrees, centerDecDegrees, starRaDegrees, starDecDegrees) > queryRadius))
-            {
-                continue;
-            }
+        cellRanges.append({
+            chunkIndex,
+            firstRecord,
+            recordCount,
+            dataStart,
+            dataStart + recordByteCount - 1
+        });
+    }
 
-            const QString starKey = QStringLiteral("%1:%2").arg(rawRa).arg(rawDec);
-            if (seenStars.contains(starKey)) {
+    std::sort(cellRanges.begin(), cellRanges.end(), [](const SirilCellRange& lhs, const SirilCellRange& rhs) {
+        if (lhs.chunkIndex != rhs.chunkIndex) {
+            return lhs.chunkIndex < rhs.chunkIndex;
+        }
+        return lhs.firstByte < rhs.firstByte;
+    });
+
+    QVector<SirilMergedRange> mergedRanges;
+    for (int cellIndex = 0; cellIndex < cellRanges.size(); ++cellIndex)
+    {
+        const SirilCellRange& cell = cellRanges[cellIndex];
+        if (!mergedRanges.isEmpty())
+        {
+            SirilMergedRange& range = mergedRanges.last();
+            const qint64 mergedLastByte = std::max(range.lastByte, cell.lastByte);
+            const bool canMerge = (range.chunkIndex == cell.chunkIndex)
+                && (cell.firstByte <= (range.lastByte + kSirilMaxMergedRangeGapBytes + 1))
+                && ((mergedLastByte - range.firstByte + 1) <= kSirilMaxMergedRangeRequestSize);
+            if (canMerge)
+            {
+                range.lastByte = mergedLastByte;
+                range.cellIndexes.append(cellIndex);
                 continue;
             }
-            seenStars.insert(starKey);
-            stars.append({
-                QStringLiteral("Gaia SPCC %1:%2").arg(chunkIndex).arg(firstRecord + recordIndex),
-                starRaDegrees,
-                starDecDegrees,
-                magnitude,
-                QString()
-            });
+        }
+
+        mergedRanges.append({
+            cell.chunkIndex,
+            cell.firstByte,
+            cell.lastByte,
+            QVector<int>{cellIndex}
+        });
+    }
+
+    QSet<QString> seenStars;
+    stars.reserve(cellRanges.size() * 8);
+
+    qDebug() << "CameraPlateSolver: Siril SPCC Gaia request"
+             << "pixels" << pixels.size()
+             << "cells" << cellRanges.size()
+             << "ranges" << mergedRanges.size()
+             << "center RA" << centerRaDegrees
+             << "Dec" << centerDecDegrees
+             << "radius" << queryRadius
+             << "maxMag" << maxMagnitude;
+
+    for (const SirilMergedRange& range : mergedRanges)
+    {
+        const qint64 expectedByteCount = range.lastByte - range.firstByte + 1;
+        if (expectedByteCount > std::numeric_limits<int>::max())
+        {
+            qWarning() << "CameraPlateSolver: Siril SPCC merged record range is too large"
+                       << "chunk" << range.chunkIndex
+                       << "bytes" << expectedByteCount;
+            continue;
+        }
+
+        const QByteArray recordBytes = fetchSirilRange(range.chunkIndex, range.firstByte, range.lastByte);
+        if (recordBytes.size() != expectedByteCount)
+        {
+            qWarning() << "CameraPlateSolver: Siril SPCC merged record range request failed"
+                       << "chunk" << range.chunkIndex
+                       << "cells" << range.cellIndexes.size()
+                       << "expectedBytes" << expectedByteCount
+                       << "got" << recordBytes.size();
+            continue;
+        }
+
+        for (int cellIndex : range.cellIndexes)
+        {
+            const SirilCellRange& cell = cellRanges[cellIndex];
+            const qint64 cellOffset = cell.firstByte - range.firstByte;
+            for (qint64 recordIndex = 0; recordIndex < cell.recordCount; ++recordIndex)
+            {
+                const qint64 recordOffset = cellOffset + recordIndex * kSirilRecordSize;
+                if ((recordOffset < 0) || ((recordOffset + kSirilRecordSize) > recordBytes.size()))
+                {
+                    qWarning() << "CameraPlateSolver: Siril SPCC record offset outside merged range"
+                               << "chunk" << range.chunkIndex
+                               << "firstRecord" << cell.firstRecord
+                               << "records" << cell.recordCount
+                               << "offset" << recordOffset
+                               << "size" << recordBytes.size();
+                    break;
+                }
+
+                const char *record = recordBytes.constData() + recordOffset;
+                const qint32 rawRa = qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(record));
+                const qint32 rawDec = qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(record + 4));
+                const qint16 rawMag = qFromLittleEndian<qint16>(reinterpret_cast<const uchar *>(record + 12));
+                const double starRaDegrees = normalizeDegrees(static_cast<double>(rawRa) * kSirilAngleScale);
+                const double starDecDegrees = static_cast<double>(rawDec) * kSirilAngleScale;
+                const double magnitude = static_cast<double>(rawMag) / 1000.0;
+                if (!std::isfinite(starRaDegrees)
+                    || !std::isfinite(starDecDegrees)
+                    || !std::isfinite(magnitude)
+                    || (magnitude > maxMagnitude)
+                    || (angularSeparationDegrees(centerRaDegrees, centerDecDegrees, starRaDegrees, starDecDegrees) > queryRadius))
+                {
+                    continue;
+                }
+
+                const QString starKey = QStringLiteral("%1:%2").arg(rawRa).arg(rawDec);
+                if (seenStars.contains(starKey)) {
+                    continue;
+                }
+                seenStars.insert(starKey);
+                stars.append({
+                    QStringLiteral("Gaia SPCC %1:%2").arg(cell.chunkIndex).arg(cell.firstRecord + recordIndex),
+                    starRaDegrees,
+                    starDecDegrees,
+                    magnitude,
+                    QString()
+                });
+            }
         }
     }
 

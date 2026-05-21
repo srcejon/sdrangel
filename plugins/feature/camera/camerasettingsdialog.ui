@@ -4732,14 +4732,48 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </widget>
            </item>
            <item row="11" column="3">
-            <widget class="QDateTimeEdit" name="plateSolveDateTimeEdit">
-             <property name="displayFormat">
-              <string>yyyy-MM-dd HH:mm:ss</string>
+            <layout class="QHBoxLayout" name="plateSolveDateTimeLayout">
+             <property name="spacing">
+              <number>2</number>
              </property>
-             <property name="calendarPopup">
-              <bool>true</bool>
-             </property>
-            </widget>
+             <item>
+              <widget class="WrappingDateTimeEdit" name="plateSolveDateTimeEdit">
+               <property name="displayFormat">
+                <string>yyyy-MM-dd HH:mm:ss</string>
+               </property>
+               <property name="calendarPopup">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="ButtonSwitch" name="plateSolveDateTimeUtcButton">
+               <property name="toolTip">
+                <string>Treat the solve date/time as UTC</string>
+               </property>
+               <property name="text">
+                <string>UTC</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QToolButton" name="plateSolveDateTimeNowButton">
+               <property name="toolTip">
+                <string>Set solve date/time to now</string>
+               </property>
+               <property name="text">
+                <string/>
+               </property>
+               <property name="icon">
+                <iconset resource="../../../sdrgui/resources/res.qrc">
+                 <normaloff>:/recycle.png</normaloff>:/recycle.png</iconset>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </item>
            <item row="0" column="2">
             <widget class="QLabel" name="starBackgroundBlurLabel">
@@ -5757,6 +5791,12 @@ Right-click: toggle continual synchronization from My Position.</string>
    <class>ButtonSwitch</class>
    <extends>QToolButton</extends>
    <header>gui/buttonswitch.h</header>
+  </customwidget>
+  <customwidget>
+   <class>WrappingDateTimeEdit</class>
+   <extends>QDateTimeEdit</extends>
+   <header>gui/wrappingdatetimeedit.h</header>
+   <container>1</container>
   </customwidget>
  </customwidgets>
  <tabstops>

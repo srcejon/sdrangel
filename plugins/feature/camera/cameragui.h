@@ -271,6 +271,7 @@ private:
     void updateMotionExclusionPreview();
     void updateYoloButtonEnabled();
     void updatePlateSolveStartModeUi();
+    void updatePlateSolveDateTimeEdit();
     void setPreviewDrawMode(PreviewDrawMode mode);
     void setMotionExclusionDrawMode(bool enabled);
     void setDetectionRoiDrawMode(bool enabled);
@@ -575,6 +576,8 @@ private slots:
     void on_plateSolveStartModeCombo_currentIndexChanged(int index);
     void on_plateSolveUseCurrentDateTimeCheck_toggled(bool checked);
     void on_plateSolveDateTimeEdit_dateTimeChanged(const QDateTime& dateTime);
+    void on_plateSolveDateTimeUtcButton_toggled(bool checked);
+    void on_plateSolveDateTimeNowButton_clicked();
     void on_plateSolveUseDownloadedCatalogCheck_toggled(bool checked);
     void on_plateSolveApplyModeCombo_currentIndexChanged(int index);
     void on_plateSolveDownloadCatalogButton_clicked();

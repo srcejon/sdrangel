@@ -644,8 +644,11 @@ CameraSettings:
       description: "Use current system date/time for plate solving (1 for yes, 0 for no)"
       type: integer
     plateSolveDateTime:
-      description: "Fixed local date/time for plate solving recorded media"
+      description: "Fixed date/time for plate solving recorded media"
       type: string
+    plateSolveDateTimeUtc:
+      description: "Treat fixed plate solve date/time as UTC rather than local time (1 for yes, 0 for no)"
+      type: integer
     plateSolveUseDownloadedCatalog:
       description: "Prefer downloaded HYG catalog when available (1 for yes, 0 for no)"
       type: integer

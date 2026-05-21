@@ -474,7 +474,8 @@ struct CameraSettings
     PlateSolveStartMode m_plateSolveStartMode; ///< Which current camera settings should be used as starting inputs for plate solving
     PlateSolveLabelMode m_plateSolveLabelMode; ///< Which catalog metadata should be shown for solved stars
     bool   m_plateSolveUseCurrentDateTime; ///< Use the current system date/time for plate solving instead of a fixed timestamp
-    QDateTime m_plateSolveDateTime; ///< User-specified local date/time for plate solving recorded media
+    QDateTime m_plateSolveDateTime; ///< User-specified date/time for plate solving recorded media
+    bool   m_plateSolveDateTimeUtc; ///< Treat the user-specified plate solve date/time as UTC instead of local time
     bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
     SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both

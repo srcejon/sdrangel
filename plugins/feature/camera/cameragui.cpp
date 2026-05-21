@@ -1276,8 +1276,8 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveStartModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveStartMode));
     updatePlateSolveStartModeUi();
     settingsUI()->plateSolveUseCurrentDateTimeCheck->setChecked(m_settings.m_plateSolveUseCurrentDateTime);
-    settingsUI()->plateSolveDateTimeEdit->setDateTime(m_settings.m_plateSolveDateTime.isValid() ? m_settings.m_plateSolveDateTime : QDateTime::currentDateTime());
-    settingsUI()->plateSolveDateTimeEdit->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
+    settingsUI()->plateSolveDateTimeUtcButton->setChecked(m_settings.m_plateSolveDateTimeUtc);
+    updatePlateSolveDateTimeEdit();
     settingsUI()->plateSolveUseDownloadedCatalogCheck->setChecked(m_settings.m_plateSolveUseDownloadedCatalog);
     settingsUI()->plateSolveApplyModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveApplyMode));
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
@@ -1718,6 +1718,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveStartModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveStartModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveUseCurrentDateTimeCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled);
     QObject::connect(settingsUI()->plateSolveDateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, &CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged);
+    QObject::connect(settingsUI()->plateSolveDateTimeUtcButton, &QToolButton::toggled, this, &CameraGUI::on_plateSolveDateTimeUtcButton_toggled);
+    QObject::connect(settingsUI()->plateSolveDateTimeNowButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDateTimeNowButton_clicked);
     QObject::connect(settingsUI()->plateSolveUseDownloadedCatalogCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled);
     QObject::connect(settingsUI()->plateSolveApplyModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveDownloadCatalogButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDownloadCatalogButton_clicked);
@@ -4858,6 +4860,26 @@ void CameraGUI::updatePlateSolveStartModeUi()
     settingsUI()->plateSolveSearchRadiusSpin->setEnabled(usesSearchRadius);
 }
 
+void CameraGUI::updatePlateSolveDateTimeEdit()
+{
+    const QDateTime fallback = m_settings.m_plateSolveDateTimeUtc
+        ? QDateTime::currentDateTimeUtc()
+        : QDateTime::currentDateTime();
+    const QDateTime dateTime = m_settings.m_plateSolveDateTime.isValid()
+        ? (m_settings.m_plateSolveDateTimeUtc
+            ? m_settings.m_plateSolveDateTime.toUTC()
+            : m_settings.m_plateSolveDateTime.toLocalTime())
+        : fallback;
+
+    QSignalBlocker dateTimeBlocker(settingsUI()->plateSolveDateTimeEdit);
+    QSignalBlocker utcBlocker(settingsUI()->plateSolveDateTimeUtcButton);
+    settingsUI()->plateSolveDateTimeEdit->setDateTime(dateTime);
+    settingsUI()->plateSolveDateTimeEdit->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
+    settingsUI()->plateSolveDateTimeUtcButton->setChecked(m_settings.m_plateSolveDateTimeUtc);
+    settingsUI()->plateSolveDateTimeUtcButton->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
+    settingsUI()->plateSolveDateTimeNowButton->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
+}
+
 void CameraGUI::setPreviewDrawMode(PreviewDrawMode mode)
 {
     m_previewDrawMode = mode;
@@ -5750,6 +5772,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveStartMode = defaults.m_plateSolveStartMode;
     m_settings.m_plateSolveUseCurrentDateTime = defaults.m_plateSolveUseCurrentDateTime;
     m_settings.m_plateSolveDateTime = defaults.m_plateSolveDateTime;
+    m_settings.m_plateSolveDateTimeUtc = defaults.m_plateSolveDateTimeUtc;
     m_settings.m_plateSolveUseDownloadedCatalog = defaults.m_plateSolveUseDownloadedCatalog;
     m_settings.m_plateSolveApplyMode = defaults.m_plateSolveApplyMode;
 
@@ -5804,6 +5827,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveStartMode",
         "plateSolveUseCurrentDateTime",
         "plateSolveDateTime",
+        "plateSolveDateTimeUtc",
         "plateSolveUseDownloadedCatalog",
         "plateSolveApplyMode",
         "diffMask",
@@ -6015,13 +6039,36 @@ void CameraGUI::on_plateSolveStartModeCombo_currentIndexChanged(int index)
 void CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled(bool checked)
 {
     m_settings.m_plateSolveUseCurrentDateTime = checked;
-    settingsUI()->plateSolveDateTimeEdit->setEnabled(!checked);
+    updatePlateSolveDateTimeEdit();
     applySetting("plateSolveUseCurrentDateTime");
 }
 
 void CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged(const QDateTime& dateTime)
 {
-    m_settings.m_plateSolveDateTime = dateTime;
+    m_settings.m_plateSolveDateTime = m_settings.m_plateSolveDateTimeUtc
+        ? QDateTime(dateTime.date(), dateTime.time(), Qt::UTC)
+        : QDateTime(dateTime.date(), dateTime.time(), Qt::LocalTime);
+    applySetting("plateSolveDateTime");
+}
+
+void CameraGUI::on_plateSolveDateTimeUtcButton_toggled(bool checked)
+{
+    const QDateTime dateTime = m_settings.m_plateSolveDateTime.isValid()
+        ? m_settings.m_plateSolveDateTime
+        : QDateTime::currentDateTime();
+
+    m_settings.m_plateSolveDateTimeUtc = checked;
+    m_settings.m_plateSolveDateTime = checked ? dateTime.toUTC() : dateTime.toLocalTime();
+    updatePlateSolveDateTimeEdit();
+    applySettings({"plateSolveDateTimeUtc", "plateSolveDateTime"});
+}
+
+void CameraGUI::on_plateSolveDateTimeNowButton_clicked()
+{
+    m_settings.m_plateSolveDateTime = m_settings.m_plateSolveDateTimeUtc
+        ? QDateTime::currentDateTimeUtc()
+        : QDateTime::currentDateTime();
+    updatePlateSolveDateTimeEdit();
     applySetting("plateSolveDateTime");
 }
 

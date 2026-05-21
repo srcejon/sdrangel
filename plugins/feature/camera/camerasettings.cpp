@@ -326,6 +326,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveLabelMode = PlateSolveLabelName;
     m_plateSolveUseCurrentDateTime = true;
     m_plateSolveDateTime = QDateTime::currentDateTime();
+    m_plateSolveDateTimeUtc = false;
     m_plateSolveUseDownloadedCatalog = false;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
     m_recordMode = SavedMediaRaw;
@@ -576,6 +577,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(209, m_imageRecordLimit);
     s.writeS32(210, m_videoRecordLimitSeconds);
     s.writeBool(211, m_postProcessUseCuda);
+    s.writeBool(212, m_plateSolveDateTimeUtc);
 
     return s.final();
 }
@@ -829,9 +831,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(127, &m_plateSolveSearchRadius, 12.0);
         d.readBool(129, &m_plateSolveUseDownloadedCatalog, false);
         d.readBool(130, &m_plateSolveUseCurrentDateTime, true);
+        d.readBool(212, &m_plateSolveDateTimeUtc, false);
         qint64 plateSolveDateTimeMs = QDateTime::currentDateTime().toMSecsSinceEpoch();
         d.readS64(131, &plateSolveDateTimeMs, plateSolveDateTimeMs);
-        m_plateSolveDateTime = QDateTime::fromMSecsSinceEpoch(std::max(plateSolveDateTimeMs, m_minPlateSolveDateTimeMs));
+        m_plateSolveDateTime = QDateTime::fromMSecsSinceEpoch(
+            std::max(plateSolveDateTimeMs, m_minPlateSolveDateTimeMs),
+            m_plateSolveDateTimeUtc ? Qt::UTC : Qt::LocalTime);
         qint32 plateSolveApplyMode = static_cast<qint32>(PlateSolveApplyAzElRollFov);
         d.readS32(132, &plateSolveApplyMode, static_cast<qint32>(PlateSolveApplyAzElRollFov));
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(plateSolveApplyMode);
@@ -863,7 +868,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_lensCenterOffsetY = qBound(m_minLensCenterOffset, m_lensCenterOffsetY, m_maxLensCenterOffset);
         m_lensDistortionK1 = qBound(m_minLensDistortionK1, m_lensDistortionK1, m_maxLensDistortionK1);
         if (!m_plateSolveDateTime.isValid()) {
-            m_plateSolveDateTime = QDateTime::currentDateTime();
+            m_plateSolveDateTime = m_plateSolveDateTimeUtc ? QDateTime::currentDateTimeUtc() : QDateTime::currentDateTime();
         }
         m_motionHistory = qBound(m_minMotionHistory, m_motionHistory, m_maxMotionHistory);
         m_motionVarThreshold = qBound(m_minMotionVarThreshold, m_motionVarThreshold, m_maxMotionVarThreshold);
@@ -1540,6 +1545,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveDateTime")) {
         m_plateSolveDateTime = settings.m_plateSolveDateTime;
     }
+    if (settingsKeys.contains("plateSolveDateTimeUtc")) {
+        m_plateSolveDateTimeUtc = settings.m_plateSolveDateTimeUtc;
+    }
     if (settingsKeys.contains("plateSolveUseDownloadedCatalog")) {
         m_plateSolveUseDownloadedCatalog = settings.m_plateSolveUseDownloadedCatalog;
     }
@@ -2145,6 +2153,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveDateTime") || force) {
         ostr << " m_plateSolveDateTime: " << m_plateSolveDateTime.toString(Qt::ISODateWithMs).toStdString();
+    }
+    if (settingsKeys.contains("plateSolveDateTimeUtc") || force) {
+        ostr << " m_plateSolveDateTimeUtc: " << m_plateSolveDateTimeUtc;
     }
     if (settingsKeys.contains("plateSolveUseDownloadedCatalog") || force) {
         ostr << " m_plateSolveUseDownloadedCatalog: " << m_plateSolveUseDownloadedCatalog;

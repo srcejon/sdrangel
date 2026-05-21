@@ -55,6 +55,11 @@ class CameraPlateSolver::SolverContext
 {
 public:
 
+explicit SolverContext(QNetworkAccessManager *networkManager = nullptr) :
+    m_networkManager(networkManager)
+{
+}
+
 struct CatalogStar
 {
     QString name;
@@ -212,6 +217,9 @@ double m_elevationSeedReferenceDegrees = 0.0;
 double m_elevationSeedReferenceFovDegrees = 0.0;
 double m_elevationSeedScaleDegrees = 1.0;
 double m_elevationSeedFovScaleDegrees = 1.0;
+QNetworkAccessManager *m_networkManager = nullptr;
+QHash<QString, QByteArray> m_sirilRangeCache;
+QHash<int, QByteArray> m_sirilIndexCache;
 static constexpr const char* kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 static constexpr const char* kDownloadedCatalogDir = "camera";
 static constexpr const char* kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
@@ -723,11 +731,9 @@ static QString sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastB
     return QStringLiteral("%1:%2:%3").arg(chunkIndex).arg(firstByte).arg(lastByte);
 }
 
-static thread_local QNetworkAccessManager *s_activeSirilNetworkManager;
-
-static QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 lastByte, int sourceIndex)
+QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 lastByte, int sourceIndex)
 {
-    if (!s_activeSirilNetworkManager)
+    if (!m_networkManager)
     {
         qWarning() << "CameraPlateSolver: Siril SPCC range request has no active network manager"
                    << "source" << sirilSpccSourceName(sourceIndex)
@@ -742,7 +748,7 @@ static QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qi
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 
-    QNetworkReply *reply = s_activeSirilNetworkManager->get(request);
+    QNetworkReply *reply = m_networkManager->get(request);
     QEventLoop loop;
     QTimer timeoutTimer;
     timeoutTimer.setSingleShot(true);
@@ -786,22 +792,16 @@ static QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qi
     return data;
 }
 
-static QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastByte)
+QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastByte)
 {
-    static QMutex s_rangeCacheMutex;
-    static QHash<QString, QByteArray> s_rangeCache;
-
     if ((chunkIndex < 0) || (firstByte < 0) || (lastByte < firstByte)) {
         return {};
     }
 
     const QString cacheKey = sirilRangeCacheKey(chunkIndex, firstByte, lastByte);
-    {
-        QMutexLocker locker(&s_rangeCacheMutex);
-        const auto it = s_rangeCache.constFind(cacheKey);
-        if (it != s_rangeCache.constEnd()) {
-            return it.value();
-        }
+    const auto cachedRange = m_sirilRangeCache.constFind(cacheKey);
+    if (cachedRange != m_sirilRangeCache.constEnd()) {
+        return cachedRange.value();
     }
 
     const qint64 requestedSize = lastByte - firstByte + 1;
@@ -815,9 +815,8 @@ static QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastB
     const QString requestCacheKey = sirilRangeCacheKey(chunkIndex, requestFirstByte, requestLastByte);
     if (requestCacheKey != cacheKey)
     {
-        QMutexLocker locker(&s_rangeCacheMutex);
-        const auto it = s_rangeCache.constFind(requestCacheKey);
-        if (it != s_rangeCache.constEnd())
+        const auto it = m_sirilRangeCache.constFind(requestCacheKey);
+        if (it != m_sirilRangeCache.constEnd())
         {
             const qint64 offset = firstByte - requestFirstByte;
             if (it.value().size() >= (offset + requestedSize)) {
@@ -845,26 +844,19 @@ static QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastB
         }
 
         const QByteArray requestedData = data.mid(static_cast<int>(offset), static_cast<int>(requestedSize));
-        QMutexLocker locker(&s_rangeCacheMutex);
-        s_rangeCache.insert(requestCacheKey, data);
-        s_rangeCache.insert(cacheKey, requestedData);
+        m_sirilRangeCache.insert(requestCacheKey, data);
+        m_sirilRangeCache.insert(cacheKey, requestedData);
         return requestedData;
     }
 
     return {};
 }
 
-static QByteArray fetchSirilChunkIndex(int chunkIndex)
+QByteArray fetchSirilChunkIndex(int chunkIndex)
 {
-    static QMutex s_indexCacheMutex;
-    static QHash<int, QByteArray> s_indexCache;
-
-    {
-        QMutexLocker locker(&s_indexCacheMutex);
-        const auto it = s_indexCache.constFind(chunkIndex);
-        if (it != s_indexCache.constEnd()) {
-            return it.value();
-        }
+    const auto cachedIndex = m_sirilIndexCache.constFind(chunkIndex);
+    if (cachedIndex != m_sirilIndexCache.constEnd()) {
+        return cachedIndex.value();
     }
 
     const qint64 firstByte = kSirilHeaderSize;
@@ -879,8 +871,7 @@ static QByteArray fetchSirilChunkIndex(int chunkIndex)
         return {};
     }
 
-    QMutexLocker locker(&s_indexCacheMutex);
-    s_indexCache.insert(chunkIndex, indexBytes);
+    m_sirilIndexCache.insert(chunkIndex, indexBytes);
     return indexBytes;
 }
 
@@ -987,7 +978,7 @@ static QSet<quint32> sampleSirilHealpixPixels(double centerRaDegrees,
     return pixels;
 }
 
-static bool sirilCellRecordRange(quint32 pixel, int& chunkIndex, qint64& firstRecord, qint64& recordCount)
+bool sirilCellRecordRange(quint32 pixel, int& chunkIndex, qint64& firstRecord, qint64& recordCount)
 {
     chunkIndex = static_cast<int>(pixel / kSirilPixelsPerChunk);
     const int localPixel = static_cast<int>(pixel % kSirilPixelsPerChunk);
@@ -1006,11 +997,11 @@ static bool sirilCellRecordRange(quint32 pixel, int& chunkIndex, qint64& firstRe
     return true;
 }
 
-static QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
-                                                  const QSize& imageSize,
-                                                  const QDateTime& captureDateTimeUtc,
-                                                  double maxMagnitude,
-                                                  QString* catalogSource)
+QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
+                                          const QSize& imageSize,
+                                          const QDateTime& captureDateTimeUtc,
+                                          double maxMagnitude,
+                                          QString* catalogSource)
 {
     QVector<CatalogStar> stars;
     if (!plateSolveStartUsesDirection(settings))
@@ -1463,7 +1454,7 @@ static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& set
     return visibleStars;
 }
 
-static PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& settings,
+PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& settings,
                                                        const QSize& imageSize,
                                                        const QDateTime& captureDateTimeUtc,
                                                        double maxMagnitude)
@@ -4353,8 +4344,6 @@ static void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetection
 
 };
 
-thread_local QNetworkAccessManager *CameraPlateSolver::SolverContext::s_activeSirilNetworkManager = nullptr;
-
 CameraPlateSolver::CameraPlateSolver(QObject *parent) :
     QObject(parent),
     m_networkManager(new QNetworkAccessManager(this))
@@ -4830,10 +4819,6 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                                                 const QDateTime& captureDateTime,
                                                 QVector<CameraPipelineStarDetection>& starDetections)
 {
-    QNetworkAccessManager *previousNetworkManager = SolverContext::s_activeSirilNetworkManager;
-    SolverContext::s_activeSirilNetworkManager = m_networkManager;
-    SolverContext context;
-    const CameraPlateSolveResult result = context.solve(settings, imageSize, captureDateTime, starDetections);
-    SolverContext::s_activeSirilNetworkManager = previousNetworkManager;
-    return result;
+    SolverContext context(m_networkManager);
+    return context.solve(settings, imageSize, captureDateTime, starDetections);
 }

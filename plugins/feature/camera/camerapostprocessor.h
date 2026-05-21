@@ -404,7 +404,7 @@ private:
     void applyConstellationOverlay(QImage& image) const;
     void applyTrackedObjectOverlay(QImage& image) const;
     void applyDateTimeOverlay(QImage& image) const;
-    void applyTextOverlay(QImage& image, const QString& overlayTextHtml) const;
+    void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     [[nodiscard]] QString expandOverlayTextTemplate() const;
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void restartWeatherUpdates();

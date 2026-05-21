@@ -1464,19 +1464,11 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyTextOverlay(QImage& image, const QString& overlayTextHtml) const
+// overlayTextDocument must already have font, style-sheet, and HTML set (done in
+// applyPostProcessing so the document is constructed only once per frame).
+void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const
 {
     PROFILER_START();
-    QTextDocument overlayTextDocument;
-    QFont font;
-    if (!m_settings.m_overlayTextFontFamily.isEmpty()) {
-        font.setFamily(m_settings.m_overlayTextFontFamily);
-    }
-    font.setPointSizeF(m_settings.m_overlayTextFontScale);
-    overlayTextDocument.setDefaultFont(font);
-    overlayTextDocument.setDefaultStyleSheet(QStringLiteral("* { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
-    overlayTextDocument.setHtml(QStringLiteral("<div>%1</div>").arg(overlayTextHtml));
-
     const int x = std::max(0, m_settings.m_overlayTextPosX);
     const qreal maxTextWidth = std::max(1, image.width() - x);
     overlayTextDocument.setTextWidth(maxTextWidth);
@@ -1497,9 +1489,21 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     const QImage& input = frame.m_image;
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
     const QString expandedOverlayText = expandOverlayTextTemplate();
+    // Build the overlay text document once with font/style/HTML — used for both the
+    // empty-check and rendering, so we only call QTextDocument::setHtml() once per frame.
     QTextDocument overlayTextDocument;
-    overlayTextDocument.setHtml(expandedOverlayText);
-    const bool needsTextOverlay = m_settings.m_overlayText && !overlayTextDocument.toPlainText().trimmed().isEmpty();
+    bool needsTextOverlay = false;
+    if (m_settings.m_overlayText && !expandedOverlayText.trimmed().isEmpty()) {
+        QFont font;
+        if (!m_settings.m_overlayTextFontFamily.isEmpty()) {
+            font.setFamily(m_settings.m_overlayTextFontFamily);
+        }
+        font.setPointSizeF(m_settings.m_overlayTextFontScale);
+        overlayTextDocument.setDefaultFont(font);
+        overlayTextDocument.setDefaultStyleSheet(QStringLiteral("* { color: %1; }").arg(m_settings.m_overlayTextColor.name()));
+        overlayTextDocument.setHtml(QStringLiteral("<div>%1</div>").arg(expandedOverlayText));
+        needsTextOverlay = !overlayTextDocument.toPlainText().trimmed().isEmpty();
+    }
     const bool needsAny = m_settings.m_overlayDateTime
         || m_settings.m_equatorialGrid
         || m_settings.m_altAzGrid
@@ -1532,7 +1536,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     if (m_settings.m_constellation) { applyConstellationOverlay(result); }
     if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
-    if (needsTextOverlay) { applyTextOverlay(result, expandedOverlayText); }
+    if (needsTextOverlay) { applyTextOverlay(result, overlayTextDocument); }
 
     PROFILER_STOP("CameraPostProcessor::applyPostProcessing");
     return result;

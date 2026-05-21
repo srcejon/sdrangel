@@ -277,7 +277,7 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_plateSolveMinMatches = 4;
     settings.m_plateSolveMatchRadius = 24.0;
     settings.m_plateSolveFinalMatchRadius = 24.0;
-    settings.m_plateSolveSearchRadius = 3.5;
+    settings.m_plateSolveSearchRadius = (test.fov > 30.0) ? 12.0 : 3.5;
     return settings;
 }
 

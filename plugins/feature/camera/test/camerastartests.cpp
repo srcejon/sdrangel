@@ -271,8 +271,10 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_plateSolveCatalogSource = CameraSettings::PlateSolveCatalogSirilSpccGaia;
     settings.m_plateSolveStartMode = CameraSettings::PlateSolveStartFovAzElRollLens;
     settings.m_plateSolveLabelMode = CameraSettings::PlateSolveLabelName;
-    settings.m_plateSolveMaxMagnitude = CameraSettings::m_maxPlateSolveMagnitude;
-    settings.m_plateSolveMinMatches = CameraSettings::m_minPlateSolveMatches;
+    settings.m_plateSolveMaxMagnitude = (test.fov > 30.0)
+        ? 5.0
+        : CameraSettings::m_maxPlateSolveMagnitude;
+    settings.m_plateSolveMinMatches = 4;
     settings.m_plateSolveMatchRadius = 24.0;
     settings.m_plateSolveFinalMatchRadius = 24.0;
     settings.m_plateSolveSearchRadius = 3.5;

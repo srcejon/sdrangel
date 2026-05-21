@@ -168,6 +168,11 @@ QStringList parseExpectedStars(const QString& value)
     return stars;
 }
 
+QString normalizedStarName(const QString& value)
+{
+    return value.trimmed().toCaseFolded();
+}
+
 bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
 {
     QFile file(csvPath);
@@ -356,20 +361,6 @@ DetectorRunResult runDetector(const StarTestCase& test)
     return result;
 }
 
-QString normalizedStarName(const QString& value)
-{
-    return value.trimmed().toCaseFolded();
-}
-
-bool labelMatchesExpectedStar(const QString& label, const QString& expected)
-{
-    const QString normalizedLabel = normalizedStarName(label);
-    const QString normalizedExpected = normalizedStarName(expected);
-    return (normalizedLabel == normalizedExpected)
-        || normalizedLabel.contains(normalizedExpected)
-        || normalizedExpected.contains(normalizedLabel);
-}
-
 QStringList solvedStarLabels(const CameraPipelineFramePtr& frame)
 {
     QStringList labels;
@@ -388,6 +379,15 @@ QStringList solvedStarLabels(const CameraPipelineFramePtr& frame)
         return a.localeAwareCompare(b) < 0;
     });
     return labels;
+}
+
+bool labelMatchesExpectedStar(const QString& label, const QString& expected)
+{
+    const QString normalizedLabel = normalizedStarName(label);
+    const QString normalizedExpected = normalizedStarName(expected);
+    return (normalizedLabel == normalizedExpected)
+        || normalizedLabel.contains(normalizedExpected)
+        || normalizedExpected.contains(normalizedLabel);
 }
 
 QStringList missingExpectedStars(const QStringList& detectedLabels, const QStringList& expectedStars)
@@ -445,6 +445,10 @@ int runTests(const QString& csvPath)
                   << " candidates=" << result.frame->m_plateSolveCatalogCandidateStars
                   << " outliers=" << result.frame->m_plateSolveOutlierStars
                   << " rms=" << result.frame->m_plateSolveRmsError
+                  << " poseAz=" << result.frame->m_plateSolveAzimuth
+                  << " poseEl=" << result.frame->m_plateSolveElevation
+                  << " poseRoll=" << result.frame->m_plateSolveRoll
+                  << " poseFov=" << result.frame->m_plateSolveFov
                   << '\n';
         std::cout << "  labels: " << labels.join(QStringLiteral(", ")).toStdString() << '\n';
         if (!missing.isEmpty()) {

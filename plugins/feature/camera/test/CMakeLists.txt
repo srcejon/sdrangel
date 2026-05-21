@@ -41,3 +41,19 @@ target_link_libraries(featurecamera_star_tests PRIVATE
     ${ZLIB_LIBRARIES}
     sdrbase
 )
+
+if(WIN32)
+    get_target_property(camera_star_tests_qmake Qt::qmake IMPORTED_LOCATION)
+    get_filename_component(camera_star_tests_qt_bin_dir "${camera_star_tests_qmake}" DIRECTORY)
+    get_filename_component(camera_star_tests_qt_dir "${camera_star_tests_qt_bin_dir}" DIRECTORY)
+    set(camera_star_tests_qt_tls_dir "${camera_star_tests_qt_dir}/plugins/tls")
+    if(EXISTS "${camera_star_tests_qt_tls_dir}")
+        add_custom_command(TARGET featurecamera_star_tests POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:featurecamera_star_tests>/tls"
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                "${camera_star_tests_qt_tls_dir}"
+                "$<TARGET_FILE_DIR:featurecamera_star_tests>/tls"
+            COMMENT "Deploying Qt TLS plugins for camera star tests"
+        )
+    endif()
+endif()

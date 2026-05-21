@@ -249,6 +249,8 @@ static constexpr qint64 kSirilMaxMergedRangeGapBytes = 64 * 1024;
 static constexpr double kSirilAngleScale = 360.0 / 2147483647.0;
 static constexpr double kSirilAutoMaxFovDegrees = 15.0;
 static constexpr double kSirilMaxQueryRadiusDegrees = 20.0;
+static constexpr double kSirilAliasMaxSeparationArcSec = 30.0;
+static constexpr double kSirilAliasMaxMagnitudeDifference = 2.5;
 
 struct SirilCellRange
 {
@@ -1417,6 +1419,118 @@ static const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& setti
     return s_catalog;
 }
 
+static QVector<int> aliasCatalogDeclinationSortedIndices(const QVector<CatalogStar>& aliasStars)
+{
+    static QMutex s_aliasIndexMutex;
+    static const QVector<CatalogStar>* s_aliasStars = nullptr;
+    static const CatalogStar* s_aliasStarsData = nullptr;
+    static int s_aliasStarsSize = 0;
+    static QVector<int> s_sortedIndices;
+
+    QMutexLocker locker(&s_aliasIndexMutex);
+    if ((s_aliasStars != &aliasStars)
+        || (s_aliasStarsData != aliasStars.constData())
+        || (s_aliasStarsSize != aliasStars.size())
+        || s_sortedIndices.isEmpty())
+    {
+        s_aliasStars = &aliasStars;
+        s_aliasStarsData = aliasStars.constData();
+        s_aliasStarsSize = aliasStars.size();
+        s_sortedIndices.resize(aliasStars.size());
+        for (int i = 0; i < aliasStars.size(); ++i) {
+            s_sortedIndices[i] = i;
+        }
+        std::sort(s_sortedIndices.begin(), s_sortedIndices.end(), [&aliasStars](int lhs, int rhs) {
+            return aliasStars[lhs].declinationDegrees < aliasStars[rhs].declinationDegrees;
+        });
+    }
+
+    return s_sortedIndices;
+}
+
+static QString resolveNamedAliasForCatalogStar(const CatalogStar& star,
+                                               const QVector<CatalogStar>& aliasStars,
+                                               const QVector<int>& sortedAliasIndices)
+{
+    if (aliasStars.isEmpty() || sortedAliasIndices.isEmpty()) {
+        return QString();
+    }
+
+    const double maxSeparationDegrees = kSirilAliasMaxSeparationArcSec / 3600.0;
+    const double minDeclination = star.declinationDegrees - maxSeparationDegrees;
+    const double maxDeclination = star.declinationDegrees + maxSeparationDegrees;
+    const auto first = std::lower_bound(
+        sortedAliasIndices.cbegin(),
+        sortedAliasIndices.cend(),
+        minDeclination,
+        [&aliasStars](int catalogIndex, double declination) {
+            return aliasStars[catalogIndex].declinationDegrees < declination;
+        });
+
+    QString bestName;
+    double bestScore = std::numeric_limits<double>::infinity();
+
+    for (auto it = first; it != sortedAliasIndices.cend(); ++it)
+    {
+        const CatalogStar& candidate = aliasStars[*it];
+        if (candidate.declinationDegrees > maxDeclination) {
+            break;
+        }
+
+        if (candidate.name.trimmed().isEmpty()) {
+            continue;
+        }
+
+        const double magnitudeDifference = std::fabs(candidate.magnitude - star.magnitude);
+        if (magnitudeDifference > kSirilAliasMaxMagnitudeDifference) {
+            continue;
+        }
+
+        const double separationArcSec = angularSeparationDegrees(
+            star.rightAscensionDegrees,
+            star.declinationDegrees,
+            candidate.rightAscensionDegrees,
+            candidate.declinationDegrees) * 3600.0;
+        if (separationArcSec > kSirilAliasMaxSeparationArcSec) {
+            continue;
+        }
+
+        const double score = separationArcSec + magnitudeDifference * 4.0;
+        if (score < bestScore)
+        {
+            bestScore = score;
+            bestName = candidate.name.trimmed();
+        }
+    }
+
+    return bestName;
+}
+
+static void applyNamedAliasesToSirilCatalog(const CameraSettings& settings, QVector<CatalogStar>& stars)
+{
+    if (stars.isEmpty()) {
+        return;
+    }
+
+    const QVector<CatalogStar>& aliasStars = brightStarCatalog(settings);
+    const QVector<int> sortedAliasIndices = aliasCatalogDeclinationSortedIndices(aliasStars);
+    int aliasCount = 0;
+
+    for (CatalogStar& star : stars)
+    {
+        const QString alias = resolveNamedAliasForCatalogStar(star, aliasStars, sortedAliasIndices);
+        if (!alias.isEmpty())
+        {
+            star.name = alias;
+            ++aliasCount;
+        }
+    }
+
+    if (aliasCount > 0) {
+        qDebug() << "CameraPlateSolver: applied Siril SPCC Gaia aliases" << aliasCount;
+    }
+}
+
 static SkyProjector createProjector(const CameraSettings& settings,
                              const QSize& size,
                              double azimuthDegrees,
@@ -1685,6 +1799,9 @@ PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& set
     if (requestSiril)
     {
         context.catalogStars = loadSirilSpccCatalog(settings, imageSize, captureDateTimeUtc, maxMagnitude, &context.catalogSource);
+        if (!context.catalogStars.isEmpty()) {
+            applyNamedAliasesToSirilCatalog(settings, context.catalogStars);
+        }
         if (context.catalogStars.size() < settings.m_plateSolveMinMatches)
         {
             qWarning() << "CameraPlateSolver: Siril SPCC Gaia catalog did not provide enough stars, falling back to HYG/bundled"

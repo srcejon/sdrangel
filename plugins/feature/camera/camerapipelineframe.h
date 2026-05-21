@@ -164,6 +164,11 @@ struct CameraPipelineFrame
     }
 #else
     void clearCudaCache() {}
+
+    bool ensureCpuImageFromCuda()
+    {
+        return !m_image.isNull();
+    }
 #endif
 
     bool hasImageData() const

@@ -3767,6 +3767,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
 
     const double finalMatchRadius = std::max(1.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius));
+    const double guidedMatchRadiusOverride = useStartDirection ? finalMatchRadius : -1.0;
     const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveSearchRadius);
     const double coarseRollRadius = std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
     const double coarseFovRadius = std::max(0.05, std::min(12.0, static_cast<double>(settings.m_fov) * 0.10));
@@ -4136,7 +4137,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             nullptr,
                             fixedCenterOffsetX,
                             fixedCenterOffsetY,
-                            fixedDistortionK1);
+                            fixedDistortionK1,
+                            guidedMatchRadiusOverride);
                         logPlateSolveEvaluation("coarse-refine", candidate);
                         if (keepMultipleCandidates) {
                             insertDistinctEvaluationCandidate(
@@ -4211,7 +4213,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             nullptr,
                             fixedCenterOffsetX,
                             fixedCenterOffsetY,
-                            fixedDistortionK1);
+                            fixedDistortionK1,
+                            guidedMatchRadiusOverride);
                         logPlateSolveEvaluation("full-refine", candidate);
                         if (keepMultipleCandidates) {
                             insertDistinctEvaluationCandidate(

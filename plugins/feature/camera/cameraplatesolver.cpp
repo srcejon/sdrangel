@@ -861,9 +861,13 @@ QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 la
     {
         const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         data = reply->readAll();
-        // Accept 206 Partial Content (normal) and 200 OK (some CDNs / servers that
-        // respond to a range request with the full content).
-        if ((httpStatus != 206 && httpStatus != 200) || data.isEmpty())
+        // Require HTTP 206 Partial Content. A 200 OK full-file response cannot be
+        // safely accepted here because fetchSirilRange() slices the returned bytes
+        // using offset = firstByte - requestFirstByte (relative to the start of the
+        // requested range), which is only valid when data[0] == byte requestFirstByte
+        // of the file.  A 200 response starts at byte 0, so the slice would cut the
+        // wrong bytes and cache corrupted catalog data.
+        if ((httpStatus != 206) || data.isEmpty())
         {
             qWarning() << "CameraPlateSolver: Siril SPCC range request returned unexpected response"
                        << "source" << sirilSpccSourceName(sourceIndex)

@@ -4850,6 +4850,7 @@ void CameraGUI::updatePlateSolveStartModeUi()
     QString searchRadiusLabelText = tr("Search radius");
     const bool usesSearchRadius =
         m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovElevation
+        || m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzEl
         || m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll
         || m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens;
     if (m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovElevation) {

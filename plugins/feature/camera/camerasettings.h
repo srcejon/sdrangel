@@ -150,6 +150,7 @@ struct CameraSettings
         PlateSolveStartBlind = 0,
         PlateSolveStartFov,
         PlateSolveStartFovElevation,
+        PlateSolveStartFovAzEl,
         PlateSolveStartFovAzElRoll,
         PlateSolveStartFovAzElRollLens,
         PlateSolveStartCurrentSettingsOnly

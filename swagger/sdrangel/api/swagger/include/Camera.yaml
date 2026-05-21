@@ -629,9 +629,10 @@ CameraSettings:
           * 0 - Blind
           * 1 - FoV
           * 2 - FoV/elevation
-          * 3 - FoV/azimuth/elevation/roll
-          * 4 - FoV/azimuth/elevation/roll/lens
-          * 5 - Current settings only
+          * 3 - FoV/azimuth/elevation
+          * 4 - FoV/azimuth/elevation/roll
+          * 5 - FoV/azimuth/elevation/roll/lens
+          * 6 - Current settings only
       type: integer
     plateSolveLabelMode:
       description: >

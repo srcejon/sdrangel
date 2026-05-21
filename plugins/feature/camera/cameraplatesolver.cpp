@@ -218,6 +218,7 @@ static constexpr const char* kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
 static constexpr const char* kDownloadedCatalogCsvFile = "hyg_v42.csv";
 static constexpr const char* kDownloadedCatalogReducedFile = "hyg_v42_reduced.txt";
 static constexpr const char* kSirilSpccBaseUrl = "https://huggingface.co/datasets/siril-spcc/gaia/resolve/main";
+static constexpr const char* kSirilSpccZenodoBaseUrl = "https://zenodo.org/records/17988559/files";
 static constexpr const char* kSirilSpccFileNamePattern = "siril_cat1_healpix8_xpsamp_%1.dat";
 static constexpr int kSirilHealpixLevel = 8;
 static constexpr int kSirilNside = 1 << kSirilHealpixLevel;
@@ -695,16 +696,82 @@ static QString currentCatalogSource(const CameraSettings& settings)
         : QStringLiteral("Bundled");
 }
 
-static QString sirilSpccChunkUrl(int chunkIndex)
+static QString sirilSpccChunkUrl(int chunkIndex, int sourceIndex)
 {
+    const QString fileName = QString::fromUtf8(kSirilSpccFileNamePattern).arg(chunkIndex);
+    if (sourceIndex == 1)
+    {
+        return QStringLiteral("%1/%2?download=1").arg(
+            QString::fromUtf8(kSirilSpccZenodoBaseUrl),
+            fileName);
+    }
+
     return QStringLiteral("%1/%2").arg(
         QString::fromUtf8(kSirilSpccBaseUrl),
-        QString::fromUtf8(kSirilSpccFileNamePattern).arg(chunkIndex));
+        fileName);
+}
+
+static QString sirilSpccSourceName(int sourceIndex)
+{
+    return sourceIndex == 1 ? QStringLiteral("Zenodo") : QStringLiteral("Hugging Face");
 }
 
 static QString sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastByte)
 {
     return QStringLiteral("%1:%2:%3").arg(chunkIndex).arg(firstByte).arg(lastByte);
+}
+
+static QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 lastByte, int sourceIndex)
+{
+    QNetworkAccessManager manager;
+    QNetworkRequest request(QUrl(sirilSpccChunkUrl(chunkIndex, sourceIndex)));
+    request.setRawHeader("Range", QByteArray("bytes=%1-%2").replace("%1", QByteArray::number(firstByte)).replace("%2", QByteArray::number(lastByte)));
+    request.setRawHeader("Accept-Encoding", "identity");
+    request.setRawHeader("User-Agent", "SDRangel CameraPlateSolver/1.0");
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+
+    QNetworkReply *reply = manager.get(request);
+    QEventLoop loop;
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start(30000);
+    loop.exec();
+
+    QByteArray data;
+    const bool timedOut = timeoutTimer.isActive() == false && !reply->isFinished();
+    if (timedOut)
+    {
+        reply->abort();
+        qWarning() << "CameraPlateSolver: Siril SPCC range request timed out"
+                   << "source" << sirilSpccSourceName(sourceIndex)
+                   << "chunk" << chunkIndex << "bytes" << firstByte << lastByte;
+    }
+    else if (reply->error() != QNetworkReply::NoError)
+    {
+        qWarning() << "CameraPlateSolver: Siril SPCC range request failed"
+                   << "source" << sirilSpccSourceName(sourceIndex)
+                   << "chunk" << chunkIndex << "bytes" << firstByte << lastByte
+                   << reply->errorString();
+    }
+    else
+    {
+        const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        data = reply->readAll();
+        if (((httpStatus != 206) && (httpStatus != 200)) || data.isEmpty())
+        {
+            qWarning() << "CameraPlateSolver: Siril SPCC range request returned unexpected response"
+                       << "source" << sirilSpccSourceName(sourceIndex)
+                       << "chunk" << chunkIndex << "status" << httpStatus
+                       << "bytes" << firstByte << lastByte << "size" << data.size();
+            data.clear();
+        }
+    }
+    reply->deleteLater();
+
+    return data;
 }
 
 static QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastByte)
@@ -725,47 +792,10 @@ static QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastB
         }
     }
 
-    QNetworkAccessManager manager;
-    QNetworkRequest request(QUrl(sirilSpccChunkUrl(chunkIndex)));
-    request.setRawHeader("Range", QByteArray("bytes=%1-%2").replace("%1", QByteArray::number(firstByte)).replace("%2", QByteArray::number(lastByte)));
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-
-    QNetworkReply *reply = manager.get(request);
-    QEventLoop loop;
-    QTimer timeoutTimer;
-    timeoutTimer.setSingleShot(true);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    timeoutTimer.start(30000);
-    loop.exec();
-
     QByteArray data;
-    const bool timedOut = timeoutTimer.isActive() == false && !reply->isFinished();
-    if (timedOut)
-    {
-        reply->abort();
-        qWarning() << "CameraPlateSolver: Siril SPCC range request timed out"
-                   << "chunk" << chunkIndex << "bytes" << firstByte << lastByte;
+    for (int sourceIndex = 0; sourceIndex < 2 && data.isEmpty(); ++sourceIndex) {
+        data = fetchSirilRangeFromSource(chunkIndex, firstByte, lastByte, sourceIndex);
     }
-    else if (reply->error() != QNetworkReply::NoError)
-    {
-        qWarning() << "CameraPlateSolver: Siril SPCC range request failed"
-                   << "chunk" << chunkIndex << "bytes" << firstByte << lastByte
-                   << reply->errorString();
-    }
-    else
-    {
-        const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        data = reply->readAll();
-        if (((httpStatus != 206) && (httpStatus != 200)) || data.isEmpty())
-        {
-            qWarning() << "CameraPlateSolver: Siril SPCC range request returned unexpected response"
-                       << "chunk" << chunkIndex << "status" << httpStatus
-                       << "bytes" << firstByte << lastByte << "size" << data.size();
-            data.clear();
-        }
-    }
-    reply->deleteLater();
 
     if (!data.isEmpty())
     {

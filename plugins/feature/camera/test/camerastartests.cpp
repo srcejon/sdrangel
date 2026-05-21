@@ -8,7 +8,9 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <limits>
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -16,6 +18,7 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QImage>
 #include <QLocale>
 #include <QStringList>
@@ -26,6 +29,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "camerastardetector.h"
+#include "util/astronomy.h"
 
 #ifndef CAMERA_STAR_TEST_DATA_DIR
 #define CAMERA_STAR_TEST_DATA_DIR "."
@@ -58,6 +62,40 @@ struct DetectorRunResult
     QString error;
     CameraPipelineFramePtr frame;
 };
+
+struct CatalogStar
+{
+    QString name;
+    double rightAscensionDegrees = 0.0;
+    double declinationDegrees = 0.0;
+    double magnitude = 0.0;
+};
+
+struct SkyVector
+{
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+};
+
+struct TestProjector
+{
+    bool valid = false;
+    CameraSettings::LensProjection lensProjection = CameraSettings::LensProjectionRectilinear;
+    SkyVector center;
+    SkyVector right;
+    SkyVector up;
+    double halfHorizontalFov = 0.0;
+    double horizontalScale = 1.0;
+    double verticalScale = 1.0;
+    double principalPointX = 0.0;
+    double principalPointY = 0.0;
+    double distortionK1 = 0.0;
+    int width = 0;
+    int height = 0;
+};
+
+constexpr double kPi = 3.14159265358979323846;
 
 QStringList parseCsvLine(const QString& line, bool* ok)
 {
@@ -171,6 +209,285 @@ QStringList parseExpectedStars(const QString& value)
 QString normalizedStarName(const QString& value)
 {
     return value.trimmed().toCaseFolded();
+}
+
+double degToRad(double value)
+{
+    return value * kPi / 180.0;
+}
+
+SkyVector normalize(const SkyVector& vector)
+{
+    const double length = std::sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
+    if (length <= 0.0) {
+        return {};
+    }
+    return {vector.x / length, vector.y / length, vector.z / length};
+}
+
+double dot(const SkyVector& lhs, const SkyVector& rhs)
+{
+    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+SkyVector cross(const SkyVector& lhs, const SkyVector& rhs)
+{
+    return {
+        lhs.y * rhs.z - lhs.z * rhs.y,
+        lhs.z * rhs.x - lhs.x * rhs.z,
+        lhs.x * rhs.y - lhs.y * rhs.x
+    };
+}
+
+SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians)
+{
+    const double cosAngle = std::cos(angleRadians);
+    const double sinAngle = std::sin(angleRadians);
+    const double axisDot = dot(axis, vector);
+    return {
+        vector.x * cosAngle + (axis.y * vector.z - axis.z * vector.y) * sinAngle + axis.x * axisDot * (1.0 - cosAngle),
+        vector.y * cosAngle + (axis.z * vector.x - axis.x * vector.z) * sinAngle + axis.y * axisDot * (1.0 - cosAngle),
+        vector.z * cosAngle + (axis.x * vector.y - axis.y * vector.x) * sinAngle + axis.z * axisDot * (1.0 - cosAngle)
+    };
+}
+
+SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
+{
+    const double azimuth = degToRad(azimuthDegrees);
+    const double elevation = degToRad(elevationDegrees);
+    const double cosElevation = std::cos(elevation);
+    return {
+        cosElevation * std::sin(azimuth),
+        cosElevation * std::cos(azimuth),
+        std::sin(elevation)
+    };
+}
+
+double parseHmsDegrees(const QString& value, bool* ok)
+{
+    const QStringList parts = value.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if (parts.size() != 3)
+    {
+        if (ok) {
+            *ok = false;
+        }
+        return 0.0;
+    }
+
+    bool hOk = false;
+    bool mOk = false;
+    bool sOk = false;
+    const double hours = QLocale::c().toDouble(parts.at(0), &hOk);
+    const double minutes = QLocale::c().toDouble(parts.at(1), &mOk);
+    const double seconds = QLocale::c().toDouble(parts.at(2), &sOk);
+    if (ok) {
+        *ok = hOk && mOk && sOk;
+    }
+    return (hours + minutes / 60.0 + seconds / 3600.0) * 15.0;
+}
+
+double parseDmsDegrees(const QString& value, bool* ok)
+{
+    const QStringList parts = value.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if (parts.size() != 3)
+    {
+        if (ok) {
+            *ok = false;
+        }
+        return 0.0;
+    }
+
+    bool dOk = false;
+    bool mOk = false;
+    bool sOk = false;
+    const double degrees = QLocale::c().toDouble(parts.at(0), &dOk);
+    const double minutes = QLocale::c().toDouble(parts.at(1), &mOk);
+    const double seconds = QLocale::c().toDouble(parts.at(2), &sOk);
+    const double sign = degrees < 0.0 ? -1.0 : 1.0;
+    if (ok) {
+        *ok = dOk && mOk && sOk;
+    }
+    return degrees + sign * (minutes / 60.0 + seconds / 3600.0);
+}
+
+QVector<CatalogStar> loadDiagnosticCatalog()
+{
+    QVector<CatalogStar> stars;
+    QFile file(QStringLiteral(":/camera/brightstarcatalog.txt"));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return stars;
+    }
+
+    QTextStream stream(&file);
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    stream.setCodec("UTF-8");
+#endif
+    if (!stream.atEnd()) {
+        stream.readLine();
+    }
+
+    while (!stream.atEnd())
+    {
+        const QString line = stream.readLine().trimmed();
+        if (line.isEmpty()) {
+            continue;
+        }
+
+        const QStringList fields = line.split(QLatin1Char('|'));
+        if (fields.size() < 4) {
+            continue;
+        }
+
+        bool raOk = false;
+        bool decOk = false;
+        bool magOk = false;
+        CatalogStar star;
+        star.name = fields.at(0).trimmed();
+        star.rightAscensionDegrees = parseHmsDegrees(fields.at(1).trimmed(), &raOk);
+        star.declinationDegrees = parseDmsDegrees(fields.at(2).trimmed(), &decOk);
+        star.magnitude = QLocale::c().toDouble(fields.at(3).trimmed(), &magOk);
+        if (raOk && decOk && magOk) {
+            stars.append(star);
+        }
+    }
+
+    return stars;
+}
+
+const CatalogStar* findDiagnosticStar(const QVector<CatalogStar>& catalog, const QString& expected)
+{
+    const QString normalizedExpected = normalizedStarName(expected);
+    for (const CatalogStar& star : catalog)
+    {
+        const QString normalizedLabel = normalizedStarName(star.name);
+        if ((normalizedLabel == normalizedExpected)
+            || normalizedLabel.contains(normalizedExpected)
+            || normalizedExpected.contains(normalizedLabel))
+        {
+            return &star;
+        }
+    }
+    return nullptr;
+}
+
+double halfHorizontalFovFromLongEdgeFov(CameraSettings::LensProjection lensProjection,
+                                       const QSize& imageSize,
+                                       double fovDegrees)
+{
+    const double halfLongEdgeFov = degToRad(fovDegrees) * 0.5;
+    if ((imageSize.width() <= 0) || (imageSize.height() <= 0) || (imageSize.width() >= imageSize.height())) {
+        return halfLongEdgeFov;
+    }
+
+    const double aspect = static_cast<double>(imageSize.height()) / static_cast<double>(imageSize.width());
+    switch (lensProjection)
+    {
+    case CameraSettings::LensProjectionEquidistant:
+        return halfLongEdgeFov / aspect;
+    case CameraSettings::LensProjectionEquisolid:
+        return 2.0 * std::asin(std::clamp(std::sin(halfLongEdgeFov * 0.5) / aspect, -1.0, 1.0));
+    case CameraSettings::LensProjectionRectilinear:
+    default:
+        return std::atan(std::tan(halfLongEdgeFov) / aspect);
+    }
+}
+
+TestProjector createDiagnosticProjector(const StarTestCase& test,
+                                        const CameraPipelineFramePtr& frame)
+{
+    TestProjector projector;
+    if (!frame || frame->m_image.isNull()) {
+        return projector;
+    }
+
+    const double azimuth = frame->m_plateSolved ? frame->m_plateSolveAzimuth : test.azimuth;
+    const double elevation = frame->m_plateSolved ? frame->m_plateSolveElevation : test.elevation;
+    const double roll = frame->m_plateSolved ? frame->m_plateSolveRoll : test.roll;
+    const double fov = frame->m_plateSolved ? frame->m_plateSolveFov : test.fov;
+    const double centerOffsetX = frame->m_plateSolved ? frame->m_plateSolveCenterOffsetX : test.centerOffsetX;
+    const double centerOffsetY = frame->m_plateSolved ? frame->m_plateSolveCenterOffsetY : test.centerOffsetY;
+    const double distortionK1 = frame->m_plateSolved ? frame->m_plateSolveDistortionK1 : test.distortionK1;
+
+    projector.width = frame->m_image.width();
+    projector.height = frame->m_image.height();
+    projector.lensProjection = test.projection;
+    if ((projector.width <= 0) || (projector.height <= 0) || (fov <= 0.0)) {
+        return projector;
+    }
+
+    const double azimuthRadians = degToRad(azimuth);
+    projector.center = normalize(vectorFromAltAz(azimuth, elevation));
+    projector.right = normalize({std::cos(azimuthRadians), -std::sin(azimuthRadians), 0.0});
+    projector.up = normalize(cross(projector.right, projector.center));
+    if ((dot(projector.right, projector.right) <= 0.0) || (dot(projector.up, projector.up) <= 0.0)) {
+        return projector;
+    }
+
+    const double rollRadians = degToRad(roll);
+    if (std::fabs(rollRadians) > 1e-9)
+    {
+        projector.right = normalize(rotateAroundAxis(projector.right, projector.center, rollRadians));
+        projector.up = normalize(rotateAroundAxis(projector.up, projector.center, rollRadians));
+    }
+
+    projector.halfHorizontalFov = halfHorizontalFovFromLongEdgeFov(test.projection, frame->m_image.size(), fov);
+    if ((projector.halfHorizontalFov <= 0.0) || (projector.halfHorizontalFov >= (kPi * 0.5))) {
+        return projector;
+    }
+
+    const double aspect = static_cast<double>(projector.height) / static_cast<double>(projector.width);
+    projector.horizontalScale = 1.0;
+    projector.verticalScale = aspect;
+    projector.principalPointX = static_cast<double>(projector.width) * 0.5 + centerOffsetX;
+    projector.principalPointY = static_cast<double>(projector.height) * 0.5 + centerOffsetY;
+    projector.distortionK1 = distortionK1;
+    projector.valid = projector.verticalScale > 0.0;
+    return projector;
+}
+
+bool projectDiagnosticVector(const TestProjector& projector, const SkyVector& vector, QPointF& point)
+{
+    if (!projector.valid) {
+        return false;
+    }
+
+    const double depth = dot(vector, projector.center);
+    if (depth <= 0.0) {
+        return false;
+    }
+
+    const double planeX = dot(vector, projector.right);
+    const double planeY = dot(vector, projector.up);
+    const double theta = std::acos(std::clamp(depth, -1.0, 1.0));
+    const double phi = std::atan2(planeY, planeX);
+    double projectionRadius = 0.0;
+    switch (projector.lensProjection)
+    {
+    case CameraSettings::LensProjectionEquidistant:
+        projectionRadius = theta / projector.halfHorizontalFov;
+        break;
+    case CameraSettings::LensProjectionEquisolid:
+        projectionRadius = std::sin(theta * 0.5) / std::sin(projector.halfHorizontalFov * 0.5);
+        break;
+    case CameraSettings::LensProjectionRectilinear:
+    default:
+        projectionRadius = std::tan(theta) / std::tan(projector.halfHorizontalFov);
+        break;
+    }
+
+    double projectedX = std::cos(phi) * projectionRadius;
+    double projectedY = std::sin(phi) * projectionRadius;
+    if (std::fabs(projector.distortionK1) > 1e-9)
+    {
+        const double radiusSquared = projectedX * projectedX + projectedY * projectedY;
+        const double distortionScale = std::max(0.1, 1.0 + projector.distortionK1 * radiusSquared);
+        projectedX *= distortionScale;
+        projectedY *= distortionScale;
+    }
+
+    point.setX(projector.principalPointX + (projectedX / projector.horizontalScale) * 0.5 * static_cast<double>(projector.width));
+    point.setY(projector.principalPointY - (projectedY / projector.verticalScale) * 0.5 * static_cast<double>(projector.height));
+    return std::isfinite(point.x()) && std::isfinite(point.y());
 }
 
 bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
@@ -407,6 +724,112 @@ QStringList missingExpectedStars(const QStringList& detectedLabels, const QStrin
     return missing;
 }
 
+void printDetectionDiagnostics(const CameraPipelineFramePtr& frame)
+{
+    if (!frame) {
+        return;
+    }
+
+    std::cout << "  detections:\n";
+    for (int i = 0; i < frame->m_starDetections.size(); ++i)
+    {
+        const CameraPipelineStarDetection& detection = frame->m_starDetections.at(i);
+        std::cout << "    #" << i
+                  << " x=" << detection.m_center.x()
+                  << " y=" << detection.m_center.y()
+                  << " peak=" << detection.m_peakValue
+                  << " quality=" << detection.m_qualityScore
+                  << " radius=" << detection.m_radius
+                  << " round=" << detection.m_roundness
+                  << " saturated=" << (detection.m_saturated ? "true" : "false")
+                  << " solved=" << (detection.m_solved ? "true" : "false");
+        if (detection.m_solved)
+        {
+            std::cout << " label=" << detection.m_label.toStdString()
+                      << " mag=" << detection.m_catalogMagnitude
+                      << " distance=" << detection.m_matchDistancePixels
+                      << " projectedX=" << detection.m_projectedCenter.x()
+                      << " projectedY=" << detection.m_projectedCenter.y();
+        }
+        std::cout << '\n';
+    }
+}
+
+void printExpectedStarDiagnostics(const StarTestCase& test,
+                                  const CameraPipelineFramePtr& frame)
+{
+    if (!frame || test.expectedStars.isEmpty()) {
+        return;
+    }
+
+    const QVector<CatalogStar> catalog = loadDiagnosticCatalog();
+    const TestProjector projector = createDiagnosticProjector(test, frame);
+    const QDateTime solveDateTimeUtc = test.dateTime.toUTC();
+    std::cout << "  expected-star projections"
+              << (frame->m_plateSolved ? " (solved pose):\n" : " (input pose):\n");
+
+    for (const QString& expected : test.expectedStars)
+    {
+        const CatalogStar *star = findDiagnosticStar(catalog, expected);
+        if (!star)
+        {
+            std::cout << "    " << expected.toStdString() << ": not found in diagnostic catalog\n";
+            continue;
+        }
+
+        const AzAlt azAlt = Astronomy::raDecToAzAlt(
+            RADec{star->rightAscensionDegrees / 15.0, star->declinationDegrees},
+            test.latitude,
+            test.longitude,
+            solveDateTimeUtc,
+            true);
+        QPointF projected;
+        const bool projectedOk = projectDiagnosticVector(
+            projector,
+            normalize(vectorFromAltAz(azAlt.az, azAlt.alt)),
+            projected);
+
+        double nearestDistance = std::numeric_limits<double>::infinity();
+        int nearestIndex = -1;
+        for (int i = 0; projectedOk && (i < frame->m_starDetections.size()); ++i)
+        {
+            const CameraPipelineStarDetection& detection = frame->m_starDetections.at(i);
+            const double dx = detection.m_center.x() - projected.x();
+            const double dy = detection.m_center.y() - projected.y();
+            const double distance = std::hypot(dx, dy);
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                nearestIndex = i;
+            }
+        }
+
+        std::cout << "    " << star->name.toStdString()
+                  << " mag=" << star->magnitude
+                  << " az=" << azAlt.az
+                  << " el=" << azAlt.alt;
+        if (projectedOk)
+        {
+            std::cout << " x=" << projected.x()
+                      << " y=" << projected.y()
+                      << " nearest=#" << nearestIndex
+                      << " nearestDistance=" << nearestDistance;
+            if ((nearestIndex >= 0) && (nearestIndex < frame->m_starDetections.size()))
+            {
+                const CameraPipelineStarDetection& nearest = frame->m_starDetections.at(nearestIndex);
+                if (!nearest.m_label.isEmpty()) {
+                    std::cout << " nearestLabel=" << nearest.m_label.toStdString();
+                }
+            }
+        }
+        else
+        {
+            std::cout << " notProjected";
+        }
+        std::cout << '\n';
+    }
+}
+
 int runTests(const QString& csvPath)
 {
     QVector<StarTestCase> tests;
@@ -455,6 +878,8 @@ int runTests(const QString& csvPath)
         std::cout << "  labels: " << labels.join(QStringLiteral(", ")).toStdString() << '\n';
         if (!missing.isEmpty()) {
             std::cout << "  missing: " << missing.join(QStringLiteral(", ")).toStdString() << '\n';
+            printExpectedStarDiagnostics(test, result.frame);
+            printDetectionDiagnostics(result.frame);
         }
     }
 

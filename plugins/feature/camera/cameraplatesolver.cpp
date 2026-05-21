@@ -3091,7 +3091,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveSearchRadius);
     const double coarseRollRadius = std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
-    const double coarseFovRadius = std::max(2.0, std::min(12.0, static_cast<double>(settings.m_fov) * 0.10));
+    const double coarseFovRadius = std::max(0.05, std::min(12.0, static_cast<double>(settings.m_fov) * 0.10));
+    const double minimumFovRefineStep = std::max(0.02, std::min(0.5, static_cast<double>(settings.m_fov) * 0.02));
 
     const double minAzimuthDegrees = 0.0;
     const double maxAzimuthDegrees = 360.0;
@@ -3409,7 +3410,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     double azStep = std::max(0.5, coarseSearchRadius * 0.25);
     double elStep = azStep;
     double rollStep = std::max(1.0, coarseRollRadius * 0.25);
-    double fovStep = std::max(0.5, coarseFovRadius * 0.25);
+    double fovStep = std::max(minimumFovRefineStep, coarseFovRadius * 0.25);
 
     for (int iteration = 0; iteration < 2; ++iteration)
     {
@@ -3482,7 +3483,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     azStep = std::max(0.1, azStep);
     elStep = std::max(0.1, elStep);
     rollStep = std::max(0.25, rollStep);
-    fovStep = std::max(0.1, fovStep);
+    fovStep = std::max(minimumFovRefineStep, fovStep);
 
     for (int iteration = 0; iteration < 4; ++iteration)
     {
@@ -3605,7 +3606,8 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     double azStep = std::max(0.05, settings.m_plateSolveSearchRadius * 0.05);
     double elStep = azStep;
     double rollStep = std::max(0.10, std::max(1.0, static_cast<double>(settings.m_fov) * 0.02));
-    double fovStep = std::max(0.05, std::max(0.5, static_cast<double>(settings.m_fov) * 0.01));
+    const double minimumFovStep = std::max(0.02, std::min(0.5, static_cast<double>(settings.m_fov) * 0.02));
+    double fovStep = std::max(minimumFovStep, static_cast<double>(settings.m_fov) * 0.01);
     double centerOffsetXStep = std::max(1.0, static_cast<double>(imageSize.width()) * 0.01);
     double centerOffsetYStep = std::max(1.0, static_cast<double>(imageSize.height()) * 0.01);
     double distortionStep = 0.05;

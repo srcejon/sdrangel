@@ -3106,6 +3106,28 @@ static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
+static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
+                                    const QVector<CameraPipelineStarDetection>& starDetections,
+                                    const QVector<Match>& matches,
+                                    double rmsErrorPixels,
+                                    double maxErrorPixels)
+{
+    const int minAcceptedMatches = std::max(settings.m_plateSolveMinMatches + 1,
+        std::min(8, std::max(5, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.15)))));
+    if (matches.size() < minAcceptedMatches) {
+        return false;
+    }
+
+    const double medianError = medianDistancePixels(matches);
+    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
+    const double maxMedianError = std::min(settings.m_plateSolveFinalMatchRadius * 0.55, 14.0);
+    const double maxWorstError = std::min(settings.m_plateSolveFinalMatchRadius * 1.05, 36.0);
+
+    return (rmsErrorPixels <= maxRmsError)
+        && (medianError <= maxMedianError)
+        && (maxErrorPixels <= maxWorstError);
+}
+
 static bool isAcceptableElevationSeedEvaluation(const CameraSettings& settings,
                                          int minMatchCount,
                                          const Evaluation& evaluation)
@@ -4994,6 +5016,18 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     result.m_matchedStars = finalMatches.size();
     result.m_rmsErrorPixels = selectedFinalPass.rmsErrorPixels;
     result.m_maxErrorPixels = selectedFinalPass.maxErrorPixels;
+    if (useStartDirection
+        && !isAcceptableDirectionSeedSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
+    {
+        qDebug() << "CameraPlateSolver: rejecting direction-seeded solution"
+                 << "matches=" << finalMatches.size()
+                 << "rms=" << result.m_rmsErrorPixels
+                 << "max=" << result.m_maxErrorPixels;
+        clearSolvedStars(starDetections);
+        PROFILER_STOP(QString("%1: unacceptable direction-seeded solve").arg(__FUNCTION__));
+        return CameraPlateSolveResult();
+    }
+
     if (useElevationSeedOnly
         && !isAcceptableElevationSeedSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {

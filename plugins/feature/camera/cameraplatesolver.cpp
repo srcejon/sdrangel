@@ -227,6 +227,7 @@ static constexpr int kSirilPixelsPerChunk = 1 << (2 * (kSirilHealpixLevel - kSir
 static constexpr int kSirilHeaderSize = 128;
 static constexpr int kSirilIndexSize = kSirilPixelsPerChunk * static_cast<int>(sizeof(quint32));
 static constexpr int kSirilRecordSize = 701;
+static constexpr qint64 kSirilMinRangeRequestSize = 64 * 1024;
 static constexpr double kSirilAngleScale = 360.0 / 2147483647.0;
 static constexpr double kSirilAutoMaxFovDegrees = 15.0;
 static constexpr double kSirilMaxQueryRadiusDegrees = 20.0;
@@ -761,12 +762,13 @@ static QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qi
     {
         const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         data = reply->readAll();
-        if (((httpStatus != 206) && (httpStatus != 200)) || data.isEmpty())
+        if ((httpStatus != 206) || data.isEmpty())
         {
             qWarning() << "CameraPlateSolver: Siril SPCC range request returned unexpected response"
                        << "source" << sirilSpccSourceName(sourceIndex)
                        << "chunk" << chunkIndex << "status" << httpStatus
-                       << "bytes" << firstByte << lastByte << "size" << data.size();
+                       << "bytes" << firstByte << lastByte << "size" << data.size()
+                       << "contentRange" << reply->rawHeader("Content-Range");
             data.clear();
         }
     }
@@ -793,18 +795,54 @@ static QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastB
         }
     }
 
+    const qint64 requestedSize = lastByte - firstByte + 1;
+    const bool smallRange = requestedSize < kSirilMinRangeRequestSize;
+    const qint64 requestFirstByte = smallRange
+        ? (firstByte / kSirilMinRangeRequestSize) * kSirilMinRangeRequestSize
+        : firstByte;
+    const qint64 requestLastByte = smallRange
+        ? std::max(lastByte, requestFirstByte + kSirilMinRangeRequestSize - 1)
+        : lastByte;
+    const QString requestCacheKey = sirilRangeCacheKey(chunkIndex, requestFirstByte, requestLastByte);
+    if (requestCacheKey != cacheKey)
+    {
+        QMutexLocker locker(&s_rangeCacheMutex);
+        const auto it = s_rangeCache.constFind(requestCacheKey);
+        if (it != s_rangeCache.constEnd())
+        {
+            const qint64 offset = firstByte - requestFirstByte;
+            if (it.value().size() >= (offset + requestedSize)) {
+                return it.value().mid(static_cast<int>(offset), static_cast<int>(requestedSize));
+            }
+        }
+    }
+
     QByteArray data;
     for (int sourceIndex = 0; sourceIndex < 2 && data.isEmpty(); ++sourceIndex) {
-        data = fetchSirilRangeFromSource(chunkIndex, firstByte, lastByte, sourceIndex);
+        data = fetchSirilRangeFromSource(chunkIndex, requestFirstByte, requestLastByte, sourceIndex);
     }
 
     if (!data.isEmpty())
     {
+        const qint64 offset = firstByte - requestFirstByte;
+        if (data.size() < (offset + requestedSize))
+        {
+            qWarning() << "CameraPlateSolver: Siril SPCC expanded range request was too short"
+                       << "chunk" << chunkIndex
+                       << "requestedBytes" << firstByte << lastByte
+                       << "fetchedBytes" << requestFirstByte << requestLastByte
+                       << "size" << data.size();
+            return {};
+        }
+
+        const QByteArray requestedData = data.mid(static_cast<int>(offset), static_cast<int>(requestedSize));
         QMutexLocker locker(&s_rangeCacheMutex);
-        s_rangeCache.insert(cacheKey, data);
+        s_rangeCache.insert(requestCacheKey, data);
+        s_rangeCache.insert(cacheKey, requestedData);
+        return requestedData;
     }
 
-    return data;
+    return {};
 }
 
 static QByteArray fetchSirilChunkIndex(int chunkIndex)

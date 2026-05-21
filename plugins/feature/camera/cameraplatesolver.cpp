@@ -3727,6 +3727,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
     const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
 
+    const double finalMatchRadius = std::max(1.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius));
     const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveSearchRadius);
     const double coarseRollRadius = std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
     const double coarseFovRadius = std::max(0.05, std::min(12.0, static_cast<double>(settings.m_fov) * 0.10));
@@ -3752,7 +3753,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             double azimuthDegrees,
                             double elevationDegrees,
                             double rollDegrees,
-                            double fovDegrees) {
+                            double fovDegrees,
+                            double matchRadiusOverride = -1.0) {
         const Evaluation candidate = evaluatePose(
             settings,
             catalogContext,
@@ -3767,7 +3769,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
             nullptr,
             fixedCenterOffsetX,
             fixedCenterOffsetY,
-            fixedDistortionK1);
+            fixedDistortionK1,
+            matchRadiusOverride);
         logPlateSolveEvaluation(stage, candidate);
         if (keepMultipleCandidates) {
             insertDistinctEvaluationCandidate(
@@ -3822,7 +3825,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             settings.m_elevation + elFactor * coarseSearchRadius,
                             settings.m_roll + rollFactor * rollStepDegrees,
                             std::max(static_cast<double>(CameraSettings::m_minFov),
-                                     static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius));
+                                     static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius),
+                            finalMatchRadius);
                         if (hasGoodGuidedSeed()) {
                             guidedSatisfied = true;
                             break;

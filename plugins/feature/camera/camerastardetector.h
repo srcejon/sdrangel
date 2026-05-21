@@ -26,6 +26,7 @@ public:
 
 protected:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;
+    void captureActiveChanged(bool active) override;
     void processNewFrame(const CameraPipelineFramePtr& frame) override;
 
 private:

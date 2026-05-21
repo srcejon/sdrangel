@@ -55,8 +55,11 @@ class CameraPlateSolver::SolverContext
 {
 public:
 
-explicit SolverContext(QNetworkAccessManager *networkManager = nullptr) :
-    m_networkManager(networkManager)
+// owner may be nullptr when SolverContext is used for static utility functions
+// (e.g. downloadedCatalogArchivePath) that don't need network access.
+explicit SolverContext(CameraPlateSolver *owner = nullptr) :
+    m_owner(owner),
+    m_networkManager(owner ? owner->m_networkManager : nullptr)
 {
 }
 
@@ -217,9 +220,13 @@ double m_elevationSeedReferenceDegrees = 0.0;
 double m_elevationSeedReferenceFovDegrees = 0.0;
 double m_elevationSeedScaleDegrees = 1.0;
 double m_elevationSeedFovScaleDegrees = 1.0;
+CameraPlateSolver *m_owner = nullptr;
 QNetworkAccessManager *m_networkManager = nullptr;
 QHash<QString, QByteArray> m_sirilRangeCache;
 QHash<int, QByteArray> m_sirilIndexCache;
+// Maximum total size of m_sirilRangeCache before it is cleared after a solve.
+// m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
+static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
 static constexpr const char* kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 static constexpr const char* kDownloadedCatalogDir = "camera";
 static constexpr const char* kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
@@ -795,6 +802,11 @@ QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 la
         return {};
     }
 
+    // Fast-exit if cancellation was already requested before we even start.
+    if (m_owner && m_owner->m_cancelNetworkRequests) {
+        return {};
+    }
+
     QNetworkRequest request(QUrl(sirilSpccChunkUrl(chunkIndex, sourceIndex)));
     request.setRawHeader("Range", QByteArray("bytes=%1-%2").replace("%1", QByteArray::number(firstByte)).replace("%2", QByteArray::number(lastByte)));
     request.setRawHeader("Accept-Encoding", "identity");
@@ -803,6 +815,14 @@ QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 la
     request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 
     QNetworkReply *reply = m_networkManager->get(request);
+
+    // Register the active reply so requestNetworkCancellation() can abort it while
+    // loop.exec() is running.  Both this function and captureActiveChanged() run on
+    // the star-detector thread, so no mutex is needed.
+    if (m_owner) {
+        m_owner->m_activeNetworkReply = reply;
+    }
+
     QEventLoop loop;
     QTimer timeoutTimer;
     timeoutTimer.setSingleShot(true);
@@ -810,9 +830,14 @@ QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 la
     QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
     timeoutTimer.start(30000);
     loop.exec();
+    timeoutTimer.stop();  // stop the timer if the reply finished before it fired
+
+    if (m_owner) {
+        m_owner->m_activeNetworkReply = nullptr;
+    }
 
     QByteArray data;
-    const bool timedOut = timeoutTimer.isActive() == false && !reply->isFinished();
+    const bool timedOut = !timeoutTimer.isActive() && !reply->isFinished();
     if (timedOut)
     {
         reply->abort();
@@ -822,16 +847,23 @@ QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 la
     }
     else if (reply->error() != QNetworkReply::NoError)
     {
-        qWarning() << "CameraPlateSolver: Siril SPCC range request failed"
-                   << "source" << sirilSpccSourceName(sourceIndex)
-                   << "chunk" << chunkIndex << "bytes" << firstByte << lastByte
-                   << reply->errorString();
+        // Includes the OperationCanceledError case from requestNetworkCancellation().
+        if (m_owner && m_owner->m_cancelNetworkRequests) {
+            qDebug() << "CameraPlateSolver: Siril SPCC range request cancelled";
+        } else {
+            qWarning() << "CameraPlateSolver: Siril SPCC range request failed"
+                       << "source" << sirilSpccSourceName(sourceIndex)
+                       << "chunk" << chunkIndex << "bytes" << firstByte << lastByte
+                       << reply->errorString();
+        }
     }
     else
     {
         const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         data = reply->readAll();
-        if ((httpStatus != 206) || data.isEmpty())
+        // Accept 206 Partial Content (normal) and 200 OK (some CDNs / servers that
+        // respond to a range request with the full content).
+        if ((httpStatus != 206 && httpStatus != 200) || data.isEmpty())
         {
             qWarning() << "CameraPlateSolver: Siril SPCC range request returned unexpected response"
                        << "source" << sirilSpccSourceName(sourceIndex)
@@ -1200,6 +1232,9 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
 
     for (const SirilMergedRange& range : mergedRanges)
     {
+        if (m_owner && m_owner->m_cancelNetworkRequests) {
+            break;
+        }
         const qint64 expectedByteCount = range.lastByte - range.firstByte + 1;
         if (expectedByteCount > std::numeric_limits<int>::max())
         {
@@ -4993,11 +5028,46 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     return result;
 }
 
+void CameraPlateSolver::requestNetworkCancellation()
+{
+    m_cancelNetworkRequests = true;
+    if (m_activeNetworkReply) {
+        m_activeNetworkReply->abort();
+    }
+}
+
 CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                                                 const QSize& imageSize,
                                                 const QDateTime& captureDateTime,
                                                 QVector<CameraPipelineStarDetection>& starDetections)
 {
-    SolverContext context(m_networkManager);
-    return context.solve(settings, imageSize, captureDateTime, starDetections);
+    // Reset cancellation flag at the start of each solve so that a cancellation
+    // from a previous solve doesn't block subsequent ones.
+    m_cancelNetworkRequests = false;
+
+    SolverContext context(this);
+
+    // Swap the persistent caches into the SolverContext so that Siril SPCC data
+    // fetched in this solve is reused in future solves rather than discarded.
+    std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
+    std::swap(context.m_sirilIndexCache, m_sirilIndexCache);
+
+    const CameraPlateSolveResult result = context.solve(settings, imageSize, captureDateTime, starDetections);
+
+    std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
+    std::swap(context.m_sirilIndexCache, m_sirilIndexCache);
+
+    // Evict the range cache if it has grown beyond the size limit.  The index cache
+    // is bounded naturally (≤ 48 chunks × 64 KB ≈ 3 MB) and is always kept.
+    qint64 rangeCacheBytes = 0;
+    for (const QByteArray& v : m_sirilRangeCache) {
+        rangeCacheBytes += v.size();
+    }
+    if (rangeCacheBytes > SolverContext::kSirilMaxRangeCacheBytes) {
+        qDebug() << "CameraPlateSolver: Siril range cache exceeded" << SolverContext::kSirilMaxRangeCacheBytes
+                 << "bytes (" << rangeCacheBytes << "), clearing";
+        m_sirilRangeCache.clear();
+    }
+
+    return result;
 }

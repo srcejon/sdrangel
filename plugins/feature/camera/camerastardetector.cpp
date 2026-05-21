@@ -208,6 +208,16 @@ const cv::cuda::GpuMat& CameraStarDetector::cudaStarExclusionMask(const cv::Rect
 #endif
 
 
+void CameraStarDetector::captureActiveChanged(bool active)
+{
+    if (!active) {
+        // If the plate solver is currently blocked waiting for a Siril SPCC network
+        // response, abort it so the star-detector thread can shut down promptly
+        // rather than waiting up to 30 seconds for a timeout.
+        m_plateSolver.requestNetworkCancellation();
+    }
+}
+
 void CameraStarDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
     qDebug() << "CameraStarDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;

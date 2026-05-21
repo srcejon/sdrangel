@@ -21,6 +21,7 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QHash>
 #include <QObject>
 #include <QSize>
 #include <QString>
@@ -50,6 +51,7 @@ struct CameraPlateSolveResult
 };
 
 class QNetworkAccessManager;
+class QNetworkReply;
 
 class CameraPlateSolver : public QObject
 {
@@ -64,10 +66,22 @@ public:
                                  const QSize& imageSize,
                                  const QDateTime& captureDateTime,
                                  QVector<CameraPipelineStarDetection>& starDetections);
+    // Cancel any Siril SPCC network request currently blocking in loop.exec() inside
+    // fetchSirilRangeFromSource.  Safe to call from the star-detector thread during
+    // event processing (e.g. from CameraStarDetector::captureActiveChanged(false)).
+    void requestNetworkCancellation();
 
 private:
     class SolverContext;
+    friend class SolverContext;
     QNetworkAccessManager *m_networkManager = nullptr;
+    // Siril SPCC catalog caches — persisted across solve() calls so repeated plate
+    // solves on the same sky area don't re-download the same data each frame.
+    QHash<QString, QByteArray> m_sirilRangeCache;
+    QHash<int, QByteArray> m_sirilIndexCache;
+    // Cancellation support — both members accessed only on the star-detector thread.
+    bool m_cancelNetworkRequests = false;
+    QNetworkReply *m_activeNetworkReply = nullptr;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAPLATESOLVER_H_

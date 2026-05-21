@@ -225,6 +225,7 @@ static constexpr int kSirilNside = 1 << kSirilHealpixLevel;
 static constexpr int kSirilChunkLevel = 1;
 static constexpr int kSirilPixelsPerChunk = 1 << (2 * (kSirilHealpixLevel - kSirilChunkLevel));
 static constexpr int kSirilHeaderSize = 128;
+static constexpr int kSirilIndexSize = kSirilPixelsPerChunk * static_cast<int>(sizeof(quint32));
 static constexpr int kSirilRecordSize = 701;
 static constexpr double kSirilAngleScale = 360.0 / 2147483647.0;
 static constexpr double kSirilAutoMaxFovDegrees = 15.0;
@@ -806,6 +807,36 @@ static QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastB
     return data;
 }
 
+static QByteArray fetchSirilChunkIndex(int chunkIndex)
+{
+    static QMutex s_indexCacheMutex;
+    static QHash<int, QByteArray> s_indexCache;
+
+    {
+        QMutexLocker locker(&s_indexCacheMutex);
+        const auto it = s_indexCache.constFind(chunkIndex);
+        if (it != s_indexCache.constEnd()) {
+            return it.value();
+        }
+    }
+
+    const qint64 firstByte = kSirilHeaderSize;
+    const qint64 lastByte = kSirilHeaderSize + kSirilIndexSize - 1;
+    const QByteArray indexBytes = fetchSirilRange(chunkIndex, firstByte, lastByte);
+    if (indexBytes.size() != kSirilIndexSize)
+    {
+        qWarning() << "CameraPlateSolver: Siril SPCC chunk index request failed"
+                   << "chunk" << chunkIndex
+                   << "expected" << kSirilIndexSize
+                   << "got" << indexBytes.size();
+        return {};
+    }
+
+    QMutexLocker locker(&s_indexCacheMutex);
+    s_indexCache.insert(chunkIndex, indexBytes);
+    return indexBytes;
+}
+
 static quint32 interleaveHealpixBits(int x, int y)
 {
     quint32 pixel = 0;
@@ -913,27 +944,18 @@ static bool sirilCellRecordRange(quint32 pixel, int& chunkIndex, qint64& firstRe
 {
     chunkIndex = static_cast<int>(pixel / kSirilPixelsPerChunk);
     const int localPixel = static_cast<int>(pixel % kSirilPixelsPerChunk);
-    const qint64 firstIndexByte = kSirilHeaderSize + static_cast<qint64>(localPixel) * sizeof(quint32);
-    if (localPixel > 0)
-    {
-        const QByteArray indexBytes = fetchSirilRange(chunkIndex, firstIndexByte - sizeof(quint32), firstIndexByte + sizeof(quint32) - 1);
-        if (indexBytes.size() < static_cast<int>(sizeof(quint32) * 2)) {
-            return false;
-        }
-        const quint32 cellStart = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(indexBytes.constData()));
-        const quint32 cellEnd = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(indexBytes.constData() + sizeof(quint32)));
-        firstRecord = cellStart;
-        recordCount = cellEnd - cellStart;
-        return true;
-    }
-
-    const QByteArray indexBytes = fetchSirilRange(chunkIndex, firstIndexByte, firstIndexByte + sizeof(quint32) - 1);
-    if (indexBytes.size() < static_cast<int>(sizeof(quint32))) {
+    const QByteArray indexBytes = fetchSirilChunkIndex(chunkIndex);
+    if (indexBytes.size() != kSirilIndexSize) {
         return false;
     }
-    const quint32 cellEnd = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(indexBytes.constData()));
-    firstRecord = 0;
-    recordCount = cellEnd;
+
+    const char *cellEndBytes = indexBytes.constData() + static_cast<qint64>(localPixel) * sizeof(quint32);
+    const quint32 cellStart = (localPixel > 0)
+        ? qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(cellEndBytes - sizeof(quint32)))
+        : 0;
+    const quint32 cellEnd = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(cellEndBytes));
+    firstRecord = cellStart;
+    recordCount = cellEnd - cellStart;
     return true;
 }
 

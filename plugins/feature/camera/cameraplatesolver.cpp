@@ -690,6 +690,7 @@ static bool plateSolveStartUsesElevation(const CameraSettings& settings)
     switch (settings.m_plateSolveStartMode)
     {
     case CameraSettings::PlateSolveStartFovElevation:
+    case CameraSettings::PlateSolveStartFovAzEl:
     case CameraSettings::PlateSolveStartFovAzElRoll:
     case CameraSettings::PlateSolveStartFovAzElRollLens:
     case CameraSettings::PlateSolveStartCurrentSettingsOnly:
@@ -700,6 +701,20 @@ static bool plateSolveStartUsesElevation(const CameraSettings& settings)
 }
 
 static bool plateSolveStartUsesDirection(const CameraSettings& settings)
+{
+    switch (settings.m_plateSolveStartMode)
+    {
+    case CameraSettings::PlateSolveStartFovAzEl:
+    case CameraSettings::PlateSolveStartFovAzElRoll:
+    case CameraSettings::PlateSolveStartFovAzElRollLens:
+    case CameraSettings::PlateSolveStartCurrentSettingsOnly:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool plateSolveStartUsesRoll(const CameraSettings& settings)
 {
     switch (settings.m_plateSolveStartMode)
     {
@@ -3064,6 +3079,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const bool useStartElevation = plateSolveStartUsesElevation(settings);
     const bool useStartDirection = plateSolveStartUsesDirection(settings);
     const bool useElevationSeedOnly = useStartElevation && !useStartDirection;
+    const bool useStartRoll = plateSolveStartUsesRoll(settings);
     const bool useStartLens = plateSolveStartUsesLens(settings);
     const bool useWeakModeScoring = !useStartDirection;
     const bool keepMultipleCandidates = candidatePool && !useStartDirection;
@@ -3083,6 +3099,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const double minElevationDegrees = 0.0;
     const double maxElevationDegrees = 90.0;
     const double elevationStepDegrees = 15.0;
+    const double fovGridStepDegrees = std::max(0.25, std::min(5.0, static_cast<double>(settings.m_fov) * 0.5));
+    const double fovGridAzimuthStepDegrees = fovGridStepDegrees;
+    const double fovGridElevationStepDegrees = std::max(0.25, std::min(15.0, static_cast<double>(settings.m_fov) * 0.5));
 
     const std::array<double, 3> coarseFovOffsets = {{-1.0, 0.0, 1.0}};
     const std::array<double, 5> coarseOffsetsOrdered = {{0.0, -0.5, 0.5, -1.0, 1.0}};
@@ -3143,6 +3162,10 @@ Evaluation searchBestPose(const CameraSettings& settings,
     if (useStartDirection)
     {
         bool guidedSatisfied = false;
+        const QVector<double> rollOffsets = useStartRoll
+            ? QVector<double>{0.0, -0.5, 0.5, -1.0, 1.0}
+            : QVector<double>{0.0, -30.0, 30.0, -60.0, 60.0, -90.0, 90.0, -120.0, 120.0, -150.0, 150.0, -180.0, 180.0};
+        const double rollStepDegrees = useStartRoll ? coarseRollRadius : 1.0;
         for (double fovFactor : coarseFovOffsetsOrdered)
         {
             if (guidedSatisfied) break;
@@ -3152,13 +3175,13 @@ Evaluation searchBestPose(const CameraSettings& settings,
                 for (double azFactor : coarseOffsetsOrdered)
                 {
                     if (guidedSatisfied) break;
-                    for (double rollFactor : coarseOffsetsOrdered)
+                    for (double rollFactor : rollOffsets)
                     {
                         evaluateSeed(
                             "guided-direction",
                             settings.m_azimuth + azFactor * coarseSearchRadius,
                             settings.m_elevation + elFactor * coarseSearchRadius,
-                            settings.m_roll + rollFactor * coarseRollRadius,
+                            settings.m_roll + rollFactor * rollStepDegrees,
                             std::max(static_cast<double>(CameraSettings::m_minFov),
                                      static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius));
                         if (hasGoodGuidedSeed()) {
@@ -3230,9 +3253,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
     {
         for (double fovFactor : coarseFovOffsetsOrdered)
         {
-            for (double elevationDegrees = minElevationDegrees; elevationDegrees <= maxElevationDegrees; elevationDegrees += elevationStepDegrees)
+            for (double elevationDegrees = minElevationDegrees; elevationDegrees <= maxElevationDegrees; elevationDegrees += fovGridElevationStepDegrees)
             {
-                for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += azimuthStepDegrees)
+                for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += fovGridAzimuthStepDegrees)
                 {
                     for (double rollDegrees : wideRollOffsetsOrdered)
                     {
@@ -3334,9 +3357,11 @@ Evaluation searchBestPose(const CameraSettings& settings,
     {
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
         const std::array<double, 8> wideBlindFovs = {{15.0, 25.0, 40.0, 60.0, 90.0, 130.0, 160.0, 180.0}};
-        for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += azimuthStepDegrees)
+        const double fallbackAzimuthStepDegrees = useStartFov ? fovGridAzimuthStepDegrees : azimuthStepDegrees;
+        const double fallbackElevationStepDegrees = useStartFov ? fovGridElevationStepDegrees : elevationStepDegrees;
+        for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += fallbackAzimuthStepDegrees)
         {
-            for (double elevationDegrees = minElevationDegrees; elevationDegrees <= maxElevationDegrees; elevationDegrees += elevationStepDegrees)
+            for (double elevationDegrees = minElevationDegrees; elevationDegrees <= maxElevationDegrees; elevationDegrees += fallbackElevationStepDegrees)
             {
                 for (double rollDegrees : wideRollOffsets)
                 {

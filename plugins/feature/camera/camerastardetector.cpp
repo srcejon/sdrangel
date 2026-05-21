@@ -114,7 +114,8 @@ CameraStarDetector::~CameraStarDetector() = default;
 
 bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys)
 {
-    return settingsKeys.contains("starDebugView")
+    return settingsKeys.contains("starDetect")
+        || settingsKeys.contains("starDebugView")
         || settingsKeys.contains("starThreshold")
         || settingsKeys.contains("starBackgroundBlur")
         || settingsKeys.contains("starMinArea")
@@ -129,7 +130,8 @@ bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settin
         || settingsKeys.contains("plateSolveSearchRadius")
         || settingsKeys.contains("plateSolveStartMode")
         || settingsKeys.contains("plateSolveUseCurrentDateTime")
-        || settingsKeys.contains("plateSolveDateTime");
+        || settingsKeys.contains("plateSolveDateTime")
+        || settingsKeys.contains("plateSolveDateTimeUtc");
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION

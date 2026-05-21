@@ -431,8 +431,10 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
         cv::cuda::threshold(residualGpu, thresholdMaskGpu, m_settings.m_starThreshold, 255.0, cv::THRESH_BINARY, m_cudaDetectionStream);
         cv::cuda::bitwise_and(thresholdMaskGpu, cudaStarExclusionMask(roi, thresholdMaskGpu.size()), thresholdMaskGpu, cv::noArray(), m_cudaDetectionStream);
         thresholdMaskGpu.download(thresholdMask, m_cudaDetectionStream);
-
-        grayGpu.download(gray, m_cudaDetectionStream);
+        // grayGpu is intentionally not downloaded here — the full-frame transfer saves
+        // nothing useful because gray is only needed for the per-blob saturation check,
+        // which is instead approximated from the already-downloaded residual peak in
+        // applyStarDetection (see hasGray / saturationThreshold logic there).
         m_cudaDetectionStream.waitForCompletion();
 
         if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))
@@ -534,7 +536,10 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
         cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED, cv::LINE_8, cv::noArray(), INT_MAX, -box.tl());
 
         const cv::Mat residualRoi = residual(box);
-        const cv::Mat grayRoi = gray(box);
+        // gray is empty when the CUDA preprocessing path skipped the download to save a
+        // full-frame GPU→CPU transfer.  CPU paths always populate it.
+        const bool hasGray = !gray.empty();
+        const cv::Mat grayRoi = hasGray ? gray(box) : cv::Mat();
         double totalWeight = 0.0;
         double weightedX = 0.0;
         double weightedY = 0.0;
@@ -549,8 +554,9 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
             const uchar* maskRow = contourMask.ptr<uchar>(row);
             const uchar* residualRow8 = is16Bit ? nullptr : residualRoi.ptr<uchar>(row);
             const uint16_t* residualRow16 = is16Bit ? residualRoi.ptr<uint16_t>(row) : nullptr;
-            const uchar* grayRow8 = is16Bit ? nullptr : grayRoi.ptr<uchar>(row);
-            const uint16_t* grayRow16 = is16Bit ? grayRoi.ptr<uint16_t>(row) : nullptr;
+            // Gray row pointers are null when gray was not downloaded (CUDA fast-path).
+            const uchar* grayRow8 = (hasGray && !is16Bit) ? grayRoi.ptr<uchar>(row) : nullptr;
+            const uint16_t* grayRow16 = (hasGray && is16Bit) ? grayRoi.ptr<uint16_t>(row) : nullptr;
 
             for (int col = 0; col < box.width; ++col)
             {
@@ -571,11 +577,13 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
                 if (weight > peakValue) {
                     peakValue = weight;
                 }
-                const double grayValue = is16Bit
-                    ? static_cast<double>(grayRow16[col])
-                    : static_cast<double>(grayRow8[col]);
-                if (grayValue > grayPeak) {
-                    grayPeak = grayValue;
+                if (grayRow8 || grayRow16) {
+                    const double grayValue = grayRow16
+                        ? static_cast<double>(grayRow16[col])
+                        : static_cast<double>(grayRow8[col]);
+                    if (grayValue > grayPeak) {
+                        grayPeak = grayValue;
+                    }
                 }
             }
         }
@@ -589,7 +597,13 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
         // Saturation threshold scales with the input depth — 250/255 on 8-bit translates
         // to ~64000/65535 on 16-bit. We keep the m_saturated flag depth-agnostic for the
         // plate solver's downstream quality scoring.
-        const double saturationThreshold = is16Bit ? 64000.0 : 250.0;
+        //
+        // When gray was not downloaded (CUDA fast-path), approximate grayPeak from the
+        // residual peak instead: residual = blurredGray − background, so a saturated
+        // 8-bit pixel (gray ≈ 255) typically yields residual ≈ 225–240 against dark
+        // sky.  A proxy threshold of 200 gives comfortable headroom below that level.
+        if (!hasGray) { grayPeak = peakValue; }
+        const double saturationThreshold = is16Bit ? 64000.0 : (hasGray ? 250.0 : 200.0);
         const bool saturated = grayPeak >= saturationThreshold;
 
         const double qualityScore = peakValue

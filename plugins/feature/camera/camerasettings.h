@@ -170,6 +170,12 @@ struct CameraSettings
         PlateSolveCatalogSirilSpccGaia
     };
 
+    enum FovMode
+    {
+        FovModeDirect = 0,
+        FovModeSensorFocalLength
+    };
+
     struct ObjectDeviceSettings
     {
         int m_deviceSetIndex;           //!< Device set index in SDRangel
@@ -374,6 +380,10 @@ struct CameraSettings
     float m_roll;                  ///< Camera roll about optical axis in degrees
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
     float m_fov;                   ///< Camera field of view in degrees
+    FovMode m_fovMode;             ///< Whether FoV is entered directly or calculated from sensor/focal length
+    double m_fovSensorWidthMm;     ///< Sensor width for calculated FoV
+    double m_fovSensorHeightMm;    ///< Sensor height for calculated FoV
+    double m_fovFocalLengthMm;     ///< Lens focal length for calculated FoV
     LensProjection m_lensProjection; ///< Lens projection model used for sky overlays
     double m_lensCenterOffsetX;    ///< Principal point X offset in pixels from image center
     double m_lensCenterOffsetY;    ///< Principal point Y offset in pixels from image center
@@ -408,6 +418,7 @@ struct CameraSettings
     double m_cannyEdge;       ///< Canny edge blend amount: 0.0..3.0
     bool m_flipX;             ///< Flip image horizontally
     bool m_flipY;             ///< Flip image vertically
+    int m_imageRotation;      ///< Rotate image clockwise by 0, 90, 180, or 270 degrees
     double m_brightness;      ///< Brightness adjustment: -100.0..100.0
     double m_contrast;        ///< Contrast multiplier: 0.1..3.0
     bool m_invertColors;      ///< Invert all colour channels

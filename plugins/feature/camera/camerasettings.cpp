@@ -52,6 +52,40 @@ float normalizeSignedDegrees(float value)
     }
     return value;
 }
+
+int normalizeImageRotation(int value)
+{
+    int normalized = value % 360;
+    if (normalized < 0) {
+        normalized += 360;
+    }
+
+    switch (normalized)
+    {
+    case 90:
+    case 180:
+    case 270:
+        return normalized;
+    case 0:
+    default:
+        return 0;
+    }
+}
+
+float calculateLongEdgeFovDegrees(double sensorWidthMm, double sensorHeightMm, double focalLengthMm)
+{
+    const double sensorLongEdgeMm = std::max(sensorWidthMm, sensorHeightMm);
+    if ((sensorLongEdgeMm <= 0.0) || (focalLengthMm <= 0.0)) {
+        return CameraSettings::m_minFov;
+    }
+
+    constexpr double radiansToDegrees = 180.0 / 3.14159265358979323846;
+    const double fovDegrees = 2.0 * std::atan(sensorLongEdgeMm / (2.0 * focalLengthMm)) * radiansToDegrees;
+    return static_cast<float>(qBound(
+        static_cast<double>(CameraSettings::m_minFov),
+        fovDegrees,
+        static_cast<double>(CameraSettings::m_maxFov)));
+}
 }
 
 QDataStream& operator<<(QDataStream& out, const CameraSettings::ObjectDeviceSettings* settings)
@@ -220,6 +254,10 @@ void CameraSettings::resetToDefaults()
     m_roll = 0.0f;
     m_rotator.clear();
     m_fov = 60.0f;
+    m_fovMode = FovModeDirect;
+    m_fovSensorWidthMm = 36.0;
+    m_fovSensorHeightMm = 24.0;
+    m_fovFocalLengthMm = 35.0;
     m_lensProjection = LensProjectionRectilinear;
     m_lensCenterOffsetX = 0.0;
     m_lensCenterOffsetY = 0.0;
@@ -251,6 +289,7 @@ void CameraSettings::resetToDefaults()
     m_cannyEdge = 0.0;
     m_flipX = false;
     m_flipY = false;
+    m_imageRotation = 0;
     m_brightness = 0.0;
     m_contrast = 1.0;
     m_invertColors = false;
@@ -580,6 +619,11 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(211, m_postProcessUseCuda);
     s.writeBool(212, m_plateSolveDateTimeUtc);
     s.writeS32(213, static_cast<qint32>(m_plateSolveCatalogSource));
+    s.writeS32(214, m_imageRotation);
+    s.writeS32(215, static_cast<qint32>(m_fovMode));
+    s.writeDouble(216, m_fovSensorWidthMm);
+    s.writeDouble(217, m_fovSensorHeightMm);
+    s.writeDouble(218, m_fovFocalLengthMm);
 
     return s.final();
 }
@@ -677,6 +721,18 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readFloat(41, &m_roll, 0.0f);
         d.readString(42, &m_rotator, "");
         d.readFloat(43, &m_fov, 60.0f);
+        qint32 fovMode = static_cast<qint32>(FovModeDirect);
+        d.readS32(215, &fovMode, fovMode);
+        m_fovMode = static_cast<FovMode>(qBound(
+            static_cast<qint32>(FovModeDirect),
+            fovMode,
+            static_cast<qint32>(FovModeSensorFocalLength)));
+        d.readDouble(216, &m_fovSensorWidthMm, 36.0);
+        d.readDouble(217, &m_fovSensorHeightMm, 24.0);
+        d.readDouble(218, &m_fovFocalLengthMm, 35.0);
+        m_fovSensorWidthMm = std::max(0.001, m_fovSensorWidthMm);
+        m_fovSensorHeightMm = std::max(0.001, m_fovSensorHeightMm);
+        m_fovFocalLengthMm = std::max(0.001, m_fovFocalLengthMm);
         d.readS32(44, (int *) &m_lensProjection, LensProjectionRectilinear);
         d.readDouble(45, &m_lensCenterOffsetX, 0.0);
         d.readDouble(46, &m_lensCenterOffsetY, 0.0);
@@ -733,6 +789,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(79, &m_cannyEdge, 0.0);
         d.readBool(80, &m_flipX, false);
         d.readBool(81, &m_flipY, false);
+        d.readS32(214, &m_imageRotation, 0);
+        m_imageRotation = normalizeImageRotation(m_imageRotation);
         m_postProcessWhiteBalanceMode = qBound(m_minNonNegative, m_postProcessWhiteBalanceMode, 2);
         m_postProcessWhiteBalanceRedGain = qBound(m_minWhiteBalanceGain, m_postProcessWhiteBalanceRedGain, m_maxWhiteBalanceGain);
         m_postProcessWhiteBalanceGreenGain = qBound(m_minWhiteBalanceGain, m_postProcessWhiteBalanceGreenGain, m_maxWhiteBalanceGain);
@@ -1014,6 +1072,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_azimuth = normalizePositiveDegrees(m_azimuth);
         m_elevation = qBound(m_minElevation, m_elevation, m_maxElevation);
         m_roll = normalizeSignedDegrees(m_roll);
+        if (m_fovMode == FovModeSensorFocalLength) {
+            m_fov = calculateLongEdgeFovDegrees(m_fovSensorWidthMm, m_fovSensorHeightMm, m_fovFocalLengthMm);
+        }
         m_fov = qBound(m_minFov, m_fov, m_maxFov);
         m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) m_lensProjection, (int) LensProjectionEquisolid);
 
@@ -1295,6 +1356,21 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("fov")) {
         m_fov = qBound(m_minFov, settings.m_fov, m_maxFov);
     }
+    if (settingsKeys.contains("fovMode")) {
+        m_fovMode = static_cast<FovMode>(qBound(
+            static_cast<qint32>(FovModeDirect),
+            static_cast<qint32>(settings.m_fovMode),
+            static_cast<qint32>(FovModeSensorFocalLength)));
+    }
+    if (settingsKeys.contains("fovSensorWidthMm")) {
+        m_fovSensorWidthMm = std::max(0.001, settings.m_fovSensorWidthMm);
+    }
+    if (settingsKeys.contains("fovSensorHeightMm")) {
+        m_fovSensorHeightMm = std::max(0.001, settings.m_fovSensorHeightMm);
+    }
+    if (settingsKeys.contains("fovFocalLengthMm")) {
+        m_fovFocalLengthMm = std::max(0.001, settings.m_fovFocalLengthMm);
+    }
     if (settingsKeys.contains("lensProjection")) {
         m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) settings.m_lensProjection, (int) LensProjectionEquisolid);
     }
@@ -1390,6 +1466,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("flipY")) {
         m_flipY = settings.m_flipY;
+    }
+    if (settingsKeys.contains("imageRotation")) {
+        m_imageRotation = normalizeImageRotation(settings.m_imageRotation);
     }
     if (settingsKeys.contains("contrast")) {
         m_contrast = qBound(m_minWhiteBalanceGain, settings.m_contrast, m_maxFilterAmount);
@@ -1929,6 +2008,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("fov") || force) {
         ostr << " m_fov: " << m_fov;
     }
+    if (settingsKeys.contains("fovMode") || force) {
+        ostr << " m_fovMode: " << m_fovMode;
+    }
+    if (settingsKeys.contains("fovSensorWidthMm") || force) {
+        ostr << " m_fovSensorWidthMm: " << m_fovSensorWidthMm;
+    }
+    if (settingsKeys.contains("fovSensorHeightMm") || force) {
+        ostr << " m_fovSensorHeightMm: " << m_fovSensorHeightMm;
+    }
+    if (settingsKeys.contains("fovFocalLengthMm") || force) {
+        ostr << " m_fovFocalLengthMm: " << m_fovFocalLengthMm;
+    }
     if (settingsKeys.contains("lensProjection") || force) {
         ostr << " m_lensProjection: " << m_lensProjection;
     }
@@ -2018,6 +2109,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("flipY") || force) {
         ostr << " m_flipY: " << m_flipY;
+    }
+    if (settingsKeys.contains("imageRotation") || force) {
+        ostr << " m_imageRotation: " << m_imageRotation;
     }
     if (settingsKeys.contains("contrast") || force) {
         ostr << " m_contrast: " << m_contrast;

@@ -145,7 +145,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         "histogramStretchAsinhStrength",
         "histogramStretchLogStrength",
         "postProcessGreyscale",
-        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "edgeDisplayMode", "sobelEdge", "cannyEdge", "flipX", "flipY",
+        "saturation", "gamma", "gaussianBlur", "medianBlur", "sharpen", "edgeDisplayMode", "sobelEdge", "cannyEdge", "flipX", "flipY", "imageRotation",
         "brightness", "contrast", "invertColors"
     };
     const bool imageProcessingChanged = force || std::any_of(kImageProcessingKeys.cbegin(), kImageProcessingKeys.cend(),
@@ -510,6 +510,7 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
     const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
     const bool needsCannyEdge = m_settings.m_cannyEdge > 1e-4;
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
+    const bool needsRotation = m_settings.m_imageRotation != 0;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
         || needsUnwarp
@@ -522,6 +523,7 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
         || needsSobelEdge
         || needsCannyEdge
         || needsFlip
+        || needsRotation
         || needsBrightContrast
         || needsGreyscale
         || m_settings.m_invertColors;
@@ -573,6 +575,9 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
     }
     if (needsFlip) {
         applyFlip(bgrMat);
+    }
+    if (needsRotation) {
+        applyRotation(bgrMat);
     }
     if (needsBrightContrast) {
         applyBrightnessContrast(bgrMat);
@@ -640,6 +645,7 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
     const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
     const bool needsCannyEdge = m_settings.m_cannyEdge > 1e-4;
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
+    const bool needsRotation = m_settings.m_imageRotation != 0;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
         || needsUnwarp
@@ -652,6 +658,7 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
         || needsSobelEdge
         || needsCannyEdge
         || needsFlip
+        || needsRotation
         || needsBrightContrast
         || needsGreyscale
         || m_settings.m_invertColors;
@@ -716,6 +723,9 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
             cv::cuda::GpuMat flippedGpu;
             cv::cuda::flip(bgrGpu, flippedGpu, flipCode, m_cudaStream);
             bgrGpu = flippedGpu;
+        }
+        if (needsRotation) {
+            applyRotationCuda(bgrGpu, m_cudaStream);
         }
         if (needsBrightContrast) {
             bgrGpu.convertTo(bgrGpu, -1, m_settings.m_contrast, m_settings.m_brightness, m_cudaStream);
@@ -1072,6 +1082,41 @@ void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
         bgrGpu = edgesBgr;
     } else {
         cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, bgrGpu, -1, stream);
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyRotationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+{
+    PROFILER_START();
+
+    cv::cuda::GpuMat rotatedGpu;
+    switch (m_settings.m_imageRotation)
+    {
+    case 90:
+    {
+        cv::cuda::GpuMat transposedGpu;
+        cv::cuda::transpose(bgrGpu, transposedGpu, stream);
+        cv::cuda::flip(transposedGpu, rotatedGpu, 1, stream);
+        bgrGpu = rotatedGpu;
+        break;
+    }
+    case 180:
+        cv::cuda::flip(bgrGpu, rotatedGpu, -1, stream);
+        bgrGpu = rotatedGpu;
+        break;
+    case 270:
+    {
+        cv::cuda::GpuMat transposedGpu;
+        cv::cuda::transpose(bgrGpu, transposedGpu, stream);
+        cv::cuda::flip(transposedGpu, rotatedGpu, 0, stream);
+        bgrGpu = rotatedGpu;
+        break;
+    }
+    case 0:
+    default:
+        break;
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1500,6 +1545,33 @@ void CameraImageProcessor::applyFlip(cv::Mat& bgrMat) const
     PROFILER_START();
     const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
     cv::flip(bgrMat, bgrMat, flipCode);
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraImageProcessor::applyRotation(cv::Mat& bgrMat) const
+{
+    PROFILER_START();
+
+    cv::Mat rotated;
+    switch (m_settings.m_imageRotation)
+    {
+    case 90:
+        cv::rotate(bgrMat, rotated, cv::ROTATE_90_CLOCKWISE);
+        bgrMat = std::move(rotated);
+        break;
+    case 180:
+        cv::rotate(bgrMat, rotated, cv::ROTATE_180);
+        bgrMat = std::move(rotated);
+        break;
+    case 270:
+        cv::rotate(bgrMat, rotated, cv::ROTATE_90_COUNTERCLOCKWISE);
+        bgrMat = std::move(rotated);
+        break;
+    case 0:
+    default:
+        break;
+    }
+
     PROFILER_STOP(__FUNCTION__);
 }
 

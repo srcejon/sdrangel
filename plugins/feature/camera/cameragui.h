@@ -279,6 +279,8 @@ private:
     void populateGs232ControllerCombo();
     void applyPositionSync();
     void updatePositionControls();
+    void updateFovControls();
+    void updateCalculatedFov();
     void syncFromMainSettings();
     void syncFromSelectedGs232Controller();
     QPair<int, int> selectedGs232ControllerIndices() const;
@@ -451,7 +453,11 @@ private slots:
     void on_elevationSpin_valueChanged(double value);
     void on_rollSpin_valueChanged(double value);
     void on_rotatorControllerCombo_currentIndexChanged(int index);
+    void on_fovModeCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);
+    void on_fovSensorWidthSpin_valueChanged(double value);
+    void on_fovSensorHeightSpin_valueChanged(double value);
+    void on_fovFocalLengthSpin_valueChanged(double value);
     void on_lensProjectionCombo_currentIndexChanged(int index);
     void on_lensCenterOffsetXSpin_valueChanged(double value);
     void on_lensCenterOffsetYSpin_valueChanged(double value);
@@ -496,6 +502,7 @@ private slots:
     void on_cannyEdgeSpin_valueChanged(double value);
     void on_flipXButton_toggled(bool checked);
     void on_flipYButton_toggled(bool checked);
+    void on_imageRotationCombo_currentIndexChanged(int index);
     void on_brightnessSlider_valueChanged(int value);
     void on_brightnessSpin_valueChanged(int value);
     void on_contrastSlider_valueChanged(int value);

@@ -673,6 +673,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
         static_cast<double>(CameraSettings::m_minRoll),
         static_cast<double>(CameraSettings::m_maxRoll));
     settingsUI()->fovSpin->setDecimals(2);
+    settingsUI()->fovSpin->setSuffix(QString::fromUtf8(" \xC2\xB0"));
     settingsUI()->fovSpin->setRange(
         static_cast<double>(CameraSettings::m_minFov),
         static_cast<double>(CameraSettings::m_maxFov));
@@ -1147,7 +1148,12 @@ void CameraGUI::displaySettings()
     settingsUI()->azimuthSpin->setValue(m_settings.m_azimuth);
     settingsUI()->elevationSpin->setValue(m_settings.m_elevation);
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
+    settingsUI()->fovModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_fovMode));
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
+    settingsUI()->fovSensorWidthSpin->setValue(m_settings.m_fovSensorWidthMm);
+    settingsUI()->fovSensorHeightSpin->setValue(m_settings.m_fovSensorHeightMm);
+    settingsUI()->fovFocalLengthSpin->setValue(m_settings.m_fovFocalLengthMm);
+    updateFovControls();
     settingsUI()->lensProjectionCombo->setCurrentIndex(static_cast<int>(m_settings.m_lensProjection));
     settingsUI()->lensCenterOffsetXSpin->setValue(m_settings.m_lensCenterOffsetX);
     settingsUI()->lensCenterOffsetYSpin->setValue(m_settings.m_lensCenterOffsetY);
@@ -1204,6 +1210,7 @@ void CameraGUI::displaySettings()
     settingsUI()->cannyEdgeSpin->setValue(m_settings.m_cannyEdge);
     settingsUI()->flipXButton->setChecked(m_settings.m_flipX);
     settingsUI()->flipYButton->setChecked(m_settings.m_flipY);
+    settingsUI()->imageRotationCombo->setCurrentIndex(qBound(0, m_settings.m_imageRotation / 90, 3));
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
     settingsUI()->brightnessSpin->setValue(static_cast<int>(m_settings.m_brightness));
     settingsUI()->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
@@ -1598,7 +1605,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
     QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
     QObject::connect(settingsUI()->rotatorControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_rotatorControllerCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->fovModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fovModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
+    QObject::connect(settingsUI()->fovSensorWidthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSensorWidthSpin_valueChanged);
+    QObject::connect(settingsUI()->fovSensorHeightSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSensorHeightSpin_valueChanged);
+    QObject::connect(settingsUI()->fovFocalLengthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovFocalLengthSpin_valueChanged);
     QObject::connect(settingsUI()->lensProjectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_lensProjectionCombo_currentIndexChanged);
     QObject::connect(settingsUI()->lensCenterOffsetXSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensCenterOffsetXSpin_valueChanged);
     QObject::connect(settingsUI()->lensCenterOffsetYSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensCenterOffsetYSpin_valueChanged);
@@ -1643,6 +1654,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cannyEdgeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cannyEdgeSpin_valueChanged);
     QObject::connect(settingsUI()->flipXButton, &QCheckBox::toggled, this, &CameraGUI::on_flipXButton_toggled);
     QObject::connect(settingsUI()->flipYButton, &QCheckBox::toggled, this, &CameraGUI::on_flipYButton_toggled);
+    QObject::connect(settingsUI()->imageRotationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_imageRotationCombo_currentIndexChanged);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
     QObject::connect(settingsUI()->brightnessSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_brightnessSpin_valueChanged);
     QObject::connect(settingsUI()->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
@@ -2319,6 +2331,48 @@ void CameraGUI::updatePositionControls()
     settingsUI()->altitudeSpin->setReadOnly(m_settings.m_positionSync);
     settingsUI()->azimuthSpin->setReadOnly(azElSynced);
     settingsUI()->elevationSpin->setReadOnly(azElSynced);
+}
+
+void CameraGUI::updateFovControls()
+{
+    const bool calculateFov = m_settings.m_fovMode == CameraSettings::FovModeSensorFocalLength;
+    settingsUI()->fovSpin->setReadOnly(calculateFov);
+    settingsUI()->fovSensorWidthLabel->setEnabled(calculateFov);
+    settingsUI()->fovSensorWidthSpin->setEnabled(calculateFov);
+    settingsUI()->fovSensorHeightLabel->setEnabled(calculateFov);
+    settingsUI()->fovSensorHeightSpin->setEnabled(calculateFov);
+    settingsUI()->fovFocalLengthLabel->setEnabled(calculateFov);
+    settingsUI()->fovFocalLengthSpin->setEnabled(calculateFov);
+
+    if (calculateFov) {
+        updateCalculatedFov();
+    }
+}
+
+void CameraGUI::updateCalculatedFov()
+{
+    if (m_settings.m_fovMode != CameraSettings::FovModeSensorFocalLength) {
+        return;
+    }
+
+    const double sensorLongEdgeMm = std::max(m_settings.m_fovSensorWidthMm, m_settings.m_fovSensorHeightMm);
+    if ((sensorLongEdgeMm <= 0.0) || (m_settings.m_fovFocalLengthMm <= 0.0)) {
+        return;
+    }
+
+    constexpr double radiansToDegrees = 180.0 / 3.14159265358979323846;
+    const double fovDegrees = 2.0 * std::atan(sensorLongEdgeMm / (2.0 * m_settings.m_fovFocalLengthMm)) * radiansToDegrees;
+    m_settings.m_fov = static_cast<float>(qBound(
+        static_cast<double>(CameraSettings::m_minFov),
+        fovDegrees,
+        static_cast<double>(CameraSettings::m_maxFov)));
+
+    settingsUI()->fovSpin->blockSignals(true);
+    settingsUI()->fovSpin->setValue(m_settings.m_fov);
+    settingsUI()->fovSpin->blockSignals(false);
+    if (m_doApplySettings) {
+        applySetting("fov");
+    }
 }
 
 void CameraGUI::syncFromMainSettings()
@@ -4675,10 +4729,41 @@ void CameraGUI::on_rotatorControllerCombo_currentIndexChanged(int index)
     applySetting("rotator");
 }
 
+void CameraGUI::on_fovModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_fovMode = static_cast<CameraSettings::FovMode>(qBound(
+        static_cast<int>(CameraSettings::FovModeDirect),
+        index,
+        static_cast<int>(CameraSettings::FovModeSensorFocalLength)));
+    updateFovControls();
+    applySettings({"fovMode", "fov"});
+}
+
 void CameraGUI::on_fovSpin_valueChanged(double value)
 {
     m_settings.m_fov = static_cast<float>(value);
     applySetting("fov");
+}
+
+void CameraGUI::on_fovSensorWidthSpin_valueChanged(double value)
+{
+    m_settings.m_fovSensorWidthMm = value;
+    updateCalculatedFov();
+    applySetting("fovSensorWidthMm");
+}
+
+void CameraGUI::on_fovSensorHeightSpin_valueChanged(double value)
+{
+    m_settings.m_fovSensorHeightMm = value;
+    updateCalculatedFov();
+    applySetting("fovSensorHeightMm");
+}
+
+void CameraGUI::on_fovFocalLengthSpin_valueChanged(double value)
+{
+    m_settings.m_fovFocalLengthMm = value;
+    updateCalculatedFov();
+    applySetting("fovFocalLengthMm");
 }
 
 void CameraGUI::on_lensProjectionCombo_currentIndexChanged(int index)
@@ -5295,6 +5380,12 @@ void CameraGUI::on_flipYButton_toggled(bool checked)
 {
     m_settings.m_flipY = checked;
     applySetting("flipY");
+}
+
+void CameraGUI::on_imageRotationCombo_currentIndexChanged(int index)
+{
+    m_settings.m_imageRotation = qBound(0, index, 3) * 90;
+    applySetting("imageRotation");
 }
 
 void CameraGUI::on_brightnessSlider_valueChanged(int value)

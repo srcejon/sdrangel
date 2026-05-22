@@ -272,7 +272,7 @@ The Colour tab controls image post-processing.
 <li>Gaussian Blur and Median Blur set blur strength.</li>
 <li>Sharpen sets sharpening amount.</li>
 <li>Sobel Edge and Canny Edge set edge detection amounts.</li>
-<li>Flip X and Flip Y mirror the image horizontally or vertically.</li>
+<li>Flip X and Flip Y mirror the image horizontally or vertically; Rotation turns it clockwise by 0, 90, 180 or 270 degrees.</li>
 <li>Unwarp Fisheye unwarps the image using the configured lens projection and FoV.</li>
 <li>Reset color settings restores colour, histogram, filter and image post-processing controls to their defaults.</li>
 </ul>
@@ -402,7 +402,7 @@ The Position tab configures camera location, pointing, lens model and weather lo
 <li>The My Position import button sets the camera position from SDRangel's My Position preferences. Right click toggles continual synchronization from My Position.</li>
 <li>Rotator selects a GS232Controller feature used to continually synchronize camera azimuth and elevation.</li>
 <li>Azimuth, Elevation and Roll set the camera pointing direction.</li>
-<li>FoV sets the camera field of view in degrees.</li>
+<li>FoV mode selects direct FoV entry or calculates long-edge FoV from sensor width, sensor height and focal length.</li>
 <li>Projection selects Rectilinear, Equidistant fisheye or Equisolid fisheye lens projection.</li>
 <li>Center offset X and Center offset Y set the lens centre offset in pixels.</li>
 <li>Distortion K1 sets the first radial lens distortion coefficient.</li>

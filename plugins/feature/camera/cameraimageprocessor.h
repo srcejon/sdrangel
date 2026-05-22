@@ -184,6 +184,7 @@ private:
     void applySharpenCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
     void applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
     void applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
+    void applyRotationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
 #endif
     void applyWhiteBalance(cv::Mat& bgrMat);
     void applyLensUnwarp(cv::Mat& bgrMat);
@@ -197,6 +198,7 @@ private:
     void applySobelEdge(cv::Mat& bgrMat) const;
     void applyCannyEdge(cv::Mat& bgrMat) const;
     void applyFlip(cv::Mat& bgrMat) const;
+    void applyRotation(cv::Mat& bgrMat) const;
     void applyBrightnessContrast(cv::Mat& bgrMat) const;
     void applyInvertColors(cv::Mat& bgrMat) const;
     [[nodiscard]] CameraHistogramData computeHistogramData(const CameraPipelineFrame& frame);

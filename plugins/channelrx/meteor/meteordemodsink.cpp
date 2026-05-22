@@ -30,6 +30,7 @@
 #include "meteordemodsink.h"
 
 MESSAGE_CLASS_DEFINITION(MeteorDemodSink::MsgMeteorDetected, Message)
+MESSAGE_CLASS_DEFINITION(MeteorDemodSink::MsgMeteorDataCollected, Message)
 
 namespace {
     FFTEngine *createMeteorFFT()
@@ -81,7 +82,8 @@ MeteorDemodSink::MeteorDemodSink() :
     m_pulseFFTSize(0),
     m_spectralNoiseFloorInitialized(false),
     m_spectralEventActiveForScope(false),
-    m_nextDisplayTimeAnchorSample(0)
+    m_nextDisplayTimeAnchorSample(0),
+    m_nextDataMarkerSample(0)
 {
     resizeScopeBuffers();
     resetDetector();
@@ -140,15 +142,19 @@ bool MeteorDemodSink::flushPendingPulse()
     );
 
     for (int i = 0; i < tailSamples && (m_pulseActive || !m_spectralEvents.empty()); i++) {
-        processOneSample(zero);
+        processOneSample(zero, false);
     }
 
     return true;
 }
 
-void MeteorDemodSink::processOneSample(Complex& ci)
+void MeteorDemodSink::processOneSample(Complex& ci, bool realSample)
 {
     recordDisplayTimeAnchor();
+
+    if (realSample) {
+        emitDataCollectionMarker();
+    }
 
     const Real re = ci.real() / SDR_RX_SCALEF;
     const Real im = ci.imag() / SDR_RX_SCALEF;
@@ -594,7 +600,7 @@ void MeteorDemodSink::updateSpectralEvent(SpectralEvent& event, const SpectralBa
 
 void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
 {
-    if (!event.m_valid || !m_messageQueueToGUI || event.m_trackFrequencies.empty()) {
+    if (!event.m_valid || event.m_trackFrequencies.empty()) {
         return;
     }
 
@@ -1198,8 +1204,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         && (spectralBandContrastDB >= 6.0)
         && (spectralBandwidth <= stableFrequencyLimit)
         && (std::fabs(frequencyDrift) <= stableFrequencyLimit);
-    const bool validatesPendingBroadPulse = m_messageQueueToGUI
-        && broadValidationLineOK
+    const bool validatesPendingBroadPulse = broadValidationLineOK
         && (durationS <= 1.0)
         && m_pendingBroadPulse.m_valid
         && (m_pulseStartSample >= m_pendingBroadPulse.m_endSample)
@@ -1818,7 +1823,7 @@ bool MeteorDemodSink::reportsOverlap(
 
 void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char *source)
 {
-    if (!report.m_valid || !m_messageQueueToGUI) {
+    if (!report.m_valid) {
         return;
     }
 
@@ -1852,23 +1857,30 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
              << " startSample:" << report.m_startSample
              << " endSample:" << report.m_endSample;
 
-    m_messageQueueToGUI->push(MsgMeteorDetected::create(
-        report.m_dateTimeUtc,
-        displayDateTimeUtc,
-        peakAmplitude,
-        peakPowerDB,
-        backgroundPowerDB,
-        report.m_durationS,
-        displayDurationS,
-        report.m_centerFrequency,
-        report.m_frequencySpan,
-        report.m_frequencyDrift,
-        m_settings.m_channelSampleRate
-    ));
+    if (m_messageQueueToGUI)
+    {
+        m_messageQueueToGUI->push(MsgMeteorDetected::create(
+            report.m_dateTimeUtc,
+            displayDateTimeUtc,
+            peakAmplitude,
+            peakPowerDB,
+            backgroundPowerDB,
+            report.m_durationS,
+            displayDurationS,
+            report.m_centerFrequency,
+            report.m_frequencySpan,
+            report.m_frequencyDrift,
+            m_settings.m_channelSampleRate
+        ));
+    }
 
     rememberDetection(report.m_startSample, report.m_endSample, report.m_centerFrequency, report.m_frequencySpan);
 
     // Send to event pipes
+    if (!m_channel) {
+        return;
+    }
+
     QList<ObjectPipe*> eventPipes;
     MainCore::instance()->getMessagePipes().getMessagePipes(m_channel, "event", eventPipes);
 
@@ -1877,7 +1889,10 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
     for (const auto& pipe : eventPipes)
     {
         MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
-        messageQueue->push(MainCore::MsgEvent::create(m_channel, displayDateTimeUtc, MainCore::MsgEvent::EventType::MeteorScatterEvent, eventData));
+
+        if (messageQueue) {
+            messageQueue->push(MainCore::MsgEvent::create(m_channel, displayDateTimeUtc, MainCore::MsgEvent::EventType::MeteorScatterEvent, eventData));
+        }
     }
 }
 
@@ -1977,6 +1992,26 @@ void MeteorDemodSink::recordDisplayTimeAnchor()
     if (firstKeep != m_displayTimeAnchors.begin()) {
         m_displayTimeAnchors.erase(m_displayTimeAnchors.begin(), firstKeep);
     }
+}
+
+void MeteorDemodSink::emitDataCollectionMarker()
+{
+    if (!m_messageQueueToGUI) {
+        return;
+    }
+
+    if (m_sampleCounter < m_nextDataMarkerSample) {
+        return;
+    }
+
+    const QDateTime displayDateTimeUtc = sampleCounterToDisplayDateTimeUtc(m_sampleCounter);
+
+    if (displayDateTimeUtc.isValid()) {
+        m_messageQueueToGUI->push(MsgMeteorDataCollected::create(displayDateTimeUtc));
+    }
+
+    const int sampleRate = std::max(1, m_settings.m_channelSampleRate);
+    m_nextDataMarkerSample = m_sampleCounter + (quint64) sampleRate;
 }
 
 void MeteorDemodSink::updateNoiseFloor(double filteredPower)
@@ -2083,6 +2118,7 @@ void MeteorDemodSink::resetDetector()
     m_pulsePeakPower = 0.0;
     m_displayTimeAnchors.clear();
     m_nextDisplayTimeAnchorSample = 0;
+    m_nextDataMarkerSample = 0;
     m_pulseSamples.clear();
     m_pendingBroadPulse = PulseReport();
     m_spectralFrameBuffer.clear();

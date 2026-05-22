@@ -62,6 +62,12 @@
 
 const int MeteorGUI::m_sampleRates[4] = {100, 300, 1000, 3000};
 
+namespace {
+    constexpr int DetectionSampleUtcMSecsRole = Qt::UserRole + 1;
+    constexpr int DetectionOverlayIdRole = Qt::UserRole + 2;
+    constexpr int DetectionDisplayUtcMSecsRole = Qt::UserRole + 3;
+}
+
 MeteorGUI* MeteorGUI::create(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSampleSink *rxChannel)
 {
     return new MeteorGUI(pluginAPI, deviceUISet, rxChannel);
@@ -168,7 +174,7 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
 
 MeteorGUI::~MeteorGUI()
 {
-    saveRMOBReport(automaticRMOBReportFileName(QDate::currentDate()));
+    saveAutomaticRMOBReports();
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
     m_glSpectrum->setPaintGLCallback(nullptr);
     m_glScope->disconnectTimer();
@@ -430,6 +436,20 @@ bool MeteorGUI::handleMessage(const Message& message)
     {
         const MeteorDemodSink::MsgMeteorDetected& detection = (const MeteorDemodSink::MsgMeteorDetected&) message;
         addDetection(detection);
+        return true;
+    }
+    else if (MeteorDemodSink::MsgMeteorDataCollected::match(message))
+    {
+        const MeteorDemodSink::MsgMeteorDataCollected& data = (const MeteorDemodSink::MsgMeteorDataCollected&) message;
+        const QDateTime localTime = data.getDateTimeUtc().toLocalTime();
+
+        if (markHourData(localTime.date(), localTime.time().hour()))
+        {
+            updateHistogram();
+            updateColorgramme();
+        }
+
+        updateCounters();
         return true;
     }
 
@@ -778,6 +798,11 @@ bool MeteorGUI::loadRMOBReport(const QString& fileName)
 
 bool MeteorGUI::saveRMOBReport(const QString& fileName, QString *error) const
 {
+    return saveRMOBReport(fileName, colorgrammeMonthDate(), error);
+}
+
+bool MeteorGUI::saveRMOBReport(const QString& fileName, const QDate& reportMonthDate, QString *error) const
+{
     QDir dir = QFileInfo(fileName).absoluteDir();
 
     if (!dir.exists() && !dir.mkpath("."))
@@ -800,7 +825,7 @@ bool MeteorGUI::saveRMOBReport(const QString& fileName, QString *error) const
         return false;
     }
 
-    const QDate monthDate = colorgrammeMonthDate();
+    const QDate monthDate = reportMonthDate.isValid() ? reportMonthDate : QDate::currentDate();
     const int year = monthDate.year();
     const int month = monthDate.month();
     const int daysInMonth = monthDate.daysInMonth();
@@ -881,7 +906,11 @@ void MeteorGUI::on_detectionsTable_itemSelectionChanged()
     }
 
     bool ok = false;
-    const qint64 utcMSecs = timeItem->data(Qt::UserRole + 1).toLongLong(&ok);
+    qint64 utcMSecs = timeItem->data(DetectionDisplayUtcMSecsRole).toLongLong(&ok);
+
+    if (!ok) {
+        utcMSecs = timeItem->data(DetectionSampleUtcMSecsRole).toLongLong(&ok);
+    }
 
     if (!ok) {
         return;
@@ -1126,9 +1155,14 @@ void MeteorGUI::updateVisualSampleRate()
 
 void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection)
 {
-    const QDateTime localTime = detection.getDateTimeUtc().toLocalTime();
-    const QDate date = localTime.date();
-    const int hour = localTime.time().hour();
+    const QDateTime sampleTimeUtc = detection.getDateTimeUtc();
+    const QDateTime displayTimeUtc = detection.getDisplayDateTimeUtc().isValid()
+        ? detection.getDisplayDateTimeUtc()
+        : sampleTimeUtc;
+    const QDateTime sampleLocalTime = sampleTimeUtc.toLocalTime();
+    const QDateTime displayLocalTime = displayTimeUtc.toLocalTime();
+    const QDate date = sampleLocalTime.date();
+    const int hour = sampleLocalTime.time().hour();
 
     if (!m_hourlyCounts.contains(date)) {
         m_hourlyCounts[date] = QVector<int>(24, 0);
@@ -1156,9 +1190,10 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_detectionsTable->setSortingEnabled(false);
     const int row = m_detectionsTable->rowCount();
     m_detectionsTable->insertRow(row);
-    QTableWidgetItem *timeItem = makeTableItem(localTime.toString("yyyy-MM-dd HH:mm:ss.zzz"), localTime.toMSecsSinceEpoch());
-    timeItem->setData(Qt::UserRole + 1, detection.getDateTimeUtc().toMSecsSinceEpoch());
-    timeItem->setData(Qt::UserRole + 2, QVariant::fromValue<qulonglong>(overlayId));
+    QTableWidgetItem *timeItem = makeTableItem(displayLocalTime.toString("yyyy-MM-dd HH:mm:ss.zzz"), displayLocalTime.toMSecsSinceEpoch());
+    timeItem->setData(DetectionSampleUtcMSecsRole, sampleTimeUtc.toMSecsSinceEpoch());
+    timeItem->setData(DetectionOverlayIdRole, QVariant::fromValue<qulonglong>(overlayId));
+    timeItem->setData(DetectionDisplayUtcMSecsRole, displayTimeUtc.toMSecsSinceEpoch());
     m_detectionsTable->setItem(row, 0, timeItem);
     m_detectionsTable->setItem(row, 1, makeTableItem(QString::number(detection.getPeakPowerDB(), 'f', 1), detection.getPeakPowerDB()));
     m_detectionsTable->setItem(row, 2, makeTableItem(QString::number(detection.getBackgroundPowerDB(), 'f', 1), detection.getBackgroundPowerDB()));
@@ -1345,16 +1380,10 @@ QColor MeteorGUI::colorgrammeColor(int count, int maxCount) const
     );
 }
 
-void MeteorGUI::markCurrentHourData()
-{
-    const QDateTime now = QDateTime::currentDateTime();
-    markHourData(now.date(), now.time().hour());
-}
-
-void MeteorGUI::markHourData(const QDate& date, int hour)
+bool MeteorGUI::markHourData(const QDate& date, int hour)
 {
     if (!date.isValid() || (hour < 0) || (hour >= 24)) {
-        return;
+        return false;
     }
 
     if (!m_hourlyCounts.contains(date)) {
@@ -1365,7 +1394,9 @@ void MeteorGUI::markHourData(const QDate& date, int hour)
         m_hourlyData[date] = QVector<bool>(24, false);
     }
 
+    const bool hadData = m_hourlyData[date][hour];
     m_hourlyData[date][hour] = true;
+    return !hadData;
 }
 
 bool MeteorGUI::hasHourData(const QDate& date, int hour) const
@@ -1393,17 +1424,57 @@ QString MeteorGUI::automaticRMOBReportFileName(const QDate& date) const
         .arg(date.month(), 2, 10, QLatin1Char('0')));
 }
 
+void MeteorGUI::saveAutomaticRMOBReports() const
+{
+    const QList<QDate> months = colorgrammeMonthDates();
+
+    for (const QDate& monthDate : months) {
+        saveRMOBReport(automaticRMOBReportFileName(monthDate), monthDate);
+    }
+}
+
 QDate MeteorGUI::colorgrammeMonthDate() const
 {
-    if (!m_hourlyData.isEmpty()) {
-        return m_hourlyData.lastKey();
-    }
+    const QList<QDate> months = colorgrammeMonthDates();
 
-    if (!m_hourlyCounts.isEmpty()) {
-        return m_hourlyCounts.lastKey();
+    if (!months.isEmpty()) {
+        return months.last();
     }
 
     return QDate::currentDate();
+}
+
+QList<QDate> MeteorGUI::colorgrammeMonthDates() const
+{
+    QList<QDate> months;
+
+    auto addMonth = [&months](const QDate& date)
+    {
+        if (!date.isValid()) {
+            return;
+        }
+
+        const QDate monthDate(date.year(), date.month(), 1);
+
+        if (!months.contains(monthDate)) {
+            months.append(monthDate);
+        }
+    };
+
+    for (auto it = m_hourlyData.cbegin(); it != m_hourlyData.cend(); ++it) {
+        addMonth(it.key());
+    }
+
+    for (auto it = m_hourlyCounts.cbegin(); it != m_hourlyCounts.cend(); ++it) {
+        addMonth(it.key());
+    }
+
+    if (months.isEmpty()) {
+        addMonth(QDate::currentDate());
+    }
+
+    std::sort(months.begin(), months.end());
+    return months;
 }
 
 QString MeteorGUI::formatRMOBFrequency(qint64 frequency) const
@@ -1552,7 +1623,7 @@ QSet<quint64> MeteorGUI::selectedDetectionOverlayIds() const
         if (timeItem)
         {
             bool ok = false;
-            const quint64 id = timeItem->data(Qt::UserRole + 2).toULongLong(&ok);
+            const quint64 id = timeItem->data(DetectionOverlayIdRole).toULongLong(&ok);
 
             if (ok) {
                 ids.insert(id);
@@ -1582,14 +1653,14 @@ void MeteorGUI::deleteSelectedDetections()
         }
 
         bool idOK = false;
-        const quint64 id = timeItem->data(Qt::UserRole + 2).toULongLong(&idOK);
+        const quint64 id = timeItem->data(DetectionOverlayIdRole).toULongLong(&idOK);
 
         if (idOK) {
             idsToDelete.insert(id);
         }
 
         bool timeOK = false;
-        const qint64 utcMSecs = timeItem->data(Qt::UserRole + 1).toLongLong(&timeOK);
+        const qint64 utcMSecs = timeItem->data(DetectionSampleUtcMSecsRole).toLongLong(&timeOK);
 
         if (timeOK)
         {
@@ -1718,8 +1789,6 @@ void MeteorGUI::tick()
 {
     if ((m_tickCount++ % 20) == 0)
     {
-        markCurrentHourData();
         updateCounters();
-        updateColorgramme();
     }
 }

@@ -128,6 +128,26 @@ public:
         {}
     };
 
+    class MsgMeteorDataCollected : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QDateTime& getDateTimeUtc() const { return m_dateTimeUtc; }
+
+        static MsgMeteorDataCollected* create(const QDateTime& dateTimeUtc)
+        {
+            return new MsgMeteorDataCollected(dateTimeUtc);
+        }
+
+    private:
+        QDateTime m_dateTimeUtc;
+
+        MsgMeteorDataCollected(const QDateTime& dateTimeUtc) :
+            Message(),
+            m_dateTimeUtc(dateTimeUtc)
+        {}
+    };
+
     MeteorDemodSink();
     ~MeteorDemodSink();
 
@@ -285,6 +305,7 @@ private:
     quint64 m_sampleCounter;
     std::vector<DisplayTimeAnchor> m_displayTimeAnchors;
     quint64 m_nextDisplayTimeAnchorSample;
+    quint64 m_nextDataMarkerSample;
     bool m_noiseFloorInitialized;
     double m_noiseFloor;
     bool m_pulseActive;
@@ -296,7 +317,7 @@ private:
     QDateTime m_pulseStartDateTimeUtc;
     double m_pulsePeakPower;
     PulseReport m_pendingBroadPulse;
-    void processOneSample(Complex& ci);
+    void processOneSample(Complex& ci, bool realSample = true);
     bool processDetectorSample(const Complex& sample, double power, double filteredPower);
     void startPulse(const Complex& sample, double power);
     void updatePulse(const Complex& sample, double power);
@@ -327,6 +348,7 @@ private:
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;
     QDateTime sampleCounterToDisplayDateTimeUtc(quint64 sampleCounter) const;
     void recordDisplayTimeAnchor();
+    void emitDataCollectionMarker();
     void updateNoiseFloor(double filteredPower);
     double getDetectionThresholdPower() const;
     bool estimatePulseFrequency(

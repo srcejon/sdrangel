@@ -19,6 +19,7 @@
 #define INCLUDE_METEORGUI_H
 
 #include <QDate>
+#include <QList>
 #include <QMap>
 #include <QSet>
 #include <QVector>
@@ -173,14 +174,16 @@ private:
     void updateCounters();
     void updateHistogram();
     void updateColorgramme();
-    void markCurrentHourData();
-    void markHourData(const QDate& date, int hour);
+    bool markHourData(const QDate& date, int hour);
     bool hasHourData(const QDate& date, int hour) const;
     bool loadRMOBReport(const QString& fileName);
     bool saveRMOBReport(const QString& fileName, QString *error = nullptr) const;
+    bool saveRMOBReport(const QString& fileName, const QDate& monthDate, QString *error = nullptr) const;
+    void saveAutomaticRMOBReports() const;
     QString automaticRMOBReportFileName(const QDate& date) const;
     QColor colorgrammeColor(int count, int maxCount) const;
     QDate colorgrammeMonthDate() const;
+    QList<QDate> colorgrammeMonthDates() const;
     QString formatRMOBFrequency(qint64 frequency) const;
     QString formatRMOBCoordinate(double coordinate, bool latitude) const;
     qint64 rmobReportFrequency() const;

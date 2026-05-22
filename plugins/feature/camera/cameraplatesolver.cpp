@@ -22,6 +22,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <limits>
 
 #include <QDir>
@@ -37,6 +38,7 @@
 #include <QNetworkRequest>
 #include <QPointF>
 #include <QRectF>
+#include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
 #include <QString>
@@ -259,9 +261,12 @@ QHash<QString, QByteArray> m_sirilRangeCache;
 QHash<int, QByteArray> m_sirilIndexCache;
 QVector<double> m_detectionBrightnessMetricCache;
 QVector<double> m_detectionReliabilityMetricCache;
+QVector<ProjectedCatalogStar> m_projectedCatalogScratch;
+QVector<CandidatePair> m_candidatePairScratch;
 // Maximum total size of m_sirilRangeCache before it is cleared after a solve.
 // m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
 static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
+static constexpr const char* kSirilCacheDir = "siril-spcc-cache/v1";
 static constexpr const char* kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 static constexpr const char* kDownloadedCatalogDir = "camera";
 static constexpr const char* kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
@@ -817,6 +822,57 @@ static QString sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastB
     return QStringLiteral("%1:%2:%3").arg(chunkIndex).arg(firstByte).arg(lastByte);
 }
 
+static QString sirilCacheRootDir()
+{
+    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilCacheDir));
+}
+
+static QString sirilIndexDiskCachePath(int chunkIndex)
+{
+    return QDir(QDir(sirilCacheRootDir()).filePath(QStringLiteral("indexes")))
+        .filePath(QStringLiteral("chunk-%1.idx").arg(chunkIndex));
+}
+
+static QString sirilRangeDiskCachePath(int chunkIndex, qint64 firstByte, qint64 lastByte)
+{
+    return QDir(QDir(sirilCacheRootDir()).filePath(QStringLiteral("ranges")))
+        .filePath(QStringLiteral("chunk-%1-%2-%3.bin").arg(chunkIndex).arg(firstByte).arg(lastByte));
+}
+
+static QByteArray readSirilDiskCacheFile(const QString& path, qint64 expectedSize)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    if ((expectedSize >= 0) && (file.size() != expectedSize)) {
+        return {};
+    }
+    return file.readAll();
+}
+
+static void writeSirilDiskCacheFile(const QString& path, const QByteArray& data)
+{
+    if (data.isEmpty()) {
+        return;
+    }
+
+    QDir dir(QFileInfo(path).absolutePath());
+    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+        return;
+    }
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        return;
+    }
+    if (file.write(data) != data.size()) {
+        file.cancelWriting();
+        return;
+    }
+    file.commit();
+}
+
 static double fovLongEdgeDiagonalDegrees(const QSize& imageSize, double fovDegrees)
 {
     const int longEdge = std::max(imageSize.width(), imageSize.height());
@@ -952,8 +1008,16 @@ QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastByte)
     if (cachedRange != m_sirilRangeCache.constEnd()) {
         return cachedRange.value();
     }
-
     const qint64 requestedSize = lastByte - firstByte + 1;
+    const QByteArray cachedDiskRange = readSirilDiskCacheFile(
+        sirilRangeDiskCachePath(chunkIndex, firstByte, lastByte),
+        requestedSize);
+    if (!cachedDiskRange.isEmpty())
+    {
+        m_sirilRangeCache.insert(cacheKey, cachedDiskRange);
+        return cachedDiskRange;
+    }
+
     const bool smallRange = requestedSize < kSirilMinRangeRequestSize;
     const qint64 requestFirstByte = smallRange
         ? (firstByte / kSirilMinRangeRequestSize) * kSirilMinRangeRequestSize
@@ -970,6 +1034,22 @@ QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastByte)
             const qint64 offset = firstByte - requestFirstByte;
             if (it.value().size() >= (offset + requestedSize)) {
                 return it.value().mid(static_cast<int>(offset), static_cast<int>(requestedSize));
+            }
+        }
+        const qint64 requestSize = requestLastByte - requestFirstByte + 1;
+        const QByteArray cachedDiskRequest = readSirilDiskCacheFile(
+            sirilRangeDiskCachePath(chunkIndex, requestFirstByte, requestLastByte),
+            requestSize);
+        if (!cachedDiskRequest.isEmpty())
+        {
+            const qint64 offset = firstByte - requestFirstByte;
+            if (cachedDiskRequest.size() >= (offset + requestedSize))
+            {
+                const QByteArray requestedData = cachedDiskRequest.mid(static_cast<int>(offset), static_cast<int>(requestedSize));
+                m_sirilRangeCache.insert(requestCacheKey, cachedDiskRequest);
+                m_sirilRangeCache.insert(cacheKey, requestedData);
+                writeSirilDiskCacheFile(sirilRangeDiskCachePath(chunkIndex, firstByte, lastByte), requestedData);
+                return requestedData;
             }
         }
     }
@@ -995,6 +1075,10 @@ QByteArray fetchSirilRange(int chunkIndex, qint64 firstByte, qint64 lastByte)
         const QByteArray requestedData = data.mid(static_cast<int>(offset), static_cast<int>(requestedSize));
         m_sirilRangeCache.insert(requestCacheKey, data);
         m_sirilRangeCache.insert(cacheKey, requestedData);
+        writeSirilDiskCacheFile(sirilRangeDiskCachePath(chunkIndex, requestFirstByte, requestLastByte), data);
+        if (requestCacheKey != cacheKey) {
+            writeSirilDiskCacheFile(sirilRangeDiskCachePath(chunkIndex, firstByte, lastByte), requestedData);
+        }
         return requestedData;
     }
 
@@ -1006,6 +1090,13 @@ QByteArray fetchSirilChunkIndex(int chunkIndex)
     const auto cachedIndex = m_sirilIndexCache.constFind(chunkIndex);
     if (cachedIndex != m_sirilIndexCache.constEnd()) {
         return cachedIndex.value();
+    }
+
+    const QByteArray cachedDiskIndex = readSirilDiskCacheFile(sirilIndexDiskCachePath(chunkIndex), kSirilIndexSize);
+    if (!cachedDiskIndex.isEmpty())
+    {
+        m_sirilIndexCache.insert(chunkIndex, cachedDiskIndex);
+        return cachedDiskIndex;
     }
 
     const qint64 firstByte = kSirilHeaderSize;
@@ -1022,7 +1113,139 @@ QByteArray fetchSirilChunkIndex(int chunkIndex)
     }
 
     m_sirilIndexCache.insert(chunkIndex, indexBytes);
+    writeSirilDiskCacheFile(sirilIndexDiskCachePath(chunkIndex), indexBytes);
     return indexBytes;
+}
+
+void prefetchSirilMergedRanges(const QVector<SirilMergedRange>& mergedRanges)
+{
+    if (!m_networkManager || mergedRanges.isEmpty()) {
+        return;
+    }
+
+    struct PendingRange
+    {
+        SirilMergedRange range;
+        QNetworkReply *reply = nullptr;
+        QTimer *timer = nullptr;
+    };
+
+    QVector<SirilMergedRange> missingRanges;
+    missingRanges.reserve(mergedRanges.size());
+    for (const SirilMergedRange& range : mergedRanges)
+    {
+        const qint64 expectedByteCount = range.lastByte - range.firstByte + 1;
+        const QString cacheKey = sirilRangeCacheKey(range.chunkIndex, range.firstByte, range.lastByte);
+        if (m_sirilRangeCache.contains(cacheKey)) {
+            continue;
+        }
+
+        const QByteArray cached = readSirilDiskCacheFile(
+            sirilRangeDiskCachePath(range.chunkIndex, range.firstByte, range.lastByte),
+            expectedByteCount);
+        if (!cached.isEmpty())
+        {
+            m_sirilRangeCache.insert(cacheKey, cached);
+            continue;
+        }
+
+        missingRanges.append(range);
+    }
+
+    if (missingRanges.isEmpty()) {
+        return;
+    }
+
+    constexpr int kMaxConcurrentSirilRequests = 6;
+    int nextRange = 0;
+    int activeCount = 0;
+    QEventLoop loop;
+    QVector<PendingRange *> pending;
+
+    const auto finishPending = [&](PendingRange *item) {
+        if (!item || !item->reply) {
+            return;
+        }
+
+        const SirilMergedRange range = item->range;
+        const qint64 expectedByteCount = range.lastByte - range.firstByte + 1;
+        QByteArray data;
+        if ((item->reply->error() == QNetworkReply::NoError)
+            && (item->reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 206))
+        {
+            data = item->reply->readAll();
+        }
+
+        if (data.size() == expectedByteCount)
+        {
+            const QString cacheKey = sirilRangeCacheKey(range.chunkIndex, range.firstByte, range.lastByte);
+            m_sirilRangeCache.insert(cacheKey, data);
+            writeSirilDiskCacheFile(sirilRangeDiskCachePath(range.chunkIndex, range.firstByte, range.lastByte), data);
+        }
+
+        item->reply->deleteLater();
+        item->reply = nullptr;
+        if (item->timer)
+        {
+            item->timer->deleteLater();
+            item->timer = nullptr;
+        }
+        --activeCount;
+        if ((nextRange >= missingRanges.size()) && (activeCount <= 0)) {
+            loop.quit();
+        }
+    };
+
+    std::function<void()> startMore = [&]() {
+        while ((activeCount < kMaxConcurrentSirilRequests)
+            && (nextRange < missingRanges.size())
+            && !(m_owner && m_owner->m_cancelNetworkRequests))
+        {
+            const SirilMergedRange range = missingRanges[nextRange++];
+            QNetworkRequest request(QUrl(sirilSpccChunkUrl(range.chunkIndex, 0)));
+            request.setRawHeader("Range", QByteArray("bytes=%1-%2")
+                .replace("%1", QByteArray::number(range.firstByte))
+                .replace("%2", QByteArray::number(range.lastByte)));
+            request.setRawHeader("Accept-Encoding", "identity");
+            request.setRawHeader("User-Agent", "SDRangel CameraPlateSolver/1.0");
+            request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+            request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+
+            PendingRange *item = new PendingRange{range, m_networkManager->get(request), new QTimer(&loop)};
+            item->timer->setSingleShot(true);
+            pending.append(item);
+            ++activeCount;
+            QObject::connect(item->reply, &QNetworkReply::finished, &loop, [&, item]() {
+                finishPending(item);
+                startMore();
+            });
+            QObject::connect(item->timer, &QTimer::timeout, &loop, [item]() {
+                if (item->reply) {
+                    item->reply->abort();
+                }
+            });
+            item->timer->start(30000);
+        }
+
+        if ((nextRange >= missingRanges.size()) && (activeCount <= 0)) {
+            loop.quit();
+        }
+    };
+
+    startMore();
+    if (activeCount > 0) {
+        loop.exec();
+    }
+
+    for (PendingRange *item : pending)
+    {
+        if (item && item->reply)
+        {
+            item->reply->abort();
+            item->reply->deleteLater();
+        }
+        delete item;
+    }
 }
 
 static quint32 interleaveHealpixBits(int x, int y)
@@ -1321,6 +1544,8 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
              << "Dec" << centerDecDegrees
              << "radius" << queryRadius
              << "maxMag" << maxMagnitude;
+
+    prefetchSirilMergedRanges(mergedRanges);
 
     for (const SirilMergedRange& range : mergedRanges)
     {
@@ -2243,12 +2468,13 @@ QVector<int> selectDetectionIndicesForSolve(const QVector<CameraPipelineStarDete
     return ranked;
 }
 
-static QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatalogContext& catalogContext,
-                                                    const SkyProjector& projector,
-                                                    double searchMarginPixels,
-                                                    const QVector<int>* allowedCatalogIndices = nullptr)
+static void buildProjectedCatalogInto(const PlateSolveCatalogContext& catalogContext,
+                                      const SkyProjector& projector,
+                                      double searchMarginPixels,
+                                      const QVector<int>* allowedCatalogIndices,
+                                      QVector<ProjectedCatalogStar>& projectedStars)
 {
-    QVector<ProjectedCatalogStar> projectedStars;
+    projectedStars.clear();
     const QRectF expandedBounds(
         -searchMarginPixels,
         -searchMarginPixels,
@@ -2286,7 +2512,15 @@ static QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatal
             appendProjectedStar(visibleStar);
         }
     }
+}
 
+static QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatalogContext& catalogContext,
+                                                    const SkyProjector& projector,
+                                                    double searchMarginPixels,
+                                                    const QVector<int>* allowedCatalogIndices = nullptr)
+{
+    QVector<ProjectedCatalogStar> projectedStars;
+    buildProjectedCatalogInto(catalogContext, projector, searchMarginPixels, allowedCatalogIndices, projectedStars);
     return projectedStars;
 }
 
@@ -3531,6 +3765,25 @@ QHash<int, double> detectionBrightnessRanks(const QVector<CameraPipelineStarDete
 
 static QVector<double> projectedBrightnessRanks(const QVector<ProjectedCatalogStar>& projectedStars)
 {
+    bool alreadyMagnitudeSorted = true;
+    for (int i = 1; i < projectedStars.size(); ++i)
+    {
+        if (projectedStars[i - 1].magnitude > projectedStars[i].magnitude)
+        {
+            alreadyMagnitudeSorted = false;
+            break;
+        }
+    }
+    if (alreadyMagnitudeSorted)
+    {
+        QVector<double> ranks(projectedStars.size(), 0.0);
+        const double divisor = std::max(1, static_cast<int>(projectedStars.size()) - 1);
+        for (int i = 0; i < projectedStars.size(); ++i) {
+            ranks[i] = static_cast<double>(i) / divisor;
+        }
+        return ranks;
+    }
+
     QVector<int> sorted;
     sorted.reserve(projectedStars.size());
     for (int i = 0; i < projectedStars.size(); ++i) {
@@ -3634,7 +3887,8 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
                             const QVector<ProjectedCatalogStar>& projectedStars,
                             double matchRadiusPixels)
 {
-    QVector<CandidatePair> candidatePairs;
+    QVector<CandidatePair>& candidatePairs = m_candidatePairScratch;
+    candidatePairs.clear();
     const QVector<CatalogStar>& catalogStars = catalogContext.catalogStars;
     const QHash<int, double> detectionRanks = detectionBrightnessRanks(starDetections, detectionIndices);
     const QVector<double> projectedRanks = projectedBrightnessRanks(projectedStars);
@@ -4062,11 +4316,13 @@ Evaluation evaluatePose(const CameraSettings& settings,
         return evaluation;
     }
 
-    const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
+    buildProjectedCatalogInto(
         catalogContext,
         projector,
         matchRadiusPixels,
-        allowedCatalogIndices);
+        allowedCatalogIndices,
+        m_projectedCatalogScratch);
+    const QVector<ProjectedCatalogStar>& projectedStars = m_projectedCatalogScratch;
     if (projectedStars.isEmpty()) {
         return evaluation;
     }
@@ -4152,11 +4408,13 @@ Evaluation evaluateAnchoredPose(const CameraSettings& settings,
         return evaluation;
     }
 
-    const QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
+    buildProjectedCatalogInto(
         catalogContext,
         projector,
         matchRadiusPixels,
-        allowedCatalogIndices.isEmpty() ? nullptr : &allowedCatalogIndices);
+        allowedCatalogIndices.isEmpty() ? nullptr : &allowedCatalogIndices,
+        m_projectedCatalogScratch);
+    const QVector<ProjectedCatalogStar>& projectedStars = m_projectedCatalogScratch;
     if (projectedStars.isEmpty()) {
         return evaluation;
     }
@@ -5830,13 +6088,30 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const std::array<double, 3> coarseFovOffsetsOrdered = {{0.0, -1.0, 1.0}};
     const std::array<double, 13> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0}};
     const std::array<double, 13> wideRollOffsetsOrdered = {{0.0, -30.0, 30.0, -60.0, 60.0, -90.0, 90.0, -120.0, 120.0, -150.0, 150.0, -180.0, 180.0}};
+    QVector<int> wideFirstPassCatalogIndices;
+    if (wideWeakMode && useStartFov && (detectionIndices.size() > 32))
+    {
+        wideFirstPassCatalogIndices.reserve(std::min(192, static_cast<int>(catalogContext.visibleStars.size())));
+        for (const VisibleCatalogStar& star : catalogContext.visibleStars)
+        {
+            if ((star.magnitude <= kWideFovBrightFirstPassMaxMagnitude)
+                || (wideFirstPassCatalogIndices.size() < 96))
+            {
+                wideFirstPassCatalogIndices.append(star.catalogIndex);
+            }
+            if (wideFirstPassCatalogIndices.size() >= 192) {
+                break;
+            }
+        }
+    }
 
     auto evaluateSeed = [&](const char *stage,
                             double azimuthDegrees,
                             double elevationDegrees,
                             double rollDegrees,
                             double fovDegrees,
-                            double matchRadiusOverride = -1.0) {
+                            double matchRadiusOverride = -1.0,
+                            const QVector<int>* allowedCatalogIndices = nullptr) {
         const Evaluation candidate = evaluatePose(
             settings,
             catalogContext,
@@ -5848,7 +6123,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             elevationDegrees,
             rollDegrees,
             fovDegrees,
-            nullptr,
+            allowedCatalogIndices,
             fixedCenterOffsetX,
             fixedCenterOffsetY,
             fixedDistortionK1,
@@ -6042,7 +6317,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
                             rollDegrees,
                             std::max(static_cast<double>(CameraSettings::m_minFov),
                                      static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius),
-                            useWideFovSeedRadius ? wideFovSeedMatchRadius : -1.0);
+                            useWideFovSeedRadius ? wideFovSeedMatchRadius : -1.0,
+                            wideFirstPassCatalogIndices.isEmpty() ? nullptr : &wideFirstPassCatalogIndices);
                     }
                 }
             }

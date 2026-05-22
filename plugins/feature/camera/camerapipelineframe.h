@@ -61,11 +61,16 @@ struct CameraPipelineStarDetection
     QPointF m_projectedCenter;
     float m_peakValue;
     float m_radius;
+    float m_flux = 0.0f;
+    float m_snr = 0.0f;
+    float m_fwhm = 0.0f;
+    float m_centroidUncertainty = 0.0f;
     float m_qualityScore = 0.0f;
     float m_roundness = 0.0f;
     float m_fillRatio = 0.0f;
     float m_aspectRatio = 0.0f;
     bool m_saturated = false;
+    bool m_hotPixelSuspect = false;
     QString m_label;
     float m_matchDistancePixels = 0.0f;
     float m_catalogMagnitude = 0.0f;
@@ -110,6 +115,9 @@ struct CameraPipelineFrame
     float m_plateSolveCenterOffsetY = 0.0f;
     float m_plateSolveDistortionK1 = 0.0f;
     QString m_plateSolveCatalogSource;
+    QString m_plateSolveFailureReason;
+    QString m_plateSolveMatchSummary;
+    int m_plateSolveRequiredMatches = 0;
     bool m_saveCurrentImage = false;
     int m_stackCount = 1;
     int m_stackQueuedCount = 0;

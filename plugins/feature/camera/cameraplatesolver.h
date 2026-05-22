@@ -48,6 +48,9 @@ struct CameraPlateSolveResult
     double m_centerOffsetYPixels = 0.0;
     double m_distortionK1 = 0.0;
     QString m_catalogSource;
+    QString m_failureReason;
+    QString m_matchSummary;
+    int m_requiredMatches = 0;
 };
 
 class QNetworkAccessManager;

@@ -99,6 +99,18 @@ cv::Mat debugMaskTo8Bit(const cv::Mat& mask)
     return converted;
 }
 
+double estimateResidualNoiseSigma(const cv::Mat& residual)
+{
+    if (residual.empty()) {
+        return 1.0;
+    }
+
+    cv::Scalar mean;
+    cv::Scalar stddev;
+    cv::meanStdDev(residual, mean, stddev);
+    return std::max(1.0, stddev[0]);
+}
+
 } // namespace
 CameraStarDetector::CameraStarDetector()
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
@@ -255,6 +267,9 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     frame->m_plateSolveCenterOffsetY = 0.0f;
     frame->m_plateSolveDistortionK1 = 0.0f;
     frame->m_plateSolveCatalogSource.clear();
+    frame->m_plateSolveFailureReason.clear();
+    frame->m_plateSolveMatchSummary.clear();
+    frame->m_plateSolveRequiredMatches = 0;
 
     cv::Mat bgrMat;
     cv::Rect detectionRoi;
@@ -334,6 +349,9 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->m_plateSolveCenterOffsetY = static_cast<float>(plateSolveResult.m_centerOffsetYPixels);
         frame->m_plateSolveDistortionK1 = static_cast<float>(plateSolveResult.m_distortionK1);
         frame->m_plateSolveCatalogSource = plateSolveResult.m_catalogSource;
+        frame->m_plateSolveFailureReason = plateSolveResult.m_failureReason;
+        frame->m_plateSolveMatchSummary = plateSolveResult.m_matchSummary;
+        frame->m_plateSolveRequiredMatches = plateSolveResult.m_requiredMatches;
     }
 
     forwardFrame(frame);
@@ -509,6 +527,7 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
         applyStarPreprocessing(bgrMat, sourceBgrGpu, roi, highBitDepthGray, gray, residual, thresholdMask, debugMask);
     }
 
+    const double residualNoiseSigma = estimateResidualNoiseSigma(residual);
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(thresholdMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
@@ -559,6 +578,8 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
         double totalWeight = 0.0;
         double weightedX = 0.0;
         double weightedY = 0.0;
+        double weightedXX = 0.0;
+        double weightedYY = 0.0;
         double peakValue = 0.0;
         double grayPeak = 0.0;
 
@@ -585,9 +606,13 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
                     : static_cast<double>(residualRow8[col]);
                 if (weight > 0.0)
                 {
+                    const double x = static_cast<double>(box.x + col);
+                    const double y = static_cast<double>(box.y + row);
                     totalWeight += weight;
-                    weightedX += static_cast<double>(box.x + col) * weight;
-                    weightedY += static_cast<double>(box.y + row) * weight;
+                    weightedX += x * weight;
+                    weightedY += y * weight;
+                    weightedXX += x * x * weight;
+                    weightedYY += y * y * weight;
                 }
 
                 if (weight > peakValue) {
@@ -610,6 +635,14 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
 
         const double centerX = weightedX / totalWeight;
         const double centerY = weightedY / totalWeight;
+        const double varianceX = std::max(0.0, weightedXX / totalWeight - centerX * centerX);
+        const double varianceY = std::max(0.0, weightedYY / totalWeight - centerY * centerY);
+        const double rmsRadius = std::sqrt(0.5 * (varianceX + varianceY));
+        const double fwhm = 2.354820045 * rmsRadius;
+        const double snr = totalWeight / std::max(1.0, residualNoiseSigma * std::sqrt(std::max(1.0, area)));
+        const double centroidUncertainty = (snr > 0.0)
+            ? std::max(0.05, fwhm / std::max(2.354820045, 2.354820045 * snr))
+            : 999.0;
         // Saturation threshold scales with the input depth — 250/255 on 8-bit translates
         // to ~64000/65535 on 16-bit. We keep the m_saturated flag depth-agnostic for the
         // plate solver's downstream quality scoring.
@@ -627,16 +660,24 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
             * std::max(0.25, fillRatio)
             / std::max(1.0, aspectRatio)
             * (saturated ? 0.85 : 1.0);
+        const bool hotPixelSuspect = (area <= 2.0)
+            || ((fwhm > 0.0) && (fwhm < 0.85) && (fillRatio > 0.75))
+            || ((width <= 2.0) && (height <= 2.0) && (peakValue > residualNoiseSigma * 12.0));
 
         CameraPipelineStarDetection detection;
         detection.m_center = QPointF(centerX + roi.x, centerY + roi.y);
         detection.m_peakValue = static_cast<float>(peakValue);
         detection.m_radius = static_cast<float>(std::max(1.0, std::sqrt(area / CV_PI)));
+        detection.m_flux = static_cast<float>(totalWeight);
+        detection.m_snr = static_cast<float>(snr);
+        detection.m_fwhm = static_cast<float>(fwhm);
+        detection.m_centroidUncertainty = static_cast<float>(centroidUncertainty);
         detection.m_qualityScore = static_cast<float>(qualityScore);
         detection.m_roundness = static_cast<float>(roundness);
         detection.m_fillRatio = static_cast<float>(fillRatio);
         detection.m_aspectRatio = static_cast<float>(aspectRatio);
         detection.m_saturated = saturated;
+        detection.m_hotPixelSuspect = hotPixelSuspect;
         starDetections.append(detection);
 
         if (!finalMask.empty()) {

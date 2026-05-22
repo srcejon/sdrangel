@@ -894,10 +894,15 @@ void printDetectionDiagnostics(const CameraPipelineFramePtr& frame)
                   << " x=" << detection.m_center.x()
                   << " y=" << detection.m_center.y()
                   << " peak=" << detection.m_peakValue
+                  << " flux=" << detection.m_flux
+                  << " snr=" << detection.m_snr
+                  << " fwhm=" << detection.m_fwhm
+                  << " centroidUncertainty=" << detection.m_centroidUncertainty
                   << " quality=" << detection.m_qualityScore
                   << " radius=" << detection.m_radius
                   << " round=" << detection.m_roundness
                   << " saturated=" << (detection.m_saturated ? "true" : "false")
+                  << " hotPixel=" << (detection.m_hotPixelSuspect ? "true" : "false")
                   << " solved=" << (detection.m_solved ? "true" : "false");
         if (detection.m_solved)
         {
@@ -1018,9 +1023,9 @@ int runTests(const QString& csvPath)
             result.frame,
             diagnosticCatalog,
             labels);
-        const QStringList missing = missingExpectedStars(labels, projectedDetections, test.expectedStars);
-        const bool hasPlateSolveMatches = result.frame->m_plateSolvedMatches > 0;
-        const bool pass = missing.isEmpty() && hasPlateSolveMatches;
+        const QStringList missing = missingExpectedStars(labels, QStringList(), test.expectedStars);
+        const bool solved = result.frame->m_plateSolved;
+        const bool pass = solved && missing.isEmpty();
         if (!pass) {
             ++failures;
         }
@@ -1033,6 +1038,7 @@ int runTests(const QString& csvPath)
                   << " catalogStars=" << result.frame->m_plateSolveCatalogStarsLoaded
                   << " candidates=" << result.frame->m_plateSolveCatalogCandidateStars
                   << " outliers=" << result.frame->m_plateSolveOutlierStars
+                  << " required=" << result.frame->m_plateSolveRequiredMatches
                   << " rms=" << result.frame->m_plateSolveRmsError
                   << " poseAz=" << result.frame->m_plateSolveAzimuth
                   << " poseEl=" << result.frame->m_plateSolveElevation
@@ -1043,7 +1049,16 @@ int runTests(const QString& csvPath)
         if (!projectedDetections.isEmpty()) {
             std::cout << "  projected detections: " << projectedDetections.join(QStringLiteral(", ")).toStdString() << '\n';
         }
-        if (!hasPlateSolveMatches) {
+        if (!result.frame->m_plateSolveFailureReason.isEmpty()) {
+            std::cout << "  failure: " << result.frame->m_plateSolveFailureReason.toStdString() << '\n';
+        }
+        if (!result.frame->m_plateSolveMatchSummary.isEmpty()) {
+            std::cout << "  matches: " << result.frame->m_plateSolveMatchSummary.toStdString() << '\n';
+        }
+        if (!solved) {
+            std::cout << "  plate solve did not complete\n";
+        }
+        if (result.frame->m_plateSolvedMatches <= 0) {
             std::cout << "  missing plate-solve matches\n";
         }
         if (!missing.isEmpty()) {

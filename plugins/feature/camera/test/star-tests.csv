@@ -1,5 +1,5 @@
 image,time,latitude,longitude,altitude,azimuth,elevation,roll,fov,projection,cx,cy,k1,stars
 "images/stars-narrow-1.jpg",2026-05-21 00:40:50,51.366299,-0.125000,100.0,351.00,82.0,0.00,1.29,"rectilinear",0.0,0.0,0.0,"Edasich"
-"images/stars-narrow-2.jpg",2026-05-21 22:56:10,51.366299,-0.125000,100.0,28.5,74.0,0.00,1.29,"rectilinear",0.0,0.0,0.0,"Thuban"
+"images/stars-narrow-2.jpg",2026-05-21 21:56:10,51.366299,-0.125000,100.0,28.5,74.0,0.00,1.29,"rectilinear",0.0,0.0,0.0,"Thuban"
 "images/stars-narrow-3.jpg",2026-05-21 22:15:45,51.366299,-0.125000,100.0,32.0,70.0,0.00,1.29,"rectilinear",0.0,0.0,0.0,"HIP 73199"
 "images/stars-wide-1.jpg",2026-06-09 22:54:53,51.366299,-0.125000,100.0,100.0,81.0,-60.0,165.0,"equidistant fisheye",0.0,0.0,0.0,"Arcturus,Alkaid,Mizar,Alioth,Dubhe"

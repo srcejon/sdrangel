@@ -133,6 +133,7 @@ struct Evaluation
     double centerOffsetYPixels = 0.0;
     double distortionK1 = 0.0;
     double brightnessRankError = std::numeric_limits<double>::infinity();
+    double meanCatalogMagnitude = std::numeric_limits<double>::infinity();
     QVector<Match> matches;
 };
 
@@ -148,6 +149,7 @@ struct FinalMatchPassEvaluation
     double medianErrorPixels = std::numeric_limits<double>::infinity();
     double maxErrorPixels = std::numeric_limits<double>::infinity();
     double brightnessRankError = std::numeric_limits<double>::infinity();
+    double meanCatalogMagnitude = std::numeric_limits<double>::infinity();
 };
 
 struct TriangleSignature
@@ -224,6 +226,7 @@ double m_elevationSeedReferenceFovDegrees = 0.0;
 double m_elevationSeedScaleDegrees = 1.0;
 double m_elevationSeedFovScaleDegrees = 1.0;
 bool m_useDirectionSeedPreference = false;
+bool m_useWideCatalogMagnitudePreference = false;
 double m_directionSeedReferenceAzimuthDegrees = 0.0;
 double m_directionSeedReferenceElevationDegrees = 0.0;
 double m_directionSeedReferenceRollDegrees = 0.0;
@@ -263,8 +266,10 @@ static constexpr double kSirilAutoMaxFovDegrees = 15.0;
 static constexpr double kSirilMaxQueryRadiusDegrees = 20.0;
 static constexpr double kSirilAliasMaxSeparationArcSec = 30.0;
 static constexpr double kSirilAliasMaxMagnitudeDifference = 2.5;
-static constexpr double kWideFovBrightSolveThresholdDegrees = 30.0;
-static constexpr double kWideFovBrightSolveMaxMagnitude = 5.0;
+static constexpr double kWideFovMagnitudePreferenceThresholdDegrees = 30.0;
+static constexpr double kWideFovBrightFirstPassMaxMagnitude = 5.0;
+static constexpr double kWideFovMagnitudePreferenceMinDelta = 1.0;
+static constexpr double kWideFovMagnitudePreferenceMaxRmsPixels = 24.0;
 
 struct SirilCellRange
 {
@@ -751,10 +756,10 @@ static QString currentCatalogSource(const CameraSettings& settings)
 
 static double firstPassPlateSolveMaxMagnitude(const CameraSettings& settings)
 {
-    if ((settings.m_fov > kWideFovBrightSolveThresholdDegrees)
-        && (settings.m_plateSolveMaxMagnitude > kWideFovBrightSolveMaxMagnitude))
+    if ((settings.m_fov > kWideFovMagnitudePreferenceThresholdDegrees)
+        && (settings.m_plateSolveMaxMagnitude > kWideFovBrightFirstPassMaxMagnitude))
     {
-        return kWideFovBrightSolveMaxMagnitude;
+        return kWideFovBrightFirstPassMaxMagnitude;
     }
 
     return settings.m_plateSolveMaxMagnitude;
@@ -2859,6 +2864,30 @@ static double matchBrightnessRankError(const QVector<CameraPipelineStarDetection
     return count > 0 ? sumError / count : 0.0;
 }
 
+static double meanCatalogMagnitudeForMatches(const QVector<CatalogStar>& catalogStars,
+                                             const QVector<Match>& matches)
+{
+    double sumMagnitude = 0.0;
+    int count = 0;
+
+    for (const Match& match : matches)
+    {
+        if ((match.catalogIndex < 0) || (match.catalogIndex >= catalogStars.size())) {
+            continue;
+        }
+
+        const double magnitude = catalogStars[match.catalogIndex].magnitude;
+        if (!std::isfinite(magnitude)) {
+            continue;
+        }
+
+        sumMagnitude += magnitude;
+        ++count;
+    }
+
+    return count > 0 ? sumMagnitude / count : std::numeric_limits<double>::infinity();
+}
+
 static QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
                             const QVector<CameraPipelineStarDetection>& starDetections,
                             const QVector<int>& detectionIndices,
@@ -3288,6 +3317,9 @@ Evaluation evaluatePose(const CameraSettings& settings,
         detectionIndices,
         projectedStars,
         evaluation.matches);
+    evaluation.meanCatalogMagnitude = meanCatalogMagnitudeForMatches(
+        catalogContext.catalogStars,
+        evaluation.matches);
 
     double sumSquaredError = 0.0;
     for (const Match& match : evaluation.matches) {
@@ -3316,6 +3348,15 @@ static double medianDistancePixels(const QVector<Match>& matches)
         return 0.5 * (distances[middle - 1] + distances[middle]);
     }
     return distances[middle];
+}
+
+static double maxDistancePixels(const QVector<Match>& matches)
+{
+    double maxDistance = 0.0;
+    for (const Match& match : matches) {
+        maxDistance = std::max(maxDistance, match.distancePixels);
+    }
+    return maxDistance;
 }
 
 static QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
@@ -3484,6 +3525,41 @@ double brightnessAffinity(const Evaluation& evaluation)
     return 1.0 / (1.0 + 3.0 * clampedError * clampedError);
 }
 
+double catalogMagnitudeAffinity(const Evaluation& evaluation)
+{
+    if (!m_useWideCatalogMagnitudePreference
+        || !std::isfinite(evaluation.meanCatalogMagnitude)
+        || (evaluation.matches.size() < 3))
+    {
+        return 1.0;
+    }
+
+    const double faintExcess = std::max(0.0, evaluation.meanCatalogMagnitude - 4.0);
+    return 1.0 / (1.0 + 0.25 * faintExcess * faintExcess);
+}
+
+bool shouldPreferBrighterCatalogMean(double candidateMeanMagnitude,
+                                     double bestMeanMagnitude,
+                                     double candidateRmsPixels,
+                                     double bestRmsPixels,
+                                     double comparableRmsPixels) const
+{
+    if (!m_useWideCatalogMagnitudePreference
+        || !std::isfinite(candidateMeanMagnitude)
+        || !std::isfinite(bestMeanMagnitude)
+        || !std::isfinite(candidateRmsPixels)
+        || !std::isfinite(bestRmsPixels))
+    {
+        return false;
+    }
+
+    if ((candidateRmsPixels > comparableRmsPixels) || (bestRmsPixels > comparableRmsPixels)) {
+        return false;
+    }
+
+    return (bestMeanMagnitude - candidateMeanMagnitude) >= kWideFovMagnitudePreferenceMinDelta;
+}
+
 bool hasAcceptableBrightnessConsistency(const Evaluation& evaluation)
 {
     return !std::isfinite(evaluation.brightnessRankError)
@@ -3531,6 +3607,7 @@ double guidedDirectionEvaluationScore(const Evaluation& evaluation,
     return static_cast<double>(evaluation.matchCount)
         * evaluationRmsQuality(evaluation, normalizationRadius)
         * brightnessAffinity(evaluation)
+        * catalogMagnitudeAffinity(evaluation)
         * directionSeedAffinity(evaluation);
 }
 
@@ -3578,7 +3655,8 @@ double weakModeEvaluationScore(const Evaluation& evaluation,
     // collapses to ~0.5 so a single false coincidence cannot outweigh a tighter cluster.
     double score = static_cast<double>(evaluation.matchCount)
         * evaluationRmsQuality(evaluation, normalizationRadius)
-        * brightnessAffinity(evaluation);
+        * brightnessAffinity(evaluation)
+        * catalogMagnitudeAffinity(evaluation);
 
     if (m_useElevationSeedPreference)
     {
@@ -3751,6 +3829,9 @@ static FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& set
             allDetectionIndices,
             finalPass.projectedStars,
             finalPass.finalMatches);
+        finalPass.meanCatalogMagnitude = meanCatalogMagnitudeForMatches(
+            catalogContext.catalogStars,
+            finalPass.finalMatches);
         double sumSquaredError = 0.0;
         double maxError = 0.0;
         for (const Match& match : finalPass.finalMatches)
@@ -3761,6 +3842,7 @@ static FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& set
         finalPass.rmsErrorPixels = std::sqrt(sumSquaredError / finalPass.finalMatches.size());
         finalPass.medianErrorPixels = medianDistancePixels(finalPass.finalMatches);
         finalPass.maxErrorPixels = maxError;
+        finalPass.pose.meanCatalogMagnitude = finalPass.meanCatalogMagnitude;
     }
 
     return finalPass;
@@ -3787,6 +3869,7 @@ void logFinalMatchPassEvaluation(const char *stage,
         << " Median=" << evaluation.medianErrorPixels
         << " Max=" << evaluation.maxErrorPixels
         << " BrightnessErr=" << evaluation.brightnessRankError
+        << " MeanMag=" << evaluation.meanCatalogMagnitude
         << " projectedStars=" << evaluation.projectedStars.size()
         << " K1=" << evaluation.pose.distortionK1;
 }
@@ -3811,6 +3894,28 @@ bool isBetterFinalPassEvaluation(const Evaluation& candidate,
 
     if (candidateMeetsThreshold)
     {
+        const double comparableRms = std::min(
+            m_weakModeNormalizationPixels,
+            kWideFovMagnitudePreferenceMaxRmsPixels);
+        if (shouldPreferBrighterCatalogMean(
+                candidate.meanCatalogMagnitude,
+                best.meanCatalogMagnitude,
+                candidate.rmsErrorPixels,
+                best.rmsErrorPixels,
+                comparableRms))
+        {
+            return true;
+        }
+        if (shouldPreferBrighterCatalogMean(
+                best.meanCatalogMagnitude,
+                candidate.meanCatalogMagnitude,
+                best.rmsErrorPixels,
+                candidate.rmsErrorPixels,
+                comparableRms))
+        {
+            return false;
+        }
+
         const double candidateMedian = medianDistancePixels(candidate.matches);
         const double bestMedian = medianDistancePixels(best.matches);
         if (!qFuzzyCompare(candidateMedian + 1.0, bestMedian + 1.0)) {
@@ -3887,6 +3992,28 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
     const int finalMatchDelta = static_cast<int>(candidate.finalMatches.size()) - static_cast<int>(best.finalMatches.size());
     if (std::abs(finalMatchDelta) <= 1)
     {
+        const double comparableRms = std::min(
+            static_cast<double>(settings.m_plateSolveFinalMatchRadius),
+            kWideFovMagnitudePreferenceMaxRmsPixels);
+        if (shouldPreferBrighterCatalogMean(
+                candidate.meanCatalogMagnitude,
+                best.meanCatalogMagnitude,
+                candidate.rmsErrorPixels,
+                best.rmsErrorPixels,
+                comparableRms))
+        {
+            return true;
+        }
+        if (shouldPreferBrighterCatalogMean(
+                best.meanCatalogMagnitude,
+                candidate.meanCatalogMagnitude,
+                best.rmsErrorPixels,
+                candidate.rmsErrorPixels,
+                comparableRms))
+        {
+            return false;
+        }
+
         if (!qFuzzyCompare(candidate.medianErrorPixels + 1.0, best.medianErrorPixels + 1.0)) {
             return candidate.medianErrorPixels < best.medianErrorPixels;
         }
@@ -4088,6 +4215,7 @@ void logPlateSolveEvaluation(const char *stage,
         << " matches=" << evaluation.matchCount
         << " RMS=" << evaluation.rmsErrorPixels
         << " BrightnessErr=" << evaluation.brightnessRankError
+        << " MeanMag=" << evaluation.meanCatalogMagnitude
         << " GuidedScore=" << guidedDirectionEvaluationScore(evaluation)
         << " Cx=" << evaluation.centerOffsetXPixels
         << " Cy=" << evaluation.centerOffsetYPixels
@@ -4129,6 +4257,7 @@ void logWeakModePoolDecision(const char *stage,
         << " RMS=" << candidate.rmsErrorPixels
         << " Median=" << medianDistancePixels(candidate.matches)
         << " BrightnessErr=" << candidate.brightnessRankError
+        << " MeanMag=" << candidate.meanCatalogMagnitude
         << " poolRmsCap=" << poolQualityRadius
         << " Az=" << candidate.azimuthDegrees
         << " El=" << candidate.elevationDegrees
@@ -4144,6 +4273,7 @@ void logWeakModePoolDecision(const char *stage,
             << " matches=" << other->matchCount
             << " RMS=" << other->rmsErrorPixels
             << " Median=" << medianDistancePixels(other->matches)
+            << " MeanMag=" << other->meanCatalogMagnitude
             << " Az=" << other->azimuthDegrees
             << " El=" << other->elevationDegrees
             << " Roll=" << other->rollDegrees
@@ -4170,6 +4300,7 @@ void logWeakModeCandidatePool(const char *stage, const QVector<Evaluation>& cand
             << " RMS=" << candidate.rmsErrorPixels
             << " Median=" << medianDistancePixels(candidate.matches)
             << " BrightnessErr=" << candidate.brightnessRankError
+            << " MeanMag=" << candidate.meanCatalogMagnitude
             << " Az=" << candidate.azimuthDegrees
             << " El=" << candidate.elevationDegrees
             << " Roll=" << candidate.rollDegrees
@@ -5130,6 +5261,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     m_directionSeedRollScaleDegrees = std::max(8.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.15));
     m_directionSeedFovScaleDegrees = std::max(2.0, static_cast<double>(settings.m_fov) * 0.08);
     m_directionSeedMinMatchCount = std::max(1, settings.m_plateSolveMinMatches);
+    m_useWideCatalogMagnitudePreference = settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees;
 
     if (starDetections.isEmpty()) {
         return result;
@@ -5287,7 +5419,14 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         starDetections,
         detectionIndices,
         useMultiHypothesisRefine ? &coarseCandidates : nullptr);
-    if (!best.valid || (best.matchCount < settings.m_plateSolveMinMatches)) {
+    if (!best.valid) {
+        return result;
+    }
+    if (best.matchCount < settings.m_plateSolveMinMatches)
+    {
+        result.m_matchedStars = best.matchCount;
+        result.m_rmsErrorPixels = std::isfinite(best.rmsErrorPixels) ? best.rmsErrorPixels : 0.0;
+        result.m_maxErrorPixels = maxDistancePixels(best.matches);
         return result;
     }
     if (useMultiHypothesisRefine) {
@@ -5462,9 +5601,6 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
         result.m_solved = false;
-        result.m_matchedStars = 0;
-        result.m_rmsErrorPixels = 0.0;
-        result.m_maxErrorPixels = 0.0;
         PROFILER_STOP(QString("%1: unacceptable direction-seeded solve").arg(__FUNCTION__));
         return result;
     }
@@ -5478,9 +5614,6 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
         result.m_solved = false;
-        result.m_matchedStars = 0;
-        result.m_rmsErrorPixels = 0.0;
-        result.m_maxErrorPixels = 0.0;
         PROFILER_STOP(QString("%1: unacceptable elevation-seeded solve").arg(__FUNCTION__));
         return result;
     }
@@ -5496,9 +5629,6 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
         result.m_solved = false;
-        result.m_matchedStars = 0;
-        result.m_rmsErrorPixels = 0.0;
-        result.m_maxErrorPixels = 0.0;
         PROFILER_STOP(QString("%1: unacceptable blind solve").arg(__FUNCTION__));
         return result;
     }

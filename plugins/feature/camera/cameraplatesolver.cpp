@@ -5461,8 +5461,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "rms=" << result.m_rmsErrorPixels
                  << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
+        result.m_solved = false;
+        result.m_matchedStars = 0;
+        result.m_rmsErrorPixels = 0.0;
+        result.m_maxErrorPixels = 0.0;
         PROFILER_STOP(QString("%1: unacceptable direction-seeded solve").arg(__FUNCTION__));
-        return CameraPlateSolveResult();
+        return result;
     }
 
     if (useElevationSeedOnly
@@ -5473,8 +5477,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "rms=" << result.m_rmsErrorPixels
                  << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
+        result.m_solved = false;
+        result.m_matchedStars = 0;
+        result.m_rmsErrorPixels = 0.0;
+        result.m_maxErrorPixels = 0.0;
         PROFILER_STOP(QString("%1: unacceptable elevation-seeded solve").arg(__FUNCTION__));
-        return CameraPlateSolveResult();
+        return result;
     }
 
     if (!useStartFov
@@ -5487,8 +5495,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "rms=" << result.m_rmsErrorPixels
                  << "max=" << result.m_maxErrorPixels;
         clearSolvedStars(starDetections);
+        result.m_solved = false;
+        result.m_matchedStars = 0;
+        result.m_rmsErrorPixels = 0.0;
+        result.m_maxErrorPixels = 0.0;
         PROFILER_STOP(QString("%1: unacceptable blind solve").arg(__FUNCTION__));
-        return CameraPlateSolveResult();
+        return result;
     }
     result.m_azimuthDegrees = selectedFinalPass.pose.azimuthDegrees;
     result.m_elevationDegrees = selectedFinalPass.pose.elevationDegrees;

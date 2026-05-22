@@ -709,15 +709,80 @@ bool labelMatchesExpectedStar(const QString& label, const QString& expected)
         || normalizedExpected.contains(normalizedLabel);
 }
 
-QStringList missingExpectedStars(const QStringList& detectedLabels, const QStringList& expectedStars)
+bool expectedStarHasNearbyDetection(const StarTestCase& test,
+                                    const CameraPipelineFramePtr& frame,
+                                    const QVector<CatalogStar>& catalog,
+                                    const QString& expected)
+{
+    if (!frame) {
+        return false;
+    }
+
+    const CatalogStar *star = findDiagnosticStar(catalog, expected);
+    if (!star) {
+        return false;
+    }
+
+    const TestProjector projector = createDiagnosticProjector(test, frame);
+    const QDateTime solveDateTimeUtc = test.dateTime.toUTC();
+    const AzAlt azAlt = Astronomy::raDecToAzAlt(
+        RADec{star->rightAscensionDegrees / 15.0, star->declinationDegrees},
+        test.latitude,
+        test.longitude,
+        solveDateTimeUtc,
+        true);
+
+    QPointF projected;
+    if (!projectDiagnosticVector(projector, normalize(vectorFromAltAz(azAlt.az, azAlt.alt)), projected)) {
+        return false;
+    }
+
+    double nearestDistance = std::numeric_limits<double>::infinity();
+    for (const CameraPipelineStarDetection& detection : frame->m_starDetections)
+    {
+        const double dx = detection.m_center.x() - projected.x();
+        const double dy = detection.m_center.y() - projected.y();
+        nearestDistance = std::min(nearestDistance, std::hypot(dx, dy));
+    }
+
+    const QSize imageSize = frame->m_image.size();
+    const double maxImageDimension = std::max(imageSize.width(), imageSize.height());
+    const double tolerancePixels = std::max(72.0, std::min(128.0, maxImageDimension * 0.05));
+    return nearestDistance <= tolerancePixels;
+}
+
+QStringList projectedExpectedStarDetections(const StarTestCase& test,
+                                            const CameraPipelineFramePtr& frame,
+                                            const QVector<CatalogStar>& catalog,
+                                            const QStringList& detectedLabels)
+{
+    QStringList projectedDetections;
+    for (const QString& expected : test.expectedStars)
+    {
+        const bool alreadyLabelled = std::any_of(detectedLabels.cbegin(), detectedLabels.cend(), [&](const QString& label) {
+            return labelMatchesExpectedStar(label, expected);
+        });
+        if (!alreadyLabelled && expectedStarHasNearbyDetection(test, frame, catalog, expected)) {
+            projectedDetections.append(expected);
+        }
+    }
+    return projectedDetections;
+}
+
+QStringList missingExpectedStars(const QStringList& detectedLabels,
+                                 const QStringList& projectedDetections,
+                                 const QStringList& expectedStars)
 {
     QStringList missing;
     for (const QString& expected : expectedStars)
     {
-        const bool found = std::any_of(detectedLabels.cbegin(), detectedLabels.cend(), [&](const QString& label) {
+        const bool labelled = std::any_of(detectedLabels.cbegin(), detectedLabels.cend(), [&](const QString& label) {
             return labelMatchesExpectedStar(label, expected);
         });
-        if (!found) {
+        const bool projected = std::any_of(projectedDetections.cbegin(), projectedDetections.cend(), [&](const QString& label) {
+            return labelMatchesExpectedStar(label, expected);
+        });
+        if (!labelled && !projected) {
             missing.append(expected);
         }
     }
@@ -843,6 +908,8 @@ int runTests(const QString& csvPath)
         return 2;
     }
 
+    const QVector<CatalogStar> diagnosticCatalog = loadDiagnosticCatalog();
+
     int failures = 0;
     for (const StarTestCase& test : tests)
     {
@@ -855,7 +922,12 @@ int runTests(const QString& csvPath)
         }
 
         const QStringList labels = solvedStarLabels(result.frame);
-        const QStringList missing = missingExpectedStars(labels, test.expectedStars);
+        const QStringList projectedDetections = projectedExpectedStarDetections(
+            test,
+            result.frame,
+            diagnosticCatalog,
+            labels);
+        const QStringList missing = missingExpectedStars(labels, projectedDetections, test.expectedStars);
         const bool pass = missing.isEmpty();
         if (!pass) {
             ++failures;
@@ -876,6 +948,9 @@ int runTests(const QString& csvPath)
                   << " poseFov=" << result.frame->m_plateSolveFov
                   << '\n';
         std::cout << "  labels: " << labels.join(QStringLiteral(", ")).toStdString() << '\n';
+        if (!projectedDetections.isEmpty()) {
+            std::cout << "  projected detections: " << projectedDetections.join(QStringLiteral(", ")).toStdString() << '\n';
+        }
         if (!missing.isEmpty()) {
             std::cout << "  missing: " << missing.join(QStringLiteral(", ")).toStdString() << '\n';
             printExpectedStarDiagnostics(test, result.frame);

@@ -56,6 +56,15 @@ If Qt autogen fails with `libuv process spawn failed: operation not permitted`, 
 - Validate by building the relevant target or plugin for the area you changed
 - If CMake or dependency configuration changes, rerun the configure step before building
 
+### Camera Star/Plate Solver Tests
+Build the standalone camera star test target on Windows with:
+`cmd /c "C:\PROGRA~1\MICROS~3\2022\COMMUN~1\VC\AUXILI~1\Build\vcvars64.bat && cmake --build --preset default-qt6-windows --target featurecamera_star_tests --parallel"`
+
+Run the test outside the sandbox so it uses the real user's `%APPDATA%\f4exb\SDRangel\camera` catalog cache. Set the Qt plugin path and runtime DLL paths explicitly:
+`cmd /c "set QT_PLUGIN_PATH=C:\Qt\6.11.0\msvc2022_64\plugins && set PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\bin;C:\Users\jon\source\repos\srcejon_sdrangel_fix\external\windows\fftw-3;C:\Users\jon\source\repos\srcejon_sdrangel_fix\external\windows\libsigmf\lib;C:\Users\jon\source\repos\srcejon_sdrangel_fix\build-qt6\bin;C:\Qt\6.11.0\msvc2022_64\bin;C:\Users\jon\source\repos\srcejon_sdrangel_fix\external\windows\opencv4\x64\vc17\bin;%PATH% && build-qt6\bin\plugins\featurecamera_star_tests.exe plugins\feature\camera\test\star-tests.csv"`
+
+When running from a Codex worktree, replace `C:\Users\jon\source\repos\srcejon_sdrangel_fix` with the current worktree path. If catalog/network behavior is being investigated, add `set QT_FORCE_STDERR_LOGGING=1 && set QT_LOGGING_RULES=*.debug=true;*.warning=true &&` before the `PATH` assignment to show Qt TLS and plate-solver diagnostics.
+
 ## Architecture Notes
 - SDRangel is a Qt-based SDR application with both GUI and server modes
 - Core shared code lives in `sdrbase/`, GUI shared code in `sdrgui/`, and server shared code in `sdrsrv/`

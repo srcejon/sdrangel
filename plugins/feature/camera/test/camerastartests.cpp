@@ -53,6 +53,7 @@ struct StarTestCase
     double centerOffsetX = 0.0;
     double centerOffsetY = 0.0;
     double distortionK1 = 0.0;
+    CameraSettings::PlateSolveStartMode plateSolveStartMode = CameraSettings::PlateSolveStartFovAzElRollLens;
     QStringList expectedStars;
 };
 
@@ -204,6 +205,94 @@ QStringList parseExpectedStars(const QString& value)
         }
     }
     return stars;
+}
+
+QString compactName(const QString& value)
+{
+    QString compact;
+    compact.reserve(value.size());
+    for (const QChar ch : value.trimmed().toCaseFolded())
+    {
+        if (ch.isLetterOrNumber()) {
+            compact.append(ch);
+        }
+    }
+    return compact;
+}
+
+CameraSettings::PlateSolveStartMode parsePlateSolveStartMode(const QString& value, int lineNumber, bool* ok)
+{
+    const QString trimmed = value.trimmed();
+    if (trimmed.isEmpty()) {
+        return CameraSettings::PlateSolveStartFovAzElRollLens;
+    }
+
+    bool intOk = false;
+    const int modeIndex = QLocale::c().toInt(trimmed, &intOk);
+    if (intOk)
+    {
+        if ((modeIndex >= static_cast<int>(CameraSettings::PlateSolveStartBlind))
+            && (modeIndex <= static_cast<int>(CameraSettings::PlateSolveStartCurrentSettingsOnly)))
+        {
+            return static_cast<CameraSettings::PlateSolveStartMode>(modeIndex);
+        }
+
+        std::cerr << "Line " << lineNumber << ": invalid plateSolveStartMode index: "
+                  << trimmed.toStdString() << '\n';
+        if (ok) {
+            *ok = false;
+        }
+        return CameraSettings::PlateSolveStartFovAzElRollLens;
+    }
+
+    const QString normalized = compactName(trimmed);
+    if ((normalized == QStringLiteral("blind"))
+        || (normalized == QStringLiteral("platesolvestartblind")))
+    {
+        return CameraSettings::PlateSolveStartBlind;
+    }
+    if ((normalized == QStringLiteral("fov"))
+        || (normalized == QStringLiteral("platesolvestartfov")))
+    {
+        return CameraSettings::PlateSolveStartFov;
+    }
+    if ((normalized == QStringLiteral("fovelevation"))
+        || (normalized == QStringLiteral("fovel"))
+        || (normalized == QStringLiteral("platesolvestartfovelevation")))
+    {
+        return CameraSettings::PlateSolveStartFovElevation;
+    }
+    if ((normalized == QStringLiteral("fovazel"))
+        || (normalized == QStringLiteral("fovazimuthelevation"))
+        || (normalized == QStringLiteral("platesolvestartfovazel")))
+    {
+        return CameraSettings::PlateSolveStartFovAzEl;
+    }
+    if ((normalized == QStringLiteral("fovazelroll"))
+        || (normalized == QStringLiteral("fovazimuthelevationroll"))
+        || (normalized == QStringLiteral("platesolvestartfovazelroll")))
+    {
+        return CameraSettings::PlateSolveStartFovAzElRoll;
+    }
+    if ((normalized == QStringLiteral("fovazelrolllens"))
+        || (normalized == QStringLiteral("fovazimuthelevationrolllens"))
+        || (normalized == QStringLiteral("platesolvestartfovazelrolllens")))
+    {
+        return CameraSettings::PlateSolveStartFovAzElRollLens;
+    }
+    if ((normalized == QStringLiteral("currentsettings"))
+        || (normalized == QStringLiteral("currentsettingsonly"))
+        || (normalized == QStringLiteral("platesolvestartcurrentsettingsonly")))
+    {
+        return CameraSettings::PlateSolveStartCurrentSettingsOnly;
+    }
+
+    std::cerr << "Line " << lineNumber << ": invalid plateSolveStartMode: "
+              << trimmed.toStdString() << '\n';
+    if (ok) {
+        *ok = false;
+    }
+    return CameraSettings::PlateSolveStartFovAzElRollLens;
 }
 
 QString normalizedStarName(const QString& value)
@@ -554,6 +643,10 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         test.centerOffsetX = parseDouble(fieldValue(header, fields, QStringLiteral("cx"), &ok), QStringLiteral("cx"), lineNumber, &ok);
         test.centerOffsetY = parseDouble(fieldValue(header, fields, QStringLiteral("cy"), &ok), QStringLiteral("cy"), lineNumber, &ok);
         test.distortionK1 = parseDouble(fieldValue(header, fields, QStringLiteral("k1"), &ok), QStringLiteral("k1"), lineNumber, &ok);
+        const int plateSolveStartModeIndex = header.indexOf(QStringLiteral("plateSolveStartMode"));
+        if (plateSolveStartModeIndex >= 0) {
+            test.plateSolveStartMode = parsePlateSolveStartMode(fields.value(plateSolveStartModeIndex), lineNumber, &ok);
+        }
         test.expectedStars = parseExpectedStars(fieldValue(header, fields, QStringLiteral("stars"), &ok));
 
         if (!ok) {
@@ -586,7 +679,7 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_plateSolveDateTimeUtc = false;
     settings.m_plateSolveUseDownloadedCatalog = true;
     settings.m_plateSolveCatalogSource = CameraSettings::PlateSolveCatalogSirilSpccGaia;
-    settings.m_plateSolveStartMode = CameraSettings::PlateSolveStartFovAzElRollLens;
+    settings.m_plateSolveStartMode = test.plateSolveStartMode;
     settings.m_plateSolveLabelMode = CameraSettings::PlateSolveLabelName;
     settings.m_plateSolveMaxMagnitude = CameraSettings::m_maxPlateSolveMagnitude;
     settings.m_plateSolveMinMatches = 4;

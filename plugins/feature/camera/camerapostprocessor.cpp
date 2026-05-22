@@ -644,7 +644,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "overlayFontFamily", "overlayFontScale",
-        "motionBoxColor", "starColor", "plateSolveLabelMode",
+        "motionBoxColor", "starColor", "plateSolveLabelMode", "yoloEnabled",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
         "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov",
         "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1", "owmAPIKey",
@@ -1511,7 +1511,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         || (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty())
         || needsTextOverlay
         || !frame.m_motionBoxes.isEmpty()
-        || !frame.m_detections.isEmpty()
+        || (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty())
         || !frame.m_starDetections.isEmpty()
         || needsSpectrumOverlay;
 
@@ -1526,7 +1526,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
 
     if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(bgrMat, frame.m_motionBoxes); }
-    if (!frame.m_detections.isEmpty()) { applyDetectionOverlay(bgrMat, frame.m_detections); }
+    if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(bgrMat, frame.m_detections); }
     if (needsSpectrumOverlay) { applySpectrumOverlay(bgrMat); }
 
     QImage result = convertBgrToRgbImage(bgrMat);

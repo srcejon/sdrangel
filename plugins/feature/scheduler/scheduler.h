@@ -20,6 +20,7 @@
 
 #include <QMap>
 #include <QTimer>
+#include <QByteArray>
 
 #ifdef QT_TEXTTOSPEECH_FOUND
 #include <QTextToSpeech>
@@ -135,6 +136,7 @@ private:
     void executeRuleById(const QString& ruleId, const ExecutionContext& context);
     void executeRule(SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
     void executeRuleActions(const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
+    void executeDurationStopsByRuleId(const QString& ruleId, const QByteArray& ruleState);
     void executeDeviceActions(const QList<SchedulerSettings::DeviceSetAction>& actions);
     void executeChannelActions(const QList<SchedulerSettings::ChannelAction>& actions);
     void executeFeatureActions(const QList<SchedulerSettings::FeatureAction>& actions);
@@ -143,6 +145,7 @@ private:
     void executeFeatureDurationStops(const QList<SchedulerSettings::FeatureAction>& actions);
     static QDateTime schedulerDateTimeFromString(const QString *text);
     static QString schedulerDateTimeToString(const QDateTime& dateTime);
+    static QByteArray ruleState(const SchedulerSettings::ScheduleRule& rule);
     static bool parseFrequency(const QString& text, double& frequencyInHz);
     static bool patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting);
     static bool patchChannelSetting(int deviceSetIndex, int channelIndex, const SchedulerSettings::SettingValue& setting);

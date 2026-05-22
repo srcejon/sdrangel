@@ -605,13 +605,38 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         if (durationSeconds > 0)
         {
             const int durationMs = qMin(durationSeconds, 2147483) * 1000;
-            QTimer::singleShot(durationMs, this, [this, deviceActions, channelActions, featureActions]() {
-                executeDeviceDurationStops(deviceActions);
-                executeChannelDurationStops(channelActions);
-                executeFeatureDurationStops(featureActions);
+            const QString ruleId = rule.m_id;
+            const QByteArray state = ruleState(rule);
+
+            QTimer::singleShot(durationMs, this, [this, ruleId, state]() {
+                executeDurationStopsByRuleId(ruleId, state);
             });
         }
     });
+}
+
+void Scheduler::executeDurationStopsByRuleId(const QString& ruleId, const QByteArray& state)
+{
+    for (const SchedulerSettings::ScheduleRule& rule : m_settings.m_rules)
+    {
+        if (rule.m_id == ruleId)
+        {
+            if (rule.m_enabled && (ruleState(rule) == state))
+            {
+                executeDeviceDurationStops(rule.m_deviceSetActions);
+                executeChannelDurationStops(rule.m_channelActions);
+                executeFeatureDurationStops(rule.m_featureActions);
+            }
+            else
+            {
+                qDebug() << "Scheduler::executeDurationStopsByRuleId: skipped stale duration stop for rule" << ruleId;
+            }
+
+            return;
+        }
+    }
+
+    qDebug() << "Scheduler::executeDurationStopsByRuleId: skipped deleted rule" << ruleId;
 }
 
 void Scheduler::executeDeviceActions(const QList<SchedulerSettings::DeviceSetAction>& actions)
@@ -892,6 +917,14 @@ QDateTime Scheduler::schedulerDateTimeFromString(const QString *text)
 QString Scheduler::schedulerDateTimeToString(const QDateTime& dateTime)
 {
     return dateTime.isValid() ? dateTime.toString(Qt::ISODateWithMs) : QString();
+}
+
+QByteArray Scheduler::ruleState(const SchedulerSettings::ScheduleRule& rule)
+{
+    SchedulerSettings settings;
+
+    settings.m_rules.append(rule);
+    return settings.serialize();
 }
 
 bool Scheduler::parseFrequency(const QString& text, double& frequencyInHz)

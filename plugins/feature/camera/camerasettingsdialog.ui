@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>814</width>
-    <height>934</height>
+    <width>854</width>
+    <height>969</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -5135,7 +5135,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </widget>
            </item>
            <item row="2" column="1">
-           <widget class="QSpinBox" name="starMinAreaSpin">
+            <widget class="QSpinBox" name="starMinAreaSpin">
              <property name="suffix">
               <string> px²</string>
              </property>
@@ -5152,7 +5152,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </widget>
            </item>
            <item row="2" column="3">
-           <widget class="QSpinBox" name="starMaxAreaSpin">
+            <widget class="QSpinBox" name="starMaxAreaSpin">
              <property name="suffix">
               <string> px²</string>
              </property>
@@ -5649,7 +5649,7 @@ Right-click: toggle continual synchronization from My Position.</string>
              <double>180.000000000000000</double>
             </property>
             <property name="singleStep">
-             <double>0.010000000000000</double>
+             <double>1.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -5672,7 +5672,7 @@ Right-click: toggle continual synchronization from My Position.</string>
              <double>90.000000000000000</double>
             </property>
             <property name="singleStep">
-             <double>0.010000000000000</double>
+             <double>1.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -5695,14 +5695,14 @@ Right-click: toggle continual synchronization from My Position.</string>
              <double>360.000000000000000</double>
             </property>
             <property name="singleStep">
-             <double>0.100000000000000</double>
+             <double>1.000000000000000</double>
             </property>
            </widget>
           </item>
           <item row="4" column="0">
            <widget class="QLabel" name="fovModeLabel">
             <property name="text">
-             <string>FoV mode</string>
+             <string>FoV setting</string>
             </property>
            </widget>
           </item>
@@ -5710,7 +5710,7 @@ Right-click: toggle continual synchronization from My Position.</string>
            <widget class="QComboBox" name="fovModeCombo">
             <item>
              <property name="text">
-              <string>Direct</string>
+              <string>Manual</string>
              </property>
             </item>
             <item>

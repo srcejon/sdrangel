@@ -140,6 +140,7 @@ private:
     void setSettingValuesToTable(QTableWidget *table, const QList<SchedulerSettings::SettingValue>& settings, void (SchedulerGUI::*editorChanged)());
     void connectSettingTable(QTableWidget *table, QToolButton *addButton, QToolButton *deleteButton, void (SchedulerGUI::*editorChanged)());
     void updateEventSourceList(const QString& selectedSource);
+    void addPresetEventSources(QStringList& sources) const;
     void updateDeviceSetList(const SchedulerSettings::DeviceSetAction *selectedAction);
     void updatePresetList(const SchedulerSettings::DeviceSetAction *selectedAction);
     void updateChannelDeviceSetList(const SchedulerSettings::ChannelAction *selectedAction);

@@ -27,6 +27,7 @@
 #include <QLineEdit>
 #include <QRegularExpression>
 #include <QSpinBox>
+#include <QStringList>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTimeEdit>
@@ -35,12 +36,14 @@
 
 #include "device/deviceset.h"
 #include "channel/channelapi.h"
+#include "channel/channelutils.h"
 #include "feature/feature.h"
 #include "feature/featureset.h"
 #include "feature/featureuiset.h"
 #include "gui/basicfeaturesettingsdialog.h"
 #include "gui/dialogpositioner.h"
 #include "maincore.h"
+#include "plugin/pluginmanager.h"
 #include "settings/mainsettings.h"
 #include "settings/preset.h"
 
@@ -1183,10 +1186,16 @@ void SchedulerGUI::updateEventSourceList(const QString& selectedSource)
     ui->eventSource->addItem(tr("Any"), QString());
 
     bool found = selectedSource.isEmpty();
+    QStringList sourceIds;
     const AvailableChannelOrFeatureList& entries = m_eventSourceHandler.getAvailableChannelOrFeatureList();
     for (const AvailableChannelOrFeature& entry : entries)
     {
-        const QString longId = entry.getLongId();
+        sourceIds.append(entry.getLongId());
+    }
+    addPresetEventSources(sourceIds);
+
+    for (const QString& longId : sourceIds)
+    {
         ui->eventSource->addItem(longId, longId);
         if (longId == selectedSource) {
             found = true;
@@ -1199,6 +1208,53 @@ void SchedulerGUI::updateEventSourceList(const QString& selectedSource)
 
     const int index = selectedSource.isEmpty() ? 0 : ui->eventSource->findData(selectedSource);
     ui->eventSource->setCurrentIndex(index >= 0 ? index : 0);
+}
+
+void SchedulerGUI::addPresetEventSources(QStringList& sources) const
+{
+    const SchedulerSettings::ScheduleRule *rule = const_cast<SchedulerGUI *>(this)->currentRule();
+    if (!rule) {
+        return;
+    }
+
+    const PluginManager *pluginManager = MainCore::instance()->getPluginManager();
+
+    for (const SchedulerSettings::DeviceSetAction& action : rule->m_deviceSetActions)
+    {
+        const Preset *preset = presetForDeviceSetAction(&action);
+        if (!preset) {
+            continue;
+        }
+
+        QChar kind;
+        if (!action.m_deviceSetId.isEmpty()) {
+            kind = action.m_deviceSetId.at(0);
+        } else if (preset->isSourcePreset()) {
+            kind = 'R';
+        } else if (preset->isSinkPreset()) {
+            kind = 'T';
+        } else if (preset->isMIMOPreset()) {
+            kind = 'M';
+        }
+
+        if ((kind != 'R') && (kind != 'T') && (kind != 'M')) {
+            continue;
+        }
+
+        for (int i = 0; i < preset->getChannelCount(); ++i)
+        {
+            const QString channelURI = preset->getChannelConfig(i).m_channelIdURI;
+            const QString registeredURI = ChannelUtils::getRegisteredChannelURI(channelURI);
+            const QString channelId = pluginManager ? pluginManager->uriToId(registeredURI) : registeredURI;
+            const QString sourceId = kind == 'M'
+                ? QStringLiteral("%1%2:%3.%4 %5").arg(kind).arg(action.m_deviceSetIndex).arg(i).arg(0).arg(channelId)
+                : QStringLiteral("%1%2:%3 %4").arg(kind).arg(action.m_deviceSetIndex).arg(i).arg(channelId);
+
+            if (!sources.contains(sourceId)) {
+                sources.append(sourceId);
+            }
+        }
+    }
 }
 
 void SchedulerGUI::updateDeviceSetList(const SchedulerSettings::DeviceSetAction *selectedAction)
@@ -2146,6 +2202,9 @@ void SchedulerGUI::onDeleteDeviceAction()
     refreshChannelActionsTable();
     selectChannelAction(m_currentChannelAction);
     displayChannelActionEditor();
+    m_populating = true;
+    updateEventSourceList(rule->m_eventSourceId);
+    m_populating = false;
     refreshRulesTable();
     applyRules();
 }
@@ -2284,6 +2343,11 @@ void SchedulerGUI::onDeviceEditorChanged()
     refreshChannelActionsTable();
     selectChannelAction(m_currentChannelAction);
     displayChannelActionEditor();
+    if (rule) {
+        m_populating = true;
+        updateEventSourceList(rule->m_eventSourceId);
+        m_populating = false;
+    }
     refreshRulesTable();
     selectRule(m_currentRule);
     applyRules();

@@ -27,6 +27,10 @@ target_include_directories(meteor_demod_sink_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/..
 )
 
+target_compile_definitions(meteor_demod_sink_test PRIVATE
+    METEOR_TEST_DATA_DIR="${CMAKE_CURRENT_LIST_DIR}/tests"
+)
+
 target_link_libraries(meteor_demod_sink_test PRIVATE
     Qt::Core
     Qt::Gui

@@ -21,8 +21,10 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QList>
 #include <QStringList>
 #include <QTextStream>
@@ -40,6 +42,10 @@
 #include "meteordemodsink.h"
 #include "meteorsettings.h"
 
+#ifndef METEOR_TEST_DATA_DIR
+#define METEOR_TEST_DATA_DIR ""
+#endif
+
 namespace {
     struct Detection
     {
@@ -54,9 +60,20 @@ namespace {
         int sampleRate;
     };
 
+    struct ExpectedDetection
+    {
+        int index;
+        double timeOffsetS;
+        double durationS;
+        double centerFrequency;
+        double frequencySpan;
+        double frequencyDrift;
+    };
+
     struct Options
     {
         QString wavPath;
+        QString testDir;
         MeteorSettings settings;
         int chunkSamples = 4096;
         int tailMS = 2000;
@@ -189,6 +206,12 @@ namespace {
             return false;
         }
 
+        if (options.wavPath.isEmpty() && options.testDir.isEmpty())
+        {
+            error = "Missing --wav <file.wav> or --test-dir <directory> option";
+            return false;
+        }
+
         return true;
     }
 
@@ -211,6 +234,10 @@ namespace {
             else if (readOptionValue(args, i, "wav", value, error))
             {
                 options.wavPath = value;
+            }
+            else if (readOptionValue(args, i, "test-dir", value, error))
+            {
+                options.testDir = value;
             }
             else if (readOptionValue(args, i, "channel-sample-rate", value, error))
             {
@@ -283,10 +310,13 @@ namespace {
             }
         }
 
-        if (options.wavPath.isEmpty())
+        if (options.wavPath.isEmpty() && options.testDir.isEmpty())
         {
-            error = "Missing required --wav <file.wav> option";
-            return false;
+            const QString defaultTestDir = QString::fromUtf8(METEOR_TEST_DATA_DIR);
+
+            if (!defaultTestDir.isEmpty()) {
+                options.testDir = defaultTestDir;
+            }
         }
 
         return validateOptions(options, error);
@@ -294,11 +324,12 @@ namespace {
 
     void printHelp(QTextStream& out)
     {
-        out << "Usage: meteor_demod_sink_test --wav <file.wav> [options]\n\n";
-        out << "Play a stereo 16-bit I/Q WAV file through MeteorBaseband and count meteor detections.\n\n";
+        out << "Usage: meteor_demod_sink_test [--wav <file.wav> | --test-dir <directory>] [options]\n\n";
+        out << "Play stereo 16-bit I/Q WAV files through MeteorBaseband and count or validate meteor detections.\n\n";
         out << "Options:\n";
         out << "  -h, --help                         Show this help text.\n";
         out << "      --wav <file.wav>               Input SDRangel stereo 16-bit I/Q WAV file.\n";
+        out << "      --test-dir <directory>         Directory of paired .wav and .csv regression fixtures.\n";
         out << "      --channel-sample-rate <rate>   Detector sample rate: 100, 300, 1000, or 3000 Hz.\n";
         out << "      --input-frequency-offset <hz>  Channel input frequency offset in Hz.\n";
         out << "      --power-lpf-cutoff <hz>        Power low-pass filter cutoff in Hz.\n";
@@ -430,6 +461,296 @@ namespace {
                 .arg(detection.sampleRate);
         }
     }
+
+    bool parseDoubleField(const QString& text, double& value)
+    {
+        bool ok = false;
+        value = text.trimmed().toDouble(&ok);
+        return ok && std::isfinite(value);
+    }
+
+    bool loadExpectedDetections(const QString& csvPath, QVector<ExpectedDetection>& detections, QString& error)
+    {
+        QFile file(csvPath);
+
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            error = QString("Unable to open expectation CSV: %1").arg(csvPath);
+            return false;
+        }
+
+        QTextStream in(&file);
+        const QString header = in.readLine().trimmed();
+
+        if (header != "index,timeOffsetS,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz")
+        {
+            error = QString("Unexpected CSV header in %1").arg(csvPath);
+            return false;
+        }
+
+        int row = 1;
+
+        while (!in.atEnd())
+        {
+            row++;
+            const QString line = in.readLine().trimmed();
+
+            if (line.isEmpty()) {
+                continue;
+            }
+
+            const QStringList fields = line.split(',');
+
+            if (fields.size() != 6)
+            {
+                error = QString("Expected 6 fields in %1 row %2").arg(csvPath).arg(row);
+                return false;
+            }
+
+            bool indexOK = false;
+            ExpectedDetection detection;
+            detection.index = fields[0].trimmed().toInt(&indexOK);
+
+            if (!indexOK
+                || !parseDoubleField(fields[1], detection.timeOffsetS)
+                || !parseDoubleField(fields[2], detection.durationS)
+                || !parseDoubleField(fields[3], detection.centerFrequency)
+                || !parseDoubleField(fields[4], detection.frequencySpan)
+                || !parseDoubleField(fields[5], detection.frequencyDrift))
+            {
+                error = QString("Invalid numeric value in %1 row %2").arg(csvPath).arg(row);
+                return false;
+            }
+
+            detections.push_back(detection);
+        }
+
+        return true;
+    }
+
+    bool nearlyEqual(double actual, double expected, double tolerance)
+    {
+        return std::fabs(actual - expected) <= tolerance;
+    }
+
+    bool compareDetections(
+        const QString& name,
+        const QVector<Detection>& actual,
+        const QVector<ExpectedDetection>& expected,
+        QTextStream& err)
+    {
+        constexpr double timeToleranceS = 0.050;
+        constexpr double durationToleranceS = 0.010;
+        constexpr double frequencyToleranceHz = 1.0;
+        bool ok = true;
+
+        if (actual.size() != expected.size())
+        {
+            err << QString("%1: expected %2 detections, got %3\n")
+                .arg(name)
+                .arg(expected.size())
+                .arg(actual.size());
+            ok = false;
+        }
+
+        if (actual.isEmpty() || expected.isEmpty()) {
+            return ok;
+        }
+
+        const int count = std::min(actual.size(), expected.size());
+        const QDateTime firstTime = actual[0].dateTimeUtc;
+
+        for (int i = 0; i < count; i++)
+        {
+            const Detection& detection = actual[i];
+            const ExpectedDetection& expectation = expected[i];
+            const double timeOffsetS = firstTime.msecsTo(detection.dateTimeUtc) / 1000.0;
+
+            if (!nearlyEqual(timeOffsetS, expectation.timeOffsetS, timeToleranceS))
+            {
+                err << QString("%1 detection %2: expected timeOffsetS %3, got %4\n")
+                    .arg(name)
+                    .arg(i + 1)
+                    .arg(expectation.timeOffsetS, 0, 'f', 3)
+                    .arg(timeOffsetS, 0, 'f', 3);
+                ok = false;
+            }
+
+            if (!nearlyEqual(detection.durationS, expectation.durationS, durationToleranceS))
+            {
+                err << QString("%1 detection %2: expected durationS %3, got %4\n")
+                    .arg(name)
+                    .arg(i + 1)
+                    .arg(expectation.durationS, 0, 'f', 6)
+                    .arg(detection.durationS, 0, 'f', 6);
+                ok = false;
+            }
+
+            if (!nearlyEqual(detection.centerFrequency, expectation.centerFrequency, frequencyToleranceHz))
+            {
+                err << QString("%1 detection %2: expected centerFrequencyHz %3, got %4\n")
+                    .arg(name)
+                    .arg(i + 1)
+                    .arg(expectation.centerFrequency, 0, 'f', 2)
+                    .arg(detection.centerFrequency, 0, 'f', 2);
+                ok = false;
+            }
+
+            if (!nearlyEqual(detection.frequencySpan, expectation.frequencySpan, frequencyToleranceHz))
+            {
+                err << QString("%1 detection %2: expected frequencySpanHz %3, got %4\n")
+                    .arg(name)
+                    .arg(i + 1)
+                    .arg(expectation.frequencySpan, 0, 'f', 2)
+                    .arg(detection.frequencySpan, 0, 'f', 2);
+                ok = false;
+            }
+
+            if (!nearlyEqual(detection.frequencyDrift, expectation.frequencyDrift, frequencyToleranceHz))
+            {
+                err << QString("%1 detection %2: expected frequencyDriftHz %3, got %4\n")
+                    .arg(name)
+                    .arg(i + 1)
+                    .arg(expectation.frequencyDrift, 0, 'f', 2)
+                    .arg(detection.frequencyDrift, 0, 'f', 2);
+                ok = false;
+            }
+        }
+
+        return ok;
+    }
+
+    bool runWavFile(const Options& options, const QString& wavPath, QVector<Detection>& detections, QString& error)
+    {
+        QFile wavFile(wavPath);
+
+        if (!wavFile.open(QIODevice::ReadOnly))
+        {
+            error = QString("Unable to open WAV file: %1").arg(wavPath);
+            return false;
+        }
+
+        WavFileRecord::Header header;
+
+        if (!WavFileRecord::readHeader(wavFile, header))
+        {
+            error = "Unsupported WAV file. Expected stereo 16-bit PCM I/Q WAV data.";
+            return false;
+        }
+
+        const qint64 dataStart = wavFile.pos();
+        const qint64 availableDataBytes = std::max<qint64>(0, wavFile.size() - dataStart);
+        qint64 remainingBytes = std::min<qint64>(header.m_dataHeader.m_size, availableDataBytes);
+
+        if ((header.m_sampleRate <= 0) || (remainingBytes < 0))
+        {
+            error = "Invalid WAV header.";
+            return false;
+        }
+
+        if ((remainingBytes % (2 * (int) sizeof(qint16))) != 0) {
+            remainingBytes -= remainingBytes % (2 * (int) sizeof(qint16));
+        }
+
+        const qint64 centerFrequency = getCenterFrequency(wavPath, header);
+        MessageQueue outputQueue;
+        MeteorBaseband baseband;
+        SampleVector samples;
+
+        baseband.setFifoLabel("meteor_demod_sink_test");
+        baseband.setMessageQueueToGUI(&outputQueue);
+        baseband.startWork();
+        baseband.getInputMessageQueue()->push(new DSPSignalNotification(header.m_sampleRate, centerFrequency));
+        baseband.getInputMessageQueue()->push(MeteorBaseband::MsgConfigureMeteorBaseband::create(options.settings, QStringList(), true));
+        processEvents();
+
+        while (remainingBytes > 0)
+        {
+            if (!readWavChunk(wavFile, options.chunkSamples, samples, remainingBytes, error))
+            {
+                baseband.stopWork();
+                return false;
+            }
+
+            feedSamples(baseband, samples, outputQueue, detections);
+        }
+
+        const qint64 tailSamples = ((qint64) header.m_sampleRate * options.tailMS) / 1000;
+        qint64 tailSamplesRemaining = tailSamples;
+
+        while (tailSamplesRemaining > 0)
+        {
+            const int count = (int) std::min<qint64>(options.chunkSamples, tailSamplesRemaining);
+            samples.assign(count, Sample(0, 0));
+            feedSamples(baseband, samples, outputQueue, detections);
+            tailSamplesRemaining -= count;
+        }
+
+        processEvents();
+        drainDetections(outputQueue, detections);
+        baseband.stopWork();
+        return true;
+    }
+
+    bool runRegressionTests(const Options& options, QTextStream& out, QTextStream& err)
+    {
+        QDir testDir(options.testDir);
+
+        if (!testDir.exists())
+        {
+            err << QString("Test directory does not exist: %1\n").arg(options.testDir);
+            return false;
+        }
+
+        const QStringList csvFiles = testDir.entryList(QStringList() << "*.csv", QDir::Files, QDir::Name);
+
+        if (csvFiles.isEmpty())
+        {
+            err << QString("No CSV regression fixtures found in %1\n").arg(options.testDir);
+            return false;
+        }
+
+        bool allOK = true;
+
+        for (const QString& csvFileName : csvFiles)
+        {
+            const QFileInfo csvInfo(testDir.filePath(csvFileName));
+            const QString wavPath = testDir.filePath(csvInfo.completeBaseName() + ".wav");
+            QVector<ExpectedDetection> expectedDetections;
+            QVector<Detection> actualDetections;
+            QString error;
+
+            if (!QFileInfo::exists(wavPath))
+            {
+                err << QString("%1: missing WAV file %2\n").arg(csvFileName, wavPath);
+                allOK = false;
+                continue;
+            }
+
+            if (!loadExpectedDetections(csvInfo.filePath(), expectedDetections, error))
+            {
+                err << error << "\n";
+                allOK = false;
+                continue;
+            }
+
+            if (!runWavFile(options, wavPath, actualDetections, error))
+            {
+                err << QString("%1: %2\n").arg(csvFileName, error);
+                allOK = false;
+                continue;
+            }
+
+            const bool testOK = compareDetections(csvInfo.completeBaseName(), actualDetections, expectedDetections, err);
+            out << QString("%1: %2 detections %3\n")
+                .arg(csvInfo.completeBaseName())
+                .arg(actualDetections.size())
+                .arg(testOK ? "OK" : "FAILED");
+            allOK = allOK && testOK;
+        }
+
+        return allOK;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -456,75 +777,18 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    QFile wavFile(options.wavPath);
-
-    if (!wavFile.open(QIODevice::ReadOnly))
+    if (!options.testDir.isEmpty() && options.wavPath.isEmpty())
     {
-        err << QString("Unable to open WAV file: %1").arg(options.wavPath) << "\n";
-        return 1;
+        return runRegressionTests(options, out, err) ? 0 : 2;
     }
 
-    WavFileRecord::Header header;
-
-    if (!WavFileRecord::readHeader(wavFile, header))
-    {
-        err << "Unsupported WAV file. Expected stereo 16-bit PCM I/Q WAV data.\n";
-        return 1;
-    }
-
-    const qint64 dataStart = wavFile.pos();
-    const qint64 availableDataBytes = std::max<qint64>(0, wavFile.size() - dataStart);
-    qint64 remainingBytes = std::min<qint64>(header.m_dataHeader.m_size, availableDataBytes);
-
-    if ((header.m_sampleRate <= 0) || (remainingBytes < 0))
-    {
-        err << "Invalid WAV header.\n";
-        return 1;
-    }
-
-    if ((remainingBytes % (2 * (int) sizeof(qint16))) != 0) {
-        remainingBytes -= remainingBytes % (2 * (int) sizeof(qint16));
-    }
-
-    const qint64 centerFrequency = getCenterFrequency(options.wavPath, header);
-    MessageQueue outputQueue;
     QVector<Detection> detections;
-    MeteorBaseband baseband;
-    SampleVector samples;
 
-    baseband.setFifoLabel("meteor_demod_sink_test");
-    baseband.setMessageQueueToGUI(&outputQueue);
-    baseband.startWork();
-    baseband.getInputMessageQueue()->push(new DSPSignalNotification(header.m_sampleRate, centerFrequency));
-    baseband.getInputMessageQueue()->push(MeteorBaseband::MsgConfigureMeteorBaseband::create(options.settings, QStringList(), true));
-    processEvents();
-
-    while (remainingBytes > 0)
+    if (!runWavFile(options, options.wavPath, detections, error))
     {
-        if (!readWavChunk(wavFile, options.chunkSamples, samples, remainingBytes, error))
-        {
-            baseband.stopWork();
-            err << error << "\n";
-            return 1;
-        }
-
-        feedSamples(baseband, samples, outputQueue, detections);
+        err << error << "\n";
+        return 1;
     }
-
-    const qint64 tailSamples = ((qint64) header.m_sampleRate * options.tailMS) / 1000;
-    qint64 tailSamplesRemaining = tailSamples;
-
-    while (tailSamplesRemaining > 0)
-    {
-        const int count = (int) std::min<qint64>(options.chunkSamples, tailSamplesRemaining);
-        samples.assign(count, Sample(0, 0));
-        feedSamples(baseband, samples, outputQueue, detections);
-        tailSamplesRemaining -= count;
-    }
-
-    processEvents();
-    drainDetections(outputQueue, detections);
-    baseband.stopWork();
 
     out << QString("Meteor detections: %1\n").arg(detections.size());
 

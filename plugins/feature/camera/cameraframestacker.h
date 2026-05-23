@@ -160,6 +160,7 @@ private:
     bool m_captureActive;
     std::deque<cv::Mat> m_stackFrameHistory;
     std::deque<StackFrameQuality> m_stackFrameQualityHistory;
+    std::deque<QImage> m_stackFrameThumbnails;
     std::vector<HdrFrameSample> m_hdrFrameSamples;
     cv::Mat m_stackAccumulator;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
@@ -190,7 +191,8 @@ private:
 #endif
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);
-    static QImage makeHistoryTilesImage(const std::deque<cv::Mat>& frames, const std::deque<StackFrameQuality>& qualities);
+    static QImage makeHistoryThumbnail(const cv::Mat& frameMat);
+    static QImage makeHistoryTilesImage(const std::deque<QImage>& thumbnails, const std::deque<StackFrameQuality>& qualities);
     static StackFrameQuality computeStackFrameQuality(const cv::Mat& frameMat);
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     StackFrameQuality computeStackFrameQualityCuda(const CameraPipelineFrame& inputFrame);
@@ -201,7 +203,8 @@ private:
     [[nodiscard]] bool applyFrameStacking(CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount);
     [[nodiscard]] bool shouldRejectStackFrame(const StackFrameQuality& quality, QString& reason) const;
     [[nodiscard]] bool shouldRejectStackAlignment(const CameraPipelineFrame& inputFrame, QString& reason) const;
-    bool renderStackDisplayImage(const QImage& stackedImage, QImage& outputImage) const;
+    bool renderStackDisplayImage(const QImage& stackedImage, QImage& outputImage);
+    void ensureHistoryThumbnails();
     void deleteStackFrame(int frameIndex);
     void emitHistoryPreviewFrame();
 

@@ -123,6 +123,13 @@ struct CameraPipelineFrame
     int m_stackQueuedCount = 0;
     int m_stackDroppedCount = 0;
     int m_stackRejectedCount = 0;
+    bool m_stackAlignmentAttempted = false;
+    bool m_stackAlignmentAccepted = true;
+    float m_stackAlignmentResponse = 0.0f;
+    float m_stackAlignmentShiftPixels = 0.0f;
+    int m_stackAlignmentMatchedStars = 0;
+    QString m_stackAlignmentRejectReason;
+    QString m_stackRejectReason;
     BayerPattern m_bayerPattern = BayerNone;
 
 #if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)

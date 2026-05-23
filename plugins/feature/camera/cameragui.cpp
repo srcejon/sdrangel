@@ -392,6 +392,10 @@ bool CameraGUI::handleMessage(const Message& message)
             .arg(m_lastStackQueuedCount)
             .arg(m_lastStackDroppedCount)
             .arg(m_lastStackRejectedCount));
+        const QString stackStatusToolTip = report.getStackRejectReason().isEmpty()
+            ? tr("Stacked / queued / dropped / rejected")
+            : tr("Stacked / queued / dropped / rejected\nLast rejected frame: %1").arg(report.getStackRejectReason());
+        settingsUI()->stackCurrentCountValue->setToolTip(stackStatusToolTip);
         settingsUI()->stackDisplayFrameSpin->setMaximum(std::max(1, m_lastStackCount));
         settingsUI()->stackDeleteFrameButton->setEnabled(m_lastStackCount > 0);
         m_pipelineFrameTimes.append(nowMs);

@@ -123,6 +123,7 @@ public:
         int getStackQueuedCount() const { return m_stackQueuedCount; }
         int getStackDroppedCount() const { return m_stackDroppedCount; }
         int getStackRejectedCount() const { return m_stackRejectedCount; }
+        const QString& getStackRejectReason() const { return m_stackRejectReason; }
         bool isPlateSolved() const { return m_plateSolved; }
         int getPlateSolvedMatches() const { return m_plateSolvedMatches; }
         int getPlateSolveDetectedStarsConsidered() const { return m_plateSolveDetectedStarsConsidered; }
@@ -146,6 +147,7 @@ public:
                                       int stackQueuedCount,
                                       int stackDroppedCount,
                                       int stackRejectedCount,
+                                      const QString& stackRejectReason,
                                       bool plateSolved,
                                       int plateSolvedMatches,
                                       int plateSolveDetectedStarsConsidered,
@@ -170,6 +172,7 @@ public:
                 stackQueuedCount,
                 stackDroppedCount,
                 stackRejectedCount,
+                stackRejectReason,
                 plateSolved,
                 plateSolvedMatches,
                 plateSolveDetectedStarsConsidered,
@@ -195,6 +198,7 @@ public:
         int m_stackQueuedCount;
         int m_stackDroppedCount;
         int m_stackRejectedCount;
+        QString m_stackRejectReason;
         bool m_plateSolved;
         int m_plateSolvedMatches;
         int m_plateSolveDetectedStarsConsidered;
@@ -218,6 +222,7 @@ public:
                        int stackQueuedCount,
                        int stackDroppedCount,
                        int stackRejectedCount,
+                       const QString& stackRejectReason,
                        bool plateSolved,
                        int plateSolvedMatches,
                        int plateSolveDetectedStarsConsidered,
@@ -241,6 +246,7 @@ public:
             m_stackQueuedCount(stackQueuedCount),
             m_stackDroppedCount(stackDroppedCount),
             m_stackRejectedCount(stackRejectedCount),
+            m_stackRejectReason(stackRejectReason),
             m_plateSolved(plateSolved),
             m_plateSolvedMatches(plateSolvedMatches),
             m_plateSolveDetectedStarsConsidered(plateSolveDetectedStarsConsidered),

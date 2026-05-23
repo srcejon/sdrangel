@@ -28,6 +28,7 @@
 #include <opencv2/core/core.hpp>
 #ifdef CAMERA_OPENCV_CUDA_STACKING
 #include <opencv2/core/cuda.hpp>
+#include <opencv2/cudafilters.hpp>
 #endif
 
 #include "util/message.h"
@@ -164,6 +165,8 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     cv::cuda::Stream m_cudaStackingStream;
     cv::cuda::GpuMat m_cudaStackAccumulator;
+    cv::Ptr<cv::cuda::Filter> m_cudaQualityLaplacianFilter;
+    int m_cudaQualityLaplacianFilterType;
 #endif
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
@@ -187,12 +190,17 @@ private:
 #endif
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);
-    static QImage makeHistoryTilesImage(const std::deque<cv::Mat>& frames);
+    static QImage makeHistoryTilesImage(const std::deque<cv::Mat>& frames, const std::deque<StackFrameQuality>& qualities);
     static StackFrameQuality computeStackFrameQuality(const cv::Mat& frameMat);
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    StackFrameQuality computeStackFrameQualityCuda(const CameraPipelineFrame& inputFrame);
+#endif
+    StackFrameQuality computeStackFrameQualityForFrame(const CameraPipelineFrame& inputFrame, const cv::Mat& frameMat);
     static double medianQualityValue(const std::deque<StackFrameQuality>& qualities, double StackFrameQuality::*member);
     bool canPassThroughFrame(const CameraPipelineFrame& inputFrame) const;
-    [[nodiscard]] bool applyFrameStacking(const CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount);
+    [[nodiscard]] bool applyFrameStacking(CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount);
     [[nodiscard]] bool shouldRejectStackFrame(const StackFrameQuality& quality, QString& reason) const;
+    [[nodiscard]] bool shouldRejectStackAlignment(const CameraPipelineFrame& inputFrame, QString& reason) const;
     bool renderStackDisplayImage(const QImage& stackedImage, QImage& outputImage) const;
     void deleteStackFrame(int frameIndex);
     void emitHistoryPreviewFrame();

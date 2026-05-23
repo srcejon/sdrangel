@@ -143,12 +143,12 @@ private:
     bool preserveFrameOrder() const;
     int pendingFrameLimit() const;
     void resetAlignmentState();
-    [[nodiscard]] QImage applyAlignment(const QImage& input);
+    [[nodiscard]] QImage applyAlignment(CameraPipelineFrame& frame);
     [[nodiscard]] static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     [[nodiscard]] static QImage workingMatToImage(const cv::Mat& frameMat, bool highBitDepthInput);
-    [[nodiscard]] cv::Mat alignFrame(const cv::Mat& frameMat) const;
-    [[nodiscard]] cv::Mat alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const;
-    [[nodiscard]] cv::Mat alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame) const;
+    [[nodiscard]] cv::Mat alignFrame(const cv::Mat& frameMat, CameraPipelineFrame& frame) const;
+    [[nodiscard]] cv::Mat alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame) const;
+    [[nodiscard]] cv::Mat alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame) const;
     [[nodiscard]] cv::Mat warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform) const;
     [[nodiscard]] cv::Mat frameToAlignmentGray(const cv::Mat& frameMat) const;
     [[nodiscard]] std::vector<cv::Point2f> detectStarCentroids(const cv::Mat& grayFrame) const;

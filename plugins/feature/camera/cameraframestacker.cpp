@@ -27,6 +27,7 @@
 #include <opencv2/photo.hpp>
 #ifdef CAMERA_OPENCV_CUDA_STACKING
 #include <opencv2/cudaarithm.hpp>
+#include <opencv2/cudafilters.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #endif
 
@@ -42,6 +43,9 @@ MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgDeleteStackFrame, Message)
 CameraFrameStacker::CameraFrameStacker() :
     m_nextStage(nullptr),
     m_captureActive(false),
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    m_cudaQualityLaplacianFilterType(-1),
+#endif
     m_processingFrame(false),
     m_droppedFrameCount(0),
     m_rejectedFrameCount(0)
@@ -301,7 +305,7 @@ QImage CameraFrameStacker::workingMatToImage(const cv::Mat& frameMat)
     return image;
 }
 
-QImage CameraFrameStacker::makeHistoryTilesImage(const std::deque<cv::Mat>& frames)
+QImage CameraFrameStacker::makeHistoryTilesImage(const std::deque<cv::Mat>& frames, const std::deque<StackFrameQuality>& qualities)
 {
     if (frames.empty()) {
         return QImage();
@@ -327,6 +331,8 @@ QImage CameraFrameStacker::makeHistoryTilesImage(const std::deque<cv::Mat>& fram
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.setPen(Qt::white);
 
+    const double medianSharpness = medianQualityValue(qualities, &StackFrameQuality::m_laplacianVariance);
+
     for (int i = 0; i < frameCount; ++i)
     {
         const QImage frameImage = workingMatToImage(frames[static_cast<size_t>(i)]);
@@ -338,11 +344,132 @@ QImage CameraFrameStacker::makeHistoryTilesImage(const std::deque<cv::Mat>& fram
         const int row = i / columns;
         const QRect imageRect(col * tileWidth, row * (tileHeight + labelHeight), tileWidth, tileHeight);
         painter.drawImage(imageRect, frameImage);
+
+        QColor borderColor(80, 220, 120);
+        if (i < static_cast<int>(qualities.size()))
+        {
+            const StackFrameQuality& quality = qualities[static_cast<size_t>(i)];
+            if (!quality.m_valid
+                || (quality.m_blackFraction > 0.98)
+                || (quality.m_saturatedFraction > 0.80))
+            {
+                borderColor = QColor(255, 80, 80);
+            }
+            else if ((quality.m_blackFraction > 0.50)
+                || (quality.m_saturatedFraction > 0.35)
+                || ((medianSharpness > 10.0) && (quality.m_laplacianVariance < medianSharpness * 0.50)))
+            {
+                borderColor = QColor(255, 190, 70);
+            }
+        }
+        painter.setPen(QPen(borderColor, 3));
+        painter.drawRect(imageRect.adjusted(1, 1, -2, -2));
+        painter.setPen(Qt::white);
         painter.drawText(QRect(imageRect.left(), imageRect.bottom() + 1, tileWidth, labelHeight),
             Qt::AlignCenter, QString::number(i + 1));
     }
 
     return mosaic;
+}
+
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+CameraFrameStacker::StackFrameQuality CameraFrameStacker::computeStackFrameQualityCuda(const CameraPipelineFrame& inputFrame)
+{
+    StackFrameQuality quality;
+
+#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+    if (!canUseCudaStacking()) {
+        return quality;
+    }
+
+    try
+    {
+        cv::cuda::GpuMat grayGpu;
+        if (inputFrame.hasCudaGrayImage())
+        {
+            grayGpu = inputFrame.m_cudaGrayImage;
+        }
+        else if (inputFrame.hasCudaBgrImage())
+        {
+            cv::cuda::cvtColor(inputFrame.m_cudaBgrImage, grayGpu, cv::COLOR_BGR2GRAY, 0, m_cudaStackingStream);
+        }
+        else
+        {
+            return quality;
+        }
+
+        if (grayGpu.empty()) {
+            return quality;
+        }
+
+        cv::cuda::GpuMat gray8uGpu;
+        if (grayGpu.type() == CV_8UC1) {
+            gray8uGpu = grayGpu;
+        } else if (grayGpu.depth() == CV_16U) {
+            grayGpu.convertTo(gray8uGpu, CV_8U, 255.0 / 65535.0, 0.0, m_cudaStackingStream);
+        } else {
+            grayGpu.convertTo(gray8uGpu, CV_8U, 1.0, 0.0, m_cudaStackingStream);
+        }
+        m_cudaStackingStream.waitForCompletion();
+
+        cv::Scalar mean;
+        cv::Scalar stdDev;
+        cv::cuda::meanStdDev(gray8uGpu, mean, stdDev);
+        quality.m_mean = mean[0];
+        quality.m_stdDev = stdDev[0];
+
+        cv::cuda::GpuMat blackMask;
+        cv::cuda::GpuMat saturatedMask;
+        cv::cuda::inRange(gray8uGpu, cv::Scalar(0), cv::Scalar(2), blackMask, m_cudaStackingStream);
+        cv::cuda::inRange(gray8uGpu, cv::Scalar(253), cv::Scalar(255), saturatedMask, m_cudaStackingStream);
+        m_cudaStackingStream.waitForCompletion();
+        const double pixelCount = static_cast<double>(std::max(1, gray8uGpu.rows * gray8uGpu.cols));
+        quality.m_blackFraction = static_cast<double>(cv::cuda::countNonZero(blackMask)) / pixelCount;
+        quality.m_saturatedFraction = static_cast<double>(cv::cuda::countNonZero(saturatedMask)) / pixelCount;
+
+        if (!m_cudaQualityLaplacianFilter
+            || (m_cudaQualityLaplacianFilterType != gray8uGpu.type()))
+        {
+            m_cudaQualityLaplacianFilter = cv::cuda::createLaplacianFilter(gray8uGpu.type(), CV_32F, 1);
+            m_cudaQualityLaplacianFilterType = gray8uGpu.type();
+        }
+
+        cv::cuda::GpuMat laplacianGpu;
+        m_cudaQualityLaplacianFilter->apply(gray8uGpu, laplacianGpu, m_cudaStackingStream);
+        m_cudaStackingStream.waitForCompletion();
+        cv::cuda::meanStdDev(laplacianGpu, mean, stdDev);
+        quality.m_laplacianVariance = stdDev[0] * stdDev[0];
+        quality.m_valid = std::isfinite(quality.m_mean)
+            && std::isfinite(quality.m_stdDev)
+            && std::isfinite(quality.m_laplacianVariance)
+            && std::isfinite(quality.m_blackFraction)
+            && std::isfinite(quality.m_saturatedFraction);
+    }
+    catch (const cv::Exception& error)
+    {
+        qWarning() << "CameraFrameStacker: CUDA stack quality metrics failed; falling back to CPU:" << error.what();
+        quality = StackFrameQuality();
+    }
+#else
+    (void) inputFrame;
+#endif
+
+    return quality;
+}
+#endif
+
+CameraFrameStacker::StackFrameQuality CameraFrameStacker::computeStackFrameQualityForFrame(const CameraPipelineFrame& inputFrame, const cv::Mat& frameMat)
+{
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    StackFrameQuality cudaQuality = computeStackFrameQualityCuda(inputFrame);
+    if (cudaQuality.m_valid) {
+        return cudaQuality;
+    }
+#else
+    (void) inputFrame;
+#endif
+
+    return computeStackFrameQuality(frameMat);
 }
 
 CameraFrameStacker::StackFrameQuality CameraFrameStacker::computeStackFrameQuality(const cv::Mat& frameMat)
@@ -673,7 +800,7 @@ bool CameraFrameStacker::renderStackDisplayImage(const QImage& stackedImage, QIm
 
     if (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryTiles)
     {
-        outputImage = makeHistoryTilesImage(m_stackFrameHistory);
+        outputImage = makeHistoryTilesImage(m_stackFrameHistory, m_stackFrameQualityHistory);
         return !outputImage.isNull();
     }
 
@@ -753,6 +880,18 @@ bool CameraFrameStacker::shouldRejectStackFrame(const StackFrameQuality& quality
     return false;
 }
 
+bool CameraFrameStacker::shouldRejectStackAlignment(const CameraPipelineFrame& inputFrame, QString& reason) const
+{
+    if (!inputFrame.m_stackAlignmentAttempted || inputFrame.m_stackAlignmentAccepted) {
+        return false;
+    }
+
+    reason = inputFrame.m_stackAlignmentRejectReason.isEmpty()
+        ? QStringLiteral("alignment quality check failed")
+        : inputFrame.m_stackAlignmentRejectReason;
+    return true;
+}
+
 void CameraFrameStacker::deleteStackFrame(int frameIndex)
 {
     if (m_stackFrameHistory.empty()) {
@@ -796,7 +935,7 @@ void CameraFrameStacker::emitHistoryPreviewFrame()
     m_nextStage->submitFrame(previewFrame);
 }
 
-bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount)
+bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount)
 {
     PROFILER_START();
     const bool hdrStackingEnabled = m_settings.isHdrStackingEnabled() && (m_settings.getHdrExposureCount() > 1);
@@ -1082,14 +1221,24 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
     }
 
     StackFrameQuality quality;
-    if (m_settings.m_stackRejectBadFrames) {
-        quality = computeStackFrameQuality(alignedFrameMat);
+    const bool needQuality = m_settings.m_stackRejectBadFrames
+        || (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryTiles);
+    if (needQuality) {
+        quality = computeStackFrameQualityForFrame(inputFrame, alignedFrameMat);
     }
     QString rejectReason;
-    if (m_settings.m_stackRejectBadFrames && shouldRejectStackFrame(quality, rejectReason))
+    const bool rejectForAlignment = m_settings.m_stackRejectBadFrames && shouldRejectStackAlignment(inputFrame, rejectReason);
+    const bool rejectForQuality = !rejectForAlignment
+        && m_settings.m_stackRejectBadFrames
+        && shouldRejectStackFrame(quality, rejectReason);
+    if (rejectForAlignment || rejectForQuality)
     {
         ++m_rejectedFrameCount;
+        inputFrame.m_stackRejectReason = rejectReason;
         qDebug() << "CameraFrameStacker: Rejecting frame from stack:" << rejectReason
+                 << "alignmentResponse" << inputFrame.m_stackAlignmentResponse
+                 << "alignmentShift" << inputFrame.m_stackAlignmentShiftPixels
+                 << "alignmentStars" << inputFrame.m_stackAlignmentMatchedStars
                  << "mean" << quality.m_mean
                  << "stddev" << quality.m_stdDev
                  << "sharpness" << quality.m_laplacianVariance
@@ -1107,9 +1256,10 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
         PROFILER_STOP(__FUNCTION__);
         return true;
     }
+    inputFrame.m_stackRejectReason.clear();
 
     m_stackFrameHistory.push_back(alignedFrameMat.clone());
-    if (m_settings.m_stackRejectBadFrames) {
+    if (needQuality) {
         m_stackFrameQualityHistory.push_back(quality);
     }
     trimFrameHistoryToCurrentLimit();

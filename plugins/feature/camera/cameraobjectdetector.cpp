@@ -593,74 +593,118 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         invScales.push_back((scale > 0.0f) ? (1.0f / scale) : 1.0f);
     }
 
-    cv::Mat blob;
-    cv::dnn::blobFromImages(letterboxes, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
-    m_yoloNet.setInput(blob);
-
-    std::vector<cv::Mat> outputs;
-    try
-    {
-        m_yoloNet.forward(outputs, m_yoloNet.getUnconnectedOutLayersNames());
-    }
-    catch (const cv::Exception& e)
-    {
-        qWarning() << "CameraObjectDetector::runYoloDetections: inference failed:" << e.what();
-        return;
-    }
-
-    if (outputs.empty()) {
-        return;
-    }
-
     const float confThresh = static_cast<float>(m_settings.m_yoloConfThreshold);
     const float nmsThresh = static_cast<float>(m_settings.m_yoloNmsThreshold);
     std::vector<cv::Rect> boxes;
     std::vector<float> scores;
     std::vector<int> classIds;
 
-    cv::Mat output = outputs[0];
-    if ((output.dims == 3) && (output.size[0] == tileRects.size()))
+    auto decodeOutput = [&](cv::Mat output, int firstTile, int tileCount) -> bool
+    {
+        if ((output.dims == 3) && (output.size[0] == tileCount))
+        {
+            for (int localTileIndex = 0; localTileIndex < tileCount; ++localTileIndex)
+            {
+                const int tileIndex = firstTile + localTileIndex;
+                cv::Mat det(output.size[1], output.size[2], output.type(), output.ptr(localTileIndex));
+                decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
+            }
+            return true;
+        }
+
+        if ((output.dims == 2) && (tileCount > 1))
+        {
+            const bool isV8Style = output.rows < output.cols;
+            if (isV8Style && ((output.cols % tileCount) == 0))
+            {
+                const int anchorsPerTile = output.cols / tileCount;
+                for (int localTileIndex = 0; localTileIndex < tileCount; ++localTileIndex)
+                {
+                    const int tileIndex = firstTile + localTileIndex;
+                    cv::Mat det = output.colRange(localTileIndex * anchorsPerTile, (localTileIndex + 1) * anchorsPerTile);
+                    decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
+                }
+                return true;
+            }
+
+            if (!isV8Style && ((output.rows % tileCount) == 0))
+            {
+                const int anchorsPerTile = output.rows / tileCount;
+                for (int localTileIndex = 0; localTileIndex < tileCount; ++localTileIndex)
+                {
+                    const int tileIndex = firstTile + localTileIndex;
+                    cv::Mat det = output.rowRange(localTileIndex * anchorsPerTile, (localTileIndex + 1) * anchorsPerTile);
+                    decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
+                }
+                return true;
+            }
+
+            qWarning() << "CameraObjectDetector::runYoloDetections: unable to split batched YOLO output"
+                       << output.rows << "x" << output.cols << "tiles" << tileCount;
+            return false;
+        }
+
+        if (tileCount == 1)
+        {
+            cv::Mat det = output;
+            if (det.dims == 3) {
+                det = det.reshape(1, det.size[1]);
+            }
+            decodeYoloDetections(det, tileRects[firstTile], padXs[firstTile], padYs[firstTile], invScales[firstTile], boxes, scores, classIds);
+            return true;
+        }
+
+        return false;
+    };
+
+    std::vector<cv::Mat> outputs;
+    cv::Mat blob;
+    cv::dnn::blobFromImages(letterboxes, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
+    m_yoloNet.setInput(blob);
+
+    bool batchInferenceFailed = false;
+    try
+    {
+        m_yoloNet.forward(outputs, m_yoloNet.getUnconnectedOutLayersNames());
+        if (!outputs.empty()) {
+            decodeOutput(outputs[0], 0, tileRects.size());
+        }
+    }
+    catch (const cv::Exception& e)
+    {
+        if (tileRects.size() <= 1)
+        {
+            qWarning() << "CameraObjectDetector::runYoloDetections: inference failed:" << e.what();
+            return;
+        }
+
+        batchInferenceFailed = true;
+        qWarning() << "CameraObjectDetector::runYoloDetections: batched inference failed, retrying tiles individually:" << e.what();
+    }
+
+    if (batchInferenceFailed)
     {
         for (int tileIndex = 0; tileIndex < tileRects.size(); ++tileIndex)
         {
-            cv::Mat det(output.size[1], output.size[2], output.type(), output.ptr(tileIndex));
-            decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
-        }
-    }
-    else if ((output.dims == 2) && (tileRects.size() > 1))
-    {
-        const bool isV8Style = output.rows < output.cols;
-        if (isV8Style && ((output.cols % tileRects.size()) == 0))
-        {
-            const int anchorsPerTile = output.cols / tileRects.size();
-            for (int tileIndex = 0; tileIndex < tileRects.size(); ++tileIndex)
+            std::vector<cv::Mat> tileOutputs;
+            cv::Mat tileBlob;
+            cv::dnn::blobFromImage(letterboxes[tileIndex], tileBlob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
+            m_yoloNet.setInput(tileBlob);
+
+            try
             {
-                cv::Mat det = output.colRange(tileIndex * anchorsPerTile, (tileIndex + 1) * anchorsPerTile);
-                decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
+                m_yoloNet.forward(tileOutputs, m_yoloNet.getUnconnectedOutLayersNames());
+            }
+            catch (const cv::Exception& e)
+            {
+                qWarning() << "CameraObjectDetector::runYoloDetections: tile inference failed:" << tileIndex << e.what();
+                continue;
+            }
+
+            if (!tileOutputs.empty()) {
+                decodeOutput(tileOutputs[0], tileIndex, 1);
             }
         }
-        else if (!isV8Style && ((output.rows % tileRects.size()) == 0))
-        {
-            const int anchorsPerTile = output.rows / tileRects.size();
-            for (int tileIndex = 0; tileIndex < tileRects.size(); ++tileIndex)
-            {
-                cv::Mat det = output.rowRange(tileIndex * anchorsPerTile, (tileIndex + 1) * anchorsPerTile);
-                decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
-            }
-        }
-        else
-        {
-            qWarning() << "CameraObjectDetector::runYoloDetections: unable to split batched YOLO output"
-                       << output.rows << "x" << output.cols << "tiles" << tileRects.size();
-        }
-    }
-    else
-    {
-        cv::Mat det = output;
-        if (det.dims == 3) {
-            det = det.reshape(1, det.size[1]);
-        }
-        decodeYoloDetections(det, tileRects[0], padXs[0], padYs[0], invScales[0], boxes, scores, classIds);
     }
 
     std::vector<int> indices;

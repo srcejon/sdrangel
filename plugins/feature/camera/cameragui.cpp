@@ -659,20 +659,15 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_settingsDialog = new CameraSettingsDialog(this);
     new DialogPositioner(m_settingsDialog, false);
 
-    settingsUI()->azimuthSpin->setDecimals(4);
     settingsUI()->azimuthSpin->setRange(
         static_cast<double>(CameraSettings::m_minAzimuth),
         static_cast<double>(CameraSettings::m_maxAzimuth));
-    settingsUI()->azimuthSpin->setSingleStep(0.01);
-    settingsUI()->elevationSpin->setDecimals(4);
     settingsUI()->elevationSpin->setRange(
         static_cast<double>(CameraSettings::m_minElevation),
         static_cast<double>(CameraSettings::m_maxElevation));
-    settingsUI()->elevationSpin->setSingleStep(0.01);
     settingsUI()->rollSpin->setRange(
         static_cast<double>(CameraSettings::m_minRoll),
         static_cast<double>(CameraSettings::m_maxRoll));
-    settingsUI()->fovSpin->setDecimals(2);
     settingsUI()->fovSpin->setSuffix(QString::fromUtf8(" \xC2\xB0"));
     settingsUI()->fovSpin->setRange(
         static_cast<double>(CameraSettings::m_minFov),

@@ -382,6 +382,7 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
         m_yoloLoadedModelPath.clear();
         m_reportedErrorKeys.clear();
         m_appliedYoloDnnTarget = -1;
+        m_yoloBatchedInferenceSupported = true;
     }
 
     if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath))
@@ -483,6 +484,7 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         m_yoloLoadedModelPath.clear();
         // A newly-loaded net has default backend/target; force re-apply on next inference.
         m_appliedYoloDnnTarget = -1;
+        m_yoloBatchedInferenceSupported = true;
 
         if (!m_settings.m_yoloModelPath.isEmpty() && !(m_settings.m_yoloModelPath.startsWith("http://") || m_settings.m_yoloModelPath.startsWith("https://")))
         {
@@ -550,6 +552,7 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
             m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
         }
         m_appliedYoloDnnTarget = requestedTarget;
+        m_yoloBatchedInferenceSupported = true;
     }
 
     const QVector<cv::Rect> tileRects = makeYoloTiles(roi);
@@ -657,32 +660,36 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         return false;
     };
 
-    std::vector<cv::Mat> outputs;
-    cv::Mat blob;
-    cv::dnn::blobFromImages(letterboxes, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
-    m_yoloNet.setInput(blob);
-
     bool batchInferenceFailed = false;
-    try
+    if ((tileRects.size() == 1) || m_yoloBatchedInferenceSupported)
     {
-        m_yoloNet.forward(outputs, m_yoloNet.getUnconnectedOutLayersNames());
-        if (!outputs.empty()) {
-            decodeOutput(outputs[0], 0, tileRects.size());
-        }
-    }
-    catch (const cv::Exception& e)
-    {
-        if (tileRects.size() <= 1)
+        std::vector<cv::Mat> outputs;
+        cv::Mat blob;
+        cv::dnn::blobFromImages(letterboxes, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
+        m_yoloNet.setInput(blob);
+
+        try
         {
-            qWarning() << "CameraObjectDetector::runYoloDetections: inference failed:" << e.what();
-            return;
+            m_yoloNet.forward(outputs, m_yoloNet.getUnconnectedOutLayersNames());
+            if (!outputs.empty()) {
+                decodeOutput(outputs[0], 0, tileRects.size());
+            }
         }
+        catch (const cv::Exception& e)
+        {
+            if (tileRects.size() <= 1)
+            {
+                qWarning() << "CameraObjectDetector::runYoloDetections: inference failed:" << e.what();
+                return;
+            }
 
-        batchInferenceFailed = true;
-        qWarning() << "CameraObjectDetector::runYoloDetections: batched inference failed, retrying tiles individually:" << e.what();
+            m_yoloBatchedInferenceSupported = false;
+            batchInferenceFailed = true;
+            qWarning() << "CameraObjectDetector::runYoloDetections: batched inference failed for this model/target; using per-tile inference:" << e.what();
+        }
     }
 
-    if (batchInferenceFailed)
+    if (batchInferenceFailed || ((tileRects.size() > 1) && !m_yoloBatchedInferenceSupported))
     {
         for (int tileIndex = 0; tileIndex < tileRects.size(); ++tileIndex)
         {

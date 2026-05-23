@@ -681,7 +681,9 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_plateSolveCatalogSource = CameraSettings::PlateSolveCatalogSirilSpccGaia;
     settings.m_plateSolveStartMode = test.plateSolveStartMode;
     settings.m_plateSolveLabelMode = CameraSettings::PlateSolveLabelName;
-    settings.m_plateSolveMaxMagnitude = CameraSettings::m_maxPlateSolveMagnitude;
+    // For narrow-field (telescope) images the catalog has many more faint stars available;
+    // use a higher magnitude limit so the solver has enough matches to pin the FOV.
+    settings.m_plateSolveMaxMagnitude = (test.fov <= 5.0) ? 13.0 : CameraSettings::m_maxPlateSolveMagnitude;
     settings.m_plateSolveMinMatches = 4;
     settings.m_plateSolveMatchRadius = 24.0;
     settings.m_plateSolveFinalMatchRadius = 24.0;

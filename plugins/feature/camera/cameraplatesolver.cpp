@@ -4621,10 +4621,19 @@ static QString directionSeedRejectionReason(const CameraSettings& settings,
                                             double rmsErrorPixels,
                                             double maxErrorPixels)
 {
+    // For narrow-field (telescope) solves the FOV is pinned, so residuals reflect true
+    // centroid accuracy rather than FOV-absorbed error.  Use slightly looser thresholds.
+    const bool narrowField = settings.m_fov <= 5.0;
     const int requiredMatches = minimumDirectionSeedAcceptedMatches(settings, starDetections);
     const double medianError = medianDistancePixels(matches);
-    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
-    const double maxMedianError = std::min(settings.m_plateSolveFinalMatchRadius * 0.55, 14.0);
+    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * (narrowField ? 0.75 : 0.70), 18.0);
+    // Narrow-field: residuals reflect real centroid noise with pinned FOV — use 0.75×.
+    // Wide-field fisheye: lens distortion at large angles raises residuals even for correct
+    // solves; 0.65× (= 15.6 px at 24 px radius) is needed to accept these valid solutions
+    // while still rejecting clearly wrong ones.
+    const double maxMedianError = narrowField
+        ? std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 18.0)
+        : std::min(settings.m_plateSolveFinalMatchRadius * 0.65, 18.0);
     const double maxWorstError = std::min(settings.m_plateSolveFinalMatchRadius * 1.05, 36.0);
 
     QStringList reasons;
@@ -4667,9 +4676,16 @@ static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
         return false;
     }
 
+    // For narrow-field (telescope) solves the FOV is pinned, so residuals reflect true
+    // centroid accuracy rather than FOV-absorbed error.  Use slightly looser thresholds.
+    // For wide-field fisheye, lens distortion at large angles raises residuals; 0.65×
+    // (= 15.6 px at 24 px radius) is needed to accept valid wide-angle solutions.
+    const bool narrowField = settings.m_fov <= 5.0;
     const double medianError = medianDistancePixels(matches);
-    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
-    const double maxMedianError = std::min(settings.m_plateSolveFinalMatchRadius * 0.55, 14.0);
+    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * (narrowField ? 0.75 : 0.70), 18.0);
+    const double maxMedianError = narrowField
+        ? std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 18.0)
+        : std::min(settings.m_plateSolveFinalMatchRadius * 0.65, 18.0);
     const double maxWorstError = std::min(settings.m_plateSolveFinalMatchRadius * 1.05, 36.0);
 
     return (rmsErrorPixels <= maxRmsError)
@@ -4792,12 +4808,15 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
         return true;
     }
 
-    if (evaluation.pose.anchored && (settings.m_fov <= 5.0)) {
+    if (settings.m_fov <= 5.0) {
+        // For narrow-field (telescope) solves the FOV is pinned to the user's value,
+        // which strongly constrains the geometry.  Brightness rank ordering is also less
+        // reliable when the matched set spans mag 2–13 (saturated bright star + very faint
+        // stars).  Use the same relaxed threshold regardless of whether the pose is anchored.
         return evaluation.brightnessRankError <= 0.75;
     }
 
-    const double threshold = (settings.m_fov <= 5.0) ? 0.35
-        : (settings.m_fov <= 30.0) ? 0.50
+    const double threshold = (settings.m_fov <= 30.0) ? 0.50
         : 0.60;
     return evaluation.brightnessRankError <= threshold;
 }
@@ -5560,7 +5579,11 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
         -30.0, 30.0, -45.0, 45.0, -60.0, 60.0, -90.0, 90.0,
         -120.0, 120.0, -150.0, 150.0, -180.0, 180.0
     };
-    const std::array<double, 5> fovSeedScales = {{0.88, 0.96, 1.0, 1.04, 1.12}};
+    // For narrow-field (telescope) direction-seeded solves the FOV is treated as accurate,
+    // so only the 1.0× seed is tried.  Wider lenses explore the usual range of scales.
+    const QVector<double> fovSeedScales = (settings.m_fov <= 5.0)
+        ? QVector<double>{1.0}
+        : QVector<double>{0.88, 0.96, 1.0, 1.04, 1.12};
     const int anchorLimit = std::min(12, static_cast<int>(anchors.size()));
     const int expandedRollMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
     double bestSearchScore = -std::numeric_limits<double>::infinity();
@@ -5646,7 +5669,11 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
                         double azStep = std::max(0.04, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.20);
                         double elStep = azStep;
                         double rollStep = 6.0;
-                        double fovStep = std::max(minimumFovStep, static_cast<double>(settings.m_fov) * 0.05);
+                        // For narrow-field direction-seeded solves, hold FOV fixed at the seed value
+                        // (which is exactly settings.m_fov for the single 1.0× seed).
+                        double fovStep = (settings.m_fov <= 5.0)
+                            ? 0.0
+                            : std::max(minimumFovStep, static_cast<double>(settings.m_fov) * 0.05);
 
                         for (int iteration = 0; iteration < 5; ++iteration)
                         {
@@ -6769,7 +6796,11 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     double elStep = azStep;
     double rollStep = std::max(0.10, std::max(1.0, static_cast<double>(settings.m_fov) * 0.02));
     const double minimumFovStep = std::max(0.02, std::min(0.5, static_cast<double>(settings.m_fov) * 0.02));
-    double fovStep = std::max(minimumFovStep, static_cast<double>(settings.m_fov) * 0.01);
+    // For narrow-field direction-seeded solves, hold FOV fixed at settings.m_fov throughout
+    // refinement.  The anchor search already found (Az, El, Roll) at the correct FOV.
+    double fovStep = (useGuidedDirectionScoring && settings.m_fov <= 5.0)
+        ? 0.0
+        : std::max(minimumFovStep, static_cast<double>(settings.m_fov) * 0.01);
     double centerOffsetXStep = std::max(1.0, static_cast<double>(imageSize.width()) * 0.01);
     double centerOffsetYStep = std::max(1.0, static_cast<double>(imageSize.height()) * 0.01);
     double distortionStep = 0.05;
@@ -7131,7 +7162,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         ? std::max(0.5, static_cast<double>(settings.m_fov))
         : std::max(4.0, static_cast<double>(settings.m_plateSolveSearchRadius));
     m_directionSeedRollScaleDegrees = std::max(8.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.15));
-    m_directionSeedFovScaleDegrees = std::max(2.0, static_cast<double>(settings.m_fov) * 0.08);
+    m_directionSeedFovScaleDegrees = (settings.m_fov <= 5.0)
+        ? std::max(0.3, static_cast<double>(settings.m_fov) * 0.25)
+        : std::max(2.0, static_cast<double>(settings.m_fov) * 0.08);
     m_directionSeedMinMatchCount = std::max(1, settings.m_plateSolveMinMatches);
     m_useWideCatalogMagnitudePreference = settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees;
     m_useAllSkyZenithPreference = useStartFov

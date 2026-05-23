@@ -1,4 +1,5 @@
 project(camera)
+option(ENABLE_CAMERA_TENSORRT "Enable optional TensorRT YOLO inference in the camera feature" OFF)
 
 set(camera_SOURCES
     camera.cpp
@@ -29,6 +30,7 @@ set(camera_HEADERS
     cameramotiondetector.h
     camerastardetector.h
     cameraobjectdetector.h
+    camerayolotensorrt.h
     cameradiffdetector.h
     cameraframepreprocessor.h
     cameraframealigner.h
@@ -118,6 +120,60 @@ if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_F
 endif()
 if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_FOUND AND OpenCV_cudafilters_FOUND AND OpenCV_cudabgsegm_FOUND)
     target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+endif()
+
+if(ENABLE_CAMERA_TENSORRT)
+    find_path(TENSORRT_INCLUDE_DIR NvInfer.h
+        HINTS
+            "$ENV{TENSORRT_ROOT}/include"
+            "${TENSORRT_ROOT}/include"
+            "${CUDA_TOOLKIT_ROOT_DIR}/include"
+            "${CUDAToolkit_INCLUDE_DIRS}"
+    )
+    find_library(TENSORRT_INFER_LIBRARY
+        NAMES nvinfer nvinfer_10
+        HINTS
+            "$ENV{TENSORRT_ROOT}/lib"
+            "$ENV{TENSORRT_ROOT}/lib64"
+            "$ENV{TENSORRT_ROOT}/lib/x64"
+            "${TENSORRT_ROOT}/lib"
+            "${TENSORRT_ROOT}/lib64"
+            "${TENSORRT_ROOT}/lib/x64"
+            "${CUDA_TOOLKIT_ROOT_DIR}/lib64"
+            "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64"
+    )
+    find_library(TENSORRT_ONNXPARSER_LIBRARY
+        NAMES nvonnxparser nvonnxparser_10
+        HINTS
+            "$ENV{TENSORRT_ROOT}/lib"
+            "$ENV{TENSORRT_ROOT}/lib64"
+            "$ENV{TENSORRT_ROOT}/lib/x64"
+            "${TENSORRT_ROOT}/lib"
+            "${TENSORRT_ROOT}/lib64"
+            "${TENSORRT_ROOT}/lib/x64"
+            "${CUDA_TOOLKIT_ROOT_DIR}/lib64"
+            "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64"
+    )
+    find_library(CUDART_LIBRARY
+        NAMES cudart cudart_static
+        HINTS
+            "${CUDA_TOOLKIT_ROOT_DIR}/lib64"
+            "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64"
+    )
+
+    if(TENSORRT_INCLUDE_DIR AND TENSORRT_INFER_LIBRARY AND TENSORRT_ONNXPARSER_LIBRARY AND CUDART_LIBRARY)
+        target_sources(${TARGET_NAME} PRIVATE camerayolotensorrt.cpp)
+        target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_TENSORRT_YOLO)
+        target_include_directories(${TARGET_NAME} PRIVATE ${TENSORRT_INCLUDE_DIR})
+        target_link_libraries(${TARGET_NAME} PRIVATE
+            ${TENSORRT_INFER_LIBRARY}
+            ${TENSORRT_ONNXPARSER_LIBRARY}
+            ${CUDART_LIBRARY}
+        )
+        message(STATUS "Camera TensorRT YOLO support enabled")
+    else()
+        message(WARNING "ENABLE_CAMERA_TENSORRT is ON, but TensorRT or CUDA runtime libraries were not found; camera TensorRT support is disabled")
+    endif()
 endif()
 
 if(NOT BUILD_SHARED_LIBS)

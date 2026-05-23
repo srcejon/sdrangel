@@ -379,6 +379,9 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
     if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
     {
         m_yoloNet = cv::dnn::Net();
+#ifdef CAMERA_TENSORRT_YOLO
+        m_yoloTensorRt.reset();
+#endif
         m_yoloLoadedModelPath.clear();
         m_reportedErrorKeys.clear();
         m_appliedYoloDnnTarget = -1;
@@ -477,7 +480,14 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         }
     }
 
-    if (m_yoloLoadedModelPath != m_settings.m_yoloModelPath)
+    const bool useTensorRt =
+#ifdef CAMERA_TENSORRT_YOLO
+        (m_settings.m_yoloDnnTarget == CameraSettings::CUDA) || (m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16);
+#else
+        false;
+#endif
+
+    if ((m_yoloLoadedModelPath != m_settings.m_yoloModelPath) || (!useTensorRt && m_yoloNet.empty()))
     {
         m_yoloNet = cv::dnn::Net();
         m_yoloInputSize = cv::Size(640, 640);
@@ -485,14 +495,15 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         // A newly-loaded net has default backend/target; force re-apply on next inference.
         m_appliedYoloDnnTarget = -1;
         m_yoloBatchedInferenceSupported = true;
+#ifdef CAMERA_TENSORRT_YOLO
+        m_yoloTensorRt.reset();
+#endif
 
         if (!m_settings.m_yoloModelPath.isEmpty() && !(m_settings.m_yoloModelPath.startsWith("http://") || m_settings.m_yoloModelPath.startsWith("https://")))
         {
             const QString localFile = m_settings.m_yoloModelPath;
             try
             {
-                m_yoloNet = cv::dnn::readNetFromONNX(localFile.toStdString());
-
                 const cv::Size modelInputSize = readOnnxInputSize(localFile);
 
                 if ((modelInputSize.width > 0) && (modelInputSize.height > 0))
@@ -503,6 +514,10 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
                 {
                     qWarning() << "CameraObjectDetector::runYoloDetections: unable to read model input size, using fallback 640x640 for"
                                << localFile;
+                }
+
+                if (!useTensorRt) {
+                    m_yoloNet = cv::dnn::readNetFromONNX(localFile.toStdString());
                 }
 
                 m_yoloLoadedModelPath = m_settings.m_yoloModelPath;
@@ -525,7 +540,7 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         }
     }
 
-    if (m_yoloNet.empty()) {
+    if (!useTensorRt && m_yoloNet.empty()) {
         return;
     }
 
@@ -534,7 +549,7 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
     // when transitioning between CPU and CUDA), and is a measurable cost even when the
     // values are identical.
     const int requestedTarget = static_cast<int>(m_settings.m_yoloDnnTarget);
-    if (m_appliedYoloDnnTarget != requestedTarget)
+    if (!useTensorRt && (m_appliedYoloDnnTarget != requestedTarget))
     {
         if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
         {
@@ -660,8 +675,52 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         return false;
     };
 
+    bool useOpenCvDnn = !useTensorRt;
+#ifdef CAMERA_TENSORRT_YOLO
+    if (useTensorRt)
+    {
+        QString tensorRtError;
+        std::vector<cv::Mat> tensorRtOutputs;
+        const int maxBatch = std::max(1, std::min(16, static_cast<int>(letterboxes.size())));
+        if (m_yoloTensorRt.ensureLoaded(
+                m_settings.m_yoloModelPath,
+                m_yoloInputSize,
+                maxBatch,
+                m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16,
+                tensorRtError)
+            && m_yoloTensorRt.infer(letterboxes, tensorRtOutputs, tensorRtError))
+        {
+            for (int tileIndex = 0; tileIndex < static_cast<int>(tensorRtOutputs.size()); ++tileIndex) {
+                decodeOutput(tensorRtOutputs[static_cast<size_t>(tileIndex)], tileIndex, 1);
+            }
+            useOpenCvDnn = false;
+        }
+        else
+        {
+            qWarning() << "CameraObjectDetector::runYoloDetections: TensorRT inference unavailable, falling back to OpenCV DNN:"
+                       << tensorRtError;
+            m_yoloTensorRt.reset();
+
+            if (m_yoloNet.empty())
+            {
+                try
+                {
+                    m_yoloNet = cv::dnn::readNetFromONNX(m_settings.m_yoloModelPath.toStdString());
+                    m_appliedYoloDnnTarget = -1;
+                }
+                catch (const cv::Exception& e)
+                {
+                    qWarning() << "CameraObjectDetector::runYoloDetections: OpenCV fallback model load failed:" << e.what();
+                    return;
+                }
+            }
+            useOpenCvDnn = true;
+        }
+    }
+#endif
+
     bool batchInferenceFailed = false;
-    if ((tileRects.size() == 1) || m_yoloBatchedInferenceSupported)
+    if (useOpenCvDnn && ((tileRects.size() == 1) || m_yoloBatchedInferenceSupported))
     {
         std::vector<cv::Mat> outputs;
         cv::Mat blob;
@@ -689,7 +748,7 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         }
     }
 
-    if (batchInferenceFailed || ((tileRects.size() > 1) && !m_yoloBatchedInferenceSupported))
+    if (useOpenCvDnn && (batchInferenceFailed || ((tileRects.size() > 1) && !m_yoloBatchedInferenceSupported)))
     {
         for (int tileIndex = 0; tileIndex < tileRects.size(); ++tileIndex)
         {

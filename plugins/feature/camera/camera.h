@@ -151,6 +151,26 @@ public:
         { }
     };
 
+    class MsgDeleteStackFrame : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        int getFrameIndex() const { return m_frameIndex; }
+
+        static MsgDeleteStackFrame* create(int frameIndex)
+        {
+            return new MsgDeleteStackFrame(frameIndex);
+        }
+
+    private:
+        int m_frameIndex;
+
+        MsgDeleteStackFrame(int frameIndex) :
+            Message(),
+            m_frameIndex(frameIndex)
+        { }
+    };
+
     Camera(WebAPIAdapterInterface *webAPIAdapterInterface);
     ~Camera() override;
     void destroy() override { delete this; }

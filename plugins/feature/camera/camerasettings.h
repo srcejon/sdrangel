@@ -68,6 +68,13 @@ struct CameraSettings
         StackAlignmentStarCentroidMatching
     };
 
+    enum StackDisplayMode
+    {
+        StackDisplayStacked = 0,
+        StackDisplayHistoryFrame,
+        StackDisplayHistoryTiles
+    };
+
     enum AsiColorImageType
     {
         AsiColorImageTypeRgb24 = 0,
@@ -367,6 +374,9 @@ struct CameraSettings
     int m_stackHdrExposureCount;
     std::array<double, 4> m_stackHdrExposureTimesMs;
     StackAlignmentMethod m_stackAlignmentMethod;
+    StackDisplayMode m_stackDisplayMode;
+    int m_stackDisplayFrameIndex;
+    bool m_stackRejectBadFrames;
     QString m_stackDarkFileName;
     QString m_stackFlatFileName;
     QString m_stackBiasFileName;

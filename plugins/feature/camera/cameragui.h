@@ -198,6 +198,7 @@ private:
     int m_lastStackCount = 1;
     int m_lastStackQueuedCount = 0;
     int m_lastStackDroppedCount = 0;
+    int m_lastStackRejectedCount = 0;
     CameraSettingsDialog *m_settingsDialog;
     CameraDetectionHistory *m_detectionHistoryDialog;
     CameraHistogramDialog *m_histogramDialog;
@@ -437,6 +438,10 @@ private slots:
     void on_stackFrameCountSpin_valueChanged(int value);
     void on_stackMethodCombo_currentIndexChanged(int index);
     void on_stackAlignmentCombo_currentIndexChanged(int index);
+    void on_stackDisplayModeCombo_currentIndexChanged(int index);
+    void on_stackDisplayFrameSpin_valueChanged(int value);
+    void on_stackDeleteFrameButton_clicked();
+    void on_stackRejectBadFramesCheck_toggled(bool checked);
     void on_stackDarkFileEdit_editingFinished();
     void on_stackDarkFileButton_clicked();
     void on_stackFlatFileEdit_editingFinished();

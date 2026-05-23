@@ -41,6 +41,7 @@ MESSAGE_CLASS_DEFINITION(Camera::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgProcessCurrentFrame, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgReportError, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgDeleteStackFrame, Message)
 
 const char* const Camera::m_featureIdURI = "sdrangel.feature.camera";
 const char* const Camera::m_featureId = "Camera";
@@ -405,6 +406,14 @@ bool Camera::handleMessage(const Message& cmd)
             ? report.getErrorMessage()
             : QStringLiteral("%1\n\n%2").arg(report.getTitle(), report.getErrorMessage());
         m_state = StError;
+        return true;
+    }
+    else if (MsgDeleteStackFrame::match(cmd))
+    {
+        const MsgDeleteStackFrame& msg = (const MsgDeleteStackFrame&) cmd;
+        if (m_frameStacker) {
+            m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgDeleteStackFrame::create(msg.getFrameIndex()));
+        }
         return true;
     }
 

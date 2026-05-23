@@ -107,6 +107,26 @@ public:
         { }
     };
 
+    class MsgDeleteStackFrame : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        int getFrameIndex() const { return m_frameIndex; }
+
+        static MsgDeleteStackFrame* create(int frameIndex)
+        {
+            return new MsgDeleteStackFrame(frameIndex);
+        }
+
+    private:
+        int m_frameIndex;
+
+        MsgDeleteStackFrame(int frameIndex) :
+            Message(),
+            m_frameIndex(frameIndex)
+        { }
+    };
+
     CameraFrameStacker();
     ~CameraFrameStacker();
 
@@ -123,11 +143,22 @@ private:
         double m_exposureTimeMs = 0.0;
     };
 
+    struct StackFrameQuality
+    {
+        double m_mean = 0.0;
+        double m_stdDev = 0.0;
+        double m_laplacianVariance = 0.0;
+        double m_blackFraction = 0.0;
+        double m_saturatedFraction = 0.0;
+        bool m_valid = false;
+    };
+
     MessageQueue m_inputMessageQueue;
     CameraImageProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
     std::deque<cv::Mat> m_stackFrameHistory;
+    std::deque<StackFrameQuality> m_stackFrameQualityHistory;
     std::vector<HdrFrameSample> m_hdrFrameSamples;
     cv::Mat m_stackAccumulator;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
@@ -136,8 +167,11 @@ private:
 #endif
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
+    CameraPipelineFramePtr m_lastFrameTemplate;
+    QImage m_lastStackedImage;
     bool m_processingFrame;
     int m_droppedFrameCount;
+    int m_rejectedFrameCount;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
@@ -153,8 +187,15 @@ private:
 #endif
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);
+    static QImage makeHistoryTilesImage(const std::deque<cv::Mat>& frames);
+    static StackFrameQuality computeStackFrameQuality(const cv::Mat& frameMat);
+    static double medianQualityValue(const std::deque<StackFrameQuality>& qualities, double StackFrameQuality::*member);
     bool canPassThroughFrame(const CameraPipelineFrame& inputFrame) const;
     [[nodiscard]] bool applyFrameStacking(const CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount);
+    [[nodiscard]] bool shouldRejectStackFrame(const StackFrameQuality& quality, QString& reason) const;
+    bool renderStackDisplayImage(const QImage& stackedImage, QImage& outputImage) const;
+    void deleteStackFrame(int frameIndex);
+    void emitHistoryPreviewFrame();
 
 private slots:
     void handleInputMessages();

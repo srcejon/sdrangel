@@ -241,6 +241,9 @@ void CameraSettings::resetToDefaults()
     m_stackHdrExposureCount = 3;
     m_stackHdrExposureTimesMs = {{12.5, 50.0, 200.0, 800.0}};
     m_stackAlignmentMethod = StackAlignmentNone;
+    m_stackDisplayMode = StackDisplayStacked;
+    m_stackDisplayFrameIndex = 0;
+    m_stackRejectBadFrames = false;
     m_stackDarkFileName.clear();
     m_stackFlatFileName.clear();
     m_stackBiasFileName.clear();
@@ -628,6 +631,9 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(218, m_fovFocalLengthMm);
     s.writeBool(219, m_yoloTileLargeImages);
     s.writeS32(220, m_yoloTileOverlapPercent);
+    s.writeS32(221, static_cast<qint32>(m_stackDisplayMode));
+    s.writeS32(222, m_stackDisplayFrameIndex);
+    s.writeBool(223, m_stackRejectBadFrames);
 
     return s.final();
 }
@@ -1061,6 +1067,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(219, &m_yoloTileLargeImages, true);
         d.readS32(220, &m_yoloTileOverlapPercent, 20);
         m_yoloTileOverlapPercent = qBound(0, m_yoloTileOverlapPercent, 90);
+        d.readS32(221, reinterpret_cast<qint32*>(&m_stackDisplayMode), static_cast<qint32>(StackDisplayStacked));
+        d.readS32(222, &m_stackDisplayFrameIndex, 0);
+        d.readBool(223, &m_stackRejectBadFrames, false);
         m_asiCoolerOn = qBound(m_minAsiControl, m_asiCoolerOn, m_maxAsiControl);
         m_asiUsbBandwidth = std::max(m_minAsiControl, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(m_minAsiControl, m_asiHighSpeedMode, m_maxAsiControl);
@@ -1068,6 +1077,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_stackFrameCount = qBound(m_minStackFrameCount, m_stackFrameCount, m_maxStackFrameCount);
         m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodHDR);
         m_stackHdrAlgorithm = qBound(StackHdrAlgorithmDebevec, m_stackHdrAlgorithm, StackHdrAlgorithmMertens);
+        m_stackDisplayMode = qBound(StackDisplayStacked, m_stackDisplayMode, StackDisplayHistoryTiles);
+        m_stackDisplayFrameIndex = qBound(0, m_stackDisplayFrameIndex, m_maxStackFrameCount - 1);
         m_stackHdrExposureCount = qBound(m_minHdrExposureCount, m_stackHdrExposureCount, m_maxHdrExposureCount);
         for (double& exposureTimeMs : m_stackHdrExposureTimesMs) {
             exposureTimeMs = std::max(m_minExposureTimeMs, exposureTimeMs);
@@ -1323,6 +1334,15 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("stackAlignmentMethod")) {
         m_stackAlignmentMethod = qBound(StackAlignmentNone, settings.m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
+    }
+    if (settingsKeys.contains("stackDisplayMode")) {
+        m_stackDisplayMode = qBound(StackDisplayStacked, settings.m_stackDisplayMode, StackDisplayHistoryTiles);
+    }
+    if (settingsKeys.contains("stackDisplayFrameIndex")) {
+        m_stackDisplayFrameIndex = qBound(0, settings.m_stackDisplayFrameIndex, m_maxStackFrameCount - 1);
+    }
+    if (settingsKeys.contains("stackRejectBadFrames")) {
+        m_stackRejectBadFrames = settings.m_stackRejectBadFrames;
     }
     if (settingsKeys.contains("stackDarkFileName")) {
         m_stackDarkFileName = settings.m_stackDarkFileName;
@@ -1981,6 +2001,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("stackAlignmentMethod") || force) {
         ostr << " m_stackAlignmentMethod: " << m_stackAlignmentMethod;
+    }
+    if (settingsKeys.contains("stackDisplayMode") || force) {
+        ostr << " m_stackDisplayMode: " << m_stackDisplayMode;
+    }
+    if (settingsKeys.contains("stackDisplayFrameIndex") || force) {
+        ostr << " m_stackDisplayFrameIndex: " << m_stackDisplayFrameIndex;
+    }
+    if (settingsKeys.contains("stackRejectBadFrames") || force) {
+        ostr << " m_stackRejectBadFrames: " << m_stackRejectBadFrames;
     }
     if (settingsKeys.contains("stackDarkFileName") || force) {
         ostr << " m_stackDarkFileName: " << m_stackDarkFileName.toStdString();

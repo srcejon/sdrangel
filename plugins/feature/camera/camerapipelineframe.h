@@ -122,6 +122,7 @@ struct CameraPipelineFrame
     int m_stackCount = 1;
     int m_stackQueuedCount = 0;
     int m_stackDroppedCount = 0;
+    int m_stackRejectedCount = 0;
     BayerPattern m_bayerPattern = BayerNone;
 
 #if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)

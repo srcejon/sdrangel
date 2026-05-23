@@ -21,6 +21,7 @@
 #include <cstring>
 
 #include <QDebug>
+#include <QPainter>
 #include <QTimer>
 
 #include <opencv2/photo.hpp>
@@ -36,12 +37,14 @@
 MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgConfigureCameraFrameStacker, Message)
 MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgCaptureActive, Message)
+MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgDeleteStackFrame, Message)
 
 CameraFrameStacker::CameraFrameStacker() :
     m_nextStage(nullptr),
     m_captureActive(false),
     m_processingFrame(false),
-    m_droppedFrameCount(0)
+    m_droppedFrameCount(0),
+    m_rejectedFrameCount(0)
 {
 }
 
@@ -60,7 +63,10 @@ void CameraFrameStacker::stopWork()
 void CameraFrameStacker::resetFrameHistoryState()
 {
     m_stackFrameHistory.clear();
+    m_stackFrameQualityHistory.clear();
     m_hdrFrameSamples.clear();
+    m_lastFrameTemplate.clear();
+    m_lastStackedImage = QImage();
     m_stackAccumulator.release();
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     m_cudaStackAccumulator.release();
@@ -101,6 +107,9 @@ void CameraFrameStacker::trimFrameHistoryToCurrentLimit()
 #endif
 
         m_stackFrameHistory.pop_front();
+        if (!m_stackFrameQualityHistory.empty()) {
+            m_stackFrameQualityHistory.pop_front();
+        }
     }
 
     if (m_stackFrameHistory.empty())
@@ -292,6 +301,119 @@ QImage CameraFrameStacker::workingMatToImage(const cv::Mat& frameMat)
     return image;
 }
 
+QImage CameraFrameStacker::makeHistoryTilesImage(const std::deque<cv::Mat>& frames)
+{
+    if (frames.empty()) {
+        return QImage();
+    }
+
+    const QImage firstImage = workingMatToImage(frames.front());
+    if (firstImage.isNull()) {
+        return QImage();
+    }
+
+    const int frameCount = static_cast<int>(frames.size());
+    const int columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(frameCount)))));
+    const int rows = (frameCount + columns - 1) / columns;
+    const int tileMaxWidth = 320;
+    const int tileWidth = std::min(tileMaxWidth, std::max(1, firstImage.width()));
+    const int tileHeight = std::max(1, static_cast<int>(std::round(tileWidth * (static_cast<double>(firstImage.height()) / std::max(1, firstImage.width())))));
+    const int labelHeight = 18;
+
+    QImage mosaic(columns * tileWidth, rows * (tileHeight + labelHeight), QImage::Format_RGB888);
+    mosaic.fill(Qt::black);
+
+    QPainter painter(&mosaic);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.setPen(Qt::white);
+
+    for (int i = 0; i < frameCount; ++i)
+    {
+        const QImage frameImage = workingMatToImage(frames[static_cast<size_t>(i)]);
+        if (frameImage.isNull()) {
+            continue;
+        }
+
+        const int col = i % columns;
+        const int row = i / columns;
+        const QRect imageRect(col * tileWidth, row * (tileHeight + labelHeight), tileWidth, tileHeight);
+        painter.drawImage(imageRect, frameImage);
+        painter.drawText(QRect(imageRect.left(), imageRect.bottom() + 1, tileWidth, labelHeight),
+            Qt::AlignCenter, QString::number(i + 1));
+    }
+
+    return mosaic;
+}
+
+CameraFrameStacker::StackFrameQuality CameraFrameStacker::computeStackFrameQuality(const cv::Mat& frameMat)
+{
+    StackFrameQuality quality;
+    if (frameMat.empty()) {
+        return quality;
+    }
+
+    cv::Mat gray;
+    if (frameMat.channels() == 1) {
+        gray = frameMat;
+    } else {
+        cv::cvtColor(frameMat, gray, cv::COLOR_RGB2GRAY);
+    }
+
+    cv::Mat gray8u;
+    if (gray.depth() == CV_8U) {
+        gray8u = gray;
+    } else if (gray.depth() == CV_16U) {
+        gray.convertTo(gray8u, CV_8U, 255.0 / 65535.0);
+    } else {
+        gray.convertTo(gray8u, CV_8U);
+    }
+
+    cv::Scalar mean;
+    cv::Scalar stdDev;
+    cv::meanStdDev(gray8u, mean, stdDev);
+    quality.m_mean = mean[0];
+    quality.m_stdDev = stdDev[0];
+
+    cv::Mat blackMask;
+    cv::Mat saturatedMask;
+    cv::inRange(gray8u, cv::Scalar(0), cv::Scalar(2), blackMask);
+    cv::inRange(gray8u, cv::Scalar(253), cv::Scalar(255), saturatedMask);
+    const double pixelCount = static_cast<double>(std::max(1, gray8u.rows * gray8u.cols));
+    quality.m_blackFraction = static_cast<double>(cv::countNonZero(blackMask)) / pixelCount;
+    quality.m_saturatedFraction = static_cast<double>(cv::countNonZero(saturatedMask)) / pixelCount;
+
+    cv::Mat laplacian;
+    cv::Laplacian(gray8u, laplacian, CV_64F);
+    cv::meanStdDev(laplacian, mean, stdDev);
+    quality.m_laplacianVariance = stdDev[0] * stdDev[0];
+    quality.m_valid = std::isfinite(quality.m_mean)
+        && std::isfinite(quality.m_stdDev)
+        && std::isfinite(quality.m_laplacianVariance)
+        && std::isfinite(quality.m_blackFraction)
+        && std::isfinite(quality.m_saturatedFraction);
+    return quality;
+}
+
+double CameraFrameStacker::medianQualityValue(const std::deque<StackFrameQuality>& qualities, double StackFrameQuality::*member)
+{
+    std::vector<double> values;
+    values.reserve(qualities.size());
+    for (const StackFrameQuality& quality : qualities)
+    {
+        if (quality.m_valid) {
+            values.push_back(quality.*member);
+        }
+    }
+
+    if (values.empty()) {
+        return 0.0;
+    }
+
+    const auto middle = values.begin() + static_cast<std::ptrdiff_t>(values.size() / 2);
+    std::nth_element(values.begin(), middle, values.end());
+    return *middle;
+}
+
 bool CameraFrameStacker::handleMessage(const Message& cmd)
 {
     if (MsgConfigureCameraFrameStacker::match(cmd))
@@ -316,9 +438,16 @@ bool CameraFrameStacker::handleMessage(const Message& cmd)
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrames.clear();
         m_droppedFrameCount = 0;
+        m_rejectedFrameCount = 0;
         if (!m_captureActive) {
             m_processingFrame = false;
         }
+        return true;
+    }
+    else if (MsgDeleteStackFrame::match(cmd))
+    {
+        const MsgDeleteStackFrame& deleteMsg = (const MsgDeleteStackFrame&) cmd;
+        deleteStackFrame(deleteMsg.getFrameIndex());
         return true;
     }
 
@@ -341,6 +470,8 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
 {
     qDebug() << "CameraFrameStacker::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
+    const bool displayChanged = settingsKeys.contains("stackDisplayMode")
+        || settingsKeys.contains("stackDisplayFrameIndex");
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("cameraProtocol")
@@ -365,6 +496,7 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("stackHdrExposure2Ms")
         || settingsKeys.contains("stackHdrExposure3Ms")
         || settingsKeys.contains("stackHdrExposure4Ms")
+        || settingsKeys.contains("stackRejectBadFrames")
         || settingsKeys.contains("stackAlignmentMethod");
 
     if (force) {
@@ -378,11 +510,16 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrames.clear();
         m_droppedFrameCount = 0;
+        m_rejectedFrameCount = 0;
         resetFrameHistoryState();
     }
     else if (settingsKeys.contains("stackFrameCount"))
     {
         trimFrameHistoryToCurrentLimit();
+    }
+
+    if (!sourceChanged && displayChanged) {
+        emitHistoryPreviewFrame();
     }
 }
 
@@ -441,6 +578,7 @@ void CameraFrameStacker::processNextFrame()
             m_pendingFrames.pop_front();
             frame->m_stackQueuedCount += static_cast<int>(m_pendingFrames.size());
             frame->m_stackDroppedCount += m_droppedFrameCount;
+            frame->m_stackRejectedCount += m_rejectedFrameCount;
         }
 
         if (!frame)
@@ -487,6 +625,8 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
+    frame->m_stackRejectedCount = m_rejectedFrameCount;
+
     QImage stackedImage;
     int stackCount = 1;
 
@@ -494,6 +634,7 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
+    frame->m_stackRejectedCount = m_rejectedFrameCount;
     frame->m_image = stackedImage;
     frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
     frame->clearCudaCache();
@@ -501,6 +642,7 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->m_unprocessedImage = frame->m_image;
     }
     frame->m_stackCount = std::max(1, stackCount);
+    m_lastFrameTemplate.reset(new CameraPipelineFrame(*frame));
 
     if (m_nextStage) {
         m_nextStage->submitFrame(frame);
@@ -514,6 +656,144 @@ bool CameraFrameStacker::canPassThroughFrame(const CameraPipelineFrame& inputFra
         || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1));
 
     return !stackEnabled && inputFrame.hasImageData();
+}
+
+bool CameraFrameStacker::renderStackDisplayImage(const QImage& stackedImage, QImage& outputImage) const
+{
+    if (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryFrame)
+    {
+        if (m_stackFrameHistory.empty()) {
+            return false;
+        }
+
+        const int frameIndex = qBound(0, m_settings.m_stackDisplayFrameIndex, static_cast<int>(m_stackFrameHistory.size()) - 1);
+        outputImage = workingMatToImage(m_stackFrameHistory[static_cast<size_t>(frameIndex)]);
+        return !outputImage.isNull();
+    }
+
+    if (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryTiles)
+    {
+        outputImage = makeHistoryTilesImage(m_stackFrameHistory);
+        return !outputImage.isNull();
+    }
+
+    outputImage = stackedImage;
+    return !outputImage.isNull();
+}
+
+bool CameraFrameStacker::shouldRejectStackFrame(const StackFrameQuality& quality, QString& reason) const
+{
+    if (!quality.m_valid)
+    {
+        reason = QStringLiteral("invalid quality metrics");
+        return true;
+    }
+
+    if ((quality.m_mean < 1.0) && (quality.m_stdDev < 1.0))
+    {
+        reason = QStringLiteral("near-empty frame");
+        return true;
+    }
+
+    if (quality.m_blackFraction > 0.98)
+    {
+        reason = QStringLiteral("mostly black frame");
+        return true;
+    }
+
+    if (quality.m_saturatedFraction > 0.80)
+    {
+        reason = QStringLiteral("mostly saturated frame");
+        return true;
+    }
+
+    if (m_stackFrameQualityHistory.size() < 3) {
+        return false;
+    }
+
+    const double medianMean = medianQualityValue(m_stackFrameQualityHistory, &StackFrameQuality::m_mean);
+    const double medianStdDev = medianQualityValue(m_stackFrameQualityHistory, &StackFrameQuality::m_stdDev);
+    const double medianSharpness = medianQualityValue(m_stackFrameQualityHistory, &StackFrameQuality::m_laplacianVariance);
+    const double medianBlackFraction = medianQualityValue(m_stackFrameQualityHistory, &StackFrameQuality::m_blackFraction);
+    const double medianSaturatedFraction = medianQualityValue(m_stackFrameQualityHistory, &StackFrameQuality::m_saturatedFraction);
+
+    if ((medianSharpness > 10.0) && (quality.m_laplacianVariance < medianSharpness * 0.30))
+    {
+        reason = QStringLiteral("sharpness dropped");
+        return true;
+    }
+
+    if ((medianMean > 5.0) && (std::abs(quality.m_mean - medianMean) > 25.0)
+        && ((quality.m_mean < medianMean * 0.35) || (quality.m_mean > medianMean * 2.5)))
+    {
+        reason = QStringLiteral("brightness outlier");
+        return true;
+    }
+
+    if ((medianStdDev > 3.0) && (quality.m_stdDev < medianStdDev * 0.25))
+    {
+        reason = QStringLiteral("contrast collapsed");
+        return true;
+    }
+
+    if ((quality.m_blackFraction > std::max(0.50, medianBlackFraction * 4.0 + 0.05))
+        && (quality.m_blackFraction > medianBlackFraction + 0.20))
+    {
+        reason = QStringLiteral("black pixel fraction outlier");
+        return true;
+    }
+
+    if ((quality.m_saturatedFraction > std::max(0.35, medianSaturatedFraction * 4.0 + 0.05))
+        && (quality.m_saturatedFraction > medianSaturatedFraction + 0.20))
+    {
+        reason = QStringLiteral("saturated pixel fraction outlier");
+        return true;
+    }
+
+    return false;
+}
+
+void CameraFrameStacker::deleteStackFrame(int frameIndex)
+{
+    if (m_stackFrameHistory.empty()) {
+        return;
+    }
+
+    const int boundedFrameIndex = qBound(0, frameIndex, static_cast<int>(m_stackFrameHistory.size()) - 1);
+    m_stackFrameHistory.erase(m_stackFrameHistory.begin() + boundedFrameIndex);
+    if (boundedFrameIndex < static_cast<int>(m_stackFrameQualityHistory.size())) {
+        m_stackFrameQualityHistory.erase(m_stackFrameQualityHistory.begin() + boundedFrameIndex);
+    }
+    m_stackAccumulator.release();
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    m_cudaStackAccumulator.release();
+#endif
+
+    if (m_settings.m_stackDisplayFrameIndex >= static_cast<int>(m_stackFrameHistory.size())) {
+        m_settings.m_stackDisplayFrameIndex = std::max(0, static_cast<int>(m_stackFrameHistory.size()) - 1);
+    }
+
+    emitHistoryPreviewFrame();
+}
+
+void CameraFrameStacker::emitHistoryPreviewFrame()
+{
+    if (!m_nextStage || !m_lastFrameTemplate || m_stackFrameHistory.empty()) {
+        return;
+    }
+
+    QImage outputImage;
+    if (!renderStackDisplayImage(m_lastStackedImage, outputImage)) {
+        return;
+    }
+
+    CameraPipelineFramePtr previewFrame(new CameraPipelineFrame(*m_lastFrameTemplate));
+    previewFrame->m_image = outputImage;
+    previewFrame->m_unprocessedImage = outputImage;
+    previewFrame->m_stackCount = static_cast<int>(m_stackFrameHistory.size());
+    previewFrame->m_stackQueuedCount = 0;
+    previewFrame->m_stackRejectedCount = m_rejectedFrameCount;
+    m_nextStage->submitFrame(previewFrame);
 }
 
 bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount)
@@ -761,6 +1041,11 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
         }
 
         m_hdrFrameSamples.clear();
+        m_lastStackedImage = outputImage;
+        QImage displayImage;
+        if (renderStackDisplayImage(outputImage, displayImage)) {
+            outputImage = displayImage;
+        }
         PROFILER_STOP(__FUNCTION__);
         return true;
     }
@@ -792,10 +1077,41 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
         || m_stackFrameHistory.front().type() != alignedFrameMat.type())
     {
         m_stackFrameHistory.clear();
+        m_stackFrameQualityHistory.clear();
         m_stackAccumulator.release();
     }
 
+    StackFrameQuality quality;
+    if (m_settings.m_stackRejectBadFrames) {
+        quality = computeStackFrameQuality(alignedFrameMat);
+    }
+    QString rejectReason;
+    if (m_settings.m_stackRejectBadFrames && shouldRejectStackFrame(quality, rejectReason))
+    {
+        ++m_rejectedFrameCount;
+        qDebug() << "CameraFrameStacker: Rejecting frame from stack:" << rejectReason
+                 << "mean" << quality.m_mean
+                 << "stddev" << quality.m_stdDev
+                 << "sharpness" << quality.m_laplacianVariance
+                 << "black" << quality.m_blackFraction
+                 << "saturated" << quality.m_saturatedFraction;
+        stackCount = static_cast<int>(m_stackFrameHistory.size());
+
+        if (!m_stackFrameHistory.empty() && renderStackDisplayImage(m_lastStackedImage, outputImage))
+        {
+            PROFILER_STOP(__FUNCTION__);
+            return true;
+        }
+
+        outputImage = workingMatToImage(alignedFrameMat);
+        PROFILER_STOP(__FUNCTION__);
+        return true;
+    }
+
     m_stackFrameHistory.push_back(alignedFrameMat.clone());
+    if (m_settings.m_stackRejectBadFrames) {
+        m_stackFrameQualityHistory.push_back(quality);
+    }
     trimFrameHistoryToCurrentLimit();
 
     const double scaleTo8Bit = alignedFrameMat.depth() == CV_16U ? (255.0 / 65535.0) : 1.0;
@@ -805,6 +1121,11 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
 #ifdef CAMERA_OPENCV_CUDA_STACKING
         if (useCudaStacking && applyAverageStackingCuda(alignedFrameMat, cudaFrameMat.empty() ? nullptr : &cudaFrameMat, scaleTo8Bit, outputImage))
         {
+            QImage displayImage;
+            m_lastStackedImage = outputImage;
+            if (renderStackDisplayImage(outputImage, displayImage)) {
+                outputImage = displayImage;
+            }
             stackCount = static_cast<int>(m_stackFrameHistory.size());
             PROFILER_STOP(__FUNCTION__);
             return true;
@@ -838,7 +1159,11 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
         cv::Mat averaged8u;
         averagedFloat.convertTo(averaged8u, CV_8UC3, scaleTo8Bit);
 
-        outputImage = workingMatToImage(averaged8u);
+        const QImage stackedImage = workingMatToImage(averaged8u);
+        m_lastStackedImage = stackedImage;
+        if (!renderStackDisplayImage(stackedImage, outputImage)) {
+            outputImage = stackedImage;
+        }
         stackCount = static_cast<int>(m_stackFrameHistory.size());
 
         PROFILER_STOP(__FUNCTION__);
@@ -986,7 +1311,10 @@ bool CameraFrameStacker::applyFrameStacking(const CameraPipelineFrame& inputFram
     }
 
     PROFILER_STOP(__FUNCTION__);
-    outputImage = stackedImage;
+    m_lastStackedImage = stackedImage;
+    if (!renderStackDisplayImage(stackedImage, outputImage)) {
+        outputImage = stackedImage;
+    }
     stackCount = static_cast<int>(m_stackFrameHistory.size());
     return true;
 }

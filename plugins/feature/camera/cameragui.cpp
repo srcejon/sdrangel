@@ -386,7 +386,14 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastStackCount = report.getStackCount();
         m_lastStackQueuedCount = report.getStackQueuedCount();
         m_lastStackDroppedCount = report.getStackDroppedCount();
-        settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3").arg(m_lastStackCount).arg(m_lastStackQueuedCount).arg(m_lastStackDroppedCount));
+        m_lastStackRejectedCount = report.getStackRejectedCount();
+        settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3 / %4")
+            .arg(m_lastStackCount)
+            .arg(m_lastStackQueuedCount)
+            .arg(m_lastStackDroppedCount)
+            .arg(m_lastStackRejectedCount));
+        settingsUI()->stackDisplayFrameSpin->setMaximum(std::max(1, m_lastStackCount));
+        settingsUI()->stackDeleteFrameButton->setEnabled(m_lastStackCount > 0);
         m_pipelineFrameTimes.append(nowMs);
         while ((m_pipelineFrameTimes.size() > 1) && (m_pipelineFrameTimes.first() < nowMs - 5000)) {
             m_pipelineFrameTimes.removeFirst();
@@ -1132,6 +1139,11 @@ void CameraGUI::displaySettings()
     settingsUI()->stackHdrAlgorithmCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackHdrAlgorithm));
     settingsUI()->stackHdrExposureCountSpin->setValue(m_settings.getHdrExposureCount());
     settingsUI()->stackAlignmentCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackAlignmentMethod));
+    settingsUI()->stackDisplayModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackDisplayMode));
+    settingsUI()->stackDisplayFrameSpin->setValue(m_settings.m_stackDisplayFrameIndex + 1);
+    settingsUI()->stackDisplayFrameLabel->setEnabled(m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryFrame);
+    settingsUI()->stackDisplayFrameSpin->setEnabled(m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryFrame);
+    settingsUI()->stackRejectBadFramesCheck->setChecked(m_settings.m_stackRejectBadFrames);
     settingsUI()->stackDarkFileEdit->setText(m_settings.m_stackDarkFileName);
     settingsUI()->stackFlatFileEdit->setText(m_settings.m_stackFlatFileName);
     settingsUI()->stackBiasFileEdit->setText(m_settings.m_stackBiasFileName);
@@ -1170,7 +1182,11 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, m_settings.m_postProcessWhiteBalanceBlueGain));
     settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setValue(m_settings.m_postProcessWhiteBalanceHighlightProtection);
     settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin, m_settings.m_postProcessWhiteBalanceHighlightProtection));
-    settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3").arg(m_lastStackCount).arg(m_lastStackQueuedCount).arg(m_lastStackDroppedCount));
+    settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3 / %4")
+        .arg(m_lastStackCount)
+        .arg(m_lastStackQueuedCount)
+        .arg(m_lastStackDroppedCount)
+        .arg(m_lastStackRejectedCount));
     settingsUI()->postProcessUseCudaCheck->setChecked(m_settings.m_postProcessUseCuda);
 #ifndef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     settingsUI()->postProcessUseCudaCheck->setEnabled(false);
@@ -1589,6 +1605,10 @@ void CameraGUI::makeUIConnections()
             [this, exposureIndex](double value) { handleHdrExposureSpinChanged(exposureIndex, value); });
     }
     QObject::connect(settingsUI()->stackAlignmentCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackAlignmentCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->stackDisplayModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackDisplayModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->stackDisplayFrameSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackDisplayFrameSpin_valueChanged);
+    QObject::connect(settingsUI()->stackDeleteFrameButton, &QToolButton::clicked, this, &CameraGUI::on_stackDeleteFrameButton_clicked);
+    QObject::connect(settingsUI()->stackRejectBadFramesCheck, &QCheckBox::toggled, this, &CameraGUI::on_stackRejectBadFramesCheck_toggled);
     QObject::connect(settingsUI()->stackDarkFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackDarkFileEdit_editingFinished);
     QObject::connect(settingsUI()->stackDarkFileButton, &QToolButton::clicked, this, &CameraGUI::on_stackDarkFileButton_clicked);
     QObject::connect(settingsUI()->stackFlatFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackFlatFileEdit_editingFinished);
@@ -4596,6 +4616,34 @@ void CameraGUI::on_stackAlignmentCombo_currentIndexChanged(int index)
 {
     m_settings.m_stackAlignmentMethod = static_cast<CameraSettings::StackAlignmentMethod>(index);
     applySetting("stackAlignmentMethod");
+}
+
+void CameraGUI::on_stackDisplayModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_stackDisplayMode = static_cast<CameraSettings::StackDisplayMode>(index);
+    const bool frameControlsEnabled = m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryFrame;
+    settingsUI()->stackDisplayFrameLabel->setEnabled(frameControlsEnabled);
+    settingsUI()->stackDisplayFrameSpin->setEnabled(frameControlsEnabled);
+    applySetting("stackDisplayMode");
+}
+
+void CameraGUI::on_stackDisplayFrameSpin_valueChanged(int value)
+{
+    m_settings.m_stackDisplayFrameIndex = std::max(0, value - 1);
+    applySetting("stackDisplayFrameIndex");
+}
+
+void CameraGUI::on_stackDeleteFrameButton_clicked()
+{
+    if (m_camera) {
+        m_camera->getInputMessageQueue()->push(Camera::MsgDeleteStackFrame::create(std::max(0, settingsUI()->stackDisplayFrameSpin->value() - 1)));
+    }
+}
+
+void CameraGUI::on_stackRejectBadFramesCheck_toggled(bool checked)
+{
+    m_settings.m_stackRejectBadFrames = checked;
+    applySetting("stackRejectBadFrames");
 }
 
 void CameraGUI::on_stackDarkFileEdit_editingFinished()

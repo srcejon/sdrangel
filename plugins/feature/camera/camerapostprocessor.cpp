@@ -942,6 +942,7 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_stackCount,
             frame.m_stackQueuedCount,
             frame.m_stackDroppedCount,
+            frame.m_stackRejectedCount,
             frame.m_plateSolved,
             frame.m_plateSolvedMatches,
             frame.m_plateSolveDetectedStarsConsidered,

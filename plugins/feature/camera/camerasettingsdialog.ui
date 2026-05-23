@@ -1525,13 +1525,96 @@
            </layout>
           </item>
           <item row="9" column="0">
-           <widget class="QLabel" name="stackCurrentCountLabel">
+           <widget class="QLabel" name="stackDisplayModeLabel">
             <property name="text">
-             <string>Stacked / queued / dropped</string>
+             <string>Display</string>
             </property>
            </widget>
           </item>
           <item row="9" column="1">
+           <widget class="QComboBox" name="stackDisplayModeCombo">
+            <property name="toolTip">
+             <string>Select the stack output, one stored stack frame, or a tiled overview of stored frames</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Stacked image</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>History frame</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>History tiles</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="10" column="0">
+           <widget class="QLabel" name="stackDisplayFrameLabel">
+            <property name="text">
+             <string>History frame</string>
+            </property>
+           </widget>
+          </item>
+          <item row="10" column="1">
+           <layout class="QHBoxLayout" name="stackDisplayFrameLayout">
+            <item>
+             <widget class="QSpinBox" name="stackDisplayFrameSpin">
+              <property name="toolTip">
+               <string>Stack history frame to display or delete</string>
+              </property>
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>256</number>
+              </property>
+              <property name="value">
+               <number>1</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="stackDeleteFrameButton">
+              <property name="toolTip">
+               <string>Delete the selected stack history frame</string>
+              </property>
+              <property name="text">
+               <string>Delete</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="11" column="0">
+           <widget class="QLabel" name="stackRejectBadFramesLabel">
+            <property name="text">
+             <string>Quality reject</string>
+            </property>
+           </widget>
+          </item>
+          <item row="11" column="1">
+           <widget class="QCheckBox" name="stackRejectBadFramesCheck">
+            <property name="toolTip">
+             <string>Reject obvious bad stack frames using brightness, saturation, contrast and sharpness checks</string>
+            </property>
+            <property name="text">
+             <string>Reject bad frames</string>
+            </property>
+           </widget>
+          </item>
+          <item row="12" column="0">
+           <widget class="QLabel" name="stackCurrentCountLabel">
+            <property name="text">
+             <string>Stacked / queued / dropped / rejected</string>
+            </property>
+           </widget>
+          </item>
+          <item row="12" column="1">
            <widget class="QLabel" name="stackCurrentCountValue">
             <property name="text">
              <string>1</string>

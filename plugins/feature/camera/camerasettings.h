@@ -515,6 +515,8 @@ struct CameraSettings
     double m_yoloNmsThreshold;   ///< IoU threshold for non-maximum suppression: 0.0..1.0
     QColor m_yoloBoxColor;       ///< Bounding-box colour when no per-class colour is available
     double m_yoloDisappearDebounce; ///< Seconds a class must remain absent before it is treated as disappeared
+    bool   m_yoloTileLargeImages; ///< Tile frames larger than the YOLO input size and batch infer the tiles
+    int    m_yoloTileOverlapPercent; ///< Tile overlap percentage for large-image YOLO inference: 0..90
     QHash<QString, QList<ObjectDeviceSettings *> *> m_objectDeviceSettings; //!< Device control settings per YOLO class name
     enum DNNTarget {
         CPU,

@@ -552,30 +552,49 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         m_appliedYoloDnnTarget = requestedTarget;
     }
 
-    cv::Mat roiMat = bgrMat(roi);
+    const QVector<cv::Rect> tileRects = makeYoloTiles(roi);
 
-    // Letterbox preprocessing: scale the ROI uniformly so the longest side matches the
-    // YOLO input dimension, pad the remainder with neutral grey (114) to fill the square
-    // model input. YOLOv5/v8 are trained with letterbox-padded input — feeding them a
-    // stretched non-square ROI (the previous behaviour) measurably degrades detection
-    // accuracy and produces wrong aspect ratios in the output boxes.
+    // Letterbox each ROI/tile, batch inference where possible, then map detections back
+    // to full-frame coordinates before global NMS removes overlap duplicates.
     const int targetW = m_yoloInputSize.width;
     const int targetH = m_yoloInputSize.height;
-    const float scale = std::min(
-        static_cast<float>(targetW) / static_cast<float>(std::max(1, roiMat.cols)),
-        static_cast<float>(targetH) / static_cast<float>(std::max(1, roiMat.rows)));
-    const int newW = std::max(1, static_cast<int>(std::round(roiMat.cols * scale)));
-    const int newH = std::max(1, static_cast<int>(std::round(roiMat.rows * scale)));
-    const int padX = (targetW - newW) / 2;
-    const int padY = (targetH - newH) / 2;
+    if ((targetW <= 0) || (targetH <= 0) || tileRects.isEmpty()) {
+        return;
+    }
 
-    cv::Mat letterbox(targetH, targetW, roiMat.type(), cv::Scalar(114, 114, 114));
-    cv::Mat resized;
-    cv::resize(roiMat, resized, cv::Size(newW, newH), 0.0, 0.0, cv::INTER_LINEAR);
-    resized.copyTo(letterbox(cv::Rect(padX, padY, newW, newH)));
+    std::vector<cv::Mat> letterboxes;
+    std::vector<int> padXs;
+    std::vector<int> padYs;
+    std::vector<float> invScales;
+    letterboxes.reserve(static_cast<size_t>(tileRects.size()));
+    padXs.reserve(static_cast<size_t>(tileRects.size()));
+    padYs.reserve(static_cast<size_t>(tileRects.size()));
+    invScales.reserve(static_cast<size_t>(tileRects.size()));
+
+    for (const cv::Rect& tileRect : tileRects)
+    {
+        cv::Mat tileMat = bgrMat(tileRect);
+        const float scale = std::min(
+            static_cast<float>(targetW) / static_cast<float>(std::max(1, tileMat.cols)),
+            static_cast<float>(targetH) / static_cast<float>(std::max(1, tileMat.rows)));
+        const int newW = std::max(1, static_cast<int>(std::round(tileMat.cols * scale)));
+        const int newH = std::max(1, static_cast<int>(std::round(tileMat.rows * scale)));
+        const int padX = (targetW - newW) / 2;
+        const int padY = (targetH - newH) / 2;
+
+        cv::Mat letterbox(targetH, targetW, tileMat.type(), cv::Scalar(114, 114, 114));
+        cv::Mat resized;
+        cv::resize(tileMat, resized, cv::Size(newW, newH), 0.0, 0.0, cv::INTER_LINEAR);
+        resized.copyTo(letterbox(cv::Rect(padX, padY, newW, newH)));
+
+        letterboxes.push_back(letterbox);
+        padXs.push_back(padX);
+        padYs.push_back(padY);
+        invScales.push_back((scale > 0.0f) ? (1.0f / scale) : 1.0f);
+    }
 
     cv::Mat blob;
-    cv::dnn::blobFromImage(letterbox, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
+    cv::dnn::blobFromImages(letterboxes, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
     m_yoloNet.setInput(blob);
 
     std::vector<cv::Mat> outputs;
@@ -593,30 +612,95 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         return;
     }
 
-    cv::Mat det = outputs[0];
-    if (det.dims == 3) {
-        det = det.reshape(1, det.size[1]);
-    }
-
     const float confThresh = static_cast<float>(m_settings.m_yoloConfThreshold);
     const float nmsThresh = static_cast<float>(m_settings.m_yoloNmsThreshold);
     std::vector<cv::Rect> boxes;
     std::vector<float> scores;
     std::vector<int> classIds;
-    const bool isV8Style = (det.rows < det.cols);
 
-    // Inverse-letterbox factor: divide letterbox coords by `scale` after subtracting the
-    // pad offset to recover ROI-local pixel coordinates.
-    const float invScale = (scale > 0.0f) ? (1.0f / scale) : 1.0f;
+    cv::Mat output = outputs[0];
+    if ((output.dims == 3) && (output.size[0] == tileRects.size()))
+    {
+        for (int tileIndex = 0; tileIndex < tileRects.size(); ++tileIndex)
+        {
+            cv::Mat det(output.size[1], output.size[2], output.type(), output.ptr(tileIndex));
+            decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
+        }
+    }
+    else if ((output.dims == 2) && (tileRects.size() > 1))
+    {
+        const bool isV8Style = output.rows < output.cols;
+        if (isV8Style && ((output.cols % tileRects.size()) == 0))
+        {
+            const int anchorsPerTile = output.cols / tileRects.size();
+            for (int tileIndex = 0; tileIndex < tileRects.size(); ++tileIndex)
+            {
+                cv::Mat det = output.colRange(tileIndex * anchorsPerTile, (tileIndex + 1) * anchorsPerTile);
+                decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
+            }
+        }
+        else if (!isV8Style && ((output.rows % tileRects.size()) == 0))
+        {
+            const int anchorsPerTile = output.rows / tileRects.size();
+            for (int tileIndex = 0; tileIndex < tileRects.size(); ++tileIndex)
+            {
+                cv::Mat det = output.rowRange(tileIndex * anchorsPerTile, (tileIndex + 1) * anchorsPerTile);
+                decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
+            }
+        }
+        else
+        {
+            qWarning() << "CameraObjectDetector::runYoloDetections: unable to split batched YOLO output"
+                       << output.rows << "x" << output.cols << "tiles" << tileRects.size();
+        }
+    }
+    else
+    {
+        cv::Mat det = output;
+        if (det.dims == 3) {
+            det = det.reshape(1, det.size[1]);
+        }
+        decodeYoloDetections(det, tileRects[0], padXs[0], padYs[0], invScales[0], boxes, scores, classIds);
+    }
+
+    std::vector<int> indices;
+    cv::dnn::NMSBoxes(boxes, scores, confThresh, nmsThresh, indices);
+
+    detections.reserve(static_cast<qsizetype>(indices.size()));
+    for (int idx : indices)
+    {
+        QString label;
+        if (!m_yoloLabels.isEmpty() && classIds[idx] < m_yoloLabels.size()) {
+            label = m_yoloLabels[classIds[idx]];
+        } else {
+            label = QStringLiteral("cls%1").arg(classIds[idx]);
+        }
+
+        CameraPipelineDetection detection;
+        detection.m_box = QRect(boxes[idx].x, boxes[idx].y, boxes[idx].width, boxes[idx].height);
+        if (intersectsExclusionRects(detection.m_box)) {
+            continue;
+        }
+        detection.m_label = label;
+        detection.m_score = scores[idx];
+        detections.append(detection);
+    }
+
+    PROFILER_STOP(tileRects.size() > 1 ? "YOLO tiled" : "YOLO");
+}
+
+void CameraObjectDetector::decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
+    std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds) const
+{
+    if (det.empty()) {
+        return;
+    }
+
+    const float confThresh = static_cast<float>(m_settings.m_yoloConfThreshold);
+    const bool isV8Style = (det.rows < det.cols);
 
     if (isV8Style)
     {
-        // YOLOv8 layout is [4 + numClasses, numAnchors]: rows are features, columns
-        // are anchors. Walking the original layout per-anchor via Mat::at performs a
-        // ranged access for every (class, anchor) pair (~80 * 8400 = 672k calls). The
-        // memory access pattern is also stride-unfriendly. Transposing once gives a
-        // [numAnchors, 4 + numClasses] layout where each row is contiguous in memory
-        // for one anchor, letting us use a single ptr() per row.
         cv::Mat detT;
         cv::transpose(det, detT);
         const int numAnchors = detT.rows;
@@ -642,18 +726,14 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
                 continue;
             }
 
-            const float cxLb = row[0];
-            const float cyLb = row[1];
-            const float wLb = row[2];
-            const float hLb = row[3];
-            const float cx = (cxLb - padX) * invScale;
-            const float cy = (cyLb - padY) * invScale;
-            const float w = wLb * invScale;
-            const float h = hLb * invScale;
+            const float cx = (row[0] - padX) * invScale;
+            const float cy = (row[1] - padY) * invScale;
+            const float w = row[2] * invScale;
+            const float h = row[3] * invScale;
 
             boxes.push_back(cv::Rect(
-                roi.x + static_cast<int>(cx - w / 2.0f),
-                roi.y + static_cast<int>(cy - h / 2.0f),
+                tileRect.x + static_cast<int>(cx - w / 2.0f),
+                tileRect.y + static_cast<int>(cy - h / 2.0f),
                 static_cast<int>(w),
                 static_cast<int>(h)));
             scores.push_back(bestScore);
@@ -662,8 +742,6 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
     }
     else
     {
-        // YOLOv5 layout is [numAnchors, 5 + numClasses]: rows are anchors, columns are
-        // features. Already row-contiguous per-anchor; just walk with ptr<float>().
         const int numAnchors = det.rows;
         const int numClasses = det.cols - 5;
         if (numClasses < 0) {
@@ -693,49 +771,71 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
                 continue;
             }
 
-            const float cxLb = row[0];
-            const float cyLb = row[1];
-            const float wLb = row[2];
-            const float hLb = row[3];
-            const float cx = (cxLb - padX) * invScale;
-            const float cy = (cyLb - padY) * invScale;
-            const float w = wLb * invScale;
-            const float h = hLb * invScale;
+            const float cx = (row[0] - padX) * invScale;
+            const float cy = (row[1] - padY) * invScale;
+            const float w = row[2] * invScale;
+            const float h = row[3] * invScale;
 
             boxes.push_back(cv::Rect(
-                roi.x + static_cast<int>(cx - w / 2.0f),
-                roi.y + static_cast<int>(cy - h / 2.0f),
+                tileRect.x + static_cast<int>(cx - w / 2.0f),
+                tileRect.y + static_cast<int>(cy - h / 2.0f),
                 static_cast<int>(w),
                 static_cast<int>(h)));
             scores.push_back(bestScore);
             classIds.push_back(bestClass);
         }
     }
+}
 
-    std::vector<int> indices;
-    cv::dnn::NMSBoxes(boxes, scores, confThresh, nmsThresh, indices);
+QVector<cv::Rect> CameraObjectDetector::makeYoloTiles(const cv::Rect& roi) const
+{
+    const int tileW = std::min(m_yoloInputSize.width, roi.width);
+    const int tileH = std::min(m_yoloInputSize.height, roi.height);
+    QVector<cv::Rect> tiles;
 
-    detections.reserve(static_cast<qsizetype>(indices.size()));
-    for (int idx : indices)
-    {
-        QString label;
-        if (!m_yoloLabels.isEmpty() && classIds[idx] < m_yoloLabels.size()) {
-            label = m_yoloLabels[classIds[idx]];
-        } else {
-            label = QStringLiteral("cls%1").arg(classIds[idx]);
-        }
-
-        CameraPipelineDetection detection;
-        detection.m_box = QRect(boxes[idx].x, boxes[idx].y, boxes[idx].width, boxes[idx].height);
-        if (intersectsExclusionRects(detection.m_box)) {
-            continue;
-        }
-        detection.m_label = label;
-        detection.m_score = scores[idx];
-        detections.append(detection);
+    if ((tileW <= 0) || (tileH <= 0)) {
+        return tiles;
     }
 
-    PROFILER_STOP("YOLO");
+    if (!m_settings.m_yoloTileLargeImages || ((roi.width <= m_yoloInputSize.width) && (roi.height <= m_yoloInputSize.height)))
+    {
+        tiles.append(roi);
+        return tiles;
+    }
+
+    const int overlapPercent = qBound(0, m_settings.m_yoloTileOverlapPercent, 90);
+    auto makeStarts = [overlapPercent](int start, int length, int tileSize) -> QVector<int>
+    {
+        QVector<int> starts;
+        if (length <= tileSize)
+        {
+            starts.append(start);
+            return starts;
+        }
+
+        const int step = std::max(1, static_cast<int>(std::round(tileSize * (100 - overlapPercent) / 100.0)));
+        const int last = start + length - tileSize;
+        for (int pos = start; pos < last; pos += step) {
+            starts.append(pos);
+        }
+        if (starts.isEmpty() || starts.last() != last) {
+            starts.append(last);
+        }
+        return starts;
+    };
+
+    const QVector<int> xStarts = makeStarts(roi.x, roi.width, tileW);
+    const QVector<int> yStarts = makeStarts(roi.y, roi.height, tileH);
+    tiles.reserve(xStarts.size() * yStarts.size());
+
+    for (int y : yStarts)
+    {
+        for (int x : xStarts) {
+            tiles.append(cv::Rect(x, y, tileW, tileH));
+        }
+    }
+
+    return tiles;
 }
 
 void CameraObjectDetector::clearObjectDetectionState(bool clearHistory)
@@ -1110,7 +1210,3 @@ void CameraObjectDetector::sendEvent(const QString& className, bool detected, co
         messageQueue->push(MainCore::MsgEvent::create(m_camera, eventTime, eventType, eventData));
     }
 }
-
-
-
-

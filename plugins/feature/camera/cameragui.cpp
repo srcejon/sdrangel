@@ -40,6 +40,7 @@
 #include <QPixmap>
 #include <QSet>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QStandardItemModel>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -1319,6 +1320,9 @@ void CameraGUI::displaySettings()
     settingsUI()->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
     settingsUI()->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
     settingsUI()->yoloTargetCombo->setCurrentIndex((int) m_settings.m_yoloDnnTarget);
+    settingsUI()->yoloTileLargeImagesCheck->setChecked(m_settings.m_yoloTileLargeImages);
+    settingsUI()->yoloTileOverlapSpin->setValue(m_settings.m_yoloTileOverlapPercent);
+    settingsUI()->yoloTileOverlapSpin->setEnabled(m_settings.m_yoloTileLargeImages);
     updateColorButton(settingsUI()->yoloBoxColorButton, m_settings.m_yoloBoxColor);
     ui->audioMute->setChecked(m_settings.m_audioMute);
 
@@ -1765,6 +1769,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->actionsTabWidget, &QTabWidget::tabCloseRequested, this, &CameraGUI::on_actionsTabWidget_tabCloseRequested);
     QObject::connect(settingsUI()->yoloConfSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloConfSpin_valueChanged);
     QObject::connect(settingsUI()->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
+    QObject::connect(settingsUI()->yoloTileLargeImagesCheck, &QCheckBox::toggled, this, &CameraGUI::on_yoloTileLargeImagesCheck_toggled);
+    QObject::connect(settingsUI()->yoloTileOverlapSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_yoloTileOverlapSpin_valueChanged);
     QObject::connect(settingsUI()->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
     QObject::connect(ui->zoomInButton, &QToolButton::clicked, this, &CameraGUI::on_zoomInButton_clicked);
     QObject::connect(ui->zoomOutButton, &QToolButton::clicked, this, &CameraGUI::on_zoomOutButton_clicked);
@@ -6562,6 +6568,19 @@ void CameraGUI::on_yoloNmsSpin_valueChanged(double value)
 {
     m_settings.m_yoloNmsThreshold = value;
     applySetting("yoloNmsThreshold");
+}
+
+void CameraGUI::on_yoloTileLargeImagesCheck_toggled(bool checked)
+{
+    m_settings.m_yoloTileLargeImages = checked;
+    settingsUI()->yoloTileOverlapSpin->setEnabled(checked);
+    applySetting("yoloTileLargeImages");
+}
+
+void CameraGUI::on_yoloTileOverlapSpin_valueChanged(int value)
+{
+    m_settings.m_yoloTileOverlapPercent = value;
+    applySetting("yoloTileOverlapPercent");
 }
 
 void CameraGUI::on_yoloBoxColorButton_clicked()

@@ -21,6 +21,7 @@
 
 #include <QHash>
 #include <QSet>
+#include <vector>
 #ifdef QT_TEXTTOSPEECH_FOUND
 #include <QTextToSpeech>
 #endif
@@ -111,6 +112,9 @@ private:
 #endif
 
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
+    void decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
+        std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds) const;
+    QVector<cv::Rect> makeYoloTiles(const cv::Rect& roi) const;
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
     void clearObjectDetectionState(bool clearHistory = true);
     void clearObjectDetectionHistory();

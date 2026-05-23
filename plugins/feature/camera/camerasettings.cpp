@@ -382,6 +382,8 @@ void CameraSettings::resetToDefaults()
     m_yoloNmsThreshold = 0.45;
     m_yoloBoxColor = Qt::green;
     m_yoloDisappearDebounce = 0.0;
+    m_yoloTileLargeImages = true;
+    m_yoloTileOverlapPercent = 20;
     m_yoloDnnTarget = CPU;
     m_audioMute = true;
     m_audioDeviceName.clear();
@@ -624,6 +626,8 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(216, m_fovSensorWidthMm);
     s.writeDouble(217, m_fovSensorHeightMm);
     s.writeDouble(218, m_fovFocalLengthMm);
+    s.writeBool(219, m_yoloTileLargeImages);
+    s.writeS32(220, m_yoloTileOverlapPercent);
 
     return s.final();
 }
@@ -1054,6 +1058,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(202, &m_asiHighSpeedMode, -1);
         d.readS32(203, (qint32 *) &m_asiColorImageType, (qint32) AsiColorImageTypeRgb24);
         d.readBool(206, &m_asiAutoExposureGain, false);
+        d.readBool(219, &m_yoloTileLargeImages, true);
+        d.readS32(220, &m_yoloTileOverlapPercent, 20);
+        m_yoloTileOverlapPercent = qBound(0, m_yoloTileOverlapPercent, 90);
         m_asiCoolerOn = qBound(m_minAsiControl, m_asiCoolerOn, m_maxAsiControl);
         m_asiUsbBandwidth = std::max(m_minAsiControl, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(m_minAsiControl, m_asiHighSpeedMode, m_maxAsiControl);
@@ -1750,6 +1757,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("yoloDisappearDebounce")) {
         m_yoloDisappearDebounce = qBound(m_minYoloDisappearDebounce, settings.m_yoloDisappearDebounce, m_maxYoloDisappearDebounce);
     }
+    if (settingsKeys.contains("yoloTileLargeImages")) {
+        m_yoloTileLargeImages = settings.m_yoloTileLargeImages;
+    }
+    if (settingsKeys.contains("yoloTileOverlapPercent")) {
+        m_yoloTileOverlapPercent = qBound(0, settings.m_yoloTileOverlapPercent, 90);
+    }
     if (settingsKeys.contains("yoloDnnTarget")) {
         m_yoloDnnTarget = settings.m_yoloDnnTarget;
     }
@@ -2376,6 +2389,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("yoloDisappearDebounce") || force) {
         ostr << " m_yoloDisappearDebounce: " << m_yoloDisappearDebounce;
+    }
+    if (settingsKeys.contains("yoloTileLargeImages") || force) {
+        ostr << " m_yoloTileLargeImages: " << m_yoloTileLargeImages;
+    }
+    if (settingsKeys.contains("yoloTileOverlapPercent") || force) {
+        ostr << " m_yoloTileOverlapPercent: " << m_yoloTileOverlapPercent;
     }
     if (settingsKeys.contains("yoloDnnTarget") || force) {
         ostr << " m_yoloDnnTarget: " << m_yoloDnnTarget;

@@ -433,6 +433,35 @@ MESSAGE_CLASS_DECLARATION
         { }
     };
 
+    class MsgReportAutoExposureGain : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        double getExposureTimeMs() const { return m_exposureTimeMs; }
+        int getGain() const { return m_gain; }
+        double getMeasuredBrightness() const { return m_measuredBrightness; }
+        double getSaturatedFraction() const { return m_saturatedFraction; }
+
+        static MsgReportAutoExposureGain* create(double exposureTimeMs, int gain, double measuredBrightness, double saturatedFraction)
+        {
+            return new MsgReportAutoExposureGain(exposureTimeMs, gain, measuredBrightness, saturatedFraction);
+        }
+
+    private:
+        double m_exposureTimeMs;
+        int m_gain;
+        double m_measuredBrightness;
+        double m_saturatedFraction;
+
+        MsgReportAutoExposureGain(double exposureTimeMs, int gain, double measuredBrightness, double saturatedFraction) :
+            Message(),
+            m_exposureTimeMs(exposureTimeMs),
+            m_gain(gain),
+            m_measuredBrightness(measuredBrightness),
+            m_saturatedFraction(saturatedFraction)
+        { }
+    };
+
     // Sent periodically to update live status fields (camerastate, ccdtemperature)
     class MsgReportAlpacaStatus : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -531,6 +560,9 @@ private:
     void scheduleNextCaptureAfterFrame();
     void scheduleNextCaptureAfterFailure();
     void populateFrameExposureMetadata(CameraPipelineFrame& frame) const;
+    void maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame);
+    bool measureAutoExposureGain(const QImage& image, double& measuredBrightness, double& saturatedFraction) const;
+    void reportAutoExposureGainToGUI(double measuredBrightness, double saturatedFraction) const;
     void startCapture();
     void stopCapture();
     QImage createPlaceholderFrame() const;

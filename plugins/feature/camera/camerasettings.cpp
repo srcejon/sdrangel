@@ -222,6 +222,15 @@ void CameraSettings::resetToDefaults()
     m_asiUsbBandwidth = -1;
     m_asiHighSpeedMode = -1;
     m_asiAutoExposureGain = false;
+    m_autoExposureGainEnabled = false;
+    m_autoExposureGainMode = AutoExposureGainExposureFirst;
+    m_autoExposureTargetPercentile = 95.0;
+    m_autoExposureTargetBrightness = 70.0;
+    m_autoExposureMaxChangePercent = 25.0;
+    m_autoExposureMinMs = m_minExposureTimeMs;
+    m_autoExposureMaxMs = 60000.0;
+    m_autoExposureMinGain = 0;
+    m_autoExposureMaxGain = 100;
     m_asiColorImageType = AsiColorImageTypeRgb24;
     m_saveImage = false;
     m_imageFileName = "camera.jpg";
@@ -634,6 +643,15 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(221, static_cast<qint32>(m_stackDisplayMode));
     s.writeS32(222, m_stackDisplayFrameIndex);
     s.writeBool(223, m_stackRejectBadFrames);
+    s.writeBool(224, m_autoExposureGainEnabled);
+    s.writeS32(225, static_cast<qint32>(m_autoExposureGainMode));
+    s.writeDouble(226, m_autoExposureTargetPercentile);
+    s.writeDouble(227, m_autoExposureTargetBrightness);
+    s.writeDouble(228, m_autoExposureMaxChangePercent);
+    s.writeDouble(229, m_autoExposureMinMs);
+    s.writeDouble(230, m_autoExposureMaxMs);
+    s.writeS32(231, m_autoExposureMinGain);
+    s.writeS32(232, m_autoExposureMaxGain);
 
     return s.final();
 }
@@ -1071,10 +1089,27 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(221, reinterpret_cast<qint32*>(&m_stackDisplayMode), static_cast<qint32>(StackDisplayStacked));
         d.readS32(222, &m_stackDisplayFrameIndex, 0);
         d.readBool(223, &m_stackRejectBadFrames, false);
+        d.readBool(224, &m_autoExposureGainEnabled, false);
+        d.readS32(225, reinterpret_cast<qint32*>(&m_autoExposureGainMode), static_cast<qint32>(AutoExposureGainExposureFirst));
+        d.readDouble(226, &m_autoExposureTargetPercentile, 95.0);
+        d.readDouble(227, &m_autoExposureTargetBrightness, 70.0);
+        d.readDouble(228, &m_autoExposureMaxChangePercent, 25.0);
+        d.readDouble(229, &m_autoExposureMinMs, m_minExposureTimeMs);
+        d.readDouble(230, &m_autoExposureMaxMs, 60000.0);
+        d.readS32(231, &m_autoExposureMinGain, 0);
+        d.readS32(232, &m_autoExposureMaxGain, 100);
         m_asiCoolerOn = qBound(m_minAsiControl, m_asiCoolerOn, m_maxAsiControl);
         m_asiUsbBandwidth = std::max(m_minAsiControl, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(m_minAsiControl, m_asiHighSpeedMode, m_maxAsiControl);
         m_asiColorImageType = qBound(AsiColorImageTypeRgb24, m_asiColorImageType, AsiColorImageTypeRaw8);
+        m_autoExposureGainMode = qBound(AutoExposureGainExposureFirst, m_autoExposureGainMode, AutoExposureGainGainOnly);
+        m_autoExposureTargetPercentile = qBound(50.0, m_autoExposureTargetPercentile, 99.9);
+        m_autoExposureTargetBrightness = qBound(1.0, m_autoExposureTargetBrightness, 99.0);
+        m_autoExposureMaxChangePercent = qBound(1.0, m_autoExposureMaxChangePercent, 100.0);
+        m_autoExposureMinMs = std::max(m_minExposureTimeMs, m_autoExposureMinMs);
+        m_autoExposureMaxMs = std::max(m_autoExposureMinMs, m_autoExposureMaxMs);
+        m_autoExposureMinGain = std::max(0, m_autoExposureMinGain);
+        m_autoExposureMaxGain = std::max(m_autoExposureMinGain, m_autoExposureMaxGain);
         m_stackFrameCount = qBound(m_minStackFrameCount, m_stackFrameCount, m_maxStackFrameCount);
         m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodHDR);
         m_stackHdrAlgorithm = qBound(StackHdrAlgorithmDebevec, m_stackHdrAlgorithm, StackHdrAlgorithmMertens);
@@ -1269,6 +1304,35 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("asiAutoExposureGain")) {
         m_asiAutoExposureGain = settings.m_asiAutoExposureGain;
+    }
+    if (settingsKeys.contains("autoExposureGainEnabled")) {
+        m_autoExposureGainEnabled = settings.m_autoExposureGainEnabled;
+    }
+    if (settingsKeys.contains("autoExposureGainMode")) {
+        m_autoExposureGainMode = qBound(AutoExposureGainExposureFirst, settings.m_autoExposureGainMode, AutoExposureGainGainOnly);
+    }
+    if (settingsKeys.contains("autoExposureTargetPercentile")) {
+        m_autoExposureTargetPercentile = qBound(50.0, settings.m_autoExposureTargetPercentile, 99.9);
+    }
+    if (settingsKeys.contains("autoExposureTargetBrightness")) {
+        m_autoExposureTargetBrightness = qBound(1.0, settings.m_autoExposureTargetBrightness, 99.0);
+    }
+    if (settingsKeys.contains("autoExposureMaxChangePercent")) {
+        m_autoExposureMaxChangePercent = qBound(1.0, settings.m_autoExposureMaxChangePercent, 100.0);
+    }
+    if (settingsKeys.contains("autoExposureMinMs")) {
+        m_autoExposureMinMs = std::max(m_minExposureTimeMs, settings.m_autoExposureMinMs);
+        m_autoExposureMaxMs = std::max(m_autoExposureMinMs, m_autoExposureMaxMs);
+    }
+    if (settingsKeys.contains("autoExposureMaxMs")) {
+        m_autoExposureMaxMs = std::max(m_autoExposureMinMs, settings.m_autoExposureMaxMs);
+    }
+    if (settingsKeys.contains("autoExposureMinGain")) {
+        m_autoExposureMinGain = std::max(0, settings.m_autoExposureMinGain);
+        m_autoExposureMaxGain = std::max(m_autoExposureMinGain, m_autoExposureMaxGain);
+    }
+    if (settingsKeys.contains("autoExposureMaxGain")) {
+        m_autoExposureMaxGain = std::max(m_autoExposureMinGain, settings.m_autoExposureMaxGain);
     }
     if (settingsKeys.contains("asiColorImageType")) {
         m_asiColorImageType = qBound(AsiColorImageTypeRgb24, settings.m_asiColorImageType, AsiColorImageTypeRaw8);
@@ -1936,6 +2000,33 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("asiAutoExposureGain") || force) {
         ostr << " m_asiAutoExposureGain: " << m_asiAutoExposureGain;
+    }
+    if (settingsKeys.contains("autoExposureGainEnabled") || force) {
+        ostr << " m_autoExposureGainEnabled: " << m_autoExposureGainEnabled;
+    }
+    if (settingsKeys.contains("autoExposureGainMode") || force) {
+        ostr << " m_autoExposureGainMode: " << m_autoExposureGainMode;
+    }
+    if (settingsKeys.contains("autoExposureTargetPercentile") || force) {
+        ostr << " m_autoExposureTargetPercentile: " << m_autoExposureTargetPercentile;
+    }
+    if (settingsKeys.contains("autoExposureTargetBrightness") || force) {
+        ostr << " m_autoExposureTargetBrightness: " << m_autoExposureTargetBrightness;
+    }
+    if (settingsKeys.contains("autoExposureMaxChangePercent") || force) {
+        ostr << " m_autoExposureMaxChangePercent: " << m_autoExposureMaxChangePercent;
+    }
+    if (settingsKeys.contains("autoExposureMinMs") || force) {
+        ostr << " m_autoExposureMinMs: " << m_autoExposureMinMs;
+    }
+    if (settingsKeys.contains("autoExposureMaxMs") || force) {
+        ostr << " m_autoExposureMaxMs: " << m_autoExposureMaxMs;
+    }
+    if (settingsKeys.contains("autoExposureMinGain") || force) {
+        ostr << " m_autoExposureMinGain: " << m_autoExposureMinGain;
+    }
+    if (settingsKeys.contains("autoExposureMaxGain") || force) {
+        ostr << " m_autoExposureMaxGain: " << m_autoExposureMaxGain;
     }
     if (settingsKeys.contains("asiColorImageType") || force) {
         ostr << " m_asiColorImageType: " << m_asiColorImageType;

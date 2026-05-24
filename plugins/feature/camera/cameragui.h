@@ -423,6 +423,15 @@ private slots:
     void on_asiUsbBandwidthSpin_valueChanged(int value);
     void on_asiHighSpeedModeCheck_toggled(bool checked);
     void on_asiAutoExposureGainCheck_toggled(bool checked);
+    void on_autoExposureGainCheck_toggled(bool checked);
+    void on_autoExposureGainModeCombo_currentIndexChanged(int index);
+    void on_autoExposureTargetSpin_valueChanged(double value);
+    void on_autoExposurePercentileSpin_valueChanged(double value);
+    void on_autoExposureMinMsSpin_valueChanged(double value);
+    void on_autoExposureMaxMsSpin_valueChanged(double value);
+    void on_autoExposureMinGainSpin_valueChanged(int value);
+    void on_autoExposureMaxGainSpin_valueChanged(int value);
+    void on_autoExposureMaxChangeSpin_valueChanged(double value);
     void on_asiColorImageTypeCombo_currentIndexChanged(int index);
     void on_saveImageButton_clicked();
     void on_saveImageCheck_toggled(bool checked);

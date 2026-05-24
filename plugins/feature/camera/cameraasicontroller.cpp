@@ -333,6 +333,7 @@ bool CameraAsiController::applyCameraSettings(int cameraId, const CameraSettings
     }
 
     const ASI_BOOL autoExposureGain = (settings.m_asiAutoExposureGain
+            && !settings.m_autoExposureGainEnabled
             && (settings.m_captureMode == CameraSettings::CaptureModeFrameRate))
         ? ASI_TRUE
         : ASI_FALSE;

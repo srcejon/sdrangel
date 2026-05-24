@@ -17,10 +17,12 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <limits>
 
+#include <QColor>
 #include <QDebug>
 #include <QDateTime>
 #include <QNetworkAccessManager>
@@ -45,6 +47,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAsiCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaFilterWheelInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAutoExposureGain, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
@@ -398,6 +401,188 @@ void CameraWorker::populateFrameExposureMetadata(CameraPipelineFrame& frame) con
     frame.m_hdrExposureCount = currentHdrExposureCount();
 }
 
+bool CameraWorker::measureAutoExposureGain(const QImage& image, double& measuredBrightness, double& saturatedFraction) const
+{
+    if (image.isNull() || image.width() <= 0 || image.height() <= 0) {
+        return false;
+    }
+
+    std::array<int, 256> histogram = {};
+    const int pixelCount = image.width() * image.height();
+    const int stride = std::max(1, static_cast<int>(std::sqrt(static_cast<double>(pixelCount) / 200000.0)));
+    int samples = 0;
+    int saturated = 0;
+
+    for (int y = 0; y < image.height(); y += stride)
+    {
+        for (int x = 0; x < image.width(); x += stride)
+        {
+            const QColor color = image.pixelColor(x, y);
+            const int luminance = qBound(0,
+                static_cast<int>(std::lround(0.2126 * color.red() + 0.7152 * color.green() + 0.0722 * color.blue())),
+                255);
+            ++histogram[static_cast<size_t>(luminance)];
+            ++samples;
+
+            if (luminance >= 253) {
+                ++saturated;
+            }
+        }
+    }
+
+    if (samples <= 0) {
+        return false;
+    }
+
+    const int percentileSample = qBound(
+        1,
+        static_cast<int>(std::ceil(samples * qBound(50.0, m_settings.m_autoExposureTargetPercentile, 99.9) / 100.0)),
+        samples);
+    int cumulative = 0;
+    int percentileValue = 0;
+    for (size_t value = 0; value < histogram.size(); ++value)
+    {
+        cumulative += histogram[value];
+        if (cumulative >= percentileSample)
+        {
+            percentileValue = static_cast<int>(value);
+            break;
+        }
+    }
+
+    measuredBrightness = static_cast<double>(percentileValue) / 255.0;
+    saturatedFraction = static_cast<double>(saturated) / static_cast<double>(samples);
+    return true;
+}
+
+void CameraWorker::reportAutoExposureGainToGUI(double measuredBrightness, double saturatedFraction) const
+{
+    if (!m_msgQueueToGUI) {
+        return;
+    }
+
+    m_msgQueueToGUI->push(MsgReportAutoExposureGain::create(
+        m_settings.m_exposureTimeMs,
+        m_settings.m_cameraGain,
+        measuredBrightness,
+        saturatedFraction));
+}
+
+void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
+{
+    if (!m_settings.m_autoExposureGainEnabled
+        || isHdrBracketingActive()
+        || (!m_settings.isAlpacaCamera() && !m_settings.isAsiCamera())
+        || (currentStackBurstIndex() != (currentStackBurstFrameCount() - 1)))
+    {
+        return;
+    }
+
+    double measuredBrightness = 0.0;
+    double saturatedFraction = 0.0;
+    if (!measureAutoExposureGain(frame.m_image, measuredBrightness, saturatedFraction)) {
+        return;
+    }
+
+    const double target = qBound(0.01, m_settings.m_autoExposureTargetBrightness / 100.0, 0.99);
+    const double measured = qBound(0.001, measuredBrightness, 1.0);
+    double factor = std::pow(target / measured, 0.5);
+
+    if (saturatedFraction > 0.01) {
+        factor = std::min(factor, 0.8);
+    }
+
+    const double maxChange = qBound(0.01, m_settings.m_autoExposureMaxChangePercent / 100.0, 1.0);
+    factor = qBound(1.0 - maxChange, factor, 1.0 + maxChange);
+
+    if (std::abs(std::log(factor)) < 0.02)
+    {
+        reportAutoExposureGainToGUI(measuredBrightness, saturatedFraction);
+        return;
+    }
+
+    double exposureMinMs = std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_autoExposureMinMs);
+    double exposureMaxMs = std::max(exposureMinMs, m_settings.m_autoExposureMaxMs);
+    if (m_settings.isAlpacaCamera())
+    {
+        exposureMinMs = std::max(exposureMinMs, m_alpaca.m_exposureMinMs);
+        exposureMaxMs = std::min(exposureMaxMs, m_alpaca.m_exposureMaxMs);
+    }
+#ifdef ASICAMERA_FOUND
+    else if (m_settings.isAsiCamera())
+    {
+        exposureMinMs = std::max(exposureMinMs, m_asi.exposureMinMs());
+        exposureMaxMs = std::min(exposureMaxMs, m_asi.exposureMaxMs());
+    }
+#endif
+    exposureMaxMs = std::max(exposureMinMs, exposureMaxMs);
+
+    const int gainMin = std::max(0, m_settings.m_autoExposureMinGain);
+    const int gainMax = std::max(gainMin, m_settings.m_autoExposureMaxGain);
+    const int currentGain = qBound(gainMin, m_settings.m_cameraGain >= 0 ? m_settings.m_cameraGain : gainMin, gainMax);
+    const double currentExposureMs = qBound(exposureMinMs, m_settings.m_exposureTimeMs, exposureMaxMs);
+    double newExposureMs = currentExposureMs;
+    int newGain = currentGain;
+
+    auto adjustExposure = [&]() {
+        const double proposed = qBound(exposureMinMs, newExposureMs * factor, exposureMaxMs);
+        const bool changed = std::abs(proposed - newExposureMs) >= 0.0005;
+        newExposureMs = proposed;
+        return changed;
+    };
+    auto adjustGain = [&]() {
+        if (gainMax <= gainMin) {
+            return false;
+        }
+        const int gainRange = gainMax - gainMin;
+        int delta = static_cast<int>(std::lround((factor - 1.0) * static_cast<double>(gainRange) * 0.25));
+        if (delta == 0) {
+            delta = factor > 1.0 ? 1 : -1;
+        }
+        const int proposed = qBound(gainMin, newGain + delta, gainMax);
+        const bool changed = proposed != newGain;
+        newGain = proposed;
+        return changed;
+    };
+
+    switch (m_settings.m_autoExposureGainMode)
+    {
+    case CameraSettings::AutoExposureGainGainFirst:
+        if (!adjustGain()) {
+            adjustExposure();
+        }
+        break;
+    case CameraSettings::AutoExposureGainExposureOnly:
+        adjustExposure();
+        break;
+    case CameraSettings::AutoExposureGainGainOnly:
+        adjustGain();
+        break;
+    case CameraSettings::AutoExposureGainExposureFirst:
+    default:
+        if (!adjustExposure()) {
+            adjustGain();
+        }
+        break;
+    }
+
+    const bool exposureChanged = std::abs(newExposureMs - m_settings.m_exposureTimeMs) >= 0.0005;
+    const bool gainChanged = newGain != m_settings.m_cameraGain;
+
+    if (exposureChanged || gainChanged)
+    {
+        m_settings.m_exposureTimeMs = newExposureMs;
+        m_settings.m_cameraGain = newGain;
+#ifdef ASICAMERA_FOUND
+        if (m_settings.isAsiCamera()) {
+            invalidateAsiSettings();
+        }
+#endif
+    }
+
+    reportAutoExposureGainToGUI(measuredBrightness, saturatedFraction);
+}
+
 bool CameraWorker::handleMessage(const Message& cmd)
 {
     if (MsgConfigureCameraWorker::match(cmd))
@@ -629,6 +814,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
             || settingsKeys.contains("asiUsbBandwidth")
             || settingsKeys.contains("asiHighSpeedMode")
             || settingsKeys.contains("asiAutoExposureGain")
+            || settingsKeys.contains("autoExposureGainEnabled")
             || settingsKeys.contains("asiColorImageType")
             || settingsKeys.contains("exposureTimeMs")))
     {
@@ -1023,6 +1209,7 @@ void CameraWorker::fetchControllerImage()
                 frame->m_image = result.m_image;
                 populateFrameExposureMetadata(*frame);
                 frame->m_bayerPattern = result.m_bayerPattern;
+                maybeAdjustAutoExposureGain(*frame);
                 m_framePreprocessor->submitFrame(frame);
             }
             advanceStackBurstState();
@@ -1240,6 +1427,7 @@ bool CameraWorker::asiCaptureExposureFrame()
         frame->m_image = m_asi.frameToImage(createPlaceholderFrame(), &bayerPattern);
         populateFrameExposureMetadata(*frame);
         frame->m_bayerPattern = bayerPattern;
+        maybeAdjustAutoExposureGain(*frame);
         m_framePreprocessor->submitFrame(frame);
     }
     advanceStackBurstState();
@@ -1297,6 +1485,7 @@ void CameraWorker::asiCaptureVideoFrame()
             frame->m_image = m_asi.frameToImage(createPlaceholderFrame(), &bayerPattern);
             populateFrameExposureMetadata(*frame);
             frame->m_bayerPattern = bayerPattern;
+            maybeAdjustAutoExposureGain(*frame);
             m_framePreprocessor->submitFrame(frame);
         }
     }

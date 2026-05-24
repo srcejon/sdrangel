@@ -83,6 +83,14 @@ struct CameraSettings
         AsiColorImageTypeRaw8
     };
 
+    enum AutoExposureGainMode
+    {
+        AutoExposureGainExposureFirst = 0,
+        AutoExposureGainGainFirst,
+        AutoExposureGainExposureOnly,
+        AutoExposureGainGainOnly
+    };
+
     enum SavedMediaMode
     {
         SavedMediaRaw = 0,
@@ -356,6 +364,15 @@ struct CameraSettings
     int m_asiUsbBandwidth;    // USB bandwidth overload setting; -1 = do not set
     int m_asiHighSpeedMode;   // -1 = do not set, 0 = off, 1 = on
     bool m_asiAutoExposureGain; ///< Enable ASI auto exposure and gain in frame-rate mode
+    bool m_autoExposureGainEnabled; ///< Software auto exposure/gain loop
+    AutoExposureGainMode m_autoExposureGainMode;
+    double m_autoExposureTargetPercentile;
+    double m_autoExposureTargetBrightness;
+    double m_autoExposureMaxChangePercent;
+    double m_autoExposureMinMs;
+    double m_autoExposureMaxMs;
+    int m_autoExposureMinGain;
+    int m_autoExposureMaxGain;
     AsiColorImageType m_asiColorImageType;
     bool m_saveImage;
     QString m_imageFileName;

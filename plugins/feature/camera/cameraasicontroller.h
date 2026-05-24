@@ -117,6 +117,8 @@ public:
     OpenFailureStage lastOpenFailureStage() const { return m_lastOpenFailureStage; }
     int lastErrorNumber() const { return m_lastErrorNumber; }
     const QString& lastErrorMessage() const { return m_lastErrorMessage; }
+    double exposureMinMs() const { return m_exposureMinMs; }
+    double exposureMaxMs() const { return m_exposureMaxMs; }
 
     static QString errorCodeToString(ASI_ERROR_CODE errorCode);
     static bool getCameraInfoById(int cameraId, ASI_CAMERA_INFO& cameraInfo);

@@ -12,15 +12,16 @@
 #include <iostream>
 #include <limits>
 
-#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QHash>
 #include <QImage>
 #include <QLocale>
+#include <QPainter>
 #include <QStringList>
 #include <QTextStream>
 #include <QTimer>
@@ -59,6 +60,7 @@ struct StarTestCase
     int roiWidth = 0;
     int roiHeight = 0;
     QStringList expectedStars;
+    QHash<QString, QPointF> expectedStarPositions;
 };
 
 struct DetectorRunResult
@@ -209,6 +211,51 @@ QStringList parseExpectedStars(const QString& value)
         }
     }
     return stars;
+}
+
+QHash<QString, QPointF> parseExpectedStarPositions(const QString& value, int lineNumber, bool* ok)
+{
+    QHash<QString, QPointF> positions;
+    const QString trimmedValue = value.trimmed();
+    if (trimmedValue.isEmpty()) {
+        return positions;
+    }
+
+    const QStringList parts = trimmedValue.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    for (const QString& part : parts)
+    {
+        const QString trimmed = part.trimmed();
+        const int ySeparator = trimmed.lastIndexOf(QLatin1Char(':'));
+        const int xSeparator = ySeparator > 0 ? trimmed.lastIndexOf(QLatin1Char(':'), ySeparator - 1) : -1;
+        if ((xSeparator <= 0) || (ySeparator <= xSeparator))
+        {
+            std::cerr << "Line " << lineNumber << ": invalid starPositions entry: "
+                      << trimmed.toStdString() << '\n';
+            if (ok) {
+                *ok = false;
+            }
+            continue;
+        }
+
+        const QString name = trimmed.left(xSeparator).trimmed();
+        bool xOk = false;
+        bool yOk = false;
+        const double x = QLocale::c().toDouble(trimmed.mid(xSeparator + 1, ySeparator - xSeparator - 1).trimmed(), &xOk);
+        const double y = QLocale::c().toDouble(trimmed.mid(ySeparator + 1).trimmed(), &yOk);
+        if (name.isEmpty() || !xOk || !yOk)
+        {
+            std::cerr << "Line " << lineNumber << ": invalid starPositions entry: "
+                      << trimmed.toStdString() << '\n';
+            if (ok) {
+                *ok = false;
+            }
+            continue;
+        }
+
+        positions.insert(name.trimmed().toCaseFolded(), QPointF(x, y));
+    }
+
+    return positions;
 }
 
 QString compactName(const QString& value)
@@ -675,6 +722,10 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         test.roiWidth  = parseOptionalInt(QStringLiteral("roiW"));
         test.roiHeight = parseOptionalInt(QStringLiteral("roiH"));
         test.expectedStars = parseExpectedStars(fieldValue(header, fields, QStringLiteral("stars"), &ok));
+        const int starPositionsIndex = header.indexOf(QStringLiteral("starPositions"));
+        if (starPositionsIndex >= 0) {
+            test.expectedStarPositions = parseExpectedStarPositions(fields.value(starPositionsIndex), lineNumber, &ok);
+        }
 
         if (!ok) {
             return false;
@@ -714,7 +765,7 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_plateSolveMinMatches = 4;
     settings.m_plateSolveMatchRadius = 24.0;
     settings.m_plateSolveFinalMatchRadius = 24.0;
-    settings.m_plateSolveSearchRadius = (test.fov > 30.0) ? 12.0 : 3.5;
+    settings.m_plateSolveSearchRadius = (test.fov > 30.0) ? 24.0 : 3.5;
     settings.m_detectionRoiX      = test.roiX;
     settings.m_detectionRoiY      = test.roiY;
     settings.m_detectionRoiWidth  = test.roiWidth;
@@ -831,6 +882,76 @@ bool labelMatchesExpectedStar(const QString& label, const QString& expected)
     return (normalizedLabel == normalizedExpected)
         || normalizedLabel.contains(normalizedExpected)
         || normalizedExpected.contains(normalizedLabel);
+}
+
+const CameraPipelineStarDetection* findSolvedDetectionForExpectedStar(const CameraPipelineFramePtr& frame,
+                                                                      const QString& expected)
+{
+    if (!frame) {
+        return nullptr;
+    }
+
+    for (const CameraPipelineStarDetection& detection : frame->m_starDetections)
+    {
+        if (detection.m_solved && labelMatchesExpectedStar(detection.m_label, expected)) {
+            return &detection;
+        }
+    }
+
+    return nullptr;
+}
+
+QStringList expectedStarPositionMismatches(const StarTestCase& test,
+                                           const CameraPipelineFramePtr& frame)
+{
+    QStringList mismatches;
+    static constexpr double kPositionTolerancePixels = 24.0;
+
+    for (const QString& expected : test.expectedStars)
+    {
+        const auto positionIt = test.expectedStarPositions.constFind(normalizedStarName(expected));
+        if (positionIt == test.expectedStarPositions.constEnd()) {
+            continue;
+        }
+
+        const CameraPipelineStarDetection *detection = findSolvedDetectionForExpectedStar(frame, expected);
+        if (!detection)
+        {
+            mismatches.append(QStringLiteral("%1 missing labelled match near x=%2 y=%3")
+                .arg(expected)
+                .arg(positionIt->x(), 0, 'f', 1)
+                .arg(positionIt->y(), 0, 'f', 1));
+            continue;
+        }
+
+        const double distance = std::hypot(detection->m_center.x() - positionIt->x(), detection->m_center.y() - positionIt->y());
+        if (distance > kPositionTolerancePixels)
+        {
+            mismatches.append(QStringLiteral("%1 expected x=%2 y=%3 matched x=%4 y=%5 distance=%6")
+                .arg(expected)
+                .arg(positionIt->x(), 0, 'f', 1)
+                .arg(positionIt->y(), 0, 'f', 1)
+                .arg(detection->m_center.x(), 0, 'f', 1)
+                .arg(detection->m_center.y(), 0, 'f', 1)
+                .arg(distance, 0, 'f', 1));
+        }
+    }
+
+    return mismatches;
+}
+
+QStringList requiredExpectedStars(const StarTestCase& test)
+{
+    if (test.expectedStarPositions.isEmpty()) {
+        return test.expectedStars;
+    }
+
+    QStringList stars;
+    stars.reserve(test.expectedStarPositions.size());
+    for (auto it = test.expectedStarPositions.constBegin(); it != test.expectedStarPositions.constEnd(); ++it) {
+        stars.append(it.key());
+    }
+    return stars;
 }
 
 bool expectedStarHasNearbyDetection(const StarTestCase& test,
@@ -1024,7 +1145,127 @@ void printExpectedStarDiagnostics(const StarTestCase& test,
     }
 }
 
-int runTests(const QString& csvPath)
+QString diagnosticImageFileName(const StarTestCase& test)
+{
+    QString name = QFileInfo(test.name).completeBaseName();
+    if (name.isEmpty()) {
+        name = test.name;
+    }
+
+    for (QChar& ch : name)
+    {
+        if (!ch.isLetterOrNumber() && (ch != QLatin1Char('-')) && (ch != QLatin1Char('_'))) {
+            ch = QLatin1Char('_');
+        }
+    }
+
+    return name + QStringLiteral("-matches.png");
+}
+
+void drawCrosshair(QPainter& painter, const QPointF& point, int radius)
+{
+    painter.drawLine(QPointF(point.x() - radius, point.y()), QPointF(point.x() + radius, point.y()));
+    painter.drawLine(QPointF(point.x(), point.y() - radius), QPointF(point.x(), point.y() + radius));
+}
+
+bool writeMatchOverlayImage(const StarTestCase& test,
+                            const CameraPipelineFramePtr& frame,
+                            const QString& outputDirectory,
+                            QString* outputPath)
+{
+    if (!frame) {
+        return false;
+    }
+
+    QImage image = !frame->m_unprocessedImage.isNull() ? frame->m_unprocessedImage : frame->m_image;
+    if (image.isNull()) {
+        return false;
+    }
+
+    image = image.convertToFormat(QImage::Format_RGB32);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    QFont font = painter.font();
+    font.setPointSize(std::max(9, image.width() / 260));
+    font.setBold(true);
+    painter.setFont(font);
+
+    const int markerRadius = std::max(4, image.width() / 500);
+    const int labelOffset = markerRadius + 4;
+
+    if ((test.roiWidth > 0) && (test.roiHeight > 0))
+    {
+        painter.setPen(QPen(QColor(255, 180, 0), std::max(2, image.width() / 900)));
+        painter.drawRect(QRect(test.roiX, test.roiY, test.roiWidth, test.roiHeight));
+    }
+
+    for (auto it = test.expectedStarPositions.constBegin(); it != test.expectedStarPositions.constEnd(); ++it)
+    {
+        painter.setPen(QPen(QColor(255, 80, 255), std::max(2, image.width() / 900)));
+        drawCrosshair(painter, it.value(), markerRadius + 2);
+        const QString label = QStringLiteral("expected %1").arg(it.key());
+        const QRectF textRect(QPointF(it.value().x() + labelOffset, it.value().y() + labelOffset),
+            QSizeF(image.width() * 0.35, font.pointSizeF() * 2.5));
+        painter.setPen(QPen(Qt::black, std::max(3, image.width() / 650)));
+        painter.drawText(textRect.translated(1.0, 1.0), Qt::AlignLeft | Qt::AlignTop, label);
+        painter.setPen(QPen(QColor(255, 170, 255), 1));
+        painter.drawText(textRect, Qt::AlignLeft | Qt::AlignTop, label);
+    }
+
+    painter.setPen(QPen(QColor(80, 170, 255, 180), std::max(1, image.width() / 1400)));
+    for (const CameraPipelineStarDetection& detection : frame->m_starDetections) {
+        drawCrosshair(painter, detection.m_center, std::max(2, markerRadius / 2));
+    }
+
+    for (const CameraPipelineStarDetection& detection : frame->m_starDetections)
+    {
+        if (!detection.m_solved || detection.m_label.trimmed().isEmpty()) {
+            continue;
+        }
+
+        const QPointF center = detection.m_center;
+        const QPointF projected = detection.m_projectedCenter;
+        painter.setPen(QPen(QColor(120, 255, 120), std::max(2, image.width() / 900)));
+        painter.drawEllipse(center, markerRadius, markerRadius);
+
+        if (!projected.isNull())
+        {
+            painter.setPen(QPen(QColor(255, 220, 80), std::max(1, image.width() / 1400), Qt::DashLine));
+            painter.drawLine(center, projected);
+            drawCrosshair(painter, projected, std::max(2, markerRadius / 2));
+        }
+
+        const QString label = QStringLiteral("%1  d=%2px")
+            .arg(detection.m_label.trimmed())
+            .arg(static_cast<double>(detection.m_matchDistancePixels), 0, 'f', 1);
+        const QPointF textPos(center.x() + labelOffset, center.y() - labelOffset);
+        const QRectF textRect(textPos, QSizeF(image.width() * 0.35, font.pointSizeF() * 2.5));
+        painter.setPen(QPen(Qt::black, std::max(3, image.width() / 650)));
+        painter.drawText(textRect.translated(1.0, 1.0), Qt::AlignLeft | Qt::AlignTop, label);
+        painter.setPen(QPen(QColor(180, 255, 180), 1));
+        painter.drawText(textRect, Qt::AlignLeft | Qt::AlignTop, label);
+    }
+
+    painter.end();
+
+    QDir outputDir(outputDirectory);
+    if (!outputDir.exists() && !outputDir.mkpath(QStringLiteral("."))) {
+        return false;
+    }
+
+    const QString path = outputDir.filePath(diagnosticImageFileName(test));
+    if (!image.save(path)) {
+        return false;
+    }
+
+    if (outputPath) {
+        *outputPath = QFileInfo(path).absoluteFilePath();
+    }
+    return true;
+}
+
+int runTests(const QString& csvPath, const QString& outputDirectory)
 {
     QVector<StarTestCase> tests;
     if (!readTestCases(csvPath, tests)) {
@@ -1050,15 +1291,20 @@ int runTests(const QString& csvPath)
             continue;
         }
 
+        QString overlayPath;
+        const bool wroteOverlay = writeMatchOverlayImage(test, result.frame, outputDirectory, &overlayPath);
+
         const QStringList labels = solvedStarLabels(result.frame);
         const QStringList projectedDetections = projectedExpectedStarDetections(
             test,
             result.frame,
             diagnosticCatalog,
             labels);
-        const QStringList missing = missingExpectedStars(labels, QStringList(), test.expectedStars);
+        const QStringList requiredStars = requiredExpectedStars(test);
+        const QStringList missing = missingExpectedStars(labels, QStringList(), requiredStars);
+        const QStringList positionMismatches = expectedStarPositionMismatches(test, result.frame);
         const bool solved = result.frame->m_plateSolved;
-        const bool pass = solved && missing.isEmpty();
+        const bool pass = solved && missing.isEmpty() && positionMismatches.isEmpty();
         if (!pass) {
             ++failures;
         }
@@ -1079,6 +1325,9 @@ int runTests(const QString& csvPath)
                   << " poseFov=" << result.frame->m_plateSolveFov
                   << '\n';
         std::cout << "  labels: " << labels.join(QStringLiteral(", ")).toStdString() << '\n';
+        if (wroteOverlay) {
+            std::cout << "  overlay: " << overlayPath.toStdString() << '\n';
+        }
         if (!projectedDetections.isEmpty()) {
             std::cout << "  projected detections: " << projectedDetections.join(QStringLiteral(", ")).toStdString() << '\n';
         }
@@ -1099,6 +1348,11 @@ int runTests(const QString& csvPath)
             printExpectedStarDiagnostics(test, result.frame);
             printDetectionDiagnostics(result.frame);
         }
+        if (!positionMismatches.isEmpty())
+        {
+            std::cout << "  position mismatches: " << positionMismatches.join(QStringLiteral("; ")).toStdString() << '\n';
+            printDetectionDiagnostics(result.frame);
+        }
     }
 
     if (failures > 0) {
@@ -1113,13 +1367,17 @@ int runTests(const QString& csvPath)
 
 int main(int argc, char *argv[])
 {
-    QCoreApplication app(argc, argv);
-    QCoreApplication::setOrganizationName(QStringLiteral("f4exb"));
-    QCoreApplication::setApplicationName(QStringLiteral("SDRangel"));
+    QGuiApplication app(argc, argv);
+    QGuiApplication::setOrganizationName(QStringLiteral("f4exb"));
+    QGuiApplication::setApplicationName(QStringLiteral("SDRangel"));
 
     const QStringList args = app.arguments();
     const QString csvPath = (args.size() > 1)
         ? args.at(1)
         : QDir(QString::fromUtf8(CAMERA_STAR_TEST_DATA_DIR)).filePath(QStringLiteral("star-tests.csv"));
-    return runTests(QFileInfo(csvPath).absoluteFilePath());
+    const QString absoluteCsvPath = QFileInfo(csvPath).absoluteFilePath();
+    const QString outputDirectory = (args.size() > 2)
+        ? QFileInfo(args.at(2)).absoluteFilePath()
+        : QFileInfo(absoluteCsvPath).absoluteDir().filePath(QStringLiteral("star-test-output"));
+    return runTests(absoluteCsvPath, outputDirectory);
 }

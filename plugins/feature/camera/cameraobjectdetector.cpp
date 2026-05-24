@@ -491,7 +491,7 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
 
     const bool useTensorRt =
 #ifdef CAMERA_TENSORRT_YOLO
-        (m_settings.m_yoloDnnTarget == CameraSettings::CUDA) || (m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16);
+        (m_settings.m_yoloDnnTarget == CameraSettings::TensorRT) || (m_settings.m_yoloDnnTarget == CameraSettings::TensorRT_FP16);
 #else
         false;
 #endif
@@ -695,7 +695,7 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
                 m_settings.m_yoloModelPath,
                 m_yoloInputSize,
                 maxBatch,
-                m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16,
+                m_settings.m_yoloDnnTarget == CameraSettings::TensorRT_FP16,
                 tensorRtError)
             && m_yoloTensorRt.infer(letterboxes, tensorRtOutputs, tensorRtError))
         {

@@ -1067,6 +1067,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(219, &m_yoloTileLargeImages, true);
         d.readS32(220, &m_yoloTileOverlapPercent, 20);
         m_yoloTileOverlapPercent = qBound(0, m_yoloTileOverlapPercent, 90);
+        m_yoloDnnTarget = qBound(CPU, m_yoloDnnTarget, TensorRT_FP16);
         d.readS32(221, reinterpret_cast<qint32*>(&m_stackDisplayMode), static_cast<qint32>(StackDisplayStacked));
         d.readS32(222, &m_stackDisplayFrameIndex, 0);
         d.readBool(223, &m_stackRejectBadFrames, false);
@@ -1784,7 +1785,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_yoloTileOverlapPercent = qBound(0, settings.m_yoloTileOverlapPercent, 90);
     }
     if (settingsKeys.contains("yoloDnnTarget")) {
-        m_yoloDnnTarget = settings.m_yoloDnnTarget;
+        m_yoloDnnTarget = qBound(CPU, settings.m_yoloDnnTarget, TensorRT_FP16);
     }
     if (settingsKeys.contains("objectDeviceSettings")) {
         m_objectDeviceSettings = settings.m_objectDeviceSettings;

@@ -4251,17 +4251,27 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </property>
              <item>
               <property name="text">
-               <string>CPU</string>
+               <string>OpenCV CPU</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>CUDA</string>
+               <string>OpenCV CUDA</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>CUDA_FP16</string>
+               <string>OpenCV CUDA FP16</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>TensorRT</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>TensorRT FP16</string>
               </property>
              </item>
             </widget>

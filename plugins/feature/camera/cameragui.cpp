@@ -702,6 +702,20 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_settingsDialog = new CameraSettingsDialog(this);
     new DialogPositioner(m_settingsDialog, false);
 
+#ifndef CAMERA_TENSORRT_YOLO
+    if (QStandardItemModel *yoloTargetModel = qobject_cast<QStandardItemModel*>(settingsUI()->yoloTargetCombo->model()))
+    {
+        for (int target : {static_cast<int>(CameraSettings::TensorRT), static_cast<int>(CameraSettings::TensorRT_FP16)})
+        {
+            if (QStandardItem *item = yoloTargetModel->item(target))
+            {
+                item->setEnabled(false);
+                item->setToolTip(tr("TensorRT support is not available in this build"));
+            }
+        }
+    }
+#endif
+
     settingsUI()->azimuthSpin->setRange(
         static_cast<double>(CameraSettings::m_minAzimuth),
         static_cast<double>(CameraSettings::m_maxAzimuth));

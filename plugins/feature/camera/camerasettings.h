@@ -533,6 +533,8 @@ struct CameraSettings
         CPU,
         CUDA,
         CUDA_FP16,
+        TensorRT,
+        TensorRT_FP16,
     } m_yoloDnnTarget;          ///< OpenCV DNN target backend for running the YOLO model
 
     // Audio settings (Qt camera only)

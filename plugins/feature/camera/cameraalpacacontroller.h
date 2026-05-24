@@ -115,6 +115,8 @@ public:
         std::function<void()> reportStatus, std::function<void()> continuation);
     void moveFocuser(QNetworkAccessManager *networkManager, const CameraSettings& settings,
         std::function<void()> reportStatus);
+    void moveFocuserToPosition(QNetworkAccessManager *networkManager, const CameraSettings& settings, int position,
+        std::function<void()> reportStatus, std::function<void()> onSuccess = {}, std::function<void()> onFailure = {});
     void setFilterWheelConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings, bool connected,
         std::function<void()> reportStatus, std::function<void()> continuation = {});
     void runFilterWheelWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,

@@ -400,6 +400,7 @@ private slots:
     void on_alpacaFocuserPortSpin_valueChanged(int value);
     void on_alpacaFocusPositionSpin_valueChanged(int value);
     void on_alpacaFocusStepSizeSpin_valueChanged(int value);
+    void on_alpacaAutoFocusButton_clicked();
     void on_alpacaFilterWheelEnabledCheck_toggled(bool checked);
     void on_alpacaFilterWheelCombo_currentIndexChanged(int index);
     void on_alpacaFilterWheelHostEdit_editingFinished();

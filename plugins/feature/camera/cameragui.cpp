@@ -39,6 +39,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QProgressDialog>
+#include <QPushButton>
 #include <QSet>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -617,6 +618,33 @@ bool CameraGUI::handleMessage(const Message& message)
         settingsUI()->autoExposureGainCheck->setToolTip(tr("Measured %1%, saturated %2%")
             .arg(QString::number(report.getMeasuredBrightness() * 100.0, 'f', 1))
             .arg(QString::number(report.getSaturatedFraction() * 100.0, 'f', 2)));
+        return true;
+    }
+    else if (CameraWorker::MsgReportAutoFocus::match(message))
+    {
+        const CameraWorker::MsgReportAutoFocus& report = (CameraWorker::MsgReportAutoFocus&) message;
+        if (report.getPosition() >= 0)
+        {
+            m_settings.m_alpacaFocusPosition = report.getPosition();
+            QSignalBlocker blocker(settingsUI()->alpacaFocusPositionSpin);
+            settingsUI()->alpacaFocusPositionSpin->setValue(report.getPosition());
+        }
+
+        QString status = report.getStatus();
+        if (report.getStepCount() > 0) {
+            status = tr("%1 %2/%3 score %4")
+                .arg(status)
+                .arg(report.getStepIndex())
+                .arg(report.getStepCount())
+                .arg(QString::number(report.getScore(), 'f', 1));
+        } else if (report.getScore() > 0.0) {
+            status = tr("%1 score %2").arg(status).arg(QString::number(report.getScore(), 'f', 1));
+        }
+        settingsUI()->alpacaAutoFocusStatusLabel->setText(status);
+        settingsUI()->alpacaAutoFocusButton->setEnabled(!report.isActive());
+        if (!report.isActive() && (report.getPosition() >= 0) && (report.getScore() > 0.0)) {
+            applySetting("alpacaFocusPosition");
+        }
         return true;
     }
     else if (CameraWorker::MsgReportAvailableDevices::match(message))
@@ -1641,6 +1669,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->alpacaFocuserPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocuserPortSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaFocusPositionSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocusPositionSpin_valueChanged);
     QObject::connect(settingsUI()->alpacaFocusStepSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_alpacaFocusStepSizeSpin_valueChanged);
+    QObject::connect(settingsUI()->alpacaAutoFocusButton, &QPushButton::clicked, this, &CameraGUI::on_alpacaAutoFocusButton_clicked);
     QObject::connect(settingsUI()->alpacaFilterWheelEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_alpacaFilterWheelEnabledCheck_toggled);
     QObject::connect(settingsUI()->alpacaFilterWheelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_alpacaFilterWheelCombo_currentIndexChanged);
     QObject::connect(settingsUI()->alpacaFilterWheelHostEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_alpacaFilterWheelHostEdit_editingFinished);
@@ -3589,6 +3618,9 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->alpacaFocusPositionSpin->setVisible(alpaca);
     settingsUI()->alpacaFocusStepSizeLabel->setVisible(alpaca);
     settingsUI()->alpacaFocusStepSizeSpin->setVisible(alpaca);
+    settingsUI()->alpacaAutoFocusLabel->setVisible(alpaca);
+    settingsUI()->alpacaAutoFocusButton->setVisible(alpaca);
+    settingsUI()->alpacaAutoFocusStatusLabel->setVisible(alpaca);
     settingsUI()->alpacaFilterWheelPositionLabel->setVisible(alpaca);
     settingsUI()->alpacaFilterWheelPositionCombo->setVisible(alpaca);
 
@@ -3623,6 +3655,9 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->alpacaFocusPositionSpin->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
     settingsUI()->alpacaFocusStepSizeLabel->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
     settingsUI()->alpacaFocusStepSizeSpin->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
+    settingsUI()->alpacaAutoFocusLabel->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
+    settingsUI()->alpacaAutoFocusButton->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
+    settingsUI()->alpacaAutoFocusStatusLabel->setEnabled(m_settings.m_alpacaFocuserEnabled && focuserAvailable);
 
     bool filterWheelAvailable = alpaca && (settingsUI()->alpacaFilterWheelCombo->count() > 0);
     settingsUI()->alpacaFilterWheelEnabledCheck->setEnabled(filterWheelAvailable);
@@ -4448,6 +4483,18 @@ void CameraGUI::on_alpacaFocusStepSizeSpin_valueChanged(int value)
 {
     m_settings.m_alpacaFocusStepSize = value;
     applySetting("alpacaFocusStepSize");
+}
+
+void CameraGUI::on_alpacaAutoFocusButton_clicked()
+{
+    MessageQueue *workerQueue = m_camera->getWorkerInputMessageQueue();
+    if (!workerQueue) {
+        return;
+    }
+
+    settingsUI()->alpacaAutoFocusStatusLabel->setText(tr("Starting"));
+    settingsUI()->alpacaAutoFocusButton->setEnabled(false);
+    workerQueue->push(CameraWorker::MsgStartAutoFocus::create());
 }
 
 void CameraGUI::on_alpacaFilterWheelEnabledCheck_toggled(bool checked)

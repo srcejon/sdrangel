@@ -495,11 +495,17 @@ void CameraAlpacaController::runFocuserWhenConnected(QNetworkAccessManager *netw
 void CameraAlpacaController::moveFocuser(QNetworkAccessManager *networkManager, const CameraSettings& settings,
     std::function<void()> reportStatus)
 {
+    moveFocuserToPosition(networkManager, settings, settings.m_alpacaFocusPosition, reportStatus);
+}
+
+void CameraAlpacaController::moveFocuserToPosition(QNetworkAccessManager *networkManager, const CameraSettings& settings, int position,
+    std::function<void()> reportStatus, std::function<void()> onSuccess, std::function<void()> onFailure)
+{
     if (!networkManager || !settings.isAlpacaCamera() || !settings.m_alpacaFocuserEnabled) {
         return;
     }
 
-    runFocuserWhenConnected(networkManager, settings, reportStatus, [this, networkManager, settings, reportStatus]() {
+    runFocuserWhenConnected(networkManager, settings, reportStatus, [this, networkManager, settings, position, reportStatus, onSuccess, onFailure]() {
         const QString baseUrlString = focuserBaseUrl(settings);
         const int deviceNumber = std::max(0, settings.m_alpacaFocuserDeviceNumber);
         QUrl url(baseUrlString + QString("/api/v1/focuser/%1/move").arg(deviceNumber));
@@ -507,7 +513,7 @@ void CameraAlpacaController::moveFocuser(QNetworkAccessManager *networkManager, 
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
         QUrlQuery body;
-        body.addQueryItem("Position", QString::number(std::max(0, settings.m_alpacaFocusPosition)));
+        body.addQueryItem("Position", QString::number(std::max(0, position)));
         body.addQueryItem("ClientID", QString::number(m_clientId));
         body.addQueryItem("ClientTransactionID", QString::number(m_clientTransactionId++));
 
@@ -515,7 +521,7 @@ void CameraAlpacaController::moveFocuser(QNetworkAccessManager *networkManager, 
         logRequest(settings, "PUT", url, payload);
 
         QNetworkReply *reply = networkManager->put(request, payload);
-        QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, reportStatus]() {
+        QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, reportStatus, onSuccess, onFailure]() {
             const QByteArray responseBody = reply->readAll();
             logResponse(settings, "PUT", reply->request().url(), reply, responseBody);
             int alpacaErrorNumber = 0;
@@ -535,6 +541,14 @@ void CameraAlpacaController::moveFocuser(QNetworkAccessManager *networkManager, 
                 if (reportStatus) {
                     reportStatus();
                 }
+
+                if (onFailure) {
+                    onFailure();
+                }
+            }
+            else if (onSuccess)
+            {
+                onSuccess();
             }
             reply->deleteLater();
         });

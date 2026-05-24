@@ -40,6 +40,7 @@
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartAutoFocus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaDeviceList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
@@ -48,6 +49,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaFilterWheelInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAutoExposureGain, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAutoFocus, Message)
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
@@ -583,6 +585,176 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     reportAutoExposureGainToGUI(measuredBrightness, saturatedFraction);
 }
 
+void CameraWorker::reportAutoFocusToGUI(const QString& status, bool active, int position, double score, int stepIndex, int stepCount) const
+{
+    if (m_msgQueueToGUI) {
+        m_msgQueueToGUI->push(MsgReportAutoFocus::create(status, active, position, score, stepIndex, stepCount));
+    }
+}
+
+void CameraWorker::startAutoFocus()
+{
+    if (!m_settings.isAlpacaCamera() || !m_settings.m_alpacaFocuserEnabled)
+    {
+        reportAutoFocusToGUI(tr("Enable an Alpaca focuser first"), false, m_settings.m_alpacaFocusPosition, 0.0, 0, 0);
+        return;
+    }
+
+    if (!m_capturing)
+    {
+        reportAutoFocusToGUI(tr("Start capture before auto focus"), false, m_settings.m_alpacaFocusPosition, 0.0, 0, 0);
+        return;
+    }
+
+    const int stepSize = std::max(1, m_settings.m_alpacaFocusStepSize);
+    const int center = std::max(0, m_settings.m_alpacaFocusPosition);
+    QVector<int> positions;
+    positions.reserve(7);
+    for (int offset = -3; offset <= 3; ++offset)
+    {
+        const int position = std::max(0, center + offset * stepSize);
+        if (!positions.contains(position)) {
+            positions.append(position);
+        }
+    }
+    std::sort(positions.begin(), positions.end());
+
+    m_autoFocus.m_active = true;
+    m_autoFocus.m_movePending = false;
+    m_autoFocus.m_originalPosition = center;
+    m_autoFocus.m_bestPosition = center;
+    m_autoFocus.m_bestScore = -1.0;
+    m_autoFocus.m_currentIndex = -1;
+    m_autoFocus.m_positions = positions;
+
+    reportAutoFocusToGUI(tr("Auto focus started"), true, center, 0.0, 0, positions.size());
+    moveAutoFocusToNextPosition();
+}
+
+void CameraWorker::cancelAutoFocus(const QString& status)
+{
+    if (!m_autoFocus.m_active) {
+        return;
+    }
+
+    const int position = m_autoFocus.m_bestScore >= 0.0 ? m_autoFocus.m_bestPosition : m_settings.m_alpacaFocusPosition;
+    m_autoFocus = AutoFocusState();
+    if (!status.isEmpty()) {
+        reportAutoFocusToGUI(status, false, position, 0.0, 0, 0);
+    }
+}
+
+void CameraWorker::moveAutoFocusToNextPosition()
+{
+    if (!m_autoFocus.m_active || m_autoFocus.m_movePending) {
+        return;
+    }
+
+    ++m_autoFocus.m_currentIndex;
+    if (m_autoFocus.m_currentIndex >= m_autoFocus.m_positions.size())
+    {
+        const int bestPosition = std::max(0, m_autoFocus.m_bestPosition);
+        const double bestScore = m_autoFocus.m_bestScore;
+        m_autoFocus.m_movePending = true;
+        m_alpaca.moveFocuserToPosition(
+            m_networkManager,
+            m_settings,
+            bestPosition,
+            [this]() { reportAlpacaStatusToGUI(); },
+            [this, bestPosition, bestScore]() {
+                m_settings.m_alpacaFocusPosition = bestPosition;
+                m_autoFocus = AutoFocusState();
+                reportAutoFocusToGUI(tr("Auto focus complete"), false, bestPosition, bestScore, 0, 0);
+            },
+            [this]() {
+                cancelAutoFocus(tr("Auto focus failed moving to best position"));
+            });
+        return;
+    }
+
+    const int position = m_autoFocus.m_positions.at(m_autoFocus.m_currentIndex);
+    m_autoFocus.m_movePending = true;
+    reportAutoFocusToGUI(tr("Moving focuser"), true, position, 0.0, m_autoFocus.m_currentIndex + 1, m_autoFocus.m_positions.size());
+    m_alpaca.moveFocuserToPosition(
+        m_networkManager,
+        m_settings,
+        position,
+        [this]() { reportAlpacaStatusToGUI(); },
+        [this, position]() {
+            m_settings.m_alpacaFocusPosition = position;
+            m_autoFocus.m_movePending = false;
+            m_autoFocus.m_settleFramesRemaining = 1;
+            reportAutoFocusToGUI(tr("Waiting for next frame"), true, position, 0.0, m_autoFocus.m_currentIndex + 1, m_autoFocus.m_positions.size());
+        },
+        [this]() {
+            cancelAutoFocus(tr("Auto focus failed moving focuser"));
+        });
+}
+
+void CameraWorker::sampleAutoFocusFrame(const CameraPipelineFrame& frame)
+{
+    if (!m_autoFocus.m_active || m_autoFocus.m_movePending || (m_autoFocus.m_currentIndex < 0)) {
+        return;
+    }
+
+    const int position = m_autoFocus.m_positions.at(m_autoFocus.m_currentIndex);
+    if (m_autoFocus.m_settleFramesRemaining > 0)
+    {
+        --m_autoFocus.m_settleFramesRemaining;
+        reportAutoFocusToGUI(tr("Settling focuser"), true, position, 0.0, m_autoFocus.m_currentIndex + 1, m_autoFocus.m_positions.size());
+        return;
+    }
+
+    const double score = measureAutoFocusScore(frame.m_image);
+    if (score > m_autoFocus.m_bestScore)
+    {
+        m_autoFocus.m_bestScore = score;
+        m_autoFocus.m_bestPosition = position;
+    }
+
+    reportAutoFocusToGUI(tr("Sampled focus"), true, position, score, m_autoFocus.m_currentIndex + 1, m_autoFocus.m_positions.size());
+    moveAutoFocusToNextPosition();
+}
+
+double CameraWorker::measureAutoFocusScore(const QImage& image) const
+{
+    if (image.isNull()) {
+        return 0.0;
+    }
+
+    cv::Mat gray;
+    switch (image.format())
+    {
+    case QImage::Format_Grayscale8:
+        gray = cv::Mat(image.height(), image.width(), CV_8UC1, const_cast<uchar*>(image.constBits()), image.bytesPerLine()).clone();
+        break;
+    case QImage::Format_Grayscale16:
+    {
+        cv::Mat gray16(image.height(), image.width(), CV_16UC1, const_cast<uchar*>(image.constBits()), image.bytesPerLine());
+        gray16.convertTo(gray, CV_8UC1, 1.0 / 256.0);
+        break;
+    }
+    default:
+    {
+        QImage rgb = image.convertToFormat(QImage::Format_RGB888);
+        cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3, const_cast<uchar*>(rgb.constBits()), rgb.bytesPerLine());
+        cv::cvtColor(rgbMat, gray, cv::COLOR_RGB2GRAY);
+        break;
+    }
+    }
+
+    if (gray.empty()) {
+        return 0.0;
+    }
+
+    cv::Mat laplacian;
+    cv::Laplacian(gray, laplacian, CV_64F, 3);
+    cv::Scalar mean;
+    cv::Scalar stddev;
+    cv::meanStdDev(laplacian, mean, stddev);
+    return stddev[0] * stddev[0];
+}
+
 bool CameraWorker::handleMessage(const Message& cmd)
 {
     if (MsgConfigureCameraWorker::match(cmd))
@@ -611,6 +783,11 @@ bool CameraWorker::handleMessage(const Message& cmd)
             m_cameraFinder->reportCameraList(m_settings);
         }
 
+        return true;
+    }
+    else if (MsgStartAutoFocus::match(cmd))
+    {
+        startAutoFocus();
         return true;
     }
     else if (MainCore::MsgImage::match(cmd))
@@ -914,6 +1091,7 @@ void CameraWorker::startCapture()
 void CameraWorker::stopCapture()
 {
     m_capturing = false;
+    cancelAutoFocus(tr("Auto focus cancelled"));
     m_captureTimer.stop();
     m_alpaca.m_captureTimer.invalidate();
     resetHdrBracketState();
@@ -1209,6 +1387,7 @@ void CameraWorker::fetchControllerImage()
                 frame->m_image = result.m_image;
                 populateFrameExposureMetadata(*frame);
                 frame->m_bayerPattern = result.m_bayerPattern;
+                sampleAutoFocusFrame(*frame);
                 maybeAdjustAutoExposureGain(*frame);
                 m_framePreprocessor->submitFrame(frame);
             }
@@ -1427,6 +1606,7 @@ bool CameraWorker::asiCaptureExposureFrame()
         frame->m_image = m_asi.frameToImage(createPlaceholderFrame(), &bayerPattern);
         populateFrameExposureMetadata(*frame);
         frame->m_bayerPattern = bayerPattern;
+        sampleAutoFocusFrame(*frame);
         maybeAdjustAutoExposureGain(*frame);
         m_framePreprocessor->submitFrame(frame);
     }
@@ -1485,6 +1665,7 @@ void CameraWorker::asiCaptureVideoFrame()
             frame->m_image = m_asi.frameToImage(createPlaceholderFrame(), &bayerPattern);
             populateFrameExposureMetadata(*frame);
             frame->m_bayerPattern = bayerPattern;
+            sampleAutoFocusFrame(*frame);
             maybeAdjustAutoExposureGain(*frame);
             m_framePreprocessor->submitFrame(frame);
         }

@@ -178,6 +178,30 @@
            </property>
           </widget>
          </item>
+         <item row="23" column="0">
+          <widget class="QLabel" name="alpacaAutoFocusLabel">
+           <property name="text">
+            <string>Auto focus</string>
+           </property>
+          </widget>
+         </item>
+         <item row="23" column="1">
+          <widget class="QPushButton" name="alpacaAutoFocusButton">
+           <property name="toolTip">
+            <string>Run a software autofocus sweep using image sharpness. Capture must be running.</string>
+           </property>
+           <property name="text">
+            <string>Start</string>
+           </property>
+          </widget>
+         </item>
+         <item row="23" column="2" colspan="2">
+          <widget class="QLabel" name="alpacaAutoFocusStatusLabel">
+           <property name="text">
+            <string>Idle</string>
+           </property>
+          </widget>
+         </item>
          <item row="14" column="2">
           <widget class="QLabel" name="cameraNumYLabel">
            <property name="text">
@@ -6356,6 +6380,7 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>asiUsbBandwidthSpin</tabstop>
   <tabstop>asiHighSpeedModeCheck</tabstop>
   <tabstop>alpacaFocusStepSizeSpin</tabstop>
+  <tabstop>alpacaAutoFocusButton</tabstop>
   <tabstop>alpacaFilterWheelPositionCombo</tabstop>
   <tabstop>clearChart</tabstop>
   <tabstop>alpacaDiscoveryCheck</tabstop>

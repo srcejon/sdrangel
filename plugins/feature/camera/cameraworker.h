@@ -138,6 +138,19 @@ MESSAGE_CLASS_DECLARATION
         MsgRefreshCameraList() : Message() {}
     };
 
+    class MsgStartAutoFocus : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgStartAutoFocus* create()
+        {
+            return new MsgStartAutoFocus();
+        }
+
+    private:
+        MsgStartAutoFocus() : Message() {}
+    };
+
     class MsgReportCameraList : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -462,6 +475,41 @@ MESSAGE_CLASS_DECLARATION
         { }
     };
 
+    class MsgReportAutoFocus : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QString& getStatus() const { return m_status; }
+        bool isActive() const { return m_active; }
+        int getPosition() const { return m_position; }
+        double getScore() const { return m_score; }
+        int getStepIndex() const { return m_stepIndex; }
+        int getStepCount() const { return m_stepCount; }
+
+        static MsgReportAutoFocus* create(const QString& status, bool active, int position, double score, int stepIndex, int stepCount)
+        {
+            return new MsgReportAutoFocus(status, active, position, score, stepIndex, stepCount);
+        }
+
+    private:
+        QString m_status;
+        bool m_active;
+        int m_position;
+        double m_score;
+        int m_stepIndex;
+        int m_stepCount;
+
+        MsgReportAutoFocus(const QString& status, bool active, int position, double score, int stepIndex, int stepCount) :
+            Message(),
+            m_status(status),
+            m_active(active),
+            m_position(position),
+            m_score(score),
+            m_stepIndex(stepIndex),
+            m_stepCount(stepCount)
+        { }
+    };
+
     // Sent periodically to update live status fields (camerastate, ccdtemperature)
     class MsgReportAlpacaStatus : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -534,6 +582,16 @@ private:
     CameraFinder *m_cameraFinder;
     int m_stackFrameIndex;
     int m_hdrExposureIndex;
+    struct AutoFocusState {
+        bool m_active = false;
+        bool m_movePending = false;
+        int m_originalPosition = 0;
+        int m_bestPosition = 0;
+        double m_bestScore = -1.0;
+        int m_currentIndex = -1;
+        int m_settleFramesRemaining = 0;
+        QVector<int> m_positions;
+    } m_autoFocus;
     CameraAlpacaController m_alpaca;
     CameraQtAudioController m_qtAudio;
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature
@@ -563,6 +621,12 @@ private:
     void maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame);
     bool measureAutoExposureGain(const QImage& image, double& measuredBrightness, double& saturatedFraction) const;
     void reportAutoExposureGainToGUI(double measuredBrightness, double saturatedFraction) const;
+    void startAutoFocus();
+    void cancelAutoFocus(const QString& status = QString());
+    void moveAutoFocusToNextPosition();
+    void sampleAutoFocusFrame(const CameraPipelineFrame& frame);
+    double measureAutoFocusScore(const QImage& image) const;
+    void reportAutoFocusToGUI(const QString& status, bool active, int position, double score, int stepIndex, int stepCount) const;
     void startCapture();
     void stopCapture();
     QImage createPlaceholderFrame() const;

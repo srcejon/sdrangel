@@ -54,6 +54,10 @@ struct StarTestCase
     double centerOffsetY = 0.0;
     double distortionK1 = 0.0;
     CameraSettings::PlateSolveStartMode plateSolveStartMode = CameraSettings::PlateSolveStartFovAzElRollLens;
+    int roiX = 0;
+    int roiY = 0;
+    int roiWidth = 0;
+    int roiHeight = 0;
     QStringList expectedStars;
 };
 
@@ -647,6 +651,29 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         if (plateSolveStartModeIndex >= 0) {
             test.plateSolveStartMode = parsePlateSolveStartMode(fields.value(plateSolveStartModeIndex), lineNumber, &ok);
         }
+        // Optional ROI columns — default to 0 (full frame) when absent
+        auto parseOptionalInt = [&](const QString& colName) -> int {
+            const int idx = header.indexOf(colName);
+            if (idx < 0 || idx >= fields.size()) {
+                return 0;
+            }
+            const QString val = fields.at(idx).trimmed();
+            if (val.isEmpty()) {
+                return 0;
+            }
+            bool intOk = false;
+            const int result = QLocale::c().toInt(val, &intOk);
+            if (!intOk) {
+                std::cerr << "Line " << lineNumber << ": invalid integer for "
+                          << colName.toStdString() << ": " << val.toStdString() << '\n';
+                ok = false;
+            }
+            return result;
+        };
+        test.roiX      = parseOptionalInt(QStringLiteral("roiX"));
+        test.roiY      = parseOptionalInt(QStringLiteral("roiY"));
+        test.roiWidth  = parseOptionalInt(QStringLiteral("roiW"));
+        test.roiHeight = parseOptionalInt(QStringLiteral("roiH"));
         test.expectedStars = parseExpectedStars(fieldValue(header, fields, QStringLiteral("stars"), &ok));
 
         if (!ok) {
@@ -688,6 +715,10 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_plateSolveMatchRadius = 24.0;
     settings.m_plateSolveFinalMatchRadius = 24.0;
     settings.m_plateSolveSearchRadius = (test.fov > 30.0) ? 12.0 : 3.5;
+    settings.m_detectionRoiX      = test.roiX;
+    settings.m_detectionRoiY      = test.roiY;
+    settings.m_detectionRoiWidth  = test.roiWidth;
+    settings.m_detectionRoiHeight = test.roiHeight;
     return settings;
 }
 

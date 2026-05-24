@@ -498,6 +498,53 @@ CameraFrameStacker::StackFrameQuality CameraFrameStacker::computeStackFrameQuali
     return computeStackFrameQuality(frameMat);
 }
 
+void CameraFrameStacker::ensureStackFrameQualityHistory()
+{
+    while (m_stackFrameQualityHistory.size() < m_stackFrameHistory.size())
+    {
+        const size_t index = m_stackFrameQualityHistory.size();
+        m_stackFrameQualityHistory.push_back(computeStackFrameQuality(m_stackFrameHistory[index]));
+    }
+
+    while (m_stackFrameQualityHistory.size() > m_stackFrameHistory.size()) {
+        m_stackFrameQualityHistory.pop_back();
+    }
+}
+
+std::vector<size_t> CameraFrameStacker::selectedSharpFrameIndices() const
+{
+    std::vector<size_t> indices;
+    indices.reserve(m_stackFrameHistory.size());
+    for (size_t i = 0; i < m_stackFrameHistory.size(); ++i) {
+        indices.push_back(i);
+    }
+
+    std::sort(indices.begin(), indices.end(),
+        [this](size_t lhs, size_t rhs)
+        {
+            const bool lhsValid = (lhs < m_stackFrameQualityHistory.size()) && m_stackFrameQualityHistory[lhs].m_valid;
+            const bool rhsValid = (rhs < m_stackFrameQualityHistory.size()) && m_stackFrameQualityHistory[rhs].m_valid;
+            if (lhsValid != rhsValid) {
+                return lhsValid;
+            }
+
+            const double lhsSharpness = lhsValid ? m_stackFrameQualityHistory[lhs].m_laplacianVariance : 0.0;
+            const double rhsSharpness = rhsValid ? m_stackFrameQualityHistory[rhs].m_laplacianVariance : 0.0;
+            if (lhsSharpness != rhsSharpness) {
+                return lhsSharpness > rhsSharpness;
+            }
+
+            return lhs > rhs;
+        });
+
+    const size_t keepCount = std::max<size_t>(1, (m_stackFrameHistory.size() + 1) / 2);
+    if (indices.size() > keepCount) {
+        indices.resize(keepCount);
+    }
+
+    return indices;
+}
+
 CameraFrameStacker::StackFrameQuality CameraFrameStacker::computeStackFrameQuality(const cv::Mat& frameMat)
 {
     StackFrameQuality quality;
@@ -1280,7 +1327,8 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
     }
 
     StackFrameQuality quality;
-    const bool needQuality = m_settings.m_stackRejectBadFrames
+    const bool needQuality = (m_settings.m_stackMethod == CameraSettings::StackMethodLuckySharpAverage)
+        || m_settings.m_stackRejectBadFrames
         || (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryTiles);
     if (needQuality) {
         quality = computeStackFrameQualityForFrame(inputFrame, alignedFrameMat);
@@ -1329,6 +1377,35 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
     trimFrameHistoryToCurrentLimit();
 
     const double scaleTo8Bit = alignedFrameMat.depth() == CV_16U ? (255.0 / 65535.0) : 1.0;
+
+    if (m_settings.m_stackMethod == CameraSettings::StackMethodLuckySharpAverage)
+    {
+        ensureStackFrameQualityHistory();
+        const std::vector<size_t> selectedIndices = selectedSharpFrameIndices();
+        cv::Mat luckyAccumulator = cv::Mat::zeros(alignedFrameMat.size(), CV_32FC3);
+
+        for (size_t index : selectedIndices)
+        {
+            cv::Mat floatFrame;
+            m_stackFrameHistory[index].convertTo(floatFrame, CV_32FC3);
+            luckyAccumulator += floatFrame;
+        }
+
+        cv::Mat averagedFloat;
+        luckyAccumulator.convertTo(averagedFloat, CV_32FC3, 1.0 / static_cast<double>(std::max<size_t>(1, selectedIndices.size())));
+        cv::Mat averaged8u;
+        averagedFloat.convertTo(averaged8u, CV_8UC3, scaleTo8Bit);
+
+        const QImage stackedImage = workingMatToImage(averaged8u);
+        m_lastStackedImage = stackedImage;
+        if (!renderStackDisplayImage(stackedImage, outputImage)) {
+            outputImage = stackedImage;
+        }
+        stackCount = static_cast<int>(selectedIndices.size());
+
+        PROFILER_STOP(__FUNCTION__);
+        return true;
+    }
 
     if (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
     {

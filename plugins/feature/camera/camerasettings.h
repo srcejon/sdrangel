@@ -51,6 +51,7 @@ struct CameraSettings
         StackMethodAverage = 0,
         StackMethodMedian,
         StackMethodSigmaClippedAverage,
+        StackMethodLuckySharpAverage,
         StackMethodHDR
     };
 

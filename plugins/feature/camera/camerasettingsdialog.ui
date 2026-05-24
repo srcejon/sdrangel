@@ -1294,6 +1294,11 @@
             </item>
             <item>
              <property name="text">
+              <string>Lucky sharp average</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
               <string>HDR</string>
              </property>
             </item>

@@ -198,6 +198,8 @@ private:
     StackFrameQuality computeStackFrameQualityCuda(const CameraPipelineFrame& inputFrame);
 #endif
     StackFrameQuality computeStackFrameQualityForFrame(const CameraPipelineFrame& inputFrame, const cv::Mat& frameMat);
+    void ensureStackFrameQualityHistory();
+    std::vector<size_t> selectedSharpFrameIndices() const;
     static double medianQualityValue(const std::deque<StackFrameQuality>& qualities, double StackFrameQuality::*member);
     bool canPassThroughFrame(const CameraPipelineFrame& inputFrame) const;
     [[nodiscard]] bool applyFrameStacking(CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount);

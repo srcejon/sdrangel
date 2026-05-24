@@ -17,6 +17,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cmath>
 
 #include <QDebug>
 #include <QFile>
@@ -28,12 +29,14 @@
 #include "maincore.h"
 #include "channel/channelwebapiutils.h"
 #include "device/deviceset.h"
+#include "pipes/objectpipe.h"
 #include "settings/mainsettings.h"
 #include "settings/preset.h"
 #include "util/profiler.h"
 #include "camera.h"
 #include "cameraobjectdetector.h"
 #include "camerapostprocessor.h"
+#include "SWGTargetAzimuthElevation.h"
 
 MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgReportObjectDetectionHistory, Message)
 MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgClearObjectDetectionHistory, Message)
@@ -345,6 +348,195 @@ cv::Size readOnnxInputSize(const QString& modelPath)
 
     return cv::Size();
 }
+
+struct ObjectTargetVector
+{
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+};
+
+double degToRad(double degrees)
+{
+    return degrees * M_PI / 180.0;
+}
+
+double radToDeg(double radians)
+{
+    return radians * 180.0 / M_PI;
+}
+
+double normalizeDegrees(double degrees)
+{
+    double normalized = std::fmod(degrees, 360.0);
+    if (normalized < 0.0) {
+        normalized += 360.0;
+    }
+    return normalized;
+}
+
+ObjectTargetVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
+{
+    const double azimuth = degToRad(azimuthDegrees);
+    const double elevation = degToRad(elevationDegrees);
+    const double cosElevation = std::cos(elevation);
+    return {
+        cosElevation * std::sin(azimuth),
+        cosElevation * std::cos(azimuth),
+        std::sin(elevation)
+    };
+}
+
+double dot(const ObjectTargetVector& lhs, const ObjectTargetVector& rhs)
+{
+    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+ObjectTargetVector cross(const ObjectTargetVector& lhs, const ObjectTargetVector& rhs)
+{
+    return {
+        lhs.y * rhs.z - lhs.z * rhs.y,
+        lhs.z * rhs.x - lhs.x * rhs.z,
+        lhs.x * rhs.y - lhs.y * rhs.x
+    };
+}
+
+double length(const ObjectTargetVector& vector)
+{
+    return std::sqrt(dot(vector, vector));
+}
+
+ObjectTargetVector normalize(const ObjectTargetVector& vector)
+{
+    const double vectorLength = length(vector);
+    if (vectorLength <= 0.0) {
+        return {};
+    }
+
+    return {
+        vector.x / vectorLength,
+        vector.y / vectorLength,
+        vector.z / vectorLength
+    };
+}
+
+ObjectTargetVector rotateAroundAxis(const ObjectTargetVector& vector, const ObjectTargetVector& axis, double angleRadians)
+{
+    const double cosAngle = std::cos(angleRadians);
+    const double sinAngle = std::sin(angleRadians);
+    const ObjectTargetVector axisCrossVector = cross(axis, vector);
+    const double axisDotVector = dot(axis, vector);
+
+    return {
+        vector.x * cosAngle + axisCrossVector.x * sinAngle + axis.x * axisDotVector * (1.0 - cosAngle),
+        vector.y * cosAngle + axisCrossVector.y * sinAngle + axis.y * axisDotVector * (1.0 - cosAngle),
+        vector.z * cosAngle + axisCrossVector.z * sinAngle + axis.z * axisDotVector * (1.0 - cosAngle)
+    };
+}
+
+CameraSettings targetProjectionSettings(const CameraSettings& settings, const CameraPipelineFrame& frame)
+{
+    CameraSettings projectionSettings = settings;
+    if (frame.m_plateSolved)
+    {
+        projectionSettings.m_azimuth = frame.m_plateSolveAzimuth;
+        projectionSettings.m_elevation = frame.m_plateSolveElevation;
+        projectionSettings.m_roll = frame.m_plateSolveRoll;
+        projectionSettings.m_fov = frame.m_plateSolveFov;
+        projectionSettings.m_lensCenterOffsetX = frame.m_plateSolveCenterOffsetX;
+        projectionSettings.m_lensCenterOffsetY = frame.m_plateSolveCenterOffsetY;
+        projectionSettings.m_lensDistortionK1 = frame.m_plateSolveDistortionK1;
+    }
+    return projectionSettings;
+}
+
+bool pixelToAltAz(const CameraSettings& settings, const QSize& imageSize, const QPointF& pixel, double& azimuthDegrees, double& elevationDegrees)
+{
+    const int width = imageSize.width();
+    const int height = imageSize.height();
+    if ((width <= 0) || (height <= 0) || (settings.m_fov <= 0.0f)) {
+        return false;
+    }
+
+    const double halfHorizontalFov = degToRad(settings.m_fov) * 0.5;
+    if ((halfHorizontalFov <= 0.0) || (halfHorizontalFov >= M_PI * 0.5)) {
+        return false;
+    }
+
+    const double azimuth = degToRad(settings.m_azimuth);
+    const ObjectTargetVector center = normalize(vectorFromAltAz(settings.m_azimuth, settings.m_elevation));
+    ObjectTargetVector right = normalize({std::cos(azimuth), -std::sin(azimuth), 0.0});
+    ObjectTargetVector up = normalize(cross(right, center));
+    if ((length(center) <= 0.0) || (length(right) <= 0.0) || (length(up) <= 0.0)) {
+        return false;
+    }
+
+    const double rollRadians = degToRad(settings.m_roll);
+    if (std::fabs(rollRadians) > 1e-9)
+    {
+        right = normalize(rotateAroundAxis(right, center, rollRadians));
+        up = normalize(rotateAroundAxis(up, center, rollRadians));
+    }
+
+    const double principalPointX = static_cast<double>(width) * 0.5 + settings.m_lensCenterOffsetX;
+    const double principalPointY = static_cast<double>(height) * 0.5 + settings.m_lensCenterOffsetY;
+    const double aspect = static_cast<double>(height) / static_cast<double>(width);
+    if (aspect <= 0.0) {
+        return false;
+    }
+
+    const double normalizedX = (pixel.x() - principalPointX) / (0.5 * static_cast<double>(width));
+    const double normalizedY = (principalPointY - pixel.y()) / (0.5 * static_cast<double>(height));
+    double projectedX = normalizedX;
+    double projectedY = normalizedY * aspect;
+
+    if (std::fabs(settings.m_lensDistortionK1) > 1e-9)
+    {
+        const double distortedX = projectedX;
+        const double distortedY = projectedY;
+        for (int i = 0; i < 6; ++i)
+        {
+            const double radiusSquared = projectedX * projectedX + projectedY * projectedY;
+            const double distortionScale = std::max(0.1, 1.0 + settings.m_lensDistortionK1 * radiusSquared);
+            projectedX = distortedX / distortionScale;
+            projectedY = distortedY / distortionScale;
+        }
+    }
+
+    const double projectionRadius = std::sqrt(projectedX * projectedX + projectedY * projectedY);
+    const double theta = [&]() -> double
+    {
+        switch (settings.m_lensProjection)
+        {
+        case CameraSettings::LensProjectionEquidistant:
+            return projectionRadius * halfHorizontalFov;
+        case CameraSettings::LensProjectionEquisolid:
+            return 2.0 * std::asin(std::clamp(projectionRadius * std::sin(halfHorizontalFov * 0.5), -1.0, 1.0));
+        case CameraSettings::LensProjectionRectilinear:
+        default:
+            return std::atan(projectionRadius * std::tan(halfHorizontalFov));
+        }
+    }();
+    const double phi = std::atan2(projectedY, projectedX);
+    const ObjectTargetVector tangent = normalize({
+        right.x * std::cos(phi) + up.x * std::sin(phi),
+        right.y * std::cos(phi) + up.y * std::sin(phi),
+        right.z * std::cos(phi) + up.z * std::sin(phi)
+    });
+    const ObjectTargetVector target = normalize({
+        center.x * std::cos(theta) + tangent.x * std::sin(theta),
+        center.y * std::cos(theta) + tangent.y * std::sin(theta),
+        center.z * std::cos(theta) + tangent.z * std::sin(theta)
+    });
+
+    if (length(target) <= 0.0) {
+        return false;
+    }
+
+    azimuthDegrees = normalizeDegrees(radToDeg(std::atan2(target.x, target.y)));
+    elevationDegrees = radToDeg(std::asin(std::clamp(target.z, -1.0, 1.0)));
+    return std::isfinite(azimuthDegrees) && std::isfinite(elevationDegrees);
+}
 }
 
 CameraObjectDetector::CameraObjectDetector(Camera *camera) :
@@ -432,6 +624,7 @@ void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     {
         const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
         processObjectDetections(frame->m_detections, detectionTime, *frame);
+        sendFirstObjectDetectionTarget(frame->m_detections, *frame);
         forwardFrame(frame);
         return;
     }
@@ -451,6 +644,7 @@ void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 
     const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     processObjectDetections(frame->m_detections, detectionTime, *frame);
+    sendFirstObjectDetectionTarget(frame->m_detections, *frame);
     forwardFrame(frame);
 }
 
@@ -1006,6 +1200,46 @@ void CameraObjectDetector::reportErrorToFeature(const QString& errorKey, const Q
 
     m_reportedErrorKeys.insert(errorKey);
     m_msgQueueToFeature->push(Camera::MsgReportError::create(title, errorMessage));
+}
+
+void CameraObjectDetector::sendFirstObjectDetectionTarget(const QVector<CameraPipelineDetection>& detections, const CameraPipelineFrame& frame) const
+{
+    if (!m_camera || detections.isEmpty()) {
+        return;
+    }
+
+    const CameraPipelineDetection& detection = detections.first();
+    if (detection.m_box.isEmpty()) {
+        return;
+    }
+
+    const QPointF center(
+        static_cast<double>(detection.m_box.left()) + static_cast<double>(detection.m_box.width()) * 0.5,
+        static_cast<double>(detection.m_box.top()) + static_cast<double>(detection.m_box.height()) * 0.5);
+    const CameraSettings projectionSettings = targetProjectionSettings(m_settings, frame);
+    double azimuth = 0.0;
+    double elevation = 0.0;
+
+    if (!pixelToAltAz(projectionSettings, frame.imageSize(), center, azimuth, elevation)) {
+        return;
+    }
+
+    QList<ObjectPipe*> targetPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_camera, "target", targetPipes);
+
+    for (const ObjectPipe *pipe : targetPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        if (!messageQueue) {
+            continue;
+        }
+
+        SWGSDRangel::SWGTargetAzimuthElevation *swgTarget = new SWGSDRangel::SWGTargetAzimuthElevation();
+        swgTarget->setName(new QString(detection.m_label.isEmpty() ? QStringLiteral("Camera object") : detection.m_label));
+        swgTarget->setAzimuth(azimuth);
+        swgTarget->setElevation(elevation);
+        messageQueue->push(MainCore::MsgTargetAzimuthElevation::create(m_camera, swgTarget));
+    }
 }
 
 void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame)

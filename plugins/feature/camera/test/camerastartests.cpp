@@ -221,7 +221,8 @@ QHash<QString, QPointF> parseExpectedStarPositions(const QString& value, int lin
         return positions;
     }
 
-    const QStringList parts = trimmedValue.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    const QStringList parts = QString(trimmedValue).replace(QLatin1Char(';'), QLatin1Char(','))
+        .split(QLatin1Char(','), Qt::SkipEmptyParts);
     for (const QString& part : parts)
     {
         const QString trimmed = part.trimmed();
@@ -907,30 +908,28 @@ QStringList expectedStarPositionMismatches(const StarTestCase& test,
     QStringList mismatches;
     static constexpr double kPositionTolerancePixels = 24.0;
 
-    for (const QString& expected : test.expectedStars)
+    for (auto it = test.expectedStarPositions.constBegin(); it != test.expectedStarPositions.constEnd(); ++it)
     {
-        const auto positionIt = test.expectedStarPositions.constFind(normalizedStarName(expected));
-        if (positionIt == test.expectedStarPositions.constEnd()) {
-            continue;
-        }
+        const QString expected = it.key();
+        const QPointF& expectedPosition = it.value();
 
         const CameraPipelineStarDetection *detection = findSolvedDetectionForExpectedStar(frame, expected);
         if (!detection)
         {
             mismatches.append(QStringLiteral("%1 missing labelled match near x=%2 y=%3")
                 .arg(expected)
-                .arg(positionIt->x(), 0, 'f', 1)
-                .arg(positionIt->y(), 0, 'f', 1));
+                .arg(expectedPosition.x(), 0, 'f', 1)
+                .arg(expectedPosition.y(), 0, 'f', 1));
             continue;
         }
 
-        const double distance = std::hypot(detection->m_center.x() - positionIt->x(), detection->m_center.y() - positionIt->y());
+        const double distance = std::hypot(detection->m_center.x() - expectedPosition.x(), detection->m_center.y() - expectedPosition.y());
         if (distance > kPositionTolerancePixels)
         {
             mismatches.append(QStringLiteral("%1 expected x=%2 y=%3 matched x=%4 y=%5 distance=%6")
                 .arg(expected)
-                .arg(positionIt->x(), 0, 'f', 1)
-                .arg(positionIt->y(), 0, 'f', 1)
+                .arg(expectedPosition.x(), 0, 'f', 1)
+                .arg(expectedPosition.y(), 0, 'f', 1)
                 .arg(detection->m_center.x(), 0, 'f', 1)
                 .arg(detection->m_center.y(), 0, 'f', 1)
                 .arg(distance, 0, 'f', 1));

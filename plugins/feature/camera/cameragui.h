@@ -58,6 +58,7 @@ class CameraHistogramDialog;
 class Message;
 class QDoubleSpinBox;
 class QGraphicsRectItem;
+class QProgressDialog;
 class QTableWidgetItem;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 class QCamera;
@@ -202,6 +203,7 @@ private:
     CameraSettingsDialog *m_settingsDialog;
     CameraDetectionHistory *m_detectionHistoryDialog;
     CameraHistogramDialog *m_histogramDialog;
+    QProgressDialog *m_tensorRtProgressDialog = nullptr;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
     int m_alpacaCameraSizeX;

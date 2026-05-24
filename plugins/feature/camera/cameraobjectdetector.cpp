@@ -37,6 +37,7 @@
 
 MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgReportObjectDetectionHistory, Message)
 MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgClearObjectDetectionHistory, Message)
+MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgReportTensorRtConversion, Message)
 
 namespace {
 QString substituteObjectClass(QString text, const QString& className)
@@ -356,6 +357,14 @@ CameraObjectDetector::CameraObjectDetector(Camera *camera) :
     , m_speech(new QTextToSpeech(this))
 #endif
 {
+#ifdef CAMERA_TENSORRT_YOLO
+    m_yoloTensorRt.setProgressCallback([this](bool active, const QString& modelPath, const QString& enginePath)
+    {
+        if (m_msgQueueToGUI) {
+            m_msgQueueToGUI->push(MsgReportTensorRtConversion::create(active, modelPath, enginePath));
+        }
+    });
+#endif
 }
 
 CameraObjectDetector::~CameraObjectDetector() = default;

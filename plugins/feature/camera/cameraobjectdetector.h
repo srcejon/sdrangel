@@ -71,6 +71,32 @@ public:
         MsgClearObjectDetectionHistory() : Message() {}
     };
 
+    class MsgReportTensorRtConversion : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool isActive() const { return m_active; }
+        const QString& getModelPath() const { return m_modelPath; }
+        const QString& getEnginePath() const { return m_enginePath; }
+
+        static MsgReportTensorRtConversion* create(bool active, const QString& modelPath, const QString& enginePath)
+        {
+            return new MsgReportTensorRtConversion(active, modelPath, enginePath);
+        }
+
+    private:
+        bool m_active;
+        QString m_modelPath;
+        QString m_enginePath;
+
+        MsgReportTensorRtConversion(bool active, const QString& modelPath, const QString& enginePath) :
+            Message(),
+            m_active(active),
+            m_modelPath(modelPath),
+            m_enginePath(enginePath)
+        { }
+    };
+
     explicit CameraObjectDetector(Camera *camera);
     ~CameraObjectDetector() override;
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }

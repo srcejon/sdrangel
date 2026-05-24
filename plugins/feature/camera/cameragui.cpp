@@ -38,6 +38,7 @@
 #include <QNetworkReply>
 #include <QPainter>
 #include <QPixmap>
+#include <QProgressDialog>
 #include <QSet>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -475,6 +476,36 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         return true;
     }
+    else if (CameraObjectDetector::MsgReportTensorRtConversion::match(message))
+    {
+        const CameraObjectDetector::MsgReportTensorRtConversion& report = (CameraObjectDetector::MsgReportTensorRtConversion&) message;
+        if (report.isActive())
+        {
+            if (!m_tensorRtProgressDialog)
+            {
+                m_tensorRtProgressDialog = new QProgressDialog(this);
+                m_tensorRtProgressDialog->setWindowTitle(tr("TensorRT conversion"));
+                m_tensorRtProgressDialog->setCancelButton(nullptr);
+                m_tensorRtProgressDialog->setWindowModality(Qt::NonModal);
+                m_tensorRtProgressDialog->setMinimumDuration(0);
+                m_tensorRtProgressDialog->setRange(0, 0);
+                m_tensorRtProgressDialog->setAttribute(Qt::WA_DeleteOnClose, false);
+            }
+
+            const QFileInfo modelInfo(report.getModelPath());
+            const QFileInfo engineInfo(report.getEnginePath());
+            m_tensorRtProgressDialog->setLabelText(tr("Converting YOLO model to TensorRT engine...\n%1\n\nEngine:\n%2")
+                .arg(modelInfo.fileName().isEmpty() ? report.getModelPath() : modelInfo.fileName())
+                .arg(engineInfo.fileName().isEmpty() ? report.getEnginePath() : engineInfo.fileName()));
+            m_tensorRtProgressDialog->show();
+            m_tensorRtProgressDialog->raise();
+        }
+        else if (m_tensorRtProgressDialog)
+        {
+            m_tensorRtProgressDialog->hide();
+        }
+        return true;
+    }
     else if (CameraPostProcessor::MsgReportSaveVideoState::match(message))
     {
         const CameraPostProcessor::MsgReportSaveVideoState& report = (CameraPostProcessor::MsgReportSaveVideoState&) message;
@@ -763,6 +794,8 @@ CameraGUI::~CameraGUI()
         delete m_histogramDialog;
         m_histogramDialog = nullptr;
     }
+    delete m_tensorRtProgressDialog;
+    m_tensorRtProgressDialog = nullptr;
     delete ui;
 }
 

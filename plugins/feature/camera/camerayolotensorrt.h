@@ -21,6 +21,7 @@
 
 #include <memory>
 #include <vector>
+#include <functional>
 
 #include <QString>
 #include <opencv2/core.hpp>
@@ -32,6 +33,8 @@ public:
     ~CameraYoloTensorRt();
 
     void reset();
+    using ProgressCallback = std::function<void(bool active, const QString& modelPath, const QString& enginePath)>;
+    void setProgressCallback(ProgressCallback callback);
     bool ensureLoaded(const QString& modelPath, const cv::Size& inputSize, int maxBatch, bool fp16, QString& error);
     bool infer(const std::vector<cv::Mat>& letterboxes, std::vector<cv::Mat>& outputs, QString& error);
 

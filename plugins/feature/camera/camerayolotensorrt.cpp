@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <limits>
 #include <numeric>
+#include <utility>
 
 #include <QCryptographicHash>
 #include <QDebug>
@@ -204,6 +205,7 @@ struct CameraYoloTensorRt::Impl
     std::string m_inputName;
     std::string m_outputName;
     cudaStream_t m_stream = nullptr;
+    CameraYoloTensorRt::ProgressCallback m_progressCallback;
 
     ~Impl()
     {
@@ -404,7 +406,17 @@ struct CameraYoloTensorRt::Impl
         }
 
         qDebug() << "CameraYoloTensorRt: building engine" << enginePath;
-        return buildEngine(modelPath, inputSize, boundedBatch, fp16, error);
+        if (m_progressCallback) {
+            m_progressCallback(true, modelPath, enginePath);
+        }
+
+        const bool built = buildEngine(modelPath, inputSize, boundedBatch, fp16, error);
+
+        if (m_progressCallback) {
+            m_progressCallback(false, modelPath, enginePath);
+        }
+
+        return built;
     }
 
     bool inferChunk(const std::vector<cv::Mat>& letterboxes, int firstTile, int tileCount, std::vector<cv::Mat>& outputs, QString& error)
@@ -579,6 +591,11 @@ CameraYoloTensorRt::~CameraYoloTensorRt() = default;
 void CameraYoloTensorRt::reset()
 {
     m_impl->reset();
+}
+
+void CameraYoloTensorRt::setProgressCallback(ProgressCallback callback)
+{
+    m_impl->m_progressCallback = std::move(callback);
 }
 
 bool CameraYoloTensorRt::ensureLoaded(const QString& modelPath, const cv::Size& inputSize, int maxBatch, bool fp16, QString& error)

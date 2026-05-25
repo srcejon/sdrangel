@@ -5651,13 +5651,20 @@ bool hasAcceptableWideBrightAnchorSupport(const CameraSettings& settings,
     const bool brightDetectionsAgree =
         (evaluation.matchedBrightDetections >= 4)
         && (evaluation.brightDetectionMagnitudeError <= 1.50);
+    const bool brightDetectionsStronglyAgree =
+        (evaluation.finalMatches.size() >= std::max(settings.m_plateSolveMinMatches + 4, 8))
+        && (evaluation.brightDetections >= 6)
+        && (evaluation.matchedBrightDetections >= 6)
+        && (evaluation.brightDetectionMatchFraction >= 0.75)
+        && (evaluation.brightDetectionMagnitudeError <= 0.25);
     const bool brightProjectedStarsAgree =
         (evaluation.brightProjectedStars < 5)
         || (evaluation.matchedBrightProjectedStars >= 2)
         || (evaluation.brightProjectedMatchFraction >= 0.25);
 
     if (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartBlind) {
-        return brightDetectionsAgree && brightProjectedStarsAgree;
+        return brightDetectionsStronglyAgree
+            || (brightDetectionsAgree && brightProjectedStarsAgree);
     }
 
     return brightDetectionsAgree

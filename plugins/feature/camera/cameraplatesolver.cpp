@@ -3187,6 +3187,33 @@ bool isStrongBlindSeedEvaluation(const CameraSettings& settings,
     return (candidate.rmsErrorPixels <= maxRmsError) && (medianError <= maxMedianError);
 }
 
+template<size_t N>
+bool hasSeedAnchorSupport(const Evaluation& candidate,
+                          const std::array<int, N>& detectionIndices,
+                          const std::array<int, N>& catalogIndices,
+                          int requiredMatches)
+{
+    if (!candidate.valid || (requiredMatches <= 0)) {
+        return false;
+    }
+
+    int matchedAnchors = 0;
+    for (size_t anchorIndex = 0; anchorIndex < N; ++anchorIndex)
+    {
+        for (const Match& match : candidate.matches)
+        {
+            if ((match.detectionIndex == detectionIndices[anchorIndex])
+                && (match.catalogIndex == catalogIndices[anchorIndex]))
+            {
+                ++matchedAnchors;
+                break;
+            }
+        }
+    }
+
+    return matchedAnchors >= std::min<int>(requiredMatches, static_cast<int>(N));
+}
+
 Evaluation verifyBlindSeedCandidate(const CameraSettings& settings,
                                     const PlateSolveCatalogContext& catalogContext,
                                     const QSize& imageSize,
@@ -3685,6 +3712,14 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                         if (!seededCandidate.valid) {
                             continue;
                         }
+                        const std::array<int, 3> anchorCatalogIndices {{
+                            triangleStars[permutation[0]].catalogIndex,
+                            triangleStars[permutation[1]].catalogIndex,
+                            triangleStars[permutation[2]].catalogIndex
+                        }};
+                        if (!hasSeedAnchorSupport(seededCandidate, detectionTriangle.indices, anchorCatalogIndices, 2)) {
+                            continue;
+                        }
 
                         const Evaluation candidate = evaluatePose(
                             settings,
@@ -3831,7 +3866,8 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                 {
                     continue;
                 }
-                if (std::acos(std::clamp(dot(sourceA, sourceB), -1.0, 1.0)) < degToRad(1.0)) {
+                const double sourceSeparationRadians = std::acos(std::clamp(dot(sourceA, sourceB), -1.0, 1.0));
+                if (sourceSeparationRadians < degToRad(1.0)) {
                     continue;
                 }
 
@@ -3840,6 +3876,16 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                     for (int secondCatalog = 0; secondCatalog < brightCatalogStars.size(); ++secondCatalog)
                     {
                         if (firstCatalog == secondCatalog) {
+                            continue;
+                        }
+                        const double catalogSeparationRadians = std::acos(std::clamp(
+                            dot(brightCatalogStars[firstCatalog].vector, brightCatalogStars[secondCatalog].vector),
+                            -1.0,
+                            1.0));
+                        const double separationToleranceRadians = plateSolveStartUsesFov(settings)
+                            ? std::max(degToRad(2.0), sourceSeparationRadians * 0.18)
+                            : std::max(degToRad(5.0), sourceSeparationRadians * 0.30);
+                        if (std::fabs(sourceSeparationRadians - catalogSeparationRadians) > separationToleranceRadians) {
                             continue;
                         }
 
@@ -3879,6 +3925,17 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                             fixedCenterOffsetY,
                             fixedDistortionK1);
                         if (!seededCandidate.valid) {
+                            continue;
+                        }
+                        const std::array<int, 2> anchorDetectionIndices {{
+                            detectionIndexA,
+                            detectionIndexB
+                        }};
+                        const std::array<int, 2> anchorCatalogIndices {{
+                            brightCatalogStars[firstCatalog].catalogIndex,
+                            brightCatalogStars[secondCatalog].catalogIndex
+                        }};
+                        if (!hasSeedAnchorSupport(seededCandidate, anchorDetectionIndices, anchorCatalogIndices, 2)) {
                             continue;
                         }
 
@@ -4131,6 +4188,15 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                             fixedCenterOffsetY,
                             fixedDistortionK1);
                         if (!seededCandidate.valid) {
+                            continue;
+                        }
+                        const std::array<int, 4> anchorCatalogIndices {{
+                            quadStars[permutation[0]].catalogIndex,
+                            quadStars[permutation[1]].catalogIndex,
+                            quadStars[permutation[2]].catalogIndex,
+                            quadStars[permutation[3]].catalogIndex
+                        }};
+                        if (!hasSeedAnchorSupport(seededCandidate, detectionQuad.indices, anchorCatalogIndices, 3)) {
                             continue;
                         }
 
@@ -7552,6 +7618,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                      << "radius" << localRadiusDegrees;
         }
 
+        qint64 seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
         const QVector<Evaluation> blindTriangleSeeds = buildBlindTriangleSeeds(
             settings,
             catalogContext,
@@ -7560,6 +7627,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             starDetections,
             detectionIndices,
             *blindVisibleStars);
+        logSearchProfile("blind-triangle-seeds", seedStageStartMs);
         for (const Evaluation& seed : blindTriangleSeeds)
         {
             logPlateSolveEvaluation("blind-triangle-seed", seed);
@@ -7580,6 +7648,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             }
         }
 
+        seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
         const QVector<Evaluation> brightPairSeeds = buildBrightPairSeeds(
             settings,
             catalogContext,
@@ -7588,6 +7657,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             starDetections,
             detectionIndices,
             *blindVisibleStars);
+        logSearchProfile("bright-pair-seeds", seedStageStartMs);
         for (const Evaluation& seed : brightPairSeeds)
         {
             logPlateSolveEvaluation("bright-pair-seed", seed);
@@ -7608,6 +7678,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             }
         }
 
+        seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
         const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
             settings,
             catalogContext,
@@ -7616,6 +7687,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             starDetections,
             detectionIndices,
             *blindVisibleStars);
+        logSearchProfile("blind-quad-seeds", seedStageStartMs);
         for (const Evaluation& seed : blindQuadSeeds)
         {
             logPlateSolveEvaluation("blind-quad-seed", seed);
@@ -7650,7 +7722,11 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const bool blindSeedAlreadyAcceptable = best.valid
         && (best.matchCount >= std::max(2, minMatchCount / 2))
         && (best.rmsErrorPixels <= wideFallbackRmsCap);
+    const bool blindSeedVeryStrong = best.valid
+        && (best.matchCount >= std::max(10, minMatchCount + 6))
+        && (best.rmsErrorPixels <= std::min(wideFallbackRmsCap * 0.50, 8.0));
     const bool wideWeakBestLooksLikeFalseBrightMatch = wideWeakMode
+        && !blindSeedVeryStrong
         && best.valid
         && ((!hasAcceptableBrightnessConsistency(best))
             || (std::isfinite(best.meanCatalogMagnitude) && (best.meanCatalogMagnitude > 3.0)));
@@ -8640,12 +8716,18 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     const bool useWideWeakAnchorSearch = !useStartDirection
         && isWidePlateSolveContext(settings);
     const int guidedAnchorSkipRequiredMatches = useStartDirection
-        ? result.m_requiredMatches + 2
+        ? result.m_requiredMatches + (isWidePlateSolveContext(settings) ? 1 : 2)
         : result.m_requiredMatches;
+    const bool guidedAnchorSkipBrightnessAccepted =
+        (useStartDirection && isWidePlateSolveContext(settings))
+        || hasAcceptableBrightnessConsistency(best);
+    const double guidedAnchorSkipRmsCap = (useStartDirection && isWidePlateSolveContext(settings))
+        ? std::min(finalMatchRadius * 0.70, 18.0)
+        : std::min(finalMatchRadius * 0.60, 16.0);
     const bool bestStrongEnoughToSkipGuidedAnchor = best.valid
         && (best.matchCount >= guidedAnchorSkipRequiredMatches)
-        && (best.rmsErrorPixels <= std::min(finalMatchRadius * 0.60, 16.0))
-        && hasAcceptableBrightnessConsistency(best);
+        && (best.rmsErrorPixels <= guidedAnchorSkipRmsCap)
+        && guidedAnchorSkipBrightnessAccepted;
     if (profilePlateSolve && (useStartDirection || useWideWeakAnchorSearch) && bestStrongEnoughToSkipGuidedAnchor)
     {
         qDebug().noquote().nospace()

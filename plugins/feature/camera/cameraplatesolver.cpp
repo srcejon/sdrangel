@@ -88,6 +88,20 @@ struct ProjectedCatalogStar
     double magnitude = 0.0;
 };
 
+// Cache entry for the blind-grid roll-sweep optimisation.
+// Stores projected pixel offsets from the principal point at roll=0.
+// Each of the 13 roll steps is then obtained by a cheap 2D rotation of these
+// offsets — no acos/atan2/projection-formula calls are needed per roll.
+// This is valid for all projection types and any distortionK1 because radial
+// distortion is rotation-invariant: rolling the camera rotates phi but not
+// theta, leaving r² (and therefore the distortion scale factor) unchanged.
+struct BlindGridCachedStar {
+    int   catalogIndex = -1;
+    float dxRef = 0.0f;    // pixel_x − principalPointX at roll=0
+    float dyRef = 0.0f;    // principalPointY − pixel_y at roll=0 (up-positive)
+    float magnitude = 0.0f;
+};
+
 struct VisibleCatalogStar
 {
     int catalogIndex = -1;
@@ -274,6 +288,8 @@ QVector<double> m_detectionBrightnessMetricCache;
 QVector<double> m_detectionReliabilityMetricCache;
 QVector<ProjectedCatalogStar> m_projectedCatalogScratch;
 QVector<CandidatePair> m_candidatePairScratch;
+QVector<BlindGridCachedStar> m_blindGridCache;
+QVector<ProjectedCatalogStar> m_blindGridProjectedScratch;
 // Maximum total size of m_sirilRangeCache before it is cleared after a solve.
 // m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
 static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
@@ -4908,6 +4924,121 @@ Evaluation evaluatePose(const CameraSettings& settings,
     return evaluation;
 }
 
+// -------------------------------------------------------------------------
+// Blind-grid roll-sweep optimisation helpers
+//
+// For the exhaustive blind grid (Az × El × FOV × Roll ≈ 52 k evaluations),
+// rolling the camera is a pure 2D rotation in pixel space around the
+// principal point. We therefore project the catalog just once per (Az,El,FOV)
+// at roll=0, cache the pixel offsets in m_blindGridCache, and then for each
+// of the 13 roll values compute the rolled positions by 2D rotation — saving
+// ~13× the catalog-projection cost in the inner loop.
+// -------------------------------------------------------------------------
+
+// Project every visible catalog star at roll=0 and store pixel offsets
+// relative to the principal point in m_blindGridCache.  No image-bounds
+// check is performed here; populateBlindGridProjectedCatalog applies the
+// bounds filter after rotating to a specific roll angle.
+void buildBlindGridCache(const PlateSolveCatalogContext& catalogContext,
+                         const SkyProjector& refProjector)
+{
+    m_blindGridCache.clear();
+    if (!refProjector.valid)
+        return;
+    m_blindGridCache.reserve(catalogContext.visibleStars.size());
+    for (const VisibleCatalogStar& vs : catalogContext.visibleStars)
+    {
+        QPointF pt;
+        if (!projectVector(refProjector, vs.vector, pt))
+            continue;
+        BlindGridCachedStar cs;
+        cs.catalogIndex = vs.catalogIndex;
+        cs.dxRef        = static_cast<float>(pt.x() - refProjector.principalPointX);
+        cs.dyRef        = static_cast<float>(refProjector.principalPointY - pt.y());
+        cs.magnitude    = static_cast<float>(vs.magnitude);
+        m_blindGridCache.push_back(cs);
+    }
+}
+
+// Rotate the roll=0 offsets by rollDegrees and populate
+// m_blindGridProjectedScratch with only the stars that fall within the
+// expanded image bounds (image rect + matchRadiusPixels margin).
+void populateBlindGridProjectedCatalog(double rollDegrees,
+                                       double matchRadiusPixels,
+                                       const SkyProjector& refProjector)
+{
+    m_blindGridProjectedScratch.clear();
+    if (m_blindGridCache.isEmpty() || !refProjector.valid)
+        return;
+    const double rollRad = degToRad(rollDegrees);
+    const double cosR    = std::cos(rollRad);
+    const double sinR    = std::sin(rollRad);
+    const double cx      = refProjector.principalPointX;
+    const double cy      = refProjector.principalPointY;
+    const QRectF expandedBounds(-matchRadiusPixels,
+                                -matchRadiusPixels,
+                                refProjector.width  + 2.0 * matchRadiusPixels,
+                                refProjector.height + 2.0 * matchRadiusPixels);
+    m_blindGridProjectedScratch.reserve(m_blindGridCache.size());
+    for (const BlindGridCachedStar& cs : m_blindGridCache)
+    {
+        const double dxRef = static_cast<double>(cs.dxRef);
+        const double dyRef = static_cast<double>(cs.dyRef);
+        // 2-D rotation of the (right, up) offset vector
+        const double dx = dxRef * cosR + dyRef * sinR;
+        const double dy = -dxRef * sinR + dyRef * cosR;
+        const QPointF pt(cx + dx, cy - dy);
+        if (!expandedBounds.contains(pt))
+            continue;
+        m_blindGridProjectedScratch.push_back({cs.catalogIndex, pt, static_cast<double>(cs.magnitude)});
+    }
+}
+
+// Evaluate a pose using the pre-rotated catalog already stored in
+// m_blindGridProjectedScratch.  Mirrors evaluatePose but skips the
+// createProjector + buildProjectedCatalogInto steps.
+Evaluation evaluatePoseFromPrecomputedCatalog(
+    const CameraSettings& settings,
+    const PlateSolveCatalogContext& catalogContext,
+    const QVector<CameraPipelineStarDetection>& starDetections,
+    const QVector<int>& detectionIndices,
+    double azimuthDegrees, double elevationDegrees,
+    double rollDegrees, double fovDegrees,
+    double centerOffsetXPixels, double centerOffsetYPixels,
+    double distortionK1,
+    double matchRadiusPixels)
+{
+    Evaluation evaluation;
+    evaluation.azimuthDegrees      = normalizeDegrees(azimuthDegrees);
+    evaluation.elevationDegrees    = elevationDegrees;
+    evaluation.rollDegrees         = rollDegrees;
+    evaluation.fovDegrees          = fovDegrees;
+    evaluation.centerOffsetXPixels = centerOffsetXPixels;
+    evaluation.centerOffsetYPixels = centerOffsetYPixels;
+    evaluation.distortionK1        = distortionK1;
+
+    const QVector<ProjectedCatalogStar>& projectedStars = m_blindGridProjectedScratch;
+    if (projectedStars.isEmpty())
+        return evaluation;
+
+    evaluation.matches = buildMatches(
+        catalogContext, starDetections, detectionIndices, projectedStars, matchRadiusPixels);
+    evaluation.matchCount = evaluation.matches.size();
+    if (evaluation.matchCount <= 0)
+        return evaluation;
+
+    evaluation.brightnessRankError = matchBrightnessRankError(
+        starDetections, detectionIndices, projectedStars, evaluation.matches);
+    evaluation.meanCatalogMagnitude = meanCatalogMagnitudeForMatches(
+        catalogContext.catalogStars, evaluation.matches);
+    double sumSq = 0.0;
+    for (const Match& m : evaluation.matches)
+        sumSq += m.distancePixels * m.distancePixels;
+    evaluation.rmsErrorPixels = std::sqrt(sumSq / evaluation.matchCount);
+    evaluation.valid = true;
+    return evaluation;
+}
+
 Evaluation evaluateAnchoredPose(const CameraSettings& settings,
                                 const PlateSolveCatalogContext& catalogContext,
                                 const QSize& imageSize,
@@ -7091,6 +7222,33 @@ Evaluation searchBestPose(const CameraSettings& settings,
         }
     };
 
+    // Lightweight variant used by the blind-grid roll sweep.  The projected
+    // catalog is already stored in m_blindGridProjectedScratch — no
+    // createProjector or buildProjectedCatalogInto needed.
+    auto evaluateSeedFromCache = [&](const char *stage,
+                                     double azimuthDegrees,
+                                     double elevationDegrees,
+                                     double rollDegrees,
+                                     double fovDegrees,
+                                     double matchRadiusPixels) {
+        const Evaluation candidate = evaluatePoseFromPrecomputedCatalog(
+            settings, catalogContext, starDetections, detectionIndices,
+            azimuthDegrees, elevationDegrees, rollDegrees, fovDegrees,
+            fixedCenterOffsetX, fixedCenterOffsetY, fixedDistortionK1,
+            matchRadiusPixels);
+        logPlateSolveEvaluation(stage, candidate);
+        if (keepMultipleCandidates) {
+            insertDistinctEvaluationCandidate(
+                *candidatePool, candidate, maxMultiHypothesisCandidates,
+                useWeakModeScoring, stage, interestingWeakModeMatchCount,
+                weakModeCandidatePoolMinMatches, useGuidedDirectionScoring);
+        }
+        if (isBetterEvaluationForMode(candidate, best, useWeakModeScoring, useGuidedDirectionScoring)) {
+            best = candidate;
+            logPlateSolveEvaluation(stage, best, true);
+        }
+    };
+
     auto hasGoodGuidedSeed = [&]() {
         if (useStartDirection) {
             return isAcceptableDirectionSeedSolve(settings, minMatchCount, best)
@@ -7387,8 +7545,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
     }
 
     // Short-circuit the exhaustive wide-fallback grid when the blind seeds have already
-    // landed in a reasonable basin. The grid runs ~52k evaluatePose calls (72 az × 7 el ×
-    // 13 roll × 8 fov), so any half-decent prior result is worth keeping. Acceptance bar:
+    // landed in a reasonable basin. The grid runs ~52k match evaluations (72 az × 7 el ×
+    // 13 roll × 8 fov — but only ~4 k full catalog projections thanks to the roll-sweep
+    // cache), so any half-decent prior result is worth keeping. Acceptance bar:
     // at least half the minimum required matches *and* an RMS that fits inside the
     // acquisition radius — the subsequent refinement loops will tighten this further.
     const double wideFallbackRmsCap = std::max(
@@ -7438,40 +7597,65 @@ Evaluation searchBestPose(const CameraSettings& settings,
         const double fallbackElevationStepDegrees = (useStartFov || useNarrowBlindFallbackGrid)
             ? fovGridElevationStepDegrees
             : elevationStepDegrees;
+        // The effective match radius is constant across all grid points; compute
+        // it once so populateBlindGridProjectedCatalog can apply the same bounds.
+        const double blindMatchRadius = useStartFov
+            ? (useWideFovSeedRadius  ? wideFovSeedMatchRadius
+                                     : static_cast<double>(settings.m_plateSolveMatchRadius))
+            : (useWideBlindSeedRadius ? wideBlindSeedMatchRadius
+                                      : static_cast<double>(settings.m_plateSolveMatchRadius));
+
+        // Roll-sweep optimisation: project the catalog ONCE per (Az, El, FOV)
+        // at roll=0, cache the pixel offsets, then rotate by 2-D matrix for
+        // each of the 13 roll values — ~13× fewer acos/atan2 calls per
+        // Az×El×FOV cell.  Loop order is now FOV-outer, Roll-inner.
         for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += fallbackAzimuthStepDegrees)
         {
             for (double elevationDegrees = minElevationDegrees; elevationDegrees <= maxElevationDegrees; elevationDegrees += fallbackElevationStepDegrees)
             {
-                for (double rollDegrees : wideRollOffsets)
+                if (useStartFov)
                 {
-                    if (useStartFov)
+                    for (double fovScale : wideFovScales)
                     {
-                        for (double fovScale : wideFovScales)
+                        const double fovDegrees = std::clamp(
+                            static_cast<double>(settings.m_fov) * fovScale,
+                            static_cast<double>(CameraSettings::m_minFov),
+                            static_cast<double>(CameraSettings::m_maxFov));
+                        const SkyProjector refProjector = createProjector(
+                            settings, imageSize,
+                            azimuthDegrees, elevationDegrees, 0.0, fovDegrees,
+                            fixedCenterOffsetX, fixedCenterOffsetY, fixedDistortionK1);
+                        buildBlindGridCache(catalogContext, refProjector);
+                        for (double rollDegrees : wideRollOffsets)
                         {
-                            evaluateSeed(
+                            populateBlindGridProjectedCatalog(rollDegrees, blindMatchRadius, refProjector);
+                            evaluateSeedFromCache(
                                 "wide-fallback-fov",
-                                azimuthDegrees,
-                                elevationDegrees,
-                                rollDegrees,
-                                std::clamp(static_cast<double>(settings.m_fov) * fovScale,
-                                    static_cast<double>(CameraSettings::m_minFov),
-                                    static_cast<double>(CameraSettings::m_maxFov)),
-                                useWideFovSeedRadius ? wideFovSeedMatchRadius : -1.0);
+                                azimuthDegrees, elevationDegrees, rollDegrees,
+                                fovDegrees, blindMatchRadius);
                         }
                     }
-                    else
+                }
+                else
+                {
+                    for (double fovDegrees : blindFallbackFovs)
                     {
-                        for (double fovDegrees : blindFallbackFovs)
+                        const double clampedFov = std::clamp(
+                            fovDegrees,
+                            static_cast<double>(CameraSettings::m_minFov),
+                            180.0);
+                        const SkyProjector refProjector = createProjector(
+                            settings, imageSize,
+                            azimuthDegrees, elevationDegrees, 0.0, clampedFov,
+                            fixedCenterOffsetX, fixedCenterOffsetY, fixedDistortionK1);
+                        buildBlindGridCache(catalogContext, refProjector);
+                        for (double rollDegrees : wideRollOffsets)
                         {
-                            evaluateSeed(
+                            populateBlindGridProjectedCatalog(rollDegrees, blindMatchRadius, refProjector);
+                            evaluateSeedFromCache(
                                 "wide-fallback-blind",
-                                azimuthDegrees,
-                                elevationDegrees,
-                                rollDegrees,
-                                std::clamp(fovDegrees,
-                                    static_cast<double>(CameraSettings::m_minFov),
-                                    180.0),
-                                useWideBlindSeedRadius ? wideBlindSeedMatchRadius : -1.0);
+                                azimuthDegrees, elevationDegrees, rollDegrees,
+                                clampedFov, blindMatchRadius);
                         }
                     }
                 }

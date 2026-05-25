@@ -2299,7 +2299,10 @@ static bool projectVector(const SkyProjector& projector, const SkyVector& vector
     if (std::fabs(projector.distortionK1) > 1e-9)
     {
         const double radiusSquared = projectedX * projectedX + projectedY * projectedY;
-        const double distortionScale = std::max(0.1, 1.0 + projector.distortionK1 * radiusSquared);
+        const double distortionScale = 1.0 + projector.distortionK1 * radiusSquared;
+        // A non-positive scale means the distortion model has folded this direction
+        // back past the lens singularity — no valid image point exists.
+        if (distortionScale <= 0.0) return false;
         projectedX *= distortionScale;
         projectedY *= distortionScale;
     }
@@ -2338,13 +2341,18 @@ static bool unprojectPixelToVector(const SkyProjector& projector, const QPointF&
     {
         double undistortedX = projectedX;
         double undistortedY = projectedY;
+        bool undistortOk = true;
         for (int iteration = 0; iteration < 8; ++iteration)
         {
             const double radiusSquared = undistortedX * undistortedX + undistortedY * undistortedY;
-            const double distortionScale = std::max(0.1, 1.0 + projector.distortionK1 * radiusSquared);
+            const double distortionScale = 1.0 + projector.distortionK1 * radiusSquared;
+            // Non-positive scale means the pixel lies in the folded region of the
+            // distortion model — it cannot be mapped back to a sky direction.
+            if (distortionScale <= 0.0) { undistortOk = false; break; }
             undistortedX = projectedX / distortionScale;
             undistortedY = projectedY / distortionScale;
         }
+        if (!undistortOk) return false;
         projectedX = undistortedX;
         projectedY = undistortedY;
     }
@@ -3950,7 +3958,10 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
             const double dedupRadiusDegrees = std::clamp(baseSeedFov * 0.05, 0.5, 5.0);
             bool alreadyTried = false;
             for (const TriedDirection& tried : triedDirections) {
-                if (std::fabs(seedAzimuth - tried.azimuthDegrees) < dedupRadiusDegrees
+                // Use wrap-aware azimuth distance so seeds near 0°/360° are correctly deduped.
+                const double azDiff = std::fabs(seedAzimuth - tried.azimuthDegrees);
+                const double azDist = (azDiff <= 180.0) ? azDiff : 360.0 - azDiff;
+                if (azDist < dedupRadiusDegrees
                     && std::fabs(seedElevation - tried.elevationDegrees) < dedupRadiusDegrees)
                 {
                     alreadyTried = true;
@@ -4435,7 +4446,10 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
             const double dedupRadiusDegrees = std::clamp(baseSeedFov * 0.05, 0.5, 5.0);
             bool alreadyTried = false;
             for (const TriedDirection& tried : triedDirections) {
-                if (std::fabs(seedAzimuth - tried.azimuthDegrees) < dedupRadiusDegrees
+                // Use wrap-aware azimuth distance so seeds near 0°/360° are correctly deduped.
+                const double azDiff = std::fabs(seedAzimuth - tried.azimuthDegrees);
+                const double azDist = (azDiff <= 180.0) ? azDiff : 360.0 - azDiff;
+                if (azDist < dedupRadiusDegrees
                     && std::fabs(seedElevation - tried.elevationDegrees) < dedupRadiusDegrees)
                 {
                     alreadyTried = true;
@@ -7753,12 +7767,14 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const std::array<double, 3> coarseFovOffsets = {{-1.0, 0.0, 1.0}};
     const std::array<double, 5> coarseOffsetsOrdered = {{0.0, -0.5, 0.5, -1.0, 1.0}};
     const std::array<double, 3> coarseFovOffsetsOrdered = {{0.0, -1.0, 1.0}};
-    const std::array<double, 13> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0}};
-    const std::array<double, 13> wideRollOffsetsOrdered = {{0.0, -30.0, 30.0, -60.0, 60.0, -90.0, 90.0, -120.0, 120.0, -150.0, 150.0, -180.0, 180.0}};
-    const std::array<double, 25> wideRollOffsetsFineOrdered = {{
+    // -180° and +180° are numerically identical rotations; keep only -180° to avoid
+    // duplicating ~7.7% of blind-grid evaluations.
+    const std::array<double, 12> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0}};
+    const std::array<double, 12> wideRollOffsetsOrdered = {{0.0, -30.0, 30.0, -60.0, 60.0, -90.0, 90.0, -120.0, 120.0, -150.0, 150.0, -180.0}};
+    const std::array<double, 24> wideRollOffsetsFineOrdered = {{
         0.0, -15.0, 15.0, -30.0, 30.0, -45.0, 45.0, -60.0, 60.0,
         -75.0, 75.0, -90.0, 90.0, -105.0, 105.0, -120.0, 120.0,
-        -135.0, 135.0, -150.0, 150.0, -165.0, 165.0, -180.0, 180.0
+        -135.0, 135.0, -150.0, 150.0, -165.0, 165.0, -180.0
     }};
     QVector<double> fovSearchRollOffsets;
     if (wideWeakMode && useStartFov && !useStartElevation && !useStartDirection) {

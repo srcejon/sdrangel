@@ -7235,6 +7235,10 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const bool useGuidedDirectionScoring = useStartDirection;
     const bool keepMultipleCandidates = candidatePool != nullptr;
     const bool wideWeakMode = useWeakModeScoring && isWidePlateSolveContext(settings);
+    const bool useWideFovBlindSeedFirst = wideWeakMode
+        && useStartFov
+        && !useStartElevation
+        && !useStartDirection;
     const int maxMultiHypothesisCandidates = (useStartDirection && (settings.m_fov <= 5.0)) ? 24
         : wideWeakMode ? 64
         : 10;
@@ -7569,10 +7573,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         const double guidedFovMatchRadius = useWideFovSeedRadius
             ? wideFovSeedMatchRadius
             : static_cast<double>(settings.m_plateSolveMatchRadius);
-        const bool runGuidedFovGrid = !(wideWeakMode
-            && !useStartElevation
-            && !useStartDirection
-            && (starDetections.size() >= 32));
+        const bool runGuidedFovGrid = !useWideFovBlindSeedFirst;
         if (runGuidedFovGrid)
         {
             for (double fovFactor : coarseFovOffsetsOrdered)

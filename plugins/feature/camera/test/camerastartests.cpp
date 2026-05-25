@@ -14,6 +14,7 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -1280,13 +1281,19 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
     const QVector<CatalogStar> diagnosticCatalog = loadDiagnosticCatalog();
 
     int failures = 0;
+    QElapsedTimer suiteTimer;
+    suiteTimer.start();
     for (const StarTestCase& test : tests)
     {
+        QElapsedTimer testTimer;
+        testTimer.start();
         const DetectorRunResult result = runDetector(test);
+        const qint64 elapsedMs = testTimer.elapsed();
         if (!result.completed)
         {
             ++failures;
-            std::cerr << "FAIL " << test.name.toStdString() << ": " << result.error.toStdString() << '\n';
+            std::cerr << "FAIL " << test.name.toStdString() << ": " << result.error.toStdString()
+                      << " timeMs=" << elapsedMs << '\n';
             continue;
         }
 
@@ -1322,6 +1329,7 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
                   << " poseEl=" << result.frame->m_plateSolveElevation
                   << " poseRoll=" << result.frame->m_plateSolveRoll
                   << " poseFov=" << result.frame->m_plateSolveFov
+                  << " timeMs=" << elapsedMs
                   << '\n';
         std::cout << "  labels: " << labels.join(QStringLiteral(", ")).toStdString() << '\n';
         if (wroteOverlay) {
@@ -1359,7 +1367,8 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
         return 1;
     }
 
-    std::cout << tests.size() << " camera star test(s) passed\n";
+    std::cout << tests.size() << " camera star test(s) passed"
+              << " totalTimeMs=" << suiteTimer.elapsed() << '\n';
     return 0;
 }
 }

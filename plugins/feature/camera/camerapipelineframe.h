@@ -117,6 +117,7 @@ struct CameraPipelineFrame
     QString m_plateSolveCatalogSource;
     QString m_plateSolveFailureReason;
     QString m_plateSolveMatchSummary;
+    QString m_plateSolveProfileSummary;
     int m_plateSolveRequiredMatches = 0;
     bool m_saveCurrentImage = false;
     int m_stackCount = 1;

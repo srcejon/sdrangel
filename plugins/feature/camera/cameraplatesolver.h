@@ -50,6 +50,7 @@ struct CameraPlateSolveResult
     QString m_catalogSource;
     QString m_failureReason;
     QString m_matchSummary;
+    QString m_profileSummary;
     int m_requiredMatches = 0;
 };
 

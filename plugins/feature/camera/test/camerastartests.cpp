@@ -1330,6 +1330,7 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
                   << " poseRoll=" << result.frame->m_plateSolveRoll
                   << " poseFov=" << result.frame->m_plateSolveFov
                   << " timeMs=" << elapsedMs
+                  << " stages=" << result.frame->m_plateSolveProfileSummary.toStdString()
                   << '\n';
         std::cout << "  labels: " << labels.join(QStringLiteral(", ")).toStdString() << '\n';
         if (wroteOverlay) {
@@ -1343,6 +1344,9 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
         }
         if (!result.frame->m_plateSolveMatchSummary.isEmpty()) {
             std::cout << "  matches: " << result.frame->m_plateSolveMatchSummary.toStdString() << '\n';
+        }
+        if (!result.frame->m_plateSolveProfileSummary.isEmpty()) {
+            std::cout << "  stages: " << result.frame->m_plateSolveProfileSummary.toStdString() << '\n';
         }
         if (!solved) {
             std::cout << "  plate solve did not complete\n";

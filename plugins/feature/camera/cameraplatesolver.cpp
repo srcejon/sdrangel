@@ -292,6 +292,7 @@ QVector<CandidatePair> m_candidatePairScratch;
 QVector<BlindGridCachedStar> m_blindGridCache;
 QVector<ProjectedCatalogStar> m_blindGridProjectedScratch;
 QHash<quint64, QVector<int>> m_projectedStarGridScratch;
+QStringList m_profileTimings;
 // Maximum total size of m_sirilRangeCache before it is cleared after a solve.
 // m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
 static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
@@ -905,12 +906,15 @@ static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path)
     QVector<CatalogStar> stars;
     while (!file.atEnd())
     {
-        const QByteArray line = file.readLine().trimmed();
+        QByteArray line = file.readLine();
+        while (line.endsWith('\n') || line.endsWith('\r')) {
+            line.chop(1);
+        }
         if (line.isEmpty() || line.startsWith('#')) {
             continue;
         }
         const QList<QByteArray> fields = line.split('\t');
-        if (fields.size() < 5) {
+        if (fields.size() < 4) {
             continue;
         }
         bool raOk = false;
@@ -927,7 +931,7 @@ static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path)
             ra,
             dec,
             mag,
-            QString::fromUtf8(fields[4])
+            fields.size() >= 5 ? QString::fromUtf8(fields[4]) : QString()
         });
     }
     return stars;
@@ -2891,6 +2895,135 @@ static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& set
     return visibleStars;
 }
 
+static void buildVisibleStarIndex(const QVector<VisibleCatalogStar>& visibleStars,
+                                  QHash<int, int>& visibleStarIndexByCatalogIndex)
+{
+    visibleStarIndexByCatalogIndex.clear();
+    visibleStarIndexByCatalogIndex.reserve(visibleStars.size());
+    for (int i = 0; i < visibleStars.size(); ++i) {
+        visibleStarIndexByCatalogIndex.insert(visibleStars[i].catalogIndex, i);
+    }
+}
+
+struct VisibleCatalogCacheEntry
+{
+    QVector<VisibleCatalogStar> visibleStars;
+    QHash<int, int> visibleStarIndexByCatalogIndex;
+};
+
+static QMutex& visibleCatalogCacheMutex()
+{
+    static QMutex s_cacheMutex;
+    return s_cacheMutex;
+}
+
+static QHash<QString, VisibleCatalogCacheEntry>& visibleCatalogCache()
+{
+    static QHash<QString, VisibleCatalogCacheEntry> s_cache;
+    return s_cache;
+}
+
+static QStringList& visibleCatalogCacheOrder()
+{
+    static QStringList s_cacheOrder;
+    return s_cacheOrder;
+}
+
+static QString visibleCatalogCacheKey(const CameraSettings& settings,
+                                      const QVector<CatalogStar>& catalogStars,
+                                      const QDateTime& captureDateTimeUtc,
+                                      double maxMagnitude)
+{
+    const QString path = currentCatalogPath(settings);
+    const bool isResource = path.startsWith(QLatin1String(":/"));
+    const qint64 modifiedSecs = isResource ? 0 : QFileInfo(path).lastModified().toSecsSinceEpoch();
+    const qint64 timeBucket = captureDateTimeUtc.toSecsSinceEpoch() / 30;
+
+    return QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8")
+        .arg(path)
+        .arg(modifiedSecs)
+        .arg(catalogStars.size())
+        .arg(qRound64(settings.m_latitude * 100000.0))
+        .arg(qRound64(settings.m_longitude * 100000.0))
+        .arg(timeBucket)
+        .arg(qRound64(maxMagnitude * 100.0))
+        .arg(static_cast<int>(settings.m_plateSolveCatalogSource));
+}
+
+static bool loadVisibleCatalogCache(const CameraSettings& settings,
+                                    const QVector<CatalogStar>& catalogStars,
+                                    const QDateTime& captureDateTimeUtc,
+                                    double maxMagnitude,
+                                    QVector<VisibleCatalogStar>& visibleStars,
+                                    QHash<int, int>& visibleStarIndexByCatalogIndex)
+{
+    const QString key = visibleCatalogCacheKey(settings, catalogStars, captureDateTimeUtc, maxMagnitude);
+    QMutexLocker locker(&visibleCatalogCacheMutex());
+    const QHash<QString, VisibleCatalogCacheEntry>& cache = visibleCatalogCache();
+    const auto it = cache.constFind(key);
+    if (it == cache.cend()) {
+        return false;
+    }
+
+    visibleStars = it->visibleStars;
+    visibleStarIndexByCatalogIndex = it->visibleStarIndexByCatalogIndex;
+    return true;
+}
+
+static void storeVisibleCatalogCache(const CameraSettings& settings,
+                                     const QVector<CatalogStar>& catalogStars,
+                                     const QDateTime& captureDateTimeUtc,
+                                     double maxMagnitude,
+                                     const QVector<VisibleCatalogStar>& visibleStars,
+                                     const QHash<int, int>& visibleStarIndexByCatalogIndex)
+{
+    static constexpr int kMaxVisibleCatalogCacheEntries = 32;
+
+    const QString key = visibleCatalogCacheKey(settings, catalogStars, captureDateTimeUtc, maxMagnitude);
+    QMutexLocker locker(&visibleCatalogCacheMutex());
+    QHash<QString, VisibleCatalogCacheEntry>& cache = visibleCatalogCache();
+    QStringList& cacheOrder = visibleCatalogCacheOrder();
+    if (!cache.contains(key))
+    {
+        cacheOrder.append(key);
+        while (cacheOrder.size() > kMaxVisibleCatalogCacheEntries) {
+            cache.remove(cacheOrder.takeFirst());
+        }
+    }
+    cache.insert(key, {visibleStars, visibleStarIndexByCatalogIndex});
+}
+
+static void populateVisibleCatalogContext(PlateSolveCatalogContext& context,
+                                          const CameraSettings& settings,
+                                          const QDateTime& captureDateTimeUtc,
+                                          double maxMagnitude,
+                                          bool allowCache)
+{
+    if (allowCache
+        && loadVisibleCatalogCache(
+            settings,
+            context.catalogStars,
+            captureDateTimeUtc,
+            maxMagnitude,
+            context.visibleStars,
+            context.visibleStarIndexByCatalogIndex))
+    {
+        return;
+    }
+
+    context.visibleStars = buildVisibleCatalog(settings, context.catalogStars, captureDateTimeUtc, maxMagnitude);
+    buildVisibleStarIndex(context.visibleStars, context.visibleStarIndexByCatalogIndex);
+    if (allowCache) {
+        storeVisibleCatalogCache(
+            settings,
+            context.catalogStars,
+            captureDateTimeUtc,
+            maxMagnitude,
+            context.visibleStars,
+            context.visibleStarIndexByCatalogIndex);
+    }
+}
+
 PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& settings,
                                                        const QSize& imageSize,
                                                        const QDateTime& captureDateTimeUtc,
@@ -2941,11 +3074,8 @@ PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& set
         context.catalogSource = currentCatalogSource(settings);
     }
 
-    context.visibleStars = buildVisibleCatalog(settings, context.catalogStars, captureDateTimeUtc, maxMagnitude);
-    context.visibleStarIndexByCatalogIndex.reserve(context.visibleStars.size());
-    for (int i = 0; i < context.visibleStars.size(); ++i) {
-        context.visibleStarIndexByCatalogIndex.insert(context.visibleStars[i].catalogIndex, i);
-    }
+    const bool allowVisibleCache = !context.catalogSource.contains(QStringLiteral("Siril SPCC Gaia"));
+    populateVisibleCatalogContext(context, settings, captureDateTimeUtc, maxMagnitude, allowVisibleCache);
     return context;
 }
 
@@ -2954,12 +3084,8 @@ void rebuildVisibleCatalogContext(PlateSolveCatalogContext& context,
                                   const QDateTime& captureDateTimeUtc,
                                   double maxMagnitude)
 {
-    context.visibleStars = buildVisibleCatalog(settings, context.catalogStars, captureDateTimeUtc, maxMagnitude);
-    context.visibleStarIndexByCatalogIndex.clear();
-    context.visibleStarIndexByCatalogIndex.reserve(context.visibleStars.size());
-    for (int i = 0; i < context.visibleStars.size(); ++i) {
-        context.visibleStarIndexByCatalogIndex.insert(context.visibleStars[i].catalogIndex, i);
-    }
+    const bool allowVisibleCache = !context.catalogSource.contains(QStringLiteral("Siril SPCC Gaia"));
+    populateVisibleCatalogContext(context, settings, captureDateTimeUtc, maxMagnitude, allowVisibleCache);
 }
 
 static QVector<VisibleCatalogStar> selectLocalVisibleStars(const QVector<VisibleCatalogStar>& visibleStars,
@@ -7434,16 +7560,16 @@ Evaluation searchBestPose(const CameraSettings& settings,
     Evaluation best;
     const bool profilePlateSolve = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_PROFILE");
     QElapsedTimer searchProfileTimer;
-    if (profilePlateSolve) {
-        searchProfileTimer.start();
-    }
+    searchProfileTimer.start();
     auto logSearchProfile = [&](const char *stage, qint64 startedMs) {
+        const qint64 elapsedMs = searchProfileTimer.elapsed() - startedMs;
+        m_profileTimings.append(QStringLiteral("search.%1=%2").arg(QString::fromUtf8(stage)).arg(elapsedMs));
         if (!profilePlateSolve) {
             return;
         }
         qDebug().noquote().nospace()
             << "CameraPlateSolverProfile search." << stage
-            << " elapsedMs=" << (searchProfileTimer.elapsed() - startedMs)
+            << " elapsedMs=" << elapsedMs
             << " totalMs=" << searchProfileTimer.elapsed()
             << " bestValid=" << best.valid
             << " bestMatches=" << best.matchCount
@@ -7701,7 +7827,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     if (useStartDirection)
     {
-        const qint64 stageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        const qint64 stageStartMs = searchProfileTimer.elapsed();
         bool guidedSatisfied = false;
         const bool allowGuidedEarlyStop = settings.m_fov < kWideFovMagnitudePreferenceThresholdDegrees;
         const QVector<double> directionOffsets = buildGuidedDirectionOffsets(coarseSearchRadius);
@@ -7737,7 +7863,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     }
     else if (useStartElevation)
     {
-        const qint64 stageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        const qint64 stageStartMs = searchProfileTimer.elapsed();
         const std::array<double, 5> elevationSeedFovScales = {{1.00, 0.85, 1.15, 0.70, 1.30}};
         for (double fovScale : elevationSeedFovScales)
         {
@@ -7795,7 +7921,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     }
     else if (useStartFov)
     {
-        const qint64 stageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        const qint64 stageStartMs = searchProfileTimer.elapsed();
         const double guidedFovMatchRadius = useWideFovSeedRadius
             ? wideFovSeedMatchRadius
             : static_cast<double>(settings.m_plateSolveMatchRadius);
@@ -7871,7 +7997,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     if (needBlindSearch)
     {
-        const qint64 stageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        const qint64 stageStartMs = searchProfileTimer.elapsed();
         QVector<VisibleCatalogStar> localVisibleStars;
         const QVector<VisibleCatalogStar>* blindVisibleStars = &catalogContext.visibleStars;
         if (useStartDirection && (settings.m_fov <= 5.0))
@@ -7915,7 +8041,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             }
         };
 
-        qint64 seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        qint64 seedStageStartMs = searchProfileTimer.elapsed();
         const QVector<Evaluation> brightPairSeeds = buildBrightPairSeeds(
             settings,
             catalogContext,
@@ -7929,7 +8055,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             consumeBlindSeeds(brightPairSeeds, "bright-pair-seed");
         }
 
-        seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        seedStageStartMs = searchProfileTimer.elapsed();
         const QVector<Evaluation> blindTriangleSeeds = buildBlindTriangleSeeds(
             settings,
             catalogContext,
@@ -7945,7 +8071,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             consumeBlindSeeds(brightPairSeeds, "bright-pair-seed");
         }
 
-        seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        seedStageStartMs = searchProfileTimer.elapsed();
         const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
             settings,
             catalogContext,
@@ -7984,7 +8110,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         && (!useStartDirection || !best.valid || wideWeakBestLooksLikeFalseBrightMatch)
         && (!blindSeedAlreadyAcceptable || wideWeakBestLooksLikeFalseBrightMatch))
     {
-        const qint64 stageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        const qint64 stageStartMs = searchProfileTimer.elapsed();
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
         const std::array<double, 8> wideBlindFovs = {{15.0, 25.0, 40.0, 60.0, 90.0, 130.0, 160.0, 180.0}};
         const std::array<double, 3> wideAllSkyBlindFovs = {{130.0, 160.0, 180.0}};
@@ -8099,7 +8225,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     for (int iteration = 0; iteration < 2; ++iteration)
     {
-        const qint64 stageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        const qint64 stageStartMs = searchProfileTimer.elapsed();
         for (double azOffset : coarseFovOffsets)
         {
             for (double elOffset : coarseFovOffsets)
@@ -8178,7 +8304,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
     for (int iteration = 0; iteration < 4; ++iteration)
     {
-        const qint64 stageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        const qint64 stageStartMs = searchProfileTimer.elapsed();
         bool improved = false;
         const std::array<double, 3> refineOffsets = {{-1.0, 0.0, 1.0}};
         for (double azOffset : refineOffsets)
@@ -8702,16 +8828,17 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     CameraPlateSolveResult result;
     const bool profilePlateSolve = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_PROFILE");
     QElapsedTimer solveProfileTimer;
-    if (profilePlateSolve) {
-        solveProfileTimer.start();
-    }
+    solveProfileTimer.start();
+    m_profileTimings.clear();
     auto logSolveProfile = [&](const char *stage, qint64 startedMs) {
+        const qint64 elapsedMs = solveProfileTimer.elapsed() - startedMs;
+        m_profileTimings.append(QStringLiteral("solve.%1=%2").arg(QString::fromUtf8(stage)).arg(elapsedMs));
         if (!profilePlateSolve) {
             return;
         }
         qDebug().noquote().nospace()
             << "CameraPlateSolverProfile solve." << stage
-            << " elapsedMs=" << (solveProfileTimer.elapsed() - startedMs)
+            << " elapsedMs=" << elapsedMs
             << " totalMs=" << solveProfileTimer.elapsed();
     };
     clearSolvedStars(starDetections);
@@ -8800,7 +8927,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "solveMaxMag" << solveMaxMagnitude
                  << "fov" << settings.m_fov;
     }
-    qint64 stageStartMs = profilePlateSolve ? solveProfileTimer.elapsed() : 0;
+    qint64 stageStartMs = solveProfileTimer.elapsed();
     PlateSolveCatalogContext catalogContext = buildPlateSolveCatalogContext(
         settings,
         imageSize,
@@ -8951,7 +9078,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
 
     QVector<Evaluation> coarseCandidates;
     FinalMatchPassEvaluation selectedFinalPass;
-    stageStartMs = profilePlateSolve ? solveProfileTimer.elapsed() : 0;
+    stageStartMs = solveProfileTimer.elapsed();
     Evaluation best = searchBestPose(
         settings,
         catalogContext,
@@ -8982,7 +9109,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && guidedAnchorSkipBrightnessAccepted;
     if (bestStrongEnoughToSkipGuidedAnchor)
     {
-        stageStartMs = profilePlateSolve ? solveProfileTimer.elapsed() : 0;
+        stageStartMs = solveProfileTimer.elapsed();
         FinalMatchPassEvaluation skipFinalPass = evaluateFinalMatchPass(
             settings,
             catalogContext,
@@ -9034,7 +9161,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
     if ((useStartDirection || useWideWeakAnchorSearch) && !bestStrongEnoughToSkipGuidedAnchor)
     {
-        stageStartMs = profilePlateSolve ? solveProfileTimer.elapsed() : 0;
+        stageStartMs = solveProfileTimer.elapsed();
         PlateSolveCatalogContext guidedAnchorCatalogContext;
         const PlateSolveCatalogContext *guidedAnchorCatalogContextPtr = &catalogContext;
         if (useBrightFirstPassCatalog)
@@ -9130,7 +9257,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         return result;
     }
     if (useMultiHypothesisRefine) {
-        stageStartMs = profilePlateSolve ? solveProfileTimer.elapsed() : 0;
+        stageStartMs = solveProfileTimer.elapsed();
         insertDistinctEvaluationCandidate(
             coarseCandidates,
             best,
@@ -9173,7 +9300,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         logWeakModeCandidatePool("rescored-candidate-pool", rescoredCandidates);
         logSolveProfile("rescoreCandidates", stageStartMs);
 
-        stageStartMs = profilePlateSolve ? solveProfileTimer.elapsed() : 0;
+        stageStartMs = solveProfileTimer.elapsed();
         Evaluation refinedBest = selectedFinalPass.projectorValid ? selectedFinalPass.pose : Evaluation();
         FinalMatchPassEvaluation refinedBestFinalPass = selectedFinalPass;
         for (const Evaluation& candidate : rescoredCandidates)
@@ -9275,7 +9402,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && useStartFov
         && (std::fabs(best.fovDegrees - settings.m_fov) >= 2.0))
     {
-        stageStartMs = profilePlateSolve ? solveProfileTimer.elapsed() : 0;
+        stageStartMs = solveProfileTimer.elapsed();
         Evaluation bestFovPinnedEvaluation;
         FinalMatchPassEvaluation bestFovPinnedFinalPass;
         const std::array<double, 5> distortionSeeds = {{
@@ -9333,7 +9460,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         logSolveProfile("fovPinnedFinalPass", stageStartMs);
     }
 
-    stageStartMs = profilePlateSolve ? solveProfileTimer.elapsed() : 0;
+    stageStartMs = solveProfileTimer.elapsed();
     if (selectedFinalPass.projectorValid && rankWideFinalPassWithSelectedDetections)
     {
         selectedFinalPass = evaluateFinalMatchPass(
@@ -9578,7 +9705,8 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
     std::swap(context.m_sirilIndexCache, m_sirilIndexCache);
 
-    const CameraPlateSolveResult result = context.solve(settings, imageSize, captureDateTime, starDetections);
+    CameraPlateSolveResult result = context.solve(settings, imageSize, captureDateTime, starDetections);
+    result.m_profileSummary = context.m_profileTimings.join(QStringLiteral(";"));
 
     std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
     std::swap(context.m_sirilIndexCache, m_sirilIndexCache);

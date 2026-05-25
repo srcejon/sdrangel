@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <vector>
 
 #include <QDebug>
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
@@ -105,10 +106,77 @@ double estimateResidualNoiseSigma(const cv::Mat& residual)
         return 1.0;
     }
 
-    cv::Scalar mean;
-    cv::Scalar stddev;
-    cv::meanStdDev(residual, mean, stddev);
-    return std::max(1.0, stddev[0]);
+    constexpr int kTargetSamples = 4096;
+    const double totalPixels = static_cast<double>(residual.rows) * static_cast<double>(residual.cols);
+    const int sampleStep = std::max(1, static_cast<int>(std::sqrt(std::max(1.0, totalPixels / kTargetSamples))));
+    std::vector<double> samples;
+    samples.reserve(static_cast<size_t>(std::min(kTargetSamples * 2, residual.rows * residual.cols)));
+
+    for (int y = 0; y < residual.rows; y += sampleStep)
+    {
+        if (residual.depth() == CV_16U)
+        {
+            const uint16_t* row = residual.ptr<uint16_t>(y);
+            for (int x = 0; x < residual.cols; x += sampleStep) {
+                samples.push_back(static_cast<double>(row[x]));
+            }
+        }
+        else
+        {
+            const uchar* row = residual.ptr<uchar>(y);
+            for (int x = 0; x < residual.cols; x += sampleStep) {
+                samples.push_back(static_cast<double>(row[x]));
+            }
+        }
+    }
+
+    if (samples.empty()) {
+        return 1.0;
+    }
+
+    std::sort(samples.begin(), samples.end());
+    const double median = samples[samples.size() / 2];
+    std::vector<double> deviations;
+    deviations.reserve(samples.size());
+    for (double sample : samples) {
+        deviations.push_back(std::fabs(sample - median));
+    }
+    std::sort(deviations.begin(), deviations.end());
+    double sigma = 1.4826 * deviations[deviations.size() / 2];
+    if (sigma < 1.0)
+    {
+        const double p90 = samples[static_cast<size_t>(std::min<double>(samples.size() - 1, samples.size() * 0.90))];
+        sigma = (p90 > median) ? (p90 - median) / 1.28155 : 1.0;
+    }
+    return std::max(1.0, sigma);
+}
+
+void thresholdResidualWithRobustTiles(const cv::Mat& residual,
+                                      double userThreshold,
+                                      double maxValue,
+                                      cv::Mat& thresholdMask)
+{
+    constexpr int kTileSize = 512;
+    thresholdMask.create(residual.size(), residual.type());
+
+    for (int y = 0; y < residual.rows; y += kTileSize)
+    {
+        const int height = std::min(kTileSize, residual.rows - y);
+        for (int x = 0; x < residual.cols; x += kTileSize)
+        {
+            const int width = std::min(kTileSize, residual.cols - x);
+            const cv::Rect tileRect(x, y, width, height);
+            const cv::Mat residualTile = residual(tileRect);
+            cv::Mat thresholdTile = thresholdMask(tileRect);
+            const double adaptiveThreshold = estimateResidualNoiseSigma(residualTile) * 4.0;
+            cv::threshold(
+                residualTile,
+                thresholdTile,
+                std::max(userThreshold, adaptiveThreshold),
+                maxValue,
+                cv::THRESH_BINARY);
+        }
+    }
 }
 
 } // namespace
@@ -269,6 +337,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     frame->m_plateSolveCatalogSource.clear();
     frame->m_plateSolveFailureReason.clear();
     frame->m_plateSolveMatchSummary.clear();
+    frame->m_plateSolveProfileSummary.clear();
     frame->m_plateSolveRequiredMatches = 0;
 
     cv::Mat bgrMat;
@@ -351,6 +420,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->m_plateSolveCatalogSource = plateSolveResult.m_catalogSource;
         frame->m_plateSolveFailureReason = plateSolveResult.m_failureReason;
         frame->m_plateSolveMatchSummary = plateSolveResult.m_matchSummary;
+        frame->m_plateSolveProfileSummary = plateSolveResult.m_profileSummary;
         frame->m_plateSolveRequiredMatches = plateSolveResult.m_requiredMatches;
     }
 
@@ -409,11 +479,8 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
     const double userThresholdScaled = useHighBitDepth
         ? static_cast<double>(m_settings.m_starThreshold) * 256.0
         : static_cast<double>(m_settings.m_starThreshold);
-    const double residualNoiseSigma = estimateResidualNoiseSigma(residual);
-    const double adaptiveThresholdScaled = residualNoiseSigma * 4.0;
-    const double thresholdScaled = std::max(userThresholdScaled, adaptiveThresholdScaled);
     const double maxValueScaled = useHighBitDepth ? 65535.0 : 255.0;
-    cv::threshold(residual, thresholdMask, thresholdScaled, maxValueScaled, cv::THRESH_BINARY);
+    thresholdResidualWithRobustTiles(residual, userThresholdScaled, maxValueScaled, thresholdMask);
     // findContours only accepts CV_8U; downscale the binary mask (it's still a binary
     // mask, no precision lost).
     if (thresholdMask.depth() != CV_8U) {
@@ -471,11 +538,7 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
         // applyStarDetection (see hasGray / saturationThreshold logic there).
         m_cudaDetectionStream.waitForCompletion();
 
-        const double residualNoiseSigma = estimateResidualNoiseSigma(residual);
-        const double thresholdValue = std::max(
-            static_cast<double>(m_settings.m_starThreshold),
-            residualNoiseSigma * 4.0);
-        cv::threshold(residual, thresholdMask, thresholdValue, 255.0, cv::THRESH_BINARY);
+        thresholdResidualWithRobustTiles(residual, static_cast<double>(m_settings.m_starThreshold), 255.0, thresholdMask);
         cv::bitwise_and(thresholdMask, cachedExclusionMask(roi, thresholdMask.size()), thresholdMask);
 
         if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))

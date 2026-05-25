@@ -300,6 +300,8 @@ struct ProfileTiming
 };
 QStringList m_profileTimingOrder;
 QHash<QString, ProfileTiming> m_profileTimingStats;
+QStringList m_profileMetricOrder;
+QHash<QString, qint64> m_profileMetrics;
 // Maximum total size of m_sirilRangeCache before it is cleared after a solve.
 // m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
 static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
@@ -330,6 +332,8 @@ void clearProfileTimings()
 {
     m_profileTimingOrder.clear();
     m_profileTimingStats.clear();
+    m_profileMetricOrder.clear();
+    m_profileMetrics.clear();
 }
 
 void recordProfileTiming(const QString& stage, qint64 elapsedMs)
@@ -344,10 +348,18 @@ void recordProfileTiming(const QString& stage, qint64 elapsedMs)
     ++timing.count;
 }
 
+void recordProfileMetric(const QString& name, qint64 value)
+{
+    if (!m_profileMetrics.contains(name)) {
+        m_profileMetricOrder.append(name);
+    }
+    m_profileMetrics[name] += value;
+}
+
 QString profileSummary() const
 {
     QStringList summary;
-    summary.reserve(m_profileTimingOrder.size());
+    summary.reserve(m_profileTimingOrder.size() + m_profileMetricOrder.size());
     for (const QString& stage : m_profileTimingOrder)
     {
         const ProfileTiming timing = m_profileTimingStats.value(stage);
@@ -364,6 +376,9 @@ QString profileSummary() const
                 .arg(timing.totalMs / timing.count)
                 .arg(timing.maxMs));
         }
+    }
+    for (const QString& metric : m_profileMetricOrder) {
+        summary.append(QStringLiteral("%1=%2").arg(metric).arg(m_profileMetrics.value(metric)));
     }
     return summary.join(QStringLiteral(";"));
 }
@@ -3489,6 +3504,45 @@ static QuadSignature buildQuadSignature(const std::array<QPointF, 4>& unorderedP
     return signature;
 }
 
+static qint64 signatureBucketKey(int firstBin, int secondBin)
+{
+    return (static_cast<qint64>(firstBin) << 32)
+        ^ static_cast<quint32>(secondBin);
+}
+
+static int signatureRatioBin(double value, double binWidth)
+{
+    return static_cast<int>(std::floor(value / std::max(1e-6, binWidth)));
+}
+
+static QHash<qint64, QVector<int>> buildTriangleSignatureBuckets(const QVector<TriangleSignature>& signatures,
+                                                                 double binWidth)
+{
+    QHash<qint64, QVector<int>> buckets;
+    for (int i = 0; i < signatures.size(); ++i)
+    {
+        const TriangleSignature& signature = signatures.at(i);
+        const int firstBin = signatureRatioBin(signature.ratioShortToLong, binWidth);
+        const int secondBin = signatureRatioBin(signature.ratioMidToLong, binWidth);
+        buckets[signatureBucketKey(firstBin, secondBin)].append(i);
+    }
+    return buckets;
+}
+
+static QHash<qint64, QVector<int>> buildQuadSignatureBuckets(const QVector<QuadSignature>& signatures,
+                                                             double binWidth)
+{
+    QHash<qint64, QVector<int>> buckets;
+    for (int i = 0; i < signatures.size(); ++i)
+    {
+        const QuadSignature& signature = signatures.at(i);
+        const int firstBin = signatureRatioBin(signature.edgeRatios[0], binWidth);
+        const int secondBin = signatureRatioBin(signature.edgeRatios[1], binWidth);
+        buckets[signatureBucketKey(firstBin, secondBin)].append(i);
+    }
+    return buckets;
+}
+
 static double medianCandidateDistancePixels(const QVector<Match>& matches)
 {
     if (matches.isEmpty()) {
@@ -3889,6 +3943,11 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
         : kBlindSeedRatioTolerance;
     const bool ignoreOrientationHandedness = isWideFisheyeLens
         || (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0));
+    const QHash<qint64, QVector<int>> catalogTriangleBuckets =
+        buildTriangleSignatureBuckets(catalogTriangles, ratioTolerance);
+    const int bucketRadius = 1;
+    recordProfileMetric(QStringLiteral("search.triangleDetectionSignatures"), detectionTriangles.size());
+    recordProfileMetric(QStringLiteral("search.triangleCatalogSignatures"), catalogTriangles.size());
 
     const int minBlindSeedMatches = std::max(
         settings.m_plateSolveMinMatches + 1,
@@ -3901,26 +3960,46 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
     struct TriedDirection { double azimuthDegrees; double elevationDegrees; };
     QVector<TriedDirection> triedDirections;
     bool earlyExit = false;
+    qint64 ratioCandidates = 0;
+    qint64 ratioMatches = 0;
+    qint64 seedEvaluations = 0;
+    qint64 verifiedSeeds = 0;
 
     for (const TriangleSignature& detectionTriangle : detectionTriangles)
     {
         if (earlyExit) break;
-        for (const TriangleSignature& catalogTriangle : catalogTriangles)
+        const int detectionShortBin = signatureRatioBin(detectionTriangle.ratioShortToLong, ratioTolerance);
+        const int detectionMidBin = signatureRatioBin(detectionTriangle.ratioMidToLong, ratioTolerance);
+        for (int shortBinOffset = -bucketRadius; shortBinOffset <= bucketRadius; ++shortBinOffset)
         {
             if (earlyExit) break;
-            if (std::fabs(detectionTriangle.ratioShortToLong - catalogTriangle.ratioShortToLong) > ratioTolerance
-                || std::fabs(detectionTriangle.ratioMidToLong - catalogTriangle.ratioMidToLong) > ratioTolerance)
+            for (int midBinOffset = -bucketRadius; midBinOffset <= bucketRadius; ++midBinOffset)
             {
-                continue;
-            }
+                if (earlyExit) break;
+                const auto bucketIt = catalogTriangleBuckets.constFind(
+                    signatureBucketKey(detectionShortBin + shortBinOffset, detectionMidBin + midBinOffset));
+                if (bucketIt == catalogTriangleBuckets.constEnd()) {
+                    continue;
+                }
+                for (int catalogTriangleIndex : *bucketIt)
+                {
+                    if (earlyExit) break;
+                    const TriangleSignature& catalogTriangle = catalogTriangles.at(catalogTriangleIndex);
+                    ++ratioCandidates;
+                    if (std::fabs(detectionTriangle.ratioShortToLong - catalogTriangle.ratioShortToLong) > ratioTolerance
+                        || std::fabs(detectionTriangle.ratioMidToLong - catalogTriangle.ratioMidToLong) > ratioTolerance)
+                    {
+                        continue;
+                    }
 
-            if (!ignoreOrientationHandedness && ((detectionTriangle.orientation * catalogTriangle.orientation) < 0.0)) {
-                continue;
-            }
+                    ++ratioMatches;
+                    if (!ignoreOrientationHandedness && ((detectionTriangle.orientation * catalogTriangle.orientation) < 0.0)) {
+                        continue;
+                    }
 
-            const VisibleCatalogStar& a = visibleStars[catalogTriangle.indices[0]];
-            const VisibleCatalogStar& b = visibleStars[catalogTriangle.indices[1]];
-            const VisibleCatalogStar& c = visibleStars[catalogTriangle.indices[2]];
+                    const VisibleCatalogStar& a = visibleStars[catalogTriangle.indices[0]];
+                    const VisibleCatalogStar& b = visibleStars[catalogTriangle.indices[1]];
+                    const VisibleCatalogStar& c = visibleStars[catalogTriangle.indices[2]];
             const SkyVector center = normalize({
                 a.vector.x + b.vector.x + c.vector.x,
                 a.vector.y + b.vector.y + c.vector.y,
@@ -4066,6 +4145,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                             fixedCenterOffsetX,
                             fixedCenterOffsetY,
                             fixedDistortionK1);
+                        ++seedEvaluations;
                         if (!seededCandidate.valid) {
                             continue;
                         }
@@ -4103,6 +4183,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                             candidate);
                         if (verifiedCandidate.valid) {
                             seeds.append(verifiedCandidate);
+                            ++verifiedSeeds;
                             if (verifiedCandidate.matchCount >= minBlindSeedMatches + 3
                                 && verifiedCandidate.rmsErrorPixels < kBlindSeedMaxRmsPixels * 0.5)
                             {
@@ -4114,6 +4195,14 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
             }
         }
     }
+
+        }
+    }
+
+    recordProfileMetric(QStringLiteral("search.triangleRatioCandidates"), ratioCandidates);
+    recordProfileMetric(QStringLiteral("search.triangleRatioMatches"), ratioMatches);
+    recordProfileMetric(QStringLiteral("search.triangleSeedEvaluations"), seedEvaluations);
+    recordProfileMetric(QStringLiteral("search.triangleVerifiedSeeds"), verifiedSeeds);
 
     std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterWeakModeEvaluation(lhs, rhs);
@@ -4193,6 +4282,8 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
     const double fixedCenterOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
     const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
     const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
+    qint64 seedEvaluations = 0;
+    qint64 verifiedSeeds = 0;
 
     for (double seedFov : seedFovs)
     {
@@ -4281,6 +4372,7 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                             fixedCenterOffsetX,
                             fixedCenterOffsetY,
                             fixedDistortionK1);
+                        ++seedEvaluations;
                         if (!seededCandidate.valid) {
                             continue;
                         }
@@ -4321,12 +4413,15 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                             candidate);
                         if (verifiedCandidate.valid) {
                             seeds.append(verifiedCandidate);
+                            ++verifiedSeeds;
                         }
                     }
                 }
             }
         }
     }
+    recordProfileMetric(QStringLiteral("search.brightPairSeedEvaluations"), seedEvaluations);
+    recordProfileMetric(QStringLiteral("search.brightPairVerifiedSeeds"), verifiedSeeds);
 
     std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterWeakModeEvaluation(lhs, rhs);
@@ -4369,6 +4464,11 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
         : 0.03;
     const bool ignoreOrientationHandedness = isWideFisheyeLens
         || (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0));
+    const QHash<qint64, QVector<int>> catalogQuadBuckets =
+        buildQuadSignatureBuckets(catalogQuads, ratioTolerance);
+    const int bucketRadius = 1;
+    recordProfileMetric(QStringLiteral("search.quadDetectionSignatures"), detectionQuads.size());
+    recordProfileMetric(QStringLiteral("search.quadCatalogSignatures"), catalogQuads.size());
 
     const int minBlindSeedMatches = std::max(
         settings.m_plateSolveMinMatches + 1,
@@ -4381,34 +4481,54 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
     struct TriedDirection { double azimuthDegrees; double elevationDegrees; };
     QVector<TriedDirection> triedDirections;
     bool earlyExit = false;
+    qint64 ratioCandidates = 0;
+    qint64 ratioMatches = 0;
+    qint64 seedEvaluations = 0;
+    qint64 verifiedSeeds = 0;
 
     for (const QuadSignature& detectionQuad : detectionQuads)
     {
         if (earlyExit) break;
-        for (const QuadSignature& catalogQuad : catalogQuads)
+        const int detectionFirstBin = signatureRatioBin(detectionQuad.edgeRatios[0], ratioTolerance);
+        const int detectionSecondBin = signatureRatioBin(detectionQuad.edgeRatios[1], ratioTolerance);
+        for (int firstBinOffset = -bucketRadius; firstBinOffset <= bucketRadius; ++firstBinOffset)
         {
             if (earlyExit) break;
-            bool ratiosMatch = true;
-            for (int idx = 0; idx < 5; ++idx)
+            for (int secondBinOffset = -bucketRadius; secondBinOffset <= bucketRadius; ++secondBinOffset)
             {
-                if (std::fabs(detectionQuad.edgeRatios[idx] - catalogQuad.edgeRatios[idx]) > ratioTolerance)
-                {
-                    ratiosMatch = false;
-                    break;
+                if (earlyExit) break;
+                const auto bucketIt = catalogQuadBuckets.constFind(
+                    signatureBucketKey(detectionFirstBin + firstBinOffset, detectionSecondBin + secondBinOffset));
+                if (bucketIt == catalogQuadBuckets.constEnd()) {
+                    continue;
                 }
-            }
-            if (!ratiosMatch) {
-                continue;
-            }
+                for (int catalogQuadIndex : *bucketIt)
+                {
+                    if (earlyExit) break;
+                    const QuadSignature& catalogQuad = catalogQuads.at(catalogQuadIndex);
+                    ++ratioCandidates;
+                    bool ratiosMatch = true;
+                    for (int idx = 0; idx < 5; ++idx)
+                    {
+                        if (std::fabs(detectionQuad.edgeRatios[idx] - catalogQuad.edgeRatios[idx]) > ratioTolerance)
+                        {
+                            ratiosMatch = false;
+                            break;
+                        }
+                    }
+                    if (!ratiosMatch) {
+                        continue;
+                    }
 
-            if (!ignoreOrientationHandedness && ((detectionQuad.orientation * catalogQuad.orientation) < 0.0)) {
-                continue;
-            }
+                    ++ratioMatches;
+                    if (!ignoreOrientationHandedness && ((detectionQuad.orientation * catalogQuad.orientation) < 0.0)) {
+                        continue;
+                    }
 
-            const VisibleCatalogStar& a = visibleStars[catalogQuad.indices[0]];
-            const VisibleCatalogStar& b = visibleStars[catalogQuad.indices[1]];
-            const VisibleCatalogStar& c = visibleStars[catalogQuad.indices[2]];
-            const VisibleCatalogStar& d = visibleStars[catalogQuad.indices[3]];
+                    const VisibleCatalogStar& a = visibleStars[catalogQuad.indices[0]];
+                    const VisibleCatalogStar& b = visibleStars[catalogQuad.indices[1]];
+                    const VisibleCatalogStar& c = visibleStars[catalogQuad.indices[2]];
+                    const VisibleCatalogStar& d = visibleStars[catalogQuad.indices[3]];
             const SkyVector center = normalize({
                 a.vector.x + b.vector.x + c.vector.x + d.vector.x,
                 a.vector.y + b.vector.y + c.vector.y + d.vector.y,
@@ -4551,6 +4671,7 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                             fixedCenterOffsetX,
                             fixedCenterOffsetY,
                             fixedDistortionK1);
+                        ++seedEvaluations;
                         if (!seededCandidate.valid) {
                             continue;
                         }
@@ -4589,6 +4710,7 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                             candidate);
                         if (verifiedCandidate.valid) {
                             seeds.append(verifiedCandidate);
+                            ++verifiedSeeds;
                             if (verifiedCandidate.matchCount >= minBlindSeedMatches + 3
                                 && verifiedCandidate.rmsErrorPixels < kBlindSeedMaxRmsPixels * 0.5)
                             {
@@ -4600,6 +4722,14 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
             }
         }
     }
+
+        }
+    }
+
+    recordProfileMetric(QStringLiteral("search.quadRatioCandidates"), ratioCandidates);
+    recordProfileMetric(QStringLiteral("search.quadRatioMatches"), ratioMatches);
+    recordProfileMetric(QStringLiteral("search.quadSeedEvaluations"), seedEvaluations);
+    recordProfileMetric(QStringLiteral("search.quadVerifiedSeeds"), verifiedSeeds);
 
     std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterWeakModeEvaluation(lhs, rhs);
@@ -8171,6 +8301,11 @@ Evaluation searchBestPose(const CameraSettings& settings,
                 }
             }
         };
+        auto hasGoodWideBlindSeed = [&]() {
+            return wideWeakMode
+                && isStrongBlindSeedEvaluation(settings, detectionIndices, best)
+                && hasAcceptableBrightnessConsistency(best);
+        };
 
         qint64 seedStageStartMs = searchProfileTimer.elapsed();
         const QVector<Evaluation> brightPairSeeds = buildBrightPairSeeds(
@@ -8202,17 +8337,25 @@ Evaluation searchBestPose(const CameraSettings& settings,
             consumeBlindSeeds(brightPairSeeds, "bright-pair-seed");
         }
 
-        seedStageStartMs = searchProfileTimer.elapsed();
-        const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
-            settings,
-            catalogContext,
-            imageSize,
-            captureDateTimeUtc,
-            starDetections,
-            detectionIndices,
-            *blindVisibleStars);
-        logSearchProfile("blind-quad-seeds", seedStageStartMs);
-        consumeBlindSeeds(blindQuadSeeds, "blind-quad-seed");
+        if (hasGoodWideBlindSeed())
+        {
+            recordProfileMetric(QStringLiteral("search.blindQuadSkipped"), 1);
+            logSearchProfile("blind-quad-seeds", searchProfileTimer.elapsed());
+        }
+        else
+        {
+            seedStageStartMs = searchProfileTimer.elapsed();
+            const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
+                settings,
+                catalogContext,
+                imageSize,
+                captureDateTimeUtc,
+                starDetections,
+                detectionIndices,
+                *blindVisibleStars);
+            logSearchProfile("blind-quad-seeds", seedStageStartMs);
+            consumeBlindSeeds(blindQuadSeeds, "blind-quad-seed");
+        }
         logSearchProfile("blind-seeds", stageStartMs);
     }
 

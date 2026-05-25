@@ -291,10 +291,12 @@ QVector<ProjectedCatalogStar> m_projectedCatalogScratch;
 QVector<CandidatePair> m_candidatePairScratch;
 QVector<BlindGridCachedStar> m_blindGridCache;
 QVector<ProjectedCatalogStar> m_blindGridProjectedScratch;
+QHash<quint64, QVector<int>> m_projectedStarGridScratch;
 // Maximum total size of m_sirilRangeCache before it is cleared after a solve.
 // m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
 static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
 static constexpr const char* kSirilCacheDir = "siril-spcc-cache/v1";
+static constexpr const char* kSirilRegionCacheDir = "siril-spcc-region-cache/v1";
 static constexpr const char* kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 static constexpr const char* kDownloadedCatalogDir = "camera";
 static constexpr const char* kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
@@ -865,6 +867,104 @@ static QString sirilRangeDiskCachePath(int chunkIndex, qint64 firstByte, qint64 
 {
     return QDir(QDir(sirilCacheRootDir()).filePath(QStringLiteral("ranges")))
         .filePath(QStringLiteral("chunk-%1-%2-%3.bin").arg(chunkIndex).arg(firstByte).arg(lastByte));
+}
+
+static QString sirilRegionCacheRootDir()
+{
+    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilRegionCacheDir));
+}
+
+static QString sirilRegionCacheKey(double centerRaDegrees,
+                                   double centerDecDegrees,
+                                   double queryRadiusDegrees,
+                                   double maxMagnitude)
+{
+    return QStringLiteral("ra%1_dec%2_r%3_m%4.tsv")
+        .arg(qRound64(normalizeDegrees(centerRaDegrees) * 1000.0))
+        .arg(qRound64(centerDecDegrees * 1000.0))
+        .arg(qRound64(queryRadiusDegrees * 1000.0))
+        .arg(qRound64(maxMagnitude * 100.0));
+}
+
+static QString sirilRegionDiskCachePath(double centerRaDegrees,
+                                        double centerDecDegrees,
+                                        double queryRadiusDegrees,
+                                        double maxMagnitude)
+{
+    return QDir(sirilRegionCacheRootDir()).filePath(
+        sirilRegionCacheKey(centerRaDegrees, centerDecDegrees, queryRadiusDegrees, maxMagnitude));
+}
+
+static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    QVector<CatalogStar> stars;
+    while (!file.atEnd())
+    {
+        const QByteArray line = file.readLine().trimmed();
+        if (line.isEmpty() || line.startsWith('#')) {
+            continue;
+        }
+        const QList<QByteArray> fields = line.split('\t');
+        if (fields.size() < 5) {
+            continue;
+        }
+        bool raOk = false;
+        bool decOk = false;
+        bool magOk = false;
+        const double ra = fields[1].toDouble(&raOk);
+        const double dec = fields[2].toDouble(&decOk);
+        const double mag = fields[3].toDouble(&magOk);
+        if (!raOk || !decOk || !magOk) {
+            continue;
+        }
+        stars.append({
+            QString::fromUtf8(fields[0]),
+            ra,
+            dec,
+            mag,
+            QString::fromUtf8(fields[4])
+        });
+    }
+    return stars;
+}
+
+static void writeSirilRegionDiskCacheFile(const QString& path, const QVector<CatalogStar>& stars)
+{
+    if (stars.isEmpty()) {
+        return;
+    }
+
+    QDir dir(QFileInfo(path).absolutePath());
+    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+        return;
+    }
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return;
+    }
+    file.write("#name\tra\tdec\tmag\tspectral\n");
+    for (const CatalogStar& star : stars)
+    {
+        QByteArray line;
+        line += star.name.toUtf8();
+        line += '\t';
+        line += QByteArray::number(star.rightAscensionDegrees, 'g', 16);
+        line += '\t';
+        line += QByteArray::number(star.declinationDegrees, 'g', 16);
+        line += '\t';
+        line += QByteArray::number(star.magnitude, 'g', 8);
+        line += '\t';
+        line += star.spectralType.toUtf8();
+        line += '\n';
+        file.write(line);
+    }
+    file.commit();
 }
 
 static QByteArray readSirilDiskCacheFile(const QString& path, qint64 expectedSize)
@@ -1492,6 +1592,26 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
     const double centerRaDegrees = geometry.centerRaDegrees;
     const double centerDecDegrees = geometry.centerDecDegrees;
     const double queryRadius = geometry.queryRadiusDegrees;
+    const QString regionCachePath = sirilRegionDiskCachePath(
+        centerRaDegrees,
+        centerDecDegrees,
+        queryRadius,
+        maxMagnitude);
+    stars = readSirilRegionDiskCacheFile(regionCachePath);
+    if (!stars.isEmpty())
+    {
+        if (catalogSource) {
+            *catalogSource = QStringLiteral("Siril SPCC Gaia DR3");
+        }
+        qDebug() << "CameraPlateSolver: loaded cached Siril SPCC Gaia stars"
+                 << stars.size()
+                 << "center RA" << centerRaDegrees
+                 << "Dec" << centerDecDegrees
+                 << "radius" << queryRadius
+                 << "maxMag" << maxMagnitude;
+        return stars;
+    }
+
     const QSet<quint32> pixels = sampleSirilHealpixPixels(centerRaDegrees, centerDecDegrees, queryRadius);
     QVector<SirilCellRange> cellRanges;
     cellRanges.reserve(pixels.size());
@@ -1658,6 +1778,7 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
     if (catalogSource) {
         *catalogSource = QStringLiteral("Siril SPCC Gaia DR3");
     }
+    writeSirilRegionDiskCacheFile(regionCachePath, stars);
     qDebug() << "CameraPlateSolver: loaded Siril SPCC Gaia stars"
              << stars.size()
              << "pixels" << pixels.size()
@@ -4421,7 +4542,8 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
     const QVector<double> projectedRanks = projectedBrightnessRanks(projectedStars);
     const double maxDistanceSquared = matchRadiusPixels * matchRadiusPixels;
     const double cellSize = std::max(1.0, matchRadiusPixels);
-    QHash<quint64, QVector<int>> projectedStarGrid;
+    QHash<quint64, QVector<int>>& projectedStarGrid = m_projectedStarGridScratch;
+    projectedStarGrid.clear();
     projectedStarGrid.reserve(projectedStars.size());
     for (int projectedIndex = 0; projectedIndex < projectedStars.size(); ++projectedIndex)
     {
@@ -5291,6 +5413,112 @@ static double maxDistancePixels(const QVector<Match>& matches)
     return maxDistance;
 }
 
+static double detectionMatchWeight(const CameraPipelineStarDetection& detection)
+{
+    const double centroidUncertainty = std::isfinite(static_cast<double>(detection.m_centroidUncertainty))
+        ? std::max(0.05, static_cast<double>(detection.m_centroidUncertainty))
+        : 4.0;
+    const double snr = std::isfinite(static_cast<double>(detection.m_snr))
+        ? std::max(0.0, static_cast<double>(detection.m_snr))
+        : 0.0;
+    double weight = 1.0 / (centroidUncertainty * centroidUncertainty);
+    weight *= std::max(0.25, static_cast<double>(detection.m_roundness));
+    weight *= std::max(0.25, static_cast<double>(detection.m_fillRatio));
+    weight /= std::max(1.0, static_cast<double>(detection.m_aspectRatio));
+    weight *= 1.0 + std::min(4.0, std::log1p(snr));
+    if (detection.m_saturated) {
+        weight *= 0.65;
+    }
+    if (detection.m_hotPixelSuspect) {
+        weight *= 0.10;
+    }
+    return std::clamp(weight, 0.01, 100.0);
+}
+
+static double weightedRmsDistancePixels(const QVector<CameraPipelineStarDetection>& starDetections,
+                                        const QVector<Match>& matches)
+{
+    double weightedSumSquaredError = 0.0;
+    double weightSum = 0.0;
+    for (const Match& match : matches)
+    {
+        if ((match.detectionIndex < 0) || (match.detectionIndex >= starDetections.size())) {
+            continue;
+        }
+        const double weight = detectionMatchWeight(starDetections[match.detectionIndex]);
+        weightedSumSquaredError += weight * match.distancePixels * match.distancePixels;
+        weightSum += weight;
+    }
+    if (weightSum <= 0.0) {
+        double sumSquaredError = 0.0;
+        for (const Match& match : matches) {
+            sumSquaredError += match.distancePixels * match.distancePixels;
+        }
+        return matches.isEmpty() ? std::numeric_limits<double>::infinity()
+            : std::sqrt(sumSquaredError / matches.size());
+    }
+    return std::sqrt(weightedSumSquaredError / weightSum);
+}
+
+static bool hasGeometricallyConsistentMatches(const QVector<CameraPipelineStarDetection>& starDetections,
+                                              const QVector<ProjectedCatalogStar>& projectedStars,
+                                              const QVector<Match>& matches,
+                                              double matchRadiusPixels)
+{
+    if (matches.size() < 4) {
+        return true;
+    }
+
+    QHash<int, QPointF> projectedPointByCatalogIndex;
+    projectedPointByCatalogIndex.reserve(projectedStars.size());
+    for (const ProjectedCatalogStar& projectedStar : projectedStars) {
+        projectedPointByCatalogIndex.insert(projectedStar.catalogIndex, projectedStar.point);
+    }
+
+    int checkedPairs = 0;
+    int consistentPairs = 0;
+    for (int i = 0; i < matches.size(); ++i)
+    {
+        const Match& lhs = matches[i];
+        if ((lhs.detectionIndex < 0) || (lhs.detectionIndex >= starDetections.size())) {
+            continue;
+        }
+        const auto lhsProjectedIt = projectedPointByCatalogIndex.constFind(lhs.catalogIndex);
+        if (lhsProjectedIt == projectedPointByCatalogIndex.cend()) {
+            continue;
+        }
+        for (int j = i + 1; j < matches.size(); ++j)
+        {
+            const Match& rhs = matches[j];
+            if ((rhs.detectionIndex < 0) || (rhs.detectionIndex >= starDetections.size())) {
+                continue;
+            }
+            const auto rhsProjectedIt = projectedPointByCatalogIndex.constFind(rhs.catalogIndex);
+            if (rhsProjectedIt == projectedPointByCatalogIndex.cend()) {
+                continue;
+            }
+
+            const double detectionDistance = pointDistancePixels(
+                starDetections[lhs.detectionIndex].m_center,
+                starDetections[rhs.detectionIndex].m_center);
+            const double projectedDistance = pointDistancePixels(lhsProjectedIt.value(), rhsProjectedIt.value());
+            const double tolerance = std::max(
+                std::max(3.0, matchRadiusPixels * 0.35),
+                0.08 * std::max(detectionDistance, projectedDistance));
+            ++checkedPairs;
+            if (std::fabs(detectionDistance - projectedDistance) <= tolerance) {
+                ++consistentPairs;
+            }
+        }
+    }
+
+    if (checkedPairs < 6) {
+        return true;
+    }
+    const double fraction = static_cast<double>(consistentPairs) / static_cast<double>(checkedPairs);
+    return fraction >= 0.55;
+}
+
 static QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
                                     int minMatches,
                                     double matchRadiusPixels,
@@ -6125,14 +6353,12 @@ FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
         finalPass.brightProjectedMatchFraction = (finalPass.brightProjectedStars > 0)
             ? static_cast<double>(finalPass.matchedBrightProjectedStars) / static_cast<double>(finalPass.brightProjectedStars)
             : 1.0;
-        double sumSquaredError = 0.0;
         double maxError = 0.0;
         for (const Match& match : finalPass.finalMatches)
         {
-            sumSquaredError += match.distancePixels * match.distancePixels;
             maxError = std::max(maxError, match.distancePixels);
         }
-        finalPass.rmsErrorPixels = std::sqrt(sumSquaredError / finalPass.finalMatches.size());
+        finalPass.rmsErrorPixels = weightedRmsDistancePixels(starDetections, finalPass.finalMatches);
         finalPass.medianErrorPixels = medianDistancePixels(finalPass.finalMatches);
         finalPass.maxErrorPixels = maxError;
         finalPass.pose.meanCatalogMagnitude = finalPass.meanCatalogMagnitude;
@@ -7690,6 +7916,20 @@ Evaluation searchBestPose(const CameraSettings& settings,
         };
 
         qint64 seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
+        const QVector<Evaluation> brightPairSeeds = buildBrightPairSeeds(
+            settings,
+            catalogContext,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices,
+            *blindVisibleStars);
+        logSearchProfile("bright-pair-seeds", seedStageStartMs);
+        if (wideWeakMode) {
+            consumeBlindSeeds(brightPairSeeds, "bright-pair-seed");
+        }
+
+        seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
         const QVector<Evaluation> blindTriangleSeeds = buildBlindTriangleSeeds(
             settings,
             catalogContext,
@@ -7701,17 +7941,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
         logSearchProfile("blind-triangle-seeds", seedStageStartMs);
         consumeBlindSeeds(blindTriangleSeeds, "blind-triangle-seed");
 
-        seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
-        const QVector<Evaluation> brightPairSeeds = buildBrightPairSeeds(
-            settings,
-            catalogContext,
-            imageSize,
-            captureDateTimeUtc,
-            starDetections,
-            detectionIndices,
-            *blindVisibleStars);
-        logSearchProfile("bright-pair-seeds", seedStageStartMs);
-        consumeBlindSeeds(brightPairSeeds, "bright-pair-seed");
+        if (!wideWeakMode) {
+            consumeBlindSeeds(brightPairSeeds, "bright-pair-seed");
+        }
 
         seedStageStartMs = profilePlateSolve ? searchProfileTimer.elapsed() : 0;
         const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
@@ -8640,7 +8872,6 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             return result;
         }
 
-        double sumSquaredError = 0.0;
         double maxError = 0.0;
         QHash<int, QPointF> projectedPointsByCatalogIndex;
         for (const ProjectedCatalogStar& projectedStar : projectedStars) {
@@ -8656,12 +8887,11 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
             detection.m_catalogSpectralType = catalogStar.spectralType;
             detection.m_solved = true;
-            sumSquaredError += match.distancePixels * match.distancePixels;
             maxError = std::max(maxError, match.distancePixels);
         }
 
         result.m_matchedStars = finalMatches.size();
-        result.m_rmsErrorPixels = std::sqrt(sumSquaredError / finalMatches.size());
+        result.m_rmsErrorPixels = weightedRmsDistancePixels(starDetections, finalMatches);
         result.m_maxErrorPixels = maxError;
         result.m_matchSummary = matchSummary(catalogContext, starDetections, finalMatches);
 
@@ -9103,8 +9333,6 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         logSolveProfile("fovPinnedFinalPass", stageStartMs);
     }
 
-    const bool selectedWideBrightAnchorAccepted =
-        hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass);
     stageStartMs = profilePlateSolve ? solveProfileTimer.elapsed() : 0;
     if (selectedFinalPass.projectorValid && rankWideFinalPassWithSelectedDetections)
     {
@@ -9140,8 +9368,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     result.m_catalogCandidateStars = projectedStars.size();
     result.m_outlierStars = selectedFinalPass.outlierCount;
 
-    if (!selectedWideBrightAnchorAccepted
-        && !hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass))
+    const bool selectedWideBrightAnchorAccepted =
+        hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass);
+    if (!selectedWideBrightAnchorAccepted)
     {
         qDebug() << "CameraPlateSolver: final match pass rejected candidate due to weak wide-field bright-star support"
                  << "finalMatches" << finalMatches.size()
@@ -9177,10 +9406,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && !useStartDirection
         && isWidePlateSolveContext(settings)
         && (finalMatches.size() >= settings.m_plateSolveMinMatches)
-        && (selectedWideBrightAnchorAccepted
-            || hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass))
-        && (result.m_rmsErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 0.85, 24.0))
-        && (result.m_maxErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 1.25, 36.0));
+        && selectedWideBrightAnchorAccepted
+        && (selectedFinalPass.rmsErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 0.85, 24.0))
+        && (selectedFinalPass.maxErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 1.25, 36.0));
 
     if ((finalMatches.size() < settings.m_plateSolveMinMatches) && !sparseWideBlindAccepted) {
         qDebug().noquote().nospace()
@@ -9204,6 +9432,17 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             .arg(selectedFinalPass.rmsErrorPixels, 0, 'f', 2);
         result.m_matchSummary = matchSummary(catalogContext, starDetections, finalMatches);
         PROFILER_STOP(QString("%1: insufficient matches").arg(__FUNCTION__));
+        return result;
+    }
+
+    if (!hasGeometricallyConsistentMatches(starDetections, projectedStars, finalMatches, finalMatchRadius))
+    {
+        result.m_matchedStars = finalMatches.size();
+        result.m_rmsErrorPixels = selectedFinalPass.rmsErrorPixels;
+        result.m_maxErrorPixels = selectedFinalPass.maxErrorPixels;
+        result.m_matchSummary = matchSummary(catalogContext, starDetections, finalMatches);
+        result.m_failureReason = QStringLiteral("final match pass rejected candidate: inconsistent inter-star geometry");
+        PROFILER_STOP(QString("%1: inconsistent match geometry").arg(__FUNCTION__));
         return result;
     }
 

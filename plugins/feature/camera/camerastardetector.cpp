@@ -404,10 +404,14 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
 
     // Threshold scaled to the native bit depth. The user-facing m_starThreshold remains
     // expressed on the 0-255 scale; we shift left by 8 when running 16-bit so the same
-    // slider value gives consistent visual behaviour.
-    const double thresholdScaled = useHighBitDepth
+    // slider value gives consistent visual behaviour. Use the residual noise as an
+    // adaptive floor so moonlight, gradients or sensor noise do not flood the contour pass.
+    const double userThresholdScaled = useHighBitDepth
         ? static_cast<double>(m_settings.m_starThreshold) * 256.0
         : static_cast<double>(m_settings.m_starThreshold);
+    const double residualNoiseSigma = estimateResidualNoiseSigma(residual);
+    const double adaptiveThresholdScaled = residualNoiseSigma * 4.0;
+    const double thresholdScaled = std::max(userThresholdScaled, adaptiveThresholdScaled);
     const double maxValueScaled = useHighBitDepth ? 65535.0 : 255.0;
     cv::threshold(residual, thresholdMask, thresholdScaled, maxValueScaled, cv::THRESH_BINARY);
     // findContours only accepts CV_8U; downscale the binary mask (it's still a binary
@@ -436,7 +440,6 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
         cv::cuda::GpuMat blurredGrayGpu;
         cv::cuda::GpuMat backgroundGpu;
         cv::cuda::GpuMat residualGpu;
-        cv::cuda::GpuMat thresholdMaskGpu;
 
         if (sourceBgrGpu && !sourceBgrGpu->empty()) {
             bgrGpu = (*sourceBgrGpu)(roi);
@@ -462,14 +465,18 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
         cv::cuda::subtract(blurredGrayGpu, backgroundGpu, residualGpu, cv::noArray(), -1, m_cudaDetectionStream);
         residualGpu.download(residual, m_cudaDetectionStream);
 
-        cv::cuda::threshold(residualGpu, thresholdMaskGpu, m_settings.m_starThreshold, 255.0, cv::THRESH_BINARY, m_cudaDetectionStream);
-        cv::cuda::bitwise_and(thresholdMaskGpu, cudaStarExclusionMask(roi, thresholdMaskGpu.size()), thresholdMaskGpu, cv::noArray(), m_cudaDetectionStream);
-        thresholdMaskGpu.download(thresholdMask, m_cudaDetectionStream);
         // grayGpu is intentionally not downloaded here — the full-frame transfer saves
         // nothing useful because gray is only needed for the per-blob saturation check,
         // which is instead approximated from the already-downloaded residual peak in
         // applyStarDetection (see hasGray / saturationThreshold logic there).
         m_cudaDetectionStream.waitForCompletion();
+
+        const double residualNoiseSigma = estimateResidualNoiseSigma(residual);
+        const double thresholdValue = std::max(
+            static_cast<double>(m_settings.m_starThreshold),
+            residualNoiseSigma * 4.0);
+        cv::threshold(residual, thresholdMask, thresholdValue, 255.0, cv::THRESH_BINARY);
+        cv::bitwise_and(thresholdMask, cachedExclusionMask(roi, thresholdMask.size()), thresholdMask);
 
         if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))
         {

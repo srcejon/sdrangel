@@ -292,7 +292,14 @@ QVector<CandidatePair> m_candidatePairScratch;
 QVector<BlindGridCachedStar> m_blindGridCache;
 QVector<ProjectedCatalogStar> m_blindGridProjectedScratch;
 QHash<quint64, QVector<int>> m_projectedStarGridScratch;
-QStringList m_profileTimings;
+struct ProfileTiming
+{
+    qint64 totalMs = 0;
+    qint64 maxMs = 0;
+    int count = 0;
+};
+QStringList m_profileTimingOrder;
+QHash<QString, ProfileTiming> m_profileTimingStats;
 // Maximum total size of m_sirilRangeCache before it is cleared after a solve.
 // m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
 static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
@@ -318,6 +325,48 @@ static constexpr qint64 kSirilMinRangeRequestSize = 64 * 1024;
 static constexpr qint64 kSirilMaxMergedRangeRequestSize = 1024 * 1024;
 static constexpr qint64 kSirilMaxMergedRangeGapBytes = 64 * 1024;
 static constexpr double kSirilAngleScale = 360.0 / 2147483647.0;
+
+void clearProfileTimings()
+{
+    m_profileTimingOrder.clear();
+    m_profileTimingStats.clear();
+}
+
+void recordProfileTiming(const QString& stage, qint64 elapsedMs)
+{
+    if (!m_profileTimingStats.contains(stage)) {
+        m_profileTimingOrder.append(stage);
+    }
+
+    ProfileTiming& timing = m_profileTimingStats[stage];
+    timing.totalMs += elapsedMs;
+    timing.maxMs = std::max(timing.maxMs, elapsedMs);
+    ++timing.count;
+}
+
+QString profileSummary() const
+{
+    QStringList summary;
+    summary.reserve(m_profileTimingOrder.size());
+    for (const QString& stage : m_profileTimingOrder)
+    {
+        const ProfileTiming timing = m_profileTimingStats.value(stage);
+        if (timing.count <= 1)
+        {
+            summary.append(QStringLiteral("%1=%2").arg(stage).arg(timing.totalMs));
+        }
+        else
+        {
+            summary.append(QStringLiteral("%1=%2(count=%3,avg=%4,max=%5)")
+                .arg(stage)
+                .arg(timing.totalMs)
+                .arg(timing.count)
+                .arg(timing.totalMs / timing.count)
+                .arg(timing.maxMs));
+        }
+    }
+    return summary.join(QStringLiteral(";"));
+}
 static constexpr double kSirilAutoMaxFovDegrees = 15.0;
 static constexpr double kSirilMaxQueryRadiusDegrees = 20.0;
 static constexpr double kSirilAliasMaxSeparationArcSec = 30.0;
@@ -1864,6 +1913,24 @@ static bool isWidePlateSolveContext(const CameraSettings& settings)
             || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartBlind));
 }
 
+static bool seedFovCompatibleWithStartFov(const CameraSettings& settings, double seedFovDegrees)
+{
+    if (!plateSolveStartUsesFov(settings)) {
+        return true;
+    }
+
+    const double referenceFov = std::clamp(
+        static_cast<double>(settings.m_fov),
+        static_cast<double>(CameraSettings::m_minFov),
+        static_cast<double>(CameraSettings::m_maxFov));
+    const bool wideFisheye = isWidePlateSolveContext(settings);
+    const double toleranceDegrees = wideFisheye
+        ? std::max(30.0, referenceFov * 0.35)
+        : std::max(0.20, referenceFov * 0.35);
+
+    return std::fabs(seedFovDegrees - referenceFov) <= toleranceDegrees;
+}
+
 static bool canCalibrateLens(const CameraSettings& settings)
 {
     return (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens)
@@ -3119,6 +3186,34 @@ static QVector<VisibleCatalogStar> selectLocalVisibleStars(const QVector<Visible
     return localStars;
 }
 
+static QVector<VisibleCatalogStar> selectVisibleStarsNearElevation(const QVector<VisibleCatalogStar>& visibleStars,
+                                                                   double centerElevationDegrees,
+                                                                   double radiusDegrees,
+                                                                   int maxStars)
+{
+    QVector<VisibleCatalogStar> localStars;
+    if ((maxStars <= 0) || visibleStars.isEmpty()) {
+        return localStars;
+    }
+
+    const double radius = std::max(0.0, radiusDegrees);
+    localStars.reserve(std::min(maxStars, static_cast<int>(visibleStars.size())));
+    for (const VisibleCatalogStar& star : visibleStars)
+    {
+        if (std::fabs(star.elevationDegrees - centerElevationDegrees) <= radius) {
+            localStars.append(star);
+        }
+    }
+
+    std::sort(localStars.begin(), localStars.end(), [](const VisibleCatalogStar& lhs, const VisibleCatalogStar& rhs) {
+        return lhs.magnitude < rhs.magnitude;
+    });
+    if (localStars.size() > maxStars) {
+        localStars.resize(maxStars);
+    }
+    return localStars;
+}
+
 QVector<GuidedAnchorPair> findGuidedAnchorPairs(const CameraSettings& settings,
                                                 const PlateSolveCatalogContext& catalogContext,
                                                 const QSize& imageSize,
@@ -3844,6 +3939,9 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
                 catalogAngularDistance * static_cast<double>(std::max(imageSize.width(), imageSize.height())) / std::max(1.0, detectionTriangle.longestDistance),
                 static_cast<double>(CameraSettings::m_minFov),
                 static_cast<double>(CameraSettings::m_maxFov));
+            if (!seedFovCompatibleWithStartFov(settings, baseSeedFov)) {
+                continue;
+            }
 
             // Skip sky directions already tried by a previous triangle match. The dedup
             // radius scales with the seed FoV: at 90° FoV the original 3° tolerance is fine,
@@ -4329,6 +4427,9 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
                 maxAngularDistance * static_cast<double>(std::max(imageSize.width(), imageSize.height())) / std::max(1.0, detectionQuad.longestDistance),
                 static_cast<double>(CameraSettings::m_minFov),
                 static_cast<double>(CameraSettings::m_maxFov));
+            if (!seedFovCompatibleWithStartFov(settings, baseSeedFov)) {
+                continue;
+            }
 
             // FoV-scaled dedup so wide-field seeds don't swallow nearby distinct directions.
             const double dedupRadiusDegrees = std::clamp(baseSeedFov * 0.05, 0.5, 5.0);
@@ -7563,7 +7664,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     searchProfileTimer.start();
     auto logSearchProfile = [&](const char *stage, qint64 startedMs) {
         const qint64 elapsedMs = searchProfileTimer.elapsed() - startedMs;
-        m_profileTimings.append(QStringLiteral("search.%1=%2").arg(QString::fromUtf8(stage)).arg(elapsedMs));
+        recordProfileTiming(QStringLiteral("search.%1").arg(QString::fromUtf8(stage)), elapsedMs);
         if (!profilePlateSolve) {
             return;
         }
@@ -8017,6 +8118,20 @@ Evaluation searchBestPose(const CameraSettings& settings,
             qDebug() << "CameraPlateSolver: guided narrow blind seed catalog"
                      << "stars" << blindVisibleStars->size()
                      << "radius" << localRadiusDegrees;
+        }
+        else if (useElevationSeedOnly)
+        {
+            const double localElevationRadiusDegrees = std::max(
+                static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 0.5,
+                static_cast<double>(settings.m_fov));
+            localVisibleStars = selectVisibleStarsNearElevation(
+                catalogContext.visibleStars,
+                settings.m_elevation,
+                localElevationRadiusDegrees,
+                128);
+            if (!localVisibleStars.isEmpty()) {
+                blindVisibleStars = &localVisibleStars;
+            }
         }
 
         auto consumeBlindSeeds = [&](const QVector<Evaluation>& seeds, const char *stage) {
@@ -8829,10 +8944,10 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     const bool profilePlateSolve = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_PROFILE");
     QElapsedTimer solveProfileTimer;
     solveProfileTimer.start();
-    m_profileTimings.clear();
+    clearProfileTimings();
     auto logSolveProfile = [&](const char *stage, qint64 startedMs) {
         const qint64 elapsedMs = solveProfileTimer.elapsed() - startedMs;
-        m_profileTimings.append(QStringLiteral("solve.%1=%2").arg(QString::fromUtf8(stage)).arg(elapsedMs));
+        recordProfileTiming(QStringLiteral("solve.%1").arg(QString::fromUtf8(stage)), elapsedMs);
         if (!profilePlateSolve) {
             return;
         }
@@ -9706,7 +9821,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     std::swap(context.m_sirilIndexCache, m_sirilIndexCache);
 
     CameraPlateSolveResult result = context.solve(settings, imageSize, captureDateTime, starDetections);
-    result.m_profileSummary = context.m_profileTimings.join(QStringLiteral(";"));
+    result.m_profileSummary = context.profileSummary();
 
     std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
     std::swap(context.m_sirilIndexCache, m_sirilIndexCache);

@@ -21,10 +21,14 @@
 #include <cmath>
 #include <limits>
 
+#include <QAction>
+#include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QColorDialog>
 #include <QDateTime>
 #include <QDateTimeEdit>
+#include <QDesktopServices>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
@@ -33,6 +37,7 @@
 #include <QFontDatabase>
 #include <QGraphicsView>
 #include <QGraphicsRectItem>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QLineEdit>
 #include <QNetworkReply>
@@ -50,6 +55,7 @@
 #include <QWheelEvent>
 #include <QMessageBox>
 #include <QUrl>
+#include <QUrlQuery>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
 #include <QCameraDevice>
@@ -82,6 +88,7 @@
 #include "maincore.h"
 #include "feature/featureset.h"
 #include "channel/channelwebapiutils.h"
+#include "feature/featurewebapiutils.h"
 
 #include "cameraplatesolver.h"
 #include "ui_cameragui.h"
@@ -385,6 +392,7 @@ bool CameraGUI::handleMessage(const Message& message)
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
         m_lastHistogramData = report.getHistogramData();
+        m_lastStarDetections = report.getStarDetections();
         m_lastStackCount = report.getStackCount();
         m_lastStackQueuedCount = report.getStackQueuedCount();
         m_lastStackDroppedCount = report.getStackDroppedCount();
@@ -1049,6 +1057,7 @@ void CameraGUI::resetCameraStatus()
     m_lastPlateSolveCenterOffsetY = 0.0;
     m_lastPlateSolveDistortionK1 = 0.0;
     m_lastPlateSolveCatalogSource.clear();
+    m_lastStarDetections.clear();
     settingsUI()->pipelineFpsLabel->setText("-");
     settingsUI()->plateSolveStatusLabel->setText("-");
     settingsUI()->plateSolveMatchesLabel->setText("-");
@@ -5337,6 +5346,148 @@ QPoint CameraGUI::mapViewportPointToImage(const QPoint& viewportPos) const
     return QPoint(x, y);
 }
 
+int CameraGUI::findStarDetectionAtImagePos(const QPointF& imagePos) const
+{
+    int bestIndex = -1;
+    double bestDistanceSquared = std::numeric_limits<double>::max();
+
+    for (int i = 0; i < m_lastStarDetections.size(); ++i)
+    {
+        const CameraPipelineStarDetection& star = m_lastStarDetections[i];
+        const QPointF delta = star.m_center - imagePos;
+        const double distanceSquared = delta.x() * delta.x() + delta.y() * delta.y();
+        const double hitRadius = std::max(8.0, static_cast<double>(star.m_radius) + 6.0);
+
+        if ((distanceSquared <= hitRadius * hitRadius) && (distanceSquared < bestDistanceSquared))
+        {
+            bestDistanceSquared = distanceSquared;
+            bestIndex = i;
+        }
+    }
+
+    return bestIndex;
+}
+
+QString CameraGUI::starDetectionDisplayName(const CameraPipelineStarDetection& star) const
+{
+    const QString label = star.m_label.trimmed();
+    if (!label.isEmpty()) {
+        return label;
+    }
+    return star.m_solved ? tr("Matched star") : tr("Detected star");
+}
+
+QString CameraGUI::starDetectionSearchTarget(const CameraPipelineStarDetection& star) const
+{
+    return star.m_label.trimmed();
+}
+
+QString CameraGUI::starDetectionDetails(const CameraPipelineStarDetection& star) const
+{
+    QStringList details;
+    details << tr("Name: %1").arg(starDetectionDisplayName(star));
+    details << tr("Image position: x=%1 px, y=%2 px")
+        .arg(QString::number(star.m_center.x(), 'f', 1))
+        .arg(QString::number(star.m_center.y(), 'f', 1));
+
+    if (star.m_solved)
+    {
+        details << tr("Projected position: x=%1 px, y=%2 px")
+            .arg(QString::number(star.m_projectedCenter.x(), 'f', 1))
+            .arg(QString::number(star.m_projectedCenter.y(), 'f', 1));
+        details << tr("Match error: %1 px").arg(QString::number(star.m_matchDistancePixels, 'f', 2));
+        details << tr("Catalog magnitude: %1").arg(QString::number(star.m_catalogMagnitude, 'f', 2));
+
+        if (!star.m_catalogSpectralType.trimmed().isEmpty()) {
+            details << tr("Spectral type: %1").arg(star.m_catalogSpectralType.trimmed());
+        }
+    }
+
+    details << tr("Peak: %1").arg(QString::number(star.m_peakValue, 'f', 1));
+    details << tr("Radius: %1 px").arg(QString::number(star.m_radius, 'f', 1));
+    details << tr("Flux: %1").arg(QString::number(star.m_flux, 'f', 1));
+    details << tr("SNR: %1").arg(QString::number(star.m_snr, 'f', 1));
+    details << tr("FWHM: %1 px").arg(QString::number(star.m_fwhm, 'f', 2));
+    details << tr("Quality: %1").arg(QString::number(star.m_qualityScore, 'f', 2));
+    details << tr("Roundness: %1").arg(QString::number(star.m_roundness, 'f', 2));
+    details << tr("Aspect ratio: %1").arg(QString::number(star.m_aspectRatio, 'f', 2));
+    details << tr("Saturated: %1").arg(star.m_saturated ? tr("yes") : tr("no"));
+    details << tr("Hot pixel suspect: %1").arg(star.m_hotPixelSuspect ? tr("yes") : tr("no"));
+    return details.join('\n');
+}
+
+void CameraGUI::showStarDetectionInfoDialog(const CameraPipelineStarDetection& star)
+{
+    QMessageBox::information(this, tr("Star detection"), starDetectionDetails(star));
+}
+
+bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QPoint& globalPos)
+{
+    if (m_lastImage.isNull() || !m_imagePixmapItem || m_lastStarDetections.isEmpty()) {
+        return false;
+    }
+
+    const QPointF imagePos = ui->imageView->mapToScene(viewportPos);
+    const QRectF imageBounds(QPointF(0.0, 0.0), QSizeF(m_lastImage.size()));
+    if (!imageBounds.contains(imagePos)) {
+        return false;
+    }
+
+    const int starIndex = findStarDetectionAtImagePos(imagePos);
+    if (starIndex < 0) {
+        return false;
+    }
+
+    const CameraPipelineStarDetection star = m_lastStarDetections[starIndex];
+    const QString target = starDetectionSearchTarget(star);
+    QMenu menu(this);
+    menu.addSection(starDetectionDisplayName(star));
+    QAction *infoAction = menu.addAction(tr("Star information..."));
+    QAction *skyMapAction = menu.addAction(tr("Find in Sky Map"));
+    QAction *simbadAction = menu.addAction(tr("Open in SIMBAD"));
+    QAction *copyNameAction = menu.addAction(tr("Copy name"));
+    QAction *copyDetailsAction = menu.addAction(tr("Copy details"));
+
+    const bool hasTarget = !target.isEmpty();
+    skyMapAction->setEnabled(hasTarget);
+    simbadAction->setEnabled(hasTarget);
+    copyNameAction->setEnabled(hasTarget);
+
+    QAction *selectedAction = menu.exec(globalPos);
+    if (!selectedAction) {
+        return true;
+    }
+
+    if (selectedAction == infoAction)
+    {
+        showStarDetectionInfoDialog(star);
+    }
+    else if (selectedAction == skyMapAction)
+    {
+        if (!FeatureWebAPIUtils::skyMapFind(target)) {
+            QMessageBox::warning(this, tr("Sky Map"), tr("No Sky Map feature could find \"%1\".").arg(target));
+        }
+    }
+    else if (selectedAction == simbadAction)
+    {
+        QUrl url(QStringLiteral("https://simbad.cds.unistra.fr/simbad/sim-id"));
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("Ident"), target);
+        url.setQuery(query);
+        QDesktopServices::openUrl(url);
+    }
+    else if (selectedAction == copyNameAction)
+    {
+        QApplication::clipboard()->setText(target);
+    }
+    else if (selectedAction == copyDetailsAction)
+    {
+        QApplication::clipboard()->setText(starDetectionDetails(star));
+    }
+
+    return true;
+}
+
 void CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index)
 {
     m_settings.m_postProcessWhiteBalanceMode = index;
@@ -6928,6 +7079,22 @@ bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
             const double factor = (wheelEvent->angleDelta().y() > 0) ? 1.25 : 1.0 / 1.25;
             ui->imageView->scale(factor, factor);
             return true;
+        }
+
+        if ((m_previewDrawMode == PreviewDrawModeNone) && (event->type() == QEvent::MouseButtonPress))
+        {
+            const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::RightButton)
+            {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+                const QPoint globalPos = mouseEvent->globalPosition().toPoint();
+#else
+                const QPoint globalPos = mouseEvent->globalPos();
+#endif
+                if (showStarDetectionContextMenu(mouseEvent->pos(), globalPos)) {
+                    return true;
+                }
+            }
         }
 
         if (m_previewDrawMode != PreviewDrawModeNone)

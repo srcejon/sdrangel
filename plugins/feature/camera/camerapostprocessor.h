@@ -124,6 +124,7 @@ public:
         int getStackDroppedCount() const { return m_stackDroppedCount; }
         int getStackRejectedCount() const { return m_stackRejectedCount; }
         const QString& getStackRejectReason() const { return m_stackRejectReason; }
+        const QVector<CameraPipelineStarDetection>& getStarDetections() const { return m_starDetections; }
         bool isPlateSolved() const { return m_plateSolved; }
         int getPlateSolvedMatches() const { return m_plateSolvedMatches; }
         int getPlateSolveDetectedStarsConsidered() const { return m_plateSolveDetectedStarsConsidered; }
@@ -148,6 +149,7 @@ public:
                                       int stackDroppedCount,
                                       int stackRejectedCount,
                                       const QString& stackRejectReason,
+                                      const QVector<CameraPipelineStarDetection>& starDetections,
                                       bool plateSolved,
                                       int plateSolvedMatches,
                                       int plateSolveDetectedStarsConsidered,
@@ -173,6 +175,7 @@ public:
                 stackDroppedCount,
                 stackRejectedCount,
                 stackRejectReason,
+                starDetections,
                 plateSolved,
                 plateSolvedMatches,
                 plateSolveDetectedStarsConsidered,
@@ -199,6 +202,7 @@ public:
         int m_stackDroppedCount;
         int m_stackRejectedCount;
         QString m_stackRejectReason;
+        QVector<CameraPipelineStarDetection> m_starDetections;
         bool m_plateSolved;
         int m_plateSolvedMatches;
         int m_plateSolveDetectedStarsConsidered;
@@ -223,6 +227,7 @@ public:
                        int stackDroppedCount,
                        int stackRejectedCount,
                        const QString& stackRejectReason,
+                       const QVector<CameraPipelineStarDetection>& starDetections,
                        bool plateSolved,
                        int plateSolvedMatches,
                        int plateSolveDetectedStarsConsidered,
@@ -247,6 +252,7 @@ public:
             m_stackDroppedCount(stackDroppedCount),
             m_stackRejectedCount(stackRejectedCount),
             m_stackRejectReason(stackRejectReason),
+            m_starDetections(starDetections),
             m_plateSolved(plateSolved),
             m_plateSolvedMatches(plateSolvedMatches),
             m_plateSolveDetectedStarsConsidered(plateSolveDetectedStarsConsidered),

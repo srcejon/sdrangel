@@ -195,6 +195,7 @@ private:
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
+    QVector<CameraPipelineStarDetection> m_lastStarDetections;
     QList<CameraDetectionHistoryEntry> m_detectionHistory;
     int m_lastStackCount = 1;
     int m_lastStackQueuedCount = 0;
@@ -279,6 +280,12 @@ private:
     void setMotionExclusionDrawMode(bool enabled);
     void setDetectionRoiDrawMode(bool enabled);
     QPoint mapViewportPointToImage(const QPoint& viewportPos) const;
+    int findStarDetectionAtImagePos(const QPointF& imagePos) const;
+    bool showStarDetectionContextMenu(const QPoint& viewportPos, const QPoint& globalPos);
+    QString starDetectionDisplayName(const CameraPipelineStarDetection& star) const;
+    QString starDetectionDetails(const CameraPipelineStarDetection& star) const;
+    QString starDetectionSearchTarget(const CameraPipelineStarDetection& star) const;
+    void showStarDetectionInfoDialog(const CameraPipelineStarDetection& star);
     void populateGs232ControllerCombo();
     void applyPositionSync();
     void updatePositionControls();

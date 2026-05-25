@@ -799,7 +799,7 @@ static double firstPassPlateSolveMaxMagnitude(const CameraSettings& settings)
         return 9.0;
     }
 
-    if ((settings.m_fov > kWideFovMagnitudePreferenceThresholdDegrees)
+    if (isWidePlateSolveContext(settings)
         && (settings.m_plateSolveMaxMagnitude > kWideFovBrightFirstPassMaxMagnitude))
     {
         return kWideFovBrightFirstPassMaxMagnitude;
@@ -1715,11 +1715,17 @@ static bool plateSolveStartUsesLens(const CameraSettings& settings)
     }
 }
 
+static bool isWidePlateSolveContext(const CameraSettings& settings)
+{
+    return (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
+        && ((settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees)
+            || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartBlind));
+}
+
 static bool canCalibrateLens(const CameraSettings& settings)
 {
     return (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens)
-        || ((settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
-            && (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees));
+        || isWidePlateSolveContext(settings);
 }
 
 static const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
@@ -2245,6 +2251,97 @@ static bool projectorPoseFromBasis(const SkyVector& center,
     return std::isfinite(azimuthDegrees) && std::isfinite(elevationDegrees) && std::isfinite(rollDegrees);
 }
 
+static SkyVector subtractScaled(const SkyVector& lhs, const SkyVector& rhs, double scale)
+{
+    return {
+        lhs.x - rhs.x * scale,
+        lhs.y - rhs.y * scale,
+        lhs.z - rhs.z * scale
+    };
+}
+
+static SkyVector combineBasis(const SkyVector& xAxis,
+                              const SkyVector& yAxis,
+                              const SkyVector& zAxis,
+                              double x,
+                              double y,
+                              double z)
+{
+    return {
+        xAxis.x * x + yAxis.x * y + zAxis.x * z,
+        xAxis.y * x + yAxis.y * y + zAxis.y * z,
+        xAxis.z * x + yAxis.z * y + zAxis.z * z
+    };
+}
+
+static bool mappedBasisVector(const SkyVector& sourceVector,
+                              const SkyVector& sourceXAxis,
+                              const SkyVector& sourceYAxis,
+                              const SkyVector& sourceZAxis,
+                              const SkyVector& targetXAxis,
+                              const SkyVector& targetYAxis,
+                              const SkyVector& targetZAxis,
+                              SkyVector& mappedVector)
+{
+    const double x = dot(sourceVector, sourceXAxis);
+    const double y = dot(sourceVector, sourceYAxis);
+    const double z = dot(sourceVector, sourceZAxis);
+    mappedVector = normalize(combineBasis(targetXAxis, targetYAxis, targetZAxis, x, y, z));
+    return length(mappedVector) > 0.0;
+}
+
+static bool poseFromTwoVectorPairs(const SkyProjector& baseProjector,
+                                   const SkyVector& sourceA,
+                                   const SkyVector& sourceB,
+                                   const SkyVector& targetA,
+                                   const SkyVector& targetB,
+                                   double& azimuthDegrees,
+                                   double& elevationDegrees,
+                                   double& rollDegrees)
+{
+    const SkyVector sourceXAxis = normalize(sourceA);
+    const SkyVector sourceYAxis = normalize(subtractScaled(sourceB, sourceXAxis, dot(sourceB, sourceXAxis)));
+    const SkyVector sourceZAxis = normalize(cross(sourceXAxis, sourceYAxis));
+    const SkyVector targetXAxis = normalize(targetA);
+    const SkyVector targetYAxis = normalize(subtractScaled(targetB, targetXAxis, dot(targetB, targetXAxis)));
+    const SkyVector targetZAxis = normalize(cross(targetXAxis, targetYAxis));
+    if ((length(sourceXAxis) <= 0.0)
+        || (length(sourceYAxis) <= 0.0)
+        || (length(sourceZAxis) <= 0.0)
+        || (length(targetXAxis) <= 0.0)
+        || (length(targetYAxis) <= 0.0)
+        || (length(targetZAxis) <= 0.0))
+    {
+        return false;
+    }
+
+    SkyVector mappedCenter;
+    SkyVector mappedRight;
+    if (!mappedBasisVector(
+            baseProjector.center,
+            sourceXAxis,
+            sourceYAxis,
+            sourceZAxis,
+            targetXAxis,
+            targetYAxis,
+            targetZAxis,
+            mappedCenter)
+        || !mappedBasisVector(
+            baseProjector.right,
+            sourceXAxis,
+            sourceYAxis,
+            sourceZAxis,
+            targetXAxis,
+            targetYAxis,
+            targetZAxis,
+            mappedRight))
+    {
+        return false;
+    }
+
+    return projectorPoseFromBasis(mappedCenter, mappedRight, azimuthDegrees, elevationDegrees, rollDegrees);
+}
+
 static bool anchorAlignedPoseFromPixel(const CameraSettings& settings,
                                        const QSize& imageSize,
                                        const QPointF& anchorPoint,
@@ -2766,8 +2863,7 @@ QVector<GuidedAnchorPair> findGuidedAnchorPairs(const CameraSettings& settings,
 {
     QVector<GuidedAnchorPair> anchors;
     const bool useWideWeakAnchorSearch = !plateSolveStartUsesDirection(settings)
-        && (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
-        && (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees);
+        && isWidePlateSolveContext(settings);
     if ((!plateSolveStartUsesDirection(settings) && !useWideWeakAnchorSearch)
         || starDetections.isEmpty()
         || localVisibleStars.isEmpty())
@@ -2792,12 +2888,16 @@ QVector<GuidedAnchorPair> findGuidedAnchorPairs(const CameraSettings& settings,
 
     const QPointF center = projectorPrincipalPoint(currentProjector);
     const double maxImageDimension = std::max(imageSize.width(), imageSize.height());
-    const double radialTolerancePixels = std::max(
-        static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 6.0,
-        maxImageDimension * 0.08);
-    const double directDistanceLimitPixels = std::max(
-        radialTolerancePixels * 3.0,
-        maxImageDimension * 0.35);
+    const double radialTolerancePixels = useWideWeakAnchorSearch
+        ? maxImageDimension
+        : std::max(
+            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 6.0,
+            maxImageDimension * 0.08);
+    const double directDistanceLimitPixels = useWideWeakAnchorSearch
+        ? maxImageDimension * 1.5
+        : std::max(
+            radialTolerancePixels * 3.0,
+            maxImageDimension * 0.35);
     const double anchorMaxMagnitude = std::min(settings.m_plateSolveMaxMagnitude, 7.0);
     QVector<int> allDetectionIndices;
     allDetectionIndices.reserve(starDetections.size());
@@ -2924,7 +3024,8 @@ QVector<GuidedAnchorPair> findGuidedAnchorPairs(const CameraSettings& settings,
         }
         return lhs.detectionIndex < rhs.detectionIndex;
     });
-    while (anchors.size() > 24) {
+    const int anchorPoolLimit = useWideWeakAnchorSearch ? 96 : 24;
+    while (anchors.size() > anchorPoolLimit) {
         anchors.removeLast();
     }
 
@@ -3376,8 +3477,7 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
         return seeds;
     }
 
-    const bool isWideFisheyeLens = (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
-        && (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees);
+    const bool isWideFisheyeLens = isWidePlateSolveContext(settings);
     const QVector<int> signatureDetectionIndices = isWideFisheyeLens
         ? selectDetectionIndicesForBlindSignatures(starDetections, detectionIndices, 12, 12, 20)
         : detectionIndices;
@@ -3609,8 +3709,199 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
     std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterWeakModeEvaluation(lhs, rhs);
     });
-    if (seeds.size() > 16) {
-        seeds.resize(16);
+    const int seedLimit = isWideFisheyeLens ? 64 : 16;
+    if (seeds.size() > seedLimit) {
+        seeds.resize(seedLimit);
+    }
+
+    return seeds;
+}
+
+QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
+                                         const PlateSolveCatalogContext& catalogContext,
+                                         const QSize& imageSize,
+                                         const QDateTime& captureDateTimeUtc,
+                                         const QVector<CameraPipelineStarDetection>& starDetections,
+                                         const QVector<int>& detectionIndices,
+                                         const QVector<VisibleCatalogStar>& visibleStars)
+{
+    QVector<Evaluation> seeds;
+    if (!isWidePlateSolveContext(settings)
+        || (starDetections.size() < settings.m_plateSolveMinMatches)
+        || (visibleStars.size() < settings.m_plateSolveMinMatches))
+    {
+        return seeds;
+    }
+
+    QVector<int> brightDetectionIndices = selectDetectionIndicesForBlindSignatures(
+        starDetections,
+        detectionIndices,
+        10,
+        10,
+        16);
+    if (brightDetectionIndices.size() < 2) {
+        return seeds;
+    }
+    if (brightDetectionIndices.size() > 10) {
+        brightDetectionIndices.resize(10);
+    }
+
+    QVector<VisibleCatalogStar> brightCatalogStars;
+    brightCatalogStars.reserve(20);
+    for (const VisibleCatalogStar& visibleStar : visibleStars)
+    {
+        if (visibleStar.magnitude > kWideFovBrightFirstPassMaxMagnitude) {
+            break;
+        }
+        brightCatalogStars.append(visibleStar);
+        if (brightCatalogStars.size() >= 20) {
+            break;
+        }
+    }
+    if (brightCatalogStars.size() < 2) {
+        return seeds;
+    }
+
+    QVector<double> seedFovs;
+    if (plateSolveStartUsesFov(settings))
+    {
+        for (double scale : {0.96, 1.0, 1.04})
+        {
+            seedFovs.append(std::clamp(
+                static_cast<double>(settings.m_fov) * scale,
+                static_cast<double>(CameraSettings::m_minFov),
+                static_cast<double>(CameraSettings::m_maxFov)));
+        }
+    }
+    else
+    {
+        for (double fovDegrees : {130.0, 160.0, 180.0}) {
+            seedFovs.append(fovDegrees);
+        }
+    }
+
+    const bool useStartLens = plateSolveStartUsesLens(settings);
+    const double fixedCenterOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
+    const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
+    const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
+
+    for (double seedFov : seedFovs)
+    {
+        const SkyProjector baseProjector = createProjector(
+            settings,
+            imageSize,
+            0.0,
+            90.0,
+            0.0,
+            seedFov,
+            fixedCenterOffsetX,
+            fixedCenterOffsetY,
+            fixedDistortionK1);
+        if (!baseProjector.valid) {
+            continue;
+        }
+
+        for (int firstDetection = 0; firstDetection < brightDetectionIndices.size(); ++firstDetection)
+        {
+            for (int secondDetection = firstDetection + 1; secondDetection < brightDetectionIndices.size(); ++secondDetection)
+            {
+                const int detectionIndexA = brightDetectionIndices[firstDetection];
+                const int detectionIndexB = brightDetectionIndices[secondDetection];
+                SkyVector sourceA;
+                SkyVector sourceB;
+                if (!unprojectPixelToVector(baseProjector, starDetections[detectionIndexA].m_center, sourceA)
+                    || !unprojectPixelToVector(baseProjector, starDetections[detectionIndexB].m_center, sourceB))
+                {
+                    continue;
+                }
+                if (std::acos(std::clamp(dot(sourceA, sourceB), -1.0, 1.0)) < degToRad(1.0)) {
+                    continue;
+                }
+
+                for (int firstCatalog = 0; firstCatalog < brightCatalogStars.size(); ++firstCatalog)
+                {
+                    for (int secondCatalog = 0; secondCatalog < brightCatalogStars.size(); ++secondCatalog)
+                    {
+                        if (firstCatalog == secondCatalog) {
+                            continue;
+                        }
+
+                        double seedAzimuth = 0.0;
+                        double seedElevation = 0.0;
+                        double seedRoll = 0.0;
+                        if (!poseFromTwoVectorPairs(
+                                baseProjector,
+                                sourceA,
+                                sourceB,
+                                brightCatalogStars[firstCatalog].vector,
+                                brightCatalogStars[secondCatalog].vector,
+                                seedAzimuth,
+                                seedElevation,
+                                seedRoll))
+                        {
+                            continue;
+                        }
+
+                        QVector<int> allowedCatalogIndices {
+                            brightCatalogStars[firstCatalog].catalogIndex,
+                            brightCatalogStars[secondCatalog].catalogIndex
+                        };
+                        const Evaluation seededCandidate = evaluatePose(
+                            settings,
+                            catalogContext,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            seedAzimuth,
+                            seedElevation,
+                            seedRoll,
+                            seedFov,
+                            &allowedCatalogIndices,
+                            fixedCenterOffsetX,
+                            fixedCenterOffsetY,
+                            fixedDistortionK1);
+                        if (!seededCandidate.valid) {
+                            continue;
+                        }
+
+                        const Evaluation candidate = evaluatePose(
+                            settings,
+                            catalogContext,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            seededCandidate.azimuthDegrees,
+                            seededCandidate.elevationDegrees,
+                            seededCandidate.rollDegrees,
+                            seededCandidate.fovDegrees,
+                            nullptr,
+                            fixedCenterOffsetX,
+                            fixedCenterOffsetY,
+                            fixedDistortionK1);
+                        const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
+                            settings,
+                            catalogContext,
+                            imageSize,
+                            captureDateTimeUtc,
+                            starDetections,
+                            detectionIndices,
+                            candidate);
+                        if (verifiedCandidate.valid) {
+                            seeds.append(verifiedCandidate);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
+        return isBetterWeakModeEvaluation(lhs, rhs);
+    });
+    if (seeds.size() > 64) {
+        seeds.resize(64);
     }
 
     return seeds;
@@ -3629,8 +3920,7 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
         return seeds;
     }
 
-    const bool isWideFisheyeLens = (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
-        && (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees);
+    const bool isWideFisheyeLens = isWidePlateSolveContext(settings);
     const QVector<int> signatureDetectionIndices = isWideFisheyeLens
         ? selectDetectionIndicesForBlindSignatures(starDetections, detectionIndices, 10, 10, 16)
         : detectionIndices;
@@ -3867,8 +4157,9 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
     std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterWeakModeEvaluation(lhs, rhs);
     });
-    if (seeds.size() > 12) {
-        seeds.resize(12);
+    const int seedLimit = isWideFisheyeLens ? 64 : 12;
+    if (seeds.size() > seedLimit) {
+        seeds.resize(seedLimit);
     }
 
     return seeds;
@@ -4338,8 +4629,7 @@ static void appendWideBrightSupplementalMatches(const CameraSettings& settings,
                                                 double matchRadiusPixels,
                                                 QVector<Match>& matches)
 {
-    if ((settings.m_fov < kWideFovMagnitudePreferenceThresholdDegrees)
-        || (settings.m_lensProjection == CameraSettings::LensProjectionRectilinear)
+    if (!isWidePlateSolveContext(settings)
         || matches.isEmpty())
     {
         return;
@@ -4843,6 +5133,25 @@ static bool isAcceptableBlindSolve(const CameraSettings& settings,
         && (maxErrorPixels <= maxWorstError);
 }
 
+static bool isAcceptableSparseWideBlindSolve(const CameraSettings& settings,
+                                             const QVector<CameraPipelineStarDetection>& starDetections,
+                                             const FinalMatchPassEvaluation& evaluation)
+{
+    if (!isWidePlateSolveContext(settings)
+        || (settings.m_plateSolveStartMode != CameraSettings::PlateSolveStartBlind)
+        || (starDetections.size() > 12)
+        || (evaluation.finalMatches.size() < 3))
+    {
+        return false;
+    }
+
+    return (evaluation.rmsErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0))
+        && (evaluation.medianErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 0.60, 16.0))
+        && (evaluation.maxErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 1.25, 32.0))
+        && (evaluation.matchedBrightDetections >= 2)
+        && (evaluation.brightDetectionMagnitudeError <= 1.50);
+}
+
 static bool isStrongGuidedSolve(const CameraSettings& settings,
                          int minMatchCount,
                          const Evaluation& evaluation)
@@ -4897,7 +5206,9 @@ static QString directionSeedRejectionReason(const CameraSettings& settings,
     const double maxMedianError = narrowField
         ? std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 18.0)
         : std::min(settings.m_plateSolveFinalMatchRadius * 0.65, 18.0);
-    const double maxWorstError = std::min(settings.m_plateSolveFinalMatchRadius * 1.05, 36.0);
+    const double maxWorstError = std::min(
+        settings.m_plateSolveFinalMatchRadius * (isWidePlateSolveContext(settings) ? 1.15 : 1.05),
+        36.0);
 
     QStringList reasons;
     if (matches.size() < requiredMatches) {
@@ -4949,7 +5260,9 @@ static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
     const double maxMedianError = narrowField
         ? std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 18.0)
         : std::min(settings.m_plateSolveFinalMatchRadius * 0.65, 18.0);
-    const double maxWorstError = std::min(settings.m_plateSolveFinalMatchRadius * 1.05, 36.0);
+    const double maxWorstError = std::min(
+        settings.m_plateSolveFinalMatchRadius * (isWidePlateSolveContext(settings) ? 1.15 : 1.05),
+        36.0);
 
     return (rmsErrorPixels <= maxRmsError)
         && (medianError <= maxMedianError)
@@ -5085,7 +5398,7 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
         return false;
     }
 
-    if ((settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees)
+    if (isWidePlateSolveContext(settings)
         && (evaluation.brightDetections >= 5)
         && (evaluation.brightDetectionMagnitudeError > 0.85))
     {
@@ -5093,6 +5406,40 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
     }
 
     return true;
+}
+
+bool needsWideBrightAnchorSupport(const CameraSettings& settings,
+                                  const QVector<CameraPipelineStarDetection>& starDetections)
+{
+    return isWidePlateSolveContext(settings)
+        && (starDetections.size() >= 32);
+}
+
+bool hasAcceptableWideBrightAnchorSupport(const CameraSettings& settings,
+                                          const QVector<CameraPipelineStarDetection>& starDetections,
+                                          const FinalMatchPassEvaluation& evaluation)
+{
+    if (!needsWideBrightAnchorSupport(settings, starDetections)) {
+        return true;
+    }
+    if (evaluation.brightDetections < 5) {
+        return false;
+    }
+
+    const bool brightDetectionsAgree =
+        (evaluation.matchedBrightDetections >= 4)
+        && (evaluation.brightDetectionMagnitudeError <= 1.50);
+    const bool brightProjectedStarsAgree =
+        (evaluation.brightProjectedStars < 5)
+        || (evaluation.matchedBrightProjectedStars >= 2)
+        || (evaluation.brightProjectedMatchFraction >= 0.25);
+
+    if (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartBlind) {
+        return brightDetectionsAgree && brightProjectedStarsAgree;
+    }
+
+    return brightDetectionsAgree
+        && (brightProjectedStarsAgree || (evaluation.matchedBrightDetections >= 4));
 }
 
 double directionSeedAffinity(const Evaluation& evaluation)
@@ -5709,7 +6056,7 @@ double wideFinalPassMagnitudeAffinity(const FinalMatchPassEvaluation& evaluation
 double brightDetectionCoverageAffinity(const CameraSettings& settings,
                                        const FinalMatchPassEvaluation& evaluation)
 {
-    if ((settings.m_fov < kWideFovMagnitudePreferenceThresholdDegrees)
+    if (!isWidePlateSolveContext(settings)
         || (evaluation.brightDetections < 3))
     {
         return 1.0;
@@ -5722,7 +6069,7 @@ double brightDetectionCoverageAffinity(const CameraSettings& settings,
 double brightProjectedCoverageAffinity(const CameraSettings& settings,
                                        const FinalMatchPassEvaluation& evaluation)
 {
-    if ((settings.m_fov < kWideFovMagnitudePreferenceThresholdDegrees)
+    if (!isWidePlateSolveContext(settings)
         || (evaluation.brightProjectedStars < 3))
     {
         return 1.0;
@@ -5735,7 +6082,7 @@ double brightProjectedCoverageAffinity(const CameraSettings& settings,
 double brightDetectionMagnitudeAffinity(const CameraSettings& settings,
                                         const FinalMatchPassEvaluation& evaluation)
 {
-    if ((settings.m_fov < kWideFovMagnitudePreferenceThresholdDegrees)
+    if (!isWidePlateSolveContext(settings)
         || (evaluation.brightDetections < 3))
     {
         return 1.0;
@@ -5796,11 +6143,23 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
         && bestMeetsMinMatches
         && isAcceptableBlindSolve(settings, starDetections, best.finalMatches, best.rmsErrorPixels, best.maxErrorPixels);
 
-    if (blindMode && (candidateBlindAccepted != bestBlindAccepted)) {
-        return candidateBlindAccepted;
-    }
     if (candidateMeetsMinMatches != bestMeetsMinMatches) {
         return candidateMeetsMinMatches;
+    }
+
+    if (isWidePlateSolveContext(settings))
+    {
+        const bool candidateBrightAnchorAccepted =
+            hasAcceptableWideBrightAnchorSupport(settings, starDetections, candidate);
+        const bool bestBrightAnchorAccepted =
+            hasAcceptableWideBrightAnchorSupport(settings, starDetections, best);
+        if (candidateBrightAnchorAccepted != bestBrightAnchorAccepted) {
+            return candidateBrightAnchorAccepted;
+        }
+    }
+
+    if (blindMode && (candidateBlindAccepted != bestBlindAccepted)) {
+        return candidateBlindAccepted;
     }
 
     if (m_useDirectionSeedPreference)
@@ -5812,7 +6171,7 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
         }
     }
 
-    if (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees)
+    if (isWidePlateSolveContext(settings))
     {
         const double projectedCoverageDelta = candidate.brightProjectedMatchFraction - best.brightProjectedMatchFraction;
         if ((candidate.brightProjectedStars >= 3)
@@ -5997,8 +6356,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
 {
     Evaluation best;
     const bool useWideWeakAnchorSearch = !plateSolveStartUsesDirection(settings)
-        && (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
-        && (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees);
+        && isWidePlateSolveContext(settings);
     if ((!plateSolveStartUsesDirection(settings) && !useWideWeakAnchorSearch)
         || starDetections.isEmpty()
         || catalogContext.visibleStars.isEmpty())
@@ -6044,7 +6402,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
     centerOffsetSeeds.append(QPointF(fixedCenterOffsetX, fixedCenterOffsetY));
     QVector<double> distortionSeeds;
     distortionSeeds.append(fixedDistortionK1);
-    if (calibrateLens && (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees))
+    if (calibrateLens && isWidePlateSolveContext(settings))
     {
         const double xStep = imageSize.width() * 0.08;
         const double yStep = imageSize.height() * 0.08;
@@ -6075,7 +6433,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
     const QVector<double> fovSeedScales = (settings.m_fov <= 5.0)
         ? QVector<double>{1.0}
         : QVector<double>{0.88, 0.96, 1.0, 1.04, 1.12};
-    const int anchorLimit = std::min(12, static_cast<int>(anchors.size()));
+    const int anchorLimit = std::min(useWideWeakAnchorSearch ? 32 : 12, static_cast<int>(anchors.size()));
     const int expandedRollMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
     double bestSearchScore = -std::numeric_limits<double>::infinity();
 
@@ -6240,7 +6598,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
                     const bool tryCoarseLensSeeds = (anchorIndex < 6)
                         && (anchor.magnitude <= 3.0)
                         && calibrateLens
-                        && (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees);
+                        && isWidePlateSolveContext(settings);
                     const int centerSeedCount = tryCoarseLensSeeds ? centerOffsetSeeds.size() : 1;
                     for (int centerSeedIndex = 0; centerSeedIndex < centerSeedCount; ++centerSeedIndex)
                     {
@@ -6594,9 +6952,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const bool useWeakModeScoring = !useStartDirection;
     const bool useGuidedDirectionScoring = useStartDirection;
     const bool keepMultipleCandidates = candidatePool != nullptr;
-    const bool wideWeakMode = useWeakModeScoring && (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees);
+    const bool wideWeakMode = useWeakModeScoring && isWidePlateSolveContext(settings);
     const int maxMultiHypothesisCandidates = (useStartDirection && (settings.m_fov <= 5.0)) ? 24
-        : wideWeakMode ? 24
+        : wideWeakMode ? 64
         : 10;
     const int interestingWeakModeMatchCount = std::max(3, minMatchCount - 1);
     const int weakModeCandidatePoolMinMatches = std::max(3, minMatchCount - 2);
@@ -6614,8 +6972,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const bool useWideBlindSeedRadius = !useStartFov
         && !useStartElevation
         && !useStartDirection
-        && (settings.m_fov >= 120.0)
-        && (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
+        && isWidePlateSolveContext(settings);
     const double wideFovSeedMatchRadius = useWideFovSeedRadius
         ? std::max(finalMatchRadius, std::min(240.0, std::max(120.0, maxImageDimension * 0.065)))
         : finalMatchRadius;
@@ -6629,7 +6986,6 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const double searchMatchRadiusOverride = useStartDirection
         ? guidedSeedMatchRadius
         : useWideFovSeedRadius ? wideFovSeedMatchRadius
-        : useWideBlindSeedRadius ? wideBlindSeedMatchRadius
         : -1.0;
     if (useStartDirection && (settings.m_fov <= 5.0)) {
         m_weakModeNormalizationPixels = std::max(m_weakModeNormalizationPixels, guidedSeedMatchRadius);
@@ -6660,6 +7016,23 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const std::array<double, 3> coarseFovOffsetsOrdered = {{0.0, -1.0, 1.0}};
     const std::array<double, 13> wideRollOffsets = {{-180.0, -150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0}};
     const std::array<double, 13> wideRollOffsetsOrdered = {{0.0, -30.0, 30.0, -60.0, 60.0, -90.0, 90.0, -120.0, 120.0, -150.0, 150.0, -180.0, 180.0}};
+    const std::array<double, 25> wideRollOffsetsFineOrdered = {{
+        0.0, -15.0, 15.0, -30.0, 30.0, -45.0, 45.0, -60.0, 60.0,
+        -75.0, 75.0, -90.0, 90.0, -105.0, 105.0, -120.0, 120.0,
+        -135.0, 135.0, -150.0, 150.0, -165.0, 165.0, -180.0, 180.0
+    }};
+    QVector<double> fovSearchRollOffsets;
+    if (wideWeakMode && useStartFov && !useStartElevation && !useStartDirection) {
+        fovSearchRollOffsets.reserve(static_cast<int>(wideRollOffsetsFineOrdered.size()));
+        for (double rollOffset : wideRollOffsetsFineOrdered) {
+            fovSearchRollOffsets.append(rollOffset);
+        }
+    } else {
+        fovSearchRollOffsets.reserve(static_cast<int>(wideRollOffsetsOrdered.size()));
+        for (double rollOffset : wideRollOffsetsOrdered) {
+            fovSearchRollOffsets.append(rollOffset);
+        }
+    }
     QVector<int> wideFirstPassCatalogIndices;
     if (wideWeakMode && useStartFov && (detectionIndices.size() > 32))
     {
@@ -6825,7 +7198,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             {
                 for (double azimuthDegrees = minAzimuthDegrees; azimuthDegrees < maxAzimuthDegrees; azimuthDegrees += fovGridAzimuthStepDegrees)
                 {
-                    for (double rollDegrees : wideRollOffsetsOrdered)
+                    for (double rollDegrees : fovSearchRollOffsets)
                     {
                         evaluateSeed(
                             "guided-elevation",
@@ -6956,6 +7329,34 @@ Evaluation searchBestPose(const CameraSettings& settings,
             }
         }
 
+        const QVector<Evaluation> brightPairSeeds = buildBrightPairSeeds(
+            settings,
+            catalogContext,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices,
+            *blindVisibleStars);
+        for (const Evaluation& seed : brightPairSeeds)
+        {
+            logPlateSolveEvaluation("bright-pair-seed", seed);
+            if (candidatePool) {
+                insertDistinctEvaluationCandidate(
+                    *candidatePool,
+                    seed,
+                    maxMultiHypothesisCandidates,
+                    useWeakModeScoring,
+                    "bright-pair-seed",
+                    interestingWeakModeMatchCount,
+                    weakModeCandidatePoolMinMatches,
+                    useGuidedDirectionScoring);
+            }
+            if (isBetterEvaluationForMode(seed, best, useWeakModeScoring, useGuidedDirectionScoring)) {
+                best = seed;
+                logPlateSolveEvaluation("bright-pair-seed", best, true);
+            }
+        }
+
         const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
             settings,
             catalogContext,
@@ -6998,9 +7399,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         && (best.rmsErrorPixels <= wideFallbackRmsCap);
     const bool wideWeakBestLooksLikeFalseBrightMatch = wideWeakMode
         && best.valid
-        && (settings.m_fov >= 120.0)
-        && ((settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartBlind)
-            || (!hasAcceptableBrightnessConsistency(best))
+        && ((!hasAcceptableBrightnessConsistency(best))
             || (std::isfinite(best.meanCatalogMagnitude) && (best.meanCatalogMagnitude > 3.0)));
 
     if (((!best.valid || (best.matchCount < minMatchCount)) || wideWeakBestLooksLikeFalseBrightMatch)
@@ -7009,22 +7408,31 @@ Evaluation searchBestPose(const CameraSettings& settings,
     {
         const std::array<double, 3> wideFovScales = {{0.70, 1.00, 1.30}};
         const std::array<double, 8> wideBlindFovs = {{15.0, 25.0, 40.0, 60.0, 90.0, 130.0, 160.0, 180.0}};
+        const std::array<double, 3> wideAllSkyBlindFovs = {{130.0, 160.0, 180.0}};
         QVector<double> blindFallbackFovs;
         blindFallbackFovs.reserve(static_cast<int>(wideBlindFovs.size()) + 3);
         if (settings.m_fov < 15.0)
         {
-            for (double fovScale : wideFovScales)
+            const auto& seedFovs = useWideBlindSeedRadius ? wideAllSkyBlindFovs : wideFovScales;
+            for (double fovScale : seedFovs)
             {
-                blindFallbackFovs.append(std::clamp(static_cast<double>(settings.m_fov) * fovScale,
+                const double fovDegrees = useWideBlindSeedRadius
+                    ? fovScale
+                    : static_cast<double>(settings.m_fov) * fovScale;
+                blindFallbackFovs.append(std::clamp(fovDegrees,
                     static_cast<double>(CameraSettings::m_minFov),
                     static_cast<double>(CameraSettings::m_maxFov)));
             }
         }
-        for (double fovDegrees : wideBlindFovs) {
-            blindFallbackFovs.append(fovDegrees);
+        if (!useWideBlindSeedRadius)
+        {
+            for (double fovDegrees : wideBlindFovs) {
+                blindFallbackFovs.append(fovDegrees);
+            }
         }
         const bool useNarrowBlindFallbackGrid = !useStartFov && (settings.m_fov < 15.0);
-        const double fallbackAzimuthStepDegrees = (useStartFov || useNarrowBlindFallbackGrid)
+        const double fallbackAzimuthStepDegrees = useWideBlindSeedRadius ? 15.0
+            : (useStartFov || useNarrowBlindFallbackGrid)
             ? fovGridAzimuthStepDegrees
             : azimuthStepDegrees;
         const double fallbackElevationStepDegrees = (useStartFov || useNarrowBlindFallbackGrid)
@@ -7723,9 +8131,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     m_fovSeedScaleDegrees = (settings.m_fov <= 5.0)
         ? std::max(0.3, static_cast<double>(settings.m_fov) * 0.25)
         : std::max(2.0, static_cast<double>(settings.m_fov) * 0.06);
-    m_useWideCatalogMagnitudePreference = settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees;
+    m_useWideCatalogMagnitudePreference = isWidePlateSolveContext(settings);
     m_useAllSkyZenithPreference = useStartFov
-        && !useStartElevation
+        && useStartElevation
         && !useStartDirection
         && (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
         && (settings.m_fov >= 120.0)
@@ -7928,8 +8336,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         useMultiHypothesisRefine ? &coarseCandidates : nullptr);
     bool usingFullCatalogForGuidedAnchor = false;
     const bool useWideWeakAnchorSearch = !useStartDirection
-        && (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
-        && (settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees);
+        && isWidePlateSolveContext(settings);
     if (useStartDirection || useWideWeakAnchorSearch)
     {
         PlateSolveCatalogContext guidedAnchorCatalogContext;
@@ -7970,13 +8377,14 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             }
             if (guidedAnchorMatchesActiveCatalog)
             {
+                const int guidedAnchorPoolLimit = useWideWeakAnchorSearch ? 64 : 24;
                 coarseCandidates.prepend(guidedAnchorBest);
                 for (const Evaluation& guidedAnchorCandidate : guidedAnchorCandidates)
                 {
                     insertDistinctEvaluationCandidate(
                         coarseCandidates,
                         guidedAnchorCandidate,
-                        24,
+                        guidedAnchorPoolLimit,
                         useWeakModeScoring,
                         "guided-anchor-candidate-pool",
                         std::max(3, settings.m_plateSolveMinMatches - 1),
@@ -7986,7 +8394,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 insertDistinctEvaluationCandidate(
                     coarseCandidates,
                     guidedAnchorBest,
-                    24,
+                    guidedAnchorPoolLimit,
                     useWeakModeScoring,
                     "guided-anchor-candidate",
                     std::max(3, settings.m_plateSolveMinMatches - 1),
@@ -8008,10 +8416,10 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
     const int weakModeCandidatePoolMinMatches = std::max(3, settings.m_plateSolveMinMatches - 2);
     const int weakModeRefineMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
-    const bool rankWideFinalPassWithSelectedDetections =
-        settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees;
-    const int multiHypothesisCandidateLimit =
-        (useStartDirection && (settings.m_fov <= 5.0)) || rankWideFinalPassWithSelectedDetections ? 24 : 10;
+    const bool rankWideFinalPassWithSelectedDetections = isWidePlateSolveContext(settings);
+    const int multiHypothesisCandidateLimit = (useStartDirection && (settings.m_fov <= 5.0)) ? 24
+        : rankWideFinalPassWithSelectedDetections ? 64
+        : 10;
     if ((best.matchCount < settings.m_plateSolveMinMatches)
         && (!useMultiHypothesisRefine || (best.matchCount < weakModeRefineMinMatches)))
     {
@@ -8161,6 +8569,69 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         }
     }
 
+    if (selectedFinalPass.projectorValid
+        && rankWideFinalPassWithSelectedDetections
+        && useStartFov
+        && (std::fabs(best.fovDegrees - settings.m_fov) >= 2.0))
+    {
+        Evaluation bestFovPinnedEvaluation;
+        FinalMatchPassEvaluation bestFovPinnedFinalPass;
+        const std::array<double, 5> distortionSeeds = {{
+            best.distortionK1,
+            0.0,
+            0.05,
+            -0.05,
+            0.10
+        }};
+        for (double distortionSeed : distortionSeeds)
+        {
+            for (double azimuthOffset : {-2.0, 0.0, 2.0})
+            {
+                for (double elevationOffset : {-2.0, 0.0, 2.0})
+                {
+                    for (double rollOffset : {-2.0, 0.0, 2.0})
+                    {
+                        Evaluation fovPinnedBest = best;
+                        fovPinnedBest.azimuthDegrees += azimuthOffset;
+                        fovPinnedBest.elevationDegrees += elevationOffset;
+                        fovPinnedBest.rollDegrees += rollOffset;
+                        fovPinnedBest.fovDegrees = settings.m_fov;
+                        fovPinnedBest.distortionK1 = distortionSeed;
+                        const FinalMatchPassEvaluation fovPinnedFinalPass = evaluateFinalMatchPass(
+                            settings,
+                            catalogContext,
+                            imageSize,
+                            starDetections,
+                            detectionIndices,
+                            fovPinnedBest,
+                            finalMatchRadius,
+                            true);
+                        logFinalMatchPassEvaluation("final-match-pass-fov-pinned", fovPinnedFinalPass);
+                        if (isBetterWeakModeFinalMatchPass(
+                                settings,
+                                starDetections,
+                                !useStartFov,
+                                fovPinnedFinalPass,
+                                bestFovPinnedFinalPass))
+                        {
+                            bestFovPinnedEvaluation = fovPinnedBest;
+                            bestFovPinnedFinalPass = fovPinnedFinalPass;
+                        }
+                    }
+                }
+            }
+        }
+        if (bestFovPinnedFinalPass.projectorValid
+            && hasAcceptableWideBrightAnchorSupport(settings, starDetections, bestFovPinnedFinalPass))
+        {
+            best = bestFovPinnedEvaluation;
+            selectedFinalPass = bestFovPinnedFinalPass;
+            logFinalMatchPassEvaluation("final-match-pass-fov-pinned", selectedFinalPass, true);
+        }
+    }
+
+    const bool selectedWideBrightAnchorAccepted =
+        hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass);
     if (selectedFinalPass.projectorValid && rankWideFinalPassWithSelectedDetections)
     {
         selectedFinalPass = evaluateFinalMatchPass(
@@ -8194,7 +8665,49 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     result.m_catalogCandidateStars = projectedStars.size();
     result.m_outlierStars = selectedFinalPass.outlierCount;
 
-    if (finalMatches.size() < settings.m_plateSolveMinMatches) {
+    if (!selectedWideBrightAnchorAccepted
+        && !hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass))
+    {
+        qDebug() << "CameraPlateSolver: final match pass rejected candidate due to weak wide-field bright-star support"
+                 << "finalMatches" << finalMatches.size()
+                 << "brightDetections" << selectedFinalPass.matchedBrightDetections
+                 << "/" << selectedFinalPass.brightDetections
+                 << "brightMagErr" << selectedFinalPass.brightDetectionMagnitudeError
+                 << "brightProjected" << selectedFinalPass.matchedBrightProjectedStars
+                 << "/" << selectedFinalPass.brightProjectedStars
+                 << "Az" << selectedFinalPass.pose.azimuthDegrees
+                 << "El" << selectedFinalPass.pose.elevationDegrees
+                 << "Roll" << selectedFinalPass.pose.rollDegrees
+                 << "FoV" << selectedFinalPass.pose.fovDegrees;
+        result.m_matchedStars = finalMatches.size();
+        result.m_rmsErrorPixels = selectedFinalPass.rmsErrorPixels;
+        result.m_maxErrorPixels = selectedFinalPass.maxErrorPixels;
+        result.m_matchSummary = matchSummary(catalogContext, starDetections, finalMatches);
+        result.m_failureReason = QStringLiteral("wide-field candidate lacked bright-star support: brightDetections=%1/%2 brightProjected=%3/%4 brightMagErr=%5")
+            .arg(selectedFinalPass.matchedBrightDetections)
+            .arg(selectedFinalPass.brightDetections)
+            .arg(selectedFinalPass.matchedBrightProjectedStars)
+            .arg(selectedFinalPass.brightProjectedStars)
+            .arg(selectedFinalPass.brightDetectionMagnitudeError, 0, 'f', 2);
+        PROFILER_STOP(QString("%1: weak wide bright-star support").arg(__FUNCTION__));
+        return result;
+    }
+
+    const bool sparseWideBlindAccepted = isAcceptableSparseWideBlindSolve(
+        settings,
+        starDetections,
+        selectedFinalPass);
+    const bool denseWideBlindAccepted = !useStartFov
+        && !useStartElevation
+        && !useStartDirection
+        && isWidePlateSolveContext(settings)
+        && (finalMatches.size() >= settings.m_plateSolveMinMatches)
+        && (selectedWideBrightAnchorAccepted
+            || hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass))
+        && (result.m_rmsErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 0.85, 24.0))
+        && (result.m_maxErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 1.25, 36.0));
+
+    if ((finalMatches.size() < settings.m_plateSolveMinMatches) && !sparseWideBlindAccepted) {
         qDebug().noquote().nospace()
             << "CameraPlateSolver: final match pass rejected candidate"
             << " finalMatches=" << finalMatches.size()
@@ -8289,6 +8802,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     if (!useStartFov
         && !useStartElevation
         && !useStartDirection
+        && !sparseWideBlindAccepted
+        && !denseWideBlindAccepted
         && !isAcceptableBlindSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
         qDebug() << "CameraPlateSolver: rejecting blind solution"

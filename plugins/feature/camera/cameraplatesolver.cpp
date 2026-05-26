@@ -5676,6 +5676,23 @@ Evaluation evaluateAnchoredPose(const CameraSettings& settings,
         return evaluation;
     }
 
+    const auto anchorVisibleIt = catalogContext.visibleStarIndexByCatalogIndex.constFind(anchor.catalogIndex);
+    if (anchorVisibleIt == catalogContext.visibleStarIndexByCatalogIndex.cend()) {
+        return evaluation;
+    }
+
+    QPointF anchorProjectedPoint;
+    if (!projectVector(projector, catalogContext.visibleStars[*anchorVisibleIt].vector, anchorProjectedPoint)) {
+        return evaluation;
+    }
+
+    const double anchorDistance = pointDistancePixels(
+        starDetections[anchor.detectionIndex].m_center,
+        anchorProjectedPoint);
+    if (anchorDistance > matchRadiusPixels) {
+        return evaluation;
+    }
+
     buildProjectedCatalogInto(
         catalogContext,
         projector,
@@ -5684,26 +5701,6 @@ Evaluation evaluateAnchoredPose(const CameraSettings& settings,
         m_projectedCatalogScratch);
     const QVector<ProjectedCatalogStar>& projectedStars = m_projectedCatalogScratch;
     if (projectedStars.isEmpty()) {
-        return evaluation;
-    }
-
-    int anchorProjectedIndex = -1;
-    for (int i = 0; i < projectedStars.size(); ++i)
-    {
-        if (projectedStars[i].catalogIndex == anchor.catalogIndex)
-        {
-            anchorProjectedIndex = i;
-            break;
-        }
-    }
-    if (anchorProjectedIndex < 0) {
-        return evaluation;
-    }
-
-    const double anchorDistance = pointDistancePixels(
-        starDetections[anchor.detectionIndex].m_center,
-        projectedStars[anchorProjectedIndex].point);
-    if (anchorDistance > matchRadiusPixels) {
         return evaluation;
     }
 
@@ -7289,7 +7286,10 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
         ? QVector<double>{1.0}
         : QVector<double>{0.88, 0.96, 1.0, 1.04, 1.12};
     const int anchorLimit = std::min(
-        useWideWeakAnchorSearch ? 32 : (useDenseWideGuidedDirection ? 8 : 12),
+        useWideWeakAnchorSearch ? 32
+            : useDenseWideGuidedDirection ? 8
+            : (useStartDirection && useWidePlateSolve && (starDetections.size() <= 16)) ? 4
+            : 12,
         static_cast<int>(anchors.size()));
     const int expandedRollMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
     const int refinementIterations = useDenseWideGuidedDirection ? 4 : 5;

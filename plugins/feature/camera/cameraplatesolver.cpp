@@ -8643,6 +8643,740 @@ Evaluation searchBestPose(const CameraSettings& settings,
     return best;
 }
 
+enum PlateSolveLmParameter
+{
+    PlateSolveLmAzimuth = 0,
+    PlateSolveLmElevation,
+    PlateSolveLmRoll,
+    PlateSolveLmFov,
+    PlateSolveLmCenterX,
+    PlateSolveLmCenterY,
+    PlateSolveLmDistortionK1,
+    PlateSolveLmParameterCount
+};
+
+struct PlateSolveLmPose
+{
+    double azimuthDegrees = 0.0;
+    double elevationDegrees = 0.0;
+    double rollDegrees = 0.0;
+    double fovDegrees = 0.0;
+    double centerOffsetXPixels = 0.0;
+    double centerOffsetYPixels = 0.0;
+    double distortionK1 = 0.0;
+};
+
+struct PlateSolveLmEvaluation
+{
+    bool valid = false;
+    PlateSolveLmPose pose;
+    Evaluation evaluation;
+    QVector<double> residuals;
+    QVector<double> pairResidualNorms;
+    double robustCost = std::numeric_limits<double>::infinity();
+};
+
+static double normalizeSignedDegrees(double value)
+{
+    value = normalizeDegrees(value);
+    if (value > 180.0) {
+        value -= 360.0;
+    }
+    return value;
+}
+
+static PlateSolveLmPose poseFromEvaluation(const Evaluation& evaluation)
+{
+    PlateSolveLmPose pose;
+    pose.azimuthDegrees = evaluation.azimuthDegrees;
+    pose.elevationDegrees = evaluation.elevationDegrees;
+    pose.rollDegrees = evaluation.rollDegrees;
+    pose.fovDegrees = evaluation.fovDegrees;
+    pose.centerOffsetXPixels = evaluation.centerOffsetXPixels;
+    pose.centerOffsetYPixels = evaluation.centerOffsetYPixels;
+    pose.distortionK1 = evaluation.distortionK1;
+    return pose;
+}
+
+static void clampPlateSolveLmPose(const QSize& imageSize, PlateSolveLmPose& pose)
+{
+    pose.azimuthDegrees = normalizeDegrees(pose.azimuthDegrees);
+    pose.elevationDegrees = std::clamp(pose.elevationDegrees, kVisibleAltitudeFloor, 90.0);
+    pose.rollDegrees = normalizeSignedDegrees(pose.rollDegrees);
+    pose.fovDegrees = std::clamp(
+        pose.fovDegrees,
+        static_cast<double>(CameraSettings::m_minFov),
+        static_cast<double>(CameraSettings::m_maxFov));
+    const double maxCenterOffset = std::max(1.0, static_cast<double>(std::max(imageSize.width(), imageSize.height())));
+    pose.centerOffsetXPixels = std::clamp(pose.centerOffsetXPixels, -maxCenterOffset, maxCenterOffset);
+    pose.centerOffsetYPixels = std::clamp(pose.centerOffsetYPixels, -maxCenterOffset, maxCenterOffset);
+    pose.distortionK1 = std::clamp(pose.distortionK1, -0.75, 0.75);
+}
+
+static double plateSolveLmParameterValue(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter)
+{
+    switch (parameter)
+    {
+    case PlateSolveLmAzimuth:
+        return pose.azimuthDegrees;
+    case PlateSolveLmElevation:
+        return pose.elevationDegrees;
+    case PlateSolveLmRoll:
+        return pose.rollDegrees;
+    case PlateSolveLmFov:
+        return pose.fovDegrees;
+    case PlateSolveLmCenterX:
+        return pose.centerOffsetXPixels;
+    case PlateSolveLmCenterY:
+        return pose.centerOffsetYPixels;
+    case PlateSolveLmDistortionK1:
+        return pose.distortionK1;
+    default:
+        return 0.0;
+    }
+}
+
+static void addPlateSolveLmParameterDelta(const QSize& imageSize,
+                                          PlateSolveLmPose& pose,
+                                          PlateSolveLmParameter parameter,
+                                          double delta)
+{
+    switch (parameter)
+    {
+    case PlateSolveLmAzimuth:
+        pose.azimuthDegrees += delta;
+        break;
+    case PlateSolveLmElevation:
+        pose.elevationDegrees += delta;
+        break;
+    case PlateSolveLmRoll:
+        pose.rollDegrees += delta;
+        break;
+    case PlateSolveLmFov:
+        pose.fovDegrees += delta;
+        break;
+    case PlateSolveLmCenterX:
+        pose.centerOffsetXPixels += delta;
+        break;
+    case PlateSolveLmCenterY:
+        pose.centerOffsetYPixels += delta;
+        break;
+    case PlateSolveLmDistortionK1:
+        pose.distortionK1 += delta;
+        break;
+    default:
+        break;
+    }
+    clampPlateSolveLmPose(imageSize, pose);
+}
+
+static double plateSolveLmFiniteDifferenceStep(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter)
+{
+    switch (parameter)
+    {
+    case PlateSolveLmAzimuth:
+    case PlateSolveLmElevation:
+    case PlateSolveLmRoll:
+        return std::max(1e-4, std::min(0.02, pose.fovDegrees * 0.001));
+    case PlateSolveLmFov:
+        return std::max(1e-4, pose.fovDegrees * 1e-4);
+    case PlateSolveLmCenterX:
+    case PlateSolveLmCenterY:
+        return 0.25;
+    case PlateSolveLmDistortionK1:
+        return 1e-4;
+    default:
+        return 1e-4;
+    }
+}
+
+static double plateSolveLmMaximumStep(const QSize& imageSize,
+                                      const PlateSolveLmPose& pose,
+                                      PlateSolveLmParameter parameter)
+{
+    switch (parameter)
+    {
+    case PlateSolveLmAzimuth:
+    case PlateSolveLmElevation:
+        return std::max(0.05, std::min(5.0, pose.fovDegrees * 0.75));
+    case PlateSolveLmRoll:
+        return 30.0;
+    case PlateSolveLmFov:
+        return std::max(0.02, pose.fovDegrees * 0.25);
+    case PlateSolveLmCenterX:
+        return std::max(1.0, static_cast<double>(imageSize.width()) * 0.05);
+    case PlateSolveLmCenterY:
+        return std::max(1.0, static_cast<double>(imageSize.height()) * 0.05);
+    case PlateSolveLmDistortionK1:
+        return 0.10;
+    default:
+        return 1.0;
+    }
+}
+
+static double robustPlateSolveLmWeight(double residualNormPixels, double thresholdPixels)
+{
+    if ((residualNormPixels <= thresholdPixels) || (residualNormPixels <= 1e-9)) {
+        return 1.0;
+    }
+    return thresholdPixels / residualNormPixels;
+}
+
+static bool solveSmallLinearSystem(double matrix[PlateSolveLmParameterCount][PlateSolveLmParameterCount],
+                                   double rhs[PlateSolveLmParameterCount],
+                                   double solution[PlateSolveLmParameterCount],
+                                   int size)
+{
+    for (int i = 0; i < size; ++i) {
+        solution[i] = 0.0;
+    }
+    for (int column = 0; column < size; ++column)
+    {
+        int pivotRow = column;
+        double pivotAbs = std::fabs(matrix[column][column]);
+        for (int row = column + 1; row < size; ++row)
+        {
+            const double candidateAbs = std::fabs(matrix[row][column]);
+            if (candidateAbs > pivotAbs)
+            {
+                pivotAbs = candidateAbs;
+                pivotRow = row;
+            }
+        }
+        if (pivotAbs < 1e-12) {
+            return false;
+        }
+        if (pivotRow != column)
+        {
+            for (int col = column; col < size; ++col) {
+                std::swap(matrix[column][col], matrix[pivotRow][col]);
+            }
+            std::swap(rhs[column], rhs[pivotRow]);
+        }
+
+        const double pivot = matrix[column][column];
+        for (int col = column; col < size; ++col) {
+            matrix[column][col] /= pivot;
+        }
+        rhs[column] /= pivot;
+
+        for (int row = 0; row < size; ++row)
+        {
+            if (row == column) {
+                continue;
+            }
+            const double factor = matrix[row][column];
+            if (std::fabs(factor) <= 0.0) {
+                continue;
+            }
+            for (int col = column; col < size; ++col) {
+                matrix[row][col] -= factor * matrix[column][col];
+            }
+            rhs[row] -= factor * rhs[column];
+        }
+    }
+    for (int i = 0; i < size; ++i) {
+        solution[i] = rhs[i];
+    }
+    return true;
+}
+
+QVector<Match> uniqueValidMatchesForRefinement(const PlateSolveCatalogContext& catalogContext,
+                                               const QVector<CameraPipelineStarDetection>& starDetections,
+                                               const QVector<Match>& matches,
+                                               const GuidedAnchorPair *forcedAnchor = nullptr) const
+{
+    QVector<Match> uniqueMatches;
+    uniqueMatches.reserve(matches.size() + (forcedAnchor ? 1 : 0));
+    QSet<int> matchedDetections;
+    QSet<int> matchedCatalogStars;
+
+    const auto appendIfValid = [&](int detectionIndex, int catalogIndex, double distancePixels)
+    {
+        if ((detectionIndex < 0)
+            || (detectionIndex >= starDetections.size())
+            || (catalogIndex < 0)
+            || (catalogIndex >= catalogContext.catalogStars.size())
+            || matchedDetections.contains(detectionIndex)
+            || matchedCatalogStars.contains(catalogIndex)
+            || !catalogContext.visibleStarIndexByCatalogIndex.contains(catalogIndex))
+        {
+            return;
+        }
+
+        matchedDetections.insert(detectionIndex);
+        matchedCatalogStars.insert(catalogIndex);
+        uniqueMatches.append({detectionIndex, catalogIndex, distancePixels});
+    };
+
+    if (forcedAnchor) {
+        appendIfValid(forcedAnchor->detectionIndex, forcedAnchor->catalogIndex, forcedAnchor->initialDistancePixels);
+    }
+    for (const Match& match : matches) {
+        appendIfValid(match.detectionIndex, match.catalogIndex, match.distancePixels);
+    }
+    return uniqueMatches;
+}
+
+static QVector<int> detectionIndicesForMatches(const QVector<Match>& matches)
+{
+    QVector<int> detectionIndices;
+    QSet<int> seen;
+    detectionIndices.reserve(matches.size());
+    for (const Match& match : matches)
+    {
+        if (seen.contains(match.detectionIndex)) {
+            continue;
+        }
+        seen.insert(match.detectionIndex);
+        detectionIndices.append(match.detectionIndex);
+    }
+    return detectionIndices;
+}
+
+PlateSolveLmEvaluation evaluateFixedPlateSolveLmPose(const CameraSettings& settings,
+                                                     const PlateSolveCatalogContext& catalogContext,
+                                                     const QSize& imageSize,
+                                                     const QVector<CameraPipelineStarDetection>& starDetections,
+                                                     const QVector<Match>& fixedMatches,
+                                                     const QVector<int>& rankDetectionIndices,
+                                                     const PlateSolveLmPose& inputPose,
+                                                     double robustThresholdPixels,
+                                                     const Evaluation& seedEvaluation) const
+{
+    PlateSolveLmEvaluation lmEvaluation;
+    lmEvaluation.pose = inputPose;
+    clampPlateSolveLmPose(imageSize, lmEvaluation.pose);
+
+    Evaluation& evaluation = lmEvaluation.evaluation;
+    evaluation.azimuthDegrees = lmEvaluation.pose.azimuthDegrees;
+    evaluation.elevationDegrees = lmEvaluation.pose.elevationDegrees;
+    evaluation.rollDegrees = lmEvaluation.pose.rollDegrees;
+    evaluation.fovDegrees = lmEvaluation.pose.fovDegrees;
+    evaluation.centerOffsetXPixels = lmEvaluation.pose.centerOffsetXPixels;
+    evaluation.centerOffsetYPixels = lmEvaluation.pose.centerOffsetYPixels;
+    evaluation.distortionK1 = lmEvaluation.pose.distortionK1;
+    evaluation.anchored = seedEvaluation.anchored;
+    evaluation.anchorDetectionIndex = seedEvaluation.anchorDetectionIndex;
+    evaluation.anchorCatalogIndex = seedEvaluation.anchorCatalogIndex;
+
+    const SkyProjector projector = createProjector(
+        settings,
+        imageSize,
+        evaluation.azimuthDegrees,
+        evaluation.elevationDegrees,
+        evaluation.rollDegrees,
+        evaluation.fovDegrees,
+        evaluation.centerOffsetXPixels,
+        evaluation.centerOffsetYPixels,
+        evaluation.distortionK1);
+    if (!projector.valid) {
+        return lmEvaluation;
+    }
+
+    QVector<ProjectedCatalogStar> projectedStars;
+    projectedStars.reserve(fixedMatches.size());
+    evaluation.matches.reserve(fixedMatches.size());
+    lmEvaluation.residuals.reserve(fixedMatches.size() * 2);
+    lmEvaluation.pairResidualNorms.reserve(fixedMatches.size());
+
+    double sumSquaredError = 0.0;
+    double robustCost = 0.0;
+    const double thresholdPixels = std::max(1.0, robustThresholdPixels);
+    for (const Match& fixedMatch : fixedMatches)
+    {
+        if ((fixedMatch.detectionIndex < 0)
+            || (fixedMatch.detectionIndex >= starDetections.size())
+            || (fixedMatch.catalogIndex < 0)
+            || (fixedMatch.catalogIndex >= catalogContext.catalogStars.size()))
+        {
+            return lmEvaluation;
+        }
+
+        const auto visibleIt = catalogContext.visibleStarIndexByCatalogIndex.constFind(fixedMatch.catalogIndex);
+        if (visibleIt == catalogContext.visibleStarIndexByCatalogIndex.cend()) {
+            return lmEvaluation;
+        }
+
+        const VisibleCatalogStar& visibleStar = catalogContext.visibleStars[visibleIt.value()];
+        QPointF projectedPoint;
+        if (!projectVector(projector, visibleStar.vector, projectedPoint)) {
+            return lmEvaluation;
+        }
+
+        const QPointF delta = projectedPoint - starDetections[fixedMatch.detectionIndex].m_center;
+        const double distancePixels = std::hypot(delta.x(), delta.y());
+        evaluation.matches.append({fixedMatch.detectionIndex, fixedMatch.catalogIndex, distancePixels});
+        projectedStars.append({fixedMatch.catalogIndex, projectedPoint, visibleStar.magnitude});
+        lmEvaluation.residuals.append(delta.x());
+        lmEvaluation.residuals.append(delta.y());
+        lmEvaluation.pairResidualNorms.append(distancePixels);
+        sumSquaredError += distancePixels * distancePixels;
+        robustCost += robustPlateSolveLmWeight(distancePixels, thresholdPixels) * distancePixels * distancePixels;
+    }
+
+    evaluation.matchCount = evaluation.matches.size();
+    if (evaluation.matchCount <= 0) {
+        return lmEvaluation;
+    }
+
+    evaluation.brightnessRankError = matchBrightnessRankError(
+        starDetections,
+        rankDetectionIndices,
+        projectedStars,
+        evaluation.matches);
+    evaluation.meanCatalogMagnitude = meanCatalogMagnitudeForMatches(
+        catalogContext.catalogStars,
+        evaluation.matches);
+    evaluation.rmsErrorPixels = std::sqrt(sumSquaredError / evaluation.matchCount);
+    evaluation.valid = true;
+    lmEvaluation.valid = true;
+    lmEvaluation.robustCost = robustCost;
+    return lmEvaluation;
+}
+
+Evaluation runPlateSolveLmRefinement(const CameraSettings& settings,
+                                     const PlateSolveCatalogContext& catalogContext,
+                                     const QSize& imageSize,
+                                     const QVector<CameraPipelineStarDetection>& starDetections,
+                                     const QVector<Match>& fixedMatches,
+                                     const QVector<int>& rankDetectionIndices,
+                                     const Evaluation& seedEvaluation,
+                                     std::array<bool, PlateSolveLmParameterCount> activeParameters,
+                                     double matchRadiusPixels) const
+{
+    if (fixedMatches.isEmpty()) {
+        return seedEvaluation;
+    }
+
+    const int pairCount = fixedMatches.size();
+    if (pairCount < 6)
+    {
+        activeParameters[PlateSolveLmCenterX] = false;
+        activeParameters[PlateSolveLmCenterY] = false;
+        activeParameters[PlateSolveLmDistortionK1] = false;
+    }
+    if (pairCount < 4) {
+        activeParameters[PlateSolveLmFov] = false;
+    }
+
+    auto activeParameterList = [&activeParameters]() {
+        QVector<int> active;
+        active.reserve(PlateSolveLmParameterCount);
+        for (int parameter = 0; parameter < PlateSolveLmParameterCount; ++parameter)
+        {
+            if (activeParameters[parameter]) {
+                active.append(parameter);
+            }
+        }
+        return active;
+    };
+    QVector<int> activeParametersList = activeParameterList();
+    while ((activeParametersList.size() > pairCount * 2) && !activeParametersList.isEmpty())
+    {
+        const int parameter = activeParametersList.takeLast();
+        activeParameters[parameter] = false;
+    }
+    if (activeParametersList.isEmpty()) {
+        return evaluateFixedPlateSolveLmPose(
+            settings,
+            catalogContext,
+            imageSize,
+            starDetections,
+            fixedMatches,
+            rankDetectionIndices,
+            poseFromEvaluation(seedEvaluation),
+            matchRadiusPixels,
+            seedEvaluation).evaluation;
+    }
+
+    PlateSolveLmPose pose = poseFromEvaluation(seedEvaluation);
+    clampPlateSolveLmPose(imageSize, pose);
+    PlateSolveLmEvaluation best = evaluateFixedPlateSolveLmPose(
+        settings,
+        catalogContext,
+        imageSize,
+        starDetections,
+        fixedMatches,
+        rankDetectionIndices,
+        pose,
+        matchRadiusPixels,
+        seedEvaluation);
+    if (!best.valid) {
+        return seedEvaluation;
+    }
+
+    double lambda = 1e-3;
+    for (int iteration = 0; iteration < 15; ++iteration)
+    {
+        const double robustThresholdPixels = std::max(
+            2.0,
+            std::min(matchRadiusPixels, std::max(2.0, best.evaluation.rmsErrorPixels * 2.0)));
+        best = evaluateFixedPlateSolveLmPose(
+            settings,
+            catalogContext,
+            imageSize,
+            starDetections,
+            fixedMatches,
+            rankDetectionIndices,
+            pose,
+            robustThresholdPixels,
+            seedEvaluation);
+        if (!best.valid) {
+            return seedEvaluation;
+        }
+
+        const int residualCount = best.residuals.size();
+        QVector<QVector<double>> jacobianColumns;
+        jacobianColumns.reserve(activeParametersList.size());
+        bool jacobianValid = true;
+        for (int parameterIndex : activeParametersList)
+        {
+            const PlateSolveLmParameter parameter = static_cast<PlateSolveLmParameter>(parameterIndex);
+            double step = plateSolveLmFiniteDifferenceStep(pose, parameter);
+            PlateSolveLmPose steppedPose = pose;
+            addPlateSolveLmParameterDelta(imageSize, steppedPose, parameter, step);
+            auto parameterDelta = [&pose, parameter](const PlateSolveLmPose& candidatePose) {
+                const double rawDelta = plateSolveLmParameterValue(candidatePose, parameter)
+                    - plateSolveLmParameterValue(pose, parameter);
+                return ((parameter == PlateSolveLmAzimuth) || (parameter == PlateSolveLmRoll))
+                    ? normalizeSignedDegrees(rawDelta)
+                    : rawDelta;
+            };
+            double appliedStep = parameterDelta(steppedPose);
+            if (std::fabs(appliedStep) < 1e-12)
+            {
+                steppedPose = pose;
+                addPlateSolveLmParameterDelta(imageSize, steppedPose, parameter, -step);
+                appliedStep = parameterDelta(steppedPose);
+            }
+            if (std::fabs(appliedStep) < 1e-12)
+            {
+                jacobianValid = false;
+                break;
+            }
+
+            const PlateSolveLmEvaluation stepped = evaluateFixedPlateSolveLmPose(
+                settings,
+                catalogContext,
+                imageSize,
+                starDetections,
+                fixedMatches,
+                rankDetectionIndices,
+                steppedPose,
+                robustThresholdPixels,
+                seedEvaluation);
+            if (!stepped.valid || (stepped.residuals.size() != residualCount))
+            {
+                jacobianValid = false;
+                break;
+            }
+
+            QVector<double> column;
+            column.reserve(residualCount);
+            for (int residualIndex = 0; residualIndex < residualCount; ++residualIndex) {
+                column.append((stepped.residuals[residualIndex] - best.residuals[residualIndex]) / appliedStep);
+            }
+            jacobianColumns.append(column);
+        }
+        if (!jacobianValid) {
+            break;
+        }
+
+        double normalMatrix[PlateSolveLmParameterCount][PlateSolveLmParameterCount] = {};
+        double gradient[PlateSolveLmParameterCount] = {};
+        const int activeCount = activeParametersList.size();
+        for (int pairIndex = 0; pairIndex < pairCount; ++pairIndex)
+        {
+            const double weight = robustPlateSolveLmWeight(best.pairResidualNorms[pairIndex], robustThresholdPixels);
+            for (int component = 0; component < 2; ++component)
+            {
+                const int residualIndex = pairIndex * 2 + component;
+                for (int lhs = 0; lhs < activeCount; ++lhs)
+                {
+                    const double weightedJacobian = weight * jacobianColumns[lhs][residualIndex];
+                    gradient[lhs] += weightedJacobian * best.residuals[residualIndex];
+                    for (int rhs = lhs; rhs < activeCount; ++rhs) {
+                        normalMatrix[lhs][rhs] += weightedJacobian * jacobianColumns[rhs][residualIndex];
+                    }
+                }
+            }
+        }
+        for (int lhs = 0; lhs < activeCount; ++lhs)
+        {
+            for (int rhs = 0; rhs < lhs; ++rhs) {
+                normalMatrix[lhs][rhs] = normalMatrix[rhs][lhs];
+            }
+        }
+
+        double dampedMatrix[PlateSolveLmParameterCount][PlateSolveLmParameterCount] = {};
+        double rhs[PlateSolveLmParameterCount] = {};
+        for (int row = 0; row < activeCount; ++row)
+        {
+            rhs[row] = -gradient[row];
+            for (int col = 0; col < activeCount; ++col) {
+                dampedMatrix[row][col] = normalMatrix[row][col];
+            }
+            dampedMatrix[row][row] += lambda * std::max(std::fabs(normalMatrix[row][row]), 1e-9);
+        }
+
+        double delta[PlateSolveLmParameterCount] = {};
+        if (!solveSmallLinearSystem(dampedMatrix, rhs, delta, activeCount))
+        {
+            lambda = std::min(lambda * 10.0, 1e12);
+            continue;
+        }
+
+        PlateSolveLmPose proposedPose = pose;
+        double maxNormalizedDelta = 0.0;
+        for (int i = 0; i < activeCount; ++i)
+        {
+            const PlateSolveLmParameter parameter = static_cast<PlateSolveLmParameter>(activeParametersList[i]);
+            const double maxStep = plateSolveLmMaximumStep(imageSize, pose, parameter);
+            const double clampedDelta = std::clamp(delta[i], -maxStep, maxStep);
+            addPlateSolveLmParameterDelta(imageSize, proposedPose, parameter, clampedDelta);
+            maxNormalizedDelta = std::max(maxNormalizedDelta, std::fabs(clampedDelta) / std::max(maxStep, 1e-9));
+        }
+
+        const PlateSolveLmEvaluation proposed = evaluateFixedPlateSolveLmPose(
+            settings,
+            catalogContext,
+            imageSize,
+            starDetections,
+            fixedMatches,
+            rankDetectionIndices,
+            proposedPose,
+            robustThresholdPixels,
+            seedEvaluation);
+        if (proposed.valid && (proposed.robustCost < best.robustCost))
+        {
+            const double previousCost = best.robustCost;
+            pose = proposed.pose;
+            best = proposed;
+            lambda = std::max(lambda * 0.3, 1e-9);
+            if ((maxNormalizedDelta < 1e-4)
+                || ((best.robustCost > 0.0)
+                    && ((previousCost - best.robustCost) / std::max(previousCost, 1.0) < 1e-8)))
+            {
+                break;
+            }
+        }
+        else
+        {
+            lambda = std::min(lambda * 10.0, 1e12);
+        }
+    }
+
+    return best.evaluation;
+}
+
+QVector<Match> rebuildRefinementMatchesAtPose(const CameraSettings& settings,
+                                              const PlateSolveCatalogContext& catalogContext,
+                                              const QSize& imageSize,
+                                              const QVector<CameraPipelineStarDetection>& starDetections,
+                                              const QVector<int>& detectionIndices,
+                                              const Evaluation& pose,
+                                              double matchRadiusPixels,
+                                              const GuidedAnchorPair *forcedAnchor = nullptr)
+{
+    const SkyProjector projector = createProjector(
+        settings,
+        imageSize,
+        pose.azimuthDegrees,
+        pose.elevationDegrees,
+        pose.rollDegrees,
+        pose.fovDegrees,
+        pose.centerOffsetXPixels,
+        pose.centerOffsetYPixels,
+        pose.distortionK1);
+    if (!projector.valid) {
+        return QVector<Match>();
+    }
+
+    QVector<ProjectedCatalogStar> projectedStars = buildProjectedCatalog(
+        catalogContext,
+        projector,
+        matchRadiusPixels);
+    if (projectedStars.isEmpty()) {
+        return QVector<Match>();
+    }
+
+    QVector<Match> matches = buildMatches(
+        catalogContext,
+        starDetections,
+        detectionIndices,
+        projectedStars,
+        matchRadiusPixels);
+
+    if (forcedAnchor
+        && (forcedAnchor->detectionIndex >= 0)
+        && (forcedAnchor->detectionIndex < starDetections.size()))
+    {
+        int anchorProjectedIndex = -1;
+        for (int i = 0; i < projectedStars.size(); ++i)
+        {
+            if (projectedStars[i].catalogIndex == forcedAnchor->catalogIndex)
+            {
+                anchorProjectedIndex = i;
+                break;
+            }
+        }
+        if (anchorProjectedIndex >= 0)
+        {
+            const double anchorDistance = pointDistancePixels(
+                starDetections[forcedAnchor->detectionIndex].m_center,
+                projectedStars[anchorProjectedIndex].point);
+            if (anchorDistance <= matchRadiusPixels)
+            {
+                QVector<Match> anchoredMatches;
+                anchoredMatches.reserve(matches.size() + 1);
+                anchoredMatches.append({
+                    forcedAnchor->detectionIndex,
+                    forcedAnchor->catalogIndex,
+                    anchorDistance
+                });
+                QSet<int> matchedDetections;
+                QSet<int> matchedCatalogStars;
+                matchedDetections.insert(forcedAnchor->detectionIndex);
+                matchedCatalogStars.insert(forcedAnchor->catalogIndex);
+                for (const Match& match : matches)
+                {
+                    if (matchedDetections.contains(match.detectionIndex)
+                        || matchedCatalogStars.contains(match.catalogIndex))
+                    {
+                        continue;
+                    }
+                    matchedDetections.insert(match.detectionIndex);
+                    matchedCatalogStars.insert(match.catalogIndex);
+                    anchoredMatches.append(match);
+                }
+                matches = anchoredMatches;
+            }
+        }
+    }
+
+    int outlierCount = 0;
+    matches = rejectOutlierMatches(
+        matches,
+        settings.m_plateSolveMinMatches,
+        matchRadiusPixels,
+        &outlierCount);
+    appendSupplementalMatches(
+        starDetections,
+        projectedStars,
+        matchRadiusPixels,
+        &detectionIndices,
+        matches);
+    appendWideBrightSupplementalMatches(
+        settings,
+        starDetections,
+        projectedStars,
+        imageSize,
+        matchRadiusPixels,
+        matches);
+    return matches;
+}
+
 Evaluation refinePoseFromMatches(const CameraSettings& settings,
                                  const PlateSolveCatalogContext& catalogContext,
                                  const QSize& imageSize,
@@ -8650,28 +9384,19 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                                  const QVector<CameraPipelineStarDetection>& starDetections,
                                  const Evaluation& initialEvaluation)
 {
+    Q_UNUSED(captureDateTimeUtc)
+
     if (!initialEvaluation.valid || initialEvaluation.matches.isEmpty()) {
         return initialEvaluation;
     }
     const bool calibrateLens = canCalibrateLens(settings);
     const bool useGuidedDirectionScoring = plateSolveStartUsesDirection(settings);
 
-    int initialOutlierCount = 0;
     const QVector<Match> inlierMatches = rejectOutlierMatches(
         initialEvaluation.matches,
         settings.m_plateSolveMinMatches,
         settings.m_plateSolveMatchRadius,
-        &initialOutlierCount);
-
-    QVector<int> detectionIndices;
-    QVector<int> catalogIndices;
-    detectionIndices.reserve(inlierMatches.size());
-    catalogIndices.reserve(inlierMatches.size());
-    for (const Match& match : inlierMatches)
-    {
-        detectionIndices.append(match.detectionIndex);
-        catalogIndices.append(match.catalogIndex);
-    }
+        nullptr);
 
     const bool forceAnchor = initialEvaluation.anchored
         && (initialEvaluation.anchorDetectionIndex >= 0)
@@ -8681,315 +9406,147 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     {
         forcedAnchor.detectionIndex = initialEvaluation.anchorDetectionIndex;
         forcedAnchor.catalogIndex = initialEvaluation.anchorCatalogIndex;
-        if (!detectionIndices.contains(forcedAnchor.detectionIndex)) {
-            detectionIndices.append(forcedAnchor.detectionIndex);
-        }
-        if (!catalogIndices.contains(forcedAnchor.catalogIndex)) {
-            catalogIndices.append(forcedAnchor.catalogIndex);
+        for (const Match& match : initialEvaluation.matches)
+        {
+            if ((match.detectionIndex == forcedAnchor.detectionIndex)
+                && (match.catalogIndex == forcedAnchor.catalogIndex))
+            {
+                forcedAnchor.initialDistancePixels = match.distancePixels;
+                break;
+            }
         }
     }
 
-    auto evaluateRefinementPose = [&](const QVector<int>& activeDetectionIndices,
-                                      const QVector<int>& activeCatalogIndices,
-                                      double azimuthDegrees,
-                                      double elevationDegrees,
-                                      double rollDegrees,
-                                      double fovDegrees,
-                                      double centerOffsetXPixels,
-                                      double centerOffsetYPixels,
-                                      double distortionK1,
-                                      double matchRadiusOverride = -1.0) {
-        if (forceAnchor)
-        {
-            return evaluateAnchoredPose(
-                settings,
-                catalogContext,
-                imageSize,
-                captureDateTimeUtc,
-                starDetections,
-                activeDetectionIndices,
-                activeCatalogIndices,
-                forcedAnchor,
-                azimuthDegrees,
-                elevationDegrees,
-                rollDegrees,
-                fovDegrees,
-                centerOffsetXPixels,
-                centerOffsetYPixels,
-                distortionK1,
-                matchRadiusOverride > 0.0
-                    ? matchRadiusOverride
-                    : static_cast<double>(settings.m_plateSolveMatchRadius));
-        }
+    Evaluation seed = initialEvaluation;
+    seed.centerOffsetXPixels = calibrateLens ? initialEvaluation.centerOffsetXPixels : settings.m_lensCenterOffsetX;
+    seed.centerOffsetYPixels = calibrateLens ? initialEvaluation.centerOffsetYPixels : settings.m_lensCenterOffsetY;
+    seed.distortionK1 = calibrateLens ? initialEvaluation.distortionK1 : settings.m_lensDistortionK1;
 
-        return evaluatePose(
-            settings,
-            catalogContext,
-            imageSize,
-            captureDateTimeUtc,
-            starDetections,
-            activeDetectionIndices,
-            azimuthDegrees,
-            elevationDegrees,
-            rollDegrees,
-            fovDegrees,
-            &activeCatalogIndices,
-            centerOffsetXPixels,
-            centerOffsetYPixels,
-            distortionK1,
-            matchRadiusOverride);
-    };
+    QVector<Match> fixedMatches = uniqueValidMatchesForRefinement(
+        catalogContext,
+        starDetections,
+        inlierMatches,
+        forceAnchor ? &forcedAnchor : nullptr);
+    if (fixedMatches.isEmpty()) {
+        return seed;
+    }
 
-    Evaluation best = evaluateRefinementPose(
-        detectionIndices,
-        catalogIndices,
-        initialEvaluation.azimuthDegrees,
-        initialEvaluation.elevationDegrees,
-        initialEvaluation.rollDegrees,
-        initialEvaluation.fovDegrees,
-        calibrateLens ? initialEvaluation.centerOffsetXPixels : settings.m_lensCenterOffsetX,
-        calibrateLens ? initialEvaluation.centerOffsetYPixels : settings.m_lensCenterOffsetY,
-        calibrateLens ? initialEvaluation.distortionK1 : settings.m_lensDistortionK1);
+    QVector<int> rankDetectionIndices = detectionIndicesForMatches(fixedMatches);
+    std::array<bool, PlateSolveLmParameterCount> activeParameters = {{
+        true,
+        true,
+        true,
+        !(useGuidedDirectionScoring && settings.m_fov <= 5.0),
+        calibrateLens,
+        calibrateLens,
+        calibrateLens
+    }};
+
+    Evaluation best = runPlateSolveLmRefinement(
+        settings,
+        catalogContext,
+        imageSize,
+        starDetections,
+        fixedMatches,
+        rankDetectionIndices,
+        seed,
+        activeParameters,
+        static_cast<double>(settings.m_plateSolveMatchRadius));
     if (!best.valid) {
-        best = initialEvaluation;
+        best = seed;
     }
 
-    double azCenter = best.azimuthDegrees;
-    double elCenter = best.elevationDegrees;
-    double rollCenter = best.rollDegrees;
-    double fovCenter = best.fovDegrees;
-    double centerOffsetXCenter = best.centerOffsetXPixels;
-    double centerOffsetYCenter = best.centerOffsetYPixels;
-    double distortionCenter = best.distortionK1;
-    double azStep = std::max(0.05, settings.m_plateSolveSearchRadius * 0.05);
-    double elStep = azStep;
-    double rollStep = std::max(0.10, std::max(1.0, static_cast<double>(settings.m_fov) * 0.02));
-    const double minimumFovStep = std::max(0.02, std::min(0.5, static_cast<double>(settings.m_fov) * 0.02));
-    // For narrow-field direction-seeded solves, hold FOV fixed at settings.m_fov throughout
-    // refinement.  The anchor search already found (Az, El, Roll) at the correct FOV.
-    double fovStep = (useGuidedDirectionScoring && settings.m_fov <= 5.0)
-        ? 0.0
-        : std::max(minimumFovStep, static_cast<double>(settings.m_fov) * 0.01);
-    double centerOffsetXStep = std::max(1.0, static_cast<double>(imageSize.width()) * 0.01);
-    double centerOffsetYStep = std::max(1.0, static_cast<double>(imageSize.height()) * 0.01);
-    double distortionStep = 0.05;
-    const std::array<double, 3> offsets = {{-1.0, 0.0, 1.0}};
-
-    for (int iteration = 0; iteration < 5; ++iteration)
-    {
-        bool improvedAz = false;
-        bool improvedEl = false;
-        bool improvedRoll = false;
-        bool improvedFov = false;
-        for (double azOffset : offsets)
-        {
-            for (double elOffset : offsets)
-            {
-                for (double rollOffset : offsets)
-                {
-                    for (double fovOffset : offsets)
-                    {
-                        const Evaluation candidate = evaluateRefinementPose(
-                            detectionIndices,
-                            catalogIndices,
-                            azCenter + azOffset * azStep,
-                            elCenter + elOffset * elStep,
-                            rollCenter + rollOffset * rollStep,
-                            std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
-                            centerOffsetXCenter,
-                            centerOffsetYCenter,
-                            distortionCenter);
-                        if (isBetterEvaluationForMode(candidate, best, false, useGuidedDirectionScoring)) {
-                            best = candidate;
-                            if (azOffset != 0.0) improvedAz = true;
-                            if (elOffset != 0.0) improvedEl = true;
-                            if (rollOffset != 0.0) improvedRoll = true;
-                            if (fovOffset != 0.0) improvedFov = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        azCenter = best.azimuthDegrees;
-        elCenter = best.elevationDegrees;
-        rollCenter = best.rollDegrees;
-        fovCenter = best.fovDegrees;
-        // Per-axis shrinking: only shrink the axes whose best offset was 0 this iteration.
-        // This avoids prematurely shrinking an axis that just hasn't been visited yet because
-        // another axis improved first.
-        if (!improvedAz)   azStep   *= 0.5;
-        if (!improvedEl)   elStep   *= 0.5;
-        if (!improvedRoll) rollStep *= 0.5;
-        if (!improvedFov)  fovStep  *= 0.5;
+    QVector<int> expandedDetectionIndices = selectDetectionIndicesForSolve(starDetections, imageSize);
+    QSet<int> expandedDetectionSet;
+    expandedDetectionSet.reserve(expandedDetectionIndices.size() + rankDetectionIndices.size());
+    for (int detectionIndex : expandedDetectionIndices) {
+        expandedDetectionSet.insert(detectionIndex);
     }
-
-    if (calibrateLens)
+    for (int detectionIndex : rankDetectionIndices)
     {
-        azCenter = best.azimuthDegrees;
-        elCenter = best.elevationDegrees;
-        rollCenter = best.rollDegrees;
-        fovCenter = best.fovDegrees;
-        centerOffsetXCenter = best.centerOffsetXPixels;
-        centerOffsetYCenter = best.centerOffsetYPixels;
-        distortionCenter = best.distortionK1;
-
-        for (int iteration = 0; iteration < 4; ++iteration)
+        if (!expandedDetectionSet.contains(detectionIndex))
         {
-            bool improved = false;
-            for (double centerOffsetXOffset : offsets)
-            {
-                for (double centerOffsetYOffset : offsets)
-                {
-                    for (double distortionOffset : offsets)
-                    {
-                        const Evaluation candidate = evaluateRefinementPose(
-                            detectionIndices,
-                            catalogIndices,
-                            azCenter,
-                            elCenter,
-                            rollCenter,
-                            fovCenter,
-                            centerOffsetXCenter + centerOffsetXOffset * centerOffsetXStep,
-                            centerOffsetYCenter + centerOffsetYOffset * centerOffsetYStep,
-                            std::clamp(distortionCenter + distortionOffset * distortionStep, -0.75, 0.75));
-                        if (isBetterEvaluationForMode(candidate, best, false, useGuidedDirectionScoring)) {
-                            best = candidate;
-                            improved = true;
-                        }
-                    }
-                }
-            }
-
-            centerOffsetXCenter = best.centerOffsetXPixels;
-            centerOffsetYCenter = best.centerOffsetYPixels;
-            distortionCenter = best.distortionK1;
-            if (!improved) {
-                centerOffsetXStep *= 0.5;
-                centerOffsetYStep *= 0.5;
-                distortionStep *= 0.5;
-            }
+            expandedDetectionSet.insert(detectionIndex);
+            expandedDetectionIndices.append(detectionIndex);
         }
     }
-    else
-    {
-        best.centerOffsetXPixels = settings.m_lensCenterOffsetX;
-        best.centerOffsetYPixels = settings.m_lensCenterOffsetY;
-        best.distortionK1 = settings.m_lensDistortionK1;
-    }
 
-    azCenter = best.azimuthDegrees;
-    elCenter = best.elevationDegrees;
-    rollCenter = best.rollDegrees;
-    fovCenter = best.fovDegrees;
-    centerOffsetXCenter = best.centerOffsetXPixels;
-    centerOffsetYCenter = best.centerOffsetYPixels;
-    distortionCenter = best.distortionK1;
-
-    // Tighten in stages. Jumping directly from the loose acquisition radius to the tight final
-    // radius can leave wide-field weak solves stuck with a coarse-but-high-match-count pose that
-    // never wins the final comparison, even when the correct basin is nearby.
     const double finalPassRadius = std::min(
         static_cast<double>(settings.m_plateSolveMatchRadius),
         std::max(1.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius)));
     const double intermediatePassRadius = std::min(
         static_cast<double>(settings.m_plateSolveMatchRadius),
         std::max(finalPassRadius + 10.0, finalPassRadius * 2.0));
-    QVector<double> tighteningPassRadii;
-    if (intermediatePassRadius > (finalPassRadius + 1e-6)) {
-        tighteningPassRadii.append(intermediatePassRadius);
-    }
-    tighteningPassRadii.append(finalPassRadius);
 
-    for (double tighteningRadius : tighteningPassRadii)
+    const QVector<Match> rebuiltMatches = rebuildRefinementMatchesAtPose(
+        settings,
+        catalogContext,
+        imageSize,
+        starDetections,
+        expandedDetectionIndices,
+        best,
+        intermediatePassRadius,
+        forceAnchor ? &forcedAnchor : nullptr);
+    if (!rebuiltMatches.isEmpty())
     {
-        const Evaluation preTighteningBest = best;
-        const int retainedMatchThreshold = forceAnchor
-            ? std::max(2, std::min(settings.m_plateSolveMinMatches, preTighteningBest.matchCount))
-            : minimumRetainedMatchesForFinalPass(
-                preTighteningBest,
-                settings.m_plateSolveMinMatches);
-        Evaluation tighteningBest = evaluateRefinementPose(
-            detectionIndices,
-            catalogIndices,
-            azCenter,
-            elCenter,
-            rollCenter,
-            fovCenter,
-            centerOffsetXCenter,
-            centerOffsetYCenter,
-            distortionCenter,
-            tighteningRadius);
-
-        for (int iteration = 0; iteration < 2; ++iteration)
+        QVector<Match> rebuiltFixedMatches = uniqueValidMatchesForRefinement(
+            catalogContext,
+            starDetections,
+            rebuiltMatches,
+            forceAnchor ? &forcedAnchor : nullptr);
+        if (rebuiltFixedMatches.size() >= fixedMatches.size())
         {
-            bool improvedAz = false;
-            bool improvedEl = false;
-            bool improvedRoll = false;
-            bool improvedFov = false;
-            for (double azOffset : offsets)
-            {
-                for (double elOffset : offsets)
-                {
-                    for (double rollOffset : offsets)
-                    {
-                        for (double fovOffset : offsets)
-                        {
-                            const Evaluation candidate = evaluateRefinementPose(
-                                detectionIndices,
-                                catalogIndices,
-                                azCenter + azOffset * azStep,
-                                elCenter + elOffset * elStep,
-                                rollCenter + rollOffset * rollStep,
-                                std::max(static_cast<double>(CameraSettings::m_minFov), fovCenter + fovOffset * fovStep),
-                                centerOffsetXCenter,
-                                centerOffsetYCenter,
-                                distortionCenter,
-                                tighteningRadius);
-                            if (isBetterFinalPassEvaluation(candidate, tighteningBest, retainedMatchThreshold, useGuidedDirectionScoring)) {
-                                tighteningBest = candidate;
-                                if (azOffset != 0.0) improvedAz = true;
-                                if (elOffset != 0.0) improvedEl = true;
-                                if (rollOffset != 0.0) improvedRoll = true;
-                                if (fovOffset != 0.0) improvedFov = true;
-                            }
-                        }
-                    }
-                }
+            Evaluation expandedSeed = best;
+            expandedSeed.matches = rebuiltFixedMatches;
+            expandedSeed.matchCount = rebuiltFixedMatches.size();
+            const Evaluation expandedBest = runPlateSolveLmRefinement(
+                settings,
+                catalogContext,
+                imageSize,
+                starDetections,
+                rebuiltFixedMatches,
+                expandedDetectionIndices,
+                expandedSeed,
+                activeParameters,
+                intermediatePassRadius);
+            if (isBetterEvaluationForMode(expandedBest, best, false, useGuidedDirectionScoring)) {
+                best = expandedBest;
             }
-
-            if (tighteningBest.valid) {
-                azCenter = tighteningBest.azimuthDegrees;
-                elCenter = tighteningBest.elevationDegrees;
-                rollCenter = tighteningBest.rollDegrees;
-                fovCenter = tighteningBest.fovDegrees;
-            }
-            if (!improvedAz)   azStep   *= 0.5;
-            if (!improvedEl)   elStep   *= 0.5;
-            if (!improvedRoll) rollStep *= 0.5;
-            if (!improvedFov)  fovStep  *= 0.5;
         }
+    }
 
-        if (tighteningBest.valid && (tighteningBest.matchCount >= retainedMatchThreshold)) {
-            best = tighteningBest;
-            azCenter = best.azimuthDegrees;
-            elCenter = best.elevationDegrees;
-            rollCenter = best.rollDegrees;
-            fovCenter = best.fovDegrees;
-            centerOffsetXCenter = best.centerOffsetXPixels;
-            centerOffsetYCenter = best.centerOffsetYPixels;
-            distortionCenter = best.distortionK1;
-        } else {
-            best = preTighteningBest;
-            azCenter = best.azimuthDegrees;
-            elCenter = best.elevationDegrees;
-            rollCenter = best.rollDegrees;
-            fovCenter = best.fovDegrees;
-            centerOffsetXCenter = best.centerOffsetXPixels;
-            centerOffsetYCenter = best.centerOffsetYPixels;
-            distortionCenter = best.distortionK1;
-            break;
+    const int retainedMatchThreshold = forceAnchor
+        ? std::max(2, std::min(settings.m_plateSolveMinMatches, best.matchCount))
+        : minimumRetainedMatchesForFinalPass(best, settings.m_plateSolveMinMatches);
+    const FinalMatchPassEvaluation finalPass = evaluateFinalMatchPass(
+        settings,
+        catalogContext,
+        imageSize,
+        starDetections,
+        expandedDetectionIndices,
+        best,
+        finalPassRadius);
+    if (finalPass.projectorValid && (finalPass.finalMatches.size() >= retainedMatchThreshold))
+    {
+        Evaluation finalEvaluation = best;
+        finalEvaluation.matches = finalPass.finalMatches;
+        finalEvaluation.matchCount = finalPass.finalMatches.size();
+        finalEvaluation.rmsErrorPixels = finalPass.rmsErrorPixels;
+        finalEvaluation.brightnessRankError = finalPass.brightnessRankError;
+        finalEvaluation.meanCatalogMagnitude = finalPass.meanCatalogMagnitude;
+        finalEvaluation.valid = true;
+        if (isBetterFinalPassEvaluation(finalEvaluation, best, retainedMatchThreshold, useGuidedDirectionScoring)
+            || (finalEvaluation.matchCount >= best.matchCount))
+        {
+            best = finalEvaluation;
         }
+    }
+
+    if (!calibrateLens)
+    {
+        best.centerOffsetXPixels = settings.m_lensCenterOffsetX;
+        best.centerOffsetYPixels = settings.m_lensCenterOffsetY;
+        best.distortionK1 = settings.m_lensDistortionK1;
     }
 
     return best;

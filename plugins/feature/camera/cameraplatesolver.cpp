@@ -7198,6 +7198,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
                                   QVector<Evaluation> *candidatePool = nullptr)
 {
     Evaluation best;
+    const bool useStartFov = plateSolveStartUsesFov(settings);
     const bool useStartDirection = plateSolveStartUsesDirection(settings);
     const bool useStartRoll = plateSolveStartUsesRoll(settings);
     const bool useStartLens = plateSolveStartUsesLens(settings);
@@ -7271,8 +7272,6 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
         : 4.0;
     const double anchorMatchRadius = std::max(finalMatchRadius,
         std::min(128.0, std::max(finalMatchRadius, static_cast<double>(settings.m_plateSolveMatchRadius)) * anchorMatchRadiusMultiplier));
-    const double minimumFovStep = std::max(0.02, std::min(0.5, static_cast<double>(settings.m_fov) * 0.02));
-    const std::array<double, 3> offsets = {{-1.0, 0.0, 1.0}};
     const QVector<double> primaryRollSeedOffsets = useStartRoll
         ? QVector<double>{0.0, -5.0, 5.0, -10.0, 10.0}
         : QVector<double>{0.0, -5.0, 5.0, -10.0, 10.0, -20.0, 20.0, -35.0, 35.0};
@@ -7284,15 +7283,16 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
     // so extra scale seeds only multiply the expensive anchor search.
     const QVector<double> fovSeedScales = useStartDirection
         ? QVector<double>{1.0}
-        : QVector<double>{0.88, 0.96, 1.0, 1.04, 1.12};
+        : (useStartFov && useWideWeakAnchorSearch)
+            ? QVector<double>{0.96, 1.0, 1.04}
+            : QVector<double>{0.88, 0.96, 1.0, 1.04, 1.12};
     const int anchorLimit = std::min(
-        useWideWeakAnchorSearch ? 32
+        useWideWeakAnchorSearch ? 24
             : useDenseWideGuidedDirection ? 8
             : (useStartDirection && useWidePlateSolve && (starDetections.size() <= 16)) ? 4
             : 12,
         static_cast<int>(anchors.size()));
     const int expandedRollMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
-    const int refinementIterations = useDenseWideGuidedDirection ? 4 : 5;
     double bestSearchScore = -std::numeric_limits<double>::infinity();
 
     if (kLogPlateSolveCandidates)
@@ -7372,74 +7372,24 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
                             return;
                         }
 
-                        double azCenter = localBest.azimuthDegrees;
-                        double elCenter = localBest.elevationDegrees;
-                        double rollCenter = localBest.rollDegrees;
-                        double fovCenter = localBest.fovDegrees;
-                        double azStep = std::max(0.04, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.20);
-                        double elStep = azStep;
-                        double rollStep = 6.0;
-                        // For narrow-field direction-seeded solves, hold FOV fixed at the seed value
-                        // (which is exactly settings.m_fov for the single 1.0× seed).
-                        double fovStep = (settings.m_fov <= 5.0)
-                            ? 0.0
-                            : std::max(minimumFovStep, static_cast<double>(settings.m_fov) * 0.05);
-
-                        for (int iteration = 0; iteration < refinementIterations; ++iteration)
+                        if (!useWideWeakAnchorSearch || (localBest.matchCount >= 2))
                         {
-                            bool improved = false;
-                            for (double azOffset : offsets)
-                            {
-                                for (double elOffset : offsets)
-                                {
-                                    for (double rollOffset : offsets)
-                                    {
-                                        const int fovOffsetCount = fovStep > 0.0 ? static_cast<int>(offsets.size()) : 1;
-                                        for (int fovOffsetIndex = 0; fovOffsetIndex < fovOffsetCount; ++fovOffsetIndex)
-                                        {
-                                            const double fovOffset = fovStep > 0.0 ? offsets[fovOffsetIndex] : 0.0;
-                                            const Evaluation candidate = evaluateAnchoredPose(
-                                                settings,
-                                                catalogContext,
-                                                imageSize,
-                                                captureDateTimeUtc,
-                                                starDetections,
-                                                anchoredDetectionIndices,
-                                                allowedCatalogIndices,
-                                                anchor,
-                                                azCenter + azOffset * azStep,
-                                                elCenter + elOffset * elStep,
-                                                rollCenter + rollOffset * rollStep,
-                                                std::clamp(fovCenter + fovOffset * fovStep,
-                                                    static_cast<double>(CameraSettings::m_minFov),
-                                                    static_cast<double>(CameraSettings::m_maxFov)),
-                                                seedCenterOffsetX,
-                                                seedCenterOffsetY,
-                                                seedDistortionK1,
-                                                anchorMatchRadius);
-                                            if (isBetterGuidedAnchorEvaluation(candidate, localBest, anchorMatchRadius))
-                                            {
-                                                localBest = candidate;
-                                                improved = true;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            azCenter = localBest.azimuthDegrees;
-                            elCenter = localBest.elevationDegrees;
-                            rollCenter = localBest.rollDegrees;
-                            fovCenter = localBest.fovDegrees;
-                            if (!improved)
-                            {
-                                azStep *= 0.5;
-                                elStep *= 0.5;
-                                rollStep *= 0.5;
-                                fovStep *= 0.5;
-                            }
+                            localBest = refineGuidedAnchorSeedWithLm(
+                                settings,
+                                catalogContext,
+                                imageSize,
+                                captureDateTimeUtc,
+                                starDetections,
+                                anchoredDetectionIndices,
+                                allowedCatalogIndices,
+                                anchor,
+                                localBest,
+                                seedCenterOffsetX,
+                                seedCenterOffsetY,
+                                seedDistortionK1,
+                                anchorMatchRadius,
+                                settings.m_fov > 5.0);
                         }
-
                         logPlateSolveEvaluation("guided-anchor", localBest);
                         if (candidatePool && localBest.valid && (localBest.matchCount >= 2)) {
                             candidatePool->append(localBest);
@@ -7459,7 +7409,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
                         && (anchor.magnitude <= 3.0)
                         && calibrateLens
                         && useWidePlateSolve
-                        && (!useStartDirection || useStartLens);
+                        && useStartLens;
                     const int centerSeedCount = tryCoarseLensSeeds ? centerOffsetSeeds.size() : 1;
                     for (int centerSeedIndex = 0; centerSeedIndex < centerSeedCount; ++centerSeedIndex)
                     {
@@ -8301,10 +8251,20 @@ Evaluation searchBestPose(const CameraSettings& settings,
                 }
             }
         };
+        auto isStrongWideWeakBlindSeed = [&](const Evaluation& candidate) {
+            const double strongWideSeedRmsCap = std::min(
+                std::max(static_cast<double>(settings.m_plateSolveMatchRadius) * 0.9, 2.0) * 0.60,
+                14.0);
+            return wideWeakMode
+                && candidate.valid
+                && (candidate.matchCount >= std::max(10, minMatchCount + 6))
+                && (candidate.rmsErrorPixels <= strongWideSeedRmsCap);
+        };
         auto hasGoodWideBlindSeed = [&]() {
             return wideWeakMode
-                && isStrongBlindSeedEvaluation(settings, detectionIndices, best)
-                && hasAcceptableBrightnessConsistency(best);
+                && ((isStrongBlindSeedEvaluation(settings, detectionIndices, best)
+                        && hasAcceptableBrightnessConsistency(best))
+                    || isStrongWideWeakBlindSeed(best));
         };
 
         qint64 seedStageStartMs = searchProfileTimer.elapsed();
@@ -8371,9 +8331,10 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const bool blindSeedAlreadyAcceptable = best.valid
         && (best.matchCount >= std::max(2, minMatchCount / 2))
         && (best.rmsErrorPixels <= wideFallbackRmsCap);
-    const bool blindSeedVeryStrong = best.valid
+    const bool blindSeedVeryStrong = wideWeakMode
+        && best.valid
         && (best.matchCount >= std::max(10, minMatchCount + 6))
-        && (best.rmsErrorPixels <= std::min(wideFallbackRmsCap * 0.50, 8.0));
+        && (best.rmsErrorPixels <= std::min(wideFallbackRmsCap * 0.60, 14.0));
     const bool wideWeakBestLooksLikeFalseBrightMatch = wideWeakMode
         && !blindSeedVeryStrong
         && best.valid
@@ -9270,6 +9231,92 @@ Evaluation runPlateSolveLmRefinement(const CameraSettings& settings,
     return best.evaluation;
 }
 
+Evaluation refineGuidedAnchorSeedWithLm(const CameraSettings& settings,
+                                        const PlateSolveCatalogContext& catalogContext,
+                                        const QSize& imageSize,
+                                        const QDateTime& captureDateTimeUtc,
+                                        const QVector<CameraPipelineStarDetection>& starDetections,
+                                        const QVector<int>& detectionIndices,
+                                        const QVector<int>& allowedCatalogIndices,
+                                        const GuidedAnchorPair& anchor,
+                                        const Evaluation& seedEvaluation,
+                                        double centerOffsetXPixels,
+                                        double centerOffsetYPixels,
+                                        double distortionK1,
+                                        double matchRadiusPixels,
+                                        bool refineFov)
+{
+    QVector<Match> fixedMatches = uniqueValidMatchesForRefinement(
+        catalogContext,
+        starDetections,
+        seedEvaluation.matches,
+        &anchor);
+    if (fixedMatches.isEmpty()) {
+        return seedEvaluation;
+    }
+
+    std::array<bool, PlateSolveLmParameterCount> activeParameters = {{
+        true,
+        true,
+        true,
+        refineFov,
+        false,
+        false,
+        false
+    }};
+
+    Evaluation best = seedEvaluation;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        Evaluation lmEvaluation = runPlateSolveLmRefinement(
+            settings,
+            catalogContext,
+            imageSize,
+            starDetections,
+            fixedMatches,
+            detectionIndices,
+            best,
+            activeParameters,
+            matchRadiusPixels);
+        if (isBetterGuidedAnchorEvaluation(lmEvaluation, best, matchRadiusPixels)) {
+            best = lmEvaluation;
+        }
+
+        const Evaluation rematched = evaluateAnchoredPose(
+            settings,
+            catalogContext,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices,
+            allowedCatalogIndices,
+            anchor,
+            best.azimuthDegrees,
+            best.elevationDegrees,
+            best.rollDegrees,
+            best.fovDegrees,
+            centerOffsetXPixels,
+            centerOffsetYPixels,
+            distortionK1,
+            matchRadiusPixels);
+        if (isBetterGuidedAnchorEvaluation(rematched, best, matchRadiusPixels)) {
+            best = rematched;
+        }
+
+        QVector<Match> rematchedFixedMatches = uniqueValidMatchesForRefinement(
+            catalogContext,
+            starDetections,
+            best.matches,
+            &anchor);
+        if (rematchedFixedMatches.size() <= fixedMatches.size()) {
+            break;
+        }
+        fixedMatches = rematchedFixedMatches;
+    }
+
+    return best;
+}
+
 QVector<Match> rebuildRefinementMatchesAtPose(const CameraSettings& settings,
                                               const PlateSolveCatalogContext& catalogContext,
                                               const QSize& imageSize,
@@ -9928,9 +9975,14 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             : 2)
         : 0;
     const int guidedAnchorSkipRequiredMatches = result.m_requiredMatches + guidedAnchorExtraMatches;
+    const bool wideWeakStrongSkipCandidate = useWideWeakAnchorSearch
+        && best.valid
+        && (best.matchCount >= std::max(10, result.m_requiredMatches + 6))
+        && (best.rmsErrorPixels <= std::min(finalMatchRadius * 0.60, 16.0));
     const bool guidedAnchorSkipBrightnessAccepted =
         (useStartDirection && isWidePlateSolveContext(settings))
-        || hasAcceptableBrightnessConsistency(best);
+        || hasAcceptableBrightnessConsistency(best)
+        || wideWeakStrongSkipCandidate;
     const double guidedAnchorSkipRmsCap = (useStartDirection && isWidePlateSolveContext(settings))
         ? std::min(finalMatchRadius * 0.90, 24.0)
         : std::min(finalMatchRadius * 0.60, 16.0);

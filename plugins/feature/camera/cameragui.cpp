@@ -2287,7 +2287,12 @@ void CameraGUI::updateVideoFileControls()
     ui->playbackRateSpin->setEnabled(hasVideoFile);
     ui->playbackPositionSlider->setVisible(fileCameraSelected);
     ui->playbackPositionSlider->setEnabled(hasPlaybackPosition);
+    ui->playbackPositionLabel->setVisible(fileCameraSelected);
+    ui->playbackPositionLabel->setEnabled(hasPlaybackPosition);
     ui->videoLine->setVisible(fileCameraSelected);
+    if (!fileCameraSelected || !hasVideoFile) {
+        ui->playbackPositionLabel->setText(m_settings.isImageFileSequenceCamera() ? QStringLiteral("0/0") : QStringLiteral("00:00:00"));
+    }
     updateVideoPreRecordBufferMemoryLabel();
 }
 
@@ -3927,6 +3932,7 @@ void CameraGUI::updateCameraStatusDisplay()
 void CameraGUI::handleMediaPlayerPositionChanged(qint64 position)
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    updatePlaybackPositionLabel(position);
     if (m_mediaPlayerDurationMs <= 0 || ui->playbackPositionSlider->isSliderDown()) {
         return;
     }
@@ -3951,6 +3957,7 @@ void CameraGUI::handleMediaPlayerDurationChanged(qint64 duration)
         QSignalBlocker blocker(ui->playbackPositionSlider);
         ui->playbackPositionSlider->setValue(0);
     }
+    updatePlaybackPositionLabel();
     updateVideoFileControls();
 #else
     Q_UNUSED(duration)
@@ -3977,6 +3984,31 @@ qint64 CameraGUI::imageSequenceDurationMs() const
     }
 
     return static_cast<qint64>(frameCount) * imageSequenceIntervalMs();
+}
+
+void CameraGUI::updatePlaybackPositionLabel(qint64 videoPositionMs)
+{
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        const int frameCount = m_settings.m_imageFileCameraPaths.size();
+        const int frameNumber = frameCount > 0 ? qBound(1, m_imageSequenceIndex + 1, frameCount) : 0;
+        ui->playbackPositionLabel->setText(QStringLiteral("%1/%2").arg(frameNumber).arg(frameCount));
+        return;
+    }
+
+    qint64 positionMs = videoPositionMs;
+    if ((positionMs < 0) && m_mediaPlayer) {
+        positionMs = m_mediaPlayer->position();
+    }
+    positionMs = qMax<qint64>(0, positionMs);
+    const qint64 totalSeconds = positionMs / 1000;
+    const qint64 hours = totalSeconds / 3600;
+    const qint64 minutes = (totalSeconds / 60) % 60;
+    const qint64 seconds = totalSeconds % 60;
+    ui->playbackPositionLabel->setText(QStringLiteral("%1:%2:%3")
+        .arg(hours, 2, 10, QLatin1Char('0'))
+        .arg(minutes, 2, 10, QLatin1Char('0'))
+        .arg(seconds, 2, 10, QLatin1Char('0')));
 }
 
 bool CameraGUI::loadImageSequenceFrame(int index, QImage& image) const
@@ -4045,6 +4077,7 @@ void CameraGUI::updateImageSequencePositionSlider()
     const int sliderValue = (m_imageSequenceIndex * PlaybackPositionSliderMaximum) / denominator;
     QSignalBlocker blocker(ui->playbackPositionSlider);
     ui->playbackPositionSlider->setValue(qBound(0, sliderValue, PlaybackPositionSliderMaximum));
+    updatePlaybackPositionLabel();
 }
 #endif
 
@@ -4471,6 +4504,7 @@ void CameraGUI::on_playbackRateSpin_valueChanged(double value)
     if (m_settings.isImageFileSequenceCamera() && m_imageSequenceTimer.isActive()) {
         m_mediaPlayerDurationMs = imageSequenceDurationMs();
         m_imageSequenceTimer.start(imageSequenceIntervalMs());
+        updatePlaybackPositionLabel();
     }
     if (m_mediaPlayer) {
         m_mediaPlayer->setPlaybackRate(value);
@@ -4500,6 +4534,7 @@ void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)
     }
 
     const qint64 position = (static_cast<qint64>(value) * m_mediaPlayerDurationMs) / PlaybackPositionSliderMaximum;
+    updatePlaybackPositionLabel(position);
     m_mediaPlayer->setPosition(position);
 #else
     Q_UNUSED(value)

@@ -337,6 +337,7 @@ private:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     int imageSequenceIntervalMs() const;
     qint64 imageSequenceDurationMs() const;
+    void updatePlaybackPositionLabel(qint64 videoPositionMs = -1);
     bool loadImageSequenceFrame(int index, QImage& image) const;
     void showImageSequenceFrame(int index);
     void advanceImageSequenceFrame();

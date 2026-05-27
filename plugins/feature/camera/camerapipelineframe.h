@@ -132,6 +132,8 @@ struct CameraPipelineFrame
     QImage m_unprocessedImage;
     CameraHistogramData m_histogramData;
     QDateTime m_captureDateTime;
+    qint64 m_playbackPositionMs = -1;
+    int m_playbackFrameNumber = -1;
     double m_exposureTimeMs = 0.0;
     int m_hdrExposureIndex = -1;
     int m_hdrExposureCount = 0;

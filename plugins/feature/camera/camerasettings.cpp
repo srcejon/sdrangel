@@ -405,7 +405,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveSearchRadius = 12.0;
     m_plateSolveStartMode = PlateSolveStartFovAzElRoll;
     m_plateSolveLabelMode = PlateSolveLabelName;
-    m_plateSolveUseCurrentDateTime = true;
+    m_plateSolveUseCaptureDateTime = true;
     m_plateSolveDateTime = QDateTime::currentDateTime();
     m_plateSolveDateTimeUtc = false;
     m_plateSolveUseDownloadedCatalog = false;
@@ -578,7 +578,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(127, m_plateSolveSearchRadius);
     s.writeS32(128, static_cast<qint32>(m_plateSolveStartMode));
     s.writeBool(129, m_plateSolveUseDownloadedCatalog);
-    s.writeBool(130, m_plateSolveUseCurrentDateTime);
+    s.writeBool(130, m_plateSolveUseCaptureDateTime);
     s.writeS64(131, m_plateSolveDateTime.isValid() ? m_plateSolveDateTime.toMSecsSinceEpoch() : 0);
     s.writeS32(132, static_cast<qint32>(m_plateSolveApplyMode));
     s.writeS32(133, static_cast<qint32>(m_plateSolveLabelMode));
@@ -949,7 +949,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(126, &m_plateSolveFinalMatchRadius, m_plateSolveMatchRadius);
         d.readDouble(127, &m_plateSolveSearchRadius, 12.0);
         d.readBool(129, &m_plateSolveUseDownloadedCatalog, false);
-        d.readBool(130, &m_plateSolveUseCurrentDateTime, true);
+        d.readBool(130, &m_plateSolveUseCaptureDateTime, true);
         d.readBool(212, &m_plateSolveDateTimeUtc, false);
         qint32 plateSolveCatalogSource = static_cast<qint32>(PlateSolveCatalogAuto);
         d.readS32(213, &plateSolveCatalogSource, plateSolveCatalogSource);
@@ -1753,8 +1753,8 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveLabelMode")) {
         m_plateSolveLabelMode = settings.m_plateSolveLabelMode;
     }
-    if (settingsKeys.contains("plateSolveUseCurrentDateTime")) {
-        m_plateSolveUseCurrentDateTime = settings.m_plateSolveUseCurrentDateTime;
+    if (settingsKeys.contains("plateSolveUseCaptureDateTime") || settingsKeys.contains("plateSolveUseCurrentDateTime")) {
+        m_plateSolveUseCaptureDateTime = settings.m_plateSolveUseCaptureDateTime;
     }
     if (settingsKeys.contains("plateSolveDateTime")) {
         m_plateSolveDateTime = settings.m_plateSolveDateTime;
@@ -2425,8 +2425,8 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("plateSolveStartMode") || force) {
         ostr << " m_plateSolveStartMode: " << static_cast<int>(m_plateSolveStartMode);
     }
-    if (settingsKeys.contains("plateSolveUseCurrentDateTime") || force) {
-        ostr << " m_plateSolveUseCurrentDateTime: " << m_plateSolveUseCurrentDateTime;
+    if (settingsKeys.contains("plateSolveUseCaptureDateTime") || settingsKeys.contains("plateSolveUseCurrentDateTime") || force) {
+        ostr << " m_plateSolveUseCaptureDateTime: " << m_plateSolveUseCaptureDateTime;
     }
     if (settingsKeys.contains("plateSolveDateTime") || force) {
         ostr << " m_plateSolveDateTime: " << m_plateSolveDateTime.toString(Qt::ISODateWithMs).toStdString();

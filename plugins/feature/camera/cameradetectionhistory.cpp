@@ -36,6 +36,27 @@ QString formatDateTime(const QDateTime& dateTime)
 
     return dateTime.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
 }
+
+QString formatPlaybackPosition(const CameraDetectionHistoryEntry& entry)
+{
+    if (entry.m_playbackFrameNumber > 0) {
+        return QObject::tr("Frame %1").arg(entry.m_playbackFrameNumber);
+    }
+
+    if (entry.m_playbackPositionMs >= 0)
+    {
+        const qint64 totalSeconds = entry.m_playbackPositionMs / 1000;
+        const qint64 hours = totalSeconds / 3600;
+        const qint64 minutes = (totalSeconds / 60) % 60;
+        const qint64 seconds = totalSeconds % 60;
+        return QStringLiteral("%1:%2:%3")
+            .arg(hours, 2, 10, QLatin1Char('0'))
+            .arg(minutes, 2, 10, QLatin1Char('0'))
+            .arg(seconds, 2, 10, QLatin1Char('0'));
+    }
+
+    return QStringLiteral("-");
+}
 }
 
 CameraDetectionHistory::CameraDetectionHistory(const QList<CameraDetectionHistoryEntry>& history, QWidget* parent) :
@@ -48,8 +69,8 @@ CameraDetectionHistory::CameraDetectionHistory(const QList<CameraDetectionHistor
     resize(720, 360);
     setModal(false);
 
-    m_table->setColumnCount(4);
-    m_table->setHorizontalHeaderLabels({tr("Class"), tr("First detected"), tr("Disappeared"), tr("Peak confidence")});
+    m_table->setColumnCount(5);
+    m_table->setHorizontalHeaderLabels({tr("Class"), tr("First detected"), tr("Disappeared"), tr("Position"), tr("Peak confidence")});
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -62,6 +83,7 @@ CameraDetectionHistory::CameraDetectionHistory(const QList<CameraDetectionHistor
     auto* closeButton = new QPushButton(tr("Close"), this);
     connect(m_clearButton, &QPushButton::clicked, this, &CameraDetectionHistory::clearHistoryRequested);
     connect(m_saveCsvButton, &QPushButton::clicked, this, &CameraDetectionHistory::saveHistoryToCsv);
+    connect(m_table, &QTableWidget::cellDoubleClicked, this, &CameraDetectionHistory::handleCellDoubleClicked);
     connect(closeButton, &QPushButton::clicked, this, &QDialog::close);
 
     auto* buttonLayout = new QHBoxLayout();
@@ -87,14 +109,32 @@ void CameraDetectionHistory::updateHistory(const QList<CameraDetectionHistoryEnt
     for (int row = 0; row < history.size(); ++row)
     {
         const CameraDetectionHistoryEntry& entry = history.at(row);
-        m_table->setItem(row, 0, new QTableWidgetItem(entry.m_label));
+        QTableWidgetItem *labelItem = new QTableWidgetItem(entry.m_label);
+        labelItem->setData(Qt::UserRole, row);
+        m_table->setItem(row, 0, labelItem);
         m_table->setItem(row, 1, new QTableWidgetItem(formatDateTime(entry.m_firstDetected)));
         m_table->setItem(row, 2, new QTableWidgetItem(formatDateTime(entry.m_disappeared)));
-        m_table->setItem(row, 3, new QTableWidgetItem(QString::number(entry.m_peakConfidence, 'f', 3)));
+        m_table->setItem(row, 3, new QTableWidgetItem(formatPlaybackPosition(entry)));
+        m_table->setItem(row, 4, new QTableWidgetItem(QString::number(entry.m_peakConfidence, 'f', 3)));
     }
 
     m_table->setSortingEnabled(true);
     m_table->sortItems(1, Qt::DescendingOrder);
+}
+
+void CameraDetectionHistory::handleCellDoubleClicked(int row, int column)
+{
+    Q_UNUSED(column)
+
+    QTableWidgetItem *item = m_table->item(row, 0);
+    if (!item) {
+        return;
+    }
+
+    const int historyIndex = item->data(Qt::UserRole).toInt();
+    if ((historyIndex >= 0) && (historyIndex < m_history.size())) {
+        emit detectionActivated(m_history.at(historyIndex));
+    }
 }
 
 void CameraDetectionHistory::saveHistoryToCsv()
@@ -115,7 +155,7 @@ void CameraDetectionHistory::saveHistoryToCsv()
     }
 
     QTextStream stream(&file);
-    stream << "\"Class\",\"First detected\",\"Disappeared\",\"Peak confidence\"\n";
+    stream << "\"Class\",\"First detected\",\"Disappeared\",\"Position\",\"Peak confidence\"\n";
 
     for (const CameraDetectionHistoryEntry& entry : m_history)
     {
@@ -127,6 +167,7 @@ void CameraDetectionHistory::saveHistoryToCsv()
         stream << escapeCsv(entry.m_label) << ','
                << escapeCsv(formatDateTime(entry.m_firstDetected)) << ','
                << escapeCsv(formatDateTime(entry.m_disappeared)) << ','
+               << escapeCsv(formatPlaybackPosition(entry)) << ','
                << escapeCsv(QString::number(entry.m_peakConfidence, 'f', 3)) << '\n';
     }
 

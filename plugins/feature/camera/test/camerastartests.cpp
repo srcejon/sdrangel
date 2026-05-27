@@ -754,7 +754,7 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_lensCenterOffsetX = test.centerOffsetX;
     settings.m_lensCenterOffsetY = test.centerOffsetY;
     settings.m_lensDistortionK1 = test.distortionK1;
-    settings.m_plateSolveUseCurrentDateTime = false;
+    settings.m_plateSolveUseCaptureDateTime = false;
     settings.m_plateSolveDateTime = test.dateTime;
     settings.m_plateSolveDateTimeUtc = false;
     settings.m_plateSolveUseDownloadedCatalog = true;

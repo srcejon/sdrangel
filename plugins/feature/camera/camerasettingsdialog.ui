@@ -5200,10 +5200,17 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </widget>
            </item>
            <item row="11" column="1">
-            <widget class="QCheckBox" name="plateSolveUseCurrentDateTimeCheck">
-             <property name="text">
-              <string/>
-             </property>
+            <widget class="QComboBox" name="plateSolveDateTimeModeCombo">
+             <item>
+              <property name="text">
+               <string>Capture</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Custom</string>
+              </property>
+             </item>
             </widget>
            </item>
            <item row="9" column="0">
@@ -5451,9 +5458,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </widget>
            </item>
            <item row="11" column="0">
-            <widget class="QLabel" name="plateSolveUseCurrentDateTimeLabel">
+            <widget class="QLabel" name="plateSolveDateTimeModeLabel">
              <property name="text">
-              <string>Use current date/time</string>
+              <string>Date/time source</string>
              </property>
             </widget>
            </item>

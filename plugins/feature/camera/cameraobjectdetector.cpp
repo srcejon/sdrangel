@@ -612,7 +612,7 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
 void CameraObjectDetector::captureActiveChanged(bool active)
 {
     if (active) {
-        clearObjectDetectionState();
+        clearObjectDetectionState(false);
     }
 }
 
@@ -1275,6 +1275,8 @@ void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineD
             CameraDetectionHistoryEntry entry;
             entry.m_label = className;
             entry.m_firstDetected = now;
+            entry.m_playbackPositionMs = frame.m_playbackPositionMs;
+            entry.m_playbackFrameNumber = frame.m_playbackFrameNumber;
             entry.m_peakConfidence = currentPeakScore;
             activeHistoryIt = m_activeObjectDetectionHistory.insert(className, entry);
             historyChanged = true;

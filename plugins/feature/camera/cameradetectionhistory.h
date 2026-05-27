@@ -36,9 +36,11 @@ public:
 
 signals:
     void clearHistoryRequested();
+    void detectionActivated(const CameraDetectionHistoryEntry& entry);
 
 private:
     void saveHistoryToCsv();
+    void handleCellDoubleClicked(int row, int column);
 
     QList<CameraDetectionHistoryEntry> m_history;
     QTableWidget* m_table;

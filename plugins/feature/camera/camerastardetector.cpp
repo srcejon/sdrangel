@@ -213,6 +213,7 @@ bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settin
         || settingsKeys.contains("plateSolveFinalMatchRadius")
         || settingsKeys.contains("plateSolveSearchRadius")
         || settingsKeys.contains("plateSolveStartMode")
+        || settingsKeys.contains("plateSolveUseCaptureDateTime")
         || settingsKeys.contains("plateSolveUseCurrentDateTime")
         || settingsKeys.contains("plateSolveDateTime")
         || settingsKeys.contains("plateSolveDateTimeUtc")

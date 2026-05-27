@@ -1510,7 +1510,7 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveSearchRadiusSpin->setValue(m_settings.m_plateSolveSearchRadius);
     settingsUI()->plateSolveStartModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveStartMode));
     updatePlateSolveStartModeUi();
-    settingsUI()->plateSolveUseCurrentDateTimeCheck->setChecked(m_settings.m_plateSolveUseCurrentDateTime);
+    settingsUI()->plateSolveDateTimeModeCombo->setCurrentIndex(m_settings.m_plateSolveUseCaptureDateTime ? 0 : 1);
     settingsUI()->plateSolveDateTimeUtcButton->setChecked(m_settings.m_plateSolveDateTimeUtc);
     updatePlateSolveDateTimeEdit();
     settingsUI()->plateSolveUseDownloadedCatalogCheck->setChecked(m_settings.m_plateSolveUseDownloadedCatalog);
@@ -1976,7 +1976,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveFinalMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveFinalMatchRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveSearchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveStartModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveStartModeCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->plateSolveUseCurrentDateTimeCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled);
+    QObject::connect(settingsUI()->plateSolveDateTimeModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveDateTimeModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveDateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, &CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged);
     QObject::connect(settingsUI()->plateSolveDateTimeUtcButton, &QToolButton::toggled, this, &CameraGUI::on_plateSolveDateTimeUtcButton_toggled);
     QObject::connect(settingsUI()->plateSolveDateTimeNowButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDateTimeNowButton_clicked);
@@ -3630,7 +3630,15 @@ void CameraGUI::processPendingQtVideoFrame()
     }
 
     const QImage image = frame.toImage();
-    onQtImageCaptured(-1, image);
+    qint64 playbackPositionMs = -1;
+    if (m_settings.isVideoFileCamera())
+    {
+        const qint64 frameStartTimeUs = frame.startTime();
+        playbackPositionMs = frameStartTimeUs >= 0
+            ? frameStartTimeUs / 1000
+            : (m_mediaPlayer ? m_mediaPlayer->position() : -1);
+    }
+    submitQtImageFrame(image, playbackPositionMs);
 
     if (m_pendingQtVideoFrame.isValid()) {
         QMetaObject::invokeMethod(this, &CameraGUI::processPendingQtVideoFrame, Qt::QueuedConnection);
@@ -3641,7 +3649,7 @@ void CameraGUI::processPendingQtVideoFrame()
 #else
 void CameraGUI::onQt5VideoFrame(const QImage& image)
 {
-    onQtImageCaptured(-1, image);
+    submitQtImageFrame(image, m_mediaPlayer ? m_mediaPlayer->position() : -1);
 }
 #endif
 
@@ -3649,6 +3657,11 @@ void CameraGUI::onQtImageCaptured(int id, const QImage& image)
 {
     Q_UNUSED(id)
 
+    submitQtImageFrame(image);
+}
+
+void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionMs, int playbackFrameNumber)
+{
     if (image.isNull()) {
         return;
     }
@@ -3664,6 +3677,8 @@ void CameraGUI::onQtImageCaptured(int id, const QImage& image)
         const QDateTime captureDateTime = m_settings.isImageFileSequenceCamera()
             ? captureDateTimeFromFileName(m_settings.m_imageFileCameraPaths.value(m_imageSequenceIndex))
             : QDateTime();
+        frame->m_playbackPositionMs = playbackPositionMs;
+        frame->m_playbackFrameNumber = playbackFrameNumber;
         populateFrameExposureMetadata(*frame, exposureTimeMs, hdrExposureIndex, hdrExposureCount, captureDateTime);
         frameAligner->submitFrame(frame);
     }
@@ -4044,7 +4059,7 @@ void CameraGUI::showImageSequenceFrame(int index)
 
     m_imageSequenceIndex = index;
     updateImageSequencePositionSlider();
-    onQtImageCaptured(-1, image);
+    submitQtImageFrame(image, -1, index + 1);
 }
 
 void CameraGUI::advanceImageSequenceFrame()
@@ -5725,10 +5740,11 @@ void CameraGUI::updatePlateSolveDateTimeEdit()
     QSignalBlocker dateTimeBlocker(settingsUI()->plateSolveDateTimeEdit);
     QSignalBlocker utcBlocker(settingsUI()->plateSolveDateTimeUtcButton);
     settingsUI()->plateSolveDateTimeEdit->setDateTime(dateTime);
-    settingsUI()->plateSolveDateTimeEdit->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
+    const bool customDateTime = !m_settings.m_plateSolveUseCaptureDateTime;
+    settingsUI()->plateSolveDateTimeEdit->setEnabled(customDateTime);
     settingsUI()->plateSolveDateTimeUtcButton->setChecked(m_settings.m_plateSolveDateTimeUtc);
-    settingsUI()->plateSolveDateTimeUtcButton->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
-    settingsUI()->plateSolveDateTimeNowButton->setEnabled(!m_settings.m_plateSolveUseCurrentDateTime);
+    settingsUI()->plateSolveDateTimeUtcButton->setEnabled(customDateTime);
+    settingsUI()->plateSolveDateTimeNowButton->setEnabled(customDateTime);
 }
 
 void CameraGUI::setPreviewDrawMode(PreviewDrawMode mode)
@@ -6581,6 +6597,7 @@ void CameraGUI::on_detectionHistoryButton_clicked()
         m_detectionHistoryDialog = new CameraDetectionHistory(m_detectionHistory, this);
         m_detectionHistoryDialog->setAttribute(Qt::WA_DeleteOnClose);
         connect(m_detectionHistoryDialog, &CameraDetectionHistory::clearHistoryRequested, this, &CameraGUI::on_detectionHistoryClearRequested);
+        connect(m_detectionHistoryDialog, &CameraDetectionHistory::detectionActivated, this, &CameraGUI::on_detectionHistoryEntryActivated);
         connect(m_detectionHistoryDialog, &QObject::destroyed, this, [this]() { m_detectionHistoryDialog = nullptr; });
     }
     else
@@ -6599,6 +6616,48 @@ void CameraGUI::on_detectionHistoryClearRequested()
     if (detectorQueue) {
         detectorQueue->push(CameraObjectDetector::MsgClearObjectDetectionHistory::create());
     }
+}
+
+void CameraGUI::on_detectionHistoryEntryActivated(const CameraDetectionHistoryEntry& entry)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (!m_settings.isFileCamera()) {
+        return;
+    }
+
+    if (m_settings.isImageFileSequenceCamera() && (entry.m_playbackFrameNumber > 0))
+    {
+        const int frameIndex = entry.m_playbackFrameNumber - 1;
+        if ((frameIndex < 0) || (frameIndex >= m_settings.m_imageFileCameraPaths.size())) {
+            return;
+        }
+
+        m_imageSequenceTimer.stop();
+        {
+            QSignalBlocker blocker(ui->playPauseVideo);
+            ui->playPauseVideo->setChecked(false);
+        }
+        showImageSequenceFrame(frameIndex);
+        return;
+    }
+
+    if (m_settings.isVideoFileCamera() && (entry.m_playbackPositionMs >= 0))
+    {
+        if (!m_mediaPlayer && (m_camera->getState() == Feature::StRunning)) {
+            setupQtCapture();
+        }
+
+        if (m_mediaPlayer)
+        {
+            const qint64 maxPosition = m_mediaPlayerDurationMs > 0 ? m_mediaPlayerDurationMs : entry.m_playbackPositionMs;
+            const qint64 position = qBound<qint64>(0, entry.m_playbackPositionMs, maxPosition);
+            updatePlaybackPositionLabel(position);
+            m_mediaPlayer->setPosition(position);
+        }
+    }
+#else
+    Q_UNUSED(entry)
+#endif
 }
 
 void CameraGUI::on_defaultColorSettingsButton_clicked()
@@ -6769,7 +6828,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveFinalMatchRadius = defaults.m_plateSolveFinalMatchRadius;
     m_settings.m_plateSolveSearchRadius = defaults.m_plateSolveSearchRadius;
     m_settings.m_plateSolveStartMode = defaults.m_plateSolveStartMode;
-    m_settings.m_plateSolveUseCurrentDateTime = defaults.m_plateSolveUseCurrentDateTime;
+    m_settings.m_plateSolveUseCaptureDateTime = defaults.m_plateSolveUseCaptureDateTime;
     m_settings.m_plateSolveDateTime = defaults.m_plateSolveDateTime;
     m_settings.m_plateSolveDateTimeUtc = defaults.m_plateSolveDateTimeUtc;
     m_settings.m_plateSolveUseDownloadedCatalog = defaults.m_plateSolveUseDownloadedCatalog;
@@ -6825,7 +6884,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveFinalMatchRadius",
         "plateSolveSearchRadius",
         "plateSolveStartMode",
-        "plateSolveUseCurrentDateTime",
+        "plateSolveUseCaptureDateTime",
         "plateSolveDateTime",
         "plateSolveDateTimeUtc",
         "plateSolveUseDownloadedCatalog",
@@ -7028,11 +7087,11 @@ void CameraGUI::on_plateSolveStartModeCombo_currentIndexChanged(int index)
     applySetting("plateSolveStartMode");
 }
 
-void CameraGUI::on_plateSolveUseCurrentDateTimeCheck_toggled(bool checked)
+void CameraGUI::on_plateSolveDateTimeModeCombo_currentIndexChanged(int index)
 {
-    m_settings.m_plateSolveUseCurrentDateTime = checked;
+    m_settings.m_plateSolveUseCaptureDateTime = (index == 0);
     updatePlateSolveDateTimeEdit();
-    applySetting("plateSolveUseCurrentDateTime");
+    applySetting("plateSolveUseCaptureDateTime");
 }
 
 void CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged(const QDateTime& dateTime)

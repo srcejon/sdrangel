@@ -27,6 +27,8 @@ struct CameraDetectionHistoryEntry
     QString m_label;
     QDateTime m_firstDetected;
     QDateTime m_disappeared;
+    qint64 m_playbackPositionMs = -1;
+    int m_playbackFrameNumber = -1;
     float m_peakConfidence = 0.0f;
 };
 

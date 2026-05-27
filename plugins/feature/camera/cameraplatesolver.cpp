@@ -9790,8 +9790,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     if (configuredSolveDateTime.isValid()) {
         configuredSolveDateTime.setTimeSpec(settings.m_plateSolveDateTimeUtc ? Qt::UTC : Qt::LocalTime);
     }
-    const QDateTime solveDateTime = settings.m_plateSolveUseCurrentDateTime
-        ? QDateTime::currentDateTime()
+    const QDateTime solveDateTime = settings.m_plateSolveUseCaptureDateTime
+        ? captureDateTime
         : configuredSolveDateTime;
     const QDateTime captureDateTimeUtc = (solveDateTime.isValid() ? solveDateTime : QDateTime::currentDateTime()).toUTC();
     const double solveMaxMagnitude = firstPassPlateSolveMaxMagnitude(settings);

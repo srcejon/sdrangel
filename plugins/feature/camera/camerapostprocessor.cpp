@@ -484,7 +484,12 @@ void drawConstellationStars(QPainter& painter,
 
 QDateTime plateSolveOverlayDateTime(const CameraSettings& settings, const QDateTime& captureDateTime)
 {
-    if (settings.m_plateSolveUseCurrentDateTime) {
+    if (settings.m_plateSolveUseCaptureDateTime)
+    {
+        if (captureDateTime.isValid()) {
+            return captureDateTime;
+        }
+
         return QDateTime::currentDateTime();
     }
 

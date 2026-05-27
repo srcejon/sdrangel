@@ -316,6 +316,7 @@ private:
     void updateHdrStackingControls();
     void updateVideoFileControls();
     void updateVideoPreRecordBufferMemoryLabel();
+    void submitQtImageFrame(const QImage& image, qint64 playbackPositionMs = -1, int playbackFrameNumber = -1);
     bool isHdrStackingSupported() const;
     bool isHdrStackingActiveForQt() const;
     void resetQtHdrBracketState();
@@ -581,6 +582,7 @@ private slots:
     void on_diffMaskHistoryFramesSpin_valueChanged(int value);
     void on_diffMaskCloseSizeSpin_valueChanged(int value);
     void on_detectionHistoryButton_clicked();
+    void on_detectionHistoryEntryActivated(const CameraDetectionHistoryEntry& entry);
     void on_histogramButton_clicked();
     void on_defaultColorSettingsButton_clicked();
     void on_overlayFontCombo_currentFontChanged(const QFont& font);
@@ -624,7 +626,7 @@ private slots:
     void on_plateSolveFinalMatchRadiusSpin_valueChanged(double value);
     void on_plateSolveSearchRadiusSpin_valueChanged(double value);
     void on_plateSolveStartModeCombo_currentIndexChanged(int index);
-    void on_plateSolveUseCurrentDateTimeCheck_toggled(bool checked);
+    void on_plateSolveDateTimeModeCombo_currentIndexChanged(int index);
     void on_plateSolveDateTimeEdit_dateTimeChanged(const QDateTime& dateTime);
     void on_plateSolveDateTimeUtcButton_toggled(bool checked);
     void on_plateSolveDateTimeNowButton_clicked();

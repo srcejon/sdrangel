@@ -902,7 +902,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setPlateSolveSearchRadius(settings.m_plateSolveSearchRadius);
     swg->setPlateSolveStartMode((int) settings.m_plateSolveStartMode);
     swg->setPlateSolveLabelMode((int) settings.m_plateSolveLabelMode);
-    swg->setPlateSolveUseCurrentDateTime(settings.m_plateSolveUseCurrentDateTime ? 1 : 0);
+    swg->setPlateSolveUseCurrentDateTime(settings.m_plateSolveUseCaptureDateTime ? 1 : 0);
     swg->setPlateSolveDateTime(new QString(settings.m_plateSolveDateTime.toString(Qt::ISODateWithMs)));
     swg->setPlateSolveUseDownloadedCatalog(settings.m_plateSolveUseDownloadedCatalog ? 1 : 0);
     swg->setPlateSolveApplyMode((int) settings.m_plateSolveApplyMode);
@@ -1559,7 +1559,7 @@ void Camera::webapiUpdateFeatureSettings(
         settings.m_plateSolveLabelMode = (CameraSettings::PlateSolveLabelMode) swg->getPlateSolveLabelMode();
     }
     if (featureSettingsKeys.contains("plateSolveUseCurrentDateTime")) {
-        settings.m_plateSolveUseCurrentDateTime = swg->getPlateSolveUseCurrentDateTime() != 0;
+        settings.m_plateSolveUseCaptureDateTime = swg->getPlateSolveUseCurrentDateTime() != 0;
     }
     if (featureSettingsKeys.contains("plateSolveDateTime"))
     {

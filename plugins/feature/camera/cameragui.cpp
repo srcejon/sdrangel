@@ -1731,6 +1731,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->cameraCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cameraCombo_currentIndexChanged);
     QObject::connect(ui->browseVideoFileButton, &QToolButton::clicked, this, &CameraGUI::on_browseVideoFileButton_clicked);
     QObject::connect(ui->restartVideo, &QToolButton::clicked, this, &CameraGUI::on_restartVideo_clicked);
+    QObject::connect(ui->stepBackVideo, &QToolButton::clicked, this, &CameraGUI::on_stepBackVideo_clicked);
+    QObject::connect(ui->stepForwardVideo, &QToolButton::clicked, this, &CameraGUI::on_stepForwardVideo_clicked);
     QObject::connect(ui->playPauseVideo, &ButtonSwitch::clicked, this, &CameraGUI::on_playPauseVideo_clicked);
     QObject::connect(ui->loopVideo, &ButtonSwitch::clicked, this, &CameraGUI::on_loopVideo_clicked);
     QObject::connect(ui->playbackRateSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_playbackRateSpin_valueChanged);
@@ -2279,6 +2281,10 @@ void CameraGUI::updateVideoFileControls()
     ui->browseVideoFileButton->setEnabled(fileCameraSelected);
     ui->restartVideo->setVisible(fileCameraSelected);
     ui->restartVideo->setEnabled(hasVideoFile);
+    ui->stepBackVideo->setVisible(fileCameraSelected);
+    ui->stepBackVideo->setEnabled(hasVideoFile);
+    ui->stepForwardVideo->setVisible(fileCameraSelected);
+    ui->stepForwardVideo->setEnabled(hasVideoFile);
     ui->playPauseVideo->setVisible(fileCameraSelected);
     ui->playPauseVideo->setEnabled(hasVideoFile);
     ui->loopVideo->setVisible(fileCameraSelected);
@@ -4423,6 +4429,101 @@ void CameraGUI::on_restartVideo_clicked()
         m_mediaPlayer->setPosition(0);
         m_mediaPlayer->play();
     }
+#endif
+}
+
+void CameraGUI::on_stepBackVideo_clicked()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (!m_settings.hasFileCameraSource()) {
+        return;
+    }
+
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        const bool wasLoaded = m_imageSequenceLoaded;
+        m_imageSequenceTimer.stop();
+        {
+            QSignalBlocker blocker(ui->playPauseVideo);
+            ui->playPauseVideo->setChecked(false);
+        }
+
+        if (!m_imageSequenceLoaded && (m_camera->getState() == Feature::StRunning))
+        {
+            setupQtCapture();
+            m_imageSequenceTimer.stop();
+            QSignalBlocker blocker(ui->playPauseVideo);
+            ui->playPauseVideo->setChecked(false);
+        }
+
+        if (m_imageSequenceLoaded && !m_settings.m_imageFileCameraPaths.isEmpty()) {
+            showImageSequenceFrame(wasLoaded ? qMax(0, m_imageSequenceIndex - 1) : 0);
+        }
+        return;
+    }
+
+    if (!m_mediaPlayer && (m_camera->getState() == Feature::StRunning)) {
+        setupQtCapture();
+    }
+
+    if (!m_mediaPlayer) {
+        return;
+    }
+
+    m_mediaPlayer->pause();
+    const qint64 stepMs = qMax<qint64>(1, static_cast<qint64>(1000.0 / qMax(1, m_settings.m_framesPerSecond) + 0.5));
+    const qint64 position = qMax<qint64>(0, m_mediaPlayer->position() - stepMs);
+    updatePlaybackPositionLabel(position);
+    m_mediaPlayer->setPosition(position);
+#endif
+}
+
+void CameraGUI::on_stepForwardVideo_clicked()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (!m_settings.hasFileCameraSource()) {
+        return;
+    }
+
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        const bool wasLoaded = m_imageSequenceLoaded;
+        m_imageSequenceTimer.stop();
+        {
+            QSignalBlocker blocker(ui->playPauseVideo);
+            ui->playPauseVideo->setChecked(false);
+        }
+
+        if (!m_imageSequenceLoaded && (m_camera->getState() == Feature::StRunning))
+        {
+            setupQtCapture();
+            m_imageSequenceTimer.stop();
+            QSignalBlocker blocker(ui->playPauseVideo);
+            ui->playPauseVideo->setChecked(false);
+        }
+
+        if (m_imageSequenceLoaded && !m_settings.m_imageFileCameraPaths.isEmpty())
+        {
+            const int maxIndex = m_settings.m_imageFileCameraPaths.size() - 1;
+            showImageSequenceFrame(wasLoaded ? qMin(maxIndex, m_imageSequenceIndex + 1) : 0);
+        }
+        return;
+    }
+
+    if (!m_mediaPlayer && (m_camera->getState() == Feature::StRunning)) {
+        setupQtCapture();
+    }
+
+    if (!m_mediaPlayer) {
+        return;
+    }
+
+    m_mediaPlayer->pause();
+    const qint64 stepMs = qMax<qint64>(1, static_cast<qint64>(1000.0 / qMax(1, m_settings.m_framesPerSecond) + 0.5));
+    const qint64 maxPosition = m_mediaPlayerDurationMs > 0 ? m_mediaPlayerDurationMs : std::numeric_limits<qint64>::max();
+    const qint64 position = qMin(maxPosition, m_mediaPlayer->position() + stepMs);
+    updatePlaybackPositionLabel(position);
+    m_mediaPlayer->setPosition(position);
 #endif
 }
 

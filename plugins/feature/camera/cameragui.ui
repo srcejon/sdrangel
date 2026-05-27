@@ -141,6 +141,34 @@
        </widget>
       </item>
       <item>
+       <widget class="QToolButton" name="stepBackVideo">
+        <property name="toolTip">
+         <string>Step back one frame</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/media_back.png</normaloff>:/camera/icons/media_back.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="stepForwardVideo">
+        <property name="toolTip">
+         <string>Step forward one frame</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/media_forward.png</normaloff>:/camera/icons/media_forward.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="ButtonSwitch" name="playPauseVideo">
         <property name="toolTip">
          <string>Play or pause playback of the selected video file</string>

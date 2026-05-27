@@ -399,6 +399,8 @@ private slots:
     void on_cameraCombo_currentIndexChanged(int index);
     void on_browseVideoFileButton_clicked();
     void on_restartVideo_clicked();
+    void on_stepBackVideo_clicked();
+    void on_stepForwardVideo_clicked();
     void on_playPauseVideo_clicked(bool checked);
     void on_loopVideo_clicked(bool checked=false);
     void on_playbackRateSpin_valueChanged(double value);

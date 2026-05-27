@@ -11,6 +11,7 @@ set(camera_SOURCES
     cameraframepreprocessor.cpp
     cameraframealigner.cpp
     cameraframestacker.cpp
+    cameraimageutils.cpp
     cameraimageprocessor.cpp
     cameraplatesolver.cpp
     camerapostprocessor.cpp
@@ -35,6 +36,7 @@ set(camera_HEADERS
     cameraframepreprocessor.h
     cameraframealigner.h
     cameraframestacker.h
+    cameraimageutils.h
     cameraimageprocessor.h
     cameraplatesolver.h
     camerapipelineframe.h

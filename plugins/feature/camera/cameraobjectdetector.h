@@ -151,6 +151,10 @@ private:
     QVector<cv::Rect> makeYoloTiles(const cv::Rect& roi) const;
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
     void sendFirstObjectDetectionTarget(const QVector<CameraPipelineDetection>& detections, const CameraPipelineFrame& frame) const;
+    [[nodiscard]] int findCompletedPlaybackHistoryIndex(const QString& className, const CameraPipelineFrame& frame) const;
+    [[nodiscard]] int findCompletedPlaybackHistoryIndex(const CameraDetectionHistoryEntry& entry) const;
+    void updateHistoryEntryPlayback(CameraDetectionHistoryEntry& entry, const CameraPipelineFrame& frame) const;
+    void mergeCompletedHistoryEntry(const CameraDetectionHistoryEntry& entry);
     void clearObjectDetectionState();
     void clearObjectDetectionHistory();
     void reportObjectDetectionHistoryToGUI() const;

@@ -29,6 +29,7 @@
 #include "util/profiler.h"
 #include "cameraframealigner.h"
 #include "cameraframestacker.h"
+#include "cameraimageutils.h"
 
 MESSAGE_CLASS_DEFINITION(CameraFrameAligner::MsgConfigureCameraFrameAligner, Message)
 MESSAGE_CLASS_DEFINITION(CameraFrameAligner::MsgProcessFrame, Message)
@@ -214,7 +215,7 @@ void CameraFrameAligner::processNextFrame()
         {
             frame = m_pendingFrames.front();
             m_pendingFrames.pop_front();
-            frame->m_stack.m_queuedCount = static_cast<int>(m_pendingFrames.size());
+            frame->m_stack.m_queuedCount += static_cast<int>(m_pendingFrames.size());
             frame->m_stack.m_droppedCount = m_droppedFrameCount;
         }
 
@@ -277,100 +278,13 @@ void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
 // stages — the biggest single throughput win at high resolution / high bit depth.
 cv::Mat CameraFrameAligner::imageToWorkingMat(const QImage& input, bool& highBitDepthInput)
 {
-    highBitDepthInput = (input.format() == QImage::Format_RGBA64)
-        || (input.format() == QImage::Format_RGBX64)
-        || (input.format() == QImage::Format_Grayscale16);
-
-    if (input.format() == QImage::Format_Grayscale16)
-    {
-        return cv::Mat(input.height(), input.width(), CV_16UC1,
-            const_cast<uchar*>(input.bits()),
-            static_cast<size_t>(input.bytesPerLine()));
-    }
-
-    if (input.format() == QImage::Format_Grayscale8)
-    {
-        return cv::Mat(input.height(), input.width(), CV_8UC1,
-            const_cast<uchar*>(input.bits()),
-            static_cast<size_t>(input.bytesPerLine()));
-    }
-
-    if (highBitDepthInput)
-    {
-        cv::Mat frameMat(input.height(), input.width(), CV_16UC3);
-        for (int y = 0; y < input.height(); ++y)
-        {
-            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(input.constScanLine(y));
-            cv::Vec<uint16_t, 3> *outputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
-
-            for (int x = 0; x < input.width(); ++x)
-            {
-                outputLine[x][0] = inputLine[x].red();
-                outputLine[x][1] = inputLine[x].green();
-                outputLine[x][2] = inputLine[x].blue();
-            }
-        }
-
-        return frameMat;
-    }
-
-    if (input.format() == QImage::Format_RGB888)
-    {
-        return cv::Mat(input.height(), input.width(), CV_8UC3,
-            const_cast<uchar*>(input.bits()),
-            static_cast<size_t>(input.bytesPerLine()));
-    }
-
-    // Source isn't already in a directly-mappable layout — we have to convert into a
-    // function-local QImage. Clone the Mat so it outlives the temporary.
-    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
-    cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
-                   const_cast<uchar*>(rgb.bits()),
-                   static_cast<size_t>(rgb.bytesPerLine()));
-    return rgbMat.clone();
+    return CameraImageUtils::imageToWorkingMat(input, &highBitDepthInput);
 }
 
 QImage CameraFrameAligner::workingMatToImage(const cv::Mat& frameMat, bool highBitDepthInput)
 {
-    if (frameMat.channels() == 1)
-    {
-        if (highBitDepthInput)
-        {
-            QImage result(frameMat.cols, frameMat.rows, QImage::Format_Grayscale16);
-            for (int row = 0; row < frameMat.rows; ++row) {
-                std::memcpy(result.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * sizeof(quint16)));
-            }
-            return result;
-        }
-
-        QImage result(frameMat.cols, frameMat.rows, QImage::Format_Grayscale8);
-        for (int row = 0; row < frameMat.rows; ++row) {
-            std::memcpy(result.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols));
-        }
-        return result;
-    }
-
-    if (!highBitDepthInput)
-    {
-        QImage result(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
-        for (int row = 0; row < frameMat.rows; ++row) {
-            std::memcpy(result.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * 3));
-        }
-        return result;
-    }
-
-    QImage result(frameMat.cols, frameMat.rows, QImage::Format_RGBA64);
-    for (int y = 0; y < frameMat.rows; ++y)
-    {
-        QRgba64 *outputLine = reinterpret_cast<QRgba64*>(result.scanLine(y));
-        const cv::Vec<uint16_t, 3> *inputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
-
-        for (int x = 0; x < frameMat.cols; ++x) {
-            outputLine[x] = qRgba64(inputLine[x][0], inputLine[x][1], inputLine[x][2], 65535);
-        }
-    }
-
-    return result;
+    (void) highBitDepthInput;
+    return CameraImageUtils::workingMatToImage(frameMat);
 }
 
 QImage CameraFrameAligner::applyAlignment(CameraPipelineFrame& frame)

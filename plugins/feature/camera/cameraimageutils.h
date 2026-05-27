@@ -16,22 +16,25 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
-#ifndef INCLUDE_FEATURE_CAMERADETECTIONHISTORYENTRY_H_
-#define INCLUDE_FEATURE_CAMERADETECTIONHISTORYENTRY_H_
+#ifndef INCLUDE_FEATURE_CAMERAIMAGEUTILS_H_
+#define INCLUDE_FEATURE_CAMERAIMAGEUTILS_H_
 
-#include <QDateTime>
-#include <QString>
+#include <QImage>
 
-struct CameraDetectionHistoryEntry
+#include <opencv2/core.hpp>
+
+#include "camerapipelineframe.h"
+
+class CameraImageUtils
 {
-    QString m_label;
-    QDateTime m_firstDetected;
-    QDateTime m_disappeared;
-    qint64 m_playbackPositionMs = -1;
-    qint64 m_lastPlaybackPositionMs = -1;
-    int m_playbackFrameNumber = -1;
-    int m_lastPlaybackFrameNumber = -1;
-    float m_peakConfidence = 0.0f;
+public:
+    [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
+    [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
+    [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
+    [[nodiscard]] static cv::Mat imageToWorkingMat(const QImage& input, bool *highBitDepthInput = nullptr);
+    [[nodiscard]] static QImage workingMatToImage(const cv::Mat& frameMat);
+    [[nodiscard]] static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
+    [[nodiscard]] static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
 };
 
-#endif // INCLUDE_FEATURE_CAMERADETECTIONHISTORYENTRY_H_
+#endif // INCLUDE_FEATURE_CAMERAIMAGEUTILS_H_

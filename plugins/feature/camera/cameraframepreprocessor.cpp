@@ -32,6 +32,7 @@
 #include "util/profiler.h"
 #include "cameraframealigner.h"
 #include "cameraframepreprocessor.h"
+#include "cameraimageutils.h"
 
 MESSAGE_CLASS_DEFINITION(CameraFramePreprocessor::MsgConfigureCameraFramePreprocessor, Message)
 MESSAGE_CLASS_DEFINITION(CameraFramePreprocessor::MsgProcessFrame, Message)
@@ -661,20 +662,7 @@ bool CameraFramePreprocessor::shouldMaterializeUnprocessedImage(const CameraPipe
 
 int CameraFramePreprocessor::bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern)
 {
-    switch (bayerPattern)
-    {
-    case CameraPipelineFrame::BayerRGGB:
-        return cv::COLOR_BayerBG2BGR;
-    case CameraPipelineFrame::BayerBGGR:
-        return cv::COLOR_BayerRG2BGR;
-    case CameraPipelineFrame::BayerGRBG:
-        return cv::COLOR_BayerGB2BGR;
-    case CameraPipelineFrame::BayerGBRG:
-        return cv::COLOR_BayerGR2BGR;
-    case CameraPipelineFrame::BayerNone:
-    default:
-        return -1;
-    }
+    return CameraImageUtils::bayerPatternToOpenCvCode(bayerPattern);
 }
 
 // Lifetime contract: the returned Mat may alias the source QImage's pixel buffer when no
@@ -688,113 +676,15 @@ int CameraFramePreprocessor::bayerPatternToOpenCvCode(CameraPipelineFrame::Bayer
 // stages that hit this path — the biggest single throughput win at high resolution.
 cv::Mat CameraFramePreprocessor::imageToWorkingMat(const QImage& input)
 {
-    if (input.format() == QImage::Format_Grayscale16)
-    {
-        return cv::Mat(input.height(), input.width(), CV_16UC1,
-            const_cast<uchar*>(input.bits()),
-            static_cast<size_t>(input.bytesPerLine()));
-    }
-
-    if (input.format() == QImage::Format_Grayscale8)
-    {
-        return cv::Mat(input.height(), input.width(), CV_8UC1,
-            const_cast<uchar*>(input.bits()),
-            static_cast<size_t>(input.bytesPerLine()));
-    }
-
-    if ((input.format() == QImage::Format_RGBA64) || (input.format() == QImage::Format_RGBX64))
-    {
-        cv::Mat frameMat(input.height(), input.width(), CV_16UC3);
-        for (int y = 0; y < input.height(); ++y)
-        {
-            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(input.constScanLine(y));
-            cv::Vec<uint16_t, 3> *outputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
-
-            for (int x = 0; x < input.width(); ++x)
-            {
-                outputLine[x][0] = inputLine[x].red();
-                outputLine[x][1] = inputLine[x].green();
-                outputLine[x][2] = inputLine[x].blue();
-            }
-        }
-        return frameMat;
-    }
-
-    if (input.format() == QImage::Format_RGB888)
-    {
-        return cv::Mat(input.height(), input.width(), CV_8UC3,
-            const_cast<uchar*>(input.bits()),
-            static_cast<size_t>(input.bytesPerLine()));
-    }
-
-    // Source isn't already in a directly-mappable layout — convert into a function-local
-    // QImage and clone the wrapping Mat so it outlives that temporary.
-    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
-    cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
-                   const_cast<uchar*>(rgb.bits()),
-                   static_cast<size_t>(rgb.bytesPerLine()));
-    return rgbMat.clone();
+    return CameraImageUtils::imageToWorkingMat(input);
 }
 
 QImage CameraFramePreprocessor::workingMatToImage(const cv::Mat& frameMat)
 {
-    // Defensive single-channel handling. preprocessFrame always upconverts 1-channel input
-    // to 3 channels via cvtColor(GRAY2RGB) before calling here, so the 8-bit/RGB888 branch
-    // below is safe in the current flow. But the unconditional memcpy of `cols * 3` bytes
-    // assumed 3 channels, so any future code path that hands a single-channel Mat to this
-    // function would overrun the source buffer by 3x. Mirror the aligner/stacker variants
-    // and branch on channels() == 1 explicitly.
-    if (frameMat.channels() == 1)
-    {
-        if (frameMat.depth() == CV_16U)
-        {
-            QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale16);
-            for (int row = 0; row < frameMat.rows; ++row) {
-                std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * sizeof(quint16)));
-            }
-            return image;
-        }
-
-        QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale8);
-        for (int row = 0; row < frameMat.rows; ++row) {
-            std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols));
-        }
-        return image;
-    }
-
-    if (frameMat.depth() == CV_16U)
-    {
-        QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGBA64);
-        for (int y = 0; y < frameMat.rows; ++y)
-        {
-            const cv::Vec<uint16_t, 3> *inputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
-            QRgba64 *outputLine = reinterpret_cast<QRgba64*>(image.scanLine(y));
-
-            for (int x = 0; x < frameMat.cols; ++x) {
-                outputLine[x] = qRgba64(inputLine[x][0], inputLine[x][1], inputLine[x][2], 65535);
-            }
-        }
-        return image;
-    }
-
-    QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
-    for (int row = 0; row < frameMat.rows; ++row) {
-        std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * 3));
-    }
-    return image;
+    return CameraImageUtils::workingMatToImage(frameMat);
 }
 
 cv::Mat CameraFramePreprocessor::debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern)
 {
-    const int cvCode = bayerPatternToOpenCvCode(bayerPattern);
-    if ((cvCode < 0) || (input.channels() != 1)) {
-        return input;
-    }
-
-    cv::Mat debayered;
-    cv::cvtColor(input, debayered, cvCode);
-    if (debayered.channels() == 3) {
-        cv::cvtColor(debayered, debayered, cv::COLOR_BGR2RGB);
-    }
-    return debayered;
+    return CameraImageUtils::debayerRawMat(input, bayerPattern);
 }

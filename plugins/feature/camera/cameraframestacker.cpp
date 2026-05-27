@@ -33,6 +33,7 @@
 
 #include "util/profiler.h"
 #include "cameraframestacker.h"
+#include "cameraimageutils.h"
 #include "cameraimageprocessor.h"
 
 MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgConfigureCameraFrameStacker, Message)
@@ -215,98 +216,12 @@ bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const
 // Avoiding the clone here saves ~32 MB/frame for 4K Grayscale16.
 cv::Mat CameraFrameStacker::imageToWorkingMat(const QImage& input, bool& highBitDepthInput)
 {
-    highBitDepthInput = (input.format() == QImage::Format_RGBA64)
-        || (input.format() == QImage::Format_RGBX64)
-        || (input.format() == QImage::Format_Grayscale16);
-
-    if (input.format() == QImage::Format_Grayscale16)
-    {
-        return cv::Mat(input.height(), input.width(), CV_16UC1,
-            const_cast<uchar*>(input.bits()),
-            static_cast<size_t>(input.bytesPerLine()));
-    }
-
-    if (input.format() == QImage::Format_Grayscale8)
-    {
-        return cv::Mat(input.height(), input.width(), CV_8UC1,
-            const_cast<uchar*>(input.bits()),
-            static_cast<size_t>(input.bytesPerLine()));
-    }
-
-    if ((input.format() == QImage::Format_RGBA64) || (input.format() == QImage::Format_RGBX64))
-    {
-        cv::Mat frameMat(input.height(), input.width(), CV_16UC3);
-        for (int y = 0; y < input.height(); ++y)
-        {
-            const QRgba64 *inputLine = reinterpret_cast<const QRgba64*>(input.constScanLine(y));
-            cv::Vec<uint16_t, 3> *outputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
-
-            for (int x = 0; x < input.width(); ++x)
-            {
-                outputLine[x][0] = inputLine[x].red();
-                outputLine[x][1] = inputLine[x].green();
-                outputLine[x][2] = inputLine[x].blue();
-            }
-        }
-        return frameMat;
-    }
-
-    if (input.format() == QImage::Format_RGB888)
-    {
-        return cv::Mat(input.height(), input.width(), CV_8UC3,
-            const_cast<uchar*>(input.bits()),
-            static_cast<size_t>(input.bytesPerLine()));
-    }
-
-    // Source isn't already in a directly-mappable layout — convert into a function-local
-    // QImage and clone the wrapping Mat so it outlives that temporary.
-    const QImage rgb = input.convertToFormat(QImage::Format_RGB888);
-    cv::Mat rgbMat(rgb.height(), rgb.width(), CV_8UC3,
-                   const_cast<uchar*>(rgb.bits()),
-                   static_cast<size_t>(rgb.bytesPerLine()));
-    return rgbMat.clone();
+    return CameraImageUtils::imageToWorkingMat(input, &highBitDepthInput);
 }
 
 QImage CameraFrameStacker::workingMatToImage(const cv::Mat& frameMat)
 {
-    if (frameMat.channels() == 1)
-    {
-        if (frameMat.depth() == CV_16U)
-        {
-            QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale16);
-            for (int row = 0; row < frameMat.rows; ++row) {
-                std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * sizeof(quint16)));
-            }
-            return image;
-        }
-
-        QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale8);
-        for (int row = 0; row < frameMat.rows; ++row) {
-            std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols));
-        }
-        return image;
-    }
-
-    if (frameMat.depth() == CV_16U)
-    {
-        QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGBA64);
-        for (int y = 0; y < frameMat.rows; ++y)
-        {
-            const cv::Vec<uint16_t, 3> *inputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
-            QRgba64 *outputLine = reinterpret_cast<QRgba64*>(image.scanLine(y));
-
-            for (int x = 0; x < frameMat.cols; ++x) {
-                outputLine[x] = qRgba64(inputLine[x][0], inputLine[x][1], inputLine[x][2], 65535);
-            }
-        }
-        return image;
-    }
-
-    QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
-    for (int row = 0; row < frameMat.rows; ++row) {
-        std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * 3));
-    }
-    return image;
+    return CameraImageUtils::workingMatToImage(frameMat);
 }
 
 QImage CameraFrameStacker::makeHistoryThumbnail(const cv::Mat& frameMat)

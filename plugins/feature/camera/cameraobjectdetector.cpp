@@ -537,6 +537,75 @@ bool pixelToAltAz(const CameraSettings& settings, const QSize& imageSize, const 
     elevationDegrees = radToDeg(std::asin(std::clamp(target.z, -1.0, 1.0)));
     return std::isfinite(azimuthDegrees) && std::isfinite(elevationDegrees);
 }
+
+bool hasPlaybackPosition(const CameraPipelineFrame& frame)
+{
+    return (frame.m_playbackFrameNumber > 0) || (frame.m_playbackPositionMs >= 0);
+}
+
+bool hasPlaybackPosition(const CameraDetectionHistoryEntry& entry)
+{
+    return (entry.m_playbackFrameNumber > 0) || (entry.m_playbackPositionMs >= 0);
+}
+
+bool playbackFrameInRange(const CameraDetectionHistoryEntry& entry, int frameNumber)
+{
+    if (frameNumber <= 0 || entry.m_playbackFrameNumber <= 0) {
+        return false;
+    }
+
+    const int lastFrameNumber = entry.m_lastPlaybackFrameNumber > 0
+        ? entry.m_lastPlaybackFrameNumber
+        : entry.m_playbackFrameNumber;
+    const int rangeStart = std::min(entry.m_playbackFrameNumber, lastFrameNumber);
+    const int rangeEnd = std::max(entry.m_playbackFrameNumber, lastFrameNumber);
+    return (frameNumber >= rangeStart) && (frameNumber <= rangeEnd);
+}
+
+bool playbackPositionInRange(const CameraDetectionHistoryEntry& entry, qint64 positionMs)
+{
+    if (positionMs < 0 || entry.m_playbackPositionMs < 0) {
+        return false;
+    }
+
+    const qint64 lastPositionMs = entry.m_lastPlaybackPositionMs >= 0
+        ? entry.m_lastPlaybackPositionMs
+        : entry.m_playbackPositionMs;
+    const qint64 rangeStart = std::min(entry.m_playbackPositionMs, lastPositionMs);
+    const qint64 rangeEnd = std::max(entry.m_playbackPositionMs, lastPositionMs);
+    return (positionMs >= rangeStart) && (positionMs <= rangeEnd);
+}
+
+bool playbackRangesOverlap(const CameraDetectionHistoryEntry& lhs, const CameraDetectionHistoryEntry& rhs)
+{
+    if (!hasPlaybackPosition(lhs) || !hasPlaybackPosition(rhs)) {
+        return false;
+    }
+
+    if ((lhs.m_playbackFrameNumber > 0) && (rhs.m_playbackFrameNumber > 0))
+    {
+        const int lhsLast = lhs.m_lastPlaybackFrameNumber > 0 ? lhs.m_lastPlaybackFrameNumber : lhs.m_playbackFrameNumber;
+        const int rhsLast = rhs.m_lastPlaybackFrameNumber > 0 ? rhs.m_lastPlaybackFrameNumber : rhs.m_playbackFrameNumber;
+        const int lhsStart = std::min(lhs.m_playbackFrameNumber, lhsLast);
+        const int lhsEnd = std::max(lhs.m_playbackFrameNumber, lhsLast);
+        const int rhsStart = std::min(rhs.m_playbackFrameNumber, rhsLast);
+        const int rhsEnd = std::max(rhs.m_playbackFrameNumber, rhsLast);
+        return lhsStart <= rhsEnd && rhsStart <= lhsEnd;
+    }
+
+    if ((lhs.m_playbackPositionMs >= 0) && (rhs.m_playbackPositionMs >= 0))
+    {
+        const qint64 lhsLast = lhs.m_lastPlaybackPositionMs >= 0 ? lhs.m_lastPlaybackPositionMs : lhs.m_playbackPositionMs;
+        const qint64 rhsLast = rhs.m_lastPlaybackPositionMs >= 0 ? rhs.m_lastPlaybackPositionMs : rhs.m_playbackPositionMs;
+        const qint64 lhsStart = std::min(lhs.m_playbackPositionMs, lhsLast);
+        const qint64 lhsEnd = std::max(lhs.m_playbackPositionMs, lhsLast);
+        const qint64 rhsStart = std::min(rhs.m_playbackPositionMs, rhsLast);
+        const qint64 rhsEnd = std::max(rhs.m_playbackPositionMs, rhsLast);
+        return lhsStart <= rhsEnd && rhsStart <= lhsEnd;
+    }
+
+    return false;
+}
 }
 
 CameraObjectDetector::CameraObjectDetector(Camera *camera) :
@@ -1203,6 +1272,112 @@ void CameraObjectDetector::reportErrorToFeature(const QString& errorKey, const Q
     m_msgQueueToFeature->push(Camera::MsgReportError::create(title, errorMessage));
 }
 
+int CameraObjectDetector::findCompletedPlaybackHistoryIndex(const QString& className, const CameraPipelineFrame& frame) const
+{
+    if (!hasPlaybackPosition(frame)) {
+        return -1;
+    }
+
+    for (int index = 0; index < m_completedObjectDetectionHistory.size(); ++index)
+    {
+        const CameraDetectionHistoryEntry& entry = m_completedObjectDetectionHistory.at(index);
+        if (entry.m_label != className) {
+            continue;
+        }
+
+        if (playbackFrameInRange(entry, frame.m_playbackFrameNumber)
+            || playbackPositionInRange(entry, frame.m_playbackPositionMs))
+        {
+            return index;
+        }
+    }
+
+    return -1;
+}
+
+int CameraObjectDetector::findCompletedPlaybackHistoryIndex(const CameraDetectionHistoryEntry& entry) const
+{
+    if (!hasPlaybackPosition(entry)) {
+        return -1;
+    }
+
+    for (int index = 0; index < m_completedObjectDetectionHistory.size(); ++index)
+    {
+        const CameraDetectionHistoryEntry& completed = m_completedObjectDetectionHistory.at(index);
+        if ((completed.m_label == entry.m_label) && playbackRangesOverlap(completed, entry)) {
+            return index;
+        }
+    }
+
+    return -1;
+}
+
+void CameraObjectDetector::updateHistoryEntryPlayback(CameraDetectionHistoryEntry& entry, const CameraPipelineFrame& frame) const
+{
+    if (frame.m_playbackFrameNumber > 0)
+    {
+        if ((entry.m_playbackFrameNumber <= 0) || (frame.m_playbackFrameNumber < entry.m_playbackFrameNumber)) {
+            entry.m_playbackFrameNumber = frame.m_playbackFrameNumber;
+        }
+        if ((entry.m_lastPlaybackFrameNumber <= 0) || (frame.m_playbackFrameNumber > entry.m_lastPlaybackFrameNumber)) {
+            entry.m_lastPlaybackFrameNumber = frame.m_playbackFrameNumber;
+        }
+    }
+
+    if (frame.m_playbackPositionMs >= 0)
+    {
+        if ((entry.m_playbackPositionMs < 0) || (frame.m_playbackPositionMs < entry.m_playbackPositionMs)) {
+            entry.m_playbackPositionMs = frame.m_playbackPositionMs;
+        }
+        if ((entry.m_lastPlaybackPositionMs < 0) || (frame.m_playbackPositionMs > entry.m_lastPlaybackPositionMs)) {
+            entry.m_lastPlaybackPositionMs = frame.m_playbackPositionMs;
+        }
+    }
+}
+
+void CameraObjectDetector::mergeCompletedHistoryEntry(const CameraDetectionHistoryEntry& entry)
+{
+    const int existingIndex = findCompletedPlaybackHistoryIndex(entry);
+    if (existingIndex < 0)
+    {
+        m_completedObjectDetectionHistory.append(entry);
+        return;
+    }
+
+    CameraDetectionHistoryEntry& existing = m_completedObjectDetectionHistory[existingIndex];
+    if (entry.m_firstDetected.isValid()
+        && (!existing.m_firstDetected.isValid() || (entry.m_firstDetected < existing.m_firstDetected)))
+    {
+        existing.m_firstDetected = entry.m_firstDetected;
+    }
+    if (entry.m_disappeared.isValid()
+        && (!existing.m_disappeared.isValid() || (entry.m_disappeared > existing.m_disappeared)))
+    {
+        existing.m_disappeared = entry.m_disappeared;
+    }
+    if (entry.m_playbackFrameNumber > 0
+        && ((existing.m_playbackFrameNumber <= 0) || (entry.m_playbackFrameNumber < existing.m_playbackFrameNumber)))
+    {
+        existing.m_playbackFrameNumber = entry.m_playbackFrameNumber;
+    }
+    if (entry.m_lastPlaybackFrameNumber > 0
+        && ((existing.m_lastPlaybackFrameNumber <= 0) || (entry.m_lastPlaybackFrameNumber > existing.m_lastPlaybackFrameNumber)))
+    {
+        existing.m_lastPlaybackFrameNumber = entry.m_lastPlaybackFrameNumber;
+    }
+    if (entry.m_playbackPositionMs >= 0
+        && ((existing.m_playbackPositionMs < 0) || (entry.m_playbackPositionMs < existing.m_playbackPositionMs)))
+    {
+        existing.m_playbackPositionMs = entry.m_playbackPositionMs;
+    }
+    if (entry.m_lastPlaybackPositionMs >= 0
+        && ((existing.m_lastPlaybackPositionMs < 0) || (entry.m_lastPlaybackPositionMs > existing.m_lastPlaybackPositionMs)))
+    {
+        existing.m_lastPlaybackPositionMs = entry.m_lastPlaybackPositionMs;
+    }
+    existing.m_peakConfidence = std::max(existing.m_peakConfidence, entry.m_peakConfidence);
+}
+
 void CameraObjectDetector::sendFirstObjectDetectionTarget(const QVector<CameraPipelineDetection>& detections, const CameraPipelineFrame& frame) const
 {
     if (!m_camera || detections.isEmpty()) {
@@ -1270,18 +1445,40 @@ void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineD
         if (activeHistoryIt == m_activeObjectDetectionHistory.end())
         {
             CameraDetectionHistoryEntry entry;
-            entry.m_label = className;
-            entry.m_firstDetected = now;
-            entry.m_playbackPositionMs = frame.m_playbackPositionMs;
-            entry.m_playbackFrameNumber = frame.m_playbackFrameNumber;
-            entry.m_peakConfidence = currentPeakScore;
+            const int completedIndex = findCompletedPlaybackHistoryIndex(className, frame);
+            if (completedIndex >= 0)
+            {
+                entry = m_completedObjectDetectionHistory.takeAt(completedIndex);
+                entry.m_disappeared = QDateTime();
+            }
+            else
+            {
+                entry.m_label = className;
+                entry.m_firstDetected = now;
+            }
+            updateHistoryEntryPlayback(entry, frame);
+            entry.m_peakConfidence = std::max(entry.m_peakConfidence, currentPeakScore);
             activeHistoryIt = m_activeObjectDetectionHistory.insert(className, entry);
             historyChanged = true;
         }
-        else if (currentPeakScore > activeHistoryIt->m_peakConfidence)
+        else
         {
-            activeHistoryIt->m_peakConfidence = currentPeakScore;
-            historyChanged = true;
+            if (currentPeakScore > activeHistoryIt->m_peakConfidence)
+            {
+                activeHistoryIt->m_peakConfidence = currentPeakScore;
+                historyChanged = true;
+            }
+
+            const qint64 previousStartMs = activeHistoryIt->m_playbackPositionMs;
+            const qint64 previousLastMs = activeHistoryIt->m_lastPlaybackPositionMs;
+            const int previousStartFrame = activeHistoryIt->m_playbackFrameNumber;
+            const int previousLastFrame = activeHistoryIt->m_lastPlaybackFrameNumber;
+            updateHistoryEntryPlayback(*activeHistoryIt, frame);
+            historyChanged = historyChanged
+                || (previousStartMs != activeHistoryIt->m_playbackPositionMs)
+                || (previousLastMs != activeHistoryIt->m_lastPlaybackPositionMs)
+                || (previousStartFrame != activeHistoryIt->m_playbackFrameNumber)
+                || (previousLastFrame != activeHistoryIt->m_lastPlaybackFrameNumber);
         }
 
         if (!m_detectedObjectClasses.contains(className))
@@ -1321,7 +1518,7 @@ void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineD
             if (activeHistoryIt != m_activeObjectDetectionHistory.end())
             {
                 activeHistoryIt->m_disappeared = it.value().m_firstMissing;
-                m_completedObjectDetectionHistory.append(activeHistoryIt.value());
+                mergeCompletedHistoryEntry(activeHistoryIt.value());
                 m_activeObjectDetectionHistory.erase(activeHistoryIt);
                 historyChanged = true;
             }

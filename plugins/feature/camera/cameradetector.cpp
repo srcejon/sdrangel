@@ -22,6 +22,7 @@
 
 #include "util/profiler.h"
 #include "cameradetector.h"
+#include "cameraimageutils.h"
 
 MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgConfigureCameraDetectionStage, Message)
 MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgProcessFrame, Message)
@@ -248,29 +249,16 @@ bool CameraDetectionStage::intersectsExclusionRects(const QRect& rect) const
 
 const QImage& CameraDetectionStage::ensureRgb888(const QImage& image, QImage& convertedImage)
 {
-    if (image.format() == QImage::Format_RGB888) {
-        return image;
-    }
-
-    convertedImage = image.convertToFormat(QImage::Format_RGB888);
-    return convertedImage;
+    return CameraImageUtils::ensureRgb888(image, convertedImage);
 }
 
 cv::Mat CameraDetectionStage::wrapRgb888Image(const QImage& image)
 {
-    return cv::Mat(image.height(), image.width(), CV_8UC3,
-                   const_cast<uchar*>(image.constBits()),
-                   static_cast<size_t>(image.bytesPerLine()));
+    return CameraImageUtils::wrapRgb888Image(image);
 }
 
 QImage CameraDetectionStage::convertBgrToRgbImage(const cv::Mat& bgrMat)
 {
     PROFILER_START();
-    QImage result(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);
-    cv::Mat rgbMat(result.height(), result.width(), CV_8UC3,
-                   result.bits(),
-                   static_cast<size_t>(result.bytesPerLine()));
-    cv::cvtColor(bgrMat, rgbMat, cv::COLOR_BGR2RGB);
-    return result;
+    return CameraImageUtils::convertBgrToRgbImage(bgrMat);
 }
-

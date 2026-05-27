@@ -31,6 +31,7 @@
 #include "util/weather.h"
 #include "util/profiler.h"
 #include "maincore.h"
+#include "cameraimageutils.h"
 #include "camerapostprocessor.h"
 
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgConfigureCameraPostProcessor, Message)
@@ -1100,19 +1101,12 @@ void CameraPostProcessor::applySpectrumOverlay(QImage& image) const
 
 const QImage& CameraPostProcessor::ensureRgb888(const QImage& image, QImage& convertedImage)
 {
-    if (image.format() == QImage::Format_RGB888) {
-        return image;
-    }
-
-    convertedImage = image.convertToFormat(QImage::Format_RGB888);
-    return convertedImage;
+    return CameraImageUtils::ensureRgb888(image, convertedImage);
 }
 
 cv::Mat CameraPostProcessor::wrapRgb888Image(const QImage& image)
 {
-    return cv::Mat(image.height(), image.width(), CV_8UC3,
-                   const_cast<uchar*>(image.constBits()),
-                   static_cast<size_t>(image.bytesPerLine()));
+    return CameraImageUtils::wrapRgb888Image(image);
 }
 
 void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const

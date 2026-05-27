@@ -601,7 +601,7 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
         || settingsKeys.contains("yoloLabelsPath")
         || settingsKeys.contains("objectDeviceSettings"))
     {
-        clearObjectDetectionState(false);
+        clearObjectDetectionState();
     }
 
     if (force || settingsKeys.contains("saveVideo")) {
@@ -612,7 +612,7 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
 void CameraObjectDetector::captureActiveChanged(bool active)
 {
     if (active) {
-        clearObjectDetectionState(false);
+        clearObjectDetectionState();
     }
 }
 
@@ -1155,13 +1155,10 @@ QVector<cv::Rect> CameraObjectDetector::makeYoloTiles(const cv::Rect& roi) const
     return tiles;
 }
 
-void CameraObjectDetector::clearObjectDetectionState(bool clearHistory)
+void CameraObjectDetector::clearObjectDetectionState()
 {
     m_detectedObjectClasses.clear();
     m_pendingDisappearStates.clear();
-    if (clearHistory) {
-        clearObjectDetectionHistory();
-    }
 }
 
 void CameraObjectDetector::clearObjectDetectionHistory()

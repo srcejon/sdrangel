@@ -151,7 +151,7 @@ private:
     QVector<cv::Rect> makeYoloTiles(const cv::Rect& roi) const;
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
     void sendFirstObjectDetectionTarget(const QVector<CameraPipelineDetection>& detections, const CameraPipelineFrame& frame) const;
-    void clearObjectDetectionState(bool clearHistory = true);
+    void clearObjectDetectionState();
     void clearObjectDetectionHistory();
     void reportObjectDetectionHistoryToGUI() const;
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);

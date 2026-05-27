@@ -46,13 +46,15 @@ QString formatPlaybackPosition(const CameraDetectionHistoryEntry& entry)
     if (entry.m_playbackPositionMs >= 0)
     {
         const qint64 totalSeconds = entry.m_playbackPositionMs / 1000;
+        const qint64 milliseconds = entry.m_playbackPositionMs % 1000;
         const qint64 hours = totalSeconds / 3600;
         const qint64 minutes = (totalSeconds / 60) % 60;
         const qint64 seconds = totalSeconds % 60;
-        return QStringLiteral("%1:%2:%3")
+        return QStringLiteral("%1:%2:%3.%4")
             .arg(hours, 2, 10, QLatin1Char('0'))
             .arg(minutes, 2, 10, QLatin1Char('0'))
-            .arg(seconds, 2, 10, QLatin1Char('0'));
+            .arg(seconds, 2, 10, QLatin1Char('0'))
+            .arg(milliseconds, 3, 10, QLatin1Char('0'));
     }
 
     return QStringLiteral("-");

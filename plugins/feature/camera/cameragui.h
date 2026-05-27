@@ -250,6 +250,7 @@ private:
     QVideoFrame m_pendingQtVideoFrame;
     bool m_processingQtVideoFrame = false;
     QTimer m_imageSequenceTimer;
+    bool m_imageSequenceLoaded = false;
     int m_imageSequenceIndex = 0;
 #else
     QCamera *m_qtCamera;
@@ -323,7 +324,7 @@ private:
     int currentQtHdrExposureCount() const;
     void advanceQtHdrBracketState();
     void applyQtExposureTimeMs(double exposureTimeMs);
-    void populateFrameExposureMetadata(CameraPipelineFrame& frame, double exposureTimeMs, int hdrExposureIndex, int hdrExposureCount) const;
+    void populateFrameExposureMetadata(CameraPipelineFrame& frame, double exposureTimeMs, int hdrExposureIndex, int hdrExposureCount, const QDateTime& captureDateTime = QDateTime()) const;
     void handleHdrExposureSliderChanged(int exposureIndex, int sliderValue);
     void handleHdrExposureSpinChanged(int exposureIndex, double value);
     void probeQtCameraCapabilities();

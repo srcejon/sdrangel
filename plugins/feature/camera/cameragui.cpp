@@ -45,6 +45,7 @@
 #include <QPixmap>
 #include <QProgressDialog>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -142,6 +143,30 @@ QString fileCameraDisplayText(const QString& protocol, const QString& descriptio
         return description.isEmpty() ? QStringLiteral("files:") : QStringLiteral("files:%1").arg(description);
     }
     return QString();
+}
+
+QDateTime captureDateTimeFromFileName(const QString& fileName)
+{
+    static const QRegularExpression dateTimeRe(
+        QStringLiteral("(\\d{4}-\\d{2}-\\d{2})T(\\d{2})[_:](\\d{2})[_:](\\d{2})(?:[_.](\\d{1,3}))?"));
+    const QRegularExpressionMatch match = dateTimeRe.match(QFileInfo(fileName).fileName());
+    if (!match.hasMatch()) {
+        return QDateTime();
+    }
+
+    const QDate date = QDate::fromString(match.captured(1), Qt::ISODate);
+    QString milliseconds = match.captured(5);
+    while (!milliseconds.isEmpty() && milliseconds.size() < 3) {
+        milliseconds.append(QLatin1Char('0'));
+    }
+
+    const QTime time(
+        match.captured(2).toInt(),
+        match.captured(3).toInt(),
+        match.captured(4).toInt(),
+        milliseconds.left(3).toInt());
+    const QDateTime dateTime(date, time, Qt::UTC);
+    return dateTime.isValid() ? dateTime : QDateTime();
 }
 
 }
@@ -2458,9 +2483,9 @@ void CameraGUI::applyQtExposureTimeMs(double exposureTimeMs)
 #endif
 }
 
-void CameraGUI::populateFrameExposureMetadata(CameraPipelineFrame& frame, double exposureTimeMs, int hdrExposureIndex, int hdrExposureCount) const
+void CameraGUI::populateFrameExposureMetadata(CameraPipelineFrame& frame, double exposureTimeMs, int hdrExposureIndex, int hdrExposureCount, const QDateTime& captureDateTime) const
 {
-    frame.m_captureDateTime = QDateTime::currentDateTime();
+    frame.m_captureDateTime = captureDateTime.isValid() ? captureDateTime : QDateTime::currentDateTime();
     frame.m_exposureTimeMs = std::max(CameraSettings::m_minExposureTimeMs, exposureTimeMs);
     frame.m_hdrExposureIndex = hdrExposureIndex;
     frame.m_hdrExposureCount = hdrExposureCount;
@@ -3001,6 +3026,7 @@ void CameraGUI::setupQtCapture()
 
         m_pendingQtVideoFrame = QVideoFrame();
         m_processingQtVideoFrame = false;
+        m_imageSequenceLoaded = true;
         m_mediaPlayerDurationMs = imageSequenceDurationMs();
         m_imageSequenceIndex = 0;
         updateImageSequencePositionSlider();
@@ -3360,6 +3386,7 @@ void CameraGUI::cleanupQtCapture()
     resetQtHdrBracketState();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     m_imageSequenceTimer.stop();
+    m_imageSequenceLoaded = false;
     m_imageSequenceIndex = 0;
     m_pendingQtVideoFrame = QVideoFrame();
     m_processingQtVideoFrame = false;
@@ -3460,6 +3487,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         if (m_qtCamera
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
             || m_mediaPlayer
+            || m_imageSequenceLoaded
             || m_imageSequenceTimer.isActive()
 #endif
         ) {
@@ -3501,7 +3529,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
 
     const bool hasActiveVisualSource =
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        (m_qtCamera != nullptr) || (m_mediaPlayer != nullptr) || m_imageSequenceTimer.isActive();
+        (m_qtCamera != nullptr) || (m_mediaPlayer != nullptr) || m_imageSequenceLoaded;
 #else
         (m_qtCamera != nullptr);
 #endif
@@ -3622,7 +3650,10 @@ void CameraGUI::onQtImageCaptured(int id, const QImage& image)
     if (frameAligner) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
-        populateFrameExposureMetadata(*frame, exposureTimeMs, hdrExposureIndex, hdrExposureCount);
+        const QDateTime captureDateTime = m_settings.isImageFileSequenceCamera()
+            ? captureDateTimeFromFileName(m_settings.m_imageFileCameraPaths.value(m_imageSequenceIndex))
+            : QDateTime();
+        populateFrameExposureMetadata(*frame, exposureTimeMs, hdrExposureIndex, hdrExposureCount, captureDateTime);
         frameAligner->submitFrame(frame);
     }
 
@@ -4339,7 +4370,7 @@ void CameraGUI::on_restartVideo_clicked()
 
     if (m_settings.isImageFileSequenceCamera())
     {
-        if (!m_imageSequenceTimer.isActive() && (m_camera->getState() == Feature::StRunning)) {
+        if (!m_imageSequenceLoaded && (m_camera->getState() == Feature::StRunning)) {
             setupQtCapture();
         } else {
             showImageSequenceFrame(0);
@@ -4371,9 +4402,16 @@ void CameraGUI::on_playPauseVideo_clicked(bool checked)
 
     if (m_settings.isImageFileSequenceCamera())
     {
-        if (checked && !m_imageSequenceTimer.isActive() && (m_camera->getState() == Feature::StRunning)) {
-            m_imageSequenceTimer.start(imageSequenceIntervalMs());
-        } else if (!checked) {
+        if (checked)
+        {
+            if (!m_imageSequenceLoaded && (m_camera->getState() == Feature::StRunning)) {
+                setupQtCapture();
+            } else if (m_imageSequenceLoaded) {
+                m_imageSequenceTimer.start(imageSequenceIntervalMs());
+            }
+        }
+        else
+        {
             m_imageSequenceTimer.stop();
         }
         return;

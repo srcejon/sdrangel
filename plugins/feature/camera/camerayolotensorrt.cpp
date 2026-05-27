@@ -196,6 +196,7 @@ struct CameraYoloTensorRt::Impl
     QString m_modelPath;
     QString m_enginePath;
     cv::Size m_inputSize = cv::Size(0, 0);
+    int m_requestedMaxBatch = 1;
     int m_maxBatch = 1;
     bool m_fp16 = false;
     nvinfer1::Dims m_modelInputDims {};
@@ -222,6 +223,7 @@ struct CameraYoloTensorRt::Impl
         m_modelPath.clear();
         m_enginePath.clear();
         m_inputSize = cv::Size(0, 0);
+        m_requestedMaxBatch = 1;
         m_maxBatch = 1;
         m_fp16 = false;
         m_modelInputDims = nvinfer1::Dims {};
@@ -275,6 +277,7 @@ struct CameraYoloTensorRt::Impl
         }
 
         m_modelInputDims = m_engine->getTensorShape(m_inputName.c_str());
+        m_maxBatch = std::max(1, m_requestedMaxBatch);
         if ((m_modelInputDims.nbDims == 4) && (m_modelInputDims.d[0] > 0)) {
             m_maxBatch = m_modelInputDims.d[0];
         }
@@ -381,7 +384,7 @@ struct CameraYoloTensorRt::Impl
         const int boundedBatch = std::max(1, std::min(maxBatch, 32));
         const QString enginePath = makeEnginePath(modelPath, inputSize, boundedBatch, fp16);
         if (m_context && (m_modelPath == modelPath) && (m_enginePath == enginePath)
-            && (m_inputSize == inputSize) && (m_maxBatch >= boundedBatch) && (m_fp16 == fp16))
+            && (m_inputSize == inputSize) && (m_requestedMaxBatch >= boundedBatch) && (m_fp16 == fp16))
         {
             return true;
         }
@@ -390,6 +393,7 @@ struct CameraYoloTensorRt::Impl
         m_modelPath = modelPath;
         m_enginePath = enginePath;
         m_inputSize = inputSize;
+        m_requestedMaxBatch = boundedBatch;
         m_maxBatch = boundedBatch;
         m_fp16 = fp16;
 

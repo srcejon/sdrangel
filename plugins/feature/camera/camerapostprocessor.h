@@ -119,156 +119,61 @@ public:
     public:
         const QImage& getImage() const { return m_image; }
         const CameraHistogramData& getHistogramData() const { return m_histogramData; }
-        int getStackCount() const { return m_stackCount; }
-        int getStackQueuedCount() const { return m_stackQueuedCount; }
-        int getStackDroppedCount() const { return m_stackDroppedCount; }
-        int getStackRejectedCount() const { return m_stackRejectedCount; }
-        const QString& getStackRejectReason() const { return m_stackRejectReason; }
+        int getStackCount() const { return m_stack.m_count; }
+        int getStackQueuedCount() const { return m_stack.m_queuedCount; }
+        int getStackDroppedCount() const { return m_stack.m_droppedCount; }
+        int getStackRejectedCount() const { return m_stack.m_rejectedCount; }
+        const QString& getStackRejectReason() const { return m_stack.m_rejectReason; }
         const QVector<CameraPipelineStarDetection>& getStarDetections() const { return m_starDetections; }
-        bool isPlateSolved() const { return m_plateSolved; }
-        int getPlateSolvedMatches() const { return m_plateSolvedMatches; }
-        int getPlateSolveDetectedStarsConsidered() const { return m_plateSolveDetectedStarsConsidered; }
-        int getPlateSolveCatalogStarsLoaded() const { return m_plateSolveCatalogStarsLoaded; }
-        int getPlateSolveCatalogCandidateStars() const { return m_plateSolveCatalogCandidateStars; }
-        int getPlateSolveOutlierStars() const { return m_plateSolveOutlierStars; }
-        float getPlateSolveRmsError() const { return m_plateSolveRmsError; }
-        float getPlateSolveMaxError() const { return m_plateSolveMaxError; }
-        float getPlateSolveAzimuth() const { return m_plateSolveAzimuth; }
-        float getPlateSolveElevation() const { return m_plateSolveElevation; }
-        float getPlateSolveRoll() const { return m_plateSolveRoll; }
-        float getPlateSolveFov() const { return m_plateSolveFov; }
-        float getPlateSolveCenterOffsetX() const { return m_plateSolveCenterOffsetX; }
-        float getPlateSolveCenterOffsetY() const { return m_plateSolveCenterOffsetY; }
-        float getPlateSolveDistortionK1() const { return m_plateSolveDistortionK1; }
-        const QString& getPlateSolveCatalogSource() const { return m_plateSolveCatalogSource; }
+        bool isPlateSolved() const { return m_plateSolve.m_solved; }
+        int getPlateSolvedMatches() const { return m_plateSolve.m_matchedStars; }
+        int getPlateSolveDetectedStarsConsidered() const { return m_plateSolve.m_detectedStarsConsidered; }
+        int getPlateSolveCatalogStarsLoaded() const { return m_plateSolve.m_catalogStarsLoaded; }
+        int getPlateSolveCatalogCandidateStars() const { return m_plateSolve.m_catalogCandidateStars; }
+        int getPlateSolveOutlierStars() const { return m_plateSolve.m_outlierStars; }
+        float getPlateSolveRmsError() const { return m_plateSolve.m_rmsError; }
+        float getPlateSolveMaxError() const { return m_plateSolve.m_maxError; }
+        float getPlateSolveAzimuth() const { return m_plateSolve.m_azimuth; }
+        float getPlateSolveElevation() const { return m_plateSolve.m_elevation; }
+        float getPlateSolveRoll() const { return m_plateSolve.m_roll; }
+        float getPlateSolveFov() const { return m_plateSolve.m_fov; }
+        float getPlateSolveCenterOffsetX() const { return m_plateSolve.m_centerOffsetX; }
+        float getPlateSolveCenterOffsetY() const { return m_plateSolve.m_centerOffsetY; }
+        float getPlateSolveDistortionK1() const { return m_plateSolve.m_distortionK1; }
+        const QString& getPlateSolveCatalogSource() const { return m_plateSolve.m_catalogSource; }
 
         static MsgReportFrame* create(const QImage& image,
                                       const CameraHistogramData& histogramData,
-                                      int stackCount,
-                                      int stackQueuedCount,
-                                      int stackDroppedCount,
-                                      int stackRejectedCount,
-                                      const QString& stackRejectReason,
+                                      const CameraPipelineStacking& stack,
                                       const QVector<CameraPipelineStarDetection>& starDetections,
-                                      bool plateSolved,
-                                      int plateSolvedMatches,
-                                      int plateSolveDetectedStarsConsidered,
-                                      int plateSolveCatalogStarsLoaded,
-                                      int plateSolveCatalogCandidateStars,
-                                      int plateSolveOutlierStars,
-                                      float plateSolveRmsError,
-                                      float plateSolveMaxError,
-                                      float plateSolveAzimuth,
-                                      float plateSolveElevation,
-                                      float plateSolveRoll,
-                                      float plateSolveFov,
-                                      float plateSolveCenterOffsetX,
-                                      float plateSolveCenterOffsetY,
-                                      float plateSolveDistortionK1,
-                                      const QString& plateSolveCatalogSource)
+                                      const CameraPipelinePlateSolve& plateSolve)
         {
             return new MsgReportFrame(
                 image,
                 histogramData,
-                stackCount,
-                stackQueuedCount,
-                stackDroppedCount,
-                stackRejectedCount,
-                stackRejectReason,
+                stack,
                 starDetections,
-                plateSolved,
-                plateSolvedMatches,
-                plateSolveDetectedStarsConsidered,
-                plateSolveCatalogStarsLoaded,
-                plateSolveCatalogCandidateStars,
-                plateSolveOutlierStars,
-                plateSolveRmsError,
-                plateSolveMaxError,
-                plateSolveAzimuth,
-                plateSolveElevation,
-                plateSolveRoll,
-                plateSolveFov,
-                plateSolveCenterOffsetX,
-                plateSolveCenterOffsetY,
-                plateSolveDistortionK1,
-                plateSolveCatalogSource);
+                plateSolve);
         }
 
     private:
         QImage m_image;
         CameraHistogramData m_histogramData;
-        int m_stackCount;
-        int m_stackQueuedCount;
-        int m_stackDroppedCount;
-        int m_stackRejectedCount;
-        QString m_stackRejectReason;
+        CameraPipelineStacking m_stack;
         QVector<CameraPipelineStarDetection> m_starDetections;
-        bool m_plateSolved;
-        int m_plateSolvedMatches;
-        int m_plateSolveDetectedStarsConsidered;
-        int m_plateSolveCatalogStarsLoaded;
-        int m_plateSolveCatalogCandidateStars;
-        int m_plateSolveOutlierStars;
-        float m_plateSolveRmsError;
-        float m_plateSolveMaxError;
-        float m_plateSolveAzimuth;
-        float m_plateSolveElevation;
-        float m_plateSolveRoll;
-        float m_plateSolveFov;
-        float m_plateSolveCenterOffsetX;
-        float m_plateSolveCenterOffsetY;
-        float m_plateSolveDistortionK1;
-        QString m_plateSolveCatalogSource;
+        CameraPipelinePlateSolve m_plateSolve;
 
         MsgReportFrame(const QImage& image,
                        const CameraHistogramData& histogramData,
-                       int stackCount,
-                       int stackQueuedCount,
-                       int stackDroppedCount,
-                       int stackRejectedCount,
-                       const QString& stackRejectReason,
+                       const CameraPipelineStacking& stack,
                        const QVector<CameraPipelineStarDetection>& starDetections,
-                       bool plateSolved,
-                       int plateSolvedMatches,
-                       int plateSolveDetectedStarsConsidered,
-                       int plateSolveCatalogStarsLoaded,
-                       int plateSolveCatalogCandidateStars,
-                       int plateSolveOutlierStars,
-                       float plateSolveRmsError,
-                       float plateSolveMaxError,
-                       float plateSolveAzimuth,
-                       float plateSolveElevation,
-                       float plateSolveRoll,
-                       float plateSolveFov,
-                       float plateSolveCenterOffsetX,
-                       float plateSolveCenterOffsetY,
-                       float plateSolveDistortionK1,
-                       const QString& plateSolveCatalogSource) :
+                       const CameraPipelinePlateSolve& plateSolve) :
             Message(),
             m_image(image),
             m_histogramData(histogramData),
-            m_stackCount(stackCount),
-            m_stackQueuedCount(stackQueuedCount),
-            m_stackDroppedCount(stackDroppedCount),
-            m_stackRejectedCount(stackRejectedCount),
-            m_stackRejectReason(stackRejectReason),
+            m_stack(stack),
             m_starDetections(starDetections),
-            m_plateSolved(plateSolved),
-            m_plateSolvedMatches(plateSolvedMatches),
-            m_plateSolveDetectedStarsConsidered(plateSolveDetectedStarsConsidered),
-            m_plateSolveCatalogStarsLoaded(plateSolveCatalogStarsLoaded),
-            m_plateSolveCatalogCandidateStars(plateSolveCatalogCandidateStars),
-            m_plateSolveOutlierStars(plateSolveOutlierStars),
-            m_plateSolveRmsError(plateSolveRmsError),
-            m_plateSolveMaxError(plateSolveMaxError),
-            m_plateSolveAzimuth(plateSolveAzimuth),
-            m_plateSolveElevation(plateSolveElevation),
-            m_plateSolveRoll(plateSolveRoll),
-            m_plateSolveFov(plateSolveFov),
-            m_plateSolveCenterOffsetX(plateSolveCenterOffsetX),
-            m_plateSolveCenterOffsetY(plateSolveCenterOffsetY),
-            m_plateSolveDistortionK1(plateSolveDistortionK1),
-            m_plateSolveCatalogSource(plateSolveCatalogSource)
+            m_plateSolve(plateSolve)
         { }
     };
 

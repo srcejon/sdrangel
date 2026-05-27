@@ -437,15 +437,15 @@ ObjectTargetVector rotateAroundAxis(const ObjectTargetVector& vector, const Obje
 CameraSettings targetProjectionSettings(const CameraSettings& settings, const CameraPipelineFrame& frame)
 {
     CameraSettings projectionSettings = settings;
-    if (frame.m_plateSolved)
+    if (frame.m_plateSolve.m_solved)
     {
-        projectionSettings.m_azimuth = frame.m_plateSolveAzimuth;
-        projectionSettings.m_elevation = frame.m_plateSolveElevation;
-        projectionSettings.m_roll = frame.m_plateSolveRoll;
-        projectionSettings.m_fov = frame.m_plateSolveFov;
-        projectionSettings.m_lensCenterOffsetX = frame.m_plateSolveCenterOffsetX;
-        projectionSettings.m_lensCenterOffsetY = frame.m_plateSolveCenterOffsetY;
-        projectionSettings.m_lensDistortionK1 = frame.m_plateSolveDistortionK1;
+        projectionSettings.m_azimuth = frame.m_plateSolve.m_azimuth;
+        projectionSettings.m_elevation = frame.m_plateSolve.m_elevation;
+        projectionSettings.m_roll = frame.m_plateSolve.m_roll;
+        projectionSettings.m_fov = frame.m_plateSolve.m_fov;
+        projectionSettings.m_lensCenterOffsetX = frame.m_plateSolve.m_centerOffsetX;
+        projectionSettings.m_lensCenterOffsetY = frame.m_plateSolve.m_centerOffsetY;
+        projectionSettings.m_lensDistortionK1 = frame.m_plateSolve.m_distortionK1;
     }
     return projectionSettings;
 }

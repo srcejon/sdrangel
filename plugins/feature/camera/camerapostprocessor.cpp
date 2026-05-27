@@ -939,28 +939,9 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
         m_msgQueueToGUI->push(MsgReportFrame::create(
             image,
             frame.m_histogramData,
-            frame.m_stackCount,
-            frame.m_stackQueuedCount,
-            frame.m_stackDroppedCount,
-            frame.m_stackRejectedCount,
-            frame.m_stackRejectReason,
+            frame.m_stack,
             frame.m_starDetections,
-            frame.m_plateSolved,
-            frame.m_plateSolvedMatches,
-            frame.m_plateSolveDetectedStarsConsidered,
-            frame.m_plateSolveCatalogStarsLoaded,
-            frame.m_plateSolveCatalogCandidateStars,
-            frame.m_plateSolveOutlierStars,
-            frame.m_plateSolveRmsError,
-            frame.m_plateSolveMaxError,
-            frame.m_plateSolveAzimuth,
-            frame.m_plateSolveElevation,
-            frame.m_plateSolveRoll,
-            frame.m_plateSolveFov,
-            frame.m_plateSolveCenterOffsetX,
-            frame.m_plateSolveCenterOffsetY,
-            frame.m_plateSolveDistortionK1,
-            frame.m_plateSolveCatalogSource));
+            frame.m_plateSolve));
     }
 }
 

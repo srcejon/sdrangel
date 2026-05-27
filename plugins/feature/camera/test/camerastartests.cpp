@@ -542,13 +542,13 @@ TestProjector createDiagnosticProjector(const StarTestCase& test,
         return projector;
     }
 
-    const double azimuth = frame->m_plateSolved ? frame->m_plateSolveAzimuth : test.azimuth;
-    const double elevation = frame->m_plateSolved ? frame->m_plateSolveElevation : test.elevation;
-    const double roll = frame->m_plateSolved ? frame->m_plateSolveRoll : test.roll;
-    const double fov = frame->m_plateSolved ? frame->m_plateSolveFov : test.fov;
-    const double centerOffsetX = frame->m_plateSolved ? frame->m_plateSolveCenterOffsetX : test.centerOffsetX;
-    const double centerOffsetY = frame->m_plateSolved ? frame->m_plateSolveCenterOffsetY : test.centerOffsetY;
-    const double distortionK1 = frame->m_plateSolved ? frame->m_plateSolveDistortionK1 : test.distortionK1;
+    const double azimuth = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_azimuth : test.azimuth;
+    const double elevation = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_elevation : test.elevation;
+    const double roll = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_roll : test.roll;
+    const double fov = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_fov : test.fov;
+    const double centerOffsetX = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_centerOffsetX : test.centerOffsetX;
+    const double centerOffsetY = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_centerOffsetY : test.centerOffsetY;
+    const double distortionK1 = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_distortionK1 : test.distortionK1;
 
     projector.width = frame->m_image.width();
     projector.height = frame->m_image.height();
@@ -1081,7 +1081,7 @@ void printExpectedStarDiagnostics(const StarTestCase& test,
     const TestProjector projector = createDiagnosticProjector(test, frame);
     const QDateTime solveDateTimeUtc = test.dateTime.toUTC();
     std::cout << "  expected-star projections"
-              << (frame->m_plateSolved ? " (solved pose):\n" : " (input pose):\n");
+              << (frame->m_plateSolve.m_solved ? " (solved pose):\n" : " (input pose):\n");
 
     for (const QString& expected : test.expectedStars)
     {
@@ -1309,7 +1309,7 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
         const QStringList requiredStars = requiredExpectedStars(test);
         const QStringList missing = missingExpectedStars(labels, QStringList(), requiredStars);
         const QStringList positionMismatches = expectedStarPositionMismatches(test, result.frame);
-        const bool solved = result.frame->m_plateSolved;
+        const bool solved = result.frame->m_plateSolve.m_solved;
         const bool pass = solved && missing.isEmpty() && positionMismatches.isEmpty();
         if (!pass) {
             ++failures;
@@ -1317,20 +1317,20 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
 
         std::cout << (pass ? "PASS " : "FAIL ") << test.name.toStdString()
                   << ": detections=" << result.frame->m_starDetections.size()
-                  << " matched=" << result.frame->m_plateSolvedMatches
-                  << " solved=" << (result.frame->m_plateSolved ? "true" : "false")
-                  << " catalog=" << result.frame->m_plateSolveCatalogSource.toStdString()
-                  << " catalogStars=" << result.frame->m_plateSolveCatalogStarsLoaded
-                  << " candidates=" << result.frame->m_plateSolveCatalogCandidateStars
-                  << " outliers=" << result.frame->m_plateSolveOutlierStars
-                  << " required=" << result.frame->m_plateSolveRequiredMatches
-                  << " rms=" << result.frame->m_plateSolveRmsError
-                  << " poseAz=" << result.frame->m_plateSolveAzimuth
-                  << " poseEl=" << result.frame->m_plateSolveElevation
-                  << " poseRoll=" << result.frame->m_plateSolveRoll
-                  << " poseFov=" << result.frame->m_plateSolveFov
+                  << " matched=" << result.frame->m_plateSolve.m_matchedStars
+                  << " solved=" << (result.frame->m_plateSolve.m_solved ? "true" : "false")
+                  << " catalog=" << result.frame->m_plateSolve.m_catalogSource.toStdString()
+                  << " catalogStars=" << result.frame->m_plateSolve.m_catalogStarsLoaded
+                  << " candidates=" << result.frame->m_plateSolve.m_catalogCandidateStars
+                  << " outliers=" << result.frame->m_plateSolve.m_outlierStars
+                  << " required=" << result.frame->m_plateSolve.m_requiredMatches
+                  << " rms=" << result.frame->m_plateSolve.m_rmsError
+                  << " poseAz=" << result.frame->m_plateSolve.m_azimuth
+                  << " poseEl=" << result.frame->m_plateSolve.m_elevation
+                  << " poseRoll=" << result.frame->m_plateSolve.m_roll
+                  << " poseFov=" << result.frame->m_plateSolve.m_fov
                   << " timeMs=" << elapsedMs
-                  << " stages=" << result.frame->m_plateSolveProfileSummary.toStdString()
+                  << " stages=" << result.frame->m_plateSolve.m_profileSummary.toStdString()
                   << '\n';
         std::cout << "  labels: " << labels.join(QStringLiteral(", ")).toStdString() << '\n';
         if (wroteOverlay) {
@@ -1339,19 +1339,19 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
         if (!projectedDetections.isEmpty()) {
             std::cout << "  projected detections: " << projectedDetections.join(QStringLiteral(", ")).toStdString() << '\n';
         }
-        if (!result.frame->m_plateSolveFailureReason.isEmpty()) {
-            std::cout << "  failure: " << result.frame->m_plateSolveFailureReason.toStdString() << '\n';
+        if (!result.frame->m_plateSolve.m_failureReason.isEmpty()) {
+            std::cout << "  failure: " << result.frame->m_plateSolve.m_failureReason.toStdString() << '\n';
         }
-        if (!result.frame->m_plateSolveMatchSummary.isEmpty()) {
-            std::cout << "  matches: " << result.frame->m_plateSolveMatchSummary.toStdString() << '\n';
+        if (!result.frame->m_plateSolve.m_matchSummary.isEmpty()) {
+            std::cout << "  matches: " << result.frame->m_plateSolve.m_matchSummary.toStdString() << '\n';
         }
-        if (!result.frame->m_plateSolveProfileSummary.isEmpty()) {
-            std::cout << "  stages: " << result.frame->m_plateSolveProfileSummary.toStdString() << '\n';
+        if (!result.frame->m_plateSolve.m_profileSummary.isEmpty()) {
+            std::cout << "  stages: " << result.frame->m_plateSolve.m_profileSummary.toStdString() << '\n';
         }
         if (!solved) {
             std::cout << "  plate solve did not complete\n";
         }
-        if (result.frame->m_plateSolvedMatches <= 0) {
+        if (result.frame->m_plateSolve.m_matchedStars <= 0) {
             std::cout << "  missing plate-solve matches\n";
         }
         if (!missing.isEmpty()) {

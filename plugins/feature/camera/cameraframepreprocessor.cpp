@@ -214,8 +214,8 @@ void CameraFramePreprocessor::processNextFrame()
         {
             frame = m_pendingFrames.front();
             m_pendingFrames.pop_front();
-            frame->m_stackQueuedCount += static_cast<int>(m_pendingFrames.size());
-            frame->m_stackDroppedCount += m_droppedFrameCount;
+            frame->m_stack.m_queuedCount += static_cast<int>(m_pendingFrames.size());
+            frame->m_stack.m_droppedCount += m_droppedFrameCount;
         }
 
         if (!frame)

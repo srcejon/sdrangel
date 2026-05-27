@@ -214,8 +214,8 @@ void CameraFrameAligner::processNextFrame()
         {
             frame = m_pendingFrames.front();
             m_pendingFrames.pop_front();
-            frame->m_stackQueuedCount = static_cast<int>(m_pendingFrames.size());
-            frame->m_stackDroppedCount = m_droppedFrameCount;
+            frame->m_stack.m_queuedCount = static_cast<int>(m_pendingFrames.size());
+            frame->m_stack.m_droppedCount = m_droppedFrameCount;
         }
 
         if (!frame)
@@ -379,12 +379,12 @@ QImage CameraFrameAligner::applyAlignment(CameraPipelineFrame& frame)
 
     bool highBitDepthInput = false;
     cv::Mat frameMat = imageToWorkingMat(frame.m_image, highBitDepthInput);
-    frame.m_stackAlignmentAttempted = true;
-    frame.m_stackAlignmentAccepted = true;
-    frame.m_stackAlignmentResponse = 0.0f;
-    frame.m_stackAlignmentShiftPixels = 0.0f;
-    frame.m_stackAlignmentMatchedStars = 0;
-    frame.m_stackAlignmentRejectReason.clear();
+    frame.m_stack.m_alignmentAttempted = true;
+    frame.m_stack.m_alignmentAccepted = true;
+    frame.m_stack.m_alignmentResponse = 0.0f;
+    frame.m_stack.m_alignmentShiftPixels = 0.0f;
+    frame.m_stack.m_alignmentMatchedStars = 0;
+    frame.m_stack.m_alignmentRejectReason.clear();
 
     // If the frame geometry/type has changed (e.g. ROI, binning, depth), drop the
     // stale reference so we re-anchor on the next frame.
@@ -512,27 +512,27 @@ cv::Mat CameraFrameAligner::alignWithPhaseCorrelation(const cv::Mat& referenceFr
     const cv::Point2d shift = cv::phaseCorrelate(targetFloat, referenceFloat, cv::noArray(), &response);
     const double shiftPixels = std::hypot(shift.x, shift.y);
     const double maxReasonableShift = 0.25 * static_cast<double>(std::min(targetFrame.cols, targetFrame.rows));
-    frame.m_stackAlignmentResponse = static_cast<float>(response);
-    frame.m_stackAlignmentShiftPixels = static_cast<float>(shiftPixels);
+    frame.m_stack.m_alignmentResponse = static_cast<float>(response);
+    frame.m_stack.m_alignmentShiftPixels = static_cast<float>(shiftPixels);
 
     if (!std::isfinite(response) || !std::isfinite(shiftPixels))
     {
-        frame.m_stackAlignmentAccepted = false;
-        frame.m_stackAlignmentRejectReason = QStringLiteral("phase correlation returned invalid metrics");
+        frame.m_stack.m_alignmentAccepted = false;
+        frame.m_stack.m_alignmentRejectReason = QStringLiteral("phase correlation returned invalid metrics");
         return targetFrame.clone();
     }
 
     if (response < 0.08)
     {
-        frame.m_stackAlignmentAccepted = false;
-        frame.m_stackAlignmentRejectReason = QStringLiteral("phase correlation response too low (%1)").arg(response, 0, 'f', 3);
+        frame.m_stack.m_alignmentAccepted = false;
+        frame.m_stack.m_alignmentRejectReason = QStringLiteral("phase correlation response too low (%1)").arg(response, 0, 'f', 3);
         return targetFrame.clone();
     }
 
     if (shiftPixels > maxReasonableShift)
     {
-        frame.m_stackAlignmentAccepted = false;
-        frame.m_stackAlignmentRejectReason = QStringLiteral("alignment shift too large (%1 px)").arg(shiftPixels, 0, 'f', 1);
+        frame.m_stack.m_alignmentAccepted = false;
+        frame.m_stack.m_alignmentRejectReason = QStringLiteral("alignment shift too large (%1 px)").arg(shiftPixels, 0, 'f', 1);
         return targetFrame.clone();
     }
 
@@ -626,7 +626,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     targetGray.convertTo(targetFloat, CV_32F);
     double response = 0.0;
     const cv::Point2d shift = cv::phaseCorrelate(targetFloat, referenceFloat, cv::noArray(), &response);
-    frame.m_stackAlignmentResponse = static_cast<float>(response);
+    frame.m_stack.m_alignmentResponse = static_cast<float>(response);
 
     std::vector<cv::Point2f> matchedTargetPoints;
     std::vector<cv::Point2f> matchedReferencePoints;
@@ -668,7 +668,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     if (matchedTargetPoints.size() < 2) {
         return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame);
     }
-    frame.m_stackAlignmentMatchedStars = static_cast<int>(matchedTargetPoints.size());
+    frame.m_stack.m_alignmentMatchedStars = static_cast<int>(matchedTargetPoints.size());
 
     cv::Mat inliers;
     cv::Mat transform = cv::estimateAffinePartial2D(
@@ -683,26 +683,26 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     const double scaleY = std::hypot(transform.at<double>(0, 1), transform.at<double>(1, 1));
     const double scale = (scaleX + scaleY) * 0.5;
     const double maxReasonableShift = 0.25 * static_cast<double>(std::min(targetFrame.cols, targetFrame.rows));
-    frame.m_stackAlignmentShiftPixels = static_cast<float>(shiftPixels);
+    frame.m_stack.m_alignmentShiftPixels = static_cast<float>(shiftPixels);
 
     if (!std::isfinite(shiftPixels) || !std::isfinite(scale))
     {
-        frame.m_stackAlignmentAccepted = false;
-        frame.m_stackAlignmentRejectReason = QStringLiteral("star alignment returned invalid transform");
+        frame.m_stack.m_alignmentAccepted = false;
+        frame.m_stack.m_alignmentRejectReason = QStringLiteral("star alignment returned invalid transform");
         return targetFrame.clone();
     }
 
     if (shiftPixels > maxReasonableShift)
     {
-        frame.m_stackAlignmentAccepted = false;
-        frame.m_stackAlignmentRejectReason = QStringLiteral("star alignment shift too large (%1 px)").arg(shiftPixels, 0, 'f', 1);
+        frame.m_stack.m_alignmentAccepted = false;
+        frame.m_stack.m_alignmentRejectReason = QStringLiteral("star alignment shift too large (%1 px)").arg(shiftPixels, 0, 'f', 1);
         return targetFrame.clone();
     }
 
     if ((scale < 0.80) || (scale > 1.25))
     {
-        frame.m_stackAlignmentAccepted = false;
-        frame.m_stackAlignmentRejectReason = QStringLiteral("star alignment scale out of range (%1)").arg(scale, 0, 'f', 3);
+        frame.m_stack.m_alignmentAccepted = false;
+        frame.m_stack.m_alignmentRejectReason = QStringLiteral("star alignment scale out of range (%1)").arg(scale, 0, 'f', 3);
         return targetFrame.clone();
     }
 

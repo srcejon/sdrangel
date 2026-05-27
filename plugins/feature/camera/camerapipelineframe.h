@@ -78,6 +78,45 @@ struct CameraPipelineStarDetection
     bool m_solved = false;
 };
 
+struct CameraPipelinePlateSolve
+{
+    bool m_solved = false;
+    int m_matchedStars = 0;
+    int m_detectedStarsConsidered = 0;
+    int m_catalogStarsLoaded = 0;
+    int m_catalogCandidateStars = 0;
+    int m_outlierStars = 0;
+    float m_rmsError = 0.0f;
+    float m_maxError = 0.0f;
+    float m_azimuth = 0.0f;
+    float m_elevation = 0.0f;
+    float m_roll = 0.0f;
+    float m_fov = 0.0f;
+    float m_centerOffsetX = 0.0f;
+    float m_centerOffsetY = 0.0f;
+    float m_distortionK1 = 0.0f;
+    QString m_catalogSource;
+    QString m_failureReason;
+    QString m_matchSummary;
+    QString m_profileSummary;
+    int m_requiredMatches = 0;
+};
+
+struct CameraPipelineStacking
+{
+    int m_count = 1;
+    int m_queuedCount = 0;
+    int m_droppedCount = 0;
+    int m_rejectedCount = 0;
+    bool m_alignmentAttempted = false;
+    bool m_alignmentAccepted = true;
+    float m_alignmentResponse = 0.0f;
+    float m_alignmentShiftPixels = 0.0f;
+    int m_alignmentMatchedStars = 0;
+    QString m_alignmentRejectReason;
+    QString m_rejectReason;
+};
+
 struct CameraPipelineFrame
 {
     enum BayerPattern
@@ -99,38 +138,9 @@ struct CameraPipelineFrame
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
     QVector<CameraPipelineStarDetection> m_starDetections;
-    bool m_plateSolved = false;
-    int m_plateSolvedMatches = 0;
-    int m_plateSolveDetectedStarsConsidered = 0;
-    int m_plateSolveCatalogStarsLoaded = 0;
-    int m_plateSolveCatalogCandidateStars = 0;
-    int m_plateSolveOutlierStars = 0;
-    float m_plateSolveRmsError = 0.0f;
-    float m_plateSolveMaxError = 0.0f;
-    float m_plateSolveAzimuth = 0.0f;
-    float m_plateSolveElevation = 0.0f;
-    float m_plateSolveRoll = 0.0f;
-    float m_plateSolveFov = 0.0f;
-    float m_plateSolveCenterOffsetX = 0.0f;
-    float m_plateSolveCenterOffsetY = 0.0f;
-    float m_plateSolveDistortionK1 = 0.0f;
-    QString m_plateSolveCatalogSource;
-    QString m_plateSolveFailureReason;
-    QString m_plateSolveMatchSummary;
-    QString m_plateSolveProfileSummary;
-    int m_plateSolveRequiredMatches = 0;
+    CameraPipelinePlateSolve m_plateSolve;
     bool m_saveCurrentImage = false;
-    int m_stackCount = 1;
-    int m_stackQueuedCount = 0;
-    int m_stackDroppedCount = 0;
-    int m_stackRejectedCount = 0;
-    bool m_stackAlignmentAttempted = false;
-    bool m_stackAlignmentAccepted = true;
-    float m_stackAlignmentResponse = 0.0f;
-    float m_stackAlignmentShiftPixels = 0.0f;
-    int m_stackAlignmentMatchedStars = 0;
-    QString m_stackAlignmentRejectReason;
-    QString m_stackRejectReason;
+    CameraPipelineStacking m_stack;
     BayerPattern m_bayerPattern = BayerNone;
 
 #if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)

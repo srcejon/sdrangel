@@ -776,9 +776,9 @@ void CameraFrameStacker::processNextFrame()
         {
             frame = m_pendingFrames.front();
             m_pendingFrames.pop_front();
-            frame->m_stackQueuedCount += static_cast<int>(m_pendingFrames.size());
-            frame->m_stackDroppedCount += m_droppedFrameCount;
-            frame->m_stackRejectedCount += m_rejectedFrameCount;
+            frame->m_stack.m_queuedCount += static_cast<int>(m_pendingFrames.size());
+            frame->m_stack.m_droppedCount += m_droppedFrameCount;
+            frame->m_stack.m_rejectedCount += m_rejectedFrameCount;
         }
 
         if (!frame)
@@ -814,7 +814,7 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     const bool passThroughFrame = canPassThroughFrame(*frame);
     if (passThroughFrame)
     {
-        frame->m_stackCount = 1;
+        frame->m_stack.m_count = 1;
         if (m_nextStage) {
             m_nextStage->submitFrame(frame);
         }
@@ -825,7 +825,7 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    frame->m_stackRejectedCount = m_rejectedFrameCount;
+    frame->m_stack.m_rejectedCount = m_rejectedFrameCount;
 
     QImage stackedImage;
     int stackCount = 1;
@@ -834,14 +834,14 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    frame->m_stackRejectedCount = m_rejectedFrameCount;
+    frame->m_stack.m_rejectedCount = m_rejectedFrameCount;
     frame->m_image = stackedImage;
     frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
     frame->clearCudaCache();
     if (!frame->m_unprocessedImage.isNull()) {
         frame->m_unprocessedImage = frame->m_image;
     }
-    frame->m_stackCount = std::max(1, stackCount);
+    frame->m_stack.m_count = std::max(1, stackCount);
     m_lastFrameTemplate.reset(new CameraPipelineFrame(*frame));
 
     if (m_nextStage) {
@@ -969,13 +969,13 @@ bool CameraFrameStacker::shouldRejectStackFrame(const StackFrameQuality& quality
 
 bool CameraFrameStacker::shouldRejectStackAlignment(const CameraPipelineFrame& inputFrame, QString& reason) const
 {
-    if (!inputFrame.m_stackAlignmentAttempted || inputFrame.m_stackAlignmentAccepted) {
+    if (!inputFrame.m_stack.m_alignmentAttempted || inputFrame.m_stack.m_alignmentAccepted) {
         return false;
     }
 
-    reason = inputFrame.m_stackAlignmentRejectReason.isEmpty()
+    reason = inputFrame.m_stack.m_alignmentRejectReason.isEmpty()
         ? QStringLiteral("alignment quality check failed")
-        : inputFrame.m_stackAlignmentRejectReason;
+        : inputFrame.m_stack.m_alignmentRejectReason;
     return true;
 }
 
@@ -1019,9 +1019,9 @@ void CameraFrameStacker::emitHistoryPreviewFrame()
     CameraPipelineFramePtr previewFrame(new CameraPipelineFrame(*m_lastFrameTemplate));
     previewFrame->m_image = outputImage;
     previewFrame->m_unprocessedImage = outputImage;
-    previewFrame->m_stackCount = static_cast<int>(m_stackFrameHistory.size());
-    previewFrame->m_stackQueuedCount = 0;
-    previewFrame->m_stackRejectedCount = m_rejectedFrameCount;
+    previewFrame->m_stack.m_count = static_cast<int>(m_stackFrameHistory.size());
+    previewFrame->m_stack.m_queuedCount = 0;
+    previewFrame->m_stack.m_rejectedCount = m_rejectedFrameCount;
     m_nextStage->submitFrame(previewFrame);
 }
 
@@ -1341,11 +1341,11 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
     if (rejectForAlignment || rejectForQuality)
     {
         ++m_rejectedFrameCount;
-        inputFrame.m_stackRejectReason = rejectReason;
+        inputFrame.m_stack.m_rejectReason = rejectReason;
         qDebug() << "CameraFrameStacker: Rejecting frame from stack:" << rejectReason
-                 << "alignmentResponse" << inputFrame.m_stackAlignmentResponse
-                 << "alignmentShift" << inputFrame.m_stackAlignmentShiftPixels
-                 << "alignmentStars" << inputFrame.m_stackAlignmentMatchedStars
+                 << "alignmentResponse" << inputFrame.m_stack.m_alignmentResponse
+                 << "alignmentShift" << inputFrame.m_stack.m_alignmentShiftPixels
+                 << "alignmentStars" << inputFrame.m_stack.m_alignmentMatchedStars
                  << "mean" << quality.m_mean
                  << "stddev" << quality.m_stdDev
                  << "sharpness" << quality.m_laplacianVariance
@@ -1363,7 +1363,7 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         PROFILER_STOP(__FUNCTION__);
         return true;
     }
-    inputFrame.m_stackRejectReason.clear();
+    inputFrame.m_stack.m_rejectReason.clear();
 
     m_stackFrameHistory.push_back(alignedFrameMat.clone());
     if (needQuality) {

@@ -17,6 +17,7 @@
 
 class QLabel;
 class QListWidget;
+class QListWidgetItem;
 class QPushButton;
 
 class CameraFileSequenceDialog : public QDialog
@@ -31,17 +32,24 @@ public:
     static QImage loadPreviewImage(const QString& fileName);
 
 private:
+    void resizeEvent(QResizeEvent *event) override;
+    void addFileItem(const QString& fileName);
+    QString fileNameForItem(const QListWidgetItem *item) const;
+    bool containsFileName(const QString& fileName) const;
+    void updateFileListRowNumbers();
     void addFiles();
     void removeSelectedFiles();
     void moveSelectedFiles(int direction);
     void updateButtons();
     void updatePreview();
+    void updatePreviewPixmap();
 
     QListWidget *m_fileList;
     QLabel *m_previewLabel;
     QPushButton *m_removeButton;
     QPushButton *m_moveUpButton;
     QPushButton *m_moveDownButton;
+    QImage m_previewImage;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAFILESEQUENCEDIALOG_H_

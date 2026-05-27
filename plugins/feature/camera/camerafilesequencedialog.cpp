@@ -27,6 +27,9 @@
 #include <QListWidgetItem>
 #include <QPixmap>
 #include <QPushButton>
+#include <QResizeEvent>
+#include <QSplitter>
+#include <QVariant>
 #include <QVBoxLayout>
 
 #include "util/fits.h"
@@ -101,8 +104,9 @@ CameraFileSequenceDialog::CameraFileSequenceDialog(const QStringList& fileNames,
     m_fileList->setDefaultDropAction(Qt::MoveAction);
     m_fileList->setAlternatingRowColors(true);
     for (const QString& fileName : fileNames) {
-        m_fileList->addItem(fileName);
+        addFileItem(fileName);
     }
+    updateFileListRowNumbers();
 
     m_previewLabel->setAlignment(Qt::AlignCenter);
     m_previewLabel->setMinimumSize(260, 220);
@@ -120,13 +124,21 @@ CameraFileSequenceDialog::CameraFileSequenceDialog(const QStringList& fileNames,
     listButtonsLayout->addWidget(m_moveDownButton);
     listButtonsLayout->addStretch();
 
-    QHBoxLayout *bodyLayout = new QHBoxLayout;
-    bodyLayout->addWidget(m_fileList, 1);
-    bodyLayout->addLayout(listButtonsLayout);
-    bodyLayout->addWidget(m_previewLabel, 1);
+    QWidget *fileListPane = new QWidget(this);
+    QHBoxLayout *fileListLayout = new QHBoxLayout(fileListPane);
+    fileListLayout->setContentsMargins(0, 0, 0, 0);
+    fileListLayout->addWidget(m_fileList, 1);
+    fileListLayout->addLayout(listButtonsLayout);
+
+    QSplitter *bodySplitter = new QSplitter(Qt::Horizontal, this);
+    bodySplitter->addWidget(fileListPane);
+    bodySplitter->addWidget(m_previewLabel);
+    bodySplitter->setStretchFactor(0, 1);
+    bodySplitter->setStretchFactor(1, 1);
+    bodySplitter->setSizes(QList<int>() << 440 << 300);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->addLayout(bodyLayout, 1);
+    mainLayout->addWidget(bodySplitter, 1);
     mainLayout->addWidget(buttonBox);
 
     connect(addButton, &QPushButton::clicked, this, [this]() { addFiles(); });
@@ -138,9 +150,11 @@ CameraFileSequenceDialog::CameraFileSequenceDialog(const QStringList& fileNames,
         updatePreview();
     });
     connect(m_fileList->model(), &QAbstractItemModel::rowsMoved, this, [this]() {
+        updateFileListRowNumbers();
         updateButtons();
         updatePreview();
     });
+    connect(bodySplitter, &QSplitter::splitterMoved, this, [this]() { updatePreviewPixmap(); });
     connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
@@ -156,7 +170,7 @@ QStringList CameraFileSequenceDialog::fileNames() const
     QStringList names;
     names.reserve(m_fileList->count());
     for (int i = 0; i < m_fileList->count(); ++i) {
-        names.append(m_fileList->item(i)->text());
+        names.append(fileNameForItem(m_fileList->item(i)));
     }
     return names;
 }
@@ -172,10 +186,53 @@ QImage CameraFileSequenceDialog::loadPreviewImage(const QString& fileName)
     return reader.read();
 }
 
+void CameraFileSequenceDialog::resizeEvent(QResizeEvent *event)
+{
+    QDialog::resizeEvent(event);
+    updatePreviewPixmap();
+}
+
+void CameraFileSequenceDialog::addFileItem(const QString& fileName)
+{
+    QListWidgetItem *item = new QListWidgetItem(m_fileList);
+    item->setData(Qt::UserRole, fileName);
+    item->setToolTip(fileName);
+}
+
+QString CameraFileSequenceDialog::fileNameForItem(const QListWidgetItem *item) const
+{
+    if (!item) {
+        return QString();
+    }
+
+    const QString fileName = item->data(Qt::UserRole).toString();
+    return fileName.isEmpty() ? item->text() : fileName;
+}
+
+bool CameraFileSequenceDialog::containsFileName(const QString& fileName) const
+{
+    for (int i = 0; i < m_fileList->count(); ++i)
+    {
+        if (fileNameForItem(m_fileList->item(i)) == fileName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void CameraFileSequenceDialog::updateFileListRowNumbers()
+{
+    for (int i = 0; i < m_fileList->count(); ++i)
+    {
+        QListWidgetItem *item = m_fileList->item(i);
+        item->setText(QStringLiteral("%1. %2").arg(i + 1).arg(fileNameForItem(item)));
+    }
+}
+
 void CameraFileSequenceDialog::addFiles()
 {
     const QString startPath = m_fileList->currentItem()
-        ? QFileInfo(m_fileList->currentItem()->text()).absolutePath()
+        ? QFileInfo(fileNameForItem(m_fileList->currentItem())).absolutePath()
         : QString();
     const QStringList fileNames = QFileDialog::getOpenFileNames(
         this,
@@ -184,13 +241,14 @@ void CameraFileSequenceDialog::addFiles()
         tr("Image Files (*.jpg *.jpeg *.png *.fits *.fit *.fts);;All Files (*.*)"));
     for (const QString& fileName : fileNames)
     {
-        if (m_fileList->findItems(fileName, Qt::MatchExactly).isEmpty()) {
-            m_fileList->addItem(fileName);
+        if (!containsFileName(fileName)) {
+            addFileItem(fileName);
         }
     }
     if (!fileNames.isEmpty() && !m_fileList->currentItem()) {
         m_fileList->setCurrentRow(0);
     }
+    updateFileListRowNumbers();
     updateButtons();
     updatePreview();
 }
@@ -204,6 +262,7 @@ void CameraFileSequenceDialog::removeSelectedFiles()
     if ((m_fileList->count() > 0) && !m_fileList->currentItem()) {
         m_fileList->setCurrentRow(0);
     }
+    updateFileListRowNumbers();
     updateButtons();
     updatePreview();
 }
@@ -234,6 +293,7 @@ void CameraFileSequenceDialog::moveSelectedFiles(int direction)
         m_fileList->insertItem(newRow, item);
         item->setSelected(true);
     }
+    updateFileListRowNumbers();
     updateButtons();
     updatePreview();
 }
@@ -251,13 +311,14 @@ void CameraFileSequenceDialog::updatePreview()
     QListWidgetItem *item = m_fileList->currentItem();
     if (!item)
     {
+        m_previewImage = QImage();
         m_previewLabel->setPixmap(QPixmap());
         m_previewLabel->setText(tr("No image selected"));
         return;
     }
 
-    const QImage image = loadPreviewImage(item->text());
-    if (image.isNull())
+    m_previewImage = loadPreviewImage(fileNameForItem(item));
+    if (m_previewImage.isNull())
     {
         m_previewLabel->setPixmap(QPixmap());
         m_previewLabel->setText(tr("Preview unavailable"));
@@ -265,7 +326,16 @@ void CameraFileSequenceDialog::updatePreview()
     }
 
     m_previewLabel->setText(QString());
-    m_previewLabel->setPixmap(QPixmap::fromImage(image).scaled(
+    updatePreviewPixmap();
+}
+
+void CameraFileSequenceDialog::updatePreviewPixmap()
+{
+    if (m_previewImage.isNull()) {
+        return;
+    }
+
+    m_previewLabel->setPixmap(QPixmap::fromImage(m_previewImage).scaled(
         m_previewLabel->size(),
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation));

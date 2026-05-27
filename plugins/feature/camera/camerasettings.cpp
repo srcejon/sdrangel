@@ -2717,6 +2717,10 @@ int CameraSettings::getCaptureIntervalMs() const
 
 double CameraSettings::getCaptureFrameRate() const
 {
+    if (isImageFileSequenceCamera()) {
+        return qBound(m_minVideoPlaybackRate, m_videoPlaybackRate, m_maxVideoPlaybackRate);
+    }
+
     if (!isIntervalCaptureMode()) {
         return std::max(m_minFramesPerSecond, m_framesPerSecond);
     }

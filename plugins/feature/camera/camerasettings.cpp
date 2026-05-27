@@ -22,6 +22,8 @@
 #include <QColor>
 #include <QDataStream>
 #include <QIODevice>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <sstream>
 
 #include "util/simpleserializer.h"
@@ -85,6 +87,33 @@ float calculateLongEdgeFovDegrees(double sensorWidthMm, double sensorHeightMm, d
         static_cast<double>(CameraSettings::m_minFov),
         fovDegrees,
         static_cast<double>(CameraSettings::m_maxFov)));
+}
+
+QString serializeStringList(const QStringList& values)
+{
+    QJsonArray array;
+    for (const QString& value : values) {
+        array.append(value);
+    }
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QStringList deserializeStringList(const QString& json)
+{
+    QStringList values;
+    const QJsonDocument document = QJsonDocument::fromJson(json.toUtf8());
+    if (!document.isArray()) {
+        return values;
+    }
+
+    const QJsonArray array = document.array();
+    for (const QJsonValue& value : array)
+    {
+        if (value.isString()) {
+            values.append(value.toString());
+        }
+    }
+    return values;
 }
 }
 
@@ -236,6 +265,7 @@ void CameraSettings::resetToDefaults()
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
     m_videoFileCameraPath.clear();
+    m_imageFileCameraPaths.clear();
     m_videoFileName = "camera.mp4";
     m_videoLoop = false;
     m_videoPlaybackRate = 1.0;
@@ -652,6 +682,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(230, m_autoExposureMaxMs);
     s.writeS32(231, m_autoExposureMinGain);
     s.writeS32(232, m_autoExposureMaxGain);
+    s.writeString(233, serializeStringList(m_imageFileCameraPaths));
 
     return s.final();
 }
@@ -1059,6 +1090,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_zoomFactor = std::max(m_minZoomFactor, m_zoomFactor);
 
         d.readString(193, &m_videoFileCameraPath, "");
+        QString imageFileCameraPathsJson;
+        d.readString(233, &imageFileCameraPathsJson, "");
+        m_imageFileCameraPaths = deserializeStringList(imageFileCameraPathsJson);
         d.readBool(19, &m_videoLoop, false);
         d.readDouble(20, &m_videoPlaybackRate, 1.0);
         m_videoPlaybackRate = qBound(m_minVideoPlaybackRate, m_videoPlaybackRate, m_maxVideoPlaybackRate);
@@ -1351,6 +1385,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoFileCameraPath")) {
         m_videoFileCameraPath = settings.m_videoFileCameraPath;
+    }
+    if (settingsKeys.contains("imageFileCameraPaths")) {
+        m_imageFileCameraPaths = settings.m_imageFileCameraPaths;
     }
     if (settingsKeys.contains("videoLoop")) {
         m_videoLoop = settings.m_videoLoop;
@@ -2046,6 +2083,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("videoFileCameraPath") || force) {
         ostr << " m_videoFileCameraPath: " << m_videoFileCameraPath.toStdString();
     }
+    if (settingsKeys.contains("imageFileCameraPaths") || force) {
+        ostr << " m_imageFileCameraPaths: " << m_imageFileCameraPaths.join('|').toStdString();
+    }
     if (settingsKeys.contains("videoLoop") || force) {
         ostr << " m_videoLoop: " << m_videoLoop;
     }
@@ -2586,7 +2626,23 @@ bool CameraSettings::isQtCamera() const
 
 bool CameraSettings::isFileCamera() const
 {
+    return isVideoFileCamera() || isImageFileSequenceCamera();
+}
+
+bool CameraSettings::isVideoFileCamera() const
+{
     return m_cameraProtocol == "file";
+}
+
+bool CameraSettings::isImageFileSequenceCamera() const
+{
+    return m_cameraProtocol == "files";
+}
+
+bool CameraSettings::hasFileCameraSource() const
+{
+    return (isVideoFileCamera() && !m_videoFileCameraPath.isEmpty())
+        || (isImageFileSequenceCamera() && !m_imageFileCameraPaths.isEmpty());
 }
 
 int CameraSettings::cameraIdInt() const
@@ -2614,7 +2670,17 @@ QString CameraSettings::cameraDescription() const
 
 QString CameraSettings::cameraDisplayName() const
 {
-    if (isFileCamera()) {
+    if (isImageFileSequenceCamera())
+    {
+        if (m_imageFileCameraPaths.isEmpty()) {
+            return QStringLiteral("files:");
+        }
+        return QStringLiteral("files:%1 image%2")
+            .arg(m_imageFileCameraPaths.size())
+            .arg(m_imageFileCameraPaths.size() == 1 ? QString() : QStringLiteral("s"));
+    }
+
+    if (isVideoFileCamera()) {
         return m_cameraDescription.isEmpty() ? QStringLiteral("file:") : QStringLiteral("file:%1").arg(m_cameraDescription);
     }
 

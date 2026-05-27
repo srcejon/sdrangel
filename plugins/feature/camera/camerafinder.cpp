@@ -223,11 +223,22 @@ void CameraFinder::finalizeCameraList(int requestId)
     }
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    // Have file: as the last entry
+    // Have file sources as the last entries
     m_currentCameras.append({
         QStringLiteral("file"),
         m_settings.m_videoFileCameraPath,
         m_settings.m_videoFileCameraPath.isEmpty() ? QString() : QFileInfo(m_settings.m_videoFileCameraPath).fileName(),
+        {},
+        0
+        });
+    m_currentCameras.append({
+        QStringLiteral("files"),
+        QStringLiteral("files"),
+        m_settings.m_imageFileCameraPaths.isEmpty()
+            ? QString()
+            : QStringLiteral("%1 image%2")
+                .arg(m_settings.m_imageFileCameraPaths.size())
+                .arg(m_settings.m_imageFileCameraPaths.size() == 1 ? QString() : QStringLiteral("s")),
         {},
         0
         });

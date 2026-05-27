@@ -320,7 +320,7 @@ struct CameraSettings
     static constexpr double m_maxExposureCompensation = 2.0;
     static constexpr double m_minZoomFactor = 1.0;
     static constexpr double m_minVideoPlaybackRate = 0.1;
-    static constexpr double m_maxVideoPlaybackRate = 10.0;
+    static constexpr double m_maxVideoPlaybackRate = 120.0;
 
     QString m_title;
     quint32 m_rgbColor;
@@ -378,6 +378,7 @@ struct CameraSettings
     QString m_imageFileName;
     bool m_saveVideo;
     QString m_videoFileCameraPath;
+    QStringList m_imageFileCameraPaths;
     QString m_videoFileName;
     bool m_videoLoop;
     double m_videoPlaybackRate;
@@ -587,6 +588,9 @@ struct CameraSettings
     bool isAsiCamera() const;
     bool isQtCamera() const;
     bool isFileCamera() const;
+    bool isVideoFileCamera() const;
+    bool isImageFileSequenceCamera() const;
+    bool hasFileCameraSource() const;
     int cameraIdInt() const;
     QString cameraIdString() const;
     QString cameraDescription() const;

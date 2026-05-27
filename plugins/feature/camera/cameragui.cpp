@@ -96,6 +96,7 @@
 #include "cameradetectionhistory.h"
 #include "cameraframestacker.h"
 #include "camerahistogramdialog.h"
+#include "camerafilesequencedialog.h"
 #include "camerasettingsdialog.h"
 #include "cameraworker.h"
 #include "cameragui.h"
@@ -130,6 +131,17 @@ std::array<QDoubleSpinBox*, 4> hdrExposureSpins(Ui::CameraSettingsDialog *ui)
         ui->stackHdrExposure3Spin,
         ui->stackHdrExposure4Spin
     }};
+}
+
+QString fileCameraDisplayText(const QString& protocol, const QString& description)
+{
+    if (protocol == QLatin1String("file")) {
+        return description.isEmpty() ? QStringLiteral("file:") : QStringLiteral("file:%1").arg(description);
+    }
+    if (protocol == QLatin1String("files")) {
+        return description.isEmpty() ? QStringLiteral("files:") : QStringLiteral("files:%1").arg(description);
+    }
+    return QString();
 }
 
 }
@@ -268,8 +280,8 @@ bool CameraGUI::handleMessage(const Message& message)
 
             const QString displayKey = camera.m_protocol.isEmpty()
                 ? camera.m_id
-                : (camera.m_protocol == QLatin1String("file")
-                    ? (camera.m_description.isEmpty() ? QStringLiteral("file:") : QStringLiteral("file:%1").arg(camera.m_description))
+                : ((camera.m_protocol == QLatin1String("file")) || (camera.m_protocol == QLatin1String("files"))
+                    ? fileCameraDisplayText(camera.m_protocol, camera.m_description)
                     : QString("%1:%2").arg(camera.m_protocol, camera.m_description));
             displayCounts[displayKey] = displayCounts.value(displayKey) + 1;
         }
@@ -280,8 +292,8 @@ bool CameraGUI::handleMessage(const Message& message)
         {
             QString displayText = entry.m_protocol.isEmpty()
                 ? entry.m_id
-                : (entry.m_protocol == QLatin1String("file")
-                    ? (entry.m_description.isEmpty() ? QStringLiteral("file:") : QStringLiteral("file:%1").arg(entry.m_description))
+                : ((entry.m_protocol == QLatin1String("file")) || (entry.m_protocol == QLatin1String("files"))
+                    ? fileCameraDisplayText(entry.m_protocol, entry.m_description)
                     : QString("%1:%2").arg(entry.m_protocol, entry.m_description));
 
             if (!entry.m_host.isEmpty() && displayCounts.value(displayText) > 1) {
@@ -733,7 +745,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_imageCapture(nullptr),
     m_mediaPlayer(nullptr),
     m_videoSink(nullptr),
-    m_captureSession(nullptr)
+    m_captureSession(nullptr),
+    m_imageSequenceTimer(this)
 #else
     m_qtCamera(nullptr),
     m_imageCapture(nullptr),
@@ -835,6 +848,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 #endif
 
     connect(&m_statusTimer, &QTimer::timeout, this, &CameraGUI::updateStatus);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    connect(&m_imageSequenceTimer, &QTimer::timeout, this, &CameraGUI::advanceImageSequenceFrame);
+#endif
     connect(m_settingsDialog, &QDialog::finished, this, &CameraGUI::onSettingsDialogFinished);
     connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
     connect(&m_dlm, &HttpDownloadManagerGUI::downloadComplete, this, &CameraGUI::handleYoloDownloadComplete);
@@ -954,6 +970,9 @@ void CameraGUI::setSelectedCamera(const QString& protocol, const QString& camera
     if (protocol == QLatin1String("file")) {
         m_settings.m_videoFileCameraPath = cameraId;
     }
+    else if (protocol == QLatin1String("files")) {
+        m_settings.m_cameraId = QStringLiteral("files");
+    }
 
     if (protocol == QLatin1String("alpaca")) {
         m_settings.m_alpacaHost = alpacaHost;
@@ -1021,6 +1040,9 @@ QStringList CameraGUI::cameraSelectionSettingsKeys(const CameraInfo& cameraInfo)
 
     if (cameraInfo.m_protocol == QLatin1String("file")) {
         settingsKeys.append("videoFileCameraPath");
+    }
+    else if (cameraInfo.m_protocol == QLatin1String("files")) {
+        settingsKeys.append("imageFileCameraPaths");
     }
 
     if (cameraInfo.m_protocol == QLatin1String("alpaca")) {
@@ -1124,6 +1146,37 @@ bool CameraGUI::chooseVideoFileCameraFile(int comboIndex, const QString& previou
     ui->cameraCombo->setItemData(comboIndex, filePath, CameraIdRole);
     ui->cameraCombo->setItemData(comboIndex, description, CameraDescriptionRole);
     ui->cameraCombo->setItemText(comboIndex, QStringLiteral("file:%1").arg(description));
+    return true;
+}
+
+bool CameraGUI::chooseImageFileSequenceFiles(int comboIndex, const QString& previousCameraProtocol,
+    const QString& previousCameraId,
+    const QString& previousAlpacaHost, quint16 previousAlpacaPort)
+{
+    CameraFileSequenceDialog dialog(m_settings.m_imageFileCameraPaths, this);
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        const int previousIndex = findCameraComboIndex(
+            previousCameraProtocol,
+            previousCameraId,
+            previousAlpacaHost,
+            previousAlpacaPort);
+        if (previousIndex >= 0)
+        {
+            QSignalBlocker blocker(ui->cameraCombo);
+            ui->cameraCombo->setCurrentIndex(previousIndex);
+        }
+        return false;
+    }
+
+    m_settings.m_imageFileCameraPaths = dialog.fileNames();
+    const int fileCount = m_settings.m_imageFileCameraPaths.size();
+    const QString description = fileCount == 0
+        ? QString()
+        : tr("%1 image%2").arg(fileCount).arg(fileCount == 1 ? QString() : QStringLiteral("s"));
+    ui->cameraCombo->setItemData(comboIndex, QStringLiteral("files"), CameraIdRole);
+    ui->cameraCombo->setItemData(comboIndex, description, CameraDescriptionRole);
+    ui->cameraCombo->setItemText(comboIndex, fileCameraDisplayText(QStringLiteral("files"), description));
     return true;
 }
 
@@ -2174,12 +2227,28 @@ void CameraGUI::updateExposureControls()
 void CameraGUI::updateVideoFileControls()
 {
     const bool fileCameraSelected = m_settings.isFileCamera();
-    const bool hasVideoFile = fileCameraSelected && !m_settings.m_videoFileCameraPath.isEmpty();
+    const bool imageSequenceSelected = m_settings.isImageFileSequenceCamera();
+    const bool hasVideoFile = fileCameraSelected && m_settings.hasFileCameraSource();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const bool hasPlaybackPosition = hasVideoFile && (m_mediaPlayerDurationMs > 0);
 #else
     const bool hasPlaybackPosition = false;
 #endif
+
+    if (fileCameraSelected)
+    {
+        QSignalBlocker blocker(ui->playbackRateSpin);
+        ui->playbackRateSpin->setDecimals(imageSequenceSelected ? 1 : 2);
+        ui->playbackRateSpin->setMinimum(0.1);
+        ui->playbackRateSpin->setMaximum(CameraSettings::m_maxVideoPlaybackRate);
+        ui->playbackRateSpin->setSuffix(imageSequenceSelected ? tr(" fps") : QString());
+        ui->playbackRateSpin->setToolTip(imageSequenceSelected
+            ? tr("Image sequence playback frames per second")
+            : tr("Video playback rate"));
+    }
+    ui->browseVideoFileButton->setToolTip(imageSequenceSelected
+        ? tr("Edit image sequence files")
+        : tr("Select video file"));
 
     ui->browseVideoFileButton->setVisible(fileCameraSelected);
     ui->browseVideoFileButton->setEnabled(fileCameraSelected);
@@ -2924,7 +2993,36 @@ void CameraGUI::setupQtCapture()
     m_qtStillCaptureTimer.stop();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (m_settings.isFileCamera())
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        if (m_settings.m_imageFileCameraPaths.isEmpty()) {
+            return;
+        }
+
+        m_pendingQtVideoFrame = QVideoFrame();
+        m_processingQtVideoFrame = false;
+        m_mediaPlayerDurationMs = imageSequenceDurationMs();
+        m_imageSequenceIndex = 0;
+        updateImageSequencePositionSlider();
+        updateVideoFileControls();
+
+        m_qtZoomSupported = false;
+        m_qtManualExposureSupported = false;
+        m_qtIsoSensitivitySupported = false;
+        m_qtWhiteBalanceModeSupported = false;
+        m_qtExposureCompensationSupported = false;
+        updateCameraSettingsVisibility();
+
+        showImageSequenceFrame(0);
+        m_imageSequenceTimer.start(imageSequenceIntervalMs());
+        {
+            QSignalBlocker blocker(ui->playPauseVideo);
+            ui->playPauseVideo->setChecked(true);
+        }
+        return;
+    }
+
+    if (m_settings.isVideoFileCamera())
     {
         if (m_settings.m_videoFileCameraPath.isEmpty()) {
             return;
@@ -3261,6 +3359,8 @@ void CameraGUI::cleanupQtCapture()
     m_qtStillCaptureTimer.stop();
     resetQtHdrBracketState();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    m_imageSequenceTimer.stop();
+    m_imageSequenceIndex = 0;
     m_pendingQtVideoFrame = QVideoFrame();
     m_processingQtVideoFrame = false;
     if (m_imageCapture)
@@ -3360,6 +3460,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         if (m_qtCamera
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
             || m_mediaPlayer
+            || m_imageSequenceTimer.isActive()
 #endif
         ) {
             cleanupQtCapture();
@@ -3388,6 +3489,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         || settingsKeys.contains("cameraProtocol")
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("videoFileCameraPath")
+        || settingsKeys.contains("imageFileCameraPaths")
         || settingsKeys.contains("resolutionWidth")
         || settingsKeys.contains("resolutionHeight")
         || settingsKeys.contains("captureMode")
@@ -3399,7 +3501,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
 
     const bool hasActiveVisualSource =
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        (m_qtCamera != nullptr) || (m_mediaPlayer != nullptr);
+        (m_qtCamera != nullptr) || (m_mediaPlayer != nullptr) || m_imageSequenceTimer.isActive();
 #else
         (m_qtCamera != nullptr);
 #endif
@@ -3830,6 +3932,89 @@ void CameraGUI::handleMediaPlayerPlaybackStateChanged(QMediaPlayer::PlaybackStat
     QSignalBlocker blocker(ui->playPauseVideo);
     ui->playPauseVideo->setChecked(state == QMediaPlayer::PlayingState);
 }
+
+int CameraGUI::imageSequenceIntervalMs() const
+{
+    return qMax(1, static_cast<int>(1000.0 / qMax(0.1, m_settings.m_videoPlaybackRate) + 0.5));
+}
+
+qint64 CameraGUI::imageSequenceDurationMs() const
+{
+    const int frameCount = m_settings.m_imageFileCameraPaths.size();
+    if (frameCount <= 0) {
+        return 0;
+    }
+
+    return static_cast<qint64>(frameCount) * imageSequenceIntervalMs();
+}
+
+bool CameraGUI::loadImageSequenceFrame(int index, QImage& image) const
+{
+    if ((index < 0) || (index >= m_settings.m_imageFileCameraPaths.size())) {
+        return false;
+    }
+
+    image = CameraFileSequenceDialog::loadPreviewImage(m_settings.m_imageFileCameraPaths.at(index));
+    return !image.isNull();
+}
+
+void CameraGUI::showImageSequenceFrame(int index)
+{
+    QImage image;
+    if (!loadImageSequenceFrame(index, image))
+    {
+        reportFeatureError(
+            QStringLiteral("imageSequenceReadError"),
+            tr("Image sequence frame could not be loaded"),
+            tr("Could not load image sequence frame: %1")
+                .arg((index >= 0) && (index < m_settings.m_imageFileCameraPaths.size())
+                    ? m_settings.m_imageFileCameraPaths.at(index)
+                    : QString::number(index)));
+        return;
+    }
+
+    m_imageSequenceIndex = index;
+    updateImageSequencePositionSlider();
+    onQtImageCaptured(-1, image);
+}
+
+void CameraGUI::advanceImageSequenceFrame()
+{
+    if (m_settings.m_imageFileCameraPaths.isEmpty()) {
+        return;
+    }
+
+    int nextIndex = m_imageSequenceIndex + 1;
+    if (nextIndex >= m_settings.m_imageFileCameraPaths.size())
+    {
+        if (!m_settings.m_videoLoop)
+        {
+            m_imageSequenceTimer.stop();
+            QSignalBlocker blocker(ui->playPauseVideo);
+            ui->playPauseVideo->setChecked(false);
+            return;
+        }
+
+        nextIndex = 0;
+    }
+
+    showImageSequenceFrame(nextIndex);
+}
+
+void CameraGUI::updateImageSequencePositionSlider()
+{
+    if (m_settings.m_imageFileCameraPaths.isEmpty())
+    {
+        QSignalBlocker blocker(ui->playbackPositionSlider);
+        ui->playbackPositionSlider->setValue(0);
+        return;
+    }
+
+    const int denominator = qMax(1, m_settings.m_imageFileCameraPaths.size() - 1);
+    const int sliderValue = (m_imageSequenceIndex * PlaybackPositionSliderMaximum) / denominator;
+    QSignalBlocker blocker(ui->playbackPositionSlider);
+    ui->playbackPositionSlider->setValue(qBound(0, sliderValue, PlaybackPositionSliderMaximum));
+}
 #endif
 
 
@@ -4116,27 +4301,52 @@ void CameraGUI::on_browseVideoFileButton_clicked()
         return;
     }
 
-    if (!chooseVideoFileCameraFile(
+    const bool updated = m_settings.isImageFileSequenceCamera()
+        ? chooseImageFileSequenceFiles(
             index,
             m_settings.m_cameraProtocol,
             m_settings.m_cameraId,
             m_settings.m_alpacaHost,
-            m_settings.m_alpacaPort))
+            m_settings.m_alpacaPort)
+        : chooseVideoFileCameraFile(
+            index,
+            m_settings.m_cameraProtocol,
+            m_settings.m_cameraId,
+            m_settings.m_alpacaHost,
+            m_settings.m_alpacaPort);
+    if (!updated)
     {
         return;
     }
 
     m_settings.m_cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
     m_settings.m_cameraDescription = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
-    m_settings.m_videoFileCameraPath = m_settings.m_cameraId;
+    if (m_settings.isVideoFileCamera()) {
+        m_settings.m_videoFileCameraPath = m_settings.m_cameraId;
+    }
     updateVideoFileControls();
-    applySettings({"cameraId", "cameraDescription", "videoFileCameraPath"});
+    applySettings(m_settings.isImageFileSequenceCamera()
+        ? QStringList({"cameraId", "cameraDescription", "imageFileCameraPaths"})
+        : QStringList({"cameraId", "cameraDescription", "videoFileCameraPath"}));
 }
 
 void CameraGUI::on_restartVideo_clicked()
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (!m_settings.isFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
+    if (!m_settings.hasFileCameraSource()) {
+        return;
+    }
+
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        if (!m_imageSequenceTimer.isActive() && (m_camera->getState() == Feature::StRunning)) {
+            setupQtCapture();
+        } else {
+            showImageSequenceFrame(0);
+            m_imageSequenceTimer.start(imageSequenceIntervalMs());
+            QSignalBlocker blocker(ui->playPauseVideo);
+            ui->playPauseVideo->setChecked(true);
+        }
         return;
     }
 
@@ -4155,7 +4365,17 @@ void CameraGUI::on_restartVideo_clicked()
 void CameraGUI::on_playPauseVideo_clicked(bool checked)
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (!m_settings.isFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
+    if (!m_settings.hasFileCameraSource()) {
+        return;
+    }
+
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        if (checked && !m_imageSequenceTimer.isActive() && (m_camera->getState() == Feature::StRunning)) {
+            m_imageSequenceTimer.start(imageSequenceIntervalMs());
+        } else if (!checked) {
+            m_imageSequenceTimer.stop();
+        }
         return;
     }
 
@@ -4210,6 +4430,10 @@ void CameraGUI::on_playbackRateSpin_valueChanged(double value)
     m_settings.m_videoPlaybackRate = value;
     applySetting("videoPlaybackRate");
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_settings.isImageFileSequenceCamera() && m_imageSequenceTimer.isActive()) {
+        m_mediaPlayerDurationMs = imageSequenceDurationMs();
+        m_imageSequenceTimer.start(imageSequenceIntervalMs());
+    }
     if (m_mediaPlayer) {
         m_mediaPlayer->setPlaybackRate(value);
     }
@@ -4221,6 +4445,18 @@ void CameraGUI::on_playbackRateSpin_valueChanged(double value)
 void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        const int count = m_settings.m_imageFileCameraPaths.size();
+        if (count <= 0) {
+            return;
+        }
+
+        const int index = qBound(0, (value * (count - 1)) / PlaybackPositionSliderMaximum, count - 1);
+        showImageSequenceFrame(index);
+        return;
+    }
+
     if (!m_mediaPlayer || (m_mediaPlayerDurationMs <= 0)) {
         return;
     }
@@ -4257,6 +4493,20 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
                 previousCamera.m_id,
                 previousCamera.m_host,
                 previousCamera.m_port))
+        {
+            return;
+        }
+
+        selectedCamera = comboCameraInfo(index);
+    }
+    else if (selectedCamera.m_protocol == QLatin1String("files"))
+    {
+        if ((previousCamera.m_protocol != QLatin1String("files")) && m_settings.m_imageFileCameraPaths.isEmpty()
+            && !chooseImageFileSequenceFiles(index,
+                    previousCamera.m_protocol,
+                    previousCamera.m_id,
+                    previousCamera.m_host,
+                    previousCamera.m_port))
         {
             return;
         }

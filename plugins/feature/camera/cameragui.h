@@ -27,6 +27,7 @@
 #include <QNetworkReply>
 #include <QPair>
 #include <QSize>
+#include <QTimer>
 #include <QToolButton>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QMediaPlayer>
@@ -248,6 +249,8 @@ private:
     qint64 m_mediaPlayerDurationMs = 0;
     QVideoFrame m_pendingQtVideoFrame;
     bool m_processingQtVideoFrame = false;
+    QTimer m_imageSequenceTimer;
+    int m_imageSequenceIndex = 0;
 #else
     QCamera *m_qtCamera;
     QCameraImageCapture *m_imageCapture;
@@ -330,6 +333,14 @@ private:
     static void updateColorButton(QToolButton* btn, const QColor& color);
     void setupQtCapture();
     void cleanupQtCapture();
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    int imageSequenceIntervalMs() const;
+    qint64 imageSequenceDurationMs() const;
+    bool loadImageSequenceFrame(int index, QImage& image) const;
+    void showImageSequenceFrame(int index);
+    void advanceImageSequenceFrame();
+    void updateImageSequencePositionSlider();
+#endif
     void reportFeatureError(const QString& errorKey, const QString& title, const QString& errorMessage);
     void applyQtCameraSettings(const QList<QString>& settingsKeys, bool force);
     void applyImageToolTip();
@@ -360,6 +371,10 @@ private:
                                    const QString& previousCameraId = QString(),
                                    const QString& previousAlpacaHost = QString(),
                                    quint16 previousAlpacaPort = 0);
+    bool chooseImageFileSequenceFiles(int comboIndex, const QString& previousCameraProtocol = QString(),
+                                      const QString& previousCameraId = QString(),
+                                      const QString& previousAlpacaHost = QString(),
+                                      quint16 previousAlpacaPort = 0);
     static CameraGUI::FrameRateOptions makeFrameRateOptions(const QSet<int>& fpsValues);
     static QString resolutionKey(const QSize& size);
     static QString resolutionKey(int width, int height);

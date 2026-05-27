@@ -603,6 +603,10 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
     {
         clearObjectDetectionState(false);
     }
+
+    if (force || settingsKeys.contains("saveVideo")) {
+        m_videoRecordingStartedByObject = false;
+    }
 }
 
 void CameraObjectDetector::captureActiveChanged(bool active)
@@ -1359,6 +1363,9 @@ void CameraObjectDetector::setVideoRecordingEnabled(bool enabled)
     }
 
     m_settings.m_saveVideo = enabled;
+    if (!enabled) {
+        m_videoRecordingStartedByObject = false;
+    }
 
     if (m_postProcessorInputMessageQueue) {
         m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSetVideoRecordingEnabled::create(enabled));
@@ -1475,6 +1482,9 @@ bool CameraObjectDetector::applyObjectDetectedSettings(const QString& className,
         }
 
         if (devSettings->m_recordVideo) {
+            if (!m_settings.m_saveVideo) {
+                m_videoRecordingStartedByObject = true;
+            }
             setVideoRecordingEnabled(true);
         }
     }
@@ -1522,11 +1532,16 @@ void CameraObjectDetector::applyObjectDisappearedSettings(const QString& classNa
         return;
     }
 
+    bool classHadRecordVideoAction = false;
     for (int i = 0; i < deviceSettingsList->size(); ++i)
     {
         CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
         if (devSettings == nullptr) {
             continue;
+        }
+
+        if (devSettings->m_recordVideo) {
+            classHadRecordVideoAction = true;
         }
 
         if (devSettings->m_startStopFileSink) {
@@ -1546,7 +1561,7 @@ void CameraObjectDetector::applyObjectDisappearedSettings(const QString& classNa
         }
     }
 
-    if (!shouldRecordVideoForDetectedObjects()) {
+    if (classHadRecordVideoAction && m_videoRecordingStartedByObject && !shouldRecordVideoForDetectedObjects()) {
         setVideoRecordingEnabled(false);
     }
 }

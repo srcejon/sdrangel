@@ -316,13 +316,12 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
     [[nodiscard]] QImage applyPostProcessing(const CameraPipelineFrame& frame);
-    void applyMotionOverlay(cv::Mat& bgrMat, const QVector<QRect>& motionBoxes) const;
-    void applyDetectionOverlay(cv::Mat& bgrMat, const QVector<CameraPipelineDetection>& detections) const;
+    void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes) const;
+    void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections) const;
     void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections) const;
-    void applySpectrumOverlay(cv::Mat& bgrMat) const;
+    void applySpectrumOverlay(QImage& image) const;
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
-    [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
     void applySkyGridOverlay(QImage& image) const;
     void applyConstellationOverlay(QImage& image) const;
     void applyTrackedObjectOverlay(QImage& image) const;

@@ -950,41 +950,78 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
     }
 }
 
-void CameraPostProcessor::applyMotionOverlay(cv::Mat& bgrMat, const QVector<QRect>& motionBoxes) const
+void CameraPostProcessor::applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes) const
 {
     PROFILER_START();
-    const QColor& bc = m_settings.m_motionBoxColor;
-    const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
-    for (const QRect& box : motionBoxes) {
-        cv::Rect cvBox(box.x(), box.y(), box.width(), box.height());
-        cv::rectangle(bgrMat, cvBox, boxColor, 2);
+
+    if (motionBoxes.isEmpty()) {
+        return;
     }
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPen pen(m_settings.m_motionBoxColor);
+    pen.setWidth(2);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+
+    for (const QRect& box : motionBoxes) {
+        painter.drawRect(box);
+    }
+
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyDetectionOverlay(cv::Mat& bgrMat, const QVector<CameraPipelineDetection>& detections) const
+void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections) const
 {
     PROFILER_START();
-    const QColor& bc = m_settings.m_yoloBoxColor;
-    const cv::Scalar boxColor(bc.blue(), bc.green(), bc.red());
-    const cv::Scalar textBg(0, 0, 0);
+
+    if (detections.isEmpty()) {
+        return;
+    }
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    QFont font = painter.font();
+    font.setPointSizeF(std::max(6.0, font.pointSizeF() > 0.0 ? font.pointSizeF() : 9.0));
+    painter.setFont(font);
+    const QFontMetrics fontMetrics(font);
+    QPen pen(m_settings.m_yoloBoxColor);
+    pen.setWidth(2);
+    const QBrush textBackground(Qt::black);
 
     for (const CameraPipelineDetection& detection : detections)
     {
-        const cv::Rect box(detection.m_box.x(), detection.m_box.y(), detection.m_box.width(), detection.m_box.height());
-        cv::rectangle(bgrMat, box, boxColor, 2);
+        const QRect box = detection.m_box;
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(box);
 
-        QString label = detection.m_label + QStringLiteral(" %1%").arg(static_cast<int>(detection.m_score * 100.0f + 0.5f));
-        const std::string labelStd = label.toStdString();
-        int baseLine = 0;
-        const cv::Size textSize = cv::getTextSize(labelStd, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-        const int labelY = std::max(box.y, textSize.height + 2);
-        cv::rectangle(bgrMat,
-                      cv::Point(box.x, labelY - textSize.height - 2),
-                      cv::Point(box.x + textSize.width, labelY + baseLine),
-                      textBg, cv::FILLED);
-        cv::putText(bgrMat, labelStd, cv::Point(box.x, labelY), cv::FONT_HERSHEY_SIMPLEX, 0.5, boxColor, 1, cv::LINE_AA);
+        const QString label = detection.m_label + QStringLiteral(" %1%").arg(static_cast<int>(detection.m_score * 100.0f + 0.5f));
+        const QSize textSize = fontMetrics.size(Qt::TextSingleLine, label);
+        QRect labelRect(
+            box.left(),
+            std::max(0, box.top() - textSize.height() - 4),
+            textSize.width() + 6,
+            textSize.height() + 4);
+        if (labelRect.right() >= image.width()) {
+            labelRect.moveRight(image.width() - 1);
+        }
+        if (labelRect.top() < 0) {
+            labelRect.moveTop(std::min(image.height() - labelRect.height(), box.top()));
+        }
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(textBackground);
+        painter.drawRect(labelRect);
+        painter.setPen(m_settings.m_yoloBoxColor);
+        painter.drawText(
+            labelRect.adjusted(3, 2, -3, -2),
+            Qt::AlignLeft | Qt::AlignVCenter,
+            label);
     }
+
     PROFILER_STOP(__FUNCTION__);
 }
 
@@ -1037,9 +1074,14 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applySpectrumOverlay(cv::Mat& bgrMat) const
+void CameraPostProcessor::applySpectrumOverlay(QImage& image) const
 {
     PROFILER_START();
+
+    if (m_spectrumViewImage.isNull()) {
+        return;
+    }
+
     QImage specSrc = m_spectrumViewImage;
     if (qAbs(m_settings.m_spectrumScale - 1.0) > 1e-4)
     {
@@ -1050,49 +1092,9 @@ void CameraPostProcessor::applySpectrumOverlay(cv::Mat& bgrMat) const
         }
     }
 
-    const QImage specRgb = specSrc.convertToFormat(QImage::Format_RGBA8888);
-    const int dstW = bgrMat.cols;
-    const int dstH = bgrMat.rows;
-    const int ox = m_settings.m_spectrumOffsetX;
-    const int oy = m_settings.m_spectrumOffsetY;
-    const int sw = specRgb.width();
-    const int sh = specRgb.height();
-
-    const int srcX0 = std::max(0, -ox);
-    const int srcY0 = std::max(0, -oy);
-    const int srcX1 = std::min(sw, dstW - ox);
-    const int srcY1 = std::min(sh, dstH - oy);
-
-    for (int sy = srcY0; sy < srcY1; ++sy)
-    {
-        const uchar* srcRow = specRgb.constScanLine(sy);
-        const int dy = oy + sy;
-        uchar* dstRow = bgrMat.ptr<uchar>(dy);
-
-        for (int sx = srcX0; sx < srcX1; ++sx)
-        {
-            const int srcPx = sx * 4;
-            const uchar alpha = srcRow[srcPx + 3];
-            if (alpha == 0) {
-                continue;
-            }
-            const int dx = (ox + sx) * 3;
-            if (alpha == 255)
-            {
-                dstRow[dx] = srcRow[srcPx + 2];
-                dstRow[dx + 1] = srcRow[srcPx + 1];
-                dstRow[dx + 2] = srcRow[srcPx];
-            }
-            else
-            {
-                const int a = alpha;
-                const int invA = 255 - a;
-                dstRow[dx] = static_cast<uchar>((srcRow[srcPx + 2] * a + dstRow[dx] * invA) / 255);
-                dstRow[dx + 1] = static_cast<uchar>((srcRow[srcPx + 1] * a + dstRow[dx + 1] * invA) / 255);
-                dstRow[dx + 2] = static_cast<uchar>((srcRow[srcPx] * a + dstRow[dx + 2] * invA) / 255);
-            }
-        }
-    }
+    QPainter painter(&image);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.drawImage(m_settings.m_spectrumOffsetX, m_settings.m_spectrumOffsetY, specSrc);
     PROFILER_STOP(__FUNCTION__);
 }
 
@@ -1111,17 +1113,6 @@ cv::Mat CameraPostProcessor::wrapRgb888Image(const QImage& image)
     return cv::Mat(image.height(), image.width(), CV_8UC3,
                    const_cast<uchar*>(image.constBits()),
                    static_cast<size_t>(image.bytesPerLine()));
-}
-
-QImage CameraPostProcessor::convertBgrToRgbImage(const cv::Mat& bgrMat)
-{
-    PROFILER_START();
-    QImage result(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);
-    cv::Mat rgbMat(result.height(), result.width(), CV_8UC3,
-                   result.bits(),
-                   static_cast<size_t>(result.bytesPerLine()));
-    cv::cvtColor(bgrMat, rgbMat, cv::COLOR_BGR2RGB);
-    return result;
 }
 
 void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const
@@ -1508,18 +1499,10 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         return input;
     }
 
-    QImage convertedRgb;
-    const QImage& rgb = ensureRgb888(input, convertedRgb);
-    cv::Mat mat = wrapRgb888Image(rgb);
-    cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-
-    if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(bgrMat, frame.m_motionBoxes); }
-    if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(bgrMat, frame.m_detections); }
-    if (needsSpectrumOverlay) { applySpectrumOverlay(bgrMat); }
-
-    QImage result = convertBgrToRgbImage(bgrMat);
-
+    QImage result = input.convertToFormat(QImage::Format_RGB32);
+    if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(result, frame.m_motionBoxes); }
+    if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(result, frame.m_detections); }
+    if (needsSpectrumOverlay) { applySpectrumOverlay(result); }
     if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
     if (m_settings.m_constellation) { applyConstellationOverlay(result); }

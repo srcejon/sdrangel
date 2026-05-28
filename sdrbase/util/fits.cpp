@@ -20,12 +20,73 @@
 #include <cmath>
 
 #include <QtGlobal>
+#include <QDateTime>
 #include <QFile>
 #include <QRegularExpression>
 #include <QDebug>
 #include <QResource>
 
 #include "fits.h"
+
+namespace {
+
+QByteArray fitsCard(const QString& keyword, const QString& value, const QString& comment = QString())
+{
+    QString card = keyword.leftJustified(8, QLatin1Char(' '));
+    if (!value.isEmpty())
+    {
+        card += QStringLiteral("= ");
+        card += value.rightJustified(20, QLatin1Char(' '));
+        if (!comment.isEmpty()) {
+            card += QStringLiteral(" / ") + comment;
+        }
+    }
+
+    return card.leftJustified(80, QLatin1Char(' ')).left(80).toLatin1();
+}
+
+QString fitsStringValue(const QString& value)
+{
+    QString escaped = value;
+    escaped.replace(QLatin1Char('\''), QStringLiteral("''"));
+    return QStringLiteral("'%1'").arg(escaped).leftJustified(20, QLatin1Char(' '));
+}
+
+QString fitsVariantValue(const QVariant& value)
+{
+    switch (value.type())
+    {
+    case QVariant::Bool:
+        return value.toBool() ? QStringLiteral("T") : QStringLiteral("F");
+    case QVariant::Int:
+    case QVariant::LongLong:
+    case QVariant::UInt:
+    case QVariant::ULongLong:
+        return value.toString();
+    case QVariant::Double:
+        return QString::number(value.toDouble(), 'g', 15);
+    case QVariant::DateTime:
+        return fitsStringValue(value.toDateTime().toUTC().toString(Qt::ISODateWithMs));
+    default:
+        return fitsStringValue(value.toString());
+    }
+}
+
+void appendPadding(QByteArray& data)
+{
+    const int remainder = data.size() % 2880;
+    if (remainder != 0) {
+        data.append(QByteArray(2880 - remainder, '\0'));
+    }
+}
+
+bool isValidFitsKeyword(const QString& keyword)
+{
+    static const QRegularExpression re(QStringLiteral("^[A-Z0-9_-]{1,8}$"));
+    return re.match(keyword).hasMatch();
+}
+
+}
 
 FITS::FITS(QString resourceName) :
     m_valid(false)
@@ -148,6 +209,117 @@ FITS::FITS(QString resourceName) :
     }
     m_dataStart = ((endIdx + m_headerSize) / m_headerSize) * m_headerSize;
     m_valid = true;
+}
+
+bool FITS::saveImage(const QString& fileName,
+                     const QByteArray& imageData,
+                     int width,
+                     int height,
+                     int bitsPerPixel,
+                     const QVariantMap& headers,
+                     QString *errorMessage)
+{
+    if ((width <= 0) || (height <= 0))
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Invalid image dimensions");
+        }
+        return false;
+    }
+
+    if ((bitsPerPixel != 8) && (bitsPerPixel != 16))
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Only 8-bit and 16-bit FITS image saving is supported");
+        }
+        return false;
+    }
+
+    const int bytesPerPixel = bitsPerPixel / 8;
+    const qsizetype expectedSize = static_cast<qsizetype>(width) * static_cast<qsizetype>(height) * bytesPerPixel;
+    if (imageData.size() < expectedSize)
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Image data is smaller than the specified FITS dimensions");
+        }
+        return false;
+    }
+
+    QByteArray header;
+    header += fitsCard(QStringLiteral("SIMPLE"), QStringLiteral("T"));
+    header += fitsCard(QStringLiteral("BITPIX"), QString::number(bitsPerPixel));
+    header += fitsCard(QStringLiteral("NAXIS"), QStringLiteral("2"));
+    header += fitsCard(QStringLiteral("NAXIS1"), QString::number(width));
+    header += fitsCard(QStringLiteral("NAXIS2"), QString::number(height));
+    if (bitsPerPixel == 16)
+    {
+        header += fitsCard(QStringLiteral("BZERO"), QStringLiteral("32768"));
+        header += fitsCard(QStringLiteral("BSCALE"), QStringLiteral("1"));
+    }
+
+    for (auto it = headers.cbegin(); it != headers.cend(); ++it)
+    {
+        const QString keyword = it.key().trimmed().toUpper();
+        if (keyword.isEmpty()
+            || (keyword == QLatin1String("SIMPLE"))
+            || (keyword == QLatin1String("BITPIX"))
+            || (keyword == QLatin1String("NAXIS"))
+            || (keyword == QLatin1String("NAXIS1"))
+            || (keyword == QLatin1String("NAXIS2"))
+            || !isValidFitsKeyword(keyword))
+        {
+            continue;
+        }
+        header += fitsCard(keyword, fitsVariantValue(it.value()));
+    }
+    header += fitsCard(QStringLiteral("END"), QString());
+    appendPadding(header);
+
+    QByteArray data;
+    data.reserve(static_cast<int>(expectedSize));
+    const uchar *src = reinterpret_cast<const uchar*>(imageData.constData());
+    const int rowBytes = width * bytesPerPixel;
+
+    if (bitsPerPixel == 8)
+    {
+        for (int y = height - 1; y >= 0; --y) {
+            data.append(reinterpret_cast<const char*>(src + (y * rowBytes)), rowBytes);
+        }
+    }
+    else
+    {
+        for (int y = height - 1; y >= 0; --y)
+        {
+            const uchar *row = src + (y * rowBytes);
+            for (int x = 0; x < rowBytes; x += 2)
+            {
+                const quint16 unsignedValue = static_cast<quint16>(row[x] | (static_cast<quint16>(row[x + 1]) << 8));
+                const quint16 storedValue = static_cast<quint16>(static_cast<qint32>(unsignedValue) - 32768);
+                data.append(static_cast<char>((storedValue >> 8) & 0xff));
+                data.append(static_cast<char>(storedValue & 0xff));
+            }
+        }
+    }
+    appendPadding(data);
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly))
+    {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        return false;
+    }
+
+    if ((file.write(header) != header.size()) || (file.write(data) != data.size()))
+    {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        return false;
+    }
+
+    return true;
 }
 
 float FITS::value(int x, int y) const

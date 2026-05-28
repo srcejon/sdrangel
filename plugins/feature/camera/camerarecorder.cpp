@@ -21,12 +21,14 @@
 
 #include <QDebug>
 #include <QFileInfo>
+#include <QVariantMap>
 
 #include <opencv2/imgproc.hpp>
 
 #include "cameraimageutils.h"
 #include "camerapostprocessor.h"
 #include "camerarecorder.h"
+#include "util/fits.h"
 
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgConfigureCameraRecorder, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgProcessFrame, Message)
@@ -45,6 +47,52 @@ qint64 imageSizeBytes(const QImage& image)
 qint64 bufferedFrameSizeBytes(const QImage& raw, const QImage& processed)
 {
     return imageSizeBytes(raw) + imageSizeBytes(processed);
+}
+
+QString bayerPatternName(CameraPipelineFrame::BayerPattern pattern)
+{
+    switch (pattern)
+    {
+    case CameraPipelineFrame::BayerRGGB:
+        return QStringLiteral("RGGB");
+    case CameraPipelineFrame::BayerBGGR:
+        return QStringLiteral("BGGR");
+    case CameraPipelineFrame::BayerGRBG:
+        return QStringLiteral("GRBG");
+    case CameraPipelineFrame::BayerGBRG:
+        return QStringLiteral("GBRG");
+    case CameraPipelineFrame::BayerNone:
+    default:
+        return QString();
+    }
+}
+
+bool imageToMonoBytes(const QImage& image, QByteArray& bytes, int& bitsPerPixel)
+{
+    if (image.isNull()) {
+        return false;
+    }
+
+    QImage mono = image;
+    if ((mono.format() != QImage::Format_Grayscale8) && (mono.format() != QImage::Format_Grayscale16))
+    {
+        if (mono.depth() > 8) {
+            return false;
+        }
+        mono = mono.convertToFormat(QImage::Format_Grayscale8);
+    }
+
+    bitsPerPixel = (mono.format() == QImage::Format_Grayscale16) ? 16 : 8;
+    const int bytesPerPixel = bitsPerPixel / 8;
+    bytes.clear();
+    bytes.reserve(mono.width() * mono.height() * bytesPerPixel);
+    const int rowBytes = mono.width() * bytesPerPixel;
+
+    for (int y = 0; y < mono.height(); ++y) {
+        bytes.append(reinterpret_cast<const char*>(mono.constScanLine(y)), rowBytes);
+    }
+
+    return bytes.size() == (mono.width() * mono.height() * bytesPerPixel);
 }
 
 } // namespace
@@ -135,7 +183,8 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
 
     const bool wasSavingVideo = m_settings.m_saveVideo;
     const QString previousVideoFileName = m_settings.m_videoFileName;
-    const CameraSettings::SavedMediaMode previousRecordMode = m_settings.m_recordMode;
+    const bool previousRecordCalibratedMedia = m_settings.m_recordCalibratedMedia;
+    const bool previousRecordPostProcessedMedia = m_settings.m_recordPostProcessedMedia;
 
     if (force) {
         m_settings = settings;
@@ -145,11 +194,14 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
 
     if (force
         || settingsKeys.contains("videoFileName")
-        || settingsKeys.contains("recordMode")
+        || settingsKeys.contains("videoPostProcess")
+        || settingsKeys.contains("recordCalibratedMedia")
+        || settingsKeys.contains("recordPostProcessedMedia")
         || settingsKeys.contains("videoHwAcceleration"))
     {
         if ((previousVideoFileName != m_settings.m_videoFileName)
-            || (previousRecordMode != m_settings.m_recordMode)
+            || (previousRecordCalibratedMedia != m_settings.m_recordCalibratedMedia)
+            || (previousRecordPostProcessedMedia != m_settings.m_recordPostProcessedMedia)
             || force)
         {
             closeVideoWriters();
@@ -247,21 +299,30 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
 
     if (m_captureActive && (m_settings.m_saveImage || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
     {
-        if (shouldSaveRawMedia())
+        if (shouldSaveRawFits())
         {
-            const QString rawFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, true);
-            qDebug() << "CameraRecorder: Saving raw image to" << rawFilename;
-            rawImage.save(rawFilename);
+            const QImage& rawBayerImage = frame->m_rawBayerImage.isNull() ? frame->m_image : frame->m_rawBayerImage;
+            const QString rawFitsFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("raw"), QStringLiteral("fits"));
+            if (saveRawFits(rawFitsFilename, rawBayerImage, frame->m_rawBayerPattern, *frame)) {
+                savedImageFrame = m_settings.m_saveImage;
+            }
         }
 
-        if (shouldSaveProcessedMedia())
+        if (shouldSaveCalibratedMedia())
         {
-            const QString processedFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, false);
-            qDebug() << "CameraRecorder: Saving processed image to" << processedFilename;
+            const QString calibratedFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("calibrated"));
+            qDebug() << "CameraRecorder: Saving calibrated image to" << calibratedFilename;
+            rawImage.save(calibratedFilename);
+            savedImageFrame = m_settings.m_saveImage;
+        }
+
+        if (shouldSavePostProcessedMedia())
+        {
+            const QString processedFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("post"));
+            qDebug() << "CameraRecorder: Saving post-processed image to" << processedFilename;
             processedImage.save(processedFilename);
+            savedImageFrame = m_settings.m_saveImage;
         }
-
-        savedImageFrame = m_settings.m_saveImage;
     }
 
     if (m_captureActive && m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
@@ -270,12 +331,12 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
             flushPreRecordFrames(rawImage, processedImage);
         }
 
-        if (shouldSaveRawMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, rawImage, true)) {
+        if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, rawImage, QStringLiteral("calibrated"))) {
             writeVideoFrame(m_rawVideoWriter, rawImage);
             savedVideoFrame = true;
         }
 
-        if (shouldSaveProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processedImage, false)) {
+        if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processedImage, QStringLiteral("post"))) {
             writeVideoFrame(m_processedVideoWriter, processedImage);
             savedVideoFrame = true;
         }
@@ -363,24 +424,74 @@ void CameraRecorder::updateRecordingLimitsAfterFrame(bool savedImageFrame, bool 
     }
 }
 
-QString CameraRecorder::createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant)
+QString CameraRecorder::createTimestampedOutputFilename(const QString& baseFileName, const QString& variant, const QString& suffixOverride)
 {
     const QFileInfo fileInfo(baseFileName);
     const QString timestamp = QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz");
-    const QString infix = rawVariant ? ".raw." : ".";
-    return fileInfo.path() + "/" + fileInfo.baseName() + infix + timestamp + "." + fileInfo.suffix();
+    const QString infix = variant.isEmpty() ? QStringLiteral(".") : QStringLiteral(".%1.").arg(variant);
+    const QString suffix = suffixOverride.isEmpty() ? fileInfo.suffix() : suffixOverride;
+    return fileInfo.path() + "/" + fileInfo.baseName() + infix + timestamp + "." + suffix;
 }
 
-bool CameraRecorder::shouldSaveRawMedia() const
+bool CameraRecorder::shouldSaveRawFits() const
 {
-    return (m_settings.m_recordMode == CameraSettings::SavedMediaRaw)
-        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
+    return m_settings.m_recordRawFits;
 }
 
-bool CameraRecorder::shouldSaveProcessedMedia() const
+bool CameraRecorder::shouldSaveCalibratedMedia() const
 {
-    return (m_settings.m_recordMode == CameraSettings::SavedMediaProcessed)
-        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
+    return m_settings.m_recordCalibratedMedia;
+}
+
+bool CameraRecorder::shouldSavePostProcessedMedia() const
+{
+    return m_settings.m_recordPostProcessedMedia;
+}
+
+bool CameraRecorder::saveRawFits(const QString& fileName,
+                                 const QImage& image,
+                                 CameraPipelineFrame::BayerPattern bayerPattern,
+                                 const CameraPipelineFrame& frame) const
+{
+    QByteArray imageBytes;
+    int bitsPerPixel = 0;
+    if (!imageToMonoBytes(image, imageBytes, bitsPerPixel))
+    {
+        qWarning() << "CameraRecorder: cannot save raw FITS from image format" << image.format();
+        return false;
+    }
+
+    QVariantMap headers;
+    const QString bayer = bayerPatternName(bayerPattern);
+    if (!bayer.isEmpty()) {
+        headers.insert(QStringLiteral("BAYERPAT"), bayer);
+    }
+    if (frame.m_captureDateTime.isValid()) {
+        headers.insert(QStringLiteral("DATE-OBS"), frame.m_captureDateTime.toUTC());
+    }
+    headers.insert(QStringLiteral("EXPTIME"), m_settings.m_exposureTimeMs / 1000.0);
+    headers.insert(QStringLiteral("GAIN"), m_settings.m_cameraGain);
+    headers.insert(QStringLiteral("OFFSET"), m_settings.m_cameraOffset);
+    headers.insert(QStringLiteral("XBINNING"), m_settings.m_cameraBinX);
+    headers.insert(QStringLiteral("YBINNING"), m_settings.m_cameraBinY);
+    headers.insert(QStringLiteral("SITELAT"), m_settings.m_latitude);
+    headers.insert(QStringLiteral("SITELONG"), m_settings.m_longitude);
+    headers.insert(QStringLiteral("SITEELEV"), m_settings.m_altitude);
+    headers.insert(QStringLiteral("AZSTART"), m_settings.m_azimuth);
+    headers.insert(QStringLiteral("ELSTART"), m_settings.m_elevation);
+    if (!m_settings.m_cameraDescription.isEmpty()) {
+        headers.insert(QStringLiteral("INSTRUME"), m_settings.m_cameraDescription);
+    }
+
+    QString errorMessage;
+    if (!FITS::saveImage(fileName, imageBytes, image.width(), image.height(), bitsPerPixel, headers, &errorMessage))
+    {
+        qWarning() << "CameraRecorder: failed to save raw FITS" << fileName << errorMessage;
+        return false;
+    }
+
+    qDebug() << "CameraRecorder: Saved raw FITS to" << fileName;
+    return true;
 }
 
 void CameraRecorder::closeVideoWriters()
@@ -445,10 +556,10 @@ void CameraRecorder::appendPreRecordFrame(const QImage& rawImage, const QImage& 
     }
 
     BufferedVideoFrame entry;
-    if (shouldSaveRawMedia() && !rawImage.isNull()) {
+    if (shouldSaveCalibratedMedia() && !rawImage.isNull()) {
         entry.m_rawImage = rawImage.copy();
     }
-    if (shouldSaveProcessedMedia() && !processedImage.isNull()) {
+    if (shouldSavePostProcessedMedia() && !processedImage.isNull()) {
         entry.m_processedImage = processedImage.copy();
     }
     if (entry.m_rawImage.isNull() && entry.m_processedImage.isNull()) {
@@ -467,7 +578,7 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentRawImage, const Q
         return;
     }
 
-    if (shouldSaveRawMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, currentRawImage, true))
+    if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, currentRawImage, QStringLiteral("calibrated")))
     {
         for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
         {
@@ -477,7 +588,7 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentRawImage, const Q
         }
     }
 
-    if (shouldSaveProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, currentProcessedImage, false))
+    if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, currentProcessedImage, QStringLiteral("post")))
     {
         for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
         {
@@ -491,9 +602,9 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentRawImage, const Q
     m_preRecordBufferFlushed = true;
 }
 
-bool CameraRecorder::ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant)
+bool CameraRecorder::ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant)
 {
-    QSize& openedSize = rawVariant ? m_rawVideoWriterSize : m_processedVideoWriterSize;
+    QSize& openedSize = (variant == QLatin1String("calibrated")) ? m_rawVideoWriterSize : m_processedVideoWriterSize;
     const QSize requestedSize = frameForSize.size();
 
     if (writer.isOpened() && (openedSize == requestedSize)) {
@@ -505,7 +616,7 @@ bool CameraRecorder::ensureVideoWriter(cv::VideoWriter& writer, const QString& b
         openedSize = QSize();
     }
 
-    const QString filename = createTimestampedOutputFilename(baseFileName, rawVariant);
+    const QString filename = createTimestampedOutputFilename(baseFileName, variant);
     const int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1');
     const std::vector<int> params = {
         cv::VIDEOWRITER_PROP_HW_ACCELERATION,

@@ -153,6 +153,7 @@ private:
     void validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName);
     cv::Mat applyCalibration(const cv::Mat& input);
     bool shouldMaterializeUnprocessedImage(const CameraPipelineFrame& frame) const;
+    bool shouldMaterializeRawBayerImage(const CameraPipelineFrame& frame) const;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     bool canUseCudaPreprocessing() const;
     void invalidateCudaCalibrationFrames();

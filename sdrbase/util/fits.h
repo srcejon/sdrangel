@@ -23,6 +23,7 @@
 
 #include <QString>
 #include <QByteArray>
+#include <QVariantMap>
 
 #include "export.h"
 
@@ -50,6 +51,14 @@ class SDRBASE_API FITS {
 public:
 
     FITS(QString resourceName);
+
+    static bool saveImage(const QString& fileName,
+                          const QByteArray& imageData,
+                          int width,
+                          int height,
+                          int bitsPerPixel,
+                          const QVariantMap& headers = QVariantMap(),
+                          QString *errorMessage = nullptr);
 
     float value(int x, int y) const;
     float scaledValue(int x, int y) const;

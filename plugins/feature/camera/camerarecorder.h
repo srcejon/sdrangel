@@ -169,11 +169,16 @@ private:
     void setImageRecordingEnabled(bool enabled);
     void resetRecordingLimits();
     void updateRecordingLimitsAfterFrame(bool savedImageFrame, bool savedVideoFrame);
-    [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant);
-    [[nodiscard]] bool shouldSaveRawMedia() const;
-    [[nodiscard]] bool shouldSaveProcessedMedia() const;
+    [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, const QString& variant, const QString& suffixOverride = QString());
+    [[nodiscard]] bool shouldSaveRawFits() const;
+    [[nodiscard]] bool shouldSaveCalibratedMedia() const;
+    [[nodiscard]] bool shouldSavePostProcessedMedia() const;
+    [[nodiscard]] bool saveRawFits(const QString& fileName,
+                                   const QImage& image,
+                                   CameraPipelineFrame::BayerPattern bayerPattern,
+                                   const CameraPipelineFrame& frame) const;
     void closeVideoWriters();
-    bool ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant);
+    bool ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant);
     void writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite);
     int preRecordBufferFrameLimit() const;
     int outputQueueFrameLimit() const;

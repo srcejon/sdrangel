@@ -1344,7 +1344,9 @@ void CameraGUI::displaySettings()
     settingsUI()->videoPreRecordBufferSpin->setValue(m_settings.m_videoPreRecordBufferSeconds);
     settingsUI()->imageRecordLimitSpin->setValue(m_settings.m_imageRecordLimit);
     settingsUI()->videoRecordLimitSpin->setValue(m_settings.m_videoRecordLimitSeconds);
-    settingsUI()->recordModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_recordMode));
+    settingsUI()->recordRawFitsCheck->setChecked(m_settings.m_recordRawFits);
+    settingsUI()->recordCalibratedMediaCheck->setChecked(m_settings.m_recordCalibratedMedia);
+    settingsUI()->recordPostProcessedMediaCheck->setChecked(m_settings.m_recordPostProcessedMedia);
     ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
     settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
@@ -1803,7 +1805,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoPreRecordBufferSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoPreRecordBufferSpin_valueChanged);
     QObject::connect(settingsUI()->imageRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_imageRecordLimitSpin_valueChanged);
     QObject::connect(settingsUI()->videoRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoRecordLimitSpin_valueChanged);
-    QObject::connect(settingsUI()->recordModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_recordModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->recordRawFitsCheck, &QCheckBox::toggled, this, &CameraGUI::on_recordRawFitsCheck_toggled);
+    QObject::connect(settingsUI()->recordCalibratedMediaCheck, &QCheckBox::toggled, this, &CameraGUI::on_recordCalibratedMediaCheck_toggled);
+    QObject::connect(settingsUI()->recordPostProcessedMediaCheck, &QCheckBox::toggled, this, &CameraGUI::on_recordPostProcessedMediaCheck_toggled);
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
@@ -2311,7 +2315,8 @@ void CameraGUI::updateVideoPreRecordBufferMemoryLabel()
     const int width = m_lastImage.isNull() ? std::max(0, m_settings.m_resolutionWidth) : m_lastImage.width();
     const int height = m_lastImage.isNull() ? std::max(0, m_settings.m_resolutionHeight) : m_lastImage.height();
     const int seconds = std::max(0, m_settings.m_videoPreRecordBufferSeconds);
-    const int streams = (m_settings.m_recordMode == CameraSettings::SavedMediaBoth) ? 2 : 1;
+    const int streams = (m_settings.m_recordCalibratedMedia ? 1 : 0)
+        + (m_settings.m_recordPostProcessedMedia ? 1 : 0);
     const double frameRate = std::max(0.0, m_settings.getCaptureFrameRate());
     const double bytes = static_cast<double>(width) * static_cast<double>(height) * 3.0
         * frameRate * static_cast<double>(seconds) * static_cast<double>(streams);
@@ -5309,8 +5314,37 @@ void CameraGUI::on_recordModeCombo_currentIndexChanged(int index)
     m_settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
         static_cast<CameraSettings::SavedMediaMode>(index),
         CameraSettings::SavedMediaBoth);
+    m_settings.m_recordCalibratedMedia = (m_settings.m_recordMode == CameraSettings::SavedMediaRaw)
+        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
+    m_settings.m_recordPostProcessedMedia = (m_settings.m_recordMode == CameraSettings::SavedMediaProcessed)
+        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
     updateVideoPreRecordBufferMemoryLabel();
     applySetting("videoPostProcess");
+    applyImageToolTip();
+    applyVideoToolTip();
+}
+
+void CameraGUI::on_recordRawFitsCheck_toggled(bool checked)
+{
+    m_settings.m_recordRawFits = checked;
+    applySetting("recordRawFits");
+    applyImageToolTip();
+}
+
+void CameraGUI::on_recordCalibratedMediaCheck_toggled(bool checked)
+{
+    m_settings.m_recordCalibratedMedia = checked;
+    updateVideoPreRecordBufferMemoryLabel();
+    applySetting("recordCalibratedMedia");
+    applyImageToolTip();
+    applyVideoToolTip();
+}
+
+void CameraGUI::on_recordPostProcessedMediaCheck_toggled(bool checked)
+{
+    m_settings.m_recordPostProcessedMedia = checked;
+    updateVideoPreRecordBufferMemoryLabel();
+    applySetting("recordPostProcessedMedia");
     applyImageToolTip();
     applyVideoToolTip();
 }
@@ -7767,34 +7801,37 @@ void CameraGUI::on_cameraSettingsButton_clicked()
 
 void CameraGUI::applyImageToolTip()
 {
-    switch (m_settings.m_recordMode)
-    {
-    case CameraSettings::SavedMediaRaw:
-        ui->saveImageCheck->setToolTip(QString("Save raw images to %1").arg(m_settings.m_imageFileName));
-        break;
-    case CameraSettings::SavedMediaProcessed:
-        ui->saveImageCheck->setToolTip(QString("Save processed images to %1").arg(m_settings.m_imageFileName));
-        break;
-    case CameraSettings::SavedMediaBoth:
-        ui->saveImageCheck->setToolTip(QString("Save raw and processed images to %1").arg(m_settings.m_imageFileName));
-        break;
+    QStringList outputs;
+    if (m_settings.m_recordRawFits) {
+        outputs.append(QStringLiteral("raw FITS"));
     }
+    if (m_settings.m_recordCalibratedMedia) {
+        outputs.append(QStringLiteral("calibrated"));
+    }
+    if (m_settings.m_recordPostProcessedMedia) {
+        outputs.append(QStringLiteral("post-processed"));
+    }
+    if (outputs.isEmpty()) {
+        outputs.append(QStringLiteral("no"));
+    }
+    ui->saveImageCheck->setToolTip(QString("Save %1 images to %2")
+        .arg(outputs.join(QStringLiteral(", ")), m_settings.m_imageFileName));
 }
 
 void CameraGUI::applyVideoToolTip()
 {
-    switch (m_settings.m_recordMode)
-    {
-    case CameraSettings::SavedMediaRaw:
-        ui->saveVideoCheck->setToolTip(QString("Record raw video to %1").arg(m_settings.m_videoFileName));
-        break;
-    case CameraSettings::SavedMediaProcessed:
-        ui->saveVideoCheck->setToolTip(QString("Record processed video to %1").arg(m_settings.m_videoFileName));
-        break;
-    case CameraSettings::SavedMediaBoth:
-        ui->saveVideoCheck->setToolTip(QString("Record raw and processed video to %1").arg(m_settings.m_videoFileName));
-        break;
+    QStringList outputs;
+    if (m_settings.m_recordCalibratedMedia) {
+        outputs.append(QStringLiteral("calibrated"));
     }
+    if (m_settings.m_recordPostProcessedMedia) {
+        outputs.append(QStringLiteral("post-processed"));
+    }
+    if (outputs.isEmpty()) {
+        outputs.append(QStringLiteral("no"));
+    }
+    ui->saveVideoCheck->setToolTip(QString("Record %1 video to %2")
+        .arg(outputs.join(QStringLiteral(", ")), m_settings.m_videoFileName));
 }
 
 void CameraGUI::onSettingsDialogFinished(int result)

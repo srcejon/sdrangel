@@ -3820,33 +3820,45 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </layout>
           </item>
           <item row="2" column="0">
-           <widget class="QLabel" name="recordModeLabel">
+           <widget class="QLabel" name="recordOutputsLabel">
             <property name="text">
              <string>Record</string>
             </property>
            </widget>
           </item>
           <item row="2" column="1">
-           <widget class="QComboBox" name="recordModeCombo">
-            <property name="toolTip">
-             <string>Select whether raw, post-processed, or both image/video outputs should be saved</string>
-            </property>
+           <layout class="QHBoxLayout" name="recordOutputsLayout">
             <item>
-             <property name="text">
-              <string>Raw images</string>
-             </property>
+             <widget class="QCheckBox" name="recordRawFitsCheck">
+              <property name="toolTip">
+               <string>Save uncalibrated Bayer still images as FITS files</string>
+              </property>
+              <property name="text">
+               <string>Raw FITS</string>
+              </property>
+             </widget>
             </item>
             <item>
-             <property name="text">
-              <string>Post-processed images</string>
-             </property>
+             <widget class="QCheckBox" name="recordCalibratedMediaCheck">
+              <property name="toolTip">
+               <string>Save calibrated/debayered images and video without post-processing overlays</string>
+              </property>
+              <property name="text">
+               <string>Calibrated</string>
+              </property>
+             </widget>
             </item>
             <item>
-             <property name="text">
-              <string>Both</string>
-             </property>
+             <widget class="QCheckBox" name="recordPostProcessedMediaCheck">
+              <property name="toolTip">
+               <string>Save post-processed images and video with overlays</string>
+              </property>
+              <property name="text">
+               <string>Post-processed</string>
+              </property>
+             </widget>
             </item>
-           </widget>
+           </layout>
           </item>
           <item row="3" column="0">
            <widget class="QLabel" name="imageRecordLimitLabel">
@@ -6442,7 +6454,9 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>imagePathButton</tabstop>
   <tabstop>videoPathEdit</tabstop>
   <tabstop>videoPathButton</tabstop>
-  <tabstop>recordModeCombo</tabstop>
+  <tabstop>recordRawFitsCheck</tabstop>
+  <tabstop>recordCalibratedMediaCheck</tabstop>
+  <tabstop>recordPostProcessedMediaCheck</tabstop>
   <tabstop>videoPreRecordBufferSpin</tabstop>
   <tabstop>imageRecordLimitSpin</tabstop>
   <tabstop>videoRecordLimitSpin</tabstop>

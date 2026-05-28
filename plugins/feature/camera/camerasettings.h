@@ -380,6 +380,9 @@ struct CameraSettings
     QString m_videoFileCameraPath;
     QStringList m_imageFileCameraPaths;
     QString m_videoFileName;
+    bool m_recordRawFits;          ///< Save uncalibrated Bayer still images as FITS
+    bool m_recordCalibratedMedia;  ///< Save calibrated/debayered image/video media
+    bool m_recordPostProcessedMedia; ///< Save post-processed image/video media
     bool m_videoLoop;
     double m_videoPlaybackRate;
     bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported
@@ -527,7 +530,7 @@ struct CameraSettings
     bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available
     PlateSolveCatalogSource m_plateSolveCatalogSource; ///< Catalog source used for plate solving
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
-    SavedMediaMode m_recordMode;  ///< Save raw frames, post-processed frames, or both
+    SavedMediaMode m_recordMode;  ///< Legacy WebAPI/UI mode mapped onto the explicit record output checkboxes
 
     // Spectrum overlay settings
     bool   m_overlaySpectrum;   ///< Enable overlaying the spectrum view image on the post-processed frame

@@ -267,6 +267,9 @@ void CameraSettings::resetToDefaults()
     m_videoFileCameraPath.clear();
     m_imageFileCameraPaths.clear();
     m_videoFileName = "camera.mp4";
+    m_recordRawFits = false;
+    m_recordCalibratedMedia = true;
+    m_recordPostProcessedMedia = false;
     m_videoLoop = false;
     m_videoPlaybackRate = 1.0;
     m_videoHwAcceleration = true;
@@ -683,6 +686,9 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(231, m_autoExposureMinGain);
     s.writeS32(232, m_autoExposureMaxGain);
     s.writeString(233, serializeStringList(m_imageFileCameraPaths));
+    s.writeBool(234, m_recordRawFits);
+    s.writeBool(235, m_recordCalibratedMedia);
+    s.writeBool(236, m_recordPostProcessedMedia);
 
     return s.final();
 }
@@ -1008,6 +1014,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         qint32 videoPostProcessMode = static_cast<qint32>(SavedMediaRaw);
         d.readS32(205, &videoPostProcessMode, videoPostProcessMode);
         m_recordMode = qBound(SavedMediaRaw, static_cast<SavedMediaMode>(videoPostProcessMode), SavedMediaBoth);
+        d.readBool(234, &m_recordRawFits, false);
+        d.readBool(235, &m_recordCalibratedMedia, m_recordMode != SavedMediaProcessed);
+        d.readBool(236, &m_recordPostProcessedMedia, m_recordMode != SavedMediaRaw);
         d.readDouble(207, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(211, &m_postProcessUseCuda, false);
@@ -1773,6 +1782,17 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoPostProcess")) {
         m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
+        m_recordCalibratedMedia = (m_recordMode == SavedMediaRaw) || (m_recordMode == SavedMediaBoth);
+        m_recordPostProcessedMedia = (m_recordMode == SavedMediaProcessed) || (m_recordMode == SavedMediaBoth);
+    }
+    if (settingsKeys.contains("recordRawFits")) {
+        m_recordRawFits = settings.m_recordRawFits;
+    }
+    if (settingsKeys.contains("recordCalibratedMedia")) {
+        m_recordCalibratedMedia = settings.m_recordCalibratedMedia;
+    }
+    if (settingsKeys.contains("recordPostProcessedMedia")) {
+        m_recordPostProcessedMedia = settings.m_recordPostProcessedMedia;
     }
     if (settingsKeys.contains("overlaySpectrum")) {
         m_overlaySpectrum = settings.m_overlaySpectrum;
@@ -2448,6 +2468,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoPostProcess") || force) {
         ostr << " m_videoPostProcess: " << m_recordMode;
+    }
+    if (settingsKeys.contains("recordRawFits") || force) {
+        ostr << " m_recordRawFits: " << m_recordRawFits;
+    }
+    if (settingsKeys.contains("recordCalibratedMedia") || force) {
+        ostr << " m_recordCalibratedMedia: " << m_recordCalibratedMedia;
+    }
+    if (settingsKeys.contains("recordPostProcessedMedia") || force) {
+        ostr << " m_recordPostProcessedMedia: " << m_recordPostProcessedMedia;
     }
     if (settingsKeys.contains("overlaySpectrum") || force) {
         ostr << " m_overlaySpectrum: " << m_overlaySpectrum;

@@ -35,7 +35,7 @@
 #include "util/profiler.h"
 #include "camera.h"
 #include "cameraobjectdetector.h"
-#include "camerapostprocessor.h"
+#include "camerarecorder.h"
 #include "SWGTargetAzimuthElevation.h"
 
 MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgReportObjectDetectionHistory, Message)
@@ -1564,7 +1564,7 @@ void CameraObjectDetector::setVideoRecordingEnabled(bool enabled)
     }
 
     if (m_postProcessorInputMessageQueue) {
-        m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSetVideoRecordingEnabled::create(enabled));
+        m_postProcessorInputMessageQueue->push(CameraRecorder::MsgSetVideoRecordingEnabled::create(enabled));
     }
 }
 

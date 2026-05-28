@@ -602,19 +602,11 @@ bool CameraFramePreprocessor::preprocessFrameCuda(CameraPipelineFrame& frame, co
             cv::cuda::cvtColor(frameGpu, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
         }
 
-        if (bgrGpu.type() != CV_8UC3)
-        {
-            cv::cuda::GpuMat bgr8uGpu;
-            const double scale = bgrGpu.depth() == CV_16U ? (255.0 / 65535.0) : 1.0;
-            bgrGpu.convertTo(bgr8uGpu, CV_8UC3, scale, 0.0, m_cudaStream);
-            bgrGpu = bgr8uGpu;
-        }
-
         bgrGpu.copyTo(frame.m_cudaBgrImage, m_cudaStream);
         frame.m_cudaGrayImage.release();
         frame.m_bayerPattern = CameraPipelineFrame::BayerNone;
         if (shouldMaterializeUnprocessedImage(frame)) {
-            frame.m_unprocessedImage = downloadCudaBgrImage(frame.m_cudaBgrImage);
+            frame.m_unprocessedImage = downloadCudaBgrImage(frame.m_cudaBgrImage, true);
         } else {
             frame.m_unprocessedImage = QImage();
         }
@@ -633,14 +625,47 @@ bool CameraFramePreprocessor::preprocessFrameCuda(CameraPipelineFrame& frame, co
     return false;
 }
 
-QImage CameraFramePreprocessor::downloadCudaBgrImage(const cv::cuda::GpuMat& bgrGpu)
+QImage CameraFramePreprocessor::downloadCudaBgrImage(const cv::cuda::GpuMat& bgrGpu, bool preserveBitDepth)
 {
     cv::Mat bgrMat;
     bgrGpu.download(bgrMat, m_cudaStream);
     m_cudaStream.waitForCompletion();
-    QImage image(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);
+
+    if (preserveBitDepth && (bgrMat.depth() == CV_16U) && (bgrMat.channels() == 3))
+    {
+        QImage image(bgrMat.cols, bgrMat.rows, QImage::Format_RGBA64);
+        for (int y = 0; y < bgrMat.rows; ++y)
+        {
+            const cv::Vec<uint16_t, 3> *inputLine = bgrMat.ptr<cv::Vec<uint16_t, 3>>(y);
+            QRgba64 *outputLine = reinterpret_cast<QRgba64*>(image.scanLine(y));
+
+            for (int x = 0; x < bgrMat.cols; ++x) {
+                outputLine[x] = qRgba64(inputLine[x][2], inputLine[x][1], inputLine[x][0], 65535);
+            }
+        }
+        return image;
+    }
+
+    if (preserveBitDepth && (bgrMat.depth() == CV_16U) && (bgrMat.channels() == 1))
+    {
+        QImage image(bgrMat.cols, bgrMat.rows, QImage::Format_Grayscale16);
+        for (int y = 0; y < bgrMat.rows; ++y) {
+            std::memcpy(image.scanLine(y), bgrMat.ptr(y), static_cast<size_t>(bgrMat.cols * sizeof(quint16)));
+        }
+        return image;
+    }
+
+    cv::Mat bgr8uMat;
+    if (bgrMat.type() == CV_8UC3) {
+        bgr8uMat = bgrMat;
+    } else {
+        const double scale = bgrMat.depth() == CV_16U ? (255.0 / 65535.0) : 1.0;
+        bgrMat.convertTo(bgr8uMat, CV_8UC3, scale);
+    }
+
+    QImage image(bgr8uMat.cols, bgr8uMat.rows, QImage::Format_RGB888);
     cv::Mat rgbMat(image.height(), image.width(), CV_8UC3, image.bits(), static_cast<size_t>(image.bytesPerLine()));
-    cv::cvtColor(bgrMat, rgbMat, cv::COLOR_BGR2RGB);
+    cv::cvtColor(bgr8uMat, rgbMat, cv::COLOR_BGR2RGB);
     return image;
 }
 #endif

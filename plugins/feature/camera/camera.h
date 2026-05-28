@@ -33,6 +33,7 @@
 #include "cameraframealigner.h"
 #include "cameraframestacker.h"
 #include "cameraimageprocessor.h"
+#include "camerarecorder.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
 
@@ -226,6 +227,7 @@ public:
     MessageQueue* getFrameStackerInputMessageQueue() { return m_frameStacker ? m_frameStacker->getInputMessageQueue() : nullptr; }
     MessageQueue* getImageProcessorInputMessageQueue() { return m_imageProcessor ? m_imageProcessor->getInputMessageQueue() : nullptr; }
     MessageQueue* getDetectorInputMessageQueue() { return m_objectDetector ? m_objectDetector->getInputMessageQueue() : nullptr; }
+    MessageQueue* getRecorderInputMessageQueue() { return m_recorder ? m_recorder->getInputMessageQueue() : nullptr; }
     MessageQueue* getPostProcessorInputMessageQueue() { return m_postProcessor ? m_postProcessor->getInputMessageQueue() : nullptr; }
     void setMessageQueueToGUI(MessageQueue *queue) override;
 
@@ -248,6 +250,8 @@ private:
     CameraObjectDetector *m_objectDetector;
     QThread *m_diffDetectorThread;
     CameraDiffDetector *m_diffDetector;
+    QThread *m_recorderThread;
+    CameraRecorder *m_recorder;
     QThread *m_postProcessorThread;
     CameraPostProcessor *m_postProcessor;
     CameraSettings m_settings;

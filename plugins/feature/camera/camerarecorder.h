@@ -16,30 +16,31 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
-#ifndef INCLUDE_FEATURE_CAMERAFRAMEPREPROCESSOR_H_
-#define INCLUDE_FEATURE_CAMERAFRAMEPREPROCESSOR_H_
+#ifndef INCLUDE_FEATURE_CAMERARECORDER_H_
+#define INCLUDE_FEATURE_CAMERARECORDER_H_
 
 #include <QObject>
-#include <QMutex>
 #include <deque>
 
-#include <opencv2/core/core.hpp>
-#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
-#include <opencv2/core/cuda.hpp>
-#endif
+#include <QDateTime>
+#include <QImage>
+#include <QMutex>
+#include <QSize>
+
+#include <opencv2/videoio.hpp>
 
 #include "util/message.h"
 #include "util/messagequeue.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
-class CameraFrameAligner;
+class CameraPostProcessor;
 
-class CameraFramePreprocessor : public QObject
+class CameraRecorder : public QObject
 {
     Q_OBJECT
 public:
-    class MsgConfigureCameraFramePreprocessor : public Message {
+    class MsgConfigureCameraRecorder : public Message {
         MESSAGE_CLASS_DECLARATION
 
     public:
@@ -47,9 +48,9 @@ public:
         const QList<QString>& getSettingsKeys() const { return m_settingsKeys; }
         bool getForce() const { return m_force; }
 
-        static MsgConfigureCameraFramePreprocessor* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
+        static MsgConfigureCameraRecorder* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
         {
-            return new MsgConfigureCameraFramePreprocessor(settings, settingsKeys, force);
+            return new MsgConfigureCameraRecorder(settings, settingsKeys, force);
         }
 
     private:
@@ -57,7 +58,7 @@ public:
         QList<QString> m_settingsKeys;
         bool m_force;
 
-        MsgConfigureCameraFramePreprocessor(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
+        MsgConfigureCameraRecorder(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
             Message(),
             m_settings(settings),
             m_settingsKeys(settingsKeys),
@@ -85,6 +86,26 @@ public:
         { }
     };
 
+    class MsgSetVideoRecordingEnabled : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool getEnabled() const { return m_enabled; }
+
+        static MsgSetVideoRecordingEnabled* create(bool enabled)
+        {
+            return new MsgSetVideoRecordingEnabled(enabled);
+        }
+
+    private:
+        bool m_enabled;
+
+        MsgSetVideoRecordingEnabled(bool enabled) :
+            Message(),
+            m_enabled(enabled)
+        { }
+    };
+
     class MsgCaptureActive : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -105,70 +126,64 @@ public:
         { }
     };
 
-    CameraFramePreprocessor();
-    ~CameraFramePreprocessor();
+    CameraRecorder();
+    ~CameraRecorder();
 
     void startWork();
     void stopWork();
     void submitFrame(const CameraPipelineFramePtr& frame);
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
-    void setNextStage(CameraFrameAligner *nextStage) { m_nextStage = nextStage; }
+    void setNextStage(CameraPostProcessor *nextStage) { m_nextStage = nextStage; }
+    void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
 
 private:
-    MessageQueue m_inputMessageQueue;
-    CameraFrameAligner *m_nextStage;
-    CameraSettings m_settings;
-    bool m_captureActive;
-    cv::Mat m_darkCalibrationFrame;
-    cv::Mat m_flatCalibrationFrame;
-    cv::Mat m_biasCalibrationFrame;
-#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
-    cv::cuda::Stream m_cudaStream;
-
-    struct CudaCalibrationFrame
+    struct BufferedVideoFrame
     {
-        cv::cuda::GpuMat m_frame;
-        cv::Size m_sourceSize;
-        int m_sourceType = -1;
-        int m_channels = 0;
+        QImage m_rawImage;
+        QImage m_processedImage;
     };
 
-    CudaCalibrationFrame m_cudaDarkCalibrationFrame;
-    CudaCalibrationFrame m_cudaFlatCalibrationFrame;
-    CudaCalibrationFrame m_cudaBiasCalibrationFrame;
-#endif
+    MessageQueue m_inputMessageQueue;
+    MessageQueue *m_msgQueueToGUI;
+    CameraPostProcessor *m_nextStage;
+    CameraSettings m_settings;
+    bool m_captureActive;
+    cv::VideoWriter m_rawVideoWriter;
+    cv::VideoWriter m_processedVideoWriter;
+    QSize m_rawVideoWriterSize;
+    QSize m_processedVideoWriterSize;
+    std::deque<BufferedVideoFrame> m_preRecordVideoFrames;
+    bool m_preRecordBufferFlushed;
+    int m_recordedImageFrames;
+    QDateTime m_videoRecordingStartDateTime;
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
-    bool m_processingFrame;
-    int m_droppedFrameCount;
+    bool m_processingFrames;
+    int m_droppedOutputFrames;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
-    void preprocessFrame(const CameraPipelineFramePtr& frame, cv::Mat& inputMat);
-    bool preserveFrameOrder() const;
-    int pendingFrameLimit() const;
-    void reloadCalibrationFrames();
-    cv::Mat loadFitsCalibrationFrame(const QString& fileName, const QString& calibrationType, bool normalizeFlat) const;
-    void validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName);
-    cv::Mat applyCalibration(const cv::Mat& input);
-    bool shouldMaterializeUnprocessedImage(const CameraPipelineFrame& frame) const;
-#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
-    bool canUseCudaPreprocessing() const;
-    void invalidateCudaCalibrationFrames();
-    cv::cuda::GpuMat uploadCalibrationFrameCuda(CudaCalibrationFrame& cachedFrame, const cv::Mat& calibrationFrame, int channels);
-    bool applyCalibrationCuda(cv::cuda::GpuMat& frameGpu, const cv::Size& inputSize, int inputType);
-    bool preprocessFrameCuda(CameraPipelineFrame& frame, const cv::Mat& inputMat);
-    QImage downloadCudaBgrImage(const cv::cuda::GpuMat& bgrGpu, bool preserveBitDepth);
-#endif
-    static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
-    static cv::Mat imageToWorkingMat(const QImage& input);
-    static QImage workingMatToImage(const cv::Mat& frameMat);
-    static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
+    void forwardFrame(const CameraPipelineFramePtr& frame);
+    void setVideoRecordingEnabled(bool enabled);
+    void setImageRecordingEnabled(bool enabled);
+    void resetRecordingLimits();
+    void updateRecordingLimitsAfterFrame(bool savedImageFrame, bool savedVideoFrame);
+    [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant);
+    [[nodiscard]] bool shouldSaveRawMedia() const;
+    [[nodiscard]] bool shouldSaveProcessedMedia() const;
+    void closeVideoWriters();
+    bool ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant);
+    void writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite);
+    int preRecordBufferFrameLimit() const;
+    int outputQueueFrameLimit() const;
+    void trimPreRecordBuffer();
+    void appendPreRecordFrame(const QImage& rawImage, const QImage& processedImage);
+    void flushPreRecordFrames(const QImage& currentRawImage, const QImage& currentProcessedImage);
 
 private slots:
     void handleInputMessages();
-    void processNextFrame();
+    void processNextFrames();
 };
 
-#endif // INCLUDE_FEATURE_CAMERAFRAMEPREPROCESSOR_H_
+#endif // INCLUDE_FEATURE_CAMERARECORDER_H_

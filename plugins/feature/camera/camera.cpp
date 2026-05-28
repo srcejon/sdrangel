@@ -66,6 +66,8 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_objectDetector(new CameraObjectDetector(this)),
     m_diffDetectorThread(new QThread()),
     m_diffDetector(new CameraDiffDetector()),
+    m_recorderThread(new QThread()),
+    m_recorder(new CameraRecorder()),
     m_postProcessorThread(new QThread()),
     m_postProcessor(new CameraPostProcessor())
 {
@@ -138,7 +140,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_objectDetectorThread, &QThread::finished, m_objectDetector, &QObject::deleteLater);
     QObject::connect(m_objectDetectorThread, &QThread::finished, m_objectDetectorThread, &QThread::deleteLater);
     m_objectDetector->setNextStage(m_diffDetector);
-    m_objectDetector->setPostProcessorInputMessageQueue(getPostProcessorInputMessageQueue());
+    m_objectDetector->setPostProcessorInputMessageQueue(getRecorderInputMessageQueue());
     m_objectDetector->setMessageQueueToGUI(getMessageQueueToGUI());
     m_objectDetector->setMessageQueueToFeature(getInputMessageQueue());
     m_objectDetectorThread->start();
@@ -152,12 +154,21 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_diffDetectorThread->start();
     m_diffDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(m_settings, QList<QString>(), true));
 
+    m_recorder->moveToThread(m_recorderThread);
+    QObject::connect(m_recorderThread, &QThread::started, m_recorder, &CameraRecorder::startWork);
+    QObject::connect(m_recorderThread, &QThread::finished, m_recorder, &QObject::deleteLater);
+    QObject::connect(m_recorderThread, &QThread::finished, m_recorderThread, &QThread::deleteLater);
+    m_recorder->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_recorderThread->start();
+    m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgConfigureCameraRecorder::create(m_settings, QList<QString>(), true));
+
     // The post-processor runs continously, to be able to update the image when post processing settings are changed.
     m_postProcessor->moveToThread(m_postProcessorThread);
     QObject::connect(m_postProcessorThread, &QThread::started, m_postProcessor, &CameraPostProcessor::startWork);
     QObject::connect(m_postProcessorThread, &QThread::finished, m_postProcessor, &QObject::deleteLater);
     QObject::connect(m_postProcessorThread, &QThread::finished, m_postProcessorThread, &QThread::deleteLater);
     m_postProcessor->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_postProcessor->setNextStageInputMessageQueue(getRecorderInputMessageQueue());
     m_postProcessorThread->start();
     m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgConfigureCameraPostProcessor::create(m_settings, QList<QString>(), true));
 }
@@ -238,6 +249,14 @@ Camera::~Camera()
         m_diffDetector = nullptr;
     }
 
+    if (m_recorderThread)
+    {
+        m_recorderThread->quit();
+        m_recorderThread->wait();
+        m_recorderThread = nullptr;
+        m_recorder = nullptr;
+    }
+
     if (m_postProcessorThread)
     {
         m_postProcessorThread->quit();
@@ -283,6 +302,9 @@ void Camera::start()
     if (m_diffDetector) {
         m_diffDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(true));
     }
+    if (m_recorder) {
+        m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgCaptureActive::create(true));
+    }
     if (m_postProcessor) {
         m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(true));
     }
@@ -305,6 +327,9 @@ void Camera::stop()
     }
     if (m_postProcessor) {
         m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(false));
+    }
+    if (m_recorder) {
+        m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgCaptureActive::create(false));
     }
     if (m_diffDetector) {
         m_diffDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(false));
@@ -357,6 +382,9 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
     if (m_objectDetector) {
         m_objectDetector->setMessageQueueToGUI(queue);
         m_objectDetector->setMessageQueueToFeature(getInputMessageQueue());
+    }
+    if (m_recorder) {
+        m_recorder->setMessageQueueToGUI(queue);
     }
     if (m_postProcessor) {
         m_postProcessor->setMessageQueueToGUI(queue);
@@ -472,6 +500,9 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
     }
     if (m_diffDetector) {
         m_diffDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(settings, settingsKeys, force));
+    }
+    if (m_recorder) {
+        m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgConfigureCameraRecorder::create(settings, settingsKeys, force));
     }
     if (m_postProcessor) {
         m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgConfigureCameraPostProcessor::create(settings, settingsKeys, force));

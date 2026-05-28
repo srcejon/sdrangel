@@ -265,6 +265,7 @@ public:
     void submitFrame(const CameraPipelineFramePtr& frame);
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setNextStageInputMessageQueue(MessageQueue *messageQueue) { m_nextStageQueue = messageQueue; }
 
 private:
     struct TrackedMapObject
@@ -284,6 +285,7 @@ private:
 
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_nextStageQueue;
     AvailableChannelOrFeatureHandler m_availableChannelOrFeatureHandler;
     CameraSettings m_settings;
     bool m_captureActive;

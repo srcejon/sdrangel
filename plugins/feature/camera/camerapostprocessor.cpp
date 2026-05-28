@@ -21,7 +21,6 @@
 #include <cmath>
 
 #include <QDebug>
-#include <QFileInfo>
 #include <QFont>
 #include <QFontMetrics>
 #include <QPainter>
@@ -33,6 +32,7 @@
 #include "maincore.h"
 #include "cameraimageutils.h"
 #include "camerapostprocessor.h"
+#include "camerarecorder.h"
 
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgConfigureCameraPostProcessor, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgProcessFrame, Message)
@@ -40,7 +40,6 @@ MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveVideoState, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveImageState, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSetVideoRecordingEnabled, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
 
 namespace {
@@ -509,6 +508,7 @@ QDateTime plateSolveOverlayDateTime(const CameraSettings& settings, const QDateT
 
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
+    m_nextStageQueue(nullptr),
     m_availableChannelOrFeatureHandler(kTrackedObjectPipeURIs, QStringList{QStringLiteral("mapitems")}),
     m_captureActive(false),
     m_preRecordBufferFlushed(false),
@@ -598,12 +598,6 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         updateTrackedMapObject(msgMapItem.getPipeSource(), msgMapItem.getSWGMapItem());
         return true;
     }
-    else if (MsgSetVideoRecordingEnabled::match(cmd))
-    {
-        MsgSetVideoRecordingEnabled& enabledMsg = (MsgSetVideoRecordingEnabled&) cmd;
-        setVideoRecordingEnabled(enabledMsg.getEnabled());
-        return true;
-    }
     else if (MsgCaptureActive::match(cmd))
     {
         MsgCaptureActive& activeMsg = (MsgCaptureActive&) cmd;
@@ -613,14 +607,6 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         {
             m_lastFrame = CameraPipelineFrame();
         }
-        else
-        {
-            closeVideoWriters();
-            m_preRecordVideoFrames.clear();
-            m_preRecordBufferFlushed = false;
-            resetRecordingLimits();
-        }
-
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrame.reset();
         if (!m_captureActive) {
@@ -686,13 +672,6 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 
     if (sourceChanged) {
         m_lastFrame = CameraPipelineFrame();
-        m_preRecordVideoFrames.clear();
-        m_preRecordBufferFlushed = false;
-        resetRecordingLimits();
-        // The video writers were opened with a fixed cv::Size from the previous frame
-        // geometry; any further writes would silently produce a corrupted file. Close them
-        // so ensureVideoWriter reopens at the new size on the next frame.
-        closeVideoWriters();
     }
 
     // Reset the per-recording counters whenever the saveImage / saveVideo key arrives and
@@ -886,57 +865,16 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
-    const QImage& unprocessedImage = frame->m_unprocessedImage.isNull() ? frame->m_image : frame->m_unprocessedImage;
     const QImage processed = applyPostProcessing(*frame);
+    frame->m_postProcessedImage = processed;
 
     m_lastFrame = *frame;
 
     reportFrameToGUI(processed, *frame);
 
-    bool savedImageFrame = false;
-    bool savedVideoFrame = false;
-
-    if (m_captureActive && (m_settings.m_saveImage || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
-    {
-        if (shouldSaveRawMedia())
-        {
-            const QString rawFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, true);
-            qDebug() << "CameraPostProcessor: Saving raw image to" << rawFilename;
-            unprocessedImage.save(rawFilename);
-        }
-
-        if (shouldSaveProcessedMedia())
-        {
-            const QString processedFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, false);
-            qDebug() << "CameraPostProcessor: Saving processed image to" << processedFilename;
-            processed.save(processedFilename);
-        }
-
-        savedImageFrame = m_settings.m_saveImage;
+    if (m_nextStageQueue) {
+        m_nextStageQueue->push(CameraRecorder::MsgProcessFrame::create(frame));
     }
-
-    if (m_captureActive && m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
-    {
-        if (!m_preRecordBufferFlushed) {
-            flushPreRecordFrames(unprocessedImage, processed);
-        }
-
-        if (shouldSaveRawMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, unprocessedImage, true)) {
-            writeVideoFrame(m_rawVideoWriter, unprocessedImage);
-            savedVideoFrame = true;
-        }
-
-        if (shouldSaveProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processed, false)) {
-            writeVideoFrame(m_processedVideoWriter, processed);
-            savedVideoFrame = true;
-        }
-    }
-    else if (m_captureActive && !m_settings.m_saveVideo)
-    {
-        appendPreRecordFrame(unprocessedImage, processed);
-    }
-
-    updateRecordingLimitsAfterFrame(savedImageFrame, savedVideoFrame);
 }
 
 void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame)

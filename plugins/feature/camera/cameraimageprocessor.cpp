@@ -35,6 +35,46 @@
 #include "cameraimageutils.h"
 #include "cameraimageprocessor.h"
 
+namespace {
+
+double maxValueForDepth(int depth)
+{
+    return depth == CV_16U ? 65535.0 : 255.0;
+}
+
+int matTypeForDepthAndChannels(int depth, int channels)
+{
+    return CV_MAKETYPE(depth, channels);
+}
+
+cv::Mat bgrMatFromImagePreserveDepth(const QImage& image)
+{
+    bool highBitDepthInput = false;
+    cv::Mat rgbMat = CameraImageUtils::imageToWorkingMat(image, &highBitDepthInput);
+    cv::Mat bgrMat;
+
+    if (rgbMat.channels() == 1) {
+        cv::cvtColor(rgbMat, bgrMat, cv::COLOR_GRAY2BGR);
+    } else {
+        cv::cvtColor(rgbMat, bgrMat, cv::COLOR_RGB2BGR);
+    }
+
+    return bgrMat;
+}
+
+void convertBgrTo8Bit(cv::Mat& bgrMat)
+{
+    if (bgrMat.depth() == CV_8U) {
+        return;
+    }
+
+    cv::Mat bgr8u;
+    bgrMat.convertTo(bgr8u, matTypeForDepthAndChannels(CV_8U, bgrMat.channels()), 255.0 / maxValueForDepth(bgrMat.depth()));
+    bgrMat = std::move(bgr8u);
+}
+
+}
+
 MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgConfigureCameraImageProcessor, Message)
 MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgCaptureActive, Message)
@@ -535,11 +575,7 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
         return;
     }
 
-    QImage convertedRgb;
-    const QImage& rgb = ensureRgb888(input, convertedRgb);
-    cv::Mat mat = wrapRgb888Image(rgb);
-    cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+    cv::Mat bgrMat = bgrMatFromImagePreserveDepth(input);
 
     if (needsUnwarp) {
         applyLensUnwarp(bgrMat);
@@ -569,9 +605,11 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
         applySharpen(bgrMat);
     }
     if (needsSobelEdge) {
+        convertBgrTo8Bit(bgrMat);
         applySobelEdge(bgrMat);
     }
     if (needsCannyEdge) {
+        convertBgrTo8Bit(bgrMat);
         applyCannyEdge(bgrMat);
     }
     if (needsFlip) {
@@ -587,7 +625,9 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
         applyInvertColors(bgrMat);
     }
 
-    QImage result = convertBgrToRgbImage(bgrMat);
+    cv::Mat rgbMat;
+    cv::cvtColor(bgrMat, rgbMat, cv::COLOR_BGR2RGB);
+    QImage result = CameraImageUtils::workingMatToImage(rgbMat);
     PROFILER_STOP("CameraImageProcessor::applyImageProcessing");
     frame.m_image = result;
 }
@@ -649,7 +689,9 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
         || needsGreyscale
         || m_settings.m_invertColors;
 
-    if (!needsAny) {
+    if (!needsAny)
+    {
+        PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");
         return;
     }
 
@@ -668,6 +710,14 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
             cv::cuda::GpuMat gpuRgb;
             gpuRgb.upload(rgbMat, m_cudaStream);
             cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
+        }
+
+        if ((bgrGpu.depth() == CV_16U) && (needsHistogramStretch || needsSaturation || needsGamma))
+        {
+            frame.ensureCpuImageFromCuda();
+            applyImageProcessingCpu(frame);
+            PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");
+            return;
         }
 
         if (needsUnwarp) {
@@ -714,7 +764,8 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
             applyRotationCuda(bgrGpu, m_cudaStream);
         }
         if (needsBrightContrast) {
-            bgrGpu.convertTo(bgrGpu, -1, m_settings.m_contrast, m_settings.m_brightness, m_cudaStream);
+            const double brightnessScale = maxValueForDepth(bgrGpu.depth()) / 255.0;
+            bgrGpu.convertTo(bgrGpu, -1, m_settings.m_contrast, m_settings.m_brightness * brightnessScale, m_cudaStream);
         }
         if (m_settings.m_invertColors) {
             cv::cuda::bitwise_not(bgrGpu, bgrGpu, cv::noArray(), m_cudaStream);
@@ -815,8 +866,9 @@ void CameraImageProcessor::applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::c
     }
     else
     {
-        static constexpr double kHighlightRolloffStart = 0.85 * 255.0;
-        static constexpr double kHighlightRolloffRange = 255.0 - kHighlightRolloffStart;
+        const double maxValue = maxValueForDepth(bgrGpu.depth());
+        const double kHighlightRolloffStart = 0.85 * maxValue;
+        const double kHighlightRolloffRange = maxValue - kHighlightRolloffStart;
 
         cv::cuda::GpuMat highlightGpu;
         cv::cuda::GpuMat rolloffGpu;
@@ -1238,16 +1290,20 @@ void CameraImageProcessor::applyWhiteBalance(cv::Mat& bgrMat)
     }
     else
     {
-        static constexpr double kHighlightRolloffStart = 0.85 * 255.0;
-        static constexpr double kHighlightRolloffRange = 255.0 - kHighlightRolloffStart;
+        const double maxValue = maxValueForDepth(bgrMat.depth());
+        const double kHighlightRolloffStart = 0.85 * maxValue;
+        const double kHighlightRolloffRange = maxValue - kHighlightRolloffStart;
 
-        for (int y = 0; y < bgrMat.rows; ++y)
+        cv::Mat floatMat;
+        bgrMat.convertTo(floatMat, CV_32FC3);
+
+        for (int y = 0; y < floatMat.rows; ++y)
         {
-            cv::Vec3b *row = bgrMat.ptr<cv::Vec3b>(y);
+            cv::Vec3f *row = floatMat.ptr<cv::Vec3f>(y);
 
-            for (int x = 0; x < bgrMat.cols; ++x)
+            for (int x = 0; x < floatMat.cols; ++x)
             {
-                const cv::Vec3b src = row[x];
+                const cv::Vec3f src = row[x];
                 const double highlight = std::max({
                     static_cast<double>(src[0]),
                     static_cast<double>(src[1]),
@@ -1260,10 +1316,12 @@ void CameraImageProcessor::applyWhiteBalance(cv::Mat& bgrMat)
                 for (int c = 0; c < 3; ++c)
                 {
                     const double effectiveGain = gains[c] + (1.0 - gains[c]) * rolloff;
-                    row[x][c] = cv::saturate_cast<uchar>(src[c] * effectiveGain);
+                    row[x][c] = static_cast<float>(std::clamp(src[c] * effectiveGain, 0.0, maxValue));
                 }
             }
         }
+
+        floatMat.convertTo(bgrMat, bgrMat.type());
     }
     PROFILER_STOP(__FUNCTION__);
 }
@@ -1272,8 +1330,10 @@ void CameraImageProcessor::applyHistogramStretch(cv::Mat& bgrMat) const
 {
     PROFILER_START();
 
+    const int outputType = bgrMat.type();
+    const double maxValue = maxValueForDepth(bgrMat.depth());
     cv::Mat floatMat;
-    bgrMat.convertTo(floatMat, CV_32FC3, 1.0 / 255.0);
+    bgrMat.convertTo(floatMat, CV_32FC3, 1.0 / maxValue);
 
     const float blackPoint = static_cast<float>(m_settings.m_histogramStretchBlackPoint);
     const float whitePoint = static_cast<float>(m_settings.m_histogramStretchWhitePoint);
@@ -1287,6 +1347,7 @@ void CameraImageProcessor::applyHistogramStretch(cv::Mat& bgrMat) const
 
     if (m_settings.m_histogramStretch == CameraSettings::HistogramStretchCLAHE)
     {
+        convertBgrTo8Bit(bgrMat);
         cv::Mat labMat;
         cv::cvtColor(bgrMat, labMat, cv::COLOR_BGR2Lab);
         std::vector<cv::Mat> labChannels;
@@ -1334,7 +1395,7 @@ void CameraImageProcessor::applyHistogramStretch(cv::Mat& bgrMat) const
         }
     }
 
-    floatMat.convertTo(bgrMat, CV_8UC3, 255.0);
+    floatMat.convertTo(bgrMat, outputType, maxValue);
     PROFILER_STOP(__FUNCTION__);
 }
 
@@ -1508,19 +1569,60 @@ void CameraImageProcessor::applyGreyscale(cv::Mat& bgrMat) const
 void CameraImageProcessor::applySaturation(cv::Mat& bgrMat)
 {
     PROFILER_START();
+    const int outputType = bgrMat.type();
+    cv::Mat colorMat;
+    const double maxValue = maxValueForDepth(bgrMat.depth());
+    if (bgrMat.depth() == CV_8U) {
+        colorMat = bgrMat;
+    } else {
+        bgrMat.convertTo(colorMat, CV_32FC3, 1.0 / maxValue);
+    }
+
     cv::Mat hsvMat;
-    cv::cvtColor(bgrMat, hsvMat, cv::COLOR_BGR2HSV);
+    cv::cvtColor(colorMat, hsvMat, cv::COLOR_BGR2HSV);
     std::vector<cv::Mat> hsvChannels;
     cv::split(hsvMat, hsvChannels);
     hsvChannels[1].convertTo(hsvChannels[1], -1, m_settings.m_saturation, 0.0);
+    if (colorMat.depth() == CV_32F) {
+        cv::threshold(hsvChannels[1], hsvChannels[1], 1.0, 1.0, cv::THRESH_TRUNC);
+    }
     cv::merge(hsvChannels, hsvMat);
-    cv::cvtColor(hsvMat, bgrMat, cv::COLOR_HSV2BGR);
+    cv::cvtColor(hsvMat, colorMat, cv::COLOR_HSV2BGR);
+
+    if (outputType == colorMat.type()) {
+        bgrMat = colorMat;
+    } else {
+        colorMat.convertTo(bgrMat, outputType, maxValue);
+    }
     PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraImageProcessor::applyGamma(cv::Mat& bgrMat) const
 {
     PROFILER_START();
+    if (bgrMat.depth() != CV_8U)
+    {
+        const int outputType = bgrMat.type();
+        const double maxValue = maxValueForDepth(bgrMat.depth());
+        cv::Mat floatMat;
+        bgrMat.convertTo(floatMat, CV_32FC3, 1.0 / maxValue);
+
+        for (int row = 0; row < floatMat.rows; ++row)
+        {
+            cv::Vec3f *pixelRow = floatMat.ptr<cv::Vec3f>(row);
+            for (int col = 0; col < floatMat.cols; ++col)
+            {
+                for (int channel = 0; channel < 3; ++channel) {
+                    pixelRow[col][channel] = static_cast<float>(std::pow(std::clamp(pixelRow[col][channel], 0.0f, 1.0f), m_settings.m_gamma));
+                }
+            }
+        }
+
+        floatMat.convertTo(bgrMat, outputType, maxValue);
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
     cv::Mat lut(1, 256, CV_8U);
     uchar* lutData = lut.ptr<uchar>();
     for (int i = 0; i < 256; ++i) {
@@ -1642,7 +1744,8 @@ void CameraImageProcessor::applyBrightnessContrast(cv::Mat& bgrMat) const
 {
     PROFILER_START();
     cv::Mat adjusted;
-    cv::convertScaleAbs(bgrMat, adjusted, m_settings.m_contrast, m_settings.m_brightness);
+    const double brightnessScale = maxValueForDepth(bgrMat.depth()) / 255.0;
+    bgrMat.convertTo(adjusted, bgrMat.type(), m_settings.m_contrast, m_settings.m_brightness * brightnessScale);
     bgrMat = adjusted;
     PROFILER_STOP(__FUNCTION__);
 }

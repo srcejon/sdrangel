@@ -130,6 +130,7 @@ struct CameraPipelineFrame
 
     QImage m_image;
     QImage m_unprocessedImage;
+    QImage m_postProcessedImage;
     CameraHistogramData m_histogramData;
     QDateTime m_captureDateTime;
     qint64 m_playbackPositionMs = -1;
@@ -158,7 +159,8 @@ struct CameraPipelineFrame
     bool hasCudaBgrImage() const
     {
         return !m_cudaBgrImage.empty()
-            && (m_cudaBgrImage.type() == CV_8UC3);
+            && (m_cudaBgrImage.channels() == 3)
+            && ((m_cudaBgrImage.depth() == CV_8U) || (m_cudaBgrImage.depth() == CV_16U));
     }
 
     bool hasCudaGrayImage() const
@@ -235,6 +237,21 @@ struct CameraPipelineFrame
     {
         if (bgrMat.empty()) {
             return QImage();
+        }
+
+        if ((bgrMat.depth() == CV_16U) && (bgrMat.channels() == 3))
+        {
+            QImage result(bgrMat.cols, bgrMat.rows, QImage::Format_RGBA64);
+            for (int y = 0; y < bgrMat.rows; ++y)
+            {
+                const cv::Vec<uint16_t, 3> *inputLine = bgrMat.ptr<cv::Vec<uint16_t, 3>>(y);
+                QRgba64 *outputLine = reinterpret_cast<QRgba64*>(result.scanLine(y));
+
+                for (int x = 0; x < bgrMat.cols; ++x) {
+                    outputLine[x] = qRgba64(inputLine[x][2], inputLine[x][1], inputLine[x][0], 65535);
+                }
+            }
+            return result;
         }
 
         QImage result(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);

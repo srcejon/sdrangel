@@ -608,22 +608,7 @@ bool CameraImageProcessor::canUseCudaImageProcessing() const
         return false;
     }
 
-    const bool manualHighlightProtectedWhiteBalance =
-        (m_settings.m_postProcessWhiteBalanceMode == 2)
-        && (m_settings.m_postProcessWhiteBalanceHighlightProtection > 1e-6);
-    const bool unsupported =
-        (m_settings.m_postProcessWhiteBalanceMode == 1)
-        || manualHighlightProtectedWhiteBalance;
-
-    if (unsupported)
-    {
-        if (!warnedUnsupportedSettings)
-        {
-            qDebug() << "CameraImageProcessor: CUDA post-processing requested, but current settings need CPU-only post-processing";
-            warnedUnsupportedSettings = true;
-        }
-        return false;
-    }
+    (void) warnedUnsupportedSettings;
 
     return true;
 }
@@ -773,16 +758,93 @@ void CameraImageProcessor::applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu, cv::cud
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
     std::vector<cv::cuda::GpuMat> channels;
     cv::cuda::split(bgrGpu, channels, stream);
-    channels[0].convertTo(channels[0], -1, m_settings.m_postProcessWhiteBalanceBlueGain, 0.0, stream);
-    channels[1].convertTo(channels[1], -1, m_settings.m_postProcessWhiteBalanceGreenGain, 0.0, stream);
-    channels[2].convertTo(channels[2], -1, m_settings.m_postProcessWhiteBalanceRedGain, 0.0, stream);
-    cv::cuda::merge(channels, bgrGpu, stream);
+    cv::Vec3d gains(
+        m_settings.m_postProcessWhiteBalanceBlueGain,
+        m_settings.m_postProcessWhiteBalanceGreenGain,
+        m_settings.m_postProcessWhiteBalanceRedGain);
+
+    if (m_settings.m_postProcessWhiteBalanceMode == 1)
+    {
+        stream.waitForCompletion();
+        const cv::Scalar blueSum = cv::cuda::sum(channels[0]);
+        const cv::Scalar greenSum = cv::cuda::sum(channels[1]);
+        const cv::Scalar redSum = cv::cuda::sum(channels[2]);
+        const double pixelCount = std::max(1.0, static_cast<double>(bgrGpu.rows * bgrGpu.cols));
+        const double blueMean = std::max(1.0, blueSum[0] / pixelCount);
+        const double greenMean = std::max(1.0, greenSum[0] / pixelCount);
+        const double redMean = std::max(1.0, redSum[0] / pixelCount);
+        const double targetMean = (blueMean + greenMean + redMean) / 3.0;
+
+        const cv::Vec3d targetGains(
+            qBound(0.25, targetMean / blueMean, 4.0),
+            qBound(0.25, targetMean / greenMean, 4.0),
+            qBound(0.25, targetMean / redMean, 4.0));
+
+        if (!m_autoWhiteBalanceInitialized)
+        {
+            m_autoWhiteBalanceGains = targetGains;
+            m_autoWhiteBalanceInitialized = true;
+        }
+        else
+        {
+            static constexpr double kAutoWhiteBalanceSmoothing = 0.2;
+            m_autoWhiteBalanceGains =
+                (1.0 - kAutoWhiteBalanceSmoothing) * m_autoWhiteBalanceGains
+                + kAutoWhiteBalanceSmoothing * targetGains;
+        }
+
+        gains = m_autoWhiteBalanceGains;
+    }
+
+    const double highlightProtection = (m_settings.m_postProcessWhiteBalanceMode == 2)
+        ? qBound(0.0, m_settings.m_postProcessWhiteBalanceHighlightProtection, 1.0)
+        : 0.0;
+
+    if (highlightProtection <= 1e-6)
+    {
+        channels[0].convertTo(channels[0], -1, gains[0], 0.0, stream);
+        channels[1].convertTo(channels[1], -1, gains[1], 0.0, stream);
+        channels[2].convertTo(channels[2], -1, gains[2], 0.0, stream);
+        cv::cuda::merge(channels, bgrGpu, stream);
+    }
+    else
+    {
+        static constexpr double kHighlightRolloffStart = 0.85 * 255.0;
+        static constexpr double kHighlightRolloffRange = 255.0 - kHighlightRolloffStart;
+
+        cv::cuda::GpuMat highlightGpu;
+        cv::cuda::GpuMat rolloffGpu;
+        cv::cuda::GpuMat rolloffSquaredGpu;
+        cv::cuda::GpuMat smoothFactorGpu;
+
+        cv::cuda::max(channels[0], channels[1], highlightGpu, stream);
+        cv::cuda::max(highlightGpu, channels[2], highlightGpu, stream);
+        highlightGpu.convertTo(rolloffGpu, CV_32F, 1.0 / kHighlightRolloffRange, -kHighlightRolloffStart / kHighlightRolloffRange, stream);
+        cv::cuda::threshold(rolloffGpu, rolloffGpu, 0.0, 0.0, cv::THRESH_TOZERO, stream);
+        cv::cuda::threshold(rolloffGpu, rolloffGpu, 1.0, 1.0, cv::THRESH_TRUNC, stream);
+        cv::cuda::multiply(rolloffGpu, rolloffGpu, rolloffSquaredGpu, 1.0, -1, stream);
+        rolloffGpu.convertTo(smoothFactorGpu, CV_32F, -2.0, 3.0, stream);
+        cv::cuda::multiply(rolloffSquaredGpu, smoothFactorGpu, rolloffGpu, highlightProtection, -1, stream);
+
+        for (int channel = 0; channel < 3; ++channel)
+        {
+            cv::cuda::GpuMat channelFloatGpu;
+            cv::cuda::GpuMat effectiveGainGpu;
+            cv::cuda::GpuMat balancedFloatGpu;
+            channels[channel].convertTo(channelFloatGpu, CV_32F, 1.0, 0.0, stream);
+            rolloffGpu.convertTo(effectiveGainGpu, CV_32F, 1.0 - gains[channel], gains[channel], stream);
+            cv::cuda::multiply(channelFloatGpu, effectiveGainGpu, balancedFloatGpu, 1.0, -1, stream);
+            balancedFloatGpu.convertTo(channels[channel], channels[channel].type(), 1.0, 0.0, stream);
+        }
+
+        cv::cuda::merge(channels, bgrGpu, stream);
+    }
 
     PROFILER_STOP(__FUNCTION__);
 }

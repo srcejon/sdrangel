@@ -172,7 +172,7 @@ private:
     void applyImageProcessingCuda(CameraPipelineFrame& frame);
     [[nodiscard]] bool canUseCudaImageProcessing() const;
     void applyLensUnwarpCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream);
-    void applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
+    void applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream);
     void applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
     void applyGreyscaleCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;
     void applySaturationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const;

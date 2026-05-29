@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>854</width>
-    <height>969</height>
+    <height>1033</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -4216,7 +4216,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
        <item>
         <widget class="QTabWidget" name="detectionTabWidget">
          <property name="currentIndex">
-          <number>0</number>
+          <number>2</number>
          </property>
          <widget class="QWidget" name="tab">
           <attribute name="title">
@@ -5423,7 +5423,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
               <double>-2.000000000000000</double>
              </property>
              <property name="maximum">
-              <double>11.000000000000000</double>
+              <double>13.000000000000000</double>
              </property>
              <property name="singleStep">
               <double>0.100000000000000</double>

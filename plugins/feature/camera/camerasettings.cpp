@@ -401,7 +401,7 @@ void CameraSettings::resetToDefaults()
     m_starDebugView = StarDebugViewOff;
     m_starColor = QColor(120, 255, 255);
     m_plateSolve = false;
-    m_plateSolveMaxMagnitude = 3.5;
+    m_plateSolveMaxMagnitude = 5.0;
     m_plateSolveMinMatches = 4;
     m_plateSolveMatchRadius = 24.0;
     m_plateSolveFinalMatchRadius = 24.0;
@@ -947,7 +947,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readU32(121, &starColorRgba, QColor(120, 255, 255).rgba());
         m_starColor = QColor::fromRgba(starColorRgba);
         d.readBool(122, &m_plateSolve, false);
-        d.readDouble(123, &m_plateSolveMaxMagnitude, 3.5);
+        d.readDouble(123, &m_plateSolveMaxMagnitude, 5.0);
         d.readS32(124, &m_plateSolveMinMatches, 4);
         d.readDouble(125, &m_plateSolveMatchRadius, 24.0);
         d.readDouble(126, &m_plateSolveFinalMatchRadius, m_plateSolveMatchRadius);

@@ -131,7 +131,7 @@ struct CameraPipelineFrame
     QImage m_image;
     QImage m_unprocessedImage;
     QImage m_postProcessedImage;
-    QImage m_rawBayerImage;
+    QImage m_rawInputImage;
     CameraHistogramData m_histogramData;
     QDateTime m_captureDateTime;
     qint64 m_playbackPositionMs = -1;
@@ -146,7 +146,7 @@ struct CameraPipelineFrame
     bool m_saveCurrentImage = false;
     CameraPipelineStacking m_stack;
     BayerPattern m_bayerPattern = BayerNone;
-    BayerPattern m_rawBayerPattern = BayerNone;
+    BayerPattern m_rawInputBayerPattern = BayerNone;
 
 #if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
     cv::cuda::GpuMat m_cudaBgrImage;

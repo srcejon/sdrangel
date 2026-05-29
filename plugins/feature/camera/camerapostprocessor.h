@@ -175,46 +175,6 @@ public:
         { }
     };
 
-    class MsgReportSaveVideoState : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        bool getSaveVideo() const { return m_saveVideo; }
-
-        static MsgReportSaveVideoState* create(bool saveVideo)
-        {
-            return new MsgReportSaveVideoState(saveVideo);
-        }
-
-    private:
-        bool m_saveVideo;
-
-        MsgReportSaveVideoState(bool saveVideo) :
-            Message(),
-            m_saveVideo(saveVideo)
-        { }
-    };
-
-    class MsgReportSaveImageState : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        bool getSaveImage() const { return m_saveImage; }
-
-        static MsgReportSaveImageState* create(bool saveImage)
-        {
-            return new MsgReportSaveImageState(saveImage);
-        }
-
-    private:
-        bool m_saveImage;
-
-        MsgReportSaveImageState(bool saveImage) :
-            Message(),
-            m_saveImage(saveImage)
-        { }
-    };
-
     class MsgCaptureActive : public Message {
         MESSAGE_CLASS_DECLARATION
 

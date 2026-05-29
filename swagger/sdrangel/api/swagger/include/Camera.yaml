@@ -91,32 +91,32 @@ CameraSettings:
     alpacaFilterWheelPosition:
       description: "Filter wheel position index"
       type: integer
-    alpacaBinX:
-      description: "ALPACA camera X binning factor"
+    cameraBinX:
+      description: "Camera X binning factor"
       type: integer
-    alpacaBinY:
-      description: "ALPACA camera Y binning factor"
+    cameraBinY:
+      description: "Camera Y binning factor"
       type: integer
-    alpacaNumX:
-      description: "ALPACA camera ROI width in binned pixels (0 = full width)"
+    cameraNumX:
+      description: "Camera ROI width in binned pixels (0 = full width)"
       type: integer
-    alpacaNumY:
-      description: "ALPACA camera ROI height in binned pixels (0 = full height)"
+    cameraNumY:
+      description: "Camera ROI height in binned pixels (0 = full height)"
       type: integer
-    alpacaStartX:
-      description: "ALPACA camera ROI X origin in unbinned pixels"
+    cameraStartX:
+      description: "Camera ROI X origin in unbinned pixels"
       type: integer
-    alpacaStartY:
-      description: "ALPACA camera ROI Y origin in unbinned pixels"
+    cameraStartY:
+      description: "Camera ROI Y origin in unbinned pixels"
       type: integer
-    alpacaGain:
-      description: "ALPACA camera gain index or numeric value (-1 = do not set)"
+    cameraGain:
+      description: "Camera gain index or numeric value (-1 = do not set)"
       type: integer
-    alpacaOffset:
-      description: "ALPACA camera offset index or numeric value (-1 = do not set)"
+    cameraOffset:
+      description: "Camera offset index or numeric value (-1 = do not set)"
       type: integer
-    alpacaReadoutMode:
-      description: "ALPACA camera readout mode index"
+    cameraReadoutMode:
+      description: "Camera readout mode index"
       type: integer
     asiCoolerOn:
       description: "ASI cooler control: -1 do not set, 0 off, 1 on"
@@ -132,6 +132,43 @@ CameraSettings:
       type: integer
     asiAutoExposureGain:
       description: "Enable ASI auto exposure/gain in frame-rate mode (1 for yes, 0 for no)"
+      type: integer
+    autoExposureGainEnabled:
+      description: "Enable SDRangel software auto exposure/gain control loop (1 for yes, 0 for no)"
+      type: integer
+    autoExposureGainMode:
+      description: >
+        Software auto exposure/gain adjustment mode
+          * 0 - Exposure first
+          * 1 - Gain first
+          * 2 - Exposure only
+          * 3 - Gain only
+      type: integer
+    autoExposureTargetPercentile:
+      description: "Image percentile used as the exposure target measurement"
+      type: number
+      format: double
+    autoExposureTargetBrightness:
+      description: "Target brightness percentage for the selected percentile"
+      type: number
+      format: double
+    autoExposureMaxChangePercent:
+      description: "Maximum exposure/gain change per control step, as a percentage"
+      type: number
+      format: double
+    autoExposureMinMs:
+      description: "Minimum software auto-exposure time in milliseconds"
+      type: number
+      format: double
+    autoExposureMaxMs:
+      description: "Maximum software auto-exposure time in milliseconds"
+      type: number
+      format: double
+    autoExposureMinGain:
+      description: "Minimum software auto-gain value"
+      type: integer
+    autoExposureMaxGain:
+      description: "Maximum software auto-gain value"
       type: integer
     asiColorImageType:
       description: >
@@ -152,9 +189,23 @@ CameraSettings:
     videoFileCameraPath:
       description: "File path for file-based camera video source"
       type: string
+    imageFileCameraPaths:
+      description: "Ordered image file list for files: image sequence camera source"
+      type: array
+      items:
+        type: string
     videoFileName:
       description: "File path for recorded video output"
       type: string
+    recordRawFits:
+      description: "Save uncalibrated raw input still images as FITS files (1 for yes, 0 for no)"
+      type: integer
+    recordCalibratedMedia:
+      description: "Save calibrated/debayered still images and videos (1 for yes, 0 for no)"
+      type: integer
+    recordPostProcessedMedia:
+      description: "Save post-processed still images and videos with overlays (1 for yes, 0 for no)"
+      type: integer
     videoHwAcceleration:
       description: "Prefer hardware-accelerated video encoding when available (1 for yes, 0 for no)"
       type: integer
@@ -186,7 +237,8 @@ CameraSettings:
           * 0 - Average
           * 1 - Median
           * 2 - Sigma-clipped average
-          * 3 - HDR
+          * 3 - Lucky sharp average
+          * 4 - HDR
       type: integer
     stackHdrAlgorithm:
       description: >
@@ -210,6 +262,19 @@ CameraSettings:
           * 0 - None
           * 1 - Phase correlation
           * 2 - Star centroid matching
+      type: integer
+    stackDisplayMode:
+      description: >
+        Stack preview display mode
+          * 0 - Stacked image
+          * 1 - Single history frame
+          * 2 - History tile sheet
+      type: integer
+    stackDisplayFrameIndex:
+      description: "History frame index to preview when stackDisplayMode is single history frame"
+      type: integer
+    stackRejectBadFrames:
+      description: "Reject frames that are poor candidates for stacking (1 for yes, 0 for no)"
       type: integer
     stackDarkFileName:
       description: "Dark calibration frame file path"
@@ -257,6 +322,24 @@ CameraSettings:
       description: "Camera field of view in degrees"
       type: number
       format: float
+    fovMode:
+      description: >
+        Field-of-view input mode
+          * 0 - Direct FoV
+          * 1 - Calculate from sensor size and focal length
+      type: integer
+    fovSensorWidthMm:
+      description: "Sensor width in millimetres when calculating FoV"
+      type: number
+      format: double
+    fovSensorHeightMm:
+      description: "Sensor height in millimetres when calculating FoV"
+      type: number
+      format: double
+    fovFocalLengthMm:
+      description: "Focal length in millimetres when calculating FoV"
+      type: number
+      format: double
     lensProjection:
       description: >
         Lens projection model
@@ -299,6 +382,9 @@ CameraSettings:
       description: "Amount to reduce manual white-balance gains toward neutral in highlights"
       type: number
       format: double
+    postProcessUseCuda:
+      description: "Use OpenCV CUDA acceleration for supported camera processing steps (1 for yes, 0 for no)"
+      type: integer
     postProcessUnwarp:
       description: "Unwarp fisheye images using lens settings (1 for yes, 0 for no)"
       type: integer
@@ -380,6 +466,14 @@ CameraSettings:
       type: integer
     flipY:
       description: "Flip image vertically (1 for yes, 0 for no)"
+      type: integer
+    imageRotation:
+      description: >
+        Rotate image clockwise after flips
+          * 0 - 0 degrees
+          * 90 - 90 degrees
+          * 180 - 180 degrees
+          * 270 - 270 degrees
       type: integer
     invertColors:
       description: "Invert all colour channels (1 for yes, 0 for no)"
@@ -641,8 +735,8 @@ CameraSettings:
           * 1 - Name/magnitude
           * 2 - Name/magnitude/spectral type
       type: integer
-    plateSolveUseCurrentDateTime:
-      description: "Use current system date/time for plate solving (1 for yes, 0 for no)"
+    plateSolveUseCaptureDateTime:
+      description: "Use frame capture date/time for plate solving; when 0 use plateSolveDateTime (1 for yes, 0 for no)"
       type: integer
     plateSolveDateTime:
       description: "Fixed date/time for plate solving recorded media"
@@ -653,6 +747,13 @@ CameraSettings:
     plateSolveUseDownloadedCatalog:
       description: "Prefer downloaded HYG catalog when available (1 for yes, 0 for no)"
       type: integer
+    plateSolveCatalogSource:
+      description: >
+        Plate solve catalog source
+          * 0 - Auto
+          * 1 - HYG
+          * 2 - Siril SPCC Gaia
+      type: integer
     plateSolveApplyMode:
       description: >
         Plate solve apply mode
@@ -660,9 +761,6 @@ CameraSettings:
           * 1 - Azimuth/elevation/roll
           * 2 - Azimuth/elevation/roll/FoV
           * 3 - Azimuth/elevation/roll/FoV/lens
-      type: integer
-    videoPostProcess:
-      description: "Write post-processed frames to video file; when 0 write raw frames (1 for yes, 0 for no)"
       type: integer
     overlaySpectrum:
       description: "Overlay the spectrum view image on each frame (1 for yes, 0 for no)"
@@ -704,12 +802,20 @@ CameraSettings:
       description: "Seconds a class must remain absent before it is treated as disappeared"
       type: number
       format: double
+    yoloTileLargeImages:
+      description: "Tile images larger than the YOLO model input size before inference (1 for yes, 0 for no)"
+      type: integer
+    yoloTileOverlapPercent:
+      description: "Tile overlap percentage for large-image YOLO inference"
+      type: integer
     yoloDnnTarget:
       description: >
-        OpenCV DNN backend for YOLO inference
+        YOLO inference backend/target
           * 0 - CPU
-          * 1 - CUDA (FP32)
+          * 1 - CUDA FP32
           * 2 - CUDA FP16
+          * 3 - TensorRT FP32
+          * 4 - TensorRT FP16
       type: integer
     objectDeviceSettings:
       description: "Per-YOLO-class device control settings"
@@ -840,11 +946,14 @@ CameraActions:
         filename:
           description: "Filename for the image"
           type: string
-        recordMode:
-          description: >
-            * 0 - Raw images
-            * 1 - Processed images
-            * 2 - Both
+        recordRawFits:
+          description: "Save uncalibrated raw input image as FITS (1 for yes, 0 for no)"
+          type: integer
+        recordCalibratedMedia:
+          description: "Save calibrated/debayered image (1 for yes, 0 for no)"
+          type: integer
+        recordPostProcessedMedia:
+          description: "Save post-processed image with overlays (1 for yes, 0 for no)"
           type: integer
         images:
           description: "Number of images to save (0 - Unlimited)"
@@ -856,11 +965,11 @@ CameraActions:
         filename:
           description: "Filename for the video"
           type: string
-        recordMode:
-          description: >
-            * 0 - Raw video
-            * 1 - Processed video
-            * 2 - Both
+        recordCalibratedMedia:
+          description: "Record calibrated/debayered video (1 for yes, 0 for no)"
+          type: integer
+        recordPostProcessedMedia:
+          description: "Record post-processed video with overlays (1 for yes, 0 for no)"
           type: integer
         duration:
           description: "Duration of recording (0 - Unlimited)"

@@ -98,6 +98,7 @@
 #include "cameraframestacker.h"
 #include "camerahistogramdialog.h"
 #include "camerafilesequencedialog.h"
+#include "camerarecorder.h"
 #include "camerasettingsdialog.h"
 #include "cameraworker.h"
 #include "cameragui.h"
@@ -552,9 +553,9 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         return true;
     }
-    else if (CameraPostProcessor::MsgReportSaveVideoState::match(message))
+    else if (CameraRecorder::MsgReportSaveVideoState::match(message))
     {
-        const CameraPostProcessor::MsgReportSaveVideoState& report = (CameraPostProcessor::MsgReportSaveVideoState&) message;
+        const CameraRecorder::MsgReportSaveVideoState& report = (CameraRecorder::MsgReportSaveVideoState&) message;
         m_settings.m_saveVideo = report.getSaveVideo();
         ui->saveVideoCheck->blockSignals(true);
         ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
@@ -562,9 +563,9 @@ bool CameraGUI::handleMessage(const Message& message)
         applySetting("saveVideo");
         return true;
     }
-    else if (CameraPostProcessor::MsgReportSaveImageState::match(message))
+    else if (CameraRecorder::MsgReportSaveImageState::match(message))
     {
-        const CameraPostProcessor::MsgReportSaveImageState& report = (CameraPostProcessor::MsgReportSaveImageState&) message;
+        const CameraRecorder::MsgReportSaveImageState& report = (CameraRecorder::MsgReportSaveImageState&) message;
         m_settings.m_saveImage = report.getSaveImage();
         ui->saveImageCheck->blockSignals(true);
         ui->saveImageCheck->setChecked(m_settings.m_saveImage);

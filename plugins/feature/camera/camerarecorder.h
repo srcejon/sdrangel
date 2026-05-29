@@ -126,6 +126,46 @@ public:
         { }
     };
 
+    class MsgReportSaveVideoState : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool getSaveVideo() const { return m_saveVideo; }
+
+        static MsgReportSaveVideoState* create(bool saveVideo)
+        {
+            return new MsgReportSaveVideoState(saveVideo);
+        }
+
+    private:
+        bool m_saveVideo;
+
+        MsgReportSaveVideoState(bool saveVideo) :
+            Message(),
+            m_saveVideo(saveVideo)
+        { }
+    };
+
+    class MsgReportSaveImageState : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool getSaveImage() const { return m_saveImage; }
+
+        static MsgReportSaveImageState* create(bool saveImage)
+        {
+            return new MsgReportSaveImageState(saveImage);
+        }
+
+    private:
+        bool m_saveImage;
+
+        MsgReportSaveImageState(bool saveImage) :
+            Message(),
+            m_saveImage(saveImage)
+        { }
+    };
+
     CameraRecorder();
     ~CameraRecorder();
 
@@ -139,7 +179,7 @@ public:
 private:
     struct BufferedVideoFrame
     {
-        QImage m_rawImage;
+        QImage m_calibratedImage;
         QImage m_processedImage;
     };
 
@@ -148,9 +188,9 @@ private:
     CameraPostProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
-    cv::VideoWriter m_rawVideoWriter;
+    cv::VideoWriter m_calibratedVideoWriter;
     cv::VideoWriter m_processedVideoWriter;
-    QSize m_rawVideoWriterSize;
+    QSize m_calibratedVideoWriterSize;
     QSize m_processedVideoWriterSize;
     std::deque<BufferedVideoFrame> m_preRecordVideoFrames;
     bool m_preRecordBufferFlushed;
@@ -183,8 +223,8 @@ private:
     int preRecordBufferFrameLimit() const;
     int outputQueueFrameLimit() const;
     void trimPreRecordBuffer();
-    void appendPreRecordFrame(const QImage& rawImage, const QImage& processedImage);
-    void flushPreRecordFrames(const QImage& currentRawImage, const QImage& currentProcessedImage);
+    void appendPreRecordFrame(const QImage& calibratedImage, const QImage& processedImage);
+    void flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentProcessedImage);
 
 private slots:
     void handleInputMessages();

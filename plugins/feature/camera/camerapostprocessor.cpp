@@ -38,8 +38,6 @@ MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgConfigureCameraPostProcessor, M
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveVideoState, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportSaveImageState, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
 
 namespace {
@@ -1408,4 +1406,3 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     PROFILER_STOP("CameraPostProcessor::applyPostProcessing");
     return result;
 }
-

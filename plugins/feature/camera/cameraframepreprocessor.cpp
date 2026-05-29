@@ -410,20 +410,20 @@ void CameraFramePreprocessor::processNewFrame(const CameraPipelineFramePtr& fram
     }
 
     cv::Mat frameMat = imageToWorkingMat(frame->m_image);
-    if (shouldMaterializeRawBayerImage(*frame) && (frameMat.channels() == 1))
+    if (shouldMaterializeRawInputImage(*frame) && (frameMat.channels() == 1))
     {
-        frame->m_rawBayerImage = workingMatToImage(frameMat.clone());
-        frame->m_rawBayerPattern = frame->m_bayerPattern;
+        frame->m_rawInputImage = workingMatToImage(frameMat.clone());
+        frame->m_rawInputBayerPattern = frame->m_bayerPattern;
     }
-    else if (shouldMaterializeRawBayerImage(*frame))
+    else if (shouldMaterializeRawInputImage(*frame))
     {
-        frame->m_rawBayerImage = frame->m_image.copy();
-        frame->m_rawBayerPattern = CameraPipelineFrame::BayerNone;
+        frame->m_rawInputImage = frame->m_image.copy();
+        frame->m_rawInputBayerPattern = CameraPipelineFrame::BayerNone;
     }
     else
     {
-        frame->m_rawBayerImage = QImage();
-        frame->m_rawBayerPattern = CameraPipelineFrame::BayerNone;
+        frame->m_rawInputImage = QImage();
+        frame->m_rawInputBayerPattern = CameraPipelineFrame::BayerNone;
     }
 
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
@@ -697,7 +697,7 @@ bool CameraFramePreprocessor::shouldMaterializeUnprocessedImage(const CameraPipe
         || (m_settings.m_videoPreRecordBufferSeconds > 0);
 }
 
-bool CameraFramePreprocessor::shouldMaterializeRawBayerImage(const CameraPipelineFrame& frame) const
+bool CameraFramePreprocessor::shouldMaterializeRawInputImage(const CameraPipelineFrame& frame) const
 {
     return m_settings.m_recordRawFits
         && (m_settings.m_saveImage || frame.m_saveCurrentImage);

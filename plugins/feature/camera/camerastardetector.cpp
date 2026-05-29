@@ -22,6 +22,7 @@
 #include <vector>
 
 #include <QDebug>
+#include <opencv2/imgproc.hpp>
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudafilters.hpp>
@@ -214,6 +215,49 @@ void thresholdResidualWithRobustTiles(const cv::Mat& residual,
             ? std::max(1.0, weightedSigmaSum / static_cast<double>(weightedPixelCount))
             : 1.0;
     }
+}
+
+void suppressSatelliteTrails(cv::Mat& thresholdMask)
+{
+    PROFILER_START();
+
+    if (thresholdMask.empty() || (thresholdMask.type() != CV_8UC1)) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    const int minDimension = std::min(thresholdMask.cols, thresholdMask.rows);
+    if (minDimension < 128) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    const double minLineLength = std::max(40.0, minDimension * 0.06);
+    const double maxLineGap = std::max(4.0, minDimension * 0.01);
+    const int houghThreshold = std::max(12, static_cast<int>(std::round(minLineLength * 0.25)));
+
+    std::vector<cv::Vec4i> lines;
+    cv::HoughLinesP(thresholdMask, lines, 1.0, CV_PI / 180.0, houghThreshold, minLineLength, maxLineGap);
+    if (lines.empty()) {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    const int eraseThickness = std::clamp(static_cast<int>(std::round(minDimension * 0.004)), 3, 15);
+    for (const cv::Vec4i& line : lines)
+    {
+        const cv::Point p1(line[0], line[1]);
+        const cv::Point p2(line[2], line[3]);
+        const double dx = static_cast<double>(p1.x - p2.x);
+        const double dy = static_cast<double>(p1.y - p2.y);
+        if (std::sqrt(dx * dx + dy * dy) < minLineLength) {
+            continue;
+        }
+
+        cv::line(thresholdMask, p1, p2, cv::Scalar(0), eraseThickness, cv::LINE_8);
+    }
+
+    PROFILER_STOP(__FUNCTION__);
 }
 
 } // namespace
@@ -544,6 +588,7 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
         thresholdMask = thresholdMask8;
     }
     cv::bitwise_and(thresholdMask, cachedExclusionMask(roi, thresholdMask.size()), thresholdMask);
+    suppressSatelliteTrails(thresholdMask);
     if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewThresholded)) {
         *debugMask = thresholdMask.clone();
     }
@@ -595,6 +640,7 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
 
         thresholdResidualWithRobustTiles(residual, static_cast<double>(m_settings.m_starThreshold), 255.0, thresholdMask, &residualNoiseSigma);
         cv::bitwise_and(thresholdMask, cachedExclusionMask(roi, thresholdMask.size()), thresholdMask);
+        suppressSatelliteTrails(thresholdMask);
 
         if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))
         {

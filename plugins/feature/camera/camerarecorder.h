@@ -25,6 +25,7 @@
 #include <QDateTime>
 #include <QImage>
 #include <QMutex>
+#include <QSet>
 #include <QSize>
 
 #include <opencv2/videoio.hpp>
@@ -175,6 +176,7 @@ public:
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setNextStage(CameraPostProcessor *nextStage) { m_nextStage = nextStage; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
 
 private:
     struct BufferedVideoFrame
@@ -185,6 +187,7 @@ private:
 
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_msgQueueToFeature;
     CameraPostProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
@@ -200,6 +203,7 @@ private:
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrames;
     int m_droppedOutputFrames;
+    QSet<QString> m_reportedVideoWriterErrorKeys;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
@@ -220,6 +224,7 @@ private:
     void closeVideoWriters();
     bool ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant);
     void writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite);
+    void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     int preRecordBufferFrameLimit() const;
     int outputQueueFrameLimit() const;
     void trimPreRecordBuffer();

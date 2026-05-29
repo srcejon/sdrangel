@@ -27,6 +27,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "cameraimageutils.h"
+#include "camera.h"
 #include "camerapostprocessor.h"
 #include "camerarecorder.h"
 #include "util/fits.h"
@@ -163,6 +164,7 @@ bool imageToFitsBytes(const QImage& image, QByteArray& bytes, int& bitsPerPixel,
 
 CameraRecorder::CameraRecorder() :
     m_msgQueueToGUI(nullptr),
+    m_msgQueueToFeature(nullptr),
     m_nextStage(nullptr),
     m_captureActive(false),
     m_preRecordBufferFlushed(false),
@@ -269,6 +271,7 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
         {
             closeVideoWriters();
             m_preRecordBufferFlushed = false;
+            m_reportedVideoWriterErrorKeys.clear();
         }
     }
 
@@ -279,6 +282,7 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
         } else if (!wasSavingVideo) {
             m_videoRecordingStartDateTime = QDateTime::currentDateTimeUtc();
             m_preRecordBufferFlushed = false;
+            m_reportedVideoWriterErrorKeys.clear();
         }
     }
 
@@ -580,6 +584,7 @@ void CameraRecorder::closeVideoWriters()
     }
     m_calibratedVideoWriterSize = QSize();
     m_processedVideoWriterSize = QSize();
+    m_reportedVideoWriterErrorKeys.clear();
 }
 
 int CameraRecorder::preRecordBufferFrameLimit() const
@@ -708,12 +713,38 @@ bool CameraRecorder::ensureVideoWriter(cv::VideoWriter& writer, const QString& b
 
     if (writer.isOpened()) {
         openedSize = requestedSize;
+        m_reportedVideoWriterErrorKeys.remove(QStringLiteral("video-writer:%1:%2:%3x%4")
+            .arg(variant, filename)
+            .arg(requestedSize.width())
+            .arg(requestedSize.height()));
         qDebug() << "CameraRecorder opened:" << filename << "backend:" << QString::fromStdString(writer.getBackendName());
     } else {
+        const QString errorMessage = tr("Failed to open video file for %1 recording:\n%2\n\nCodec: avc1\nFrame size: %3x%4\nFrame rate: %5 fps")
+            .arg(variant,
+                 filename)
+            .arg(requestedSize.width())
+            .arg(requestedSize.height())
+            .arg(QString::number(m_settings.getCaptureFrameRate(), 'f', 3));
         qWarning() << "CameraRecorder failed to open:" << filename;
+        reportErrorToFeature(QStringLiteral("video-writer:%1:%2:%3x%4")
+                                 .arg(variant, filename)
+                                 .arg(requestedSize.width())
+                                 .arg(requestedSize.height()),
+                             tr("Camera video recording error"),
+                             errorMessage);
     }
 
     return writer.isOpened();
+}
+
+void CameraRecorder::reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage)
+{
+    if (!m_msgQueueToFeature || m_reportedVideoWriterErrorKeys.contains(errorKey)) {
+        return;
+    }
+
+    m_reportedVideoWriterErrorKeys.insert(errorKey);
+    m_msgQueueToFeature->push(Camera::MsgReportError::create(title, errorMessage));
 }
 
 void CameraRecorder::writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite)

@@ -160,6 +160,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_recorderThread, &QThread::finished, m_recorder, &QObject::deleteLater);
     QObject::connect(m_recorderThread, &QThread::finished, m_recorderThread, &QThread::deleteLater);
     m_recorder->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_recorder->setMessageQueueToFeature(getInputMessageQueue());
     m_recorderThread->start();
     m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgConfigureCameraRecorder::create(m_settings, QList<QString>(), true));
 
@@ -389,6 +390,7 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
     }
     if (m_recorder) {
         m_recorder->setMessageQueueToGUI(queue);
+        m_recorder->setMessageQueueToFeature(getInputMessageQueue());
     }
     if (m_postProcessor) {
         m_postProcessor->setMessageQueueToGUI(queue);

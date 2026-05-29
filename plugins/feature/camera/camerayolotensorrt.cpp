@@ -21,6 +21,7 @@
 #ifdef CAMERA_TENSORRT_YOLO
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 #include <numeric>
 #include <utility>
@@ -33,6 +34,7 @@
 
 #include <NvInfer.h>
 #include <NvOnnxParser.h>
+#include <cuda_fp16.h>
 #include <cuda_runtime_api.h>
 #include <opencv2/dnn/dnn.hpp>
 
@@ -76,6 +78,37 @@ size_t dataTypeSize(nvinfer1::DataType type)
     }
 
     return 0;
+}
+
+QString dataTypeName(nvinfer1::DataType type)
+{
+    switch (type)
+    {
+    case nvinfer1::DataType::kFLOAT:
+        return QStringLiteral("float32");
+    case nvinfer1::DataType::kHALF:
+        return QStringLiteral("float16");
+    case nvinfer1::DataType::kINT8:
+        return QStringLiteral("int8");
+    case nvinfer1::DataType::kINT32:
+        return QStringLiteral("int32");
+    case nvinfer1::DataType::kBOOL:
+        return QStringLiteral("bool");
+    case nvinfer1::DataType::kUINT8:
+        return QStringLiteral("uint8");
+    case nvinfer1::DataType::kFP8:
+        return QStringLiteral("float8");
+    case nvinfer1::DataType::kBF16:
+        return QStringLiteral("bfloat16");
+    case nvinfer1::DataType::kINT64:
+        return QStringLiteral("int64");
+    case nvinfer1::DataType::kINT4:
+        return QStringLiteral("int4");
+    case nvinfer1::DataType::kFP4:
+        return QStringLiteral("float4");
+    }
+
+    return QStringLiteral("unknown");
 }
 
 qint64 dimsVolume(const nvinfer1::Dims& dims)
@@ -198,6 +231,7 @@ struct CameraYoloTensorRt::Impl
     cv::Size m_inputSize = cv::Size(0, 0);
     int m_requestedMaxBatch = 1;
     int m_maxBatch = 1;
+    bool m_fixedInputBatch = false;
     bool m_fp16 = false;
     nvinfer1::Dims m_modelInputDims {};
     std::unique_ptr<nvinfer1::IRuntime> m_runtime;
@@ -225,6 +259,7 @@ struct CameraYoloTensorRt::Impl
         m_inputSize = cv::Size(0, 0);
         m_requestedMaxBatch = 1;
         m_maxBatch = 1;
+        m_fixedInputBatch = false;
         m_fp16 = false;
         m_modelInputDims = nvinfer1::Dims {};
         m_inputName.clear();
@@ -278,7 +313,8 @@ struct CameraYoloTensorRt::Impl
 
         m_modelInputDims = m_engine->getTensorShape(m_inputName.c_str());
         m_maxBatch = std::max(1, m_requestedMaxBatch);
-        if ((m_modelInputDims.nbDims == 4) && (m_modelInputDims.d[0] > 0)) {
+        m_fixedInputBatch = (m_modelInputDims.nbDims == 4) && (m_modelInputDims.d[0] > 0);
+        if (m_fixedInputBatch) {
             m_maxBatch = m_modelInputDims.d[0];
         }
         if (!m_stream && (cudaStreamCreate(&m_stream) != cudaSuccess))
@@ -431,7 +467,8 @@ struct CameraYoloTensorRt::Impl
             return false;
         }
 
-        const nvinfer1::Dims inputDims = makeInputDims(tileCount, m_inputSize, m_modelInputDims);
+        const int inferenceBatch = m_fixedInputBatch ? m_maxBatch : tileCount;
+        const nvinfer1::Dims inputDims = makeInputDims(inferenceBatch, m_inputSize, m_modelInputDims);
         if (!m_context->setInputShape(m_inputName.c_str(), inputDims))
         {
             error = QStringLiteral("TensorRT failed to set input shape");
@@ -440,13 +477,46 @@ struct CameraYoloTensorRt::Impl
 
         cv::Mat blob;
         std::vector<cv::Mat> chunk;
-        chunk.reserve(static_cast<size_t>(tileCount));
-        for (int i = 0; i < tileCount; ++i) {
-            chunk.push_back(letterboxes[static_cast<size_t>(firstTile + i)]);
+        chunk.reserve(static_cast<size_t>(inferenceBatch));
+        for (int i = 0; i < inferenceBatch; ++i)
+        {
+            const int tileOffset = std::min(i, tileCount - 1);
+            chunk.push_back(letterboxes[static_cast<size_t>(firstTile + tileOffset)]);
         }
         cv::dnn::blobFromImages(chunk, blob, 1.0 / 255.0, m_inputSize, cv::Scalar(), true, false);
+        if (!blob.isContinuous()) {
+            blob = blob.clone();
+        }
 
-        const size_t inputBytes = blob.total() * blob.elemSize();
+        const nvinfer1::DataType inputDataType = m_engine->getTensorDataType(m_inputName.c_str());
+        const size_t inputElementSize = dataTypeSize(inputDataType);
+        const qint64 inputElements = dimsVolume(inputDims);
+        if ((inputElements <= 0) || (static_cast<size_t>(inputElements) != blob.total()) || (inputElementSize == 0))
+        {
+            error = QStringLiteral("TensorRT input tensor is unsupported");
+            return false;
+        }
+
+        std::vector<quint16> inputHalfHost;
+        const void *inputHostData = blob.ptr<float>();
+        if (inputDataType == nvinfer1::DataType::kHALF)
+        {
+            const float *floatData = blob.ptr<float>();
+            inputHalfHost.resize(static_cast<size_t>(inputElements));
+            for (size_t i = 0; i < inputHalfHost.size(); ++i)
+            {
+                const __half halfValue = __float2half(floatData[i]);
+                std::memcpy(&inputHalfHost[i], &halfValue, sizeof(inputHalfHost[i]));
+            }
+            inputHostData = inputHalfHost.data();
+        }
+        else if (inputDataType != nvinfer1::DataType::kFLOAT)
+        {
+            error = QStringLiteral("TensorRT input tensor datatype %1 is unsupported").arg(dataTypeName(inputDataType));
+            return false;
+        }
+
+        const size_t inputBytes = static_cast<size_t>(inputElements) * inputElementSize;
         void *inputDevice = nullptr;
         void *outputDevice = nullptr;
 
@@ -466,7 +536,7 @@ struct CameraYoloTensorRt::Impl
             return false;
         }
 
-        cudaError = cudaMemcpyAsync(inputDevice, blob.ptr(), inputBytes, cudaMemcpyHostToDevice, m_stream);
+        cudaError = cudaMemcpyAsync(inputDevice, inputHostData, inputBytes, cudaMemcpyHostToDevice, m_stream);
         if (cudaError != cudaSuccess)
         {
             cleanup();
@@ -540,7 +610,7 @@ struct CameraYoloTensorRt::Impl
         if (outputDims.nbDims == 3)
         {
             const int batch = outputDims.d[0];
-            if (batch != tileCount)
+            if (batch != inferenceBatch)
             {
                 error = QStringLiteral("TensorRT output batch size mismatch");
                 return false;

@@ -369,18 +369,6 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
         m_worker->setMessageQueueToGUI(queue);
         m_worker->setMessageQueueToFeature(getInputMessageQueue());
     }
-    if (m_frameAligner) {
-        (void) queue;
-    }
-    if (m_framePreprocessor) {
-        (void) queue;
-    }
-    if (m_frameStacker) {
-        (void) queue;
-    }
-    if (m_imageProcessor) {
-        (void) queue;
-    }
     if (m_objectDetector) {
         m_objectDetector->setMessageQueueToGUI(queue);
         m_objectDetector->setMessageQueueToFeature(getInputMessageQueue());

@@ -6362,7 +6362,7 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
         // which strongly constrains the geometry.  Brightness rank ordering is also less
         // reliable when the matched set spans mag 2-13 (saturated bright star + very faint
         // stars).  Use the same relaxed threshold regardless of whether the pose is anchored.
-        return evaluation.brightnessRankError <= 0.45;
+        return evaluation.brightnessRankError <= 0.50;
     }
 
     const double threshold = (settings.m_fov <= 30.0) ? 0.50
@@ -10285,9 +10285,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
     const int weakModeCandidatePoolMinMatches = std::max(3, settings.m_plateSolveMinMatches - 2);
     const int weakModeRefineMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
-    const bool rankWideFinalPassWithSelectedDetections = isWidePlateSolveContext(settings);
+    const bool rankFinalPassWithSelectedDetections = isWidePlateSolveContext(settings)
+        || (useStartDirection
+            && (settings.m_fov <= 5.0)
+            && (starDetections.size() > kMaxDetectionsForSolve * 2));
     const int multiHypothesisCandidateLimit = (useStartDirection && (settings.m_fov <= 5.0)) ? 24
-        : rankWideFinalPassWithSelectedDetections ? 64
+        : rankFinalPassWithSelectedDetections ? 64
         : 10;
     if ((best.matchCount < settings.m_plateSolveMinMatches)
         && (!useMultiHypothesisRefine || (best.matchCount < weakModeRefineMinMatches)))
@@ -10372,10 +10375,10 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 catalogContext,
                 imageSize,
                 starDetections,
-                rankWideFinalPassWithSelectedDetections ? detectionIndices : allDetectionIndices,
+                rankFinalPassWithSelectedDetections ? detectionIndices : allDetectionIndices,
                 refinedCandidate,
                 finalMatchRadius,
-                rankWideFinalPassWithSelectedDetections);
+                rankFinalPassWithSelectedDetections);
             logFinalMatchPassEvaluation("final-match-pass-multi", finalPassEvaluation);
 
             if (isBetterWeakModeFinalMatchPass(
@@ -10443,7 +10446,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
 
     if (selectedFinalPass.projectorValid
-        && rankWideFinalPassWithSelectedDetections
+        && rankFinalPassWithSelectedDetections
         && useStartFov
         && (std::fabs(best.fovDegrees - settings.m_fov) >= 2.0))
     {
@@ -10506,7 +10509,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
 
     stageStartMs = solveProfileTimer.elapsed();
-    if (selectedFinalPass.projectorValid && rankWideFinalPassWithSelectedDetections)
+    if (selectedFinalPass.projectorValid && rankFinalPassWithSelectedDetections)
     {
         selectedFinalPass = evaluateFinalMatchPass(
             settings,

@@ -1346,7 +1346,7 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
             diagnosticCatalog,
             labels);
         const QStringList requiredStars = requiredExpectedStars(test);
-        const QStringList missing = missingExpectedStars(labels, QStringList(), requiredStars);
+        const QStringList missing = missingExpectedStars(labels, projectedDetections, requiredStars);
         const QStringList positionMismatches = expectedStarPositionMismatches(test, result.frame);
         const bool solved = result.frame->m_plateSolve.m_solved;
         const bool pass = solved && missing.isEmpty() && positionMismatches.isEmpty();

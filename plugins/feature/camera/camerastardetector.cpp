@@ -217,33 +217,40 @@ void thresholdResidualWithRobustTiles(const cv::Mat& residual,
     }
 }
 
-void suppressSatelliteTrails(cv::Mat& thresholdMask)
+cv::Mat detectSatelliteTrails(const cv::Mat& thresholdMask)
 {
     PROFILER_START();
 
     if (thresholdMask.empty() || (thresholdMask.type() != CV_8UC1)) {
         PROFILER_STOP(__FUNCTION__);
-        return;
+        return {};
     }
 
     const int minDimension = std::min(thresholdMask.cols, thresholdMask.rows);
     if (minDimension < 128) {
         PROFILER_STOP(__FUNCTION__);
-        return;
+        return {};
     }
 
-    const double minLineLength = std::max(40.0, minDimension * 0.06);
-    const double maxLineGap = std::max(4.0, minDimension * 0.01);
-    const int houghThreshold = std::max(12, static_cast<int>(std::round(minLineLength * 0.25)));
+    const double minLineLength = std::max(160.0, minDimension * 0.20);
+    const double maxLineGap = std::max(8.0, minDimension * 0.02);
+    const int houghThreshold = std::max(30, static_cast<int>(std::round(minLineLength * 0.35)));
+
+    cv::Mat lineMask;
+    cv::dilate(
+        thresholdMask,
+        lineMask,
+        cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
 
     std::vector<cv::Vec4i> lines;
-    cv::HoughLinesP(thresholdMask, lines, 1.0, CV_PI / 180.0, houghThreshold, minLineLength, maxLineGap);
+    cv::HoughLinesP(lineMask, lines, 1.0, CV_PI / 180.0, houghThreshold, minLineLength, maxLineGap);
     if (lines.empty()) {
         PROFILER_STOP(__FUNCTION__);
-        return;
+        return {};
     }
 
-    const int eraseThickness = std::clamp(static_cast<int>(std::round(minDimension * 0.004)), 3, 15);
+    cv::Mat trailMask = cv::Mat::zeros(thresholdMask.size(), CV_8UC1);
+    const int eraseThickness = std::clamp(static_cast<int>(std::round(minDimension * 0.008)), 5, 17);
     for (const cv::Vec4i& line : lines)
     {
         const cv::Point p1(line[0], line[1]);
@@ -254,10 +261,11 @@ void suppressSatelliteTrails(cv::Mat& thresholdMask)
             continue;
         }
 
-        cv::line(thresholdMask, p1, p2, cv::Scalar(0), eraseThickness, cv::LINE_8);
+        cv::line(trailMask, p1, p2, cv::Scalar(255), eraseThickness, cv::LINE_8);
     }
 
     PROFILER_STOP(__FUNCTION__);
+    return trailMask;
 }
 
 } // namespace
@@ -588,7 +596,6 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
         thresholdMask = thresholdMask8;
     }
     cv::bitwise_and(thresholdMask, cachedExclusionMask(roi, thresholdMask.size()), thresholdMask);
-    suppressSatelliteTrails(thresholdMask);
     if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewThresholded)) {
         *debugMask = thresholdMask.clone();
     }
@@ -640,7 +647,6 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
 
         thresholdResidualWithRobustTiles(residual, static_cast<double>(m_settings.m_starThreshold), 255.0, thresholdMask, &residualNoiseSigma);
         cv::bitwise_and(thresholdMask, cachedExclusionMask(roi, thresholdMask.size()), thresholdMask);
-        suppressSatelliteTrails(thresholdMask);
 
         if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))
         {
@@ -697,6 +703,14 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
 #endif
     if (useCPUStarPreprocessing) {
         applyStarPreprocessing(bgrMat, sourceBgrGpu, roi, highBitDepthGray, gray, residual, thresholdMask, residualNoiseSigma, debugMask);
+    }
+
+    cv::Mat satelliteTrailMask;
+    if (m_settings.m_plateSolve
+        && (m_settings.m_lensProjection == CameraSettings::LensProjectionRectilinear)
+        && (m_settings.m_fov <= 30.0))
+    {
+        satelliteTrailMask = detectSatelliteTrails(thresholdMask);
     }
 
     std::vector<std::vector<cv::Point>> contours;
@@ -834,6 +848,18 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
         const bool hotPixelSuspect = (area <= 2.0)
             || ((fwhm > 0.0) && (fwhm < 0.85) && (fillRatio > 0.75))
             || ((width <= 2.0) && (height <= 2.0) && (peakValue > residualNoiseSigma * 12.0));
+
+        if (!satelliteTrailMask.empty()
+            && !saturated
+            && (area <= 30.0)
+            && (fwhm <= 4.0))
+        {
+            const int trailX = std::clamp(static_cast<int>(std::round(centerX)), 0, satelliteTrailMask.cols - 1);
+            const int trailY = std::clamp(static_cast<int>(std::round(centerY)), 0, satelliteTrailMask.rows - 1);
+            if (satelliteTrailMask.at<uchar>(trailY, trailX) != 0) {
+                continue;
+            }
+        }
 
         CameraPipelineStarDetection detection;
         detection.m_center = QPointF(centerX + roi.x, centerY + roi.y);

@@ -219,6 +219,18 @@ bool FITS::saveImage(const QString& fileName,
                      const QVariantMap& headers,
                      QString *errorMessage)
 {
+    return saveImage(fileName, imageData, width, height, bitsPerPixel, 1, headers, errorMessage);
+}
+
+bool FITS::saveImage(const QString& fileName,
+                     const QByteArray& imageData,
+                     int width,
+                     int height,
+                     int bitsPerPixel,
+                     int channels,
+                     const QVariantMap& headers,
+                     QString *errorMessage)
+{
     if ((width <= 0) || (height <= 0))
     {
         if (errorMessage) {
@@ -235,8 +247,16 @@ bool FITS::saveImage(const QString& fileName,
         return false;
     }
 
+    if ((channels != 1) && (channels != 3))
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Only 1-channel and 3-channel FITS image saving is supported");
+        }
+        return false;
+    }
+
     const int bytesPerPixel = bitsPerPixel / 8;
-    const qsizetype expectedSize = static_cast<qsizetype>(width) * static_cast<qsizetype>(height) * bytesPerPixel;
+    const qsizetype expectedSize = static_cast<qsizetype>(width) * static_cast<qsizetype>(height) * bytesPerPixel * channels;
     if (imageData.size() < expectedSize)
     {
         if (errorMessage) {
@@ -248,9 +268,12 @@ bool FITS::saveImage(const QString& fileName,
     QByteArray header;
     header += fitsCard(QStringLiteral("SIMPLE"), QStringLiteral("T"));
     header += fitsCard(QStringLiteral("BITPIX"), QString::number(bitsPerPixel));
-    header += fitsCard(QStringLiteral("NAXIS"), QStringLiteral("2"));
+    header += fitsCard(QStringLiteral("NAXIS"), QString::number(channels == 1 ? 2 : 3));
     header += fitsCard(QStringLiteral("NAXIS1"), QString::number(width));
     header += fitsCard(QStringLiteral("NAXIS2"), QString::number(height));
+    if (channels > 1) {
+        header += fitsCard(QStringLiteral("NAXIS3"), QString::number(channels));
+    }
     if (bitsPerPixel == 16)
     {
         header += fitsCard(QStringLiteral("BZERO"), QStringLiteral("32768"));
@@ -266,6 +289,7 @@ bool FITS::saveImage(const QString& fileName,
             || (keyword == QLatin1String("NAXIS"))
             || (keyword == QLatin1String("NAXIS1"))
             || (keyword == QLatin1String("NAXIS2"))
+            || (keyword == QLatin1String("NAXIS3"))
             || !isValidFitsKeyword(keyword))
         {
             continue;
@@ -279,24 +303,33 @@ bool FITS::saveImage(const QString& fileName,
     data.reserve(static_cast<int>(expectedSize));
     const uchar *src = reinterpret_cast<const uchar*>(imageData.constData());
     const int rowBytes = width * bytesPerPixel;
+    const qsizetype planeBytes = static_cast<qsizetype>(height) * rowBytes;
 
     if (bitsPerPixel == 8)
     {
-        for (int y = height - 1; y >= 0; --y) {
-            data.append(reinterpret_cast<const char*>(src + (y * rowBytes)), rowBytes);
+        for (int channel = 0; channel < channels; ++channel)
+        {
+            const uchar *plane = src + (static_cast<qsizetype>(channel) * planeBytes);
+            for (int y = height - 1; y >= 0; --y) {
+                data.append(reinterpret_cast<const char*>(plane + (y * rowBytes)), rowBytes);
+            }
         }
     }
     else
     {
-        for (int y = height - 1; y >= 0; --y)
+        for (int channel = 0; channel < channels; ++channel)
         {
-            const uchar *row = src + (y * rowBytes);
-            for (int x = 0; x < rowBytes; x += 2)
+            const uchar *plane = src + (static_cast<qsizetype>(channel) * planeBytes);
+            for (int y = height - 1; y >= 0; --y)
             {
-                const quint16 unsignedValue = static_cast<quint16>(row[x] | (static_cast<quint16>(row[x + 1]) << 8));
-                const quint16 storedValue = static_cast<quint16>(static_cast<qint32>(unsignedValue) - 32768);
-                data.append(static_cast<char>((storedValue >> 8) & 0xff));
-                data.append(static_cast<char>(storedValue & 0xff));
+                const uchar *row = plane + (y * rowBytes);
+                for (int x = 0; x < rowBytes; x += 2)
+                {
+                    const quint16 unsignedValue = static_cast<quint16>(row[x] | (static_cast<quint16>(row[x + 1]) << 8));
+                    const quint16 storedValue = static_cast<quint16>(static_cast<qint32>(unsignedValue) - 32768);
+                    data.append(static_cast<char>((storedValue >> 8) & 0xff));
+                    data.append(static_cast<char>(storedValue & 0xff));
+                }
             }
         }
     }

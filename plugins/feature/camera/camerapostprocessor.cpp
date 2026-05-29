@@ -143,12 +143,12 @@ static double greenwichMeanSiderealDegrees(const QDateTime& utcDateTime)
 static QString formatSignedDegrees(double value)
 {
     const int rounded = qRound(value);
-    return QStringLiteral("%1%2°").arg(rounded >= 0 ? "+" : "").arg(rounded);
+    return QStringLiteral("%1%2Â°").arg(rounded >= 0 ? "+" : "").arg(rounded);
 }
 
 static QString formatAzimuthDegrees(double value)
 {
-    return QStringLiteral("%1°").arg(qRound(normalizeDegrees(value)));
+    return QStringLiteral("%1Â°").arg(qRound(normalizeDegrees(value)));
 }
 
 static QString formatRightAscensionDegrees(double value)
@@ -510,9 +510,6 @@ CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_nextStageQueue(nullptr),
     m_availableChannelOrFeatureHandler(kTrackedObjectPipeURIs, QStringList{QStringLiteral("mapitems")}),
-    m_captureActive(false),
-    m_preRecordBufferFlushed(false),
-    m_recordedImageFrames(0),
     m_processingFrame(false)
 {}
 
@@ -542,7 +539,6 @@ void CameraPostProcessor::stopWork()
         m_weather = nullptr;
     }
 
-    closeVideoWriters();
 }
 
 void CameraPostProcessor::handleInputMessages()
@@ -601,15 +597,14 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     else if (MsgCaptureActive::match(cmd))
     {
         MsgCaptureActive& activeMsg = (MsgCaptureActive&) cmd;
-        m_captureActive = activeMsg.isActive();
 
-        if (m_captureActive)
+        if (activeMsg.isActive())
         {
             m_lastFrame = CameraPipelineFrame();
         }
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrame.reset();
-        if (!m_captureActive) {
+        if (!activeMsg.isActive()) {
             m_processingFrame = false;
         }
 
@@ -623,8 +618,6 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 {
     qDebug() << "CameraPostProcessor::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
-    const bool wasSaveImage = m_settings.m_saveImage;
-    const bool wasSaveVideo = m_settings.m_saveVideo;
     static const QStringList kPostProcessingKeys = {
         "overlayDateTime", "dateTimeColor",
         "dateTimeFormat", "dateTimePosX", "dateTimePosY",
@@ -674,25 +667,6 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_lastFrame = CameraPipelineFrame();
     }
 
-    // Reset the per-recording counters whenever the saveImage / saveVideo key arrives and
-    // the action is requested true. The previous condition (m_saveImage != wasSaveImage)
-    // only reset on *state transition*; a follow-up REST saveImage while already enabled
-    // would either stop immediately or record (limit - previouslySaved) extra frames
-    // instead of the requested count. Same bug for recordVideo.
-    if (force
-        || (settingsKeys.contains("saveImage") && m_settings.m_saveImage)
-        || (settingsKeys.contains("saveVideo") && m_settings.m_saveVideo))
-    {
-        resetRecordingLimits();
-    }
-    else if ((settingsKeys.contains("saveImage") && m_settings.m_saveImage != wasSaveImage)
-        || (settingsKeys.contains("saveVideo") && m_settings.m_saveVideo != wasSaveVideo))
-    {
-        // saveImage / saveVideo was explicitly switched off — also reset so a later
-        // turn-on starts cleanly even if it doesn't carry an explicit key.
-        resetRecordingLimits();
-    }
-
     if (force || settingsKeys.contains("spectrumDevice")) {
         m_spectrumViewImage = QImage();
     }
@@ -700,17 +674,6 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     if (force || settingsKeys.contains("owmAPIKey") || settingsKeys.contains("latitude") || settingsKeys.contains("longitude"))
     {
         restartWeatherUpdates();
-    }
-
-    if (settingsKeys.contains("saveVideo") || settingsKeys.contains("videoFileName")
-        || settingsKeys.contains("videoHwAcceleration") || settingsKeys.contains("videoPostProcess"))
-    {
-        closeVideoWriters();
-        m_preRecordBufferFlushed = false;
-    }
-
-    if (force || settingsKeys.contains("videoPreRecordBufferSeconds")) {
-        trimPreRecordBuffer();
     }
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
@@ -1401,7 +1364,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     const QImage& input = frame.m_image;
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
     const QString expandedOverlayText = expandOverlayTextTemplate();
-    // Build the overlay text document once with font/style/HTML — used for both the
+    // Build the overlay text document once with font/style/HTML â€” used for both the
     // empty-check and rendering, so we only call QTextDocument::setHtml() once per frame.
     QTextDocument overlayTextDocument;
     bool needsTextOverlay = false;
@@ -1446,263 +1409,3 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     return result;
 }
 
-void CameraPostProcessor::setVideoRecordingEnabled(bool enabled)
-{
-    if (m_settings.m_saveVideo == enabled) {
-        return;
-    }
-
-    m_settings.m_saveVideo = enabled;
-    m_preRecordBufferFlushed = false;
-
-    if (enabled) {
-        m_videoRecordingStartDateTime = QDateTime::currentDateTimeUtc();
-    } else {
-        closeVideoWriters();
-        m_videoRecordingStartDateTime = QDateTime();
-    }
-
-    if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportSaveVideoState::create(enabled));
-    }
-}
-
-void CameraPostProcessor::setImageRecordingEnabled(bool enabled)
-{
-    if (m_settings.m_saveImage == enabled) {
-        return;
-    }
-
-    m_settings.m_saveImage = enabled;
-
-    if (enabled) {
-        m_recordedImageFrames = 0;
-    }
-
-    if (m_msgQueueToGUI) {
-        m_msgQueueToGUI->push(MsgReportSaveImageState::create(enabled));
-    }
-}
-
-void CameraPostProcessor::resetRecordingLimits()
-{
-    m_recordedImageFrames = 0;
-    m_videoRecordingStartDateTime = m_settings.m_saveVideo ? QDateTime::currentDateTimeUtc() : QDateTime();
-}
-
-void CameraPostProcessor::updateRecordingLimitsAfterFrame(bool savedImageFrame, bool savedVideoFrame)
-{
-    if (savedImageFrame && (m_settings.m_imageRecordLimit > 0))
-    {
-        ++m_recordedImageFrames;
-
-        if (m_recordedImageFrames >= m_settings.m_imageRecordLimit) {
-            setImageRecordingEnabled(false);
-        }
-    }
-
-    if (savedVideoFrame && (m_settings.m_videoRecordLimitSeconds > 0))
-    {
-        if (!m_videoRecordingStartDateTime.isValid()) {
-            m_videoRecordingStartDateTime = QDateTime::currentDateTimeUtc();
-        }
-
-        if (m_videoRecordingStartDateTime.msecsTo(QDateTime::currentDateTimeUtc()) >= (m_settings.m_videoRecordLimitSeconds * 1000LL)) {
-            setVideoRecordingEnabled(false);
-        }
-    }
-}
-
-QString CameraPostProcessor::createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant)
-{
-    const QFileInfo fileInfo(baseFileName);
-    const QString timestamp = QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH_mm_ss_zzz");
-    const QString infix = rawVariant ? ".raw." : ".";
-    return fileInfo.path() + "/" + fileInfo.baseName() + infix + timestamp + "." + fileInfo.suffix();
-}
-
-bool CameraPostProcessor::shouldSaveRawMedia() const
-{
-    return (m_settings.m_recordMode == CameraSettings::SavedMediaRaw)
-        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
-}
-
-bool CameraPostProcessor::shouldSaveProcessedMedia() const
-{
-    return (m_settings.m_recordMode == CameraSettings::SavedMediaProcessed)
-        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
-}
-
-void CameraPostProcessor::closeVideoWriters()
-{
-    if (m_rawVideoWriter.isOpened()) {
-        m_rawVideoWriter.release();
-    }
-    if (m_processedVideoWriter.isOpened()) {
-        m_processedVideoWriter.release();
-    }
-    m_rawVideoWriterSize = QSize();
-    m_processedVideoWriterSize = QSize();
-}
-
-int CameraPostProcessor::preRecordBufferFrameLimit() const
-{
-    const int seconds = qBound(0, m_settings.m_videoPreRecordBufferSeconds, 60);
-    if (seconds <= 0) {
-        return 0;
-    }
-
-    return std::max(1, static_cast<int>(std::ceil(m_settings.getCaptureFrameRate() * seconds)));
-}
-
-namespace {
-
-// Upper bound on bytes the pre-record buffer is allowed to hold. At default 1080p RGB
-// that's ~330 frames (~11 s at 30 fps); at 4K mono16 it's ~33 frames. The previous
-// implementation could exceed 22 GB at high resolution with SavedMediaBoth — frame count
-// alone is not a safe bound when a single 4K-RGB frame can be 24 MB.
-constexpr qint64 kPreRecordBufferMaxBytes = 2LL * 1024LL * 1024LL * 1024LL; // 2 GB
-
-qint64 imageSizeBytes(const QImage& image)
-{
-    return image.isNull() ? 0
-        : static_cast<qint64>(image.sizeInBytes());
-}
-
-qint64 bufferedFrameSizeBytes(const QImage& raw, const QImage& processed)
-{
-    return imageSizeBytes(raw) + imageSizeBytes(processed);
-}
-
-} // namespace
-
-void CameraPostProcessor::trimPreRecordBuffer()
-{
-    const int frameLimit = preRecordBufferFrameLimit();
-    if (frameLimit == 0) {
-        m_preRecordVideoFrames.clear();
-        return;
-    }
-    while (static_cast<int>(m_preRecordVideoFrames.size()) > frameLimit) {
-        m_preRecordVideoFrames.pop_front();
-    }
-
-    // Also enforce a global byte cap — drop oldest frames until total bytes <= cap.
-    qint64 totalBytes = 0;
-    for (const BufferedVideoFrame& f : m_preRecordVideoFrames) {
-        totalBytes += bufferedFrameSizeBytes(f.m_rawImage, f.m_processedImage);
-    }
-    while (!m_preRecordVideoFrames.empty() && (totalBytes > kPreRecordBufferMaxBytes))
-    {
-        const BufferedVideoFrame& front = m_preRecordVideoFrames.front();
-        totalBytes -= bufferedFrameSizeBytes(front.m_rawImage, front.m_processedImage);
-        m_preRecordVideoFrames.pop_front();
-    }
-}
-
-void CameraPostProcessor::appendPreRecordFrame(const QImage& rawImage, const QImage& processedImage)
-{
-    if (preRecordBufferFrameLimit() <= 0) {
-        m_preRecordVideoFrames.clear();
-        return;
-    }
-
-    // Only buffer the variant(s) that the current m_recordMode will actually write. At
-    // default settings (e.g. SavedMediaRaw) we save half the memory; at SavedMediaBoth we
-    // still buffer both, but the trimPreRecordBuffer byte cap below caps total growth.
-    BufferedVideoFrame entry;
-    if (shouldSaveRawMedia() && !rawImage.isNull()) {
-        entry.m_rawImage = rawImage.copy();
-    }
-    if (shouldSaveProcessedMedia() && !processedImage.isNull()) {
-        entry.m_processedImage = processedImage.copy();
-    }
-    if (entry.m_rawImage.isNull() && entry.m_processedImage.isNull()) {
-        // Nothing to buffer for the current record mode.
-        return;
-    }
-    m_preRecordVideoFrames.push_back(std::move(entry));
-    trimPreRecordBuffer();
-}
-
-void CameraPostProcessor::flushPreRecordFrames(const QImage& currentRawImage, const QImage& currentProcessedImage)
-{
-    if (!m_settings.m_saveVideo || m_settings.m_videoFileName.isEmpty())
-    {
-        m_preRecordBufferFlushed = true;
-        return;
-    }
-
-    if (shouldSaveRawMedia() && ensureVideoWriter(m_rawVideoWriter, m_settings.m_videoFileName, currentRawImage, true))
-    {
-        for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
-        {
-            if (bufferedFrame.m_rawImage.size() == currentRawImage.size()) {
-                writeVideoFrame(m_rawVideoWriter, bufferedFrame.m_rawImage);
-            }
-        }
-    }
-
-    if (shouldSaveProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, currentProcessedImage, false))
-    {
-        for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
-        {
-            if (bufferedFrame.m_processedImage.size() == currentProcessedImage.size()) {
-                writeVideoFrame(m_processedVideoWriter, bufferedFrame.m_processedImage);
-            }
-        }
-    }
-
-    m_preRecordVideoFrames.clear();
-    m_preRecordBufferFlushed = true;
-}
-
-bool CameraPostProcessor::ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant)
-{
-    QSize& openedSize = rawVariant ? m_rawVideoWriterSize : m_processedVideoWriterSize;
-    const QSize requestedSize = frameForSize.size();
-
-    // If a writer is already open but the frame size changed since it was opened, close
-    // and reopen. Mid-stream resolution / binning changes would otherwise corrupt the file
-    // (the cv::VideoWriter has no way to query its own configured size, so we track it).
-    if (writer.isOpened() && (openedSize == requestedSize)) {
-        return true;
-    }
-    if (writer.isOpened() && (openedSize != requestedSize)) {
-        writer.release();
-        openedSize = QSize();
-    }
-
-    const QString filename = createTimestampedOutputFilename(baseFileName, rawVariant);
-    const int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1');
-    const std::vector<int> params = {
-        cv::VIDEOWRITER_PROP_HW_ACCELERATION,
-        m_settings.m_videoHwAcceleration ? cv::VIDEO_ACCELERATION_ANY : cv::VIDEO_ACCELERATION_NONE
-    };
-
-    writer.open(
-        filename.toStdString(),
-        fourcc,
-        m_settings.getCaptureFrameRate(),
-        cv::Size(requestedSize.width(), requestedSize.height()),
-        params);
-
-    if (writer.isOpened()) {
-        openedSize = requestedSize;
-        qDebug() << "CameraPostProcessor opened:" << filename << "backend:" << QString::fromStdString(writer.getBackendName());
-    } else {
-        qWarning() << "CameraPostProcessor failed to open:" << filename;
-    }
-
-    return writer.isOpened();
-}
-
-void CameraPostProcessor::writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite)
-{
-    QImage convertedRgb;
-    const QImage& rgb = ensureRgb888(frameToWrite, convertedRgb);
-    cv::Mat mat = wrapRgb888Image(rgb);
-    cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-    writer.write(bgrMat);
-}

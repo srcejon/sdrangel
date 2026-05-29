@@ -59,6 +59,14 @@ public:
                           int bitsPerPixel,
                           const QVariantMap& headers = QVariantMap(),
                           QString *errorMessage = nullptr);
+    static bool saveImage(const QString& fileName,
+                          const QByteArray& imageData,
+                          int width,
+                          int height,
+                          int bitsPerPixel,
+                          int channels,
+                          const QVariantMap& headers = QVariantMap(),
+                          QString *errorMessage = nullptr);
 
     float value(int x, int y) const;
     float scaledValue(int x, int y) const;

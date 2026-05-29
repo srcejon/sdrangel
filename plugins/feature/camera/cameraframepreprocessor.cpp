@@ -415,6 +415,11 @@ void CameraFramePreprocessor::processNewFrame(const CameraPipelineFramePtr& fram
         frame->m_rawBayerImage = workingMatToImage(frameMat.clone());
         frame->m_rawBayerPattern = frame->m_bayerPattern;
     }
+    else if (shouldMaterializeRawBayerImage(*frame))
+    {
+        frame->m_rawBayerImage = frame->m_image.copy();
+        frame->m_rawBayerPattern = CameraPipelineFrame::BayerNone;
+    }
     else
     {
         frame->m_rawBayerImage = QImage();
@@ -695,7 +700,6 @@ bool CameraFramePreprocessor::shouldMaterializeUnprocessedImage(const CameraPipe
 bool CameraFramePreprocessor::shouldMaterializeRawBayerImage(const CameraPipelineFrame& frame) const
 {
     return m_settings.m_recordRawFits
-        && (frame.m_bayerPattern != CameraPipelineFrame::BayerNone)
         && (m_settings.m_saveImage || frame.m_saveCurrentImage);
 }
 

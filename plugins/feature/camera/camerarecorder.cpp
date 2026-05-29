@@ -67,32 +67,49 @@ QString bayerPatternName(CameraPipelineFrame::BayerPattern pattern)
     }
 }
 
-bool imageToMonoBytes(const QImage& image, QByteArray& bytes, int& bitsPerPixel)
+bool imageToFitsBytes(const QImage& image, QByteArray& bytes, int& bitsPerPixel, int& channels)
 {
     if (image.isNull()) {
         return false;
     }
 
-    QImage mono = image;
-    if ((mono.format() != QImage::Format_Grayscale8) && (mono.format() != QImage::Format_Grayscale16))
+    if ((image.format() == QImage::Format_Grayscale8) || (image.format() == QImage::Format_Grayscale16))
     {
-        if (mono.depth() > 8) {
-            return false;
+        bitsPerPixel = (image.format() == QImage::Format_Grayscale16) ? 16 : 8;
+        channels = 1;
+        const int bytesPerPixel = bitsPerPixel / 8;
+        bytes.clear();
+        bytes.reserve(image.width() * image.height() * bytesPerPixel);
+        const int rowBytes = image.width() * bytesPerPixel;
+
+        for (int y = 0; y < image.height(); ++y) {
+            bytes.append(reinterpret_cast<const char*>(image.constScanLine(y)), rowBytes);
         }
-        mono = mono.convertToFormat(QImage::Format_Grayscale8);
+
+        return bytes.size() == (image.width() * image.height() * bytesPerPixel);
     }
 
-    bitsPerPixel = (mono.format() == QImage::Format_Grayscale16) ? 16 : 8;
-    const int bytesPerPixel = bitsPerPixel / 8;
+    const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
+    bitsPerPixel = 8;
+    channels = 3;
     bytes.clear();
-    bytes.reserve(mono.width() * mono.height() * bytesPerPixel);
-    const int rowBytes = mono.width() * bytesPerPixel;
+    bytes.resize(rgb.width() * rgb.height() * channels);
+    const int planeBytes = rgb.width() * rgb.height();
+    uchar *dst = reinterpret_cast<uchar*>(bytes.data());
 
-    for (int y = 0; y < mono.height(); ++y) {
-        bytes.append(reinterpret_cast<const char*>(mono.constScanLine(y)), rowBytes);
+    for (int y = 0; y < rgb.height(); ++y)
+    {
+        const uchar *row = rgb.constScanLine(y);
+        for (int x = 0; x < rgb.width(); ++x)
+        {
+            const int pixelOffset = y * rgb.width() + x;
+            dst[pixelOffset] = row[x * 3];
+            dst[planeBytes + pixelOffset] = row[x * 3 + 1];
+            dst[(2 * planeBytes) + pixelOffset] = row[x * 3 + 2];
+        }
     }
 
-    return bytes.size() == (mono.width() * mono.height() * bytesPerPixel);
+    return true;
 }
 
 } // namespace
@@ -301,10 +318,16 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
     {
         if (shouldSaveRawFits())
         {
-            const QImage& rawBayerImage = frame->m_rawBayerImage.isNull() ? frame->m_image : frame->m_rawBayerImage;
-            const QString rawFitsFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("raw"), QStringLiteral("fits"));
-            if (saveRawFits(rawFitsFilename, rawBayerImage, frame->m_rawBayerPattern, *frame)) {
-                savedImageFrame = m_settings.m_saveImage;
+            if (frame->m_rawBayerImage.isNull())
+            {
+                qDebug() << "CameraRecorder: raw FITS requested but no raw mono frame is available; skipping";
+            }
+            else
+            {
+                const QString rawFitsFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("raw"), QStringLiteral("fits"));
+                if (saveRawFits(rawFitsFilename, frame->m_rawBayerImage, frame->m_rawBayerPattern, *frame)) {
+                    savedImageFrame = m_settings.m_saveImage;
+                }
             }
         }
 
@@ -455,7 +478,8 @@ bool CameraRecorder::saveRawFits(const QString& fileName,
 {
     QByteArray imageBytes;
     int bitsPerPixel = 0;
-    if (!imageToMonoBytes(image, imageBytes, bitsPerPixel))
+    int channels = 0;
+    if (!imageToFitsBytes(image, imageBytes, bitsPerPixel, channels))
     {
         qWarning() << "CameraRecorder: cannot save raw FITS from image format" << image.format();
         return false;
@@ -465,6 +489,9 @@ bool CameraRecorder::saveRawFits(const QString& fileName,
     const QString bayer = bayerPatternName(bayerPattern);
     if (!bayer.isEmpty()) {
         headers.insert(QStringLiteral("BAYERPAT"), bayer);
+    }
+    if (channels == 3) {
+        headers.insert(QStringLiteral("COLORSPC"), QStringLiteral("RGB"));
     }
     if (frame.m_captureDateTime.isValid()) {
         headers.insert(QStringLiteral("DATE-OBS"), frame.m_captureDateTime.toUTC());
@@ -484,7 +511,7 @@ bool CameraRecorder::saveRawFits(const QString& fileName,
     }
 
     QString errorMessage;
-    if (!FITS::saveImage(fileName, imageBytes, image.width(), image.height(), bitsPerPixel, headers, &errorMessage))
+    if (!FITS::saveImage(fileName, imageBytes, image.width(), image.height(), bitsPerPixel, channels, headers, &errorMessage))
     {
         qWarning() << "CameraRecorder: failed to save raw FITS" << fileName << errorMessage;
         return false;

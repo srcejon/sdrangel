@@ -20,7 +20,6 @@
 #define INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
 
 #include <QObject>
-#include <deque>
 #include <limits>
 #include <QHash>
 #include <QMutex>
@@ -30,7 +29,6 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/videoio.hpp>
 
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -217,26 +215,6 @@ public:
         { }
     };
 
-    class MsgSetVideoRecordingEnabled : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        bool getEnabled() const { return m_enabled; }
-
-        static MsgSetVideoRecordingEnabled* create(bool enabled)
-        {
-            return new MsgSetVideoRecordingEnabled(enabled);
-        }
-
-    private:
-        bool m_enabled;
-
-        MsgSetVideoRecordingEnabled(bool enabled) :
-            Message(),
-            m_enabled(enabled)
-        { }
-    };
-
     class MsgCaptureActive : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -277,31 +255,13 @@ private:
         QDateTime m_availableUntil;
     };
 
-    struct BufferedVideoFrame
-    {
-        QImage m_rawImage;
-        QImage m_processedImage;
-    };
-
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
     MessageQueue *m_nextStageQueue;
     AvailableChannelOrFeatureHandler m_availableChannelOrFeatureHandler;
     CameraSettings m_settings;
-    bool m_captureActive;
     CameraPipelineFrame m_lastFrame;
     QDateTime m_captureDateTime;
-    cv::VideoWriter m_rawVideoWriter;
-    cv::VideoWriter m_processedVideoWriter;
-    // Frame size each writer was opened with. We re-open on size mismatch so a stray
-    // resolution change between when the writer was opened and the next frame doesn't
-    // silently corrupt the file (the cv::VideoWriter has no API to query its own size).
-    QSize m_rawVideoWriterSize;
-    QSize m_processedVideoWriterSize;
-    std::deque<BufferedVideoFrame> m_preRecordVideoFrames;
-    bool m_preRecordBufferFlushed;
-    int m_recordedImageFrames;
-    QDateTime m_videoRecordingStartDateTime;
     QImage m_spectrumViewImage;
     Weather *m_weather = nullptr;
     float m_weatherTemperature = std::numeric_limits<float>::quiet_NaN();
@@ -332,21 +292,7 @@ private:
     [[nodiscard]] QString expandOverlayTextTemplate() const;
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void restartWeatherUpdates();
-    void setVideoRecordingEnabled(bool enabled);
-    void setImageRecordingEnabled(bool enabled);
-    void resetRecordingLimits();
-    void updateRecordingLimitsAfterFrame(bool savedImageFrame, bool savedVideoFrame);
     void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame);
-    [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, bool rawVariant);
-    [[nodiscard]] bool shouldSaveRawMedia() const;
-    [[nodiscard]] bool shouldSaveProcessedMedia() const;
-    void closeVideoWriters();
-    bool ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, bool rawVariant);
-    void writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite);
-    int preRecordBufferFrameLimit() const;
-    void trimPreRecordBuffer();
-    void appendPreRecordFrame(const QImage& rawImage, const QImage& processedImage);
-    void flushPreRecordFrames(const QImage& currentRawImage, const QImage& currentProcessedImage);
 private slots:
     void handleInputMessages();
     void handlePipeMessageQueue(MessageQueue* messageQueue);

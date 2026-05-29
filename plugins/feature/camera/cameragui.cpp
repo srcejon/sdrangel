@@ -523,6 +523,14 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         return true;
     }
+    else if (CameraStarDetector::MsgReportPlateSolveStatus::match(message))
+    {
+        const CameraStarDetector::MsgReportPlateSolveStatus& report = (const CameraStarDetector::MsgReportPlateSolveStatus&) message;
+        if (report.isSolving()) {
+            settingsUI()->plateSolveStatusLabel->setText(tr("Solving"));
+        }
+        return true;
+    }
     else if (CameraObjectDetector::MsgReportTensorRtConversion::match(message))
     {
         const CameraObjectDetector::MsgReportTensorRtConversion& report = (CameraObjectDetector::MsgReportTensorRtConversion&) message;

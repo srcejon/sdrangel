@@ -132,6 +132,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_starDetectorThread, &QThread::finished, m_starDetector, &QObject::deleteLater);
     QObject::connect(m_starDetectorThread, &QThread::finished, m_starDetectorThread, &QThread::deleteLater);
     m_starDetector->setNextStage(m_objectDetector);
+    m_starDetector->setMessageQueueToGUI(getMessageQueueToGUI());
     m_starDetectorThread->start();
     m_starDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(m_settings, QList<QString>(), true));
 
@@ -383,6 +384,9 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
         m_objectDetector->setMessageQueueToGUI(queue);
         m_objectDetector->setMessageQueueToFeature(getInputMessageQueue());
     }
+    if (m_starDetector) {
+        m_starDetector->setMessageQueueToGUI(queue);
+    }
     if (m_recorder) {
         m_recorder->setMessageQueueToGUI(queue);
     }
@@ -473,6 +477,13 @@ bool Camera::deserialize(const QByteArray& data)
 void Camera::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
     qDebug() << "Camera::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+
+    if (m_starDetector
+        && ((force && !settings.m_plateSolve)
+            || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve)))
+    {
+        m_starDetector->requestPlateSolveCancellation();
+    }
 
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(settings, settingsKeys, force));

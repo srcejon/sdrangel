@@ -21,8 +21,30 @@ class CameraStarDetector : public CameraDetectionStage
 {
     Q_OBJECT
 public:
+    class MsgReportPlateSolveStatus : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool isSolving() const { return m_solving; }
+
+        static MsgReportPlateSolveStatus* create(bool solving)
+        {
+            return new MsgReportPlateSolveStatus(solving);
+        }
+
+    private:
+        bool m_solving;
+
+        MsgReportPlateSolveStatus(bool solving) :
+            Message(),
+            m_solving(solving)
+        { }
+    };
+
     CameraStarDetector();
     ~CameraStarDetector() override;
+    void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void requestPlateSolveCancellation();
 
 protected:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;
@@ -32,8 +54,10 @@ protected:
 private:
     CameraPipelineFramePtr m_lastInputFrame;
     CameraPlateSolver m_plateSolver;
+    MessageQueue *m_msgQueueToGUI;
 
     [[nodiscard]] static bool starDisplaySettingsChanged(const QList<QString>& settingsKeys);
+    void reportPlateSolveStatus(bool solving) const;
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     mutable cv::cuda::Stream m_cudaDetectionStream;

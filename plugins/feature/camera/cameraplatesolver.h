@@ -27,6 +27,8 @@
 #include <QString>
 #include <QVector>
 
+#include <atomic>
+
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
@@ -70,6 +72,8 @@ public:
                                  const QSize& imageSize,
                                  const QDateTime& captureDateTime,
                                  QVector<CameraPipelineStarDetection>& starDetections);
+    void requestCancellation();
+    bool isCancellationRequested() const;
     // Cancel any Siril SPCC network request currently blocking in loop.exec() inside
     // fetchSirilRangeFromSource.  Safe to call from the star-detector thread during
     // event processing (e.g. from CameraStarDetector::captureActiveChanged(false)).
@@ -83,8 +87,11 @@ private:
     // solves on the same sky area don't re-download the same data each frame.
     QHash<QString, QByteArray> m_sirilRangeCache;
     QHash<int, QByteArray> m_sirilIndexCache;
-    // Cancellation support — both members accessed only on the star-detector thread.
-    bool m_cancelNetworkRequests = false;
+    // The general cancellation flag can be set from the feature thread while the
+    // solver is CPU-bound in the star-detector thread. Network cancellation is
+    // also checked by the nested Siril request event loops.
+    std::atomic_bool m_cancelRequested {false};
+    std::atomic_bool m_cancelNetworkRequests {false};
     QNetworkReply *m_activeNetworkReply = nullptr;
 };
 

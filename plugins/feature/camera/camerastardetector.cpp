@@ -33,6 +33,8 @@
 #include "cameraplatesolver.h"
 #include "camerastardetector.h"
 
+MESSAGE_CLASS_DEFINITION(CameraStarDetector::MsgReportPlateSolveStatus, Message)
+
 namespace {
 
 // Returns true and fills outGray with a CV_16UC1 view (with backing memory cloned) if the
@@ -184,17 +186,31 @@ CameraStarDetector::CameraStarDetector()
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     :
     m_plateSolver(this),
+    m_msgQueueToGUI(nullptr),
     m_cudaStarSmallBlurFilterType(-1),
     m_cudaStarBackgroundBlurFilterType(-1),
     m_cudaStarBackgroundBlurFilterSize(0)
 #else
     :
-    m_plateSolver(this)
+    m_plateSolver(this),
+    m_msgQueueToGUI(nullptr)
 #endif
 {
 }
 
 CameraStarDetector::~CameraStarDetector() = default;
+
+void CameraStarDetector::requestPlateSolveCancellation()
+{
+    m_plateSolver.requestCancellation();
+}
+
+void CameraStarDetector::reportPlateSolveStatus(bool solving) const
+{
+    if (m_msgQueueToGUI) {
+        m_msgQueueToGUI->push(MsgReportPlateSolveStatus::create(solving));
+    }
+}
 
 bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys)
 {
@@ -291,16 +307,18 @@ const cv::cuda::GpuMat& CameraStarDetector::cudaStarExclusionMask(const cv::Rect
 void CameraStarDetector::captureActiveChanged(bool active)
 {
     if (!active) {
-        // If the plate solver is currently blocked waiting for a Siril SPCC network
-        // response, abort it so the star-detector thread can shut down promptly
-        // rather than waiting up to 30 seconds for a timeout.
-        m_plateSolver.requestNetworkCancellation();
+        requestPlateSolveCancellation();
     }
 }
 
 void CameraStarDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
     qDebug() << "CameraStarDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    if ((force && !settings.m_plateSolve)
+        || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve))
+    {
+        requestPlateSolveCancellation();
+    }
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
 
     if (!force && starDisplaySettingsChanged(settingsKeys) && m_lastInputFrame)
@@ -395,13 +413,15 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         }
     }
 
-    if (!frame->m_starDetections.isEmpty())
+    if (m_settings.m_plateSolve && !frame->m_starDetections.isEmpty())
     {
+        reportPlateSolveStatus(true);
         const CameraPlateSolveResult plateSolveResult = m_plateSolver.solve(
             m_settings,
             frame->m_image.size(),
             frame->m_captureDateTime,
             frame->m_starDetections);
+        reportPlateSolveStatus(false);
         frame->m_plateSolve.m_solved = plateSolveResult.m_solved;
         frame->m_plateSolve.m_matchedStars = plateSolveResult.m_matchedStars;
         frame->m_plateSolve.m_detectedStarsConsidered = plateSolveResult.m_detectedStarsConsidered;

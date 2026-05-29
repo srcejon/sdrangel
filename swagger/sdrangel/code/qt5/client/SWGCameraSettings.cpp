@@ -84,24 +84,24 @@ SWGCameraSettings::SWGCameraSettings() {
     m_alpaca_filter_wheel_device_number_isSet = false;
     alpaca_filter_wheel_position = 0;
     m_alpaca_filter_wheel_position_isSet = false;
-    alpaca_bin_x = 0;
-    m_alpaca_bin_x_isSet = false;
-    alpaca_bin_y = 0;
-    m_alpaca_bin_y_isSet = false;
-    alpaca_num_x = 0;
-    m_alpaca_num_x_isSet = false;
-    alpaca_num_y = 0;
-    m_alpaca_num_y_isSet = false;
-    alpaca_start_x = 0;
-    m_alpaca_start_x_isSet = false;
-    alpaca_start_y = 0;
-    m_alpaca_start_y_isSet = false;
-    alpaca_gain = 0;
-    m_alpaca_gain_isSet = false;
-    alpaca_offset = 0;
-    m_alpaca_offset_isSet = false;
-    alpaca_readout_mode = 0;
-    m_alpaca_readout_mode_isSet = false;
+    camera_bin_x = 0;
+    m_camera_bin_x_isSet = false;
+    camera_bin_y = 0;
+    m_camera_bin_y_isSet = false;
+    camera_num_x = 0;
+    m_camera_num_x_isSet = false;
+    camera_num_y = 0;
+    m_camera_num_y_isSet = false;
+    camera_start_x = 0;
+    m_camera_start_x_isSet = false;
+    camera_start_y = 0;
+    m_camera_start_y_isSet = false;
+    camera_gain = 0;
+    m_camera_gain_isSet = false;
+    camera_offset = 0;
+    m_camera_offset_isSet = false;
+    camera_readout_mode = 0;
+    m_camera_readout_mode_isSet = false;
     asi_cooler_on = 0;
     m_asi_cooler_on_isSet = false;
     asi_target_temp = 0;
@@ -112,6 +112,24 @@ SWGCameraSettings::SWGCameraSettings() {
     m_asi_high_speed_mode_isSet = false;
     asi_auto_exposure_gain = 0;
     m_asi_auto_exposure_gain_isSet = false;
+    auto_exposure_gain_enabled = 0;
+    m_auto_exposure_gain_enabled_isSet = false;
+    auto_exposure_gain_mode = 0;
+    m_auto_exposure_gain_mode_isSet = false;
+    auto_exposure_target_percentile = 0.0;
+    m_auto_exposure_target_percentile_isSet = false;
+    auto_exposure_target_brightness = 0.0;
+    m_auto_exposure_target_brightness_isSet = false;
+    auto_exposure_max_change_percent = 0.0;
+    m_auto_exposure_max_change_percent_isSet = false;
+    auto_exposure_min_ms = 0.0;
+    m_auto_exposure_min_ms_isSet = false;
+    auto_exposure_max_ms = 0.0;
+    m_auto_exposure_max_ms_isSet = false;
+    auto_exposure_min_gain = 0;
+    m_auto_exposure_min_gain_isSet = false;
+    auto_exposure_max_gain = 0;
+    m_auto_exposure_max_gain_isSet = false;
     asi_color_image_type = 0;
     m_asi_color_image_type_isSet = false;
     save_image = 0;
@@ -122,8 +140,16 @@ SWGCameraSettings::SWGCameraSettings() {
     m_save_video_isSet = false;
     video_file_camera_path = nullptr;
     m_video_file_camera_path_isSet = false;
+    image_file_camera_paths = nullptr;
+    m_image_file_camera_paths_isSet = false;
     video_file_name = nullptr;
     m_video_file_name_isSet = false;
+    record_raw_fits = 0;
+    m_record_raw_fits_isSet = false;
+    record_calibrated_media = 0;
+    m_record_calibrated_media_isSet = false;
+    record_post_processed_media = 0;
+    m_record_post_processed_media_isSet = false;
     video_hw_acceleration = 0;
     m_video_hw_acceleration_isSet = false;
     video_loop = 0;
@@ -150,6 +176,12 @@ SWGCameraSettings::SWGCameraSettings() {
     m_stack_hdr_exposure_times_ms_isSet = false;
     stack_alignment_method = 0;
     m_stack_alignment_method_isSet = false;
+    stack_display_mode = 0;
+    m_stack_display_mode_isSet = false;
+    stack_display_frame_index = 0;
+    m_stack_display_frame_index_isSet = false;
+    stack_reject_bad_frames = 0;
+    m_stack_reject_bad_frames_isSet = false;
     stack_dark_file_name = nullptr;
     m_stack_dark_file_name_isSet = false;
     stack_flat_file_name = nullptr;
@@ -176,6 +208,14 @@ SWGCameraSettings::SWGCameraSettings() {
     m_rotator_isSet = false;
     fov = 0.0f;
     m_fov_isSet = false;
+    fov_mode = 0;
+    m_fov_mode_isSet = false;
+    fov_sensor_width_mm = 0.0;
+    m_fov_sensor_width_mm_isSet = false;
+    fov_sensor_height_mm = 0.0;
+    m_fov_sensor_height_mm_isSet = false;
+    fov_focal_length_mm = 0.0;
+    m_fov_focal_length_mm_isSet = false;
     lens_projection = 0;
     m_lens_projection_isSet = false;
     lens_center_offset_x = 0.0;
@@ -194,6 +234,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_post_process_white_balance_blue_gain_isSet = false;
     post_process_white_balance_highlight_protection = 0.0;
     m_post_process_white_balance_highlight_protection_isSet = false;
+    post_process_use_cuda = 0;
+    m_post_process_use_cuda_isSet = false;
     post_process_unwarp = 0;
     m_post_process_unwarp_isSet = false;
     histogram_stretch = 0;
@@ -234,6 +276,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_flip_x_isSet = false;
     flip_y = 0;
     m_flip_y_isSet = false;
+    image_rotation = 0;
+    m_image_rotation_isSet = false;
     invert_colors = 0;
     m_invert_colors_isSet = false;
     overlay_date_time = 0;
@@ -376,16 +420,18 @@ SWGCameraSettings::SWGCameraSettings() {
     m_plate_solve_start_mode_isSet = false;
     plate_solve_label_mode = 0;
     m_plate_solve_label_mode_isSet = false;
-    plate_solve_use_current_date_time = 0;
-    m_plate_solve_use_current_date_time_isSet = false;
+    plate_solve_use_capture_date_time = 0;
+    m_plate_solve_use_capture_date_time_isSet = false;
     plate_solve_date_time = nullptr;
     m_plate_solve_date_time_isSet = false;
+    plate_solve_date_time_utc = 0;
+    m_plate_solve_date_time_utc_isSet = false;
     plate_solve_use_downloaded_catalog = 0;
     m_plate_solve_use_downloaded_catalog_isSet = false;
+    plate_solve_catalog_source = 0;
+    m_plate_solve_catalog_source_isSet = false;
     plate_solve_apply_mode = 0;
     m_plate_solve_apply_mode_isSet = false;
-    video_post_process = 0;
-    m_video_post_process_isSet = false;
     overlay_spectrum = 0;
     m_overlay_spectrum_isSet = false;
     spectrum_device = nullptr;
@@ -410,6 +456,10 @@ SWGCameraSettings::SWGCameraSettings() {
     m_yolo_box_color_isSet = false;
     yolo_disappear_debounce = 0.0;
     m_yolo_disappear_debounce_isSet = false;
+    yolo_tile_large_images = 0;
+    m_yolo_tile_large_images_isSet = false;
+    yolo_tile_overlap_percent = 0;
+    m_yolo_tile_overlap_percent_isSet = false;
     yolo_dnn_target = 0;
     m_yolo_dnn_target_isSet = false;
     object_device_settings = nullptr;
@@ -506,24 +556,24 @@ SWGCameraSettings::init() {
     m_alpaca_filter_wheel_device_number_isSet = false;
     alpaca_filter_wheel_position = 0;
     m_alpaca_filter_wheel_position_isSet = false;
-    alpaca_bin_x = 0;
-    m_alpaca_bin_x_isSet = false;
-    alpaca_bin_y = 0;
-    m_alpaca_bin_y_isSet = false;
-    alpaca_num_x = 0;
-    m_alpaca_num_x_isSet = false;
-    alpaca_num_y = 0;
-    m_alpaca_num_y_isSet = false;
-    alpaca_start_x = 0;
-    m_alpaca_start_x_isSet = false;
-    alpaca_start_y = 0;
-    m_alpaca_start_y_isSet = false;
-    alpaca_gain = 0;
-    m_alpaca_gain_isSet = false;
-    alpaca_offset = 0;
-    m_alpaca_offset_isSet = false;
-    alpaca_readout_mode = 0;
-    m_alpaca_readout_mode_isSet = false;
+    camera_bin_x = 0;
+    m_camera_bin_x_isSet = false;
+    camera_bin_y = 0;
+    m_camera_bin_y_isSet = false;
+    camera_num_x = 0;
+    m_camera_num_x_isSet = false;
+    camera_num_y = 0;
+    m_camera_num_y_isSet = false;
+    camera_start_x = 0;
+    m_camera_start_x_isSet = false;
+    camera_start_y = 0;
+    m_camera_start_y_isSet = false;
+    camera_gain = 0;
+    m_camera_gain_isSet = false;
+    camera_offset = 0;
+    m_camera_offset_isSet = false;
+    camera_readout_mode = 0;
+    m_camera_readout_mode_isSet = false;
     asi_cooler_on = 0;
     m_asi_cooler_on_isSet = false;
     asi_target_temp = 0;
@@ -534,6 +584,24 @@ SWGCameraSettings::init() {
     m_asi_high_speed_mode_isSet = false;
     asi_auto_exposure_gain = 0;
     m_asi_auto_exposure_gain_isSet = false;
+    auto_exposure_gain_enabled = 0;
+    m_auto_exposure_gain_enabled_isSet = false;
+    auto_exposure_gain_mode = 0;
+    m_auto_exposure_gain_mode_isSet = false;
+    auto_exposure_target_percentile = 0.0;
+    m_auto_exposure_target_percentile_isSet = false;
+    auto_exposure_target_brightness = 0.0;
+    m_auto_exposure_target_brightness_isSet = false;
+    auto_exposure_max_change_percent = 0.0;
+    m_auto_exposure_max_change_percent_isSet = false;
+    auto_exposure_min_ms = 0.0;
+    m_auto_exposure_min_ms_isSet = false;
+    auto_exposure_max_ms = 0.0;
+    m_auto_exposure_max_ms_isSet = false;
+    auto_exposure_min_gain = 0;
+    m_auto_exposure_min_gain_isSet = false;
+    auto_exposure_max_gain = 0;
+    m_auto_exposure_max_gain_isSet = false;
     asi_color_image_type = 0;
     m_asi_color_image_type_isSet = false;
     save_image = 0;
@@ -544,8 +612,16 @@ SWGCameraSettings::init() {
     m_save_video_isSet = false;
     video_file_camera_path = new QString("");
     m_video_file_camera_path_isSet = false;
+    image_file_camera_paths = new QList<QString*>();
+    m_image_file_camera_paths_isSet = false;
     video_file_name = new QString("");
     m_video_file_name_isSet = false;
+    record_raw_fits = 0;
+    m_record_raw_fits_isSet = false;
+    record_calibrated_media = 0;
+    m_record_calibrated_media_isSet = false;
+    record_post_processed_media = 0;
+    m_record_post_processed_media_isSet = false;
     video_hw_acceleration = 0;
     m_video_hw_acceleration_isSet = false;
     video_loop = 0;
@@ -572,6 +648,12 @@ SWGCameraSettings::init() {
     m_stack_hdr_exposure_times_ms_isSet = false;
     stack_alignment_method = 0;
     m_stack_alignment_method_isSet = false;
+    stack_display_mode = 0;
+    m_stack_display_mode_isSet = false;
+    stack_display_frame_index = 0;
+    m_stack_display_frame_index_isSet = false;
+    stack_reject_bad_frames = 0;
+    m_stack_reject_bad_frames_isSet = false;
     stack_dark_file_name = new QString("");
     m_stack_dark_file_name_isSet = false;
     stack_flat_file_name = new QString("");
@@ -598,6 +680,14 @@ SWGCameraSettings::init() {
     m_rotator_isSet = false;
     fov = 0.0f;
     m_fov_isSet = false;
+    fov_mode = 0;
+    m_fov_mode_isSet = false;
+    fov_sensor_width_mm = 0.0;
+    m_fov_sensor_width_mm_isSet = false;
+    fov_sensor_height_mm = 0.0;
+    m_fov_sensor_height_mm_isSet = false;
+    fov_focal_length_mm = 0.0;
+    m_fov_focal_length_mm_isSet = false;
     lens_projection = 0;
     m_lens_projection_isSet = false;
     lens_center_offset_x = 0.0;
@@ -616,6 +706,8 @@ SWGCameraSettings::init() {
     m_post_process_white_balance_blue_gain_isSet = false;
     post_process_white_balance_highlight_protection = 0.0;
     m_post_process_white_balance_highlight_protection_isSet = false;
+    post_process_use_cuda = 0;
+    m_post_process_use_cuda_isSet = false;
     post_process_unwarp = 0;
     m_post_process_unwarp_isSet = false;
     histogram_stretch = 0;
@@ -656,6 +748,8 @@ SWGCameraSettings::init() {
     m_flip_x_isSet = false;
     flip_y = 0;
     m_flip_y_isSet = false;
+    image_rotation = 0;
+    m_image_rotation_isSet = false;
     invert_colors = 0;
     m_invert_colors_isSet = false;
     overlay_date_time = 0;
@@ -798,16 +892,18 @@ SWGCameraSettings::init() {
     m_plate_solve_start_mode_isSet = false;
     plate_solve_label_mode = 0;
     m_plate_solve_label_mode_isSet = false;
-    plate_solve_use_current_date_time = 0;
-    m_plate_solve_use_current_date_time_isSet = false;
+    plate_solve_use_capture_date_time = 0;
+    m_plate_solve_use_capture_date_time_isSet = false;
     plate_solve_date_time = new QString("");
     m_plate_solve_date_time_isSet = false;
+    plate_solve_date_time_utc = 0;
+    m_plate_solve_date_time_utc_isSet = false;
     plate_solve_use_downloaded_catalog = 0;
     m_plate_solve_use_downloaded_catalog_isSet = false;
+    plate_solve_catalog_source = 0;
+    m_plate_solve_catalog_source_isSet = false;
     plate_solve_apply_mode = 0;
     m_plate_solve_apply_mode_isSet = false;
-    video_post_process = 0;
-    m_video_post_process_isSet = false;
     overlay_spectrum = 0;
     m_overlay_spectrum_isSet = false;
     spectrum_device = new QString("");
@@ -832,6 +928,10 @@ SWGCameraSettings::init() {
     m_yolo_box_color_isSet = false;
     yolo_disappear_debounce = 0.0;
     m_yolo_disappear_debounce_isSet = false;
+    yolo_tile_large_images = 0;
+    m_yolo_tile_large_images_isSet = false;
+    yolo_tile_overlap_percent = 0;
+    m_yolo_tile_overlap_percent_isSet = false;
     yolo_dnn_target = 0;
     m_yolo_dnn_target_isSet = false;
     object_device_settings = new QList<SWGCameraObjectClassSettings*>();
@@ -926,6 +1026,15 @@ SWGCameraSettings::cleanup() {
 
 
 
+
+
+
+
+
+
+
+
+
     if(image_file_name != nullptr) { 
         delete image_file_name;
     }
@@ -933,9 +1042,22 @@ SWGCameraSettings::cleanup() {
     if(video_file_camera_path != nullptr) { 
         delete video_file_camera_path;
     }
+    if(image_file_camera_paths != nullptr) { 
+        auto arr = image_file_camera_paths;
+        for(auto o: *arr) { 
+            delete o;
+        }
+        delete image_file_camera_paths;
+    }
     if(video_file_name != nullptr) { 
         delete video_file_name;
     }
+
+
+
+
+
+
 
 
 
@@ -971,6 +1093,12 @@ SWGCameraSettings::cleanup() {
     if(rotator != nullptr) { 
         delete rotator;
     }
+
+
+
+
+
+
 
 
 
@@ -1096,6 +1224,7 @@ SWGCameraSettings::cleanup() {
 
 
 
+
     if(spectrum_device != nullptr) { 
         delete spectrum_device;
     }
@@ -1109,6 +1238,8 @@ SWGCameraSettings::cleanup() {
     if(yolo_labels_path != nullptr) { 
         delete yolo_labels_path;
     }
+
+
 
 
 
@@ -1210,23 +1341,23 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&alpaca_filter_wheel_position, pJson["alpacaFilterWheelPosition"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&alpaca_bin_x, pJson["alpacaBinX"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_bin_x, pJson["cameraBinX"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&alpaca_bin_y, pJson["alpacaBinY"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_bin_y, pJson["cameraBinY"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&alpaca_num_x, pJson["alpacaNumX"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_num_x, pJson["cameraNumX"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&alpaca_num_y, pJson["alpacaNumY"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_num_y, pJson["cameraNumY"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&alpaca_start_x, pJson["alpacaStartX"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_start_x, pJson["cameraStartX"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&alpaca_start_y, pJson["alpacaStartY"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_start_y, pJson["cameraStartY"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&alpaca_gain, pJson["alpacaGain"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_gain, pJson["cameraGain"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&alpaca_offset, pJson["alpacaOffset"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_offset, pJson["cameraOffset"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&alpaca_readout_mode, pJson["alpacaReadoutMode"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_readout_mode, pJson["cameraReadoutMode"], "qint32", "");
     
     ::SWGSDRangel::setValue(&asi_cooler_on, pJson["asiCoolerOn"], "qint32", "");
     
@@ -1238,6 +1369,24 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&asi_auto_exposure_gain, pJson["asiAutoExposureGain"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&auto_exposure_gain_enabled, pJson["autoExposureGainEnabled"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&auto_exposure_gain_mode, pJson["autoExposureGainMode"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&auto_exposure_target_percentile, pJson["autoExposureTargetPercentile"], "double", "");
+    
+    ::SWGSDRangel::setValue(&auto_exposure_target_brightness, pJson["autoExposureTargetBrightness"], "double", "");
+    
+    ::SWGSDRangel::setValue(&auto_exposure_max_change_percent, pJson["autoExposureMaxChangePercent"], "double", "");
+    
+    ::SWGSDRangel::setValue(&auto_exposure_min_ms, pJson["autoExposureMinMs"], "double", "");
+    
+    ::SWGSDRangel::setValue(&auto_exposure_max_ms, pJson["autoExposureMaxMs"], "double", "");
+    
+    ::SWGSDRangel::setValue(&auto_exposure_min_gain, pJson["autoExposureMinGain"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&auto_exposure_max_gain, pJson["autoExposureMaxGain"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&asi_color_image_type, pJson["asiColorImageType"], "qint32", "");
     
     ::SWGSDRangel::setValue(&save_image, pJson["saveImage"], "qint32", "");
@@ -1248,7 +1397,15 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&video_file_camera_path, pJson["videoFileCameraPath"], "QString", "QString");
     
+    
+    ::SWGSDRangel::setValue(&image_file_camera_paths, pJson["imageFileCameraPaths"], "QList", "QString");
     ::SWGSDRangel::setValue(&video_file_name, pJson["videoFileName"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&record_raw_fits, pJson["recordRawFits"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&record_calibrated_media, pJson["recordCalibratedMedia"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&record_post_processed_media, pJson["recordPostProcessedMedia"], "qint32", "");
     
     ::SWGSDRangel::setValue(&video_hw_acceleration, pJson["videoHwAcceleration"], "qint32", "");
     
@@ -1276,6 +1433,12 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&stack_hdr_exposure_times_ms, pJson["stackHdrExposureTimesMs"], "QList", "double");
     ::SWGSDRangel::setValue(&stack_alignment_method, pJson["stackAlignmentMethod"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&stack_display_mode, pJson["stackDisplayMode"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&stack_display_frame_index, pJson["stackDisplayFrameIndex"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&stack_reject_bad_frames, pJson["stackRejectBadFrames"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&stack_dark_file_name, pJson["stackDarkFileName"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&stack_flat_file_name, pJson["stackFlatFileName"], "QString", "QString");
@@ -1302,6 +1465,14 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&fov, pJson["fov"], "float", "");
     
+    ::SWGSDRangel::setValue(&fov_mode, pJson["fovMode"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&fov_sensor_width_mm, pJson["fovSensorWidthMm"], "double", "");
+    
+    ::SWGSDRangel::setValue(&fov_sensor_height_mm, pJson["fovSensorHeightMm"], "double", "");
+    
+    ::SWGSDRangel::setValue(&fov_focal_length_mm, pJson["fovFocalLengthMm"], "double", "");
+    
     ::SWGSDRangel::setValue(&lens_projection, pJson["lensProjection"], "qint32", "");
     
     ::SWGSDRangel::setValue(&lens_center_offset_x, pJson["lensCenterOffsetX"], "double", "");
@@ -1319,6 +1490,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&post_process_white_balance_blue_gain, pJson["postProcessWhiteBalanceBlueGain"], "double", "");
     
     ::SWGSDRangel::setValue(&post_process_white_balance_highlight_protection, pJson["postProcessWhiteBalanceHighlightProtection"], "double", "");
+    
+    ::SWGSDRangel::setValue(&post_process_use_cuda, pJson["postProcessUseCuda"], "qint32", "");
     
     ::SWGSDRangel::setValue(&post_process_unwarp, pJson["postProcessUnwarp"], "qint32", "");
     
@@ -1359,6 +1532,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&flip_x, pJson["flipX"], "qint32", "");
     
     ::SWGSDRangel::setValue(&flip_y, pJson["flipY"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&image_rotation, pJson["imageRotation"], "qint32", "");
     
     ::SWGSDRangel::setValue(&invert_colors, pJson["invertColors"], "qint32", "");
     
@@ -1502,15 +1677,17 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&plate_solve_label_mode, pJson["plateSolveLabelMode"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&plate_solve_use_current_date_time, pJson["plateSolveUseCurrentDateTime"], "qint32", "");
+    ::SWGSDRangel::setValue(&plate_solve_use_capture_date_time, pJson["plateSolveUseCaptureDateTime"], "qint32", "");
     
     ::SWGSDRangel::setValue(&plate_solve_date_time, pJson["plateSolveDateTime"], "QString", "QString");
     
+    ::SWGSDRangel::setValue(&plate_solve_date_time_utc, pJson["plateSolveDateTimeUtc"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&plate_solve_use_downloaded_catalog, pJson["plateSolveUseDownloadedCatalog"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&plate_solve_apply_mode, pJson["plateSolveApplyMode"], "qint32", "");
+    ::SWGSDRangel::setValue(&plate_solve_catalog_source, pJson["plateSolveCatalogSource"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&video_post_process, pJson["videoPostProcess"], "qint32", "");
+    ::SWGSDRangel::setValue(&plate_solve_apply_mode, pJson["plateSolveApplyMode"], "qint32", "");
     
     ::SWGSDRangel::setValue(&overlay_spectrum, pJson["overlaySpectrum"], "qint32", "");
     
@@ -1535,6 +1712,10 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&yolo_box_color, pJson["yoloBoxColor"], "qint32", "");
     
     ::SWGSDRangel::setValue(&yolo_disappear_debounce, pJson["yoloDisappearDebounce"], "double", "");
+    
+    ::SWGSDRangel::setValue(&yolo_tile_large_images, pJson["yoloTileLargeImages"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&yolo_tile_overlap_percent, pJson["yoloTileOverlapPercent"], "qint32", "");
     
     ::SWGSDRangel::setValue(&yolo_dnn_target, pJson["yoloDnnTarget"], "qint32", "");
     
@@ -1668,32 +1849,32 @@ SWGCameraSettings::asJsonObject() {
     if(m_alpaca_filter_wheel_position_isSet){
         obj->insert("alpacaFilterWheelPosition", QJsonValue(alpaca_filter_wheel_position));
     }
-    if(m_alpaca_bin_x_isSet){
-        obj->insert("alpacaBinX", QJsonValue(alpaca_bin_x));
+    if(m_camera_bin_x_isSet){
+        obj->insert("cameraBinX", QJsonValue(camera_bin_x));
     }
-    if(m_alpaca_bin_y_isSet){
-        obj->insert("alpacaBinY", QJsonValue(alpaca_bin_y));
+    if(m_camera_bin_y_isSet){
+        obj->insert("cameraBinY", QJsonValue(camera_bin_y));
     }
-    if(m_alpaca_num_x_isSet){
-        obj->insert("alpacaNumX", QJsonValue(alpaca_num_x));
+    if(m_camera_num_x_isSet){
+        obj->insert("cameraNumX", QJsonValue(camera_num_x));
     }
-    if(m_alpaca_num_y_isSet){
-        obj->insert("alpacaNumY", QJsonValue(alpaca_num_y));
+    if(m_camera_num_y_isSet){
+        obj->insert("cameraNumY", QJsonValue(camera_num_y));
     }
-    if(m_alpaca_start_x_isSet){
-        obj->insert("alpacaStartX", QJsonValue(alpaca_start_x));
+    if(m_camera_start_x_isSet){
+        obj->insert("cameraStartX", QJsonValue(camera_start_x));
     }
-    if(m_alpaca_start_y_isSet){
-        obj->insert("alpacaStartY", QJsonValue(alpaca_start_y));
+    if(m_camera_start_y_isSet){
+        obj->insert("cameraStartY", QJsonValue(camera_start_y));
     }
-    if(m_alpaca_gain_isSet){
-        obj->insert("alpacaGain", QJsonValue(alpaca_gain));
+    if(m_camera_gain_isSet){
+        obj->insert("cameraGain", QJsonValue(camera_gain));
     }
-    if(m_alpaca_offset_isSet){
-        obj->insert("alpacaOffset", QJsonValue(alpaca_offset));
+    if(m_camera_offset_isSet){
+        obj->insert("cameraOffset", QJsonValue(camera_offset));
     }
-    if(m_alpaca_readout_mode_isSet){
-        obj->insert("alpacaReadoutMode", QJsonValue(alpaca_readout_mode));
+    if(m_camera_readout_mode_isSet){
+        obj->insert("cameraReadoutMode", QJsonValue(camera_readout_mode));
     }
     if(m_asi_cooler_on_isSet){
         obj->insert("asiCoolerOn", QJsonValue(asi_cooler_on));
@@ -1710,6 +1891,33 @@ SWGCameraSettings::asJsonObject() {
     if(m_asi_auto_exposure_gain_isSet){
         obj->insert("asiAutoExposureGain", QJsonValue(asi_auto_exposure_gain));
     }
+    if(m_auto_exposure_gain_enabled_isSet){
+        obj->insert("autoExposureGainEnabled", QJsonValue(auto_exposure_gain_enabled));
+    }
+    if(m_auto_exposure_gain_mode_isSet){
+        obj->insert("autoExposureGainMode", QJsonValue(auto_exposure_gain_mode));
+    }
+    if(m_auto_exposure_target_percentile_isSet){
+        obj->insert("autoExposureTargetPercentile", QJsonValue(auto_exposure_target_percentile));
+    }
+    if(m_auto_exposure_target_brightness_isSet){
+        obj->insert("autoExposureTargetBrightness", QJsonValue(auto_exposure_target_brightness));
+    }
+    if(m_auto_exposure_max_change_percent_isSet){
+        obj->insert("autoExposureMaxChangePercent", QJsonValue(auto_exposure_max_change_percent));
+    }
+    if(m_auto_exposure_min_ms_isSet){
+        obj->insert("autoExposureMinMs", QJsonValue(auto_exposure_min_ms));
+    }
+    if(m_auto_exposure_max_ms_isSet){
+        obj->insert("autoExposureMaxMs", QJsonValue(auto_exposure_max_ms));
+    }
+    if(m_auto_exposure_min_gain_isSet){
+        obj->insert("autoExposureMinGain", QJsonValue(auto_exposure_min_gain));
+    }
+    if(m_auto_exposure_max_gain_isSet){
+        obj->insert("autoExposureMaxGain", QJsonValue(auto_exposure_max_gain));
+    }
     if(m_asi_color_image_type_isSet){
         obj->insert("asiColorImageType", QJsonValue(asi_color_image_type));
     }
@@ -1725,8 +1933,20 @@ SWGCameraSettings::asJsonObject() {
     if(video_file_camera_path != nullptr && *video_file_camera_path != QString("")){
         toJsonValue(QString("videoFileCameraPath"), video_file_camera_path, obj, QString("QString"));
     }
+    if(image_file_camera_paths && image_file_camera_paths->size() > 0){
+        toJsonArray((QList<void*>*)image_file_camera_paths, obj, "imageFileCameraPaths", "QString");
+    }
     if(video_file_name != nullptr && *video_file_name != QString("")){
         toJsonValue(QString("videoFileName"), video_file_name, obj, QString("QString"));
+    }
+    if(m_record_raw_fits_isSet){
+        obj->insert("recordRawFits", QJsonValue(record_raw_fits));
+    }
+    if(m_record_calibrated_media_isSet){
+        obj->insert("recordCalibratedMedia", QJsonValue(record_calibrated_media));
+    }
+    if(m_record_post_processed_media_isSet){
+        obj->insert("recordPostProcessedMedia", QJsonValue(record_post_processed_media));
     }
     if(m_video_hw_acceleration_isSet){
         obj->insert("videoHwAcceleration", QJsonValue(video_hw_acceleration));
@@ -1767,6 +1987,15 @@ SWGCameraSettings::asJsonObject() {
     if(m_stack_alignment_method_isSet){
         obj->insert("stackAlignmentMethod", QJsonValue(stack_alignment_method));
     }
+    if(m_stack_display_mode_isSet){
+        obj->insert("stackDisplayMode", QJsonValue(stack_display_mode));
+    }
+    if(m_stack_display_frame_index_isSet){
+        obj->insert("stackDisplayFrameIndex", QJsonValue(stack_display_frame_index));
+    }
+    if(m_stack_reject_bad_frames_isSet){
+        obj->insert("stackRejectBadFrames", QJsonValue(stack_reject_bad_frames));
+    }
     if(stack_dark_file_name != nullptr && *stack_dark_file_name != QString("")){
         toJsonValue(QString("stackDarkFileName"), stack_dark_file_name, obj, QString("QString"));
     }
@@ -1806,6 +2035,18 @@ SWGCameraSettings::asJsonObject() {
     if(m_fov_isSet){
         obj->insert("fov", QJsonValue(fov));
     }
+    if(m_fov_mode_isSet){
+        obj->insert("fovMode", QJsonValue(fov_mode));
+    }
+    if(m_fov_sensor_width_mm_isSet){
+        obj->insert("fovSensorWidthMm", QJsonValue(fov_sensor_width_mm));
+    }
+    if(m_fov_sensor_height_mm_isSet){
+        obj->insert("fovSensorHeightMm", QJsonValue(fov_sensor_height_mm));
+    }
+    if(m_fov_focal_length_mm_isSet){
+        obj->insert("fovFocalLengthMm", QJsonValue(fov_focal_length_mm));
+    }
     if(m_lens_projection_isSet){
         obj->insert("lensProjection", QJsonValue(lens_projection));
     }
@@ -1832,6 +2073,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_post_process_white_balance_highlight_protection_isSet){
         obj->insert("postProcessWhiteBalanceHighlightProtection", QJsonValue(post_process_white_balance_highlight_protection));
+    }
+    if(m_post_process_use_cuda_isSet){
+        obj->insert("postProcessUseCuda", QJsonValue(post_process_use_cuda));
     }
     if(m_post_process_unwarp_isSet){
         obj->insert("postProcessUnwarp", QJsonValue(post_process_unwarp));
@@ -1892,6 +2136,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_flip_y_isSet){
         obj->insert("flipY", QJsonValue(flip_y));
+    }
+    if(m_image_rotation_isSet){
+        obj->insert("imageRotation", QJsonValue(image_rotation));
     }
     if(m_invert_colors_isSet){
         obj->insert("invertColors", QJsonValue(invert_colors));
@@ -2106,20 +2353,23 @@ SWGCameraSettings::asJsonObject() {
     if(m_plate_solve_label_mode_isSet){
         obj->insert("plateSolveLabelMode", QJsonValue(plate_solve_label_mode));
     }
-    if(m_plate_solve_use_current_date_time_isSet){
-        obj->insert("plateSolveUseCurrentDateTime", QJsonValue(plate_solve_use_current_date_time));
+    if(m_plate_solve_use_capture_date_time_isSet){
+        obj->insert("plateSolveUseCaptureDateTime", QJsonValue(plate_solve_use_capture_date_time));
     }
     if(plate_solve_date_time != nullptr && *plate_solve_date_time != QString("")){
         toJsonValue(QString("plateSolveDateTime"), plate_solve_date_time, obj, QString("QString"));
     }
+    if(m_plate_solve_date_time_utc_isSet){
+        obj->insert("plateSolveDateTimeUtc", QJsonValue(plate_solve_date_time_utc));
+    }
     if(m_plate_solve_use_downloaded_catalog_isSet){
         obj->insert("plateSolveUseDownloadedCatalog", QJsonValue(plate_solve_use_downloaded_catalog));
     }
+    if(m_plate_solve_catalog_source_isSet){
+        obj->insert("plateSolveCatalogSource", QJsonValue(plate_solve_catalog_source));
+    }
     if(m_plate_solve_apply_mode_isSet){
         obj->insert("plateSolveApplyMode", QJsonValue(plate_solve_apply_mode));
-    }
-    if(m_video_post_process_isSet){
-        obj->insert("videoPostProcess", QJsonValue(video_post_process));
     }
     if(m_overlay_spectrum_isSet){
         obj->insert("overlaySpectrum", QJsonValue(overlay_spectrum));
@@ -2156,6 +2406,12 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_yolo_disappear_debounce_isSet){
         obj->insert("yoloDisappearDebounce", QJsonValue(yolo_disappear_debounce));
+    }
+    if(m_yolo_tile_large_images_isSet){
+        obj->insert("yoloTileLargeImages", QJsonValue(yolo_tile_large_images));
+    }
+    if(m_yolo_tile_overlap_percent_isSet){
+        obj->insert("yoloTileOverlapPercent", QJsonValue(yolo_tile_overlap_percent));
     }
     if(m_yolo_dnn_target_isSet){
         obj->insert("yoloDnnTarget", QJsonValue(yolo_dnn_target));
@@ -2490,93 +2746,93 @@ SWGCameraSettings::setAlpacaFilterWheelPosition(qint32 alpaca_filter_wheel_posit
 }
 
 qint32
-SWGCameraSettings::getAlpacaBinX() {
-    return alpaca_bin_x;
+SWGCameraSettings::getCameraBinX() {
+    return camera_bin_x;
 }
 void
-SWGCameraSettings::setAlpacaBinX(qint32 alpaca_bin_x) {
-    this->alpaca_bin_x = alpaca_bin_x;
-    this->m_alpaca_bin_x_isSet = true;
+SWGCameraSettings::setCameraBinX(qint32 camera_bin_x) {
+    this->camera_bin_x = camera_bin_x;
+    this->m_camera_bin_x_isSet = true;
 }
 
 qint32
-SWGCameraSettings::getAlpacaBinY() {
-    return alpaca_bin_y;
+SWGCameraSettings::getCameraBinY() {
+    return camera_bin_y;
 }
 void
-SWGCameraSettings::setAlpacaBinY(qint32 alpaca_bin_y) {
-    this->alpaca_bin_y = alpaca_bin_y;
-    this->m_alpaca_bin_y_isSet = true;
+SWGCameraSettings::setCameraBinY(qint32 camera_bin_y) {
+    this->camera_bin_y = camera_bin_y;
+    this->m_camera_bin_y_isSet = true;
 }
 
 qint32
-SWGCameraSettings::getAlpacaNumX() {
-    return alpaca_num_x;
+SWGCameraSettings::getCameraNumX() {
+    return camera_num_x;
 }
 void
-SWGCameraSettings::setAlpacaNumX(qint32 alpaca_num_x) {
-    this->alpaca_num_x = alpaca_num_x;
-    this->m_alpaca_num_x_isSet = true;
+SWGCameraSettings::setCameraNumX(qint32 camera_num_x) {
+    this->camera_num_x = camera_num_x;
+    this->m_camera_num_x_isSet = true;
 }
 
 qint32
-SWGCameraSettings::getAlpacaNumY() {
-    return alpaca_num_y;
+SWGCameraSettings::getCameraNumY() {
+    return camera_num_y;
 }
 void
-SWGCameraSettings::setAlpacaNumY(qint32 alpaca_num_y) {
-    this->alpaca_num_y = alpaca_num_y;
-    this->m_alpaca_num_y_isSet = true;
+SWGCameraSettings::setCameraNumY(qint32 camera_num_y) {
+    this->camera_num_y = camera_num_y;
+    this->m_camera_num_y_isSet = true;
 }
 
 qint32
-SWGCameraSettings::getAlpacaStartX() {
-    return alpaca_start_x;
+SWGCameraSettings::getCameraStartX() {
+    return camera_start_x;
 }
 void
-SWGCameraSettings::setAlpacaStartX(qint32 alpaca_start_x) {
-    this->alpaca_start_x = alpaca_start_x;
-    this->m_alpaca_start_x_isSet = true;
+SWGCameraSettings::setCameraStartX(qint32 camera_start_x) {
+    this->camera_start_x = camera_start_x;
+    this->m_camera_start_x_isSet = true;
 }
 
 qint32
-SWGCameraSettings::getAlpacaStartY() {
-    return alpaca_start_y;
+SWGCameraSettings::getCameraStartY() {
+    return camera_start_y;
 }
 void
-SWGCameraSettings::setAlpacaStartY(qint32 alpaca_start_y) {
-    this->alpaca_start_y = alpaca_start_y;
-    this->m_alpaca_start_y_isSet = true;
+SWGCameraSettings::setCameraStartY(qint32 camera_start_y) {
+    this->camera_start_y = camera_start_y;
+    this->m_camera_start_y_isSet = true;
 }
 
 qint32
-SWGCameraSettings::getAlpacaGain() {
-    return alpaca_gain;
+SWGCameraSettings::getCameraGain() {
+    return camera_gain;
 }
 void
-SWGCameraSettings::setAlpacaGain(qint32 alpaca_gain) {
-    this->alpaca_gain = alpaca_gain;
-    this->m_alpaca_gain_isSet = true;
+SWGCameraSettings::setCameraGain(qint32 camera_gain) {
+    this->camera_gain = camera_gain;
+    this->m_camera_gain_isSet = true;
 }
 
 qint32
-SWGCameraSettings::getAlpacaOffset() {
-    return alpaca_offset;
+SWGCameraSettings::getCameraOffset() {
+    return camera_offset;
 }
 void
-SWGCameraSettings::setAlpacaOffset(qint32 alpaca_offset) {
-    this->alpaca_offset = alpaca_offset;
-    this->m_alpaca_offset_isSet = true;
+SWGCameraSettings::setCameraOffset(qint32 camera_offset) {
+    this->camera_offset = camera_offset;
+    this->m_camera_offset_isSet = true;
 }
 
 qint32
-SWGCameraSettings::getAlpacaReadoutMode() {
-    return alpaca_readout_mode;
+SWGCameraSettings::getCameraReadoutMode() {
+    return camera_readout_mode;
 }
 void
-SWGCameraSettings::setAlpacaReadoutMode(qint32 alpaca_readout_mode) {
-    this->alpaca_readout_mode = alpaca_readout_mode;
-    this->m_alpaca_readout_mode_isSet = true;
+SWGCameraSettings::setCameraReadoutMode(qint32 camera_readout_mode) {
+    this->camera_readout_mode = camera_readout_mode;
+    this->m_camera_readout_mode_isSet = true;
 }
 
 qint32
@@ -2630,6 +2886,96 @@ SWGCameraSettings::setAsiAutoExposureGain(qint32 asi_auto_exposure_gain) {
 }
 
 qint32
+SWGCameraSettings::getAutoExposureGainEnabled() {
+    return auto_exposure_gain_enabled;
+}
+void
+SWGCameraSettings::setAutoExposureGainEnabled(qint32 auto_exposure_gain_enabled) {
+    this->auto_exposure_gain_enabled = auto_exposure_gain_enabled;
+    this->m_auto_exposure_gain_enabled_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAutoExposureGainMode() {
+    return auto_exposure_gain_mode;
+}
+void
+SWGCameraSettings::setAutoExposureGainMode(qint32 auto_exposure_gain_mode) {
+    this->auto_exposure_gain_mode = auto_exposure_gain_mode;
+    this->m_auto_exposure_gain_mode_isSet = true;
+}
+
+double
+SWGCameraSettings::getAutoExposureTargetPercentile() {
+    return auto_exposure_target_percentile;
+}
+void
+SWGCameraSettings::setAutoExposureTargetPercentile(double auto_exposure_target_percentile) {
+    this->auto_exposure_target_percentile = auto_exposure_target_percentile;
+    this->m_auto_exposure_target_percentile_isSet = true;
+}
+
+double
+SWGCameraSettings::getAutoExposureTargetBrightness() {
+    return auto_exposure_target_brightness;
+}
+void
+SWGCameraSettings::setAutoExposureTargetBrightness(double auto_exposure_target_brightness) {
+    this->auto_exposure_target_brightness = auto_exposure_target_brightness;
+    this->m_auto_exposure_target_brightness_isSet = true;
+}
+
+double
+SWGCameraSettings::getAutoExposureMaxChangePercent() {
+    return auto_exposure_max_change_percent;
+}
+void
+SWGCameraSettings::setAutoExposureMaxChangePercent(double auto_exposure_max_change_percent) {
+    this->auto_exposure_max_change_percent = auto_exposure_max_change_percent;
+    this->m_auto_exposure_max_change_percent_isSet = true;
+}
+
+double
+SWGCameraSettings::getAutoExposureMinMs() {
+    return auto_exposure_min_ms;
+}
+void
+SWGCameraSettings::setAutoExposureMinMs(double auto_exposure_min_ms) {
+    this->auto_exposure_min_ms = auto_exposure_min_ms;
+    this->m_auto_exposure_min_ms_isSet = true;
+}
+
+double
+SWGCameraSettings::getAutoExposureMaxMs() {
+    return auto_exposure_max_ms;
+}
+void
+SWGCameraSettings::setAutoExposureMaxMs(double auto_exposure_max_ms) {
+    this->auto_exposure_max_ms = auto_exposure_max_ms;
+    this->m_auto_exposure_max_ms_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAutoExposureMinGain() {
+    return auto_exposure_min_gain;
+}
+void
+SWGCameraSettings::setAutoExposureMinGain(qint32 auto_exposure_min_gain) {
+    this->auto_exposure_min_gain = auto_exposure_min_gain;
+    this->m_auto_exposure_min_gain_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getAutoExposureMaxGain() {
+    return auto_exposure_max_gain;
+}
+void
+SWGCameraSettings::setAutoExposureMaxGain(qint32 auto_exposure_max_gain) {
+    this->auto_exposure_max_gain = auto_exposure_max_gain;
+    this->m_auto_exposure_max_gain_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getAsiColorImageType() {
     return asi_color_image_type;
 }
@@ -2679,6 +3025,16 @@ SWGCameraSettings::setVideoFileCameraPath(QString* video_file_camera_path) {
     this->m_video_file_camera_path_isSet = true;
 }
 
+QList<QString*>*
+SWGCameraSettings::getImageFileCameraPaths() {
+    return image_file_camera_paths;
+}
+void
+SWGCameraSettings::setImageFileCameraPaths(QList<QString*>* image_file_camera_paths) {
+    this->image_file_camera_paths = image_file_camera_paths;
+    this->m_image_file_camera_paths_isSet = true;
+}
+
 QString*
 SWGCameraSettings::getVideoFileName() {
     return video_file_name;
@@ -2687,6 +3043,36 @@ void
 SWGCameraSettings::setVideoFileName(QString* video_file_name) {
     this->video_file_name = video_file_name;
     this->m_video_file_name_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getRecordRawFits() {
+    return record_raw_fits;
+}
+void
+SWGCameraSettings::setRecordRawFits(qint32 record_raw_fits) {
+    this->record_raw_fits = record_raw_fits;
+    this->m_record_raw_fits_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getRecordCalibratedMedia() {
+    return record_calibrated_media;
+}
+void
+SWGCameraSettings::setRecordCalibratedMedia(qint32 record_calibrated_media) {
+    this->record_calibrated_media = record_calibrated_media;
+    this->m_record_calibrated_media_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getRecordPostProcessedMedia() {
+    return record_post_processed_media;
+}
+void
+SWGCameraSettings::setRecordPostProcessedMedia(qint32 record_post_processed_media) {
+    this->record_post_processed_media = record_post_processed_media;
+    this->m_record_post_processed_media_isSet = true;
 }
 
 qint32
@@ -2817,6 +3203,36 @@ void
 SWGCameraSettings::setStackAlignmentMethod(qint32 stack_alignment_method) {
     this->stack_alignment_method = stack_alignment_method;
     this->m_stack_alignment_method_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackDisplayMode() {
+    return stack_display_mode;
+}
+void
+SWGCameraSettings::setStackDisplayMode(qint32 stack_display_mode) {
+    this->stack_display_mode = stack_display_mode;
+    this->m_stack_display_mode_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackDisplayFrameIndex() {
+    return stack_display_frame_index;
+}
+void
+SWGCameraSettings::setStackDisplayFrameIndex(qint32 stack_display_frame_index) {
+    this->stack_display_frame_index = stack_display_frame_index;
+    this->m_stack_display_frame_index_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackRejectBadFrames() {
+    return stack_reject_bad_frames;
+}
+void
+SWGCameraSettings::setStackRejectBadFrames(qint32 stack_reject_bad_frames) {
+    this->stack_reject_bad_frames = stack_reject_bad_frames;
+    this->m_stack_reject_bad_frames_isSet = true;
 }
 
 QString*
@@ -2950,6 +3366,46 @@ SWGCameraSettings::setFov(float fov) {
 }
 
 qint32
+SWGCameraSettings::getFovMode() {
+    return fov_mode;
+}
+void
+SWGCameraSettings::setFovMode(qint32 fov_mode) {
+    this->fov_mode = fov_mode;
+    this->m_fov_mode_isSet = true;
+}
+
+double
+SWGCameraSettings::getFovSensorWidthMm() {
+    return fov_sensor_width_mm;
+}
+void
+SWGCameraSettings::setFovSensorWidthMm(double fov_sensor_width_mm) {
+    this->fov_sensor_width_mm = fov_sensor_width_mm;
+    this->m_fov_sensor_width_mm_isSet = true;
+}
+
+double
+SWGCameraSettings::getFovSensorHeightMm() {
+    return fov_sensor_height_mm;
+}
+void
+SWGCameraSettings::setFovSensorHeightMm(double fov_sensor_height_mm) {
+    this->fov_sensor_height_mm = fov_sensor_height_mm;
+    this->m_fov_sensor_height_mm_isSet = true;
+}
+
+double
+SWGCameraSettings::getFovFocalLengthMm() {
+    return fov_focal_length_mm;
+}
+void
+SWGCameraSettings::setFovFocalLengthMm(double fov_focal_length_mm) {
+    this->fov_focal_length_mm = fov_focal_length_mm;
+    this->m_fov_focal_length_mm_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getLensProjection() {
     return lens_projection;
 }
@@ -3037,6 +3493,16 @@ void
 SWGCameraSettings::setPostProcessWhiteBalanceHighlightProtection(double post_process_white_balance_highlight_protection) {
     this->post_process_white_balance_highlight_protection = post_process_white_balance_highlight_protection;
     this->m_post_process_white_balance_highlight_protection_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPostProcessUseCuda() {
+    return post_process_use_cuda;
+}
+void
+SWGCameraSettings::setPostProcessUseCuda(qint32 post_process_use_cuda) {
+    this->post_process_use_cuda = post_process_use_cuda;
+    this->m_post_process_use_cuda_isSet = true;
 }
 
 qint32
@@ -3237,6 +3703,16 @@ void
 SWGCameraSettings::setFlipY(qint32 flip_y) {
     this->flip_y = flip_y;
     this->m_flip_y_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getImageRotation() {
+    return image_rotation;
+}
+void
+SWGCameraSettings::setImageRotation(qint32 image_rotation) {
+    this->image_rotation = image_rotation;
+    this->m_image_rotation_isSet = true;
 }
 
 qint32
@@ -3950,13 +4426,13 @@ SWGCameraSettings::setPlateSolveLabelMode(qint32 plate_solve_label_mode) {
 }
 
 qint32
-SWGCameraSettings::getPlateSolveUseCurrentDateTime() {
-    return plate_solve_use_current_date_time;
+SWGCameraSettings::getPlateSolveUseCaptureDateTime() {
+    return plate_solve_use_capture_date_time;
 }
 void
-SWGCameraSettings::setPlateSolveUseCurrentDateTime(qint32 plate_solve_use_current_date_time) {
-    this->plate_solve_use_current_date_time = plate_solve_use_current_date_time;
-    this->m_plate_solve_use_current_date_time_isSet = true;
+SWGCameraSettings::setPlateSolveUseCaptureDateTime(qint32 plate_solve_use_capture_date_time) {
+    this->plate_solve_use_capture_date_time = plate_solve_use_capture_date_time;
+    this->m_plate_solve_use_capture_date_time_isSet = true;
 }
 
 QString*
@@ -3970,6 +4446,16 @@ SWGCameraSettings::setPlateSolveDateTime(QString* plate_solve_date_time) {
 }
 
 qint32
+SWGCameraSettings::getPlateSolveDateTimeUtc() {
+    return plate_solve_date_time_utc;
+}
+void
+SWGCameraSettings::setPlateSolveDateTimeUtc(qint32 plate_solve_date_time_utc) {
+    this->plate_solve_date_time_utc = plate_solve_date_time_utc;
+    this->m_plate_solve_date_time_utc_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getPlateSolveUseDownloadedCatalog() {
     return plate_solve_use_downloaded_catalog;
 }
@@ -3980,6 +4466,16 @@ SWGCameraSettings::setPlateSolveUseDownloadedCatalog(qint32 plate_solve_use_down
 }
 
 qint32
+SWGCameraSettings::getPlateSolveCatalogSource() {
+    return plate_solve_catalog_source;
+}
+void
+SWGCameraSettings::setPlateSolveCatalogSource(qint32 plate_solve_catalog_source) {
+    this->plate_solve_catalog_source = plate_solve_catalog_source;
+    this->m_plate_solve_catalog_source_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getPlateSolveApplyMode() {
     return plate_solve_apply_mode;
 }
@@ -3987,16 +4483,6 @@ void
 SWGCameraSettings::setPlateSolveApplyMode(qint32 plate_solve_apply_mode) {
     this->plate_solve_apply_mode = plate_solve_apply_mode;
     this->m_plate_solve_apply_mode_isSet = true;
-}
-
-qint32
-SWGCameraSettings::getVideoPostProcess() {
-    return video_post_process;
-}
-void
-SWGCameraSettings::setVideoPostProcess(qint32 video_post_process) {
-    this->video_post_process = video_post_process;
-    this->m_video_post_process_isSet = true;
 }
 
 qint32
@@ -4117,6 +4603,26 @@ void
 SWGCameraSettings::setYoloDisappearDebounce(double yolo_disappear_debounce) {
     this->yolo_disappear_debounce = yolo_disappear_debounce;
     this->m_yolo_disappear_debounce_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getYoloTileLargeImages() {
+    return yolo_tile_large_images;
+}
+void
+SWGCameraSettings::setYoloTileLargeImages(qint32 yolo_tile_large_images) {
+    this->yolo_tile_large_images = yolo_tile_large_images;
+    this->m_yolo_tile_large_images_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getYoloTileOverlapPercent() {
+    return yolo_tile_overlap_percent;
+}
+void
+SWGCameraSettings::setYoloTileOverlapPercent(qint32 yolo_tile_overlap_percent) {
+    this->yolo_tile_overlap_percent = yolo_tile_overlap_percent;
+    this->m_yolo_tile_overlap_percent_isSet = true;
 }
 
 qint32
@@ -4368,31 +4874,31 @@ SWGCameraSettings::isSet(){
         if(m_alpaca_filter_wheel_position_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_alpaca_bin_x_isSet){
+        if(m_camera_bin_x_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_alpaca_bin_y_isSet){
+        if(m_camera_bin_y_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_alpaca_num_x_isSet){
+        if(m_camera_num_x_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_alpaca_num_y_isSet){
+        if(m_camera_num_y_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_alpaca_start_x_isSet){
+        if(m_camera_start_x_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_alpaca_start_y_isSet){
+        if(m_camera_start_y_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_alpaca_gain_isSet){
+        if(m_camera_gain_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_alpaca_offset_isSet){
+        if(m_camera_offset_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_alpaca_readout_mode_isSet){
+        if(m_camera_readout_mode_isSet){
             isObjectUpdated = true; break;
         }
         if(m_asi_cooler_on_isSet){
@@ -4410,6 +4916,33 @@ SWGCameraSettings::isSet(){
         if(m_asi_auto_exposure_gain_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_auto_exposure_gain_enabled_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_auto_exposure_gain_mode_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_auto_exposure_target_percentile_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_auto_exposure_target_brightness_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_auto_exposure_max_change_percent_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_auto_exposure_min_ms_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_auto_exposure_max_ms_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_auto_exposure_min_gain_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_auto_exposure_max_gain_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_asi_color_image_type_isSet){
             isObjectUpdated = true; break;
         }
@@ -4425,7 +4958,19 @@ SWGCameraSettings::isSet(){
         if(video_file_camera_path && *video_file_camera_path != QString("")){
             isObjectUpdated = true; break;
         }
+        if(image_file_camera_paths && (image_file_camera_paths->size() > 0)){
+            isObjectUpdated = true; break;
+        }
         if(video_file_name && *video_file_name != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_record_raw_fits_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_record_calibrated_media_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_record_post_processed_media_isSet){
             isObjectUpdated = true; break;
         }
         if(m_video_hw_acceleration_isSet){
@@ -4470,6 +5015,15 @@ SWGCameraSettings::isSet(){
         if(m_stack_alignment_method_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_stack_display_mode_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_display_frame_index_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_reject_bad_frames_isSet){
+            isObjectUpdated = true; break;
+        }
         if(stack_dark_file_name && *stack_dark_file_name != QString("")){
             isObjectUpdated = true; break;
         }
@@ -4509,6 +5063,18 @@ SWGCameraSettings::isSet(){
         if(m_fov_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_fov_mode_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_fov_sensor_width_mm_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_fov_sensor_height_mm_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_fov_focal_length_mm_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_lens_projection_isSet){
             isObjectUpdated = true; break;
         }
@@ -4534,6 +5100,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_post_process_white_balance_highlight_protection_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_post_process_use_cuda_isSet){
             isObjectUpdated = true; break;
         }
         if(m_post_process_unwarp_isSet){
@@ -4594,6 +5163,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_flip_y_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_image_rotation_isSet){
             isObjectUpdated = true; break;
         }
         if(m_invert_colors_isSet){
@@ -4809,19 +5381,22 @@ SWGCameraSettings::isSet(){
         if(m_plate_solve_label_mode_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_plate_solve_use_current_date_time_isSet){
+        if(m_plate_solve_use_capture_date_time_isSet){
             isObjectUpdated = true; break;
         }
         if(plate_solve_date_time && *plate_solve_date_time != QString("")){
             isObjectUpdated = true; break;
         }
+        if(m_plate_solve_date_time_utc_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_plate_solve_use_downloaded_catalog_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_plate_solve_apply_mode_isSet){
+        if(m_plate_solve_catalog_source_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_video_post_process_isSet){
+        if(m_plate_solve_apply_mode_isSet){
             isObjectUpdated = true; break;
         }
         if(m_overlay_spectrum_isSet){
@@ -4858,6 +5433,12 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_yolo_disappear_debounce_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_yolo_tile_large_images_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_yolo_tile_overlap_percent_isSet){
             isObjectUpdated = true; break;
         }
         if(m_yolo_dnn_target_isSet){

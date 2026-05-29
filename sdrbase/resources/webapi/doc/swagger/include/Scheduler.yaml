@@ -140,8 +140,30 @@ SchedulerFeatureAction:
       type: string
     action:
       description: >
-        Feature run action
+        Feature action
           * 0 - No change
           * 1 - Start
           * 2 - Stop
+          * 3 - Camera save image
+          * 4 - Camera record video
+          * 5 - Map or SkyMap find
       type: integer
+    cameraFilename:
+      description: "Optional Camera filename for save image or record video actions. Empty uses the Camera feature setting."
+      type: string
+    cameraRecordMode:
+      description: >
+        Camera recording mode
+          * 0 - Raw
+          * 1 - Processed
+          * 2 - Both
+      type: integer
+    cameraImageCount:
+      description: "Number of images to save for Camera save image action. 0 records until stopped."
+      type: integer
+    cameraVideoDuration:
+      description: "Video duration in seconds for Camera record video action. 0 records until stopped."
+      type: integer
+    findTarget:
+      description: "Target string for Map or SkyMap find action."
+      type: string

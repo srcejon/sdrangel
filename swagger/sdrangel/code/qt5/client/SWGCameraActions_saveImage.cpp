@@ -30,8 +30,12 @@ SWGCameraActions_saveImage::SWGCameraActions_saveImage(QString* json) {
 SWGCameraActions_saveImage::SWGCameraActions_saveImage() {
     filename = nullptr;
     m_filename_isSet = false;
-    record_mode = 0;
-    m_record_mode_isSet = false;
+    record_raw_fits = 0;
+    m_record_raw_fits_isSet = false;
+    record_calibrated_media = 0;
+    m_record_calibrated_media_isSet = false;
+    record_post_processed_media = 0;
+    m_record_post_processed_media_isSet = false;
     images = 0;
     m_images_isSet = false;
 }
@@ -44,8 +48,12 @@ void
 SWGCameraActions_saveImage::init() {
     filename = new QString("");
     m_filename_isSet = false;
-    record_mode = 0;
-    m_record_mode_isSet = false;
+    record_raw_fits = 0;
+    m_record_raw_fits_isSet = false;
+    record_calibrated_media = 0;
+    m_record_calibrated_media_isSet = false;
+    record_post_processed_media = 0;
+    m_record_post_processed_media_isSet = false;
     images = 0;
     m_images_isSet = false;
 }
@@ -55,6 +63,8 @@ SWGCameraActions_saveImage::cleanup() {
     if(filename != nullptr) { 
         delete filename;
     }
+
+
 
 
 }
@@ -72,7 +82,11 @@ void
 SWGCameraActions_saveImage::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&filename, pJson["filename"], "QString", "QString");
     
-    ::SWGSDRangel::setValue(&record_mode, pJson["recordMode"], "qint32", "");
+    ::SWGSDRangel::setValue(&record_raw_fits, pJson["recordRawFits"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&record_calibrated_media, pJson["recordCalibratedMedia"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&record_post_processed_media, pJson["recordPostProcessedMedia"], "qint32", "");
     
     ::SWGSDRangel::setValue(&images, pJson["images"], "qint32", "");
     
@@ -95,8 +109,14 @@ SWGCameraActions_saveImage::asJsonObject() {
     if(filename != nullptr && *filename != QString("")){
         toJsonValue(QString("filename"), filename, obj, QString("QString"));
     }
-    if(m_record_mode_isSet){
-        obj->insert("recordMode", QJsonValue(record_mode));
+    if(m_record_raw_fits_isSet){
+        obj->insert("recordRawFits", QJsonValue(record_raw_fits));
+    }
+    if(m_record_calibrated_media_isSet){
+        obj->insert("recordCalibratedMedia", QJsonValue(record_calibrated_media));
+    }
+    if(m_record_post_processed_media_isSet){
+        obj->insert("recordPostProcessedMedia", QJsonValue(record_post_processed_media));
     }
     if(m_images_isSet){
         obj->insert("images", QJsonValue(images));
@@ -116,13 +136,33 @@ SWGCameraActions_saveImage::setFilename(QString* filename) {
 }
 
 qint32
-SWGCameraActions_saveImage::getRecordMode() {
-    return record_mode;
+SWGCameraActions_saveImage::getRecordRawFits() {
+    return record_raw_fits;
 }
 void
-SWGCameraActions_saveImage::setRecordMode(qint32 record_mode) {
-    this->record_mode = record_mode;
-    this->m_record_mode_isSet = true;
+SWGCameraActions_saveImage::setRecordRawFits(qint32 record_raw_fits) {
+    this->record_raw_fits = record_raw_fits;
+    this->m_record_raw_fits_isSet = true;
+}
+
+qint32
+SWGCameraActions_saveImage::getRecordCalibratedMedia() {
+    return record_calibrated_media;
+}
+void
+SWGCameraActions_saveImage::setRecordCalibratedMedia(qint32 record_calibrated_media) {
+    this->record_calibrated_media = record_calibrated_media;
+    this->m_record_calibrated_media_isSet = true;
+}
+
+qint32
+SWGCameraActions_saveImage::getRecordPostProcessedMedia() {
+    return record_post_processed_media;
+}
+void
+SWGCameraActions_saveImage::setRecordPostProcessedMedia(qint32 record_post_processed_media) {
+    this->record_post_processed_media = record_post_processed_media;
+    this->m_record_post_processed_media_isSet = true;
 }
 
 qint32
@@ -143,7 +183,13 @@ SWGCameraActions_saveImage::isSet(){
         if(filename && *filename != QString("")){
             isObjectUpdated = true; break;
         }
-        if(m_record_mode_isSet){
+        if(m_record_raw_fits_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_record_calibrated_media_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_record_post_processed_media_isSet){
             isObjectUpdated = true; break;
         }
         if(m_images_isSet){

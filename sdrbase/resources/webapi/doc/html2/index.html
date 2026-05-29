@@ -3574,9 +3574,13 @@ margin-bottom: 20px;
       "type" : "string",
       "description" : "Filename for the video"
     },
-    "recordMode" : {
+    "recordCalibratedMedia" : {
       "type" : "integer",
-      "description" : "* 0 - Raw video * 1 - Processed video * 2 - Both\n"
+      "description" : "Record calibrated/debayered video (1 for yes, 0 for no)"
+    },
+    "recordPostProcessedMedia" : {
+      "type" : "integer",
+      "description" : "Record post-processed video with overlays (1 for yes, 0 for no)"
     },
     "duration" : {
       "type" : "integer",
@@ -3591,9 +3595,17 @@ margin-bottom: 20px;
       "type" : "string",
       "description" : "Filename for the image"
     },
-    "recordMode" : {
+    "recordRawFits" : {
       "type" : "integer",
-      "description" : "* 0 - Raw images * 1 - Processed images * 2 - Both\n"
+      "description" : "Save uncalibrated raw input image as FITS (1 for yes, 0 for no)"
+    },
+    "recordCalibratedMedia" : {
+      "type" : "integer",
+      "description" : "Save calibrated/debayered image (1 for yes, 0 for no)"
+    },
+    "recordPostProcessedMedia" : {
+      "type" : "integer",
+      "description" : "Save post-processed image with overlays (1 for yes, 0 for no)"
     },
     "images" : {
       "type" : "integer",
@@ -3816,41 +3828,41 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Filter wheel position index"
     },
-    "alpacaBinX" : {
+    "cameraBinX" : {
       "type" : "integer",
-      "description" : "ALPACA camera X binning factor"
+      "description" : "Camera X binning factor"
     },
-    "alpacaBinY" : {
+    "cameraBinY" : {
       "type" : "integer",
-      "description" : "ALPACA camera Y binning factor"
+      "description" : "Camera Y binning factor"
     },
-    "alpacaNumX" : {
+    "cameraNumX" : {
       "type" : "integer",
-      "description" : "ALPACA camera ROI width in binned pixels (0 = full width)"
+      "description" : "Camera ROI width in binned pixels (0 = full width)"
     },
-    "alpacaNumY" : {
+    "cameraNumY" : {
       "type" : "integer",
-      "description" : "ALPACA camera ROI height in binned pixels (0 = full height)"
+      "description" : "Camera ROI height in binned pixels (0 = full height)"
     },
-    "alpacaStartX" : {
+    "cameraStartX" : {
       "type" : "integer",
-      "description" : "ALPACA camera ROI X origin in unbinned pixels"
+      "description" : "Camera ROI X origin in unbinned pixels"
     },
-    "alpacaStartY" : {
+    "cameraStartY" : {
       "type" : "integer",
-      "description" : "ALPACA camera ROI Y origin in unbinned pixels"
+      "description" : "Camera ROI Y origin in unbinned pixels"
     },
-    "alpacaGain" : {
+    "cameraGain" : {
       "type" : "integer",
-      "description" : "ALPACA camera gain index or numeric value (-1 = do not set)"
+      "description" : "Camera gain index or numeric value (-1 = do not set)"
     },
-    "alpacaOffset" : {
+    "cameraOffset" : {
       "type" : "integer",
-      "description" : "ALPACA camera offset index or numeric value (-1 = do not set)"
+      "description" : "Camera offset index or numeric value (-1 = do not set)"
     },
-    "alpacaReadoutMode" : {
+    "cameraReadoutMode" : {
       "type" : "integer",
-      "description" : "ALPACA camera readout mode index"
+      "description" : "Camera readout mode index"
     },
     "asiCoolerOn" : {
       "type" : "integer",
@@ -3872,9 +3884,50 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Enable ASI auto exposure/gain in frame-rate mode (1 for yes, 0 for no)"
     },
+    "autoExposureGainEnabled" : {
+      "type" : "integer",
+      "description" : "Enable SDRangel software auto exposure/gain control loop (1 for yes, 0 for no)"
+    },
+    "autoExposureGainMode" : {
+      "type" : "integer",
+      "description" : "Software auto exposure/gain adjustment mode\n  * 0 - Exposure first\n  * 1 - Gain first\n  * 2 - Exposure only\n  * 3 - Gain only\n"
+    },
+    "autoExposureTargetPercentile" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Image percentile used as the exposure target measurement"
+    },
+    "autoExposureTargetBrightness" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Target brightness percentage for the selected percentile"
+    },
+    "autoExposureMaxChangePercent" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Maximum exposure/gain change per control step, as a percentage"
+    },
+    "autoExposureMinMs" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Minimum software auto-exposure time in milliseconds"
+    },
+    "autoExposureMaxMs" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Maximum software auto-exposure time in milliseconds"
+    },
+    "autoExposureMinGain" : {
+      "type" : "integer",
+      "description" : "Minimum software auto-gain value"
+    },
+    "autoExposureMaxGain" : {
+      "type" : "integer",
+      "description" : "Maximum software auto-gain value"
+    },
     "asiColorImageType" : {
       "type" : "integer",
-      "description" : "ASI colour image type\n  * 0 - RGB24\n  * 1 - RAW16\n"
+      "description" : "ASI colour image type\n  * 0 - RGB24\n  * 1 - RAW16\n  * 2 - RAW8\n"
     },
     "saveImage" : {
       "type" : "integer",
@@ -3892,9 +3945,28 @@ margin-bottom: 20px;
       "type" : "string",
       "description" : "File path for file-based camera video source"
     },
+    "imageFileCameraPaths" : {
+      "type" : "array",
+      "description" : "Ordered image file list for files: image sequence camera source",
+      "items" : {
+        "type" : "string"
+      }
+    },
     "videoFileName" : {
       "type" : "string",
       "description" : "File path for recorded video output"
+    },
+    "recordRawFits" : {
+      "type" : "integer",
+      "description" : "Save uncalibrated raw input still images as FITS files (1 for yes, 0 for no)"
+    },
+    "recordCalibratedMedia" : {
+      "type" : "integer",
+      "description" : "Save calibrated/debayered still images and videos (1 for yes, 0 for no)"
+    },
+    "recordPostProcessedMedia" : {
+      "type" : "integer",
+      "description" : "Save post-processed still images and videos with overlays (1 for yes, 0 for no)"
     },
     "videoHwAcceleration" : {
       "type" : "integer",
@@ -3931,7 +4003,7 @@ margin-bottom: 20px;
     },
     "stackMethod" : {
       "type" : "integer",
-      "description" : "Frame stacking method\n  * 0 - Average\n  * 1 - Median\n  * 2 - Sigma-clipped average\n  * 3 - HDR\n"
+      "description" : "Frame stacking method\n  * 0 - Average\n  * 1 - Median\n  * 2 - Sigma-clipped average\n  * 3 - Lucky sharp average\n  * 4 - HDR\n"
     },
     "stackHdrAlgorithm" : {
       "type" : "integer",
@@ -3952,6 +4024,18 @@ margin-bottom: 20px;
     "stackAlignmentMethod" : {
       "type" : "integer",
       "description" : "Frame alignment method\n  * 0 - None\n  * 1 - Phase correlation\n  * 2 - Star centroid matching\n"
+    },
+    "stackDisplayMode" : {
+      "type" : "integer",
+      "description" : "Stack preview display mode\n  * 0 - Stacked image\n  * 1 - Single history frame\n  * 2 - History tile sheet\n"
+    },
+    "stackDisplayFrameIndex" : {
+      "type" : "integer",
+      "description" : "History frame index to preview when stackDisplayMode is single history frame"
+    },
+    "stackRejectBadFrames" : {
+      "type" : "integer",
+      "description" : "Reject frames that are poor candidates for stacking (1 for yes, 0 for no)"
     },
     "stackDarkFileName" : {
       "type" : "string",
@@ -4012,6 +4096,25 @@ margin-bottom: 20px;
       "format" : "float",
       "description" : "Camera field of view in degrees"
     },
+    "fovMode" : {
+      "type" : "integer",
+      "description" : "Field-of-view input mode\n  * 0 - Direct FoV\n  * 1 - Calculate from sensor size and focal length\n"
+    },
+    "fovSensorWidthMm" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Sensor width in millimetres when calculating FoV"
+    },
+    "fovSensorHeightMm" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Sensor height in millimetres when calculating FoV"
+    },
+    "fovFocalLengthMm" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Focal length in millimetres when calculating FoV"
+    },
     "lensProjection" : {
       "type" : "integer",
       "description" : "Lens projection model\n  * 0 - Rectilinear\n  * 1 - Equidistant\n  * 2 - Equisolid\n"
@@ -4054,6 +4157,10 @@ margin-bottom: 20px;
       "type" : "number",
       "format" : "double",
       "description" : "Amount to reduce manual white-balance gains toward neutral in highlights"
+    },
+    "postProcessUseCuda" : {
+      "type" : "integer",
+      "description" : "Use OpenCV CUDA acceleration for supported camera processing steps (1 for yes, 0 for no)"
     },
     "postProcessUnwarp" : {
       "type" : "integer",
@@ -4146,6 +4253,10 @@ margin-bottom: 20px;
     "flipY" : {
       "type" : "integer",
       "description" : "Flip image vertically (1 for yes, 0 for no)"
+    },
+    "imageRotation" : {
+      "type" : "integer",
+      "description" : "Rotate image clockwise after flips\n  * 0 - 0 degrees\n  * 90 - 90 degrees\n  * 180 - 180 degrees\n  * 270 - 270 degrees\n"
     },
     "invertColors" : {
       "type" : "integer",
@@ -4441,31 +4552,35 @@ margin-bottom: 20px;
     },
     "plateSolveStartMode" : {
       "type" : "integer",
-      "description" : "Plate solve start mode\n  * 0 - Blind\n  * 1 - FoV\n  * 2 - FoV/elevation\n  * 3 - FoV/azimuth/elevation/roll\n  * 4 - FoV/azimuth/elevation/roll/lens\n  * 5 - Current settings only\n"
+      "description" : "Plate solve start mode\n  * 0 - Blind\n  * 1 - FoV\n  * 2 - FoV/elevation\n  * 3 - FoV/azimuth/elevation\n  * 4 - FoV/azimuth/elevation/roll\n  * 5 - FoV/azimuth/elevation/roll/lens\n  * 6 - Current settings only\n"
     },
     "plateSolveLabelMode" : {
       "type" : "integer",
       "description" : "Plate solve label mode\n  * 0 - Name\n  * 1 - Name/magnitude\n  * 2 - Name/magnitude/spectral type\n"
     },
-    "plateSolveUseCurrentDateTime" : {
+    "plateSolveUseCaptureDateTime" : {
       "type" : "integer",
-      "description" : "Use current system date/time for plate solving (1 for yes, 0 for no)"
+      "description" : "Use frame capture date/time for plate solving; when 0 use plateSolveDateTime (1 for yes, 0 for no)"
     },
     "plateSolveDateTime" : {
       "type" : "string",
-      "description" : "Fixed local date/time for plate solving recorded media"
+      "description" : "Fixed date/time for plate solving recorded media"
+    },
+    "plateSolveDateTimeUtc" : {
+      "type" : "integer",
+      "description" : "Treat fixed plate solve date/time as UTC rather than local time (1 for yes, 0 for no)"
     },
     "plateSolveUseDownloadedCatalog" : {
       "type" : "integer",
       "description" : "Prefer downloaded HYG catalog when available (1 for yes, 0 for no)"
     },
+    "plateSolveCatalogSource" : {
+      "type" : "integer",
+      "description" : "Plate solve catalog source\n  * 0 - Auto\n  * 1 - HYG\n  * 2 - Siril SPCC Gaia\n"
+    },
     "plateSolveApplyMode" : {
       "type" : "integer",
       "description" : "Plate solve apply mode\n  * 0 - Azimuth/elevation\n  * 1 - Azimuth/elevation/roll\n  * 2 - Azimuth/elevation/roll/FoV\n  * 3 - Azimuth/elevation/roll/FoV/lens\n"
-    },
-    "videoPostProcess" : {
-      "type" : "integer",
-      "description" : "Write post-processed frames to video file; when 0 write raw frames (1 for yes, 0 for no)"
     },
     "overlaySpectrum" : {
       "type" : "integer",
@@ -4519,9 +4634,17 @@ margin-bottom: 20px;
       "format" : "double",
       "description" : "Seconds a class must remain absent before it is treated as disappeared"
     },
+    "yoloTileLargeImages" : {
+      "type" : "integer",
+      "description" : "Tile images larger than the YOLO model input size before inference (1 for yes, 0 for no)"
+    },
+    "yoloTileOverlapPercent" : {
+      "type" : "integer",
+      "description" : "Tile overlap percentage for large-image YOLO inference"
+    },
     "yoloDnnTarget" : {
       "type" : "integer",
-      "description" : "OpenCV DNN backend for YOLO inference\n  * 0 - CPU\n  * 1 - CUDA (FP32)\n  * 2 - CUDA FP16\n"
+      "description" : "YOLO inference backend/target\n  * 0 - CPU\n  * 1 - CUDA FP32\n  * 2 - CUDA FP16\n  * 3 - TensorRT FP32\n  * 4 - TensorRT FP16\n"
     },
     "objectDeviceSettings" : {
       "type" : "array",
@@ -16806,7 +16929,27 @@ margin-bottom: 20px;
     },
     "action" : {
       "type" : "integer",
-      "description" : "Feature run action\n  * 0 - No change\n  * 1 - Start\n  * 2 - Stop\n"
+      "description" : "Feature action\n  * 0 - No change\n  * 1 - Start\n  * 2 - Stop\n  * 3 - Camera save image\n  * 4 - Camera record video\n  * 5 - Map or SkyMap find\n"
+    },
+    "cameraFilename" : {
+      "type" : "string",
+      "description" : "Optional Camera filename for save image or record video actions. Empty uses the Camera feature setting."
+    },
+    "cameraRecordMode" : {
+      "type" : "integer",
+      "description" : "Camera recording mode\n  * 0 - Raw\n  * 1 - Processed\n  * 2 - Both\n"
+    },
+    "cameraImageCount" : {
+      "type" : "integer",
+      "description" : "Number of images to save for Camera save image action. 0 records until stopped."
+    },
+    "cameraVideoDuration" : {
+      "type" : "integer",
+      "description" : "Video duration in seconds for Camera record video action. 0 records until stopped."
+    },
+    "findTarget" : {
+      "type" : "string",
+      "description" : "Target string for Map or SkyMap find action."
     }
   },
   "description" : "Feature action executed by a scheduler rule"
@@ -16834,7 +16977,7 @@ margin-bottom: 20px;
     },
     "recurrence" : {
       "type" : "integer",
-      "description" : "Time trigger recurrence\n  * 0 - Once\n  * 1 - Daily\n  * 2 - Weekly\n  * 3 - Monthly\n"
+      "description" : "Time trigger recurrence\n  * 0 - Once\n  * 1 - Daily\n  * 2 - Monthly\n"
     },
     "eventType" : {
       "type" : "integer",
@@ -16855,6 +16998,14 @@ margin-bottom: 20px;
     "eventDelayUnit" : {
       "type" : "integer",
       "description" : "Event delay unit\n  * 0 - Seconds\n  * 1 - Minutes\n"
+    },
+    "duration" : {
+      "type" : "integer",
+      "description" : "Optional rule duration. 0 leaves started actions running."
+    },
+    "durationUnit" : {
+      "type" : "integer",
+      "description" : "Rule duration unit\n  * 0 - Seconds\n  * 1 - Minutes\n"
     },
     "command" : {
       "type" : "string",
@@ -61694,7 +61845,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-05-18T09:51:00.133+02:00
+              Generated 2026-05-29T11:44:53.466+02:00
             </div>
           </div>
       </div>

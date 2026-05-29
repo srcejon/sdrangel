@@ -30,8 +30,10 @@ SWGCameraActions_recordVideo::SWGCameraActions_recordVideo(QString* json) {
 SWGCameraActions_recordVideo::SWGCameraActions_recordVideo() {
     filename = nullptr;
     m_filename_isSet = false;
-    record_mode = 0;
-    m_record_mode_isSet = false;
+    record_calibrated_media = 0;
+    m_record_calibrated_media_isSet = false;
+    record_post_processed_media = 0;
+    m_record_post_processed_media_isSet = false;
     duration = 0;
     m_duration_isSet = false;
 }
@@ -44,8 +46,10 @@ void
 SWGCameraActions_recordVideo::init() {
     filename = new QString("");
     m_filename_isSet = false;
-    record_mode = 0;
-    m_record_mode_isSet = false;
+    record_calibrated_media = 0;
+    m_record_calibrated_media_isSet = false;
+    record_post_processed_media = 0;
+    m_record_post_processed_media_isSet = false;
     duration = 0;
     m_duration_isSet = false;
 }
@@ -55,6 +59,7 @@ SWGCameraActions_recordVideo::cleanup() {
     if(filename != nullptr) { 
         delete filename;
     }
+
 
 
 }
@@ -72,7 +77,9 @@ void
 SWGCameraActions_recordVideo::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&filename, pJson["filename"], "QString", "QString");
     
-    ::SWGSDRangel::setValue(&record_mode, pJson["recordMode"], "qint32", "");
+    ::SWGSDRangel::setValue(&record_calibrated_media, pJson["recordCalibratedMedia"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&record_post_processed_media, pJson["recordPostProcessedMedia"], "qint32", "");
     
     ::SWGSDRangel::setValue(&duration, pJson["duration"], "qint32", "");
     
@@ -95,8 +102,11 @@ SWGCameraActions_recordVideo::asJsonObject() {
     if(filename != nullptr && *filename != QString("")){
         toJsonValue(QString("filename"), filename, obj, QString("QString"));
     }
-    if(m_record_mode_isSet){
-        obj->insert("recordMode", QJsonValue(record_mode));
+    if(m_record_calibrated_media_isSet){
+        obj->insert("recordCalibratedMedia", QJsonValue(record_calibrated_media));
+    }
+    if(m_record_post_processed_media_isSet){
+        obj->insert("recordPostProcessedMedia", QJsonValue(record_post_processed_media));
     }
     if(m_duration_isSet){
         obj->insert("duration", QJsonValue(duration));
@@ -116,13 +126,23 @@ SWGCameraActions_recordVideo::setFilename(QString* filename) {
 }
 
 qint32
-SWGCameraActions_recordVideo::getRecordMode() {
-    return record_mode;
+SWGCameraActions_recordVideo::getRecordCalibratedMedia() {
+    return record_calibrated_media;
 }
 void
-SWGCameraActions_recordVideo::setRecordMode(qint32 record_mode) {
-    this->record_mode = record_mode;
-    this->m_record_mode_isSet = true;
+SWGCameraActions_recordVideo::setRecordCalibratedMedia(qint32 record_calibrated_media) {
+    this->record_calibrated_media = record_calibrated_media;
+    this->m_record_calibrated_media_isSet = true;
+}
+
+qint32
+SWGCameraActions_recordVideo::getRecordPostProcessedMedia() {
+    return record_post_processed_media;
+}
+void
+SWGCameraActions_recordVideo::setRecordPostProcessedMedia(qint32 record_post_processed_media) {
+    this->record_post_processed_media = record_post_processed_media;
+    this->m_record_post_processed_media_isSet = true;
 }
 
 qint32
@@ -143,7 +163,10 @@ SWGCameraActions_recordVideo::isSet(){
         if(filename && *filename != QString("")){
             isObjectUpdated = true; break;
         }
-        if(m_record_mode_isSet){
+        if(m_record_calibrated_media_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_record_post_processed_media_isSet){
             isObjectUpdated = true; break;
         }
         if(m_duration_isSet){

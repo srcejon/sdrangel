@@ -50,6 +50,10 @@ SWGSchedulerRule::SWGSchedulerRule() {
     m_event_delay_isSet = false;
     event_delay_unit = 0;
     m_event_delay_unit_isSet = false;
+    duration = 0;
+    m_duration_isSet = false;
+    duration_unit = 0;
+    m_duration_unit_isSet = false;
     command = nullptr;
     m_command_isSet = false;
     speech = nullptr;
@@ -90,6 +94,10 @@ SWGSchedulerRule::init() {
     m_event_delay_isSet = false;
     event_delay_unit = 0;
     m_event_delay_unit_isSet = false;
+    duration = 0;
+    m_duration_isSet = false;
+    duration_unit = 0;
+    m_duration_unit_isSet = false;
     command = new QString("");
     m_command_isSet = false;
     speech = new QString("");
@@ -123,6 +131,8 @@ SWGSchedulerRule::cleanup() {
     if(event_data_regex != nullptr) { 
         delete event_data_regex;
     }
+
+
 
 
     if(command != nullptr) { 
@@ -183,6 +193,10 @@ SWGSchedulerRule::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&event_delay_unit, pJson["eventDelayUnit"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&duration, pJson["duration"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&duration_unit, pJson["durationUnit"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&command, pJson["command"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&speech, pJson["speech"], "QString", "QString");
@@ -241,6 +255,12 @@ SWGSchedulerRule::asJsonObject() {
     }
     if(m_event_delay_unit_isSet){
         obj->insert("eventDelayUnit", QJsonValue(event_delay_unit));
+    }
+    if(m_duration_isSet){
+        obj->insert("duration", QJsonValue(duration));
+    }
+    if(m_duration_unit_isSet){
+        obj->insert("durationUnit", QJsonValue(duration_unit));
     }
     if(command != nullptr && *command != QString("")){
         toJsonValue(QString("command"), command, obj, QString("QString"));
@@ -371,6 +391,26 @@ SWGSchedulerRule::setEventDelayUnit(qint32 event_delay_unit) {
     this->m_event_delay_unit_isSet = true;
 }
 
+qint32
+SWGSchedulerRule::getDuration() {
+    return duration;
+}
+void
+SWGSchedulerRule::setDuration(qint32 duration) {
+    this->duration = duration;
+    this->m_duration_isSet = true;
+}
+
+qint32
+SWGSchedulerRule::getDurationUnit() {
+    return duration_unit;
+}
+void
+SWGSchedulerRule::setDurationUnit(qint32 duration_unit) {
+    this->duration_unit = duration_unit;
+    this->m_duration_unit_isSet = true;
+}
+
 QString*
 SWGSchedulerRule::getCommand() {
     return command;
@@ -457,6 +497,12 @@ SWGSchedulerRule::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_event_delay_unit_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_duration_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_duration_unit_isSet){
             isObjectUpdated = true; break;
         }
         if(command && *command != QString("")){

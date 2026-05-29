@@ -54,6 +54,21 @@ public:
     qint32 getAction();
     void setAction(qint32 action);
 
+    QString* getCameraFilename();
+    void setCameraFilename(QString* camera_filename);
+
+    qint32 getCameraRecordMode();
+    void setCameraRecordMode(qint32 camera_record_mode);
+
+    qint32 getCameraImageCount();
+    void setCameraImageCount(qint32 camera_image_count);
+
+    qint32 getCameraVideoDuration();
+    void setCameraVideoDuration(qint32 camera_video_duration);
+
+    QString* getFindTarget();
+    void setFindTarget(QString* find_target);
+
 
     virtual bool isSet() override;
 
@@ -69,6 +84,21 @@ private:
 
     qint32 action;
     bool m_action_isSet;
+
+    QString* camera_filename;
+    bool m_camera_filename_isSet;
+
+    qint32 camera_record_mode;
+    bool m_camera_record_mode_isSet;
+
+    qint32 camera_image_count;
+    bool m_camera_image_count_isSet;
+
+    qint32 camera_video_duration;
+    bool m_camera_video_duration_isSet;
+
+    QString* find_target;
+    bool m_find_target_isSet;
 
 };
 

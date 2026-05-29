@@ -78,6 +78,12 @@ public:
     qint32 getEventDelayUnit();
     void setEventDelayUnit(qint32 event_delay_unit);
 
+    qint32 getDuration();
+    void setDuration(qint32 duration);
+
+    qint32 getDurationUnit();
+    void setDurationUnit(qint32 duration_unit);
+
     QString* getCommand();
     void setCommand(QString* command);
 
@@ -129,6 +135,12 @@ private:
 
     qint32 event_delay_unit;
     bool m_event_delay_unit_isSet;
+
+    qint32 duration;
+    bool m_duration_isSet;
+
+    qint32 duration_unit;
+    bool m_duration_unit_isSet;
 
     QString* command;
     bool m_command_isSet;

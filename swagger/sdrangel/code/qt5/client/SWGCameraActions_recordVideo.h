@@ -45,8 +45,11 @@ public:
     QString* getFilename();
     void setFilename(QString* filename);
 
-    qint32 getRecordMode();
-    void setRecordMode(qint32 record_mode);
+    qint32 getRecordCalibratedMedia();
+    void setRecordCalibratedMedia(qint32 record_calibrated_media);
+
+    qint32 getRecordPostProcessedMedia();
+    void setRecordPostProcessedMedia(qint32 record_post_processed_media);
 
     qint32 getDuration();
     void setDuration(qint32 duration);
@@ -58,8 +61,11 @@ private:
     QString* filename;
     bool m_filename_isSet;
 
-    qint32 record_mode;
-    bool m_record_mode_isSet;
+    qint32 record_calibrated_media;
+    bool m_record_calibrated_media_isSet;
+
+    qint32 record_post_processed_media;
+    bool m_record_post_processed_media_isSet;
 
     qint32 duration;
     bool m_duration_isSet;

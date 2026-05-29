@@ -130,32 +130,32 @@ public:
     qint32 getAlpacaFilterWheelPosition();
     void setAlpacaFilterWheelPosition(qint32 alpaca_filter_wheel_position);
 
-    qint32 getAlpacaBinX();
-    void setAlpacaBinX(qint32 alpaca_bin_x);
+    qint32 getCameraBinX();
+    void setCameraBinX(qint32 camera_bin_x);
 
-    qint32 getAlpacaBinY();
-    void setAlpacaBinY(qint32 alpaca_bin_y);
+    qint32 getCameraBinY();
+    void setCameraBinY(qint32 camera_bin_y);
 
-    qint32 getAlpacaNumX();
-    void setAlpacaNumX(qint32 alpaca_num_x);
+    qint32 getCameraNumX();
+    void setCameraNumX(qint32 camera_num_x);
 
-    qint32 getAlpacaNumY();
-    void setAlpacaNumY(qint32 alpaca_num_y);
+    qint32 getCameraNumY();
+    void setCameraNumY(qint32 camera_num_y);
 
-    qint32 getAlpacaStartX();
-    void setAlpacaStartX(qint32 alpaca_start_x);
+    qint32 getCameraStartX();
+    void setCameraStartX(qint32 camera_start_x);
 
-    qint32 getAlpacaStartY();
-    void setAlpacaStartY(qint32 alpaca_start_y);
+    qint32 getCameraStartY();
+    void setCameraStartY(qint32 camera_start_y);
 
-    qint32 getAlpacaGain();
-    void setAlpacaGain(qint32 alpaca_gain);
+    qint32 getCameraGain();
+    void setCameraGain(qint32 camera_gain);
 
-    qint32 getAlpacaOffset();
-    void setAlpacaOffset(qint32 alpaca_offset);
+    qint32 getCameraOffset();
+    void setCameraOffset(qint32 camera_offset);
 
-    qint32 getAlpacaReadoutMode();
-    void setAlpacaReadoutMode(qint32 alpaca_readout_mode);
+    qint32 getCameraReadoutMode();
+    void setCameraReadoutMode(qint32 camera_readout_mode);
 
     qint32 getAsiCoolerOn();
     void setAsiCoolerOn(qint32 asi_cooler_on);
@@ -172,6 +172,33 @@ public:
     qint32 getAsiAutoExposureGain();
     void setAsiAutoExposureGain(qint32 asi_auto_exposure_gain);
 
+    qint32 getAutoExposureGainEnabled();
+    void setAutoExposureGainEnabled(qint32 auto_exposure_gain_enabled);
+
+    qint32 getAutoExposureGainMode();
+    void setAutoExposureGainMode(qint32 auto_exposure_gain_mode);
+
+    double getAutoExposureTargetPercentile();
+    void setAutoExposureTargetPercentile(double auto_exposure_target_percentile);
+
+    double getAutoExposureTargetBrightness();
+    void setAutoExposureTargetBrightness(double auto_exposure_target_brightness);
+
+    double getAutoExposureMaxChangePercent();
+    void setAutoExposureMaxChangePercent(double auto_exposure_max_change_percent);
+
+    double getAutoExposureMinMs();
+    void setAutoExposureMinMs(double auto_exposure_min_ms);
+
+    double getAutoExposureMaxMs();
+    void setAutoExposureMaxMs(double auto_exposure_max_ms);
+
+    qint32 getAutoExposureMinGain();
+    void setAutoExposureMinGain(qint32 auto_exposure_min_gain);
+
+    qint32 getAutoExposureMaxGain();
+    void setAutoExposureMaxGain(qint32 auto_exposure_max_gain);
+
     qint32 getAsiColorImageType();
     void setAsiColorImageType(qint32 asi_color_image_type);
 
@@ -187,8 +214,20 @@ public:
     QString* getVideoFileCameraPath();
     void setVideoFileCameraPath(QString* video_file_camera_path);
 
+    QList<QString*>* getImageFileCameraPaths();
+    void setImageFileCameraPaths(QList<QString*>* image_file_camera_paths);
+
     QString* getVideoFileName();
     void setVideoFileName(QString* video_file_name);
+
+    qint32 getRecordRawFits();
+    void setRecordRawFits(qint32 record_raw_fits);
+
+    qint32 getRecordCalibratedMedia();
+    void setRecordCalibratedMedia(qint32 record_calibrated_media);
+
+    qint32 getRecordPostProcessedMedia();
+    void setRecordPostProcessedMedia(qint32 record_post_processed_media);
 
     qint32 getVideoHwAcceleration();
     void setVideoHwAcceleration(qint32 video_hw_acceleration);
@@ -229,6 +268,15 @@ public:
     qint32 getStackAlignmentMethod();
     void setStackAlignmentMethod(qint32 stack_alignment_method);
 
+    qint32 getStackDisplayMode();
+    void setStackDisplayMode(qint32 stack_display_mode);
+
+    qint32 getStackDisplayFrameIndex();
+    void setStackDisplayFrameIndex(qint32 stack_display_frame_index);
+
+    qint32 getStackRejectBadFrames();
+    void setStackRejectBadFrames(qint32 stack_reject_bad_frames);
+
     QString* getStackDarkFileName();
     void setStackDarkFileName(QString* stack_dark_file_name);
 
@@ -268,6 +316,18 @@ public:
     float getFov();
     void setFov(float fov);
 
+    qint32 getFovMode();
+    void setFovMode(qint32 fov_mode);
+
+    double getFovSensorWidthMm();
+    void setFovSensorWidthMm(double fov_sensor_width_mm);
+
+    double getFovSensorHeightMm();
+    void setFovSensorHeightMm(double fov_sensor_height_mm);
+
+    double getFovFocalLengthMm();
+    void setFovFocalLengthMm(double fov_focal_length_mm);
+
     qint32 getLensProjection();
     void setLensProjection(qint32 lens_projection);
 
@@ -294,6 +354,9 @@ public:
 
     double getPostProcessWhiteBalanceHighlightProtection();
     void setPostProcessWhiteBalanceHighlightProtection(double post_process_white_balance_highlight_protection);
+
+    qint32 getPostProcessUseCuda();
+    void setPostProcessUseCuda(qint32 post_process_use_cuda);
 
     qint32 getPostProcessUnwarp();
     void setPostProcessUnwarp(qint32 post_process_unwarp);
@@ -354,6 +417,9 @@ public:
 
     qint32 getFlipY();
     void setFlipY(qint32 flip_y);
+
+    qint32 getImageRotation();
+    void setImageRotation(qint32 image_rotation);
 
     qint32 getInvertColors();
     void setInvertColors(qint32 invert_colors);
@@ -568,20 +634,23 @@ public:
     qint32 getPlateSolveLabelMode();
     void setPlateSolveLabelMode(qint32 plate_solve_label_mode);
 
-    qint32 getPlateSolveUseCurrentDateTime();
-    void setPlateSolveUseCurrentDateTime(qint32 plate_solve_use_current_date_time);
+    qint32 getPlateSolveUseCaptureDateTime();
+    void setPlateSolveUseCaptureDateTime(qint32 plate_solve_use_capture_date_time);
 
     QString* getPlateSolveDateTime();
     void setPlateSolveDateTime(QString* plate_solve_date_time);
 
+    qint32 getPlateSolveDateTimeUtc();
+    void setPlateSolveDateTimeUtc(qint32 plate_solve_date_time_utc);
+
     qint32 getPlateSolveUseDownloadedCatalog();
     void setPlateSolveUseDownloadedCatalog(qint32 plate_solve_use_downloaded_catalog);
 
+    qint32 getPlateSolveCatalogSource();
+    void setPlateSolveCatalogSource(qint32 plate_solve_catalog_source);
+
     qint32 getPlateSolveApplyMode();
     void setPlateSolveApplyMode(qint32 plate_solve_apply_mode);
-
-    qint32 getVideoPostProcess();
-    void setVideoPostProcess(qint32 video_post_process);
 
     qint32 getOverlaySpectrum();
     void setOverlaySpectrum(qint32 overlay_spectrum);
@@ -618,6 +687,12 @@ public:
 
     double getYoloDisappearDebounce();
     void setYoloDisappearDebounce(double yolo_disappear_debounce);
+
+    qint32 getYoloTileLargeImages();
+    void setYoloTileLargeImages(qint32 yolo_tile_large_images);
+
+    qint32 getYoloTileOverlapPercent();
+    void setYoloTileOverlapPercent(qint32 yolo_tile_overlap_percent);
 
     qint32 getYoloDnnTarget();
     void setYoloDnnTarget(qint32 yolo_dnn_target);
@@ -755,32 +830,32 @@ private:
     qint32 alpaca_filter_wheel_position;
     bool m_alpaca_filter_wheel_position_isSet;
 
-    qint32 alpaca_bin_x;
-    bool m_alpaca_bin_x_isSet;
+    qint32 camera_bin_x;
+    bool m_camera_bin_x_isSet;
 
-    qint32 alpaca_bin_y;
-    bool m_alpaca_bin_y_isSet;
+    qint32 camera_bin_y;
+    bool m_camera_bin_y_isSet;
 
-    qint32 alpaca_num_x;
-    bool m_alpaca_num_x_isSet;
+    qint32 camera_num_x;
+    bool m_camera_num_x_isSet;
 
-    qint32 alpaca_num_y;
-    bool m_alpaca_num_y_isSet;
+    qint32 camera_num_y;
+    bool m_camera_num_y_isSet;
 
-    qint32 alpaca_start_x;
-    bool m_alpaca_start_x_isSet;
+    qint32 camera_start_x;
+    bool m_camera_start_x_isSet;
 
-    qint32 alpaca_start_y;
-    bool m_alpaca_start_y_isSet;
+    qint32 camera_start_y;
+    bool m_camera_start_y_isSet;
 
-    qint32 alpaca_gain;
-    bool m_alpaca_gain_isSet;
+    qint32 camera_gain;
+    bool m_camera_gain_isSet;
 
-    qint32 alpaca_offset;
-    bool m_alpaca_offset_isSet;
+    qint32 camera_offset;
+    bool m_camera_offset_isSet;
 
-    qint32 alpaca_readout_mode;
-    bool m_alpaca_readout_mode_isSet;
+    qint32 camera_readout_mode;
+    bool m_camera_readout_mode_isSet;
 
     qint32 asi_cooler_on;
     bool m_asi_cooler_on_isSet;
@@ -797,6 +872,33 @@ private:
     qint32 asi_auto_exposure_gain;
     bool m_asi_auto_exposure_gain_isSet;
 
+    qint32 auto_exposure_gain_enabled;
+    bool m_auto_exposure_gain_enabled_isSet;
+
+    qint32 auto_exposure_gain_mode;
+    bool m_auto_exposure_gain_mode_isSet;
+
+    double auto_exposure_target_percentile;
+    bool m_auto_exposure_target_percentile_isSet;
+
+    double auto_exposure_target_brightness;
+    bool m_auto_exposure_target_brightness_isSet;
+
+    double auto_exposure_max_change_percent;
+    bool m_auto_exposure_max_change_percent_isSet;
+
+    double auto_exposure_min_ms;
+    bool m_auto_exposure_min_ms_isSet;
+
+    double auto_exposure_max_ms;
+    bool m_auto_exposure_max_ms_isSet;
+
+    qint32 auto_exposure_min_gain;
+    bool m_auto_exposure_min_gain_isSet;
+
+    qint32 auto_exposure_max_gain;
+    bool m_auto_exposure_max_gain_isSet;
+
     qint32 asi_color_image_type;
     bool m_asi_color_image_type_isSet;
 
@@ -812,8 +914,20 @@ private:
     QString* video_file_camera_path;
     bool m_video_file_camera_path_isSet;
 
+    QList<QString*>* image_file_camera_paths;
+    bool m_image_file_camera_paths_isSet;
+
     QString* video_file_name;
     bool m_video_file_name_isSet;
+
+    qint32 record_raw_fits;
+    bool m_record_raw_fits_isSet;
+
+    qint32 record_calibrated_media;
+    bool m_record_calibrated_media_isSet;
+
+    qint32 record_post_processed_media;
+    bool m_record_post_processed_media_isSet;
 
     qint32 video_hw_acceleration;
     bool m_video_hw_acceleration_isSet;
@@ -854,6 +968,15 @@ private:
     qint32 stack_alignment_method;
     bool m_stack_alignment_method_isSet;
 
+    qint32 stack_display_mode;
+    bool m_stack_display_mode_isSet;
+
+    qint32 stack_display_frame_index;
+    bool m_stack_display_frame_index_isSet;
+
+    qint32 stack_reject_bad_frames;
+    bool m_stack_reject_bad_frames_isSet;
+
     QString* stack_dark_file_name;
     bool m_stack_dark_file_name_isSet;
 
@@ -893,6 +1016,18 @@ private:
     float fov;
     bool m_fov_isSet;
 
+    qint32 fov_mode;
+    bool m_fov_mode_isSet;
+
+    double fov_sensor_width_mm;
+    bool m_fov_sensor_width_mm_isSet;
+
+    double fov_sensor_height_mm;
+    bool m_fov_sensor_height_mm_isSet;
+
+    double fov_focal_length_mm;
+    bool m_fov_focal_length_mm_isSet;
+
     qint32 lens_projection;
     bool m_lens_projection_isSet;
 
@@ -919,6 +1054,9 @@ private:
 
     double post_process_white_balance_highlight_protection;
     bool m_post_process_white_balance_highlight_protection_isSet;
+
+    qint32 post_process_use_cuda;
+    bool m_post_process_use_cuda_isSet;
 
     qint32 post_process_unwarp;
     bool m_post_process_unwarp_isSet;
@@ -979,6 +1117,9 @@ private:
 
     qint32 flip_y;
     bool m_flip_y_isSet;
+
+    qint32 image_rotation;
+    bool m_image_rotation_isSet;
 
     qint32 invert_colors;
     bool m_invert_colors_isSet;
@@ -1193,20 +1334,23 @@ private:
     qint32 plate_solve_label_mode;
     bool m_plate_solve_label_mode_isSet;
 
-    qint32 plate_solve_use_current_date_time;
-    bool m_plate_solve_use_current_date_time_isSet;
+    qint32 plate_solve_use_capture_date_time;
+    bool m_plate_solve_use_capture_date_time_isSet;
 
     QString* plate_solve_date_time;
     bool m_plate_solve_date_time_isSet;
 
+    qint32 plate_solve_date_time_utc;
+    bool m_plate_solve_date_time_utc_isSet;
+
     qint32 plate_solve_use_downloaded_catalog;
     bool m_plate_solve_use_downloaded_catalog_isSet;
 
+    qint32 plate_solve_catalog_source;
+    bool m_plate_solve_catalog_source_isSet;
+
     qint32 plate_solve_apply_mode;
     bool m_plate_solve_apply_mode_isSet;
-
-    qint32 video_post_process;
-    bool m_video_post_process_isSet;
 
     qint32 overlay_spectrum;
     bool m_overlay_spectrum_isSet;
@@ -1243,6 +1387,12 @@ private:
 
     double yolo_disappear_debounce;
     bool m_yolo_disappear_debounce_isSet;
+
+    qint32 yolo_tile_large_images;
+    bool m_yolo_tile_large_images_isSet;
+
+    qint32 yolo_tile_overlap_percent;
+    bool m_yolo_tile_overlap_percent_isSet;
 
     qint32 yolo_dnn_target;
     bool m_yolo_dnn_target_isSet;

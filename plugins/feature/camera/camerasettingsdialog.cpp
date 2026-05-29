@@ -159,5 +159,9 @@ void CameraSettingsDialog::clearCameraStatus()
 
 void CameraSettingsDialog::on_clearChart_clicked()
 {
-    m_tempSeries->clear();
+    if (m_tempSeries) {
+        m_tempSeries->clear();
+    }
+
+    updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
 }

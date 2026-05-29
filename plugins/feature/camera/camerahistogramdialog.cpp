@@ -77,10 +77,12 @@ void CameraHistogramDialog::updateHistogram(const CameraHistogramData& histogram
         return;
     }
 
+    // QT_TR_NOOP marks the literals for lupdate extraction; the matching tr() below performs
+    // the runtime lookup (tr() on a bare runtime const char* is not extractable).
     const struct { const QVector<float>* bins; const char* name; QColor color; } channelDefs[] = {
-        {&histogramData.m_redBins, "Red",   Qt::red},
-        {&histogramData.m_greenBins, "Green", Qt::green},
-        {&histogramData.m_blueBins, "Blue",  Qt::blue}
+        {&histogramData.m_redBins, QT_TR_NOOP("Red"),   Qt::red},
+        {&histogramData.m_greenBins, QT_TR_NOOP("Green"), Qt::green},
+        {&histogramData.m_blueBins, QT_TR_NOOP("Blue"),  Qt::blue}
     };
 
     double maxCount = 0.0;

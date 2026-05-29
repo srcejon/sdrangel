@@ -636,7 +636,6 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
 bool CameraImageProcessor::canUseCudaImageProcessing() const
 {
     static bool warnedNoDevice = false;
-    static bool warnedUnsupportedSettings = false;
 
     if (cv::cuda::getCudaEnabledDeviceCount() <= 0)
     {
@@ -647,8 +646,6 @@ bool CameraImageProcessor::canUseCudaImageProcessing() const
         }
         return false;
     }
-
-    (void) warnedUnsupportedSettings;
 
     return true;
 }
@@ -712,8 +709,13 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
             cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
         }
 
-        if ((bgrGpu.depth() == CV_16U) && (needsHistogramStretch || needsSaturation || needsGamma))
+        if ((bgrGpu.depth() == CV_16U) && (needsHistogramStretch || needsSaturation || needsGamma || needsSobelEdge || needsCannyEdge))
         {
+            // The CUDA edge filters (and the histogram/saturation/gamma ops) assume 8-bit
+            // input: the CPU path calls convertBgrTo8Bit() before applySobelEdge/applyCannyEdge,
+            // but the CUDA Sobel/Canny helpers feed 16-bit gradients straight into a CV_8U
+            // convertTo with no down-scaling, producing blown-out edges (EdgesOnly) or a
+            // CV_16UC3/CV_8UC3 addWeighted type mismatch (overlay). Fall back to the CPU path.
             frame.ensureCpuImageFromCuda();
             applyImageProcessingCpu(frame);
             PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");
@@ -1332,8 +1334,6 @@ void CameraImageProcessor::applyHistogramStretch(cv::Mat& bgrMat) const
 
     const int outputType = bgrMat.type();
     const double maxValue = maxValueForDepth(bgrMat.depth());
-    cv::Mat floatMat;
-    bgrMat.convertTo(floatMat, CV_32FC3, 1.0 / maxValue);
 
     const float blackPoint = static_cast<float>(m_settings.m_histogramStretchBlackPoint);
     const float whitePoint = static_cast<float>(m_settings.m_histogramStretchWhitePoint);
@@ -1359,6 +1359,9 @@ void CameraImageProcessor::applyHistogramStretch(cv::Mat& bgrMat) const
         PROFILER_STOP(__FUNCTION__);
         return;
     }
+
+    cv::Mat floatMat;
+    bgrMat.convertTo(floatMat, CV_32FC3, 1.0 / maxValue);
 
     for (int row = 0; row < floatMat.rows; ++row)
     {

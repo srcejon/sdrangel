@@ -12,4 +12,4 @@ image,time,latitude,longitude,altitude,azimuth,elevation,roll,fov,projection,cx,
 "images/stars-wide-3.jpg",2026-05-22 22:19:48,51.366299,-0.125000,100.0,0.0,85.0,0.0,165.0,"equidistant fisheye",0.0,0.0,0.0,"Arcturus,Dubhe,Merak,Phecda,Megrez,Alioth,Mizar,Alkaid",1,727,512,1937,2552,"Arcturus:1756:1168"
 "images/stars-wide-3.jpg",2026-05-22 22:19:48,51.366299,-0.125000,100.0,100.0,79.0,120.0,165.0,"equidistant fisheye",0.0,0.0,0.0,"Arcturus,Dubhe,Merak,Phecda,Megrez,Alioth,Mizar,Alkaid",4,727,512,1937,2552,"Arcturus:1756:1168"
 "images/stars-wide-4.jpg",2026-05-27 01:48:00,51.013712929663036,-1.8520050336203637,0.0,0.0,90.0,0.0,165.0,"equidistant fisheye",0.0,0.0,0.0,"Arcturus,Dubhe,Merak,Phecda,Megrez,Alioth,Mizar,Alkaid",1,0,0,0,0,"Arcturus:764:1949"
-"images/galaxy-m101-1.jpg",2026-05-27 01:00:00,51.013712929663036,-1.8520050336203637,0.0,0.0,0.0,0.0,1.29,"rectilinear",0.0,0.0,0.0,"",1,0,0,0,0,""
+"images/galaxy-m101-1.jpg",2026-05-27 01:00:00,51.013712929663036,-1.8520050336203637,0.0,0.0,0.0,0.0,1.29,"rectilinear",0.0,0.0,0.0,"HIP 68621,HIP 68503",1,0,0,0,0,""

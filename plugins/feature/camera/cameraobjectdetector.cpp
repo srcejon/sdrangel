@@ -1771,6 +1771,8 @@ void CameraObjectDetector::sendEvent(const QString& className, bool detected, co
     for (const auto& pipe : eventPipes)
     {
         MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
-        messageQueue->push(MainCore::MsgEvent::create(m_camera, eventTime, eventType, eventData));
+        if (messageQueue) {
+            messageQueue->push(MainCore::MsgEvent::create(m_camera, eventTime, eventType, eventData));
+        }
     }
 }

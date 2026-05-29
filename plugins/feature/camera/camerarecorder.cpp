@@ -318,14 +318,17 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
     {
         if (shouldSaveRawFits())
         {
-            if (frame->m_rawBayerImage.isNull())
+            const bool haveCapturedRawFrame = !frame->m_rawBayerImage.isNull();
+            const QImage& rawFitsImage = haveCapturedRawFrame ? frame->m_rawBayerImage : rawImage;
+            if (rawFitsImage.isNull())
             {
-                qDebug() << "CameraRecorder: raw FITS requested but no raw mono frame is available; skipping";
+                qDebug() << "CameraRecorder: raw FITS requested but no image frame is available; skipping";
             }
             else
             {
                 const QString rawFitsFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("raw"), QStringLiteral("fits"));
-                if (saveRawFits(rawFitsFilename, frame->m_rawBayerImage, frame->m_rawBayerPattern, *frame)) {
+                const CameraPipelineFrame::BayerPattern bayerPattern = haveCapturedRawFrame ? frame->m_rawBayerPattern : CameraPipelineFrame::BayerNone;
+                if (saveRawFits(rawFitsFilename, rawFitsImage, bayerPattern, *frame)) {
                     savedImageFrame = m_settings.m_saveImage;
                 }
             }

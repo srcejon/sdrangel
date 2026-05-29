@@ -388,16 +388,28 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         {
             const QString calibratedFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("calibrated"));
             qDebug() << "CameraRecorder: Saving calibrated image to" << calibratedFilename;
-            calibratedImage.save(calibratedFilename);
-            savedImageFrame = m_settings.m_saveImage;
+            if (calibratedImage.save(calibratedFilename)) {
+                savedImageFrame = m_settings.m_saveImage;
+            } else {
+                qWarning() << "CameraRecorder: Failed to save calibrated image to" << calibratedFilename;
+                reportErrorToFeature(QStringLiteral("image-save:calibrated"),
+                                     tr("Camera image recording error"),
+                                     tr("Failed to save calibrated image:\n%1").arg(calibratedFilename));
+            }
         }
 
         if (shouldSavePostProcessedMedia())
         {
             const QString processedFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("post"));
             qDebug() << "CameraRecorder: Saving post-processed image to" << processedFilename;
-            processedImage.save(processedFilename);
-            savedImageFrame = m_settings.m_saveImage;
+            if (processedImage.save(processedFilename)) {
+                savedImageFrame = m_settings.m_saveImage;
+            } else {
+                qWarning() << "CameraRecorder: Failed to save post-processed image to" << processedFilename;
+                reportErrorToFeature(QStringLiteral("image-save:post"),
+                                     tr("Camera image recording error"),
+                                     tr("Failed to save post-processed image:\n%1").arg(processedFilename));
+            }
         }
     }
 

@@ -228,8 +228,13 @@ bool CameraDiffDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuM
             bgrGpu.upload(bgrMat, m_cudaDetectionStream);
         }
 
-        if (diffReferenceFrame.hasCudaBgrImage())
+        if (diffReferenceFrame.hasCudaBgrImage()
+            && (diffReferenceFrame.m_cudaBgrImage.size() == bgrGpu.size())
+            && (diffReferenceFrame.m_cudaBgrImage.type() == bgrGpu.type()))
         {
+            // Only reuse the cached GPU reference when it matches the current frame's
+            // geometry; otherwise prevBgrGpu(roi) below could index out of bounds (e.g.
+            // after a resolution change) and throw on every frame.
             prevBgrGpu = diffReferenceFrame.m_cudaBgrImage;
         }
         else

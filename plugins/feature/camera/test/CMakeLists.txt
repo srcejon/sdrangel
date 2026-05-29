@@ -1,6 +1,7 @@
 set(camera_star_tests_SOURCES
     camerastartests.cpp
     ../cameradetector.cpp
+    ../cameraimageutils.cpp
     ../camerastardetector.cpp
     ../cameraplatesolver.cpp
     ../camerasettings.cpp
@@ -9,6 +10,7 @@ set(camera_star_tests_SOURCES
 
 set(camera_star_tests_HEADERS
     ../cameradetector.h
+    ../cameraimageutils.h
     ../camerastardetector.h
     ../cameraplatesolver.h
     ../camerapipelineframe.h

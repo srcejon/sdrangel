@@ -151,12 +151,14 @@ SchedulerFeatureAction:
     cameraFilename:
       description: "Optional Camera filename for save image or record video actions. Empty uses the Camera feature setting."
       type: string
-    cameraRecordMode:
-      description: >
-        Camera recording mode
-          * 0 - Raw
-          * 1 - Processed
-          * 2 - Both
+    cameraRecordRawFits:
+      description: "Save uncalibrated raw input image as FITS for Camera save image actions (1 for yes, 0 for no)"
+      type: integer
+    cameraRecordCalibratedMedia:
+      description: "Save/record calibrated Camera media (1 for yes, 0 for no)"
+      type: integer
+    cameraRecordPostProcessedMedia:
+      description: "Save/record post-processed Camera media with overlays (1 for yes, 0 for no)"
       type: integer
     cameraImageCount:
       description: "Number of images to save for Camera save image action. 0 records until stopped."

@@ -83,7 +83,9 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     m_packetData(nullptr),
     m_cameraActionGroup(nullptr),
     m_cameraFilename(nullptr),
-    m_cameraRecordMode(nullptr),
+    m_cameraRecordRawFits(nullptr),
+    m_cameraRecordCalibratedMedia(nullptr),
+    m_cameraRecordPostProcessedMedia(nullptr),
     m_cameraImageCountLabel(nullptr),
     m_cameraImageCount(nullptr),
     m_cameraVideoDurationLabel(nullptr),
@@ -197,10 +199,6 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->fileSinkAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
     ui->fileSinkAction->addItem(tr("Stop"), SchedulerSettings::ActionStop);
 
-    m_cameraRecordMode->addItem(tr("Raw"), 0);
-    m_cameraRecordMode->addItem(tr("Processed"), 1);
-    m_cameraRecordMode->addItem(tr("Both"), 2);
-
     ui->dateFrom->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
     ui->dateUntil->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
     ui->dateUntil->setMinimumDate(noDateUntil());
@@ -308,7 +306,9 @@ void SchedulerGUI::makeUIConnections()
     });
     connect(ui->featureAction, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onFeatureEditorChanged);
     connect(m_cameraFilename, &QLineEdit::editingFinished, this, &SchedulerGUI::onFeatureEditorChanged);
-    connect(m_cameraRecordMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onFeatureEditorChanged);
+    connect(m_cameraRecordRawFits, &QCheckBox::toggled, this, &SchedulerGUI::onFeatureEditorChanged);
+    connect(m_cameraRecordCalibratedMedia, &QCheckBox::toggled, this, &SchedulerGUI::onFeatureEditorChanged);
+    connect(m_cameraRecordPostProcessedMedia, &QCheckBox::toggled, this, &SchedulerGUI::onFeatureEditorChanged);
     connect(m_cameraImageCount, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onFeatureEditorChanged);
     connect(m_cameraVideoDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onFeatureEditorChanged);
     connect(m_findTarget, &QLineEdit::editingFinished, this, &SchedulerGUI::onFeatureEditorChanged);
@@ -334,7 +334,9 @@ void SchedulerGUI::createFeatureActionParameterEditors()
     m_cameraFilename = new QLineEdit(m_cameraActionGroup);
     m_cameraFilename->setToolTip(tr("Optional filename. Leave empty to use the Camera feature setting."));
 
-    m_cameraRecordMode = new QComboBox(m_cameraActionGroup);
+    m_cameraRecordRawFits = new QCheckBox(tr("Raw FITS"), m_cameraActionGroup);
+    m_cameraRecordCalibratedMedia = new QCheckBox(tr("Calibrated"), m_cameraActionGroup);
+    m_cameraRecordPostProcessedMedia = new QCheckBox(tr("Post-processed"), m_cameraActionGroup);
 
     m_cameraImageCountLabel = new QLabel(tr("Images"), m_cameraActionGroup);
     m_cameraImageCount = new QSpinBox(m_cameraActionGroup);
@@ -348,7 +350,9 @@ void SchedulerGUI::createFeatureActionParameterEditors()
     m_cameraVideoDuration->setToolTip(tr("Video duration in seconds. 0 records until stopped."));
 
     layout->addRow(tr("Filename"), m_cameraFilename);
-    layout->addRow(tr("Record mode"), m_cameraRecordMode);
+    layout->addRow(tr("Raw FITS"), m_cameraRecordRawFits);
+    layout->addRow(tr("Calibrated"), m_cameraRecordCalibratedMedia);
+    layout->addRow(tr("Post-processed"), m_cameraRecordPostProcessedMedia);
     layout->addRow(m_cameraImageCountLabel, m_cameraImageCount);
     layout->addRow(m_cameraVideoDurationLabel, m_cameraVideoDuration);
 
@@ -907,7 +911,9 @@ void SchedulerGUI::displayFeatureActionEditor()
             ui->featureAction->setCurrentIndex(actionIndex);
         }
         m_cameraFilename->setText(action->m_cameraFilename);
-        m_cameraRecordMode->setCurrentIndex(m_cameraRecordMode->findData(action->m_cameraRecordMode));
+        m_cameraRecordRawFits->setChecked(action->m_cameraRecordRawFits);
+        m_cameraRecordCalibratedMedia->setChecked(action->m_cameraRecordCalibratedMedia);
+        m_cameraRecordPostProcessedMedia->setChecked(action->m_cameraRecordPostProcessedMedia);
         m_cameraImageCount->setValue(action->m_cameraImageCount);
         m_cameraVideoDuration->setValue(action->m_cameraVideoDuration);
         m_findTarget->setText(action->m_findTarget);
@@ -920,7 +926,9 @@ void SchedulerGUI::displayFeatureActionEditor()
             ui->featureAction->setCurrentIndex(actionIndex);
         }
         m_cameraFilename->clear();
-        m_cameraRecordMode->setCurrentIndex(m_cameraRecordMode->findData(0));
+        m_cameraRecordRawFits->setChecked(false);
+        m_cameraRecordCalibratedMedia->setChecked(true);
+        m_cameraRecordPostProcessedMedia->setChecked(false);
         m_cameraImageCount->setValue(1);
         m_cameraVideoDuration->setValue(0);
         m_findTarget->clear();
@@ -968,6 +976,12 @@ void SchedulerGUI::updateFeatureActionParameterVisibility()
 
     m_cameraActionGroup->setVisible(showCameraParams);
     m_cameraActionGroup->setEnabled(showCameraParams);
+    m_cameraRecordRawFits->setVisible(saveImage);
+    m_cameraRecordRawFits->setEnabled(saveImage);
+    m_cameraRecordCalibratedMedia->setVisible(showCameraParams);
+    m_cameraRecordCalibratedMedia->setEnabled(showCameraParams);
+    m_cameraRecordPostProcessedMedia->setVisible(showCameraParams);
+    m_cameraRecordPostProcessedMedia->setEnabled(showCameraParams);
     m_cameraImageCountLabel->setVisible(saveImage);
     m_cameraImageCount->setVisible(saveImage);
     m_cameraVideoDurationLabel->setVisible(recordVideo);
@@ -1173,7 +1187,9 @@ void SchedulerGUI::updateCurrentFeatureActionFromWidgets()
 
     action->m_action = static_cast<SchedulerSettings::RunAction>(ui->featureAction->currentData().toInt());
     action->m_cameraFilename = m_cameraFilename->text();
-    action->m_cameraRecordMode = m_cameraRecordMode->currentData().toInt();
+    action->m_cameraRecordRawFits = m_cameraRecordRawFits->isChecked();
+    action->m_cameraRecordCalibratedMedia = m_cameraRecordCalibratedMedia->isChecked();
+    action->m_cameraRecordPostProcessedMedia = m_cameraRecordPostProcessedMedia->isChecked();
     action->m_cameraImageCount = m_cameraImageCount->value();
     action->m_cameraVideoDuration = m_cameraVideoDuration->value();
     action->m_findTarget = m_findTarget->text();

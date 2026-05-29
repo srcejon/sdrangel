@@ -414,7 +414,6 @@ void CameraSettings::resetToDefaults()
     m_plateSolveUseDownloadedCatalog = false;
     m_plateSolveCatalogSource = PlateSolveCatalogAuto;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
-    m_recordMode = SavedMediaRaw;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
     m_spectrumOffsetX = 0;
@@ -657,7 +656,6 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(202, m_asiHighSpeedMode);
     s.writeS32(203, m_asiColorImageType);
     s.writeS32(204, m_diffMaskOpenSize);
-    s.writeS32(205, m_recordMode);
     s.writeBool(206, m_asiAutoExposureGain);
     s.writeDouble(207, m_postProcessWhiteBalanceHighlightProtection);
     s.writeS32(208, m_videoPreRecordBufferSeconds);
@@ -1011,12 +1009,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_motionCloseSize = qBound(m_minMorphologyKernel, m_motionCloseSize, m_maxMorphologyKernel);
         m_motionPersistenceFrames = qBound(m_minNonNegative, m_motionPersistenceFrames, m_maxShortHistoryFrames);
         m_minContourArea = qBound(m_minContourAreaBound, m_minContourArea, m_maxContourAreaBound);
-        qint32 videoPostProcessMode = static_cast<qint32>(SavedMediaRaw);
-        d.readS32(205, &videoPostProcessMode, videoPostProcessMode);
-        m_recordMode = qBound(SavedMediaRaw, static_cast<SavedMediaMode>(videoPostProcessMode), SavedMediaBoth);
         d.readBool(234, &m_recordRawFits, false);
-        d.readBool(235, &m_recordCalibratedMedia, m_recordMode != SavedMediaProcessed);
-        d.readBool(236, &m_recordPostProcessedMedia, m_recordMode != SavedMediaRaw);
+        d.readBool(235, &m_recordCalibratedMedia, true);
+        d.readBool(236, &m_recordPostProcessedMedia, false);
         d.readDouble(207, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(211, &m_postProcessUseCuda, false);
@@ -1306,31 +1301,31 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("alpacaFilterWheelPosition")) {
         m_alpacaFilterWheelPosition = std::max(m_minNonNegative, settings.m_alpacaFilterWheelPosition);
     }
-    if (settingsKeys.contains("cameraBinX") || settingsKeys.contains("alpacaBinX")) {
+    if (settingsKeys.contains("cameraBinX")) {
         m_cameraBinX = std::max(m_minPositive, settings.m_cameraBinX);
     }
-    if (settingsKeys.contains("cameraBinY") || settingsKeys.contains("alpacaBinY")) {
+    if (settingsKeys.contains("cameraBinY")) {
         m_cameraBinY = std::max(m_minPositive, settings.m_cameraBinY);
     }
-    if (settingsKeys.contains("cameraNumX") || settingsKeys.contains("alpacaNumX")) {
+    if (settingsKeys.contains("cameraNumX")) {
         m_cameraNumX = std::max(m_minNonNegative, settings.m_cameraNumX);
     }
-    if (settingsKeys.contains("cameraNumY") || settingsKeys.contains("alpacaNumY")) {
+    if (settingsKeys.contains("cameraNumY")) {
         m_cameraNumY = std::max(m_minNonNegative, settings.m_cameraNumY);
     }
-    if (settingsKeys.contains("cameraStartX") || settingsKeys.contains("alpacaStartX")) {
+    if (settingsKeys.contains("cameraStartX")) {
         m_cameraStartX = std::max(m_minNonNegative, settings.m_cameraStartX);
     }
-    if (settingsKeys.contains("cameraStartY") || settingsKeys.contains("alpacaStartY")) {
+    if (settingsKeys.contains("cameraStartY")) {
         m_cameraStartY = std::max(m_minNonNegative, settings.m_cameraStartY);
     }
-    if (settingsKeys.contains("cameraGain") || settingsKeys.contains("alpacaGain")) {
+    if (settingsKeys.contains("cameraGain")) {
         m_cameraGain = settings.m_cameraGain;
     }
-    if (settingsKeys.contains("cameraOffset") || settingsKeys.contains("alpacaOffset")) {
+    if (settingsKeys.contains("cameraOffset")) {
         m_cameraOffset = settings.m_cameraOffset;
     }
-    if (settingsKeys.contains("cameraReadoutMode") || settingsKeys.contains("alpacaReadoutMode")) {
+    if (settingsKeys.contains("cameraReadoutMode")) {
         m_cameraReadoutMode = std::max(m_minNonNegative, settings.m_cameraReadoutMode);
     }
     if (settingsKeys.contains("asiCoolerOn")) {
@@ -1762,7 +1757,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("plateSolveLabelMode")) {
         m_plateSolveLabelMode = settings.m_plateSolveLabelMode;
     }
-    if (settingsKeys.contains("plateSolveUseCaptureDateTime") || settingsKeys.contains("plateSolveUseCurrentDateTime")) {
+    if (settingsKeys.contains("plateSolveUseCaptureDateTime")) {
         m_plateSolveUseCaptureDateTime = settings.m_plateSolveUseCaptureDateTime;
     }
     if (settingsKeys.contains("plateSolveDateTime")) {
@@ -1779,11 +1774,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("plateSolveApplyMode")) {
         m_plateSolveApplyMode = settings.m_plateSolveApplyMode;
-    }
-    if (settingsKeys.contains("videoPostProcess")) {
-        m_recordMode = qBound(SavedMediaRaw, settings.m_recordMode, SavedMediaBoth);
-        m_recordCalibratedMedia = (m_recordMode == SavedMediaRaw) || (m_recordMode == SavedMediaBoth);
-        m_recordPostProcessedMedia = (m_recordMode == SavedMediaProcessed) || (m_recordMode == SavedMediaBoth);
     }
     if (settingsKeys.contains("recordRawFits")) {
         m_recordRawFits = settings.m_recordRawFits;
@@ -2016,31 +2006,31 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("alpacaFilterWheelPosition") || force) {
         ostr << " m_alpacaFilterWheelPosition: " << m_alpacaFilterWheelPosition;
     }
-    if (settingsKeys.contains("cameraBinX") || settingsKeys.contains("alpacaBinX") || force) {
+    if (settingsKeys.contains("cameraBinX") || force) {
         ostr << " m_cameraBinX: " << m_cameraBinX;
     }
-    if (settingsKeys.contains("cameraBinY") || settingsKeys.contains("alpacaBinY") || force) {
+    if (settingsKeys.contains("cameraBinY") || force) {
         ostr << " m_cameraBinY: " << m_cameraBinY;
     }
-    if (settingsKeys.contains("cameraNumX") || settingsKeys.contains("alpacaNumX") || force) {
+    if (settingsKeys.contains("cameraNumX") || force) {
         ostr << " m_cameraNumX: " << m_cameraNumX;
     }
-    if (settingsKeys.contains("cameraNumY") || settingsKeys.contains("alpacaNumY") || force) {
+    if (settingsKeys.contains("cameraNumY") || force) {
         ostr << " m_cameraNumY: " << m_cameraNumY;
     }
-    if (settingsKeys.contains("cameraStartX") || settingsKeys.contains("alpacaStartX") || force) {
+    if (settingsKeys.contains("cameraStartX") || force) {
         ostr << " m_cameraStartX: " << m_cameraStartX;
     }
-    if (settingsKeys.contains("cameraStartY") || settingsKeys.contains("alpacaStartY") || force) {
+    if (settingsKeys.contains("cameraStartY") || force) {
         ostr << " m_cameraStartY: " << m_cameraStartY;
     }
-    if (settingsKeys.contains("cameraGain") || settingsKeys.contains("alpacaGain") || force) {
+    if (settingsKeys.contains("cameraGain") || force) {
         ostr << " m_cameraGain: " << m_cameraGain;
     }
-    if (settingsKeys.contains("cameraOffset") || settingsKeys.contains("alpacaOffset") || force) {
+    if (settingsKeys.contains("cameraOffset") || force) {
         ostr << " m_cameraOffset: " << m_cameraOffset;
     }
-    if (settingsKeys.contains("cameraReadoutMode") || settingsKeys.contains("alpacaReadoutMode") || force) {
+    if (settingsKeys.contains("cameraReadoutMode") || force) {
         ostr << " m_cameraReadoutMode: " << m_cameraReadoutMode;
     }
     if (settingsKeys.contains("asiCoolerOn") || force) {
@@ -2445,7 +2435,7 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("plateSolveStartMode") || force) {
         ostr << " m_plateSolveStartMode: " << static_cast<int>(m_plateSolveStartMode);
     }
-    if (settingsKeys.contains("plateSolveUseCaptureDateTime") || settingsKeys.contains("plateSolveUseCurrentDateTime") || force) {
+    if (settingsKeys.contains("plateSolveUseCaptureDateTime") || force) {
         ostr << " m_plateSolveUseCaptureDateTime: " << m_plateSolveUseCaptureDateTime;
     }
     if (settingsKeys.contains("plateSolveDateTime") || force) {
@@ -2465,9 +2455,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveApplyMode") || force) {
         ostr << " m_plateSolveApplyMode: " << static_cast<int>(m_plateSolveApplyMode);
-    }
-    if (settingsKeys.contains("videoPostProcess") || force) {
-        ostr << " m_videoPostProcess: " << m_recordMode;
     }
     if (settingsKeys.contains("recordRawFits") || force) {
         ostr << " m_recordRawFits: " << m_recordRawFits;

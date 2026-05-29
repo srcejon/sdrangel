@@ -149,7 +149,14 @@ bool FeatureWebAPIUtils::mapSetDateTime(const QDateTime& dateTime, int featureSe
 }
 
 // Save one or more frames from a Camera feature
-bool FeatureWebAPIUtils::cameraSaveImage(const QString& filename, int recordMode, int images, int featureSetIndex, int featureIndex)
+bool FeatureWebAPIUtils::cameraSaveImage(
+    const QString& filename,
+    bool recordRawFits,
+    bool recordCalibratedMedia,
+    bool recordPostProcessedMedia,
+    int images,
+    int featureSetIndex,
+    int featureIndex)
 {
     Feature *feature = FeatureWebAPIUtils::getFeature(featureSetIndex, featureIndex, "sdrangel.feature.camera");
     if (feature != nullptr)
@@ -164,7 +171,9 @@ bool FeatureWebAPIUtils::cameraSaveImage(const QString& filename, int recordMode
             saveImage->setFilename(new QString(filename));
         }
 
-        saveImage->setRecordMode(recordMode);
+        saveImage->setRecordRawFits(recordRawFits ? 1 : 0);
+        saveImage->setRecordCalibratedMedia(recordCalibratedMedia ? 1 : 0);
+        saveImage->setRecordPostProcessedMedia(recordPostProcessedMedia ? 1 : 0);
         saveImage->setImages(images);
         cameraActions->setSaveImage(saveImage);
         query.setCameraActions(cameraActions);
@@ -186,7 +195,13 @@ bool FeatureWebAPIUtils::cameraSaveImage(const QString& filename, int recordMode
 }
 
 // Start video recording from a Camera feature
-bool FeatureWebAPIUtils::cameraRecordVideo(const QString& filename, int recordMode, int duration, int featureSetIndex, int featureIndex)
+bool FeatureWebAPIUtils::cameraRecordVideo(
+    const QString& filename,
+    bool recordCalibratedMedia,
+    bool recordPostProcessedMedia,
+    int duration,
+    int featureSetIndex,
+    int featureIndex)
 {
     Feature *feature = FeatureWebAPIUtils::getFeature(featureSetIndex, featureIndex, "sdrangel.feature.camera");
     if (feature != nullptr)
@@ -201,7 +216,8 @@ bool FeatureWebAPIUtils::cameraRecordVideo(const QString& filename, int recordMo
             recordVideo->setFilename(new QString(filename));
         }
 
-        recordVideo->setRecordMode(recordMode);
+        recordVideo->setRecordCalibratedMedia(recordCalibratedMedia ? 1 : 0);
+        recordVideo->setRecordPostProcessedMedia(recordPostProcessedMedia ? 1 : 0);
         recordVideo->setDuration(duration);
         cameraActions->setRecordVideo(recordVideo);
         query.setCameraActions(cameraActions);

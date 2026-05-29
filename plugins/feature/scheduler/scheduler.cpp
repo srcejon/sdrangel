@@ -210,6 +210,13 @@ void Scheduler::webapiFormatFeatureSettings(
             swgAction->setFeatureIndex(action.m_featureIndex);
             swgAction->setFeatureId(new QString(action.m_featureId));
             swgAction->setAction((int) action.m_action);
+            swgAction->setCameraFilename(new QString(action.m_cameraFilename));
+            swgAction->setCameraRecordRawFits(action.m_cameraRecordRawFits ? 1 : 0);
+            swgAction->setCameraRecordCalibratedMedia(action.m_cameraRecordCalibratedMedia ? 1 : 0);
+            swgAction->setCameraRecordPostProcessedMedia(action.m_cameraRecordPostProcessedMedia ? 1 : 0);
+            swgAction->setCameraImageCount(action.m_cameraImageCount);
+            swgAction->setCameraVideoDuration(action.m_cameraVideoDuration);
+            swgAction->setFindTarget(new QString(action.m_findTarget));
             swgFeatureActions->append(swgAction);
         }
         swgRule->setFeatureActions(swgFeatureActions);
@@ -313,6 +320,13 @@ void Scheduler::webapiUpdateFeatureSettings(
                         action.m_featureIndex = swgAction->getFeatureIndex();
                         action.m_featureId = swgAction->getFeatureId() ? *swgAction->getFeatureId() : QString();
                         action.m_action = (SchedulerSettings::RunAction) swgAction->getAction();
+                        action.m_cameraFilename = swgAction->getCameraFilename() ? *swgAction->getCameraFilename() : QString();
+                        action.m_cameraRecordRawFits = swgAction->getCameraRecordRawFits() != 0;
+                        action.m_cameraRecordCalibratedMedia = swgAction->getCameraRecordCalibratedMedia() != 0;
+                        action.m_cameraRecordPostProcessedMedia = swgAction->getCameraRecordPostProcessedMedia() != 0;
+                        action.m_cameraImageCount = swgAction->getCameraImageCount();
+                        action.m_cameraVideoDuration = swgAction->getCameraVideoDuration();
+                        action.m_findTarget = swgAction->getFindTarget() ? *swgAction->getFindTarget() : QString();
                         rule.m_featureActions.append(action);
                     }
                 }
@@ -753,7 +767,9 @@ void Scheduler::executeFeatureActions(const QList<SchedulerSettings::FeatureActi
         {
             FeatureWebAPIUtils::cameraSaveImage(
                 action.m_cameraFilename,
-                action.m_cameraRecordMode,
+                action.m_cameraRecordRawFits,
+                action.m_cameraRecordCalibratedMedia,
+                action.m_cameraRecordPostProcessedMedia,
                 action.m_cameraImageCount,
                 action.m_featureSetIndex,
                 action.m_featureIndex);
@@ -762,7 +778,8 @@ void Scheduler::executeFeatureActions(const QList<SchedulerSettings::FeatureActi
         {
             FeatureWebAPIUtils::cameraRecordVideo(
                 action.m_cameraFilename,
-                action.m_cameraRecordMode,
+                action.m_cameraRecordCalibratedMedia,
+                action.m_cameraRecordPostProcessedMedia,
                 action.m_cameraVideoDuration,
                 action.m_featureSetIndex,
                 action.m_featureIndex);

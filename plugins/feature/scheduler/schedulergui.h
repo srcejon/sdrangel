@@ -31,6 +31,7 @@ class Feature;
 class FeatureUISet;
 class PluginAPI;
 class Preset;
+class QCheckBox;
 class QComboBox;
 class QGroupBox;
 class QLabel;
@@ -89,7 +90,9 @@ private:
     QLineEdit *m_packetData;
     QGroupBox *m_cameraActionGroup;
     QLineEdit *m_cameraFilename;
-    QComboBox *m_cameraRecordMode;
+    QCheckBox *m_cameraRecordRawFits;
+    QCheckBox *m_cameraRecordCalibratedMedia;
+    QCheckBox *m_cameraRecordPostProcessedMedia;
     QLabel *m_cameraImageCountLabel;
     QSpinBox *m_cameraImageCount;
     QLabel *m_cameraVideoDurationLabel;

@@ -107,7 +107,9 @@ QDataStream& operator<<(QDataStream& out, const SchedulerSettings::FeatureAction
     out << action.m_featureId;
     out << static_cast<qint32>(action.m_action);
     out << action.m_cameraFilename;
-    out << action.m_cameraRecordMode;
+    out << action.m_cameraRecordRawFits;
+    out << action.m_cameraRecordCalibratedMedia;
+    out << action.m_cameraRecordPostProcessedMedia;
     out << action.m_cameraImageCount;
     out << action.m_cameraVideoDuration;
     out << action.m_findTarget;
@@ -124,7 +126,9 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::FeatureAction& actio
     in >> action.m_featureId;
     in >> runAction;
     in >> action.m_cameraFilename;
-    in >> action.m_cameraRecordMode;
+    in >> action.m_cameraRecordRawFits;
+    in >> action.m_cameraRecordCalibratedMedia;
+    in >> action.m_cameraRecordPostProcessedMedia;
     in >> action.m_cameraImageCount;
     in >> action.m_cameraVideoDuration;
     in >> action.m_findTarget;
@@ -254,7 +258,9 @@ SchedulerSettings::FeatureAction::FeatureAction() :
     m_featureSetIndex(0),
     m_featureIndex(0),
     m_action(ActionStart),
-    m_cameraRecordMode(0),
+    m_cameraRecordRawFits(false),
+    m_cameraRecordCalibratedMedia(true),
+    m_cameraRecordPostProcessedMedia(false),
     m_cameraImageCount(1),
     m_cameraVideoDuration(0)
 {

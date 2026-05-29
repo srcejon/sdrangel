@@ -213,7 +213,6 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
 
     if (force
         || settingsKeys.contains("videoFileName")
-        || settingsKeys.contains("videoPostProcess")
         || settingsKeys.contains("recordCalibratedMedia")
         || settingsKeys.contains("recordPostProcessedMedia")
         || settingsKeys.contains("videoHwAcceleration"))

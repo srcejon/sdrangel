@@ -91,13 +91,6 @@ struct CameraSettings
         AutoExposureGainGainOnly
     };
 
-    enum SavedMediaMode
-    {
-        SavedMediaRaw = 0,
-        SavedMediaProcessed,
-        SavedMediaBoth
-    };
-
     enum LensProjection
     {
         LensProjectionRectilinear = 0,
@@ -530,8 +523,6 @@ struct CameraSettings
     bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available
     PlateSolveCatalogSource m_plateSolveCatalogSource; ///< Catalog source used for plate solving
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
-    SavedMediaMode m_recordMode;  ///< Legacy WebAPI/UI mode mapped onto the explicit record output checkboxes
-
     // Spectrum overlay settings
     bool   m_overlaySpectrum;   ///< Enable overlaying the spectrum view image on the post-processed frame
     QString m_spectrumDevice;   ///< Long ID of the device whose spectrum view to overlay (e.g. "R0 HackRF")

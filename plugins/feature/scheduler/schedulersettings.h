@@ -109,7 +109,9 @@ struct SchedulerSettings
         QString m_featureId;
         RunAction m_action;
         QString m_cameraFilename;
-        int m_cameraRecordMode;
+        bool m_cameraRecordRawFits;
+        bool m_cameraRecordCalibratedMedia;
+        bool m_cameraRecordPostProcessedMedia;
         int m_cameraImageCount;
         int m_cameraVideoDuration;
         QString m_findTarget;

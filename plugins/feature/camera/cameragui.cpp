@@ -5310,21 +5310,6 @@ void CameraGUI::on_videoRecordLimitSpin_valueChanged(int value)
     applySetting("videoRecordLimitSeconds");
 }
 
-void CameraGUI::on_recordModeCombo_currentIndexChanged(int index)
-{
-    m_settings.m_recordMode = qBound(CameraSettings::SavedMediaRaw,
-        static_cast<CameraSettings::SavedMediaMode>(index),
-        CameraSettings::SavedMediaBoth);
-    m_settings.m_recordCalibratedMedia = (m_settings.m_recordMode == CameraSettings::SavedMediaRaw)
-        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
-    m_settings.m_recordPostProcessedMedia = (m_settings.m_recordMode == CameraSettings::SavedMediaProcessed)
-        || (m_settings.m_recordMode == CameraSettings::SavedMediaBoth);
-    updateVideoPreRecordBufferMemoryLabel();
-    applySetting("videoPostProcess");
-    applyImageToolTip();
-    applyVideoToolTip();
-}
-
 void CameraGUI::on_recordRawFitsCheck_toggled(bool checked)
 {
     m_settings.m_recordRawFits = checked;

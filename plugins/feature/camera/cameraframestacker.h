@@ -166,6 +166,7 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     cv::cuda::Stream m_cudaStackingStream;
     cv::cuda::GpuMat m_cudaStackAccumulator;
+    int m_cudaStackAccumulatorInputType;
     cv::Ptr<cv::cuda::Filter> m_cudaQualityLaplacianFilter;
     int m_cudaQualityLaplacianFilterType;
 #endif
@@ -187,7 +188,8 @@ private:
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     [[nodiscard]] bool canUseCudaStacking() const;
     void subtractFromCudaAccumulator(const cv::Mat& frameMat);
-    [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* frameGpu, double scaleTo8Bit, QImage& outputImage);
+    bool rebuildCudaAverageAccumulator();
+    [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* frameGpu, QImage& outputImage);
 #endif
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);

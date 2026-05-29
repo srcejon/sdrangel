@@ -137,17 +137,39 @@ double estimateResidualNoiseSigma(const cv::Mat& residual)
     }
 
     std::sort(samples.begin(), samples.end());
-    const double median = samples[samples.size() / 2];
+    auto percentile = [&samples](double fraction) {
+        if (samples.size() == 1) {
+            return samples.front();
+        }
+
+        const double position = std::clamp(fraction, 0.0, 1.0) * static_cast<double>(samples.size() - 1);
+        const size_t lower = static_cast<size_t>(std::floor(position));
+        const size_t upper = static_cast<size_t>(std::ceil(position));
+        const double t = position - static_cast<double>(lower);
+        return samples[lower] * (1.0 - t) + samples[upper] * t;
+    };
+    const double median = percentile(0.50);
     std::vector<double> deviations;
     deviations.reserve(samples.size());
     for (double sample : samples) {
         deviations.push_back(std::fabs(sample - median));
     }
     std::sort(deviations.begin(), deviations.end());
-    double sigma = 1.4826 * deviations[deviations.size() / 2];
+    auto deviationPercentile = [&deviations](double fraction) {
+        if (deviations.size() == 1) {
+            return deviations.front();
+        }
+
+        const double position = std::clamp(fraction, 0.0, 1.0) * static_cast<double>(deviations.size() - 1);
+        const size_t lower = static_cast<size_t>(std::floor(position));
+        const size_t upper = static_cast<size_t>(std::ceil(position));
+        const double t = position - static_cast<double>(lower);
+        return deviations[lower] * (1.0 - t) + deviations[upper] * t;
+    };
+    double sigma = 1.4826 * deviationPercentile(0.50);
     if (sigma < 1.0)
     {
-        const double p90 = samples[static_cast<size_t>(std::min<double>(samples.size() - 1, samples.size() * 0.90))];
+        const double p90 = percentile(0.90);
         sigma = (p90 > median) ? (p90 - median) / 1.28155 : 1.0;
     }
     return std::max(1.0, sigma);
@@ -156,10 +178,13 @@ double estimateResidualNoiseSigma(const cv::Mat& residual)
 void thresholdResidualWithRobustTiles(const cv::Mat& residual,
                                       double userThreshold,
                                       double maxValue,
-                                      cv::Mat& thresholdMask)
+                                      cv::Mat& thresholdMask,
+                                      double *meanNoiseSigma = nullptr)
 {
     constexpr int kTileSize = 512;
     thresholdMask.create(residual.size(), residual.type());
+    double weightedSigmaSum = 0.0;
+    qint64 weightedPixelCount = 0;
 
     for (int y = 0; y < residual.rows; y += kTileSize)
     {
@@ -170,14 +195,24 @@ void thresholdResidualWithRobustTiles(const cv::Mat& residual,
             const cv::Rect tileRect(x, y, width, height);
             const cv::Mat residualTile = residual(tileRect);
             cv::Mat thresholdTile = thresholdMask(tileRect);
-            const double adaptiveThreshold = estimateResidualNoiseSigma(residualTile) * 4.0;
+            const double tileNoiseSigma = estimateResidualNoiseSigma(residualTile);
+            const double adaptiveThreshold = tileNoiseSigma * 4.0;
             cv::threshold(
                 residualTile,
                 thresholdTile,
                 std::max(userThreshold, adaptiveThreshold),
                 maxValue,
                 cv::THRESH_BINARY);
+            const qint64 tilePixels = static_cast<qint64>(width) * height;
+            weightedSigmaSum += tileNoiseSigma * static_cast<double>(tilePixels);
+            weightedPixelCount += tilePixels;
         }
+    }
+
+    if (meanNoiseSigma) {
+        *meanNoiseSigma = (weightedPixelCount > 0)
+            ? std::max(1.0, weightedSigmaSum / static_cast<double>(weightedPixelCount))
+            : 1.0;
     }
 }
 
@@ -447,7 +482,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     forwardFrame(frame);
 }
 
-void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
+void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask) const
 {
     PROFILER_START();
 
@@ -500,7 +535,7 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
         ? static_cast<double>(m_settings.m_starThreshold) * 256.0
         : static_cast<double>(m_settings.m_starThreshold);
     const double maxValueScaled = useHighBitDepth ? 65535.0 : 255.0;
-    thresholdResidualWithRobustTiles(residual, userThresholdScaled, maxValueScaled, thresholdMask);
+    thresholdResidualWithRobustTiles(residual, userThresholdScaled, maxValueScaled, thresholdMask, &residualNoiseSigma);
     // findContours only accepts CV_8U; downscale the binary mask (it's still a binary
     // mask, no precision lost).
     if (thresholdMask.depth() != CV_8U) {
@@ -516,7 +551,7 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, cv::Mat* debugMask) const
+bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask) const
 {
     PROFILER_START();
 
@@ -558,7 +593,7 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
         // applyStarDetection (see hasGray / saturationThreshold logic there).
         m_cudaDetectionStream.waitForCompletion();
 
-        thresholdResidualWithRobustTiles(residual, static_cast<double>(m_settings.m_starThreshold), 255.0, thresholdMask);
+        thresholdResidualWithRobustTiles(residual, static_cast<double>(m_settings.m_starThreshold), 255.0, thresholdMask, &residualNoiseSigma);
         cv::bitwise_and(thresholdMask, cachedExclusionMask(roi, thresholdMask.size()), thresholdMask);
 
         if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewResidual))
@@ -600,6 +635,7 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
     cv::Mat gray;
     cv::Mat residual;
     cv::Mat thresholdMask;
+    double residualNoiseSigma = 1.0;
     bool useCPUStarPreprocessing = true;
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
@@ -608,16 +644,15 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
     // honours full 16-bit precision.
     if (highBitDepthGray.empty()
         && canUseCudaDetection()
-        && applyStarPreprocessingCuda(bgrMat, sourceBgrGpu, roi, gray, residual, thresholdMask, debugMask))
+        && applyStarPreprocessingCuda(bgrMat, sourceBgrGpu, roi, gray, residual, thresholdMask, residualNoiseSigma, debugMask))
     {
         useCPUStarPreprocessing = false;
     }
 #endif
     if (useCPUStarPreprocessing) {
-        applyStarPreprocessing(bgrMat, sourceBgrGpu, roi, highBitDepthGray, gray, residual, thresholdMask, debugMask);
+        applyStarPreprocessing(bgrMat, sourceBgrGpu, roi, highBitDepthGray, gray, residual, thresholdMask, residualNoiseSigma, debugMask);
     }
 
-    const double residualNoiseSigma = estimateResidualNoiseSigma(residual);
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(thresholdMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 

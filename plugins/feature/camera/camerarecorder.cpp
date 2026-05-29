@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <QDebug>
 #include <QFileInfo>
@@ -51,6 +52,27 @@ qint64 bufferedFrameSizeBytes(const QImage& calibrated, const QImage& processed)
     return imageSizeBytes(calibrated) + imageSizeBytes(processed);
 }
 
+bool checkedFitsByteCount(int width, int height, int bytesPerPixel, qsizetype& byteCount)
+{
+    if ((width <= 0) || (height <= 0) || (bytesPerPixel <= 0)) {
+        return false;
+    }
+
+    const qint64 maxByteCount = static_cast<qint64>(std::numeric_limits<qsizetype>::max());
+    const qint64 width64 = static_cast<qint64>(width);
+    const qint64 height64 = static_cast<qint64>(height);
+    const qint64 bytesPerPixel64 = static_cast<qint64>(bytesPerPixel);
+
+    if ((width64 > maxByteCount / height64)
+        || ((width64 * height64) > maxByteCount / bytesPerPixel64))
+    {
+        return false;
+    }
+
+    byteCount = static_cast<qsizetype>(width64 * height64 * bytesPerPixel64);
+    return true;
+}
+
 QString bayerPatternName(CameraPipelineFrame::BayerPattern pattern)
 {
     switch (pattern)
@@ -80,23 +102,46 @@ bool imageToFitsBytes(const QImage& image, QByteArray& bytes, int& bitsPerPixel,
         bitsPerPixel = (image.format() == QImage::Format_Grayscale16) ? 16 : 8;
         channels = 1;
         const int bytesPerPixel = bitsPerPixel / 8;
+        qsizetype imageBytes = 0;
+        qsizetype rowBytes = 0;
+        if (!checkedFitsByteCount(image.width(), image.height(), bytesPerPixel, imageBytes)
+            || !checkedFitsByteCount(image.width(), 1, bytesPerPixel, rowBytes))
+        {
+            qWarning() << "CameraRecorder: FITS image is too large to save"
+                       << image.width() << "x" << image.height()
+                       << "bytesPerPixel" << bytesPerPixel;
+            return false;
+        }
+
         bytes.clear();
-        bytes.reserve(image.width() * image.height() * bytesPerPixel);
-        const int rowBytes = image.width() * bytesPerPixel;
+        bytes.reserve(imageBytes);
 
         for (int y = 0; y < image.height(); ++y) {
             bytes.append(reinterpret_cast<const char*>(image.constScanLine(y)), rowBytes);
         }
 
-        return bytes.size() == (image.width() * image.height() * bytesPerPixel);
+        return bytes.size() == imageBytes;
     }
 
     const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
     bitsPerPixel = 8;
     channels = 3;
+    qsizetype planeBytes = 0;
+    qsizetype imageBytes = 0;
+    if (!checkedFitsByteCount(rgb.width(), rgb.height(), 1, planeBytes)
+        || !checkedFitsByteCount(rgb.width(), rgb.height(), channels, imageBytes))
+    {
+        qWarning() << "CameraRecorder: RGB FITS image is too large to save"
+                   << rgb.width() << "x" << rgb.height()
+                   << "channels" << channels;
+        return false;
+    }
+
     bytes.clear();
-    bytes.resize(rgb.width() * rgb.height() * channels);
-    const int planeBytes = rgb.width() * rgb.height();
+    bytes.resize(imageBytes);
+    if (bytes.size() != imageBytes) {
+        return false;
+    }
     uchar *dst = reinterpret_cast<uchar*>(bytes.data());
 
     for (int y = 0; y < rgb.height(); ++y)
@@ -104,7 +149,7 @@ bool imageToFitsBytes(const QImage& image, QByteArray& bytes, int& bitsPerPixel,
         const uchar *row = rgb.constScanLine(y);
         for (int x = 0; x < rgb.width(); ++x)
         {
-            const int pixelOffset = y * rgb.width() + x;
+            const qsizetype pixelOffset = static_cast<qsizetype>(y) * rgb.width() + x;
             dst[pixelOffset] = row[x * 3];
             dst[planeBytes + pixelOffset] = row[x * 3 + 1];
             dst[(2 * planeBytes) + pixelOffset] = row[x * 3 + 2];

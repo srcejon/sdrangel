@@ -45,6 +45,7 @@ CameraFrameStacker::CameraFrameStacker() :
     m_nextStage(nullptr),
     m_captureActive(false),
 #ifdef CAMERA_OPENCV_CUDA_STACKING
+    m_cudaStackAccumulatorInputType(-1),
     m_cudaQualityLaplacianFilterType(-1),
 #endif
     m_processingFrame(false),
@@ -76,6 +77,7 @@ void CameraFrameStacker::resetFrameHistoryState()
     m_stackAccumulator.release();
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     m_cudaStackAccumulator.release();
+    m_cudaStackAccumulatorInputType = -1;
 #endif
 }
 
@@ -126,6 +128,7 @@ void CameraFrameStacker::trimFrameHistoryToCurrentLimit()
         m_stackAccumulator.release();
 #ifdef CAMERA_OPENCV_CUDA_STACKING
         m_cudaStackAccumulator.release();
+        m_cudaStackAccumulatorInputType = -1;
 #endif
     }
 }
@@ -165,39 +168,75 @@ void CameraFrameStacker::subtractFromCudaAccumulator(const cv::Mat& frameMat)
     cv::cuda::subtract(m_cudaStackAccumulator, floatGpu, m_cudaStackAccumulator, cv::noArray(), -1, m_cudaStackingStream);
 }
 
-bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* sourceFrameGpu, double scaleTo8Bit, QImage& outputImage)
+bool CameraFrameStacker::rebuildCudaAverageAccumulator()
+{
+    if (m_stackFrameHistory.empty()) {
+        m_cudaStackAccumulator.release();
+        return false;
+    }
+
+    const cv::Size accumulatorSize = m_stackFrameHistory.front().size();
+    const int accumulatorInputType = m_stackFrameHistory.front().type();
+    m_cudaStackAccumulator = cv::cuda::GpuMat(accumulatorSize, CV_32FC3, cv::Scalar::all(0.0));
+    m_cudaStackAccumulatorInputType = accumulatorInputType;
+
+    cv::cuda::GpuMat frameGpu;
+    cv::cuda::GpuMat floatGpu;
+    for (const cv::Mat& historyFrame : m_stackFrameHistory)
+    {
+        frameGpu.upload(historyFrame, m_cudaStackingStream);
+        frameGpu.convertTo(floatGpu, CV_32FC3, m_cudaStackingStream);
+        cv::cuda::add(m_cudaStackAccumulator, floatGpu, m_cudaStackAccumulator, cv::noArray(), -1, m_cudaStackingStream);
+    }
+
+    return true;
+}
+
+bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* sourceFrameGpu, QImage& outputImage)
 {
     try
     {
-        if (m_cudaStackAccumulator.empty() || (m_cudaStackAccumulator.size() != frameMat.size())) {
-            m_cudaStackAccumulator = cv::cuda::GpuMat(frameMat.size(), CV_32FC3, cv::Scalar::all(0.0));
+        bool accumulatorIncludesCurrentFrame = false;
+        if (m_cudaStackAccumulator.empty()
+            || (m_cudaStackAccumulator.size() != frameMat.size())
+            || (m_cudaStackAccumulatorInputType != frameMat.type()))
+        {
+            if (!rebuildCudaAverageAccumulator()) {
+                return false;
+            }
+            accumulatorIncludesCurrentFrame = true;
         }
 
-        cv::cuda::GpuMat frameGpu;
-        cv::cuda::GpuMat floatGpu;
-        if (sourceFrameGpu && !sourceFrameGpu->empty()) {
-            frameGpu = *sourceFrameGpu;
-        } else {
-            frameGpu.upload(frameMat, m_cudaStackingStream);
+        if (!accumulatorIncludesCurrentFrame)
+        {
+            cv::cuda::GpuMat frameGpu;
+            cv::cuda::GpuMat floatGpu;
+            if (sourceFrameGpu && !sourceFrameGpu->empty()) {
+                frameGpu = *sourceFrameGpu;
+            } else {
+                frameGpu.upload(frameMat, m_cudaStackingStream);
+            }
+            frameGpu.convertTo(floatGpu, CV_32FC3, m_cudaStackingStream);
+            cv::cuda::add(m_cudaStackAccumulator, floatGpu, m_cudaStackAccumulator, cv::noArray(), -1, m_cudaStackingStream);
         }
-        frameGpu.convertTo(floatGpu, CV_32FC3, m_cudaStackingStream);
-        cv::cuda::add(m_cudaStackAccumulator, floatGpu, m_cudaStackAccumulator, cv::noArray(), -1, m_cudaStackingStream);
 
         cv::cuda::GpuMat averagedGpu;
-        cv::cuda::GpuMat averaged8uGpu;
+        cv::cuda::GpuMat averagedOutputGpu;
+        const int outputType = (frameMat.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
         m_cudaStackAccumulator.convertTo(averagedGpu, CV_32FC3, 1.0 / static_cast<double>(m_stackFrameHistory.size()), 0.0, m_cudaStackingStream);
-        averagedGpu.convertTo(averaged8uGpu, CV_8UC3, scaleTo8Bit, 0.0, m_cudaStackingStream);
+        averagedGpu.convertTo(averagedOutputGpu, outputType, 1.0, 0.0, m_cudaStackingStream);
 
-        cv::Mat averaged8u;
-        averaged8uGpu.download(averaged8u, m_cudaStackingStream);
+        cv::Mat averagedOutput;
+        averagedOutputGpu.download(averagedOutput, m_cudaStackingStream);
         m_cudaStackingStream.waitForCompletion();
-        outputImage = workingMatToImage(averaged8u);
+        outputImage = workingMatToImage(averagedOutput);
         return true;
     }
     catch (const cv::Exception& error)
     {
         qWarning() << "CameraFrameStacker: CUDA average stacking failed; falling back to CPU:" << error.what();
         m_cudaStackAccumulator.release();
+        m_cudaStackAccumulatorInputType = -1;
     }
 
     return false;
@@ -753,9 +792,6 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     frame->m_image = stackedImage;
     frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
     frame->clearCudaCache();
-    if (!frame->m_unprocessedImage.isNull()) {
-        frame->m_unprocessedImage = frame->m_image;
-    }
     frame->m_stack.m_count = std::max(1, stackCount);
     m_lastFrameTemplate.reset(new CameraPipelineFrame(*frame));
 
@@ -911,6 +947,7 @@ void CameraFrameStacker::deleteStackFrame(int frameIndex)
     m_stackAccumulator.release();
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     m_cudaStackAccumulator.release();
+    m_cudaStackAccumulatorInputType = -1;
 #endif
 
     if (m_settings.m_stackDisplayFrameIndex >= static_cast<int>(m_stackFrameHistory.size())) {
@@ -1239,6 +1276,10 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         m_stackFrameQualityHistory.clear();
         m_stackFrameThumbnails.clear();
         m_stackAccumulator.release();
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+        m_cudaStackAccumulator.release();
+        m_cudaStackAccumulatorInputType = -1;
+#endif
     }
 
     StackFrameQuality quality;
@@ -1291,8 +1332,6 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
     }
     trimFrameHistoryToCurrentLimit();
 
-    const double scaleTo8Bit = alignedFrameMat.depth() == CV_16U ? (255.0 / 65535.0) : 1.0;
-
     if (m_settings.m_stackMethod == CameraSettings::StackMethodLuckySharpAverage)
     {
         ensureStackFrameQualityHistory();
@@ -1308,10 +1347,11 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 
         cv::Mat averagedFloat;
         luckyAccumulator.convertTo(averagedFloat, CV_32FC3, 1.0 / static_cast<double>(std::max<size_t>(1, selectedIndices.size())));
-        cv::Mat averaged8u;
-        averagedFloat.convertTo(averaged8u, CV_8UC3, scaleTo8Bit);
+        cv::Mat averagedOutput;
+        const int outputType = (alignedFrameMat.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
+        averagedFloat.convertTo(averagedOutput, outputType);
 
-        const QImage stackedImage = workingMatToImage(averaged8u);
+        const QImage stackedImage = workingMatToImage(averagedOutput);
         m_lastStackedImage = stackedImage;
         if (!renderStackDisplayImage(stackedImage, outputImage)) {
             outputImage = stackedImage;
@@ -1325,7 +1365,7 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
     if (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
     {
 #ifdef CAMERA_OPENCV_CUDA_STACKING
-        if (useCudaStacking && applyAverageStackingCuda(alignedFrameMat, cudaFrameMat.empty() ? nullptr : &cudaFrameMat, scaleTo8Bit, outputImage))
+        if (useCudaStacking && applyAverageStackingCuda(alignedFrameMat, cudaFrameMat.empty() ? nullptr : &cudaFrameMat, outputImage))
         {
             QImage displayImage;
             m_lastStackedImage = outputImage;
@@ -1362,10 +1402,11 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 
         cv::Mat averagedFloat;
         m_stackAccumulator.convertTo(averagedFloat, CV_32FC3, 1.0 / static_cast<double>(m_stackFrameHistory.size()));
-        cv::Mat averaged8u;
-        averagedFloat.convertTo(averaged8u, CV_8UC3, scaleTo8Bit);
+        cv::Mat averagedOutput;
+        const int outputType = (alignedFrameMat.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
+        averagedFloat.convertTo(averagedOutput, outputType);
 
-        const QImage stackedImage = workingMatToImage(averaged8u);
+        const QImage stackedImage = workingMatToImage(averagedOutput);
         m_lastStackedImage = stackedImage;
         if (!renderStackDisplayImage(stackedImage, outputImage)) {
             outputImage = stackedImage;

@@ -26,6 +26,7 @@
 #include <QStringList>
 #include <QTextStream>
 #include <QTimer>
+#include <QStandardPaths>
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -452,12 +453,11 @@ double parseDmsDegrees(const QString& value, bool* ok)
     return degrees + sign * (minutes / 60.0 + seconds / 3600.0);
 }
 
-QVector<CatalogStar> loadDiagnosticCatalog()
+bool loadDiagnosticCatalogFile(const QString& path, QVector<CatalogStar>& stars)
 {
-    QVector<CatalogStar> stars;
-    QFile file(QStringLiteral(":/camera/brightstarcatalog.txt"));
+    QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return stars;
+        return false;
     }
 
     QTextStream stream(&file);
@@ -493,19 +493,58 @@ QVector<CatalogStar> loadDiagnosticCatalog()
         }
     }
 
+    return true;
+}
+
+QStringList diagnosticCatalogPaths()
+{
+    QStringList paths;
+    const QString appData = QString::fromLocal8Bit(qgetenv("APPDATA"));
+    if (!appData.isEmpty()) {
+        paths.append(QDir(appData).filePath(QStringLiteral("f4exb/SDRangel/camera/hyg_v42_reduced.txt")));
+    }
+
+    const QString genericData = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    if (!genericData.isEmpty()) {
+        paths.append(QDir(genericData).filePath(QStringLiteral("f4exb/SDRangel/camera/hyg_v42_reduced.txt")));
+    }
+
+    paths.append(QStringLiteral(":/camera/brightstarcatalog.txt"));
+    paths.removeDuplicates();
+    return paths;
+}
+
+QVector<CatalogStar> loadDiagnosticCatalog()
+{
+    QVector<CatalogStar> stars;
+    for (const QString& path : diagnosticCatalogPaths())
+    {
+        if (loadDiagnosticCatalogFile(path, stars) && !stars.isEmpty()) {
+            return stars;
+        }
+    }
+
     return stars;
 }
 
 const CatalogStar* findDiagnosticStar(const QVector<CatalogStar>& catalog, const QString& expected)
 {
     const QString normalizedExpected = normalizedStarName(expected);
+    const bool exactOnly = normalizedExpected.startsWith(QStringLiteral("hip"));
     for (const CatalogStar& star : catalog)
     {
         const QString normalizedLabel = normalizedStarName(star.name);
-        if ((normalizedLabel == normalizedExpected)
-            || normalizedLabel.contains(normalizedExpected)
-            || normalizedExpected.contains(normalizedLabel))
-        {
+        if (normalizedLabel == normalizedExpected) {
+            return &star;
+        }
+    }
+    if (exactOnly) {
+        return nullptr;
+    }
+    for (const CatalogStar& star : catalog)
+    {
+        const QString normalizedLabel = normalizedStarName(star.name);
+        if (normalizedLabel.contains(normalizedExpected) || normalizedExpected.contains(normalizedLabel)) {
             return &star;
         }
     }

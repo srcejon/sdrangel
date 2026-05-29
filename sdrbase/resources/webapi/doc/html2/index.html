@@ -16935,9 +16935,17 @@ margin-bottom: 20px;
       "type" : "string",
       "description" : "Optional Camera filename for save image or record video actions. Empty uses the Camera feature setting."
     },
-    "cameraRecordMode" : {
+    "cameraRecordRawFits" : {
       "type" : "integer",
-      "description" : "Camera recording mode\n  * 0 - Raw\n  * 1 - Processed\n  * 2 - Both\n"
+      "description" : "Save uncalibrated raw input image as FITS for Camera save image actions (1 for yes, 0 for no)"
+    },
+    "cameraRecordCalibratedMedia" : {
+      "type" : "integer",
+      "description" : "Save/record calibrated Camera media (1 for yes, 0 for no)"
+    },
+    "cameraRecordPostProcessedMedia" : {
+      "type" : "integer",
+      "description" : "Save/record post-processed Camera media with overlays (1 for yes, 0 for no)"
     },
     "cameraImageCount" : {
       "type" : "integer",
@@ -61845,7 +61853,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-05-29T11:44:53.466+02:00
+              Generated 2026-05-29T12:02:04.176+02:00
             </div>
           </div>
       </div>

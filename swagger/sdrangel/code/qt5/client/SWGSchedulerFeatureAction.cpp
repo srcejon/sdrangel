@@ -38,8 +38,12 @@ SWGSchedulerFeatureAction::SWGSchedulerFeatureAction() {
     m_action_isSet = false;
     camera_filename = nullptr;
     m_camera_filename_isSet = false;
-    camera_record_mode = 0;
-    m_camera_record_mode_isSet = false;
+    camera_record_raw_fits = 0;
+    m_camera_record_raw_fits_isSet = false;
+    camera_record_calibrated_media = 0;
+    m_camera_record_calibrated_media_isSet = false;
+    camera_record_post_processed_media = 0;
+    m_camera_record_post_processed_media_isSet = false;
     camera_image_count = 0;
     m_camera_image_count_isSet = false;
     camera_video_duration = 0;
@@ -64,8 +68,12 @@ SWGSchedulerFeatureAction::init() {
     m_action_isSet = false;
     camera_filename = new QString("");
     m_camera_filename_isSet = false;
-    camera_record_mode = 0;
-    m_camera_record_mode_isSet = false;
+    camera_record_raw_fits = 0;
+    m_camera_record_raw_fits_isSet = false;
+    camera_record_calibrated_media = 0;
+    m_camera_record_calibrated_media_isSet = false;
+    camera_record_post_processed_media = 0;
+    m_camera_record_post_processed_media_isSet = false;
     camera_image_count = 0;
     m_camera_image_count_isSet = false;
     camera_video_duration = 0;
@@ -85,6 +93,8 @@ SWGSchedulerFeatureAction::cleanup() {
     if(camera_filename != nullptr) { 
         delete camera_filename;
     }
+
+
 
 
 
@@ -114,7 +124,11 @@ SWGSchedulerFeatureAction::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&camera_filename, pJson["cameraFilename"], "QString", "QString");
     
-    ::SWGSDRangel::setValue(&camera_record_mode, pJson["cameraRecordMode"], "qint32", "");
+    ::SWGSDRangel::setValue(&camera_record_raw_fits, pJson["cameraRecordRawFits"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&camera_record_calibrated_media, pJson["cameraRecordCalibratedMedia"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&camera_record_post_processed_media, pJson["cameraRecordPostProcessedMedia"], "qint32", "");
     
     ::SWGSDRangel::setValue(&camera_image_count, pJson["cameraImageCount"], "qint32", "");
     
@@ -153,8 +167,14 @@ SWGSchedulerFeatureAction::asJsonObject() {
     if(camera_filename != nullptr && *camera_filename != QString("")){
         toJsonValue(QString("cameraFilename"), camera_filename, obj, QString("QString"));
     }
-    if(m_camera_record_mode_isSet){
-        obj->insert("cameraRecordMode", QJsonValue(camera_record_mode));
+    if(m_camera_record_raw_fits_isSet){
+        obj->insert("cameraRecordRawFits", QJsonValue(camera_record_raw_fits));
+    }
+    if(m_camera_record_calibrated_media_isSet){
+        obj->insert("cameraRecordCalibratedMedia", QJsonValue(camera_record_calibrated_media));
+    }
+    if(m_camera_record_post_processed_media_isSet){
+        obj->insert("cameraRecordPostProcessedMedia", QJsonValue(camera_record_post_processed_media));
     }
     if(m_camera_image_count_isSet){
         obj->insert("cameraImageCount", QJsonValue(camera_image_count));
@@ -220,13 +240,33 @@ SWGSchedulerFeatureAction::setCameraFilename(QString* camera_filename) {
 }
 
 qint32
-SWGSchedulerFeatureAction::getCameraRecordMode() {
-    return camera_record_mode;
+SWGSchedulerFeatureAction::getCameraRecordRawFits() {
+    return camera_record_raw_fits;
 }
 void
-SWGSchedulerFeatureAction::setCameraRecordMode(qint32 camera_record_mode) {
-    this->camera_record_mode = camera_record_mode;
-    this->m_camera_record_mode_isSet = true;
+SWGSchedulerFeatureAction::setCameraRecordRawFits(qint32 camera_record_raw_fits) {
+    this->camera_record_raw_fits = camera_record_raw_fits;
+    this->m_camera_record_raw_fits_isSet = true;
+}
+
+qint32
+SWGSchedulerFeatureAction::getCameraRecordCalibratedMedia() {
+    return camera_record_calibrated_media;
+}
+void
+SWGSchedulerFeatureAction::setCameraRecordCalibratedMedia(qint32 camera_record_calibrated_media) {
+    this->camera_record_calibrated_media = camera_record_calibrated_media;
+    this->m_camera_record_calibrated_media_isSet = true;
+}
+
+qint32
+SWGSchedulerFeatureAction::getCameraRecordPostProcessedMedia() {
+    return camera_record_post_processed_media;
+}
+void
+SWGSchedulerFeatureAction::setCameraRecordPostProcessedMedia(qint32 camera_record_post_processed_media) {
+    this->camera_record_post_processed_media = camera_record_post_processed_media;
+    this->m_camera_record_post_processed_media_isSet = true;
 }
 
 qint32
@@ -279,7 +319,13 @@ SWGSchedulerFeatureAction::isSet(){
         if(camera_filename && *camera_filename != QString("")){
             isObjectUpdated = true; break;
         }
-        if(m_camera_record_mode_isSet){
+        if(m_camera_record_raw_fits_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_camera_record_calibrated_media_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_camera_record_post_processed_media_isSet){
             isObjectUpdated = true; break;
         }
         if(m_camera_image_count_isSet){

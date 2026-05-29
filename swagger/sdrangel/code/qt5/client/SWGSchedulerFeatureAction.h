@@ -57,8 +57,14 @@ public:
     QString* getCameraFilename();
     void setCameraFilename(QString* camera_filename);
 
-    qint32 getCameraRecordMode();
-    void setCameraRecordMode(qint32 camera_record_mode);
+    qint32 getCameraRecordRawFits();
+    void setCameraRecordRawFits(qint32 camera_record_raw_fits);
+
+    qint32 getCameraRecordCalibratedMedia();
+    void setCameraRecordCalibratedMedia(qint32 camera_record_calibrated_media);
+
+    qint32 getCameraRecordPostProcessedMedia();
+    void setCameraRecordPostProcessedMedia(qint32 camera_record_post_processed_media);
 
     qint32 getCameraImageCount();
     void setCameraImageCount(qint32 camera_image_count);
@@ -88,8 +94,14 @@ private:
     QString* camera_filename;
     bool m_camera_filename_isSet;
 
-    qint32 camera_record_mode;
-    bool m_camera_record_mode_isSet;
+    qint32 camera_record_raw_fits;
+    bool m_camera_record_raw_fits_isSet;
+
+    qint32 camera_record_calibrated_media;
+    bool m_camera_record_calibrated_media_isSet;
+
+    qint32 camera_record_post_processed_media;
+    bool m_camera_record_post_processed_media_isSet;
 
     qint32 camera_image_count;
     bool m_camera_image_count_isSet;

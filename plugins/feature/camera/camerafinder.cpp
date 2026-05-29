@@ -16,6 +16,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -264,10 +265,19 @@ void CameraFinder::startAlpacaDiscovery()
     }
 
     m_discoverySocket->close();
-    m_discoverySocket->bind(QHostAddress::AnyIPv4, 0, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
     m_discoveredEndpointKeys.clear();
 
-    m_discoverySocket->writeDatagram(m_alpacaDiscoveryMessage, QHostAddress::Broadcast, m_alpacaDiscoveryPort);
+    if (!m_discoverySocket->bind(QHostAddress::AnyIPv4, 0, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint))
+    {
+        qWarning() << "CameraFinder: failed to bind Alpaca discovery socket:" << m_discoverySocket->errorString();
+    }
+    else
+    {
+        m_discoverySocket->writeDatagram(m_alpacaDiscoveryMessage, QHostAddress::Broadcast, m_alpacaDiscoveryPort);
+    }
+
+    // Always start the timeout so discovery completes (reporting whatever was found, or
+    // an empty list on bind failure) rather than leaving the caller waiting.
     m_discoveryTimer->start(m_alpacaDiscoveryTimeoutMs);
 }
 

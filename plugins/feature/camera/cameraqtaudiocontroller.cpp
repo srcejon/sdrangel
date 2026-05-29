@@ -58,8 +58,8 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
     qDebug() << "CameraQtAudioController: starting audio capture: outputDeviceIndex" << outputDeviceIndex
              << "inputDeviceIndex" << inputDeviceIndex;
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
-    audioDeviceManager->addAudioSource(&m_captureAudioFifo, messageQueue, inputDeviceIndex);
     QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraQtAudioController::onCaptureAudioDataReady);
+    audioDeviceManager->addAudioSource(&m_captureAudioFifo, messageQueue, inputDeviceIndex);
     m_muted = settings.m_audioMute;
     m_capturing = true;
 }

@@ -30,8 +30,9 @@
 #include "cameradiffdetector.h"
 #include "camerapostprocessor.h"
 
-CameraDiffDetector::CameraDiffDetector() :
+CameraDiffDetector::CameraDiffDetector()
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
+    :
     m_cudaDiffOpenFilterSize(0),
     m_cudaDiffOpenFilterType(-1),
     m_cudaDiffDilationFilterSize(0),

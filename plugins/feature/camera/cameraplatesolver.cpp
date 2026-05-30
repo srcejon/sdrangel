@@ -3079,22 +3079,48 @@ static void buildProjectedCatalogInto(const PlateSolveCatalogContext& catalogCon
         projectedStars.append({visibleStar.catalogIndex, point, visibleStar.magnitude});
     };
 
+    // Angular cone cull. Only catalog stars whose direction lies within the projector's field
+    // cone can land inside the (expanded) image bounds, so for a narrow field a cheap dot-product
+    // test against the bore-sight rejects the vast majority of candidate stars before the much
+    // more expensive projectVector(). The cone half-angle is 2x the diagonal half-FoV plus 1 deg
+    // of slack, which is a strict superset of anything projectVector()+bounds would accept
+    // (covering search margin, lens centre offset and distortion), so the result is identical to
+    // the unculled scan. Only enabled for genuinely narrow fields; for wide/fisheye fields the
+    // cone spans most of the sky and would reject nothing, so the dot product is skipped.
+    const double aspect = (projector.width > 0)
+        ? static_cast<double>(projector.height) / static_cast<double>(projector.width)
+        : 1.0;
+    const double halfDiagonalFovRadians = projector.halfHorizontalFov * std::sqrt(1.0 + aspect * aspect);
+    const double coneHalfAngleRadians = halfDiagonalFovRadians * 2.0 + degToRad(1.0);
+    const bool useConeCull = coneHalfAngleRadians < degToRad(15.0);
+    const double coneCosThreshold = useConeCull ? std::cos(coneHalfAngleRadians) : -2.0;
+    const auto withinFieldCone = [&](const VisibleCatalogStar& visibleStar) {
+        return !useConeCull || (dot(projector.center, visibleStar.vector) >= coneCosThreshold);
+    };
+
     if (allowedCatalogIndices)
     {
         projectedStars.reserve(allowedCatalogIndices->size());
         for (int catalogIndex : *allowedCatalogIndices)
         {
             const auto it = catalogContext.visibleStarIndexByCatalogIndex.constFind(catalogIndex);
-            if (it != catalogContext.visibleStarIndexByCatalogIndex.cend()) {
-                appendProjectedStar(catalogContext.visibleStars[*it]);
+            if (it != catalogContext.visibleStarIndexByCatalogIndex.cend())
+            {
+                const VisibleCatalogStar& visibleStar = catalogContext.visibleStars[*it];
+                if (withinFieldCone(visibleStar)) {
+                    appendProjectedStar(visibleStar);
+                }
             }
         }
     }
     else
     {
         projectedStars.reserve(catalogContext.visibleStars.size());
-        for (const VisibleCatalogStar& visibleStar : catalogContext.visibleStars) {
-            appendProjectedStar(visibleStar);
+        for (const VisibleCatalogStar& visibleStar : catalogContext.visibleStars)
+        {
+            if (withinFieldCone(visibleStar)) {
+                appendProjectedStar(visibleStar);
+            }
         }
     }
 }
@@ -12289,20 +12315,18 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 continue;
             }
 
-            FinalMatchPassEvaluation finalPassEvaluation = evaluateFinalMatchPass(
-                settings,
-                catalogContext,
-                imageSize,
-                starDetections,
-                rankFinalPassWithSelectedDetections ? detectionIndices : allDetectionIndices,
-                refinedCandidate,
-                finalMatchRadius,
-                rankFinalPassWithSelectedDetections);
+            // For the narrow dense-field case the full-detection pass overrides the
+            // selected-detection pass whenever it is valid (the common case), so the original
+            // code's first selected-detection pass was computed and then discarded on nearly
+            // every candidate. Compute the full pass first and only fall back to the cheaper
+            // selected-detection pass when the full pass is invalid — identical result, but one
+            // fewer full-catalog final pass per candidate across a pool of up to 256 candidates.
+            FinalMatchPassEvaluation finalPassEvaluation;
             if (rankFinalPassWithSelectedDetections
                 && useStartDirection
                 && (settings.m_fov <= 5.0))
             {
-                const FinalMatchPassEvaluation fullFinalPassEvaluation = evaluateFinalMatchPass(
+                finalPassEvaluation = evaluateFinalMatchPass(
                     settings,
                     catalogContext,
                     imageSize,
@@ -12310,9 +12334,30 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                     allDetectionIndices,
                     refinedCandidate,
                     finalMatchRadius);
-                if (fullFinalPassEvaluation.projectorValid) {
-                    finalPassEvaluation = fullFinalPassEvaluation;
+                if (!finalPassEvaluation.projectorValid)
+                {
+                    finalPassEvaluation = evaluateFinalMatchPass(
+                        settings,
+                        catalogContext,
+                        imageSize,
+                        starDetections,
+                        detectionIndices,
+                        refinedCandidate,
+                        finalMatchRadius,
+                        rankFinalPassWithSelectedDetections);
                 }
+            }
+            else
+            {
+                finalPassEvaluation = evaluateFinalMatchPass(
+                    settings,
+                    catalogContext,
+                    imageSize,
+                    starDetections,
+                    rankFinalPassWithSelectedDetections ? detectionIndices : allDetectionIndices,
+                    refinedCandidate,
+                    finalMatchRadius,
+                    rankFinalPassWithSelectedDetections);
             }
             logFinalMatchPassEvaluation("final-match-pass-multi", finalPassEvaluation);
 

@@ -1004,7 +1004,9 @@ static double firstPassPlateSolveMaxMagnitude(const CameraSettings& settings)
 static double narrowGuidedFullSearchMaxMagnitude(const CameraSettings& settings)
 {
     if (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0)) {
-        return std::min(static_cast<double>(settings.m_plateSolveMaxMagnitude), 18.0);
+        // Narrow guided galaxy fields can have ambiguous bright-star geometry;
+        // load enough faint stars for the internal anchor/refine pass.
+        return 18.0;
     }
 
     return settings.m_plateSolveMaxMagnitude;
@@ -12527,6 +12529,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         : configuredSolveDateTime;
     const QDateTime captureDateTimeUtc = (solveDateTime.isValid() ? solveDateTime : QDateTime::currentDateTime()).toUTC();
     const double solveMaxMagnitude = firstPassPlateSolveMaxMagnitude(settings);
+    const double fullSearchMaxMagnitude = narrowGuidedFullSearchMaxMagnitude(settings);
     const bool useBrightFirstPassCatalog = (solveMaxMagnitude < settings.m_plateSolveMaxMagnitude)
         && useStartDirection
         && (settings.m_fov <= 5.0);
@@ -12543,7 +12546,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         imageSize,
         captureDateTimeUtc,
         solveMaxMagnitude,
-        useBrightFirstPassCatalog ? settings.m_plateSolveMaxMagnitude : solveMaxMagnitude);
+        useBrightFirstPassCatalog
+            ? std::max(static_cast<double>(settings.m_plateSolveMaxMagnitude), fullSearchMaxMagnitude)
+            : solveMaxMagnitude);
     logSolveProfile("catalog", stageStartMs);
     if (isCancellationRequested()) {
         return finishCancelled();
@@ -12709,7 +12714,6 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
     bool usingFullCatalogForGuidedAnchor = false;
     bool usingRequestedMaxMagnitudeCatalog = false;
-    const double fullSearchMaxMagnitude = narrowGuidedFullSearchMaxMagnitude(settings);
     const bool useWideWeakAnchorSearch = !useStartDirection
         && isWidePlateSolveContext(settings);
     const int guidedAnchorExtraMatches = useStartDirection

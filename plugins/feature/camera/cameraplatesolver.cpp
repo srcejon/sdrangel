@@ -4765,6 +4765,44 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
         }
     }
 
+    // Per-star neighbour index: for each catalog star, the other stars ordered by angular
+    // separation, with the matching separations stored in a parallel array. The seed loop
+    // accepts a catalog partner only when its separation lies within a tolerance window of the
+    // current detection pair's separation; a binary search over this sorted index finds that
+    // window directly instead of scanning all ~N partners per detection pair. The matched
+    // partners are re-sorted to ascending catalog index before use so the visit order (and
+    // hence the verified-seed early-stop point) is identical to the exhaustive scan.
+    QVector<QVector<double>> catalogNeighborSortedSeparation(brightCatalogCount);
+    QVector<QVector<int>> catalogNeighborSortedIndex(brightCatalogCount);
+    {
+        QVector<int> neighborOrder;
+        for (int i = 0; i < brightCatalogCount; ++i)
+        {
+            const qsizetype rowBase = static_cast<qsizetype>(i) * brightCatalogCount;
+            neighborOrder.clear();
+            neighborOrder.reserve(brightCatalogCount - 1);
+            for (int j = 0; j < brightCatalogCount; ++j)
+            {
+                if (j != i) {
+                    neighborOrder.append(j);
+                }
+            }
+            std::sort(neighborOrder.begin(), neighborOrder.end(), [&](int a, int b) {
+                return catalogPairSeparationRadians[rowBase + a] < catalogPairSeparationRadians[rowBase + b];
+            });
+            QVector<double>& rowSeparations = catalogNeighborSortedSeparation[i];
+            QVector<int>& rowPartners = catalogNeighborSortedIndex[i];
+            rowSeparations.reserve(neighborOrder.size());
+            rowPartners.reserve(neighborOrder.size());
+            for (int j : neighborOrder)
+            {
+                rowSeparations.append(catalogPairSeparationRadians[rowBase + j]);
+                rowPartners.append(j);
+            }
+        }
+    }
+    QVector<int> windowSecondCatalogs;
+
     const bool useNarrowGuidedNoRoll = useNarrowGuidedPairSeeds && !plateSolveStartUsesRoll(settings);
     SkyProjector radialProjector;
     QPointF radialCenter;
@@ -5016,11 +5054,38 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                 if (sourceSeparationRadians < degToRad(minSourceSeparationDegrees)) {
                     continue;
                 }
+                // Tolerance depends only on the detection-pair separation, so compute it once
+                // here for both the binary-search window and the exact gate inside the loop.
+                const double separationToleranceRadians = useNarrowGuidedPairSeeds
+                    ? std::max(degToRad(0.04), sourceSeparationRadians * 0.18)
+                    : plateSolveStartUsesFov(settings)
+                        ? std::max(degToRad(2.0), sourceSeparationRadians * 0.18)
+                        : std::max(degToRad(5.0), sourceSeparationRadians * 0.30);
+                // Widen the search bounds by a tiny epsilon so floating-point rounding can never
+                // drop a partner the exact gate below would keep; the gate remains the authority.
+                const double windowLowSeparation = sourceSeparationRadians - separationToleranceRadians - 1e-9;
+                const double windowHighSeparation = sourceSeparationRadians + separationToleranceRadians + 1e-9;
 
                 for (int firstCatalog = 0; firstCatalog < brightCatalogStars.size(); ++firstCatalog)
                 {
                     if (shouldStopBrightPairSeedSearch()) break;
-                    for (int secondCatalog = 0; secondCatalog < brightCatalogStars.size(); ++secondCatalog)
+
+                    // Restrict the partner scan to catalog stars whose separation from
+                    // firstCatalog lands in the tolerance window, then restore ascending
+                    // catalog-index order so the visit order matches the exhaustive scan.
+                    const QVector<double>& rowSeparations = catalogNeighborSortedSeparation[firstCatalog];
+                    const QVector<int>& rowPartners = catalogNeighborSortedIndex[firstCatalog];
+                    const auto windowBegin = std::lower_bound(
+                        rowSeparations.cbegin(), rowSeparations.cend(), windowLowSeparation);
+                    const auto windowEnd = std::upper_bound(
+                        rowSeparations.cbegin(), rowSeparations.cend(), windowHighSeparation);
+                    windowSecondCatalogs.clear();
+                    for (auto it = windowBegin; it != windowEnd; ++it) {
+                        windowSecondCatalogs.append(rowPartners[it - rowSeparations.cbegin()]);
+                    }
+                    std::sort(windowSecondCatalogs.begin(), windowSecondCatalogs.end());
+
+                    for (int secondCatalog : windowSecondCatalogs)
                     {
                         if (shouldStopBrightPairSeedSearch()) break;
                         if (firstCatalog == secondCatalog) {
@@ -5028,11 +5093,6 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                         }
                         const double catalogSeparationRadians = catalogPairSeparationRadians[
                             static_cast<qsizetype>(firstCatalog) * brightCatalogCount + secondCatalog];
-                        const double separationToleranceRadians = useNarrowGuidedPairSeeds
-                            ? std::max(degToRad(0.04), sourceSeparationRadians * 0.18)
-                            : plateSolveStartUsesFov(settings)
-                                ? std::max(degToRad(2.0), sourceSeparationRadians * 0.18)
-                                : std::max(degToRad(5.0), sourceSeparationRadians * 0.30);
                         if (std::fabs(sourceSeparationRadians - catalogSeparationRadians) > separationToleranceRadians) {
                             continue;
                         }

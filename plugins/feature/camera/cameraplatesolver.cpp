@@ -3092,7 +3092,14 @@ static void buildProjectedCatalogInto(const PlateSolveCatalogContext& catalogCon
         : 1.0;
     const double halfDiagonalFovRadians = projector.halfHorizontalFov * std::sqrt(1.0 + aspect * aspect);
     const double coneHalfAngleRadians = halfDiagonalFovRadians * 2.0 + degToRad(1.0);
-    const bool useConeCull = coneHalfAngleRadians < degToRad(15.0);
+    // projectVector() applies radial distortion (scale = 1 + k1*r^2) AFTER projection. With
+    // barrel distortion (k1 < 0, scale < 1) a star at a larger undistorted angle is pulled
+    // radially inward and can still land in bounds, so an undistorted-angle cone would wrongly
+    // reject it. The solver sweeps negative k1 (distortion sweep + LM refinement), so the cone is
+    // only a guaranteed superset of the in-bounds set when k1 >= 0 (positive/pincushion distortion
+    // pushes stars outward, shrinking the in-bounds angular region). Disable the cull otherwise.
+    const bool useConeCull = (coneHalfAngleRadians < degToRad(15.0))
+        && (projector.distortionK1 >= 0.0);
     const double coneCosThreshold = useConeCull ? std::cos(coneHalfAngleRadians) : -2.0;
     const auto withinFieldCone = [&](const VisibleCatalogStar& visibleStar) {
         return !useConeCull || (dot(projector.center, visibleStar.vector) >= coneCosThreshold);

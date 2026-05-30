@@ -4743,6 +4743,28 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
         return seeds;
     }
 
+    // Precompute the angular separation of every bright catalog-star pair once. The inner
+    // seed loop below compares each detection pair's separation against every catalog pair's
+    // separation; that catalog separation depends only on the catalog pair, not the detection
+    // pair, yet the original code recomputed acos(dot(...)) for all ~N^2 catalog pairs on every
+    // one of the ~thousands of detection pairs (hundreds of millions of acos calls on dense
+    // narrow-field frames). Caching it turns the hot inner test into a single array lookup while
+    // leaving the iteration order — and therefore the set/order of seeds produced — unchanged.
+    const int brightCatalogCount = brightCatalogStars.size();
+    QVector<double> catalogPairSeparationRadians(
+        static_cast<qsizetype>(brightCatalogCount) * static_cast<qsizetype>(brightCatalogCount), 0.0);
+    for (int i = 0; i < brightCatalogCount; ++i)
+    {
+        const SkyVector& iVector = brightCatalogStars[i].vector;
+        for (int j = i + 1; j < brightCatalogCount; ++j)
+        {
+            const double separation = std::acos(std::clamp(
+                dot(iVector, brightCatalogStars[j].vector), -1.0, 1.0));
+            catalogPairSeparationRadians[static_cast<qsizetype>(i) * brightCatalogCount + j] = separation;
+            catalogPairSeparationRadians[static_cast<qsizetype>(j) * brightCatalogCount + i] = separation;
+        }
+    }
+
     const bool useNarrowGuidedNoRoll = useNarrowGuidedPairSeeds && !plateSolveStartUsesRoll(settings);
     SkyProjector radialProjector;
     QPointF radialCenter;
@@ -5004,10 +5026,8 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                         if (firstCatalog == secondCatalog) {
                             continue;
                         }
-                        const double catalogSeparationRadians = std::acos(std::clamp(
-                            dot(brightCatalogStars[firstCatalog].vector, brightCatalogStars[secondCatalog].vector),
-                            -1.0,
-                            1.0));
+                        const double catalogSeparationRadians = catalogPairSeparationRadians[
+                            static_cast<qsizetype>(firstCatalog) * brightCatalogCount + secondCatalog];
                         const double separationToleranceRadians = useNarrowGuidedPairSeeds
                             ? std::max(degToRad(0.04), sourceSeparationRadians * 0.18)
                             : plateSolveStartUsesFov(settings)

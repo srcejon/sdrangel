@@ -5252,6 +5252,11 @@ li.checked::marker { content: &quot;\2612&quot;; }
                <string>Siril SPCC Gaia DR3</string>
               </property>
              </item>
+             <item>
+              <property name="text">
+               <string>Siril Gaia DR3 Astrometric</string>
+              </property>
+             </item>
             </widget>
            </item>
            <item row="5" column="0">
@@ -5423,7 +5428,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
               <double>-2.000000000000000</double>
              </property>
              <property name="maximum">
-              <double>13.000000000000000</double>
+              <double>18.000000000000000</double>
              </property>
              <property name="singleStep">
               <double>0.100000000000000</double>

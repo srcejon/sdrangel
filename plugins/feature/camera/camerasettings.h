@@ -176,7 +176,8 @@ struct CameraSettings
     {
         PlateSolveCatalogAuto = 0,
         PlateSolveCatalogHyg,
-        PlateSolveCatalogSirilSpccGaia
+        PlateSolveCatalogSirilSpccGaia,
+        PlateSolveCatalogSirilAstroGaia
     };
 
     enum FovMode
@@ -293,7 +294,7 @@ struct CameraSettings
     static constexpr double m_minStarAspectRatio = 1.0;
     static constexpr double m_maxStarAspectRatio = 10.0;
     static constexpr double m_minPlateSolveMagnitude = -2.0;
-    static constexpr double m_maxPlateSolveMagnitude = 13.0;
+    static constexpr double m_maxPlateSolveMagnitude = 18.0;
     static constexpr int m_minPlateSolveMatches = 2;
     static constexpr int m_maxPlateSolveMatches = 32;
     static constexpr double m_minPlateSolveMatchRadius = 1.0;

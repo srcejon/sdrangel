@@ -2643,16 +2643,29 @@ static bool poseFromTwoVectorPairs(const SkyProjector& baseProjector,
                                    double& rollDegrees)
 {
     const SkyVector sourceXAxis = normalize(sourceA);
-    const SkyVector sourceYAxis = normalize(subtractScaled(sourceB, sourceXAxis, dot(sourceB, sourceXAxis)));
-    const SkyVector sourceZAxis = normalize(cross(sourceXAxis, sourceYAxis));
     const SkyVector targetXAxis = normalize(targetA);
-    const SkyVector targetYAxis = normalize(subtractScaled(targetB, targetXAxis, dot(targetB, targetXAxis)));
-    const SkyVector targetZAxis = normalize(cross(targetXAxis, targetYAxis));
+    // The second basis axis is the component of B perpendicular to A. When A and B are
+    // (near-)parallel this residual collapses toward zero, and normalize() would then amplify
+    // floating-point noise into a finite but garbage unit axis that slips past the length() <= 0
+    // checks below and produces a wildly wrong pose. Reject when either residual is too small to
+    // define a stable axis. For unit inputs the residual length equals sin(angle between A and B),
+    // so 1e-6 (~0.00006 deg) is far below any realistic detection/catalog pair separation and only
+    // rejects genuinely degenerate inputs.
+    const SkyVector sourceYResidual = subtractScaled(sourceB, sourceXAxis, dot(sourceB, sourceXAxis));
+    const SkyVector targetYResidual = subtractScaled(targetB, targetXAxis, dot(targetB, targetXAxis));
+    constexpr double kMinPerpendicularResidualLength = 1e-6;
     if ((length(sourceXAxis) <= 0.0)
-        || (length(sourceYAxis) <= 0.0)
-        || (length(sourceZAxis) <= 0.0)
         || (length(targetXAxis) <= 0.0)
-        || (length(targetYAxis) <= 0.0)
+        || (length(sourceYResidual) < kMinPerpendicularResidualLength)
+        || (length(targetYResidual) < kMinPerpendicularResidualLength))
+    {
+        return false;
+    }
+    const SkyVector sourceYAxis = normalize(sourceYResidual);
+    const SkyVector sourceZAxis = normalize(cross(sourceXAxis, sourceYAxis));
+    const SkyVector targetYAxis = normalize(targetYResidual);
+    const SkyVector targetZAxis = normalize(cross(targetXAxis, targetYAxis));
+    if ((length(sourceZAxis) <= 0.0)
         || (length(targetZAxis) <= 0.0))
     {
         return false;
@@ -3148,15 +3161,24 @@ static void buildProjectedCatalogInto(const PlateSolveCatalogContext& catalogCon
     // Angular cone cull. Only catalog stars whose direction lies within the projector's field
     // cone can land inside the (expanded) image bounds, so for a narrow field a cheap dot-product
     // test against the bore-sight rejects the vast majority of candidate stars before the much
-    // more expensive projectVector(). The cone half-angle is 2x the diagonal half-FoV plus 1 deg
-    // of slack, which is a strict superset of anything projectVector()+bounds would accept
-    // (covering search margin, lens centre offset and distortion), so the result is identical to
-    // the unculled scan. Only enabled for genuinely narrow fields; for wide/fisheye fields the
-    // cone spans most of the sky and would reject nothing, so the dot product is skipped.
-    const double aspect = (projector.width > 0)
-        ? static_cast<double>(projector.height) / static_cast<double>(projector.width)
-        : 1.0;
-    const double halfDiagonalFovRadians = projector.halfHorizontalFov * std::sqrt(1.0 + aspect * aspect);
+    // more expensive projectVector(). Only enabled for genuinely narrow fields; for wide/fisheye
+    // fields the cone spans most of the sky and would reject nothing, so the dot product is skipped.
+    //
+    // The cone half-angle must cover the angle from the bore-sight (projector.center, which maps to
+    // the principal point) to the farthest in-bounds pixel. A lens centre offset shifts the
+    // principal point away from the image centre (by up to +/-2048 px), so the maximum normalized
+    // image radius is derived from the principal point itself (which already includes the offset)
+    // plus the search margin, NOT from a centred half-diagonal. This keeps the cone a strict
+    // superset of anything projectVector()+bounds accepts even with a large centre offset. The 2x
+    // factor plus 1 deg of slack leaves headroom for the small-angle approximation; for a centred
+    // principal point this only widens the cone, so the culled set is identical to the unculled scan.
+    const double halfWidthPixels = 0.5 * static_cast<double>(projector.width);
+    const double maxRadiusXPixels = std::max(projector.principalPointX, projector.width - projector.principalPointX) + searchMarginPixels;
+    const double maxRadiusYPixels = std::max(projector.principalPointY, projector.height - projector.principalPointY) + searchMarginPixels;
+    const double maxNormalizedRadius = (halfWidthPixels > 0.0)
+        ? std::sqrt(maxRadiusXPixels * maxRadiusXPixels + maxRadiusYPixels * maxRadiusYPixels) / halfWidthPixels
+        : 0.0;
+    const double halfDiagonalFovRadians = projector.halfHorizontalFov * maxNormalizedRadius;
     const double coneHalfAngleRadians = halfDiagonalFovRadians * 2.0 + degToRad(1.0);
     // projectVector() applies radial distortion (scale = 1 + k1*r^2) AFTER projection. With
     // barrel distortion (k1 < 0, scale < 1) a star at a larger undistorted angle is pulled
@@ -5092,20 +5114,16 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
     }
     qint64 seedEvaluations = 0;
     qint64 verifiedSeeds = 0;
-    qint64 limitVerifiedSeeds = 0;
     const qint64 verifiedSeedLimit = useNarrowGuidedPairSeeds ? 96 : 12;
     bool reachedSeedLimit = false;
     bool cancelledSeedSearch = false;
     const auto shouldStopBrightPairSeedSearch = [&]() {
         return isCancellationRequested() || cancelledSeedSearch || reachedSeedLimit;
     };
-    const auto appendVerifiedSeed = [&](const Evaluation& seed, bool countsTowardSearchLimit) {
+    const auto appendVerifiedSeed = [&](const Evaluation& seed) {
         seeds.append(seed);
         ++verifiedSeeds;
-        if (countsTowardSearchLimit) {
-            ++limitVerifiedSeeds;
-        }
-        if (limitVerifiedSeeds >= verifiedSeedLimit) {
+        if (verifiedSeeds >= verifiedSeedLimit) {
             reachedSeedLimit = true;
         }
     };
@@ -5372,7 +5390,7 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
             if (shouldStopBrightPairSeedSearch()) {
                 break;
             }
-            appendVerifiedSeed(seed, true);
+            appendVerifiedSeed(seed);
         }
     };
     for (double seedFov : seedFovs)
@@ -5461,7 +5479,6 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
     }
     recordProfileMetric(QStringLiteral("search.brightPairSeedEvaluations"), seedEvaluations);
     recordProfileMetric(QStringLiteral("search.brightPairVerifiedSeeds"), verifiedSeeds);
-    recordProfileMetric(QStringLiteral("search.brightPairLimitVerifiedSeeds"), limitVerifiedSeeds);
 
     QVector<Evaluation> sparseGuidedPairSeeds;
     if (useNarrowGuidedPairSeeds)

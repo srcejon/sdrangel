@@ -1056,13 +1056,21 @@ static double firstPassPlateSolveMaxMagnitude(const CameraSettings& settings)
 
 static double narrowGuidedFullSearchMaxMagnitude(const CameraSettings& settings)
 {
-    if (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0)) {
-        // Narrow guided galaxy fields can have ambiguous bright-star geometry;
-        // load enough faint stars for the internal anchor/refine pass.
-        return 18.0;
+    if (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0))
+    {
+        // Mag 18 is a good Gaia depth for narrow guided solving: enough stars
+        // for galaxy fields without letting dense faint stars dominate matches.
+        return std::min(static_cast<double>(settings.m_plateSolveMaxMagnitude), 18.0);
     }
 
     return settings.m_plateSolveMaxMagnitude;
+}
+
+static bool isLowMagnitudeNarrowGuidedSolve(const CameraSettings& settings)
+{
+    return plateSolveStartUsesDirection(settings)
+        && (settings.m_fov <= 5.0)
+        && (settings.m_plateSolveMaxMagnitude <= 15.0);
 }
 
 static QString sirilSpccChunkUrl(int chunkIndex, int sourceIndex)
@@ -9272,6 +9280,38 @@ double brightDetectionMagnitudeAffinity(const CameraSettings& settings,
     return 1.0 / (1.0 + strength * error * error);
 }
 
+double narrowGuidedBrightConsistencyScore(const CameraSettings& settings,
+                                          const FinalMatchPassEvaluation& evaluation)
+{
+    if (!isLowMagnitudeNarrowGuidedSolve(settings) || !evaluation.projectorValid) {
+        return 0.0;
+    }
+
+    const double detectionCoverage = (evaluation.brightDetections > 0)
+        ? std::clamp(evaluation.brightDetectionMatchFraction, 0.0, 1.0)
+        : 1.0;
+    const double projectedCoverage = (evaluation.brightProjectedStars > 0)
+        ? std::clamp(evaluation.brightProjectedMatchFraction, 0.0, 1.0)
+        : 1.0;
+    const double magnitudeAffinity = 1.0 / (1.0
+        + 2.0 * std::max(0.0, evaluation.brightDetectionMagnitudeError)
+            * std::max(0.0, evaluation.brightDetectionMagnitudeError));
+    const double shapeAffinity = (evaluation.brightCatalogShapeChecks > 0)
+        ? 1.0 - std::clamp(
+            static_cast<double>(evaluation.brightCatalogShapeMismatches)
+                / static_cast<double>(evaluation.brightCatalogShapeChecks),
+            0.0,
+            1.0)
+        : 1.0;
+
+    return 4.0 * detectionCoverage
+        + 5.0 * projectedCoverage
+        + 3.0 * magnitudeAffinity
+        + 2.0 * shapeAffinity
+        + 0.20 * static_cast<double>(evaluation.matchedBrightDetections)
+        + 0.35 * static_cast<double>(evaluation.matchedBrightProjectedStars);
+}
+
 double finalMatchPassScore(const CameraSettings& settings,
                            const FinalMatchPassEvaluation& evaluation)
 {
@@ -9517,10 +9557,6 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
         }
     }
 
-    if (useNarrowGuidedMatchCap && (finalMatchDelta != 0)) {
-        return finalMatchDelta > 0;
-    }
-
     if (m_useWideCatalogMagnitudePreference || m_useDirectionSeedPreference)
     {
         const double candidateScore = finalMatchPassScore(settings, candidate);
@@ -9528,6 +9564,19 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
         if (std::fabs(candidateScore - bestScore) > 0.05) {
             return candidateScore > bestScore;
         }
+    }
+
+    if (isLowMagnitudeNarrowGuidedSolve(settings) && narrowGuidedActualMatchCountsAreClose)
+    {
+        const double candidateBrightScore = narrowGuidedBrightConsistencyScore(settings, candidate);
+        const double bestBrightScore = narrowGuidedBrightConsistencyScore(settings, best);
+        if (std::fabs(candidateBrightScore - bestBrightScore) > 0.35) {
+            return candidateBrightScore > bestBrightScore;
+        }
+    }
+
+    if (useNarrowGuidedMatchCap && (finalMatchDelta != 0)) {
+        return finalMatchDelta > 0;
     }
 
     if (std::abs(finalMatchDelta) <= 1)
@@ -12603,9 +12652,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         imageSize,
         captureDateTimeUtc,
         solveMaxMagnitude,
-        useBrightFirstPassCatalog
-            ? std::max(static_cast<double>(settings.m_plateSolveMaxMagnitude), fullSearchMaxMagnitude)
-            : solveMaxMagnitude);
+        useBrightFirstPassCatalog ? fullSearchMaxMagnitude : solveMaxMagnitude);
     logSolveProfile("catalog", stageStartMs);
     if (isCancellationRequested()) {
         return finishCancelled();

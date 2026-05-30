@@ -41,6 +41,9 @@
 #endif
 
 #include "util/messagequeue.h"
+#ifdef ASICAMERA_FOUND
+#include "cameraasisdk.h"
+#endif
 #include "camerafinder.h"
 #include "cameraworker.h"
 
@@ -130,10 +133,16 @@ QList<CameraInfo> CameraFinder::listQtCameras()
 #ifdef ASICAMERA_FOUND
 QList<CameraInfo> CameraFinder::listAsiCameras()
 {
+    CameraAsiSdkLocker asiSdkLocker;
     QList<CameraInfo> asiCameras;
     const int cameraCount = ASIGetNumOfConnectedCameras();
+    const int boundedCameraCount = qBound(0, cameraCount, 64);
 
-    for (int index = 0; index < cameraCount; ++index)
+    if (cameraCount != boundedCameraCount) {
+        qWarning() << "CameraFinder::listAsiCameras: unexpected ASI camera count" << cameraCount;
+    }
+
+    for (int index = 0; index < boundedCameraCount; ++index)
     {
         ASI_CAMERA_INFO camera {};
 

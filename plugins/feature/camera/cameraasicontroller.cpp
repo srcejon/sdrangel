@@ -20,6 +20,8 @@
 
 #ifdef ASICAMERA_FOUND
 
+#include "cameraasisdk.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -67,6 +69,7 @@ CameraAsiController::CameraAsiController() :
 
 bool CameraAsiController::openCamera(int cameraId)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     m_lastOpenFailureStage = OpenFailureNone;
 
     if (m_cameraOpen) {
@@ -129,6 +132,7 @@ bool CameraAsiController::openCamera(int cameraId)
 
 void CameraAsiController::closeCamera(int fallbackCameraId)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     const int cameraId = (m_openCameraId >= 0) ? m_openCameraId : fallbackCameraId;
 
     stopVideoCapture(cameraId);
@@ -150,6 +154,7 @@ void CameraAsiController::closeCamera(int fallbackCameraId)
 
 bool CameraAsiController::stopVideoCapture(int fallbackCameraId)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     const int cameraId = (m_openCameraId >= 0) ? m_openCameraId : fallbackCameraId;
 
     if (!m_videoCaptureStarted || (cameraId < 0)) {
@@ -170,6 +175,7 @@ bool CameraAsiController::stopVideoCapture(int fallbackCameraId)
 
 bool CameraAsiController::stopExposure(int fallbackCameraId)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     const int cameraId = (m_openCameraId >= 0) ? m_openCameraId : fallbackCameraId;
 
     if (!m_cameraOpen || (cameraId < 0)) {
@@ -197,6 +203,7 @@ void CameraAsiController::setLastError(int errorCode, const QString& errorMessag
 
 bool CameraAsiController::queryCameraCapabilities(int cameraId, const CameraSettings& settings, CapabilitiesReport& report)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     ASI_CAMERA_INFO cameraInfo {};
 
     if (!getCameraInfoById(cameraId, cameraInfo)) {
@@ -286,6 +293,7 @@ bool CameraAsiController::queryCameraCapabilities(int cameraId, const CameraSett
 
 bool CameraAsiController::applyCameraSettings(int cameraId, const CameraSettings& settings, double exposureTimeMs)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     ASI_CAMERA_INFO cameraInfo {};
     if (getCameraInfoById(cameraId, cameraInfo)) {
         m_imageType = selectImageType(cameraInfo, settings);
@@ -426,6 +434,7 @@ bool CameraAsiController::applyCameraSettings(int cameraId, const CameraSettings
 
 CameraAsiController::CaptureResult CameraAsiController::captureExposureFrame(int cameraId, double exposureTimeMs)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     if (m_videoCaptureStarted && !stopVideoCapture(cameraId)) {
         return CaptureDataFailed;
     }
@@ -495,6 +504,7 @@ CameraAsiController::CaptureResult CameraAsiController::captureExposureFrame(int
 
 CameraAsiController::CaptureResult CameraAsiController::captureVideoFrame(int cameraId, int waitMs)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     if (!m_videoCaptureStarted)
     {
         const ASI_ERROR_CODE startCaptureError = ASIStartVideoCapture(cameraId);
@@ -527,6 +537,7 @@ CameraAsiController::CaptureResult CameraAsiController::captureVideoFrame(int ca
 
 CameraAsiController::StatusReport CameraAsiController::pollStatus(int cameraId)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     long temperatureTenthsC = 0;
     ASI_BOOL isAuto = ASI_FALSE;
     const ASI_ERROR_CODE temperatureError = ASIGetControlValue(cameraId, ASI_TEMPERATURE, &temperatureTenthsC, &isAuto);
@@ -627,6 +638,7 @@ QString CameraAsiController::errorCodeToString(ASI_ERROR_CODE errorCode)
 
 bool CameraAsiController::getCameraInfoById(int cameraId, ASI_CAMERA_INFO& cameraInfo)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     const ASI_ERROR_CODE error = ASIGetCameraPropertyByID(cameraId, &cameraInfo);
 
     if (error != ASI_SUCCESS) {
@@ -638,6 +650,7 @@ bool CameraAsiController::getCameraInfoById(int cameraId, ASI_CAMERA_INFO& camer
 
 bool CameraAsiController::getControlCapsByType(int cameraId, ASI_CONTROL_TYPE controlType, ASI_CONTROL_CAPS& controlCaps)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     int numControls = 0;
     const ASI_ERROR_CODE numControlsError = ASIGetNumOfControls(cameraId, &numControls);
 
@@ -670,6 +683,7 @@ bool CameraAsiController::getControlCapsByType(int cameraId, ASI_CONTROL_TYPE co
 
 bool CameraAsiController::getControlValueByType(int cameraId, ASI_CONTROL_TYPE controlType, long& value, ASI_BOOL& isAuto)
 {
+    CameraAsiSdkLocker asiSdkLocker;
     const ASI_ERROR_CODE error = ASIGetControlValue(cameraId, controlType, &value, &isAuto);
 
     if (error != ASI_SUCCESS) {

@@ -12679,23 +12679,27 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         }
         else
         {
+            // Refine every candidate with a fixed set of strided workers: worker w handles
+            // candidates w, w+T, w+2T, ... Each worker builds its SolverContext once (instead of
+            // once per candidate) and runs its whole stride to completion with a single
+            // waitForDone, so threads stay busy with no per-batch barrier and the per-candidate
+            // state-copy overhead is removed. Each candidate result is written to its own slot and
+            // merged in candidate order afterwards, so the outcome is identical to the serial loop.
+            const int refinableCount = static_cast<int>(refinableCandidateIndices.size());
+            QVector<CandidateRefinementResult> refinementResults(refinableCount);
             QThreadPool refinementPool;
             refinementPool.setMaxThreadCount(workerThreadCount);
-            for (int batchStart = 0; batchStart < refinableCandidateIndices.size(); batchStart += workerThreadCount)
+            for (int workerIndex = 0; workerIndex < workerThreadCount; ++workerIndex)
             {
-                if (isCancellationRequested()) {
-                    return finishCancelled();
-                }
-                const int remainingCandidateCount = static_cast<int>(refinableCandidateIndices.size()) - batchStart;
-                const int batchCount = std::min(workerThreadCount, remainingCandidateCount);
-                QVector<CandidateRefinementResult> batchResults(batchCount);
-                for (int batchIndex = 0; batchIndex < batchCount; ++batchIndex)
-                {
-                    const int candidateIndex = refinableCandidateIndices[batchStart + batchIndex];
-                    refinementPool.start(QRunnable::create([&, batchIndex, candidateIndex]() {
-                        SolverContext workerContext(m_owner);
-                        workerContext.copySearchStateFrom(*this);
-                        batchResults[batchIndex] = workerContext.refineMultiHypothesisCandidate(
+                refinementPool.start(QRunnable::create([&, workerIndex]() {
+                    SolverContext workerContext(m_owner);
+                    workerContext.copySearchStateFrom(*this);
+                    for (int i = workerIndex; i < refinableCount; i += workerThreadCount)
+                    {
+                        if (workerContext.isCancellationRequested()) {
+                            break;
+                        }
+                        refinementResults[i] = workerContext.refineMultiHypothesisCandidate(
                             settings,
                             catalogContext,
                             imageSize,
@@ -12703,19 +12707,19 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                             starDetections,
                             detectionIndices,
                             allDetectionIndices,
-                            rescoredCandidates[candidateIndex],
+                            rescoredCandidates[refinableCandidateIndices[i]],
                             weakModeRefineMinMatches,
                             finalMatchRadius,
                             rankFinalPassWithSelectedDetections,
                             useStartDirection);
-                    }));
-                }
-                refinementPool.waitForDone();
-                for (const CandidateRefinementResult& refinementResult : batchResults)
-                {
-                    if (!applyRefinementResult(refinementResult)) {
-                        return finishCancelled();
                     }
+                }));
+            }
+            refinementPool.waitForDone();
+            for (int i = 0; i < refinableCount; ++i)
+            {
+                if (!applyRefinementResult(refinementResults[i])) {
+                    return finishCancelled();
                 }
             }
         }

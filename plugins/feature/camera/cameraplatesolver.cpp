@@ -340,8 +340,8 @@ QHash<QString, qint64> m_profileMetrics;
 // m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
 static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
 static constexpr const char* kSirilCacheDir = "siril-spcc-cache/v1";
-static constexpr const char* kSirilRegionCacheDir = "siril-spcc-region-cache/v1";
-static constexpr const char* kSirilAstroRegionCacheDir = "siril-astro-region-cache/v1";
+static constexpr const char* kSirilRegionCacheDir = "siril-spcc-region-cache/v2";
+static constexpr const char* kSirilAstroRegionCacheDir = "siril-astro-region-cache/v2";
 static constexpr const char* kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 static constexpr const char* kDownloadedCatalogDir = "camera";
 static constexpr const char* kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
@@ -914,6 +914,59 @@ static QString formatDeclinationDegrees(double declinationDegrees)
         .arg(degrees, 2, 10, QLatin1Char('0'))
         .arg(minutes, 2, 10, QLatin1Char('0'))
         .arg(seconds, 0, 'f', 4);
+}
+
+static QString formatGaiaCoordinateLabel(double rightAscensionDegrees,
+                                         double declinationDegrees,
+                                         double magnitude)
+{
+    constexpr int tenthsPerHour = 60 * 60 * 10;
+    constexpr int tenthsPerDay = 24 * tenthsPerHour;
+    int totalTenths = static_cast<int>(std::round(normalizeDegrees(rightAscensionDegrees) / 15.0 * tenthsPerHour));
+    if (totalTenths >= tenthsPerDay) {
+        totalTenths -= tenthsPerDay;
+    }
+    const int hours = totalTenths / tenthsPerHour;
+    totalTenths %= tenthsPerHour;
+    const int minutes = totalTenths / (60 * 10);
+    const double seconds = (totalTenths % (60 * 10)) / 10.0;
+
+    const double absoluteDeclinationDegrees = std::fabs(declinationDegrees);
+    const int degrees = static_cast<int>(std::floor(absoluteDeclinationDegrees));
+    const double totalArcMinutes = (absoluteDeclinationDegrees - degrees) * 60.0;
+    const int arcMinutes = static_cast<int>(std::floor(totalArcMinutes));
+    int arcSeconds = static_cast<int>(std::round((totalArcMinutes - arcMinutes) * 60.0));
+    int normalizedArcMinutes = arcMinutes;
+    int normalizedDegrees = degrees;
+    if (arcSeconds >= 60)
+    {
+        arcSeconds = 0;
+        ++normalizedArcMinutes;
+        if (normalizedArcMinutes >= 60)
+        {
+            normalizedArcMinutes = 0;
+            ++normalizedDegrees;
+        }
+    }
+
+    const QChar declinationSign = declinationDegrees < 0.0 ? QLatin1Char('-') : QLatin1Char('+');
+    return QStringLiteral("Gaia J%1%2%3%4%5%6%7 G%8")
+        .arg(hours, 2, 10, QLatin1Char('0'))
+        .arg(minutes, 2, 10, QLatin1Char('0'))
+        .arg(seconds, 4, 'f', 1, QLatin1Char('0'))
+        .arg(declinationSign)
+        .arg(normalizedDegrees, 2, 10, QLatin1Char('0'))
+        .arg(normalizedArcMinutes, 2, 10, QLatin1Char('0'))
+        .arg(arcSeconds, 2, 10, QLatin1Char('0'))
+        .arg(magnitude, 0, 'f', 1);
+}
+
+static bool isGenericGaiaCatalogName(const QString& name)
+{
+    const QString trimmed = name.trimmed();
+    return trimmed.startsWith(QStringLiteral("Gaia Astro "), Qt::CaseInsensitive)
+        || trimmed.startsWith(QStringLiteral("Gaia SPCC "), Qt::CaseInsensitive)
+        || trimmed.startsWith(QStringLiteral("Gaia J"), Qt::CaseInsensitive);
 }
 
 static bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path, QString* errorMessage)
@@ -2040,7 +2093,7 @@ QVector<CatalogStar> loadSirilAstroCatalog(const CameraSettings& settings,
                 }
                 seenStars.insert(starKey);
                 stars.append({
-                    QStringLiteral("Gaia Astro %1").arg(cell.firstRecord + recordIndex),
+                    formatGaiaCoordinateLabel(starRaDegrees, starDecDegrees, magnitude),
                     starRaDegrees,
                     starDecDegrees,
                     magnitude,
@@ -2261,7 +2314,7 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
                 }
                 seenStars.insert(starKey);
                 stars.append({
-                    QStringLiteral("Gaia SPCC %1:%2").arg(cell.chunkIndex).arg(cell.firstRecord + recordIndex),
+                    formatGaiaCoordinateLabel(starRaDegrees, starDecDegrees, magnitude),
                     starRaDegrees,
                     starDecDegrees,
                     magnitude,
@@ -2543,7 +2596,13 @@ static QString catalogDisplayName(const CatalogStar& star)
     const QVector<CatalogStar>& aliasStars = bundledAliasCatalog();
     const QVector<int> sortedAliasIndices = aliasCatalogDeclinationSortedIndices(aliasStars);
     const QString alias = resolveNamedAliasForCatalogStar(star, aliasStars, sortedAliasIndices);
-    return alias.isEmpty() ? star.name : alias;
+    if (!alias.isEmpty()) {
+        return alias;
+    }
+    if (isGenericGaiaCatalogName(star.name)) {
+        return formatGaiaCoordinateLabel(star.rightAscensionDegrees, star.declinationDegrees, star.magnitude);
+    }
+    return star.name;
 }
 
 static double catalogAngularSeparationDegrees(const CatalogStar& lhs, const CatalogStar& rhs)
@@ -2613,9 +2672,7 @@ static void mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings,
         if (duplicateIndex >= 0)
         {
             CatalogStar& existing = catalogStars[duplicateIndex];
-            const bool existingHasGenericName =
-                existing.name.isEmpty()
-                || existing.name.startsWith(QStringLiteral("Gaia SPCC "), Qt::CaseInsensitive);
+            const bool existingHasGenericName = existing.name.isEmpty() || isGenericGaiaCatalogName(existing.name);
             if (existingHasGenericName && !brightStar.name.isEmpty())
             {
                 existing.name = brightStar.name;

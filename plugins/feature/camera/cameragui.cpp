@@ -169,7 +169,8 @@ bool isSyntheticGaiaCatalogLabel(const QString& label)
 {
     const QString trimmed = label.trimmed();
     return trimmed.startsWith(QStringLiteral("Gaia Astro "), Qt::CaseInsensitive)
-        || trimmed.startsWith(QStringLiteral("Gaia SPCC "), Qt::CaseInsensitive);
+        || trimmed.startsWith(QStringLiteral("Gaia SPCC "), Qt::CaseInsensitive)
+        || trimmed.startsWith(QStringLiteral("Gaia J"), Qt::CaseInsensitive);
 }
 
 bool hasCatalogCoordinates(const CameraPipelineStarDetection& star)

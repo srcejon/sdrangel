@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERAPIPELINEFRAME_H_
 
 #include <cstring>
+#include <limits>
 
 #include <QDateTime>
 #include <QImage>
@@ -74,6 +75,8 @@ struct CameraPipelineStarDetection
     QString m_label;
     float m_matchDistancePixels = 0.0f;
     float m_catalogMagnitude = 0.0f;
+    double m_catalogRightAscensionDegrees = std::numeric_limits<double>::quiet_NaN();
+    double m_catalogDeclinationDegrees = std::numeric_limits<double>::quiet_NaN();
     QString m_catalogSpectralType;
     bool m_solved = false;
 };

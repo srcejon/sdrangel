@@ -973,6 +973,7 @@ void CameraFrameStacker::emitHistoryPreviewFrame()
     CameraPipelineFramePtr previewFrame(new CameraPipelineFrame(*m_lastFrameTemplate));
     previewFrame->m_image = outputImage;
     previewFrame->m_unprocessedImage = outputImage;
+    previewFrame->clearCudaCache();
     previewFrame->m_stack.m_count = static_cast<int>(m_stackFrameHistory.size());
     previewFrame->m_stack.m_queuedCount = 0;
     previewFrame->m_stack.m_rejectedCount = m_rejectedFrameCount;

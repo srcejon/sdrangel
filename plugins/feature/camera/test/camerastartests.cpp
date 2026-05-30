@@ -61,6 +61,9 @@ struct StarTestCase
     double centerOffsetX = 0.0;
     double centerOffsetY = 0.0;
     double distortionK1 = 0.0;
+    double maxMagnitude = std::numeric_limits<double>::quiet_NaN();
+    double expectedRoll = std::numeric_limits<double>::quiet_NaN();
+    double expectedRollTolerance = std::numeric_limits<double>::quiet_NaN();
     CameraSettings::PlateSolveStartMode plateSolveStartMode = CameraSettings::PlateSolveStartFovAzElRollLens;
     int roiX = 0;
     int roiY = 0;
@@ -177,6 +180,25 @@ double parseDouble(const QString& value, const QString& column, int lineNumber, 
         }
     }
     return result;
+}
+
+double parseOptionalDouble(const QStringList& header,
+                           const QStringList& values,
+                           const QString& name,
+                           int lineNumber,
+                           bool* ok)
+{
+    const int index = header.indexOf(name);
+    if ((index < 0) || (index >= values.size())) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    const QString value = values.at(index).trimmed();
+    if (value.isEmpty()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    return parseDouble(value, name, lineNumber, ok);
 }
 
 QDateTime parseDateTime(const QString& value, int lineNumber, bool* ok)
@@ -352,6 +374,23 @@ CameraSettings::PlateSolveStartMode parsePlateSolveStartMode(const QString& valu
         *ok = false;
     }
     return CameraSettings::PlateSolveStartFovAzElRollLens;
+}
+
+double effectivePlateSolveMaxMagnitude(const StarTestCase& test)
+{
+    const double fallbackMaxMagnitude = (test.fov <= 5.0)
+        ? 20.0
+        : CameraSettings::m_maxPlateSolveMagnitude;
+    return std::isfinite(test.maxMagnitude) ? test.maxMagnitude : fallbackMaxMagnitude;
+}
+
+double wrappedAngleDistanceDegrees(double a, double b)
+{
+    double difference = std::fmod(a - b + 180.0, 360.0);
+    if (difference < 0.0) {
+        difference += 360.0;
+    }
+    return std::abs(difference - 180.0);
 }
 
 QString normalizedStarName(const QString& value)
@@ -740,6 +779,25 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         test.centerOffsetX = parseDouble(fieldValue(header, fields, QStringLiteral("cx"), &ok), QStringLiteral("cx"), lineNumber, &ok);
         test.centerOffsetY = parseDouble(fieldValue(header, fields, QStringLiteral("cy"), &ok), QStringLiteral("cy"), lineNumber, &ok);
         test.distortionK1 = parseDouble(fieldValue(header, fields, QStringLiteral("k1"), &ok), QStringLiteral("k1"), lineNumber, &ok);
+        int maxMagnitudeIndex = header.indexOf(QStringLiteral("plateSolveMaxMagnitude"));
+        if (maxMagnitudeIndex < 0) {
+            maxMagnitudeIndex = header.indexOf(QStringLiteral("maxMagnitude"));
+        }
+        if (maxMagnitudeIndex >= 0)
+        {
+            const QString maxMagnitude = fields.value(maxMagnitudeIndex).trimmed();
+            if (!maxMagnitude.isEmpty())
+            {
+                test.maxMagnitude = parseDouble(maxMagnitude, QStringLiteral("plateSolveMaxMagnitude"), lineNumber, &ok);
+                if ((test.maxMagnitude < CameraSettings::m_minPlateSolveMagnitude)
+                    || (test.maxMagnitude > CameraSettings::m_maxPlateSolveMagnitude))
+                {
+                    std::cerr << "Line " << lineNumber << ": plateSolveMaxMagnitude out of range: "
+                              << maxMagnitude.toStdString() << '\n';
+                    ok = false;
+                }
+            }
+        }
         const int plateSolveStartModeIndex = header.indexOf(QStringLiteral("plateSolveStartMode"));
         if (plateSolveStartModeIndex >= 0) {
             test.plateSolveStartMode = parsePlateSolveStartMode(fields.value(plateSolveStartModeIndex), lineNumber, &ok);
@@ -771,6 +829,13 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         const int starPositionsIndex = header.indexOf(QStringLiteral("starPositions"));
         if (starPositionsIndex >= 0) {
             test.expectedStarPositions = parseExpectedStarPositions(fields.value(starPositionsIndex), lineNumber, &ok);
+        }
+        test.expectedRoll = parseOptionalDouble(header, fields, QStringLiteral("expectedRoll"), lineNumber, &ok);
+        test.expectedRollTolerance = parseOptionalDouble(header, fields, QStringLiteral("expectedRollTolerance"), lineNumber, &ok);
+        if (std::isfinite(test.expectedRollTolerance) && (test.expectedRollTolerance < 0.0))
+        {
+            std::cerr << "Line " << lineNumber << ": expectedRollTolerance cannot be negative\n";
+            ok = false;
         }
 
         if (!ok) {
@@ -805,9 +870,7 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_plateSolveCatalogSource = CameraSettings::PlateSolveCatalogAuto;
     settings.m_plateSolveStartMode = test.plateSolveStartMode;
     settings.m_plateSolveLabelMode = CameraSettings::PlateSolveLabelName;
-    // For narrow-field (telescope) images the catalog has many more faint stars available;
-    // use a higher magnitude limit so the solver has enough matches to pin the FOV.
-    settings.m_plateSolveMaxMagnitude = (test.fov <= 5.0) ? 18.0 : CameraSettings::m_maxPlateSolveMagnitude;
+    settings.m_plateSolveMaxMagnitude = effectivePlateSolveMaxMagnitude(test);
     settings.m_plateSolveMinMatches = 4;
     settings.m_plateSolveMatchRadius = 24.0;
     settings.m_plateSolveFinalMatchRadius = 24.0;
@@ -1033,6 +1096,29 @@ QStringList expectedStarPositionMismatches(const StarTestCase& test,
                 .arg(detection->m_center.y(), 0, 'f', 1)
                 .arg(distance, 0, 'f', 1));
         }
+    }
+
+    return mismatches;
+}
+
+QStringList expectedPoseMismatches(const StarTestCase& test, const CameraPipelineFramePtr& frame)
+{
+    QStringList mismatches;
+    if (!std::isfinite(test.expectedRoll)) {
+        return mismatches;
+    }
+
+    const double tolerance = std::isfinite(test.expectedRollTolerance)
+        ? test.expectedRollTolerance
+        : 5.0;
+    const double rollError = wrappedAngleDistanceDegrees(frame->m_plateSolve.m_roll, test.expectedRoll);
+    if (rollError > tolerance)
+    {
+        mismatches.append(QStringLiteral("roll expected=%1 actual=%2 error=%3 tolerance=%4")
+            .arg(test.expectedRoll, 0, 'f', 2)
+            .arg(frame->m_plateSolve.m_roll, 0, 'f', 2)
+            .arg(rollError, 0, 'f', 2)
+            .arg(tolerance, 0, 'f', 2));
     }
 
     return mismatches;
@@ -1376,8 +1462,9 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
             test,
             result.frame,
             diagnosticCatalog);
+        const QStringList poseMismatches = expectedPoseMismatches(test, result.frame);
         const bool solved = result.frame->m_plateSolve.m_solved;
-        const bool pass = solved && missing.isEmpty() && positionMismatches.isEmpty();
+        const bool pass = solved && missing.isEmpty() && positionMismatches.isEmpty() && poseMismatches.isEmpty();
         if (!pass) {
             ++failures;
         }
@@ -1386,6 +1473,7 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
                   << ": detections=" << result.frame->m_starDetections.size()
                   << " matched=" << result.frame->m_plateSolve.m_matchedStars
                   << " solved=" << (result.frame->m_plateSolve.m_solved ? "true" : "false")
+                  << " maxMag=" << effectivePlateSolveMaxMagnitude(test)
                   << " catalog=" << result.frame->m_plateSolve.m_catalogSource.toStdString()
                   << " catalogStars=" << result.frame->m_plateSolve.m_catalogStarsLoaded
                   << " candidates=" << result.frame->m_plateSolve.m_catalogCandidateStars
@@ -1431,6 +1519,9 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
             std::cout << "  position mismatches: " << positionMismatches.join(QStringLiteral("; ")).toStdString() << '\n';
             printExpectedStarDiagnostics(test, result.frame);
             printDetectionDiagnostics(result.frame);
+        }
+        if (!poseMismatches.isEmpty()) {
+            std::cout << "  pose mismatches: " << poseMismatches.join(QStringLiteral("; ")).toStdString() << '\n';
         }
     }
 

@@ -1001,6 +1001,15 @@ static double firstPassPlateSolveMaxMagnitude(const CameraSettings& settings)
     return settings.m_plateSolveMaxMagnitude;
 }
 
+static double narrowGuidedFullSearchMaxMagnitude(const CameraSettings& settings)
+{
+    if (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0)) {
+        return std::min(static_cast<double>(settings.m_plateSolveMaxMagnitude), 18.0);
+    }
+
+    return settings.m_plateSolveMaxMagnitude;
+}
+
 static QString sirilSpccChunkUrl(int chunkIndex, int sourceIndex)
 {
     const QString fileName = QString::fromUtf8(kSirilSpccFileNamePattern).arg(chunkIndex);
@@ -12314,6 +12323,8 @@ static void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetection
         detection.m_projectedCenter = QPointF();
         detection.m_matchDistancePixels = 0.0f;
         detection.m_catalogMagnitude = 0.0f;
+        detection.m_catalogRightAscensionDegrees = std::numeric_limits<double>::quiet_NaN();
+        detection.m_catalogDeclinationDegrees = std::numeric_limits<double>::quiet_NaN();
         detection.m_catalogSpectralType.clear();
         detection.m_solved = false;
     }
@@ -12615,6 +12626,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             detection.m_projectedCenter = projectedPointsByCatalogIndex.value(match.catalogIndex);
             detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
             detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
+            detection.m_catalogRightAscensionDegrees = catalogStar.rightAscensionDegrees;
+            detection.m_catalogDeclinationDegrees = catalogStar.declinationDegrees;
             detection.m_catalogSpectralType = catalogStar.spectralType;
             detection.m_solved = true;
             maxError = std::max(maxError, match.distancePixels);
@@ -12695,6 +12708,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         return finishCancelled();
     }
     bool usingFullCatalogForGuidedAnchor = false;
+    bool usingRequestedMaxMagnitudeCatalog = false;
+    const double fullSearchMaxMagnitude = narrowGuidedFullSearchMaxMagnitude(settings);
     const bool useWideWeakAnchorSearch = !useStartDirection
         && isWidePlateSolveContext(settings);
     const int guidedAnchorExtraMatches = useStartDirection
@@ -12782,7 +12797,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 guidedAnchorCatalogContext,
                 settings,
                 captureDateTimeUtc,
-                settings.m_plateSolveMaxMagnitude);
+                fullSearchMaxMagnitude);
             if (!guidedAnchorCatalogContext.catalogStars.isEmpty()) {
                 guidedAnchorCatalogContextPtr = &guidedAnchorCatalogContext;
             }
@@ -12809,6 +12824,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 result.m_catalogSource = catalogContext.catalogSource;
                 result.m_catalogStarsLoaded = catalogContext.catalogStars.size();
                 usingFullCatalogForGuidedAnchor = true;
+                usingRequestedMaxMagnitudeCatalog = fullSearchMaxMagnitude >= settings.m_plateSolveMaxMagnitude;
                 guidedAnchorMatchesActiveCatalog = true;
             }
             if (guidedAnchorMatchesActiveCatalog)
@@ -12870,7 +12886,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             settings,
             imageSize,
             captureDateTimeUtc,
-            settings.m_plateSolveMaxMagnitude,
+            fullSearchMaxMagnitude,
             settings.m_plateSolveMaxMagnitude);
         logSolveProfile("catalog.fullCatalogRetry", stageStartMs);
         if (!fullCatalogContext.catalogStars.isEmpty()
@@ -12906,6 +12922,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 coarseCandidates = std::move(fullCatalogCoarseCandidates);
                 best = fullCatalogBest;
                 usingFullCatalogForGuidedAnchor = true;
+                usingRequestedMaxMagnitudeCatalog = fullSearchMaxMagnitude >= settings.m_plateSolveMaxMagnitude;
                 selectedFinalPass = FinalMatchPassEvaluation();
                 logPlateSolveEvaluation("full-catalog-retry", best, true);
             }
@@ -13192,7 +13209,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         return result;
     }
 
-    if (useBrightFirstPassCatalog && !usingFullCatalogForGuidedAnchor)
+    if (useBrightFirstPassCatalog && !usingRequestedMaxMagnitudeCatalog)
     {
         PlateSolveCatalogContext fullCatalogContext = catalogContext;
         rebuildVisibleCatalogContext(
@@ -13418,6 +13435,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         detection.m_projectedCenter = projectedPointsByCatalogIndex.value(match.catalogIndex);
         detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
         detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
+        detection.m_catalogRightAscensionDegrees = catalogStar.rightAscensionDegrees;
+        detection.m_catalogDeclinationDegrees = catalogStar.declinationDegrees;
         detection.m_catalogSpectralType = catalogStar.spectralType;
         detection.m_solved = true;
     }

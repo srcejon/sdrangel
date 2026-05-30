@@ -165,6 +165,48 @@ QDateTime captureDateTimeFromFileName(const QString& fileName)
     return dateTime.isValid() ? dateTime : QDateTime();
 }
 
+bool isSyntheticGaiaCatalogLabel(const QString& label)
+{
+    const QString trimmed = label.trimmed();
+    return trimmed.startsWith(QStringLiteral("Gaia Astro "), Qt::CaseInsensitive)
+        || trimmed.startsWith(QStringLiteral("Gaia SPCC "), Qt::CaseInsensitive);
+}
+
+bool hasCatalogCoordinates(const CameraPipelineStarDetection& star)
+{
+    return star.m_solved
+        && std::isfinite(star.m_catalogRightAscensionDegrees)
+        && std::isfinite(star.m_catalogDeclinationDegrees);
+}
+
+QUrl simbadUrlForStarDetection(const CameraPipelineStarDetection& star, const QString& target)
+{
+    if (isSyntheticGaiaCatalogLabel(target) && hasCatalogCoordinates(star))
+    {
+        QUrl url(QStringLiteral("https://simbad.cds.unistra.fr/simbad/sim-coo"));
+        QUrlQuery query;
+        query.addQueryItem(
+            QStringLiteral("Coord"),
+            QStringLiteral("%1 %2")
+                .arg(star.m_catalogRightAscensionDegrees, 0, 'f', 8)
+                .arg(star.m_catalogDeclinationDegrees, 0, 'f', 8));
+        query.addQueryItem(QStringLiteral("Radius"), QStringLiteral("5"));
+        query.addQueryItem(QStringLiteral("Radius.unit"), QStringLiteral("arcsec"));
+        url.setQuery(query);
+        return url;
+    }
+
+    if (target.trimmed().isEmpty()) {
+        return QUrl();
+    }
+
+    QUrl url(QStringLiteral("https://simbad.cds.unistra.fr/simbad/sim-id"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("Ident"), target);
+    url.setQuery(query);
+    return url;
+}
+
 }
 
 CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
@@ -5855,6 +5897,12 @@ QString CameraGUI::starDetectionDetails(const CameraPipelineStarDetection& star)
             .arg(QString::number(star.m_projectedCenter.y(), 'f', 1));
         details << tr("Match error: %1 px").arg(QString::number(star.m_matchDistancePixels, 'f', 2));
         details << tr("Catalog magnitude: %1").arg(QString::number(star.m_catalogMagnitude, 'f', 2));
+        if (hasCatalogCoordinates(star))
+        {
+            details << tr("Catalog coordinates: RA=%1 deg, Dec=%2 deg")
+                .arg(QString::number(star.m_catalogRightAscensionDegrees, 'f', 8))
+                .arg(QString::number(star.m_catalogDeclinationDegrees, 'f', 8));
+        }
 
         if (!star.m_catalogSpectralType.trimmed().isEmpty()) {
             details << tr("Spectral type: %1").arg(star.m_catalogSpectralType.trimmed());
@@ -5898,6 +5946,7 @@ bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QP
 
     const CameraPipelineStarDetection star = m_lastStarDetections[starIndex];
     const QString target = starDetectionSearchTarget(star);
+    const QUrl simbadUrl = simbadUrlForStarDetection(star, target);
     QMenu menu(this);
     menu.addSection(starDetectionDisplayName(star));
     QAction *infoAction = menu.addAction(tr("Star information..."));
@@ -5908,7 +5957,7 @@ bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QP
 
     const bool hasTarget = !target.isEmpty();
     skyMapAction->setEnabled(hasTarget);
-    simbadAction->setEnabled(hasTarget);
+    simbadAction->setEnabled(simbadUrl.isValid() && !simbadUrl.isEmpty());
     copyNameAction->setEnabled(hasTarget);
 
     QAction *selectedAction = menu.exec(globalPos);
@@ -5928,11 +5977,7 @@ bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QP
     }
     else if (selectedAction == simbadAction)
     {
-        QUrl url(QStringLiteral("https://simbad.cds.unistra.fr/simbad/sim-id"));
-        QUrlQuery query;
-        query.addQueryItem(QStringLiteral("Ident"), target);
-        url.setQuery(query);
-        QDesktopServices::openUrl(url);
+        QDesktopServices::openUrl(simbadUrl);
     }
     else if (selectedAction == copyNameAction)
     {

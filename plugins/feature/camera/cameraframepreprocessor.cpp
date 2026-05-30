@@ -689,10 +689,11 @@ bool CameraFramePreprocessor::shouldMaterializeUnprocessedImage(const CameraPipe
         return false;
     }
 
-    return m_settings.m_saveImage
-        || m_settings.m_saveVideo
-        || frame.m_saveCurrentImage
-        || (m_settings.m_videoPreRecordBufferSeconds > 0);
+    const bool needsCalibratedStill = m_settings.m_saveImage || frame.m_saveCurrentImage;
+    const bool needsCalibratedVideo = !m_settings.m_videoFileName.isEmpty()
+        && (m_settings.m_saveVideo || (m_settings.m_videoPreRecordBufferSeconds > 0));
+
+    return needsCalibratedStill || needsCalibratedVideo;
 }
 
 bool CameraFramePreprocessor::shouldMaterializeRawInputImage(const CameraPipelineFrame& frame) const

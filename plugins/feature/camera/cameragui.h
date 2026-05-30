@@ -343,6 +343,7 @@ private:
     void showImageSequenceFrame(int index);
     void advanceImageSequenceFrame();
     void updateImageSequencePositionSlider();
+    bool prepareImageSequenceManualStep(bool *wasLoaded);
 #endif
     void reportFeatureError(const QString& errorKey, const QString& title, const QString& errorMessage);
     void applyQtCameraSettings(const QList<QString>& settingsKeys, bool force);
@@ -362,6 +363,10 @@ private:
     static bool sameCameraIdentity(const CameraInfo& lhs, const CameraInfo& rhs);
     static bool isSameHardwareCameraBackend(const CameraInfo& lhs, const CameraInfo& rhs);
     QStringList cameraSelectionSettingsKeys(const CameraInfo& cameraInfo) const;
+    bool restorePreviousCameraSelection(const QString& previousCameraProtocol,
+                                        const QString& previousCameraId,
+                                        const QString& previousAlpacaHost,
+                                        quint16 previousAlpacaPort);
     void resetCameraStatus();
     int findCameraComboIndex(const QString& protocol, const QString& cameraId,
                              const QString& alpacaHost = QString(), quint16 alpacaPort = 0) const;

@@ -22,6 +22,31 @@
 #include <QList>
 #include <QString>
 
+namespace CameraProtocol
+{
+    inline QString qt() { return QStringLiteral("qt"); }
+    inline QString asi() { return QStringLiteral("asi"); }
+    inline QString alpaca() { return QStringLiteral("alpaca"); }
+    inline QString video() { return QStringLiteral("video"); }
+    inline QString images() { return QStringLiteral("images"); }
+
+    inline bool isPlaybackSource(const QString& protocol)
+    {
+        return (protocol == video()) || (protocol == images());
+    }
+
+    inline QString playbackDisplayText(const QString& protocol, const QString& description)
+    {
+        if (protocol == video()) {
+            return description.isEmpty() ? QStringLiteral("video:") : QStringLiteral("video:%1").arg(description);
+        }
+        if (protocol == images()) {
+            return description.isEmpty() ? QStringLiteral("images:") : QStringLiteral("images:%1").arg(description);
+        }
+        return QString();
+    }
+}
+
 struct CameraInfo
 {
     QString m_protocol;     // "qt", "asi", "alpaca", "video" or "images"

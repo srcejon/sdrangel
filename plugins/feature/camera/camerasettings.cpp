@@ -30,6 +30,7 @@
 #include "util/httpdownloadmanager.h"
 #include "settings/serializable.h"
 #include "maincore.h"
+#include "camerainfo.h"
 #include "camerasettings.h"
 
 #define DEFAULT_OVERLAY_TEXT_STRING "<img src=\":/sdrangel_icon.png\"><h1 style=\"color:blue\">SDRangel</h1>\n<p>\nText overlay "
@@ -2627,17 +2628,17 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
 
 bool CameraSettings::isAlpacaCamera() const
 {
-    return m_cameraProtocol == "alpaca";
+    return m_cameraProtocol == CameraProtocol::alpaca();
 }
 
 bool CameraSettings::isAsiCamera() const
 {
-    return m_cameraProtocol == "asi";
+    return m_cameraProtocol == CameraProtocol::asi();
 }
 
 bool CameraSettings::isQtCamera() const
 {
-    return m_cameraProtocol == "qt";
+    return m_cameraProtocol == CameraProtocol::qt();
 }
 
 bool CameraSettings::isFileCamera() const
@@ -2647,12 +2648,12 @@ bool CameraSettings::isFileCamera() const
 
 bool CameraSettings::isVideoFileCamera() const
 {
-    return m_cameraProtocol == "video";
+    return m_cameraProtocol == CameraProtocol::video();
 }
 
 bool CameraSettings::isImageFileSequenceCamera() const
 {
-    return m_cameraProtocol == "images";
+    return m_cameraProtocol == CameraProtocol::images();
 }
 
 bool CameraSettings::hasFileCameraSource() const
@@ -2689,15 +2690,16 @@ QString CameraSettings::cameraDisplayName() const
     if (isImageFileSequenceCamera())
     {
         if (m_imageFileCameraPaths.isEmpty()) {
-            return QStringLiteral("images:");
+            return CameraProtocol::playbackDisplayText(CameraProtocol::images(), QString());
         }
-        return QStringLiteral("images:%1 image%2")
+        const QString description = QStringLiteral("%1 image%2")
             .arg(m_imageFileCameraPaths.size())
             .arg(m_imageFileCameraPaths.size() == 1 ? QString() : QStringLiteral("s"));
+        return CameraProtocol::playbackDisplayText(CameraProtocol::images(), description);
     }
 
     if (isVideoFileCamera()) {
-        return m_cameraDescription.isEmpty() ? QStringLiteral("video:") : QStringLiteral("video:%1").arg(m_cameraDescription);
+        return CameraProtocol::playbackDisplayText(CameraProtocol::video(), m_cameraDescription);
     }
 
     if (!m_cameraProtocol.isEmpty() && !m_cameraDescription.isEmpty()) {

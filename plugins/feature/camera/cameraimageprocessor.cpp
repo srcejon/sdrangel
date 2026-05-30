@@ -707,19 +707,6 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
             cv::cuda::cvtColor(gpuRgb, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
         }
 
-        if ((bgrGpu.depth() == CV_16U) && (needsHistogramStretch || needsSaturation || needsGamma || needsSobelEdge || needsCannyEdge))
-        {
-            // The CUDA edge filters (and the histogram/saturation/gamma ops) assume 8-bit
-            // input: the CPU path calls convertBgrTo8Bit() before applySobelEdge/applyCannyEdge,
-            // but the CUDA Sobel/Canny helpers feed 16-bit gradients straight into a CV_8U
-            // convertTo with no down-scaling, producing blown-out edges (EdgesOnly) or a
-            // CV_16UC3/CV_8UC3 addWeighted type mismatch (overlay). Fall back to the CPU path.
-            frame.ensureCpuImageFromCuda();
-            applyImageProcessingCpu(frame);
-            PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");
-            return;
-        }
-
         if (needsUnwarp) {
             applyLensUnwarpCuda(bgrGpu, m_cudaStream);
         }
@@ -907,6 +894,13 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, c
 
     if (m_settings.m_histogramStretch == CameraSettings::HistogramStretchCLAHE)
     {
+        if (bgrGpu.depth() != CV_8U)
+        {
+            cv::cuda::GpuMat bgr8uGpu;
+            bgrGpu.convertTo(bgr8uGpu, CV_8UC3, 255.0 / maxValueForDepth(bgrGpu.depth()), 0.0, stream);
+            bgrGpu = bgr8uGpu;
+        }
+
         cv::cuda::GpuMat labGpu;
         std::vector<cv::cuda::GpuMat> labChannels;
         cv::cuda::cvtColor(bgrGpu, labGpu, cv::COLOR_BGR2Lab, 0, stream);
@@ -934,6 +928,57 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, c
     const float logStrength = static_cast<float>(m_settings.m_histogramStretchLogStrength);
     const float asinhNorm = std::asinh(asinhStrength);
     const float logNorm = std::log1p(logStrength);
+
+    if (bgrGpu.depth() != CV_8U)
+    {
+        const double maxValue = maxValueForDepth(bgrGpu.depth());
+        cv::cuda::GpuMat stretchedFloatGpu;
+        bgrGpu.convertTo(stretchedFloatGpu, CV_32FC3, 1.0 / maxValue, -blackPoint, stream);
+        stretchedFloatGpu.convertTo(stretchedFloatGpu, CV_32FC3, rangeScale, 0.0, stream);
+        cv::cuda::threshold(stretchedFloatGpu, stretchedFloatGpu, 0.0, 0.0, cv::THRESH_TOZERO, stream);
+        cv::cuda::threshold(stretchedFloatGpu, stretchedFloatGpu, 1.0, 1.0, cv::THRESH_TRUNC, stream);
+
+        switch (m_settings.m_histogramStretch)
+        {
+        case CameraSettings::HistogramStretchGamma:
+            cv::cuda::pow(stretchedFloatGpu, gammaValue, stretchedFloatGpu, stream);
+            break;
+        case CameraSettings::HistogramStretchAsinh:
+            if (asinhNorm > 0.0f)
+            {
+                cv::cuda::GpuMat scaledGpu;
+                cv::cuda::GpuMat squaredGpu;
+                cv::cuda::GpuMat sqrtGpu;
+                stretchedFloatGpu.convertTo(scaledGpu, CV_32FC3, asinhStrength, 0.0, stream);
+                cv::cuda::multiply(scaledGpu, scaledGpu, squaredGpu, 1.0, -1, stream);
+                cv::cuda::addWithScalar(squaredGpu, cv::Scalar::all(1.0), squaredGpu, cv::noArray(), -1, stream);
+                cv::cuda::sqrt(squaredGpu, sqrtGpu, stream);
+                cv::cuda::add(scaledGpu, sqrtGpu, stretchedFloatGpu, cv::noArray(), -1, stream);
+                cv::cuda::log(stretchedFloatGpu, stretchedFloatGpu, stream);
+                stretchedFloatGpu.convertTo(stretchedFloatGpu, CV_32FC3, 1.0 / asinhNorm, 0.0, stream);
+            }
+            break;
+        case CameraSettings::HistogramStretchLog:
+            if (logNorm > 0.0f)
+            {
+                stretchedFloatGpu.convertTo(stretchedFloatGpu, CV_32FC3, logStrength, 1.0, stream);
+                cv::cuda::log(stretchedFloatGpu, stretchedFloatGpu, stream);
+                stretchedFloatGpu.convertTo(stretchedFloatGpu, CV_32FC3, 1.0 / logNorm, 0.0, stream);
+            }
+            break;
+        case CameraSettings::HistogramStretchLinear:
+        case CameraSettings::HistogramStretchCLAHE:
+        case CameraSettings::HistogramStretchOff:
+        default:
+            break;
+        }
+
+        cv::cuda::threshold(stretchedFloatGpu, stretchedFloatGpu, 0.0, 0.0, cv::THRESH_TOZERO, stream);
+        cv::cuda::threshold(stretchedFloatGpu, stretchedFloatGpu, 1.0, 1.0, cv::THRESH_TRUNC, stream);
+        stretchedFloatGpu.convertTo(bgrGpu, matTypeForDepthAndChannels(bgrGpu.depth(), bgrGpu.channels()), maxValue, 0.0, stream);
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
 
     if (!m_cudaHistogramStretchLookup
         || (m_cudaHistogramStretchMode != m_settings.m_histogramStretch)
@@ -1004,6 +1049,26 @@ void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu, cv::cud
 {
     PROFILER_START();
 
+    if (bgrGpu.depth() != CV_8U)
+    {
+        const double maxValue = maxValueForDepth(bgrGpu.depth());
+        cv::cuda::GpuMat bgrFloatGpu;
+        bgrGpu.convertTo(bgrFloatGpu, CV_32FC3, 1.0 / maxValue, 0.0, stream);
+
+        cv::cuda::GpuMat hsvGpu;
+        std::vector<cv::cuda::GpuMat> channels;
+        cv::cuda::cvtColor(bgrFloatGpu, hsvGpu, cv::COLOR_BGR2HSV, 0, stream);
+        cv::cuda::split(hsvGpu, channels, stream);
+        channels[1].convertTo(channels[1], CV_32F, m_settings.m_saturation, 0.0, stream);
+        cv::cuda::threshold(channels[1], channels[1], 1.0, 1.0, cv::THRESH_TRUNC, stream);
+        cv::cuda::threshold(channels[1], channels[1], 0.0, 0.0, cv::THRESH_TOZERO, stream);
+        cv::cuda::merge(channels, hsvGpu, stream);
+        cv::cuda::cvtColor(hsvGpu, bgrFloatGpu, cv::COLOR_HSV2BGR, 0, stream);
+        bgrFloatGpu.convertTo(bgrGpu, matTypeForDepthAndChannels(bgrGpu.depth(), bgrGpu.channels()), maxValue, 0.0, stream);
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
     cv::cuda::GpuMat hsvGpu;
     std::vector<cv::cuda::GpuMat> channels;
     cv::cuda::cvtColor(bgrGpu, hsvGpu, cv::COLOR_BGR2HSV, 0, stream);
@@ -1018,6 +1083,18 @@ void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu, cv::cud
 void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
+
+    if (bgrGpu.depth() != CV_8U)
+    {
+        const double maxValue = maxValueForDepth(bgrGpu.depth());
+        cv::cuda::GpuMat gammaFloatGpu;
+        bgrGpu.convertTo(gammaFloatGpu, CV_32FC3, 1.0 / maxValue, 0.0, stream);
+        cv::cuda::pow(gammaFloatGpu, m_settings.m_gamma, gammaFloatGpu, stream);
+        gammaFloatGpu.convertTo(bgrGpu, matTypeForDepthAndChannels(bgrGpu.depth(), bgrGpu.channels()), maxValue, 0.0, stream);
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
     if (!m_cudaGammaLookup || (m_cudaGamma != m_settings.m_gamma))
     {
         cv::Mat lut(1, 256, CV_8U);
@@ -1143,6 +1220,15 @@ void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
 
     cv::cuda::GpuMat grayGpu;
     cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY, 0, stream);
+    const int outputDepth = bgrGpu.depth();
+    const double outputMaxValue = maxValueForDepth(outputDepth);
+
+    if (grayGpu.depth() != CV_8U)
+    {
+        cv::cuda::GpuMat gray8uGpu;
+        grayGpu.convertTo(gray8uGpu, CV_8U, 255.0 / maxValueForDepth(grayGpu.depth()), 0.0, stream);
+        grayGpu = gray8uGpu;
+    }
 
     cv::cuda::GpuMat gradX;
     cv::cuda::GpuMat gradY;
@@ -1169,6 +1255,13 @@ void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
 
     cv::cuda::GpuMat edgesBgr;
     cv::cuda::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR, 0, stream);
+    if (edgesBgr.depth() != outputDepth)
+    {
+        cv::cuda::GpuMat convertedEdgesBgr;
+        edgesBgr.convertTo(convertedEdgesBgr, matTypeForDepthAndChannels(outputDepth, edgesBgr.channels()), outputMaxValue / 255.0, 0.0, stream);
+        edgesBgr = convertedEdgesBgr;
+    }
+
     if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
         bgrGpu = edgesBgr;
     } else {
@@ -1184,6 +1277,15 @@ void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
 
     cv::cuda::GpuMat grayGpu;
     cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY, 0, stream);
+    const int outputDepth = bgrGpu.depth();
+    const double outputMaxValue = maxValueForDepth(outputDepth);
+
+    if (grayGpu.depth() != CV_8U)
+    {
+        cv::cuda::GpuMat gray8uGpu;
+        grayGpu.convertTo(gray8uGpu, CV_8U, 255.0 / maxValueForDepth(grayGpu.depth()), 0.0, stream);
+        grayGpu = gray8uGpu;
+    }
 
     if (!m_cudaCannyDetector) {
         m_cudaCannyDetector = cv::cuda::createCannyEdgeDetector(50.0, 150.0);
@@ -1193,6 +1295,13 @@ void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
 
     cv::cuda::GpuMat edgesBgr;
     cv::cuda::cvtColor(edgesGray, edgesBgr, cv::COLOR_GRAY2BGR, 0, stream);
+    if (edgesBgr.depth() != outputDepth)
+    {
+        cv::cuda::GpuMat convertedEdgesBgr;
+        edgesBgr.convertTo(convertedEdgesBgr, matTypeForDepthAndChannels(outputDepth, edgesBgr.channels()), outputMaxValue / 255.0, 0.0, stream);
+        edgesBgr = convertedEdgesBgr;
+    }
+
     if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
         bgrGpu = edgesBgr;
     } else {

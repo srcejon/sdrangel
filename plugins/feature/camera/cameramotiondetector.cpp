@@ -145,27 +145,22 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    if (!frame->ensureCpuImageFromCuda()) {
-        return;
-    }
-
-    QImage convertedRgb;
-    const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
-    cv::Mat mat = wrapRgb888Image(rgb);
-    cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-    const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
+    const QSize frameSize = frame->imageSize();
+    const cv::Size frameCvSize(frameSize.width(), frameSize.height());
+    const cv::Rect detectionRoi = resolveDetectionRoi(frameCvSize);
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     const cv::cuda::GpuMat* cachedBgrGpu = frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr;
 #else
     const cv::cuda::GpuMat* cachedBgrGpu = nullptr;
 #endif
 
+    cv::Mat bgrMat;
     cv::Mat motionDebugMask;
     bool useCPUMotionDetection = true;
 
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
-    if (canUseCudaMotionDetection()
+    if (cachedBgrGpu
+        && canUseCudaMotionDetection()
         && applyMotionDetectionCuda(
             bgrMat,
             cachedBgrGpu,
@@ -178,6 +173,14 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 #endif
     if (useCPUMotionDetection)
     {
+        if (!frame->ensureCpuImageFromCuda()) {
+            return;
+        }
+
+        QImage convertedRgb;
+        const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
+        cv::Mat mat = wrapRgb888Image(rgb);
+        cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
         applyMotionDetection(
             bgrMat,
             cachedBgrGpu,
@@ -188,7 +191,7 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 
     if (!motionDebugMask.empty())
     {
-        cv::Mat maskCanvas = cv::Mat::zeros(bgrMat.size(), CV_8UC1);
+        cv::Mat maskCanvas = cv::Mat::zeros(frameCvSize, CV_8UC1);
         cv::Mat roiMask = motionDebugMask;
         if (motionDebugMask.size() != detectionRoi.size()) {
             cv::resize(motionDebugMask, roiMask, detectionRoi.size(), 0.0, 0.0, cv::INTER_NEAREST);
@@ -609,4 +612,3 @@ void CameraMotionDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv:
     motionBoxes = boxes;
     PROFILER_STOP(__FUNCTION__);
 }
-

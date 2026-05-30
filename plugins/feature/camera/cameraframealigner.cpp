@@ -255,8 +255,12 @@ void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
         if (!frame->ensureCpuImageFromCuda()) {
             return;
         }
-        frame->m_image = applyAlignment(*frame);
-        frame->clearCudaCache();
+        const QImage alignedImage = applyAlignment(*frame);
+        if (!alignedImage.isNull())
+        {
+            frame->m_image = alignedImage;
+            frame->clearCudaCache();
+        }
     }
 
     if (m_nextStage) {
@@ -307,7 +311,13 @@ QImage CameraFrameAligner::applyAlignment(CameraPipelineFrame& frame)
         m_alignmentReference = cv::Mat();
     }
 
-    cv::Mat alignedFrameMat = alignFrame(frameMat, frame);
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    const bool preferCudaWarp = m_settings.m_postProcessUseCuda && frame.hasCudaBgrImage();
+#else
+    const bool preferCudaWarp = false;
+#endif
+    cv::Mat appliedTransform;
+    cv::Mat alignedFrameMat = alignFrame(frameMat, frame, &appliedTransform, preferCudaWarp);
 
     // Anchor the reference once on the first frame after a reset. Use the *input*
     // (unaligned) frame so subsequent warps don't compound. We keep this reference for
@@ -316,11 +326,38 @@ QImage CameraFrameAligner::applyAlignment(CameraPipelineFrame& frame)
         m_alignmentReference = frameMat.clone();
     }
 
-    return workingMatToImage(alignedFrameMat, highBitDepthInput);
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    if (m_settings.m_postProcessUseCuda
+        && frame.hasCudaBgrImage()
+        && !appliedTransform.empty())
+    {
+        cv::cuda::GpuMat alignedGpu;
+        if (warpFrameAffineCuda(frame.m_cudaBgrImage, appliedTransform, alignedGpu))
+        {
+            frame.m_cudaBgrImage = alignedGpu;
+            frame.m_cudaGrayImage.release();
+            frame.clearCpuImage();
+            PROFILER_STOP(__FUNCTION__);
+            return QImage();
+        }
+    }
+#endif
+
+    if (preferCudaWarp && !appliedTransform.empty()) {
+        alignedFrameMat = warpFrameAffine(frameMat, appliedTransform);
+    }
+
+    QImage outputImage = workingMatToImage(alignedFrameMat, highBitDepthInput);
+    PROFILER_STOP(__FUNCTION__);
+    return outputImage;
 }
 
-cv::Mat CameraFrameAligner::alignFrame(const cv::Mat& frameMat, CameraPipelineFrame& frame)
+cv::Mat CameraFrameAligner::alignFrame(const cv::Mat& frameMat, CameraPipelineFrame& frame, cv::Mat *appliedTransform, bool deferWarp)
 {
+    if (appliedTransform) {
+        appliedTransform->release();
+    }
+
     if (m_alignmentReference.empty()) {
         return frameMat.clone();
     }
@@ -333,9 +370,9 @@ cv::Mat CameraFrameAligner::alignFrame(const cv::Mat& frameMat, CameraPipelineFr
     switch (m_settings.m_stackAlignmentMethod)
     {
     case CameraSettings::StackAlignmentPhaseCorrelation:
-        return alignWithPhaseCorrelation(referenceFrame, frameMat, frame);
+        return alignWithPhaseCorrelation(referenceFrame, frameMat, frame, appliedTransform, deferWarp);
     case CameraSettings::StackAlignmentStarCentroidMatching:
-        return alignWithStarCentroids(referenceFrame, frameMat, frame);
+        return alignWithStarCentroids(referenceFrame, frameMat, frame, appliedTransform, deferWarp);
     case CameraSettings::StackAlignmentNone:
     default:
         return frameMat.clone();
@@ -367,6 +404,39 @@ cv::Mat CameraFrameAligner::frameToAlignmentGray(const cv::Mat& frameMat) const
 
     return gray8;
 }
+
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+bool CameraFrameAligner::warpFrameAffineCuda(const cv::cuda::GpuMat& inputGpu, const cv::Mat& transform, cv::cuda::GpuMat& outputGpu)
+{
+    if (inputGpu.empty() || transform.empty()) {
+        return false;
+    }
+
+    static bool warnedNoDevice = false;
+    if (cv::cuda::getCudaEnabledDeviceCount() <= 0)
+    {
+        if (!warnedNoDevice)
+        {
+            qWarning() << "CameraFrameAligner: CUDA alignment requested, but no CUDA-enabled OpenCV device is available";
+            warnedNoDevice = true;
+        }
+        return false;
+    }
+
+    try
+    {
+        cv::cuda::warpAffine(inputGpu, outputGpu, transform, inputGpu.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(), m_cudaAlignmentStream);
+        m_cudaAlignmentStream.waitForCompletion();
+        return true;
+    }
+    catch (const cv::Exception& error)
+    {
+        qWarning() << "CameraFrameAligner: CUDA affine warp failed; falling back to CPU:" << error.what();
+    }
+
+    return false;
+}
+#endif
 
 cv::Mat CameraFrameAligner::warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform)
 {
@@ -410,7 +480,7 @@ cv::Mat CameraFrameAligner::warpFrameAffine(const cv::Mat& frameMat, const cv::M
     return aligned;
 }
 
-cv::Mat CameraFrameAligner::alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame)
+cv::Mat CameraFrameAligner::alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame, cv::Mat *appliedTransform, bool deferWarp)
 {
     const cv::Mat referenceGray = frameToAlignmentGray(referenceFrame);
     const cv::Mat targetGray = frameToAlignmentGray(targetFrame);
@@ -449,6 +519,12 @@ cv::Mat CameraFrameAligner::alignWithPhaseCorrelation(const cv::Mat& referenceFr
     }
 
     cv::Mat transform = (cv::Mat_<double>(2, 3) << 1.0, 0.0, shift.x, 0.0, 1.0, shift.y);
+    if (appliedTransform) {
+        *appliedTransform = transform.clone();
+    }
+    if (deferWarp) {
+        return targetFrame.clone();
+    }
     return warpFrameAffine(targetFrame, transform);
 }
 
@@ -521,7 +597,7 @@ std::vector<cv::Point2f> CameraFrameAligner::detectStarCentroids(const cv::Mat& 
     return stars;
 }
 
-cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame)
+cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame, cv::Mat *appliedTransform, bool deferWarp)
 {
     const cv::Mat referenceGray = frameToAlignmentGray(referenceFrame);
     const cv::Mat targetGray = frameToAlignmentGray(targetFrame);
@@ -529,7 +605,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     const std::vector<cv::Point2f> referenceStars = detectStarCentroids(referenceGray);
     const std::vector<cv::Point2f> targetStars = detectStarCentroids(targetGray);
     if (referenceStars.size() < 2 || targetStars.size() < 2) {
-        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame);
+        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
 
     cv::Mat referenceFloat;
@@ -578,7 +654,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     }
 
     if (matchedTargetPoints.size() < 2) {
-        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame);
+        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
     frame.m_stack.m_alignmentMatchedStars = static_cast<int>(matchedTargetPoints.size());
 
@@ -587,7 +663,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
         matchedTargetPoints, matchedReferencePoints, inliers, cv::RANSAC, 3.0);
 
     if (transform.empty()) {
-        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame);
+        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
 
     const double shiftPixels = std::hypot(transform.at<double>(0, 2), transform.at<double>(1, 2));
@@ -618,5 +694,11 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
         return targetFrame.clone();
     }
 
+    if (appliedTransform) {
+        *appliedTransform = transform.clone();
+    }
+    if (deferWarp) {
+        return targetFrame.clone();
+    }
     return warpFrameAffine(targetFrame, transform);
 }

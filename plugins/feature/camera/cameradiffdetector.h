@@ -62,7 +62,7 @@ private:
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     [[nodiscard]] bool canUseCudaDetection() const;
-    bool applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame);
+    bool applyDiffMaskCuda(CameraPipelineFrame& frame, const cv::Rect& roi, CameraPipelineFrame& diffReferenceFrame);
     [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaDiffOpenFilter(int inputType, int kernelSize);
     [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaDiffDilationFilter(int inputType, int kernelSize);
     [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaDiffCloseFilter(int inputType, int kernelSize);

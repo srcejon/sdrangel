@@ -125,7 +125,7 @@ private:
     [[nodiscard]] bool canUseCudaStacking() const;
     void subtractFromCudaAccumulator(const cv::Mat& frameMat);
     bool rebuildCudaAverageAccumulator();
-    [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* frameGpu, QImage& outputImage);
+    [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* frameGpu, cv::cuda::GpuMat& outputRgbGpu);
 #endif
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);

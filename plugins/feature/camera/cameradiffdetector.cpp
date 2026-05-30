@@ -106,30 +106,32 @@ void CameraDiffDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         && m_lastInputFrame.hasImageData()
         && (m_lastInputFrame.imageSize() == frame->imageSize()))
     {
-        if (!frame->ensureCpuImageFromCuda()) {
-            return;
-        }
-        m_lastInputFrame.ensureCpuImageFromCuda();
-
-        QImage convertedRgb;
-        const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
-        cv::Mat mat = wrapRgb888Image(rgb);
-        cv::Mat bgrMat;
-        cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-        const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
+        const QSize frameSize = frame->imageSize();
+        const cv::Rect detectionRoi = resolveDetectionRoi(cv::Size(frameSize.width(), frameSize.height()));
         bool useCPUDiffMask = true;
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-        if (canUseCudaDetection() && applyDiffMaskCuda(bgrMat, frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr, detectionRoi, m_lastInputFrame)){
+        if (canUseCudaDetection() && applyDiffMaskCuda(*frame, detectionRoi, m_lastInputFrame)) {
             useCPUDiffMask = false;
         }
 #endif
-        if (useCPUDiffMask) {
-            applyDiffMask(*frame, bgrMat, detectionRoi, m_lastInputFrame);
-        }
+        if (useCPUDiffMask)
+        {
+            if (!frame->ensureCpuImageFromCuda()) {
+                return;
+            }
+            m_lastInputFrame.ensureCpuImageFromCuda();
 
-        frame->m_image = convertBgrToRgbImage(bgrMat);
-        frame->clearCudaCache();
+            QImage convertedRgb;
+            const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
+            cv::Mat mat = wrapRgb888Image(rgb);
+            cv::Mat bgrMat;
+            cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+            applyDiffMask(*frame, bgrMat, detectionRoi, m_lastInputFrame);
+
+            frame->m_image = convertBgrToRgbImage(bgrMat);
+            frame->clearCudaCache();
+        }
     }
 
     m_lastInputFrame = inputFrameSnapshot;
@@ -211,7 +213,7 @@ void CameraDiffDetector::applyDiffMask(CameraPipelineFrame& frame, cv::Mat& bgrM
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-bool CameraDiffDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const CameraPipelineFrame& diffReferenceFrame)
+bool CameraDiffDetector::applyDiffMaskCuda(CameraPipelineFrame& frame, const cv::Rect& roi, CameraPipelineFrame& diffReferenceFrame)
 {
     PROFILER_START();
     try
@@ -221,13 +223,18 @@ bool CameraDiffDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuM
         cv::cuda::GpuMat grayGpu;
         cv::cuda::GpuMat prevGrayGpu;
 
-        if (sourceBgrGpu
-            && !sourceBgrGpu->empty()
-            && (sourceBgrGpu->size() == bgrMat.size())
-            && (sourceBgrGpu->type() == bgrMat.type())) {
-            bgrGpu = *sourceBgrGpu;
-        } else {
+        if (frame.hasCudaBgrImage()) {
+            bgrGpu = frame.m_cudaBgrImage;
+        } else if (!frame.m_image.isNull()) {
+            QImage convertedRgb;
+            const QImage& rgb = ensureRgb888(frame.m_image, convertedRgb);
+            cv::Mat mat = wrapRgb888Image(rgb);
+            cv::Mat bgrMat;
+            cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
             bgrGpu.upload(bgrMat, m_cudaDetectionStream);
+        } else {
+            PROFILER_STOP(__FUNCTION__);
+            return false;
         }
 
         if (diffReferenceFrame.hasCudaBgrImage()
@@ -241,6 +248,11 @@ bool CameraDiffDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuM
         }
         else
         {
+            if (!diffReferenceFrame.ensureCpuImageFromCuda())
+            {
+                PROFILER_STOP(__FUNCTION__);
+                return false;
+            }
             QImage convertedPrevRgb;
             const QImage& prevRgb = ensureRgb888(diffReferenceFrame.m_image, convertedPrevRgb);
             cv::Mat prevMat = wrapRgb888Image(prevRgb);
@@ -309,8 +321,10 @@ bool CameraDiffDetector::applyDiffMaskCuda(cv::Mat& bgrMat, const cv::cuda::GpuM
 
         cv::cuda::GpuMat resultGpu;
         cv::cuda::bitwise_and(bgrGpu, bgrGpu, resultGpu, fullMaskGpu, m_cudaDetectionStream);
-        resultGpu.download(bgrMat, m_cudaDetectionStream);
+        resultGpu.copyTo(frame.m_cudaBgrImage, m_cudaDetectionStream);
+        frame.m_cudaGrayImage.release();
         m_cudaDetectionStream.waitForCompletion();
+        frame.clearCpuImage();
         PROFILER_STOP(__FUNCTION__);
         return true;
     }

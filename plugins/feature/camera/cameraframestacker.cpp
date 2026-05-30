@@ -190,7 +190,7 @@ bool CameraFrameStacker::rebuildCudaAverageAccumulator()
     return true;
 }
 
-bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* sourceFrameGpu, QImage& outputImage)
+bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* sourceFrameGpu, cv::cuda::GpuMat& outputRgbGpu)
 {
     try
     {
@@ -223,11 +223,8 @@ bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const
         const int outputType = (frameMat.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
         m_cudaStackAccumulator.convertTo(averagedGpu, CV_32FC3, 1.0 / static_cast<double>(m_stackFrameHistory.size()), 0.0, m_cudaStackingStream);
         averagedGpu.convertTo(averagedOutputGpu, outputType, 1.0, 0.0, m_cudaStackingStream);
-
-        cv::Mat averagedOutput;
-        averagedOutputGpu.download(averagedOutput, m_cudaStackingStream);
+        averagedOutputGpu.copyTo(outputRgbGpu, m_cudaStackingStream);
         m_cudaStackingStream.waitForCompletion();
-        outputImage = workingMatToImage(averagedOutput);
         return true;
     }
     catch (const cv::Exception& error)
@@ -787,9 +784,16 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     frame->m_stack.m_rejectedCount = m_rejectedFrameCount;
-    frame->m_image = stackedImage;
+    if (!stackedImage.isNull())
+    {
+        frame->m_image = stackedImage;
+        frame->clearCudaCache();
+    }
+    else if (!frame->hasCudaBgrImage() && !frame->hasCudaGrayImage())
+    {
+        return;
+    }
     frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
-    frame->clearCudaCache();
     frame->m_stack.m_count = std::max(1, stackCount);
     m_lastFrameTemplate.reset(new CameraPipelineFrame(*frame));
 
@@ -1363,12 +1367,31 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
     if (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
     {
 #ifdef CAMERA_OPENCV_CUDA_STACKING
-        if (useCudaStacking && applyAverageStackingCuda(alignedFrameMat, cudaFrameMat.empty() ? nullptr : &cudaFrameMat, outputImage))
+        cv::cuda::GpuMat averagedRgbGpu;
+        if (useCudaStacking && applyAverageStackingCuda(alignedFrameMat, cudaFrameMat.empty() ? nullptr : &cudaFrameMat, averagedRgbGpu))
         {
-            QImage displayImage;
-            m_lastStackedImage = outputImage;
-            if (renderStackDisplayImage(outputImage, displayImage)) {
-                outputImage = displayImage;
+            if (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked)
+            {
+                cv::cuda::cvtColor(averagedRgbGpu, inputFrame.m_cudaBgrImage, cv::COLOR_RGB2BGR, 0, m_cudaStackingStream);
+                inputFrame.m_cudaGrayImage.release();
+                inputFrame.clearCpuImage();
+                m_cudaStackingStream.waitForCompletion();
+                m_lastStackedImage = QImage();
+                outputImage = QImage();
+            }
+            else
+            {
+                cv::Mat averagedOutput;
+                averagedRgbGpu.download(averagedOutput, m_cudaStackingStream);
+                m_cudaStackingStream.waitForCompletion();
+                const QImage stackedImage = workingMatToImage(averagedOutput);
+                QImage displayImage;
+                m_lastStackedImage = stackedImage;
+                if (renderStackDisplayImage(stackedImage, displayImage)) {
+                    outputImage = displayImage;
+                } else {
+                    outputImage = stackedImage;
+                }
             }
             stackCount = static_cast<int>(m_stackFrameHistory.size());
             PROFILER_STOP(__FUNCTION__);

@@ -235,15 +235,15 @@ void CameraFinder::finalizeCameraList(int requestId)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     // Have file sources as the last entries
     m_currentCameras.append({
-        QStringLiteral("file"),
+        QStringLiteral("video"),
         m_settings.m_videoFileCameraPath,
         m_settings.m_videoFileCameraPath.isEmpty() ? QString() : QFileInfo(m_settings.m_videoFileCameraPath).fileName(),
         {},
         0
         });
     m_currentCameras.append({
-        QStringLiteral("files"),
-        QStringLiteral("files"),
+        QStringLiteral("images"),
+        QStringLiteral("images"),
         m_settings.m_imageFileCameraPaths.isEmpty()
             ? QString()
             : QStringLiteral("%1 image%2")

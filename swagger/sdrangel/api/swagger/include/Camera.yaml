@@ -6,7 +6,7 @@ CameraSettings:
     rgbColor:
       type: integer
     cameraProtocol:
-      description: "Camera protocol identifier (e.g. 'ALPACA', 'QT', 'file:')"
+      description: "Camera protocol identifier (e.g. 'ALPACA', 'QT', 'video:')"
       type: string
     cameraId:
       description: "Camera device identifier"
@@ -190,7 +190,7 @@ CameraSettings:
       description: "File path for file-based camera video source"
       type: string
     imageFileCameraPaths:
-      description: "Ordered image file list for files: image sequence camera source"
+      description: "Ordered image file list for images: image sequence camera source"
       type: array
       items:
         type: string

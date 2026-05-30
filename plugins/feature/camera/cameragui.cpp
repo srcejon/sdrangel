@@ -137,11 +137,11 @@ std::array<QDoubleSpinBox*, 4> hdrExposureSpins(Ui::CameraSettingsDialog *ui)
 
 QString fileCameraDisplayText(const QString& protocol, const QString& description)
 {
-    if (protocol == QLatin1String("file")) {
-        return description.isEmpty() ? QStringLiteral("file:") : QStringLiteral("file:%1").arg(description);
+    if (protocol == QLatin1String("video")) {
+        return description.isEmpty() ? QStringLiteral("video:") : QStringLiteral("video:%1").arg(description);
     }
-    if (protocol == QLatin1String("files")) {
-        return description.isEmpty() ? QStringLiteral("files:") : QStringLiteral("files:%1").arg(description);
+    if (protocol == QLatin1String("images")) {
+        return description.isEmpty() ? QStringLiteral("images:") : QStringLiteral("images:%1").arg(description);
     }
     return QString();
 }
@@ -306,7 +306,7 @@ bool CameraGUI::handleMessage(const Message& message)
 
             const QString displayKey = camera.m_protocol.isEmpty()
                 ? camera.m_id
-                : ((camera.m_protocol == QLatin1String("file")) || (camera.m_protocol == QLatin1String("files"))
+                : ((camera.m_protocol == QLatin1String("video")) || (camera.m_protocol == QLatin1String("images"))
                     ? fileCameraDisplayText(camera.m_protocol, camera.m_description)
                     : QString("%1:%2").arg(camera.m_protocol, camera.m_description));
             displayCounts[displayKey] = displayCounts.value(displayKey) + 1;
@@ -318,7 +318,7 @@ bool CameraGUI::handleMessage(const Message& message)
         {
             QString displayText = entry.m_protocol.isEmpty()
                 ? entry.m_id
-                : ((entry.m_protocol == QLatin1String("file")) || (entry.m_protocol == QLatin1String("files"))
+                : ((entry.m_protocol == QLatin1String("video")) || (entry.m_protocol == QLatin1String("images"))
                     ? fileCameraDisplayText(entry.m_protocol, entry.m_description)
                     : QString("%1:%2").arg(entry.m_protocol, entry.m_description));
 
@@ -1001,11 +1001,11 @@ void CameraGUI::setSelectedCamera(const QString& protocol, const QString& camera
     m_settings.m_cameraId = cameraId;
     m_settings.m_cameraDescription = description;
 
-    if (protocol == QLatin1String("file")) {
+    if (protocol == QLatin1String("video")) {
         m_settings.m_videoFileCameraPath = cameraId;
     }
-    else if (protocol == QLatin1String("files")) {
-        m_settings.m_cameraId = QStringLiteral("files");
+    else if (protocol == QLatin1String("images")) {
+        m_settings.m_cameraId = QStringLiteral("images");
     }
 
     if (protocol == QLatin1String("alpaca")) {
@@ -1072,10 +1072,10 @@ QStringList CameraGUI::cameraSelectionSettingsKeys(const CameraInfo& cameraInfo)
 {
     QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
 
-    if (cameraInfo.m_protocol == QLatin1String("file")) {
+    if (cameraInfo.m_protocol == QLatin1String("video")) {
         settingsKeys.append("videoFileCameraPath");
     }
-    else if (cameraInfo.m_protocol == QLatin1String("files")) {
+    else if (cameraInfo.m_protocol == QLatin1String("images")) {
         settingsKeys.append("imageFileCameraPaths");
     }
 
@@ -1179,7 +1179,7 @@ bool CameraGUI::chooseVideoFileCameraFile(int comboIndex, const QString& previou
     const QString description = QFileInfo(filePath).fileName();
     ui->cameraCombo->setItemData(comboIndex, filePath, CameraIdRole);
     ui->cameraCombo->setItemData(comboIndex, description, CameraDescriptionRole);
-    ui->cameraCombo->setItemText(comboIndex, QStringLiteral("file:%1").arg(description));
+    ui->cameraCombo->setItemText(comboIndex, QStringLiteral("video:%1").arg(description));
     return true;
 }
 
@@ -1208,9 +1208,9 @@ bool CameraGUI::chooseImageFileSequenceFiles(int comboIndex, const QString& prev
     const QString description = fileCount == 0
         ? QString()
         : tr("%1 image%2").arg(fileCount).arg(fileCount == 1 ? QString() : QStringLiteral("s"));
-    ui->cameraCombo->setItemData(comboIndex, QStringLiteral("files"), CameraIdRole);
+    ui->cameraCombo->setItemData(comboIndex, QStringLiteral("images"), CameraIdRole);
     ui->cameraCombo->setItemData(comboIndex, description, CameraDescriptionRole);
-    ui->cameraCombo->setItemText(comboIndex, fileCameraDisplayText(QStringLiteral("files"), description));
+    ui->cameraCombo->setItemText(comboIndex, fileCameraDisplayText(QStringLiteral("images"), description));
     return true;
 }
 
@@ -4689,7 +4689,7 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     const bool wasAlpaca = previousCamera.m_protocol == QLatin1String("alpaca");
     const bool wasAsi = previousCamera.m_protocol == QLatin1String("asi");
 
-    if ((selectedCamera.m_protocol == QLatin1String("file")) && selectedCamera.m_id.isEmpty())
+    if ((selectedCamera.m_protocol == QLatin1String("video")) && selectedCamera.m_id.isEmpty())
     {
         if (!chooseVideoFileCameraFile(index,
                 previousCamera.m_protocol,
@@ -4702,9 +4702,9 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
 
         selectedCamera = comboCameraInfo(index);
     }
-    else if (selectedCamera.m_protocol == QLatin1String("files"))
+    else if (selectedCamera.m_protocol == QLatin1String("images"))
     {
-        if ((previousCamera.m_protocol != QLatin1String("files")) && m_settings.m_imageFileCameraPaths.isEmpty()
+        if ((previousCamera.m_protocol != QLatin1String("images")) && m_settings.m_imageFileCameraPaths.isEmpty()
             && !chooseImageFileSequenceFiles(index,
                     previousCamera.m_protocol,
                     previousCamera.m_id,

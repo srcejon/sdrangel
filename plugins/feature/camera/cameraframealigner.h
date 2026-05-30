@@ -66,7 +66,7 @@ private:
     // when the frame geometry changes.
     cv::Mat m_alignmentReference;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
-    mutable cv::cuda::Stream m_cudaAlignmentStream;
+    cv::cuda::Stream m_cudaAlignmentStream;
 #endif
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
@@ -82,10 +82,10 @@ private:
     [[nodiscard]] QImage applyAlignment(CameraPipelineFrame& frame);
     [[nodiscard]] static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     [[nodiscard]] static QImage workingMatToImage(const cv::Mat& frameMat, bool highBitDepthInput);
-    [[nodiscard]] cv::Mat alignFrame(const cv::Mat& frameMat, CameraPipelineFrame& frame) const;
-    [[nodiscard]] cv::Mat alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame) const;
-    [[nodiscard]] cv::Mat alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame) const;
-    [[nodiscard]] cv::Mat warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform) const;
+    [[nodiscard]] cv::Mat alignFrame(const cv::Mat& frameMat, CameraPipelineFrame& frame);
+    [[nodiscard]] cv::Mat alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame);
+    [[nodiscard]] cv::Mat alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame);
+    [[nodiscard]] cv::Mat warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform);
     [[nodiscard]] cv::Mat frameToAlignmentGray(const cv::Mat& frameMat) const;
     [[nodiscard]] std::vector<cv::Point2f> detectStarCentroids(const cv::Mat& grayFrame) const;
 

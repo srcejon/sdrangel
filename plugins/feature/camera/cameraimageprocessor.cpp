@@ -901,7 +901,7 @@ void CameraImageProcessor::applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::c
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
@@ -989,7 +989,7 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, c
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyGreyscaleCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applyGreyscaleCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
@@ -1000,7 +1000,7 @@ void CameraImageProcessor::applyGreyscaleCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
@@ -1015,7 +1015,7 @@ void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu, cv::cud
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
     if (!m_cudaGammaLookup || (m_cudaGamma != m_settings.m_gamma))
@@ -1037,7 +1037,7 @@ void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::St
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
@@ -1058,7 +1058,7 @@ void CameraImageProcessor::applyGaussianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::c
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
@@ -1086,14 +1086,14 @@ void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::cud
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::invalidateMedianBlurCudaFilter() const
+void CameraImageProcessor::invalidateMedianBlurCudaFilter()
 {
     m_cudaMedianBlurFilter.release();
     m_cudaMedianBlurKernelSize = 0;
     m_cudaMedianBlurChannelType = -1;
 }
 
-void CameraImageProcessor::invalidateCudaProcessingCaches() const
+void CameraImageProcessor::invalidateCudaProcessingCaches()
 {
     m_cudaUnwarpMapX.release();
     m_cudaUnwarpMapY.release();
@@ -1120,7 +1120,7 @@ void CameraImageProcessor::invalidateCudaProcessingCaches() const
     m_cudaCannyDetector.release();
 }
 
-void CameraImageProcessor::applySharpenCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applySharpenCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
@@ -1137,7 +1137,7 @@ void CameraImageProcessor::applySharpenCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
@@ -1178,7 +1178,7 @@ void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 
@@ -1202,7 +1202,7 @@ void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraImageProcessor::applyRotationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream) const
+void CameraImageProcessor::applyRotationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
 

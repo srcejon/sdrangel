@@ -218,7 +218,7 @@ cv::Mat CameraDetectionStage::buildExclusionMask(const cv::Rect& roi, const cv::
     return mask;
 }
 
-const cv::Mat& CameraDetectionStage::cachedExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
+const cv::Mat& CameraDetectionStage::cachedExclusionMask(const cv::Rect& roi, const cv::Size& workSize)
 {
     if (m_exclusionMask.empty()
         || (m_exclusionMaskRoi != roi)

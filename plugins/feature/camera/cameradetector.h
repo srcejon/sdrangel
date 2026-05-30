@@ -62,17 +62,17 @@ protected:
     void forwardFrame(const CameraPipelineFramePtr& frame);
     [[nodiscard]] cv::Rect resolveDetectionRoi(const cv::Size& frameSize) const;
     [[nodiscard]] cv::Mat buildExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
-    [[nodiscard]] const cv::Mat& cachedExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const;
+    [[nodiscard]] const cv::Mat& cachedExclusionMask(const cv::Rect& roi, const cv::Size& workSize);
     [[nodiscard]] bool intersectsExclusionRects(const QRect& rect) const;
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);
 
 private:
-    mutable cv::Mat m_exclusionMask;
-    mutable cv::Rect m_exclusionMaskRoi;
-    mutable cv::Size m_exclusionMaskWorkSize;
-    mutable QVector<QRect> m_exclusionMaskRects;
+    cv::Mat m_exclusionMask;
+    cv::Rect m_exclusionMaskRoi;
+    cv::Size m_exclusionMaskWorkSize;
+    QVector<QRect> m_exclusionMaskRects;
 
     bool handleMessage(const Message& cmd);
 

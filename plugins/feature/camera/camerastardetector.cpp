@@ -345,7 +345,7 @@ bool CameraStarDetector::canUseCudaDetection() const
     return true;
 }
 
-cv::Ptr<cv::cuda::Filter> CameraStarDetector::cudaStarSmallBlurFilter(int inputType) const
+cv::Ptr<cv::cuda::Filter> CameraStarDetector::cudaStarSmallBlurFilter(int inputType)
 {
     if (!m_cudaStarSmallBlurFilter || (m_cudaStarSmallBlurFilterType != inputType))
     {
@@ -357,7 +357,7 @@ cv::Ptr<cv::cuda::Filter> CameraStarDetector::cudaStarSmallBlurFilter(int inputT
     return m_cudaStarSmallBlurFilter;
 }
 
-cv::Ptr<cv::cuda::Filter> CameraStarDetector::cudaStarBackgroundBlurFilter(int inputType, int kernelSize) const
+cv::Ptr<cv::cuda::Filter> CameraStarDetector::cudaStarBackgroundBlurFilter(int inputType, int kernelSize)
 {
     if (!m_cudaStarBackgroundBlurFilter
         || (m_cudaStarBackgroundBlurFilterType != inputType)
@@ -372,7 +372,7 @@ cv::Ptr<cv::cuda::Filter> CameraStarDetector::cudaStarBackgroundBlurFilter(int i
     return m_cudaStarBackgroundBlurFilter;
 }
 
-const cv::cuda::GpuMat& CameraStarDetector::cudaStarExclusionMask(const cv::Rect& roi, const cv::Size& workSize) const
+const cv::cuda::GpuMat& CameraStarDetector::cudaStarExclusionMask(const cv::Rect& roi, const cv::Size& workSize)
 {
     if (m_cudaStarExclusionMask.empty()
         || (m_cudaStarExclusionRoi != roi)
@@ -534,7 +534,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     forwardFrame(frame);
 }
 
-void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask) const
+void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -603,7 +603,7 @@ void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv:
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask) const
+bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -680,7 +680,7 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
 }
 #endif
 
-void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask) const
+void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask)
 {
     PROFILER_START();
 

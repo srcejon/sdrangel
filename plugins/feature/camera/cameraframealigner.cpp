@@ -319,7 +319,7 @@ QImage CameraFrameAligner::applyAlignment(CameraPipelineFrame& frame)
     return workingMatToImage(alignedFrameMat, highBitDepthInput);
 }
 
-cv::Mat CameraFrameAligner::alignFrame(const cv::Mat& frameMat, CameraPipelineFrame& frame) const
+cv::Mat CameraFrameAligner::alignFrame(const cv::Mat& frameMat, CameraPipelineFrame& frame)
 {
     if (m_alignmentReference.empty()) {
         return frameMat.clone();
@@ -368,7 +368,7 @@ cv::Mat CameraFrameAligner::frameToAlignmentGray(const cv::Mat& frameMat) const
     return gray8;
 }
 
-cv::Mat CameraFrameAligner::warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform) const
+cv::Mat CameraFrameAligner::warpFrameAffine(const cv::Mat& frameMat, const cv::Mat& transform)
 {
     if (transform.empty()) {
         return frameMat.clone();
@@ -410,7 +410,7 @@ cv::Mat CameraFrameAligner::warpFrameAffine(const cv::Mat& frameMat, const cv::M
     return aligned;
 }
 
-cv::Mat CameraFrameAligner::alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame) const
+cv::Mat CameraFrameAligner::alignWithPhaseCorrelation(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame)
 {
     const cv::Mat referenceGray = frameToAlignmentGray(referenceFrame);
     const cv::Mat targetGray = frameToAlignmentGray(targetFrame);
@@ -521,7 +521,7 @@ std::vector<cv::Point2f> CameraFrameAligner::detectStarCentroids(const cv::Mat& 
     return stars;
 }
 
-cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame) const
+cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame, const cv::Mat& targetFrame, CameraPipelineFrame& frame)
 {
     const cv::Mat referenceGray = frameToAlignmentGray(referenceFrame);
     const cv::Mat targetGray = frameToAlignmentGray(targetFrame);

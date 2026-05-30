@@ -724,6 +724,10 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
     starDetections.clear();
     starDetections.reserve(static_cast<qsizetype>(contours.size()));
 
+    const bool hasGray = !gray.empty();
+    const bool is16Bit = (residual.depth() == CV_16U);
+    const double saturationThreshold = is16Bit ? 64000.0 : (hasGray ? 250.0 : 200.0);
+
     for (const std::vector<cv::Point>& contour : contours)
     {
         const double area = cv::contourArea(contour);
@@ -747,7 +751,16 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
 
         const double perimeter = std::max(1.0, cv::arcLength(contour, true));
         const double roundness = std::clamp((4.0 * CV_PI * area) / (perimeter * perimeter), 0.0, 1.0);
-        if (roundness < 0.2) {
+        bool saturatedContourCandidate = false;
+        if ((roundness < 0.2) && hasGray && (area >= 6.0))
+        {
+            double grayPeakInBox = 0.0;
+            cv::minMaxLoc(gray(box), nullptr, &grayPeakInBox);
+            saturatedContourCandidate = grayPeakInBox >= saturationThreshold;
+        }
+        if ((roundness < 0.2)
+            && !(saturatedContourCandidate && (roundness >= 0.12)))
+        {
             continue;
         }
 
@@ -758,7 +771,6 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
         const cv::Mat residualRoi = residual(box);
         // gray is empty when the CUDA preprocessing path skipped the download to save a
         // full-frame GPU→CPU transfer.  CPU paths always populate it.
-        const bool hasGray = !gray.empty();
         const cv::Mat grayRoi = hasGray ? gray(box) : cv::Mat();
         double totalWeight = 0.0;
         double weightedX = 0.0;
@@ -770,7 +782,6 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
 
         // Branch on depth so 16-bit inputs preserve per-pixel precision in the weighted
         // centroid (faint stars benefit substantially from the extra bits).
-        const bool is16Bit = (residual.depth() == CV_16U);
         for (int row = 0; row < box.height; ++row)
         {
             const uchar* maskRow = contourMask.ptr<uchar>(row);
@@ -837,8 +848,7 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
         // 8-bit pixel (gray ≈ 255) typically yields residual ≈ 225–240 against dark
         // sky.  A proxy threshold of 200 gives comfortable headroom below that level.
         if (!hasGray) { grayPeak = peakValue; }
-        const double saturationThreshold = is16Bit ? 64000.0 : (hasGray ? 250.0 : 200.0);
-        const bool saturated = grayPeak >= saturationThreshold;
+        const bool saturated = saturatedContourCandidate || (grayPeak >= saturationThreshold);
 
         const double qualityScore = peakValue
             * std::max(0.25, roundness)

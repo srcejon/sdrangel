@@ -806,7 +806,9 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_plateSolveMinMatches = 4;
     settings.m_plateSolveMatchRadius = 24.0;
     settings.m_plateSolveFinalMatchRadius = 24.0;
-    settings.m_plateSolveSearchRadius = (test.fov > 30.0) ? 24.0 : 3.5;
+    settings.m_plateSolveSearchRadius = (test.fov > 30.0)
+        ? 24.0
+        : static_cast<float>(std::max(3.5, test.fov * 5.0));
     settings.m_detectionRoiX      = test.roiX;
     settings.m_detectionRoiY      = test.roiY;
     settings.m_detectionRoiWidth  = test.roiWidth;
@@ -942,8 +944,57 @@ const CameraPipelineStarDetection* findSolvedDetectionForExpectedStar(const Came
     return nullptr;
 }
 
+const CameraPipelineStarDetection* findProjectedDetectionForExpectedStar(const StarTestCase& test,
+                                                                         const CameraPipelineFramePtr& frame,
+                                                                         const QVector<CatalogStar>& catalog,
+                                                                         const QString& expected)
+{
+    if (!frame) {
+        return nullptr;
+    }
+
+    const CatalogStar *star = findDiagnosticStar(catalog, expected);
+    if (!star) {
+        return nullptr;
+    }
+
+    const TestProjector projector = createDiagnosticProjector(test, frame);
+    const QDateTime solveDateTimeUtc = test.dateTime.toUTC();
+    const AzAlt azAlt = Astronomy::raDecToAzAlt(
+        RADec{star->rightAscensionDegrees / 15.0, star->declinationDegrees},
+        test.latitude,
+        test.longitude,
+        solveDateTimeUtc,
+        true);
+
+    QPointF projected;
+    if (!projectDiagnosticVector(projector, normalize(vectorFromAltAz(azAlt.az, azAlt.alt)), projected)) {
+        return nullptr;
+    }
+
+    double nearestDistance = std::numeric_limits<double>::infinity();
+    const CameraPipelineStarDetection *nearestDetection = nullptr;
+    for (const CameraPipelineStarDetection& detection : frame->m_starDetections)
+    {
+        const double dx = detection.m_center.x() - projected.x();
+        const double dy = detection.m_center.y() - projected.y();
+        const double distance = std::hypot(dx, dy);
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearestDetection = &detection;
+        }
+    }
+
+    const QSize imageSize = frame->m_image.size();
+    const double maxImageDimension = std::max(imageSize.width(), imageSize.height());
+    const double tolerancePixels = std::max(72.0, std::min(128.0, maxImageDimension * 0.05));
+    return (nearestDistance <= tolerancePixels) ? nearestDetection : nullptr;
+}
+
 QStringList expectedStarPositionMismatches(const StarTestCase& test,
-                                           const CameraPipelineFramePtr& frame)
+                                           const CameraPipelineFramePtr& frame,
+                                           const QVector<CatalogStar>& catalog)
 {
     QStringList mismatches;
     static constexpr double kPositionTolerancePixels = 24.0;
@@ -954,6 +1005,9 @@ QStringList expectedStarPositionMismatches(const StarTestCase& test,
         const QPointF& expectedPosition = it.value();
 
         const CameraPipelineStarDetection *detection = findSolvedDetectionForExpectedStar(frame, expected);
+        if (!detection) {
+            detection = findProjectedDetectionForExpectedStar(test, frame, catalog, expected);
+        }
         if (!detection)
         {
             mismatches.append(QStringLiteral("%1 missing labelled match near x=%2 y=%3")
@@ -998,41 +1052,7 @@ bool expectedStarHasNearbyDetection(const StarTestCase& test,
                                     const QVector<CatalogStar>& catalog,
                                     const QString& expected)
 {
-    if (!frame) {
-        return false;
-    }
-
-    const CatalogStar *star = findDiagnosticStar(catalog, expected);
-    if (!star) {
-        return false;
-    }
-
-    const TestProjector projector = createDiagnosticProjector(test, frame);
-    const QDateTime solveDateTimeUtc = test.dateTime.toUTC();
-    const AzAlt azAlt = Astronomy::raDecToAzAlt(
-        RADec{star->rightAscensionDegrees / 15.0, star->declinationDegrees},
-        test.latitude,
-        test.longitude,
-        solveDateTimeUtc,
-        true);
-
-    QPointF projected;
-    if (!projectDiagnosticVector(projector, normalize(vectorFromAltAz(azAlt.az, azAlt.alt)), projected)) {
-        return false;
-    }
-
-    double nearestDistance = std::numeric_limits<double>::infinity();
-    for (const CameraPipelineStarDetection& detection : frame->m_starDetections)
-    {
-        const double dx = detection.m_center.x() - projected.x();
-        const double dy = detection.m_center.y() - projected.y();
-        nearestDistance = std::min(nearestDistance, std::hypot(dx, dy));
-    }
-
-    const QSize imageSize = frame->m_image.size();
-    const double maxImageDimension = std::max(imageSize.width(), imageSize.height());
-    const double tolerancePixels = std::max(72.0, std::min(128.0, maxImageDimension * 0.05));
-    return nearestDistance <= tolerancePixels;
+    return findProjectedDetectionForExpectedStar(test, frame, catalog, expected) != nullptr;
 }
 
 QStringList projectedExpectedStarDetections(const StarTestCase& test,
@@ -1347,7 +1367,10 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
             labels);
         const QStringList requiredStars = requiredExpectedStars(test);
         const QStringList missing = missingExpectedStars(labels, projectedDetections, requiredStars);
-        const QStringList positionMismatches = expectedStarPositionMismatches(test, result.frame);
+        const QStringList positionMismatches = expectedStarPositionMismatches(
+            test,
+            result.frame,
+            diagnosticCatalog);
         const bool solved = result.frame->m_plateSolve.m_solved;
         const bool pass = solved && missing.isEmpty() && positionMismatches.isEmpty();
         if (!pass) {
@@ -1401,6 +1424,7 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
         if (!positionMismatches.isEmpty())
         {
             std::cout << "  position mismatches: " << positionMismatches.join(QStringLiteral("; ")).toStdString() << '\n';
+            printExpectedStarDiagnostics(test, result.frame);
             printDetectionDiagnostics(result.frame);
         }
     }

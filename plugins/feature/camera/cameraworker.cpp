@@ -37,7 +37,6 @@
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
 
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgConfigureCameraWorker, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartAutoFocus, Message)
@@ -757,10 +756,10 @@ double CameraWorker::measureAutoFocusScore(const QImage& image) const
 
 bool CameraWorker::handleMessage(const Message& cmd)
 {
-    if (MsgConfigureCameraWorker::match(cmd))
+    if (Camera::MsgConfigureCamera::match(cmd))
     {
         QMutexLocker locker(&m_mutex);
-        MsgConfigureCameraWorker& cfg = (MsgConfigureCameraWorker&) cmd;
+        const Camera::MsgConfigureCamera& cfg = (const Camera::MsgConfigureCamera&) cmd;
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
         return true;
     }

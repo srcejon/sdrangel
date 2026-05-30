@@ -31,6 +31,7 @@
 #endif
 
 #include "util/profiler.h"
+#include "camera.h"
 #include "cameradetector.h"
 #include "cameraimageutils.h"
 #include "cameraimageprocessor.h"
@@ -75,9 +76,6 @@ void convertBgrTo8Bit(cv::Mat& bgrMat)
 
 }
 
-MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgConfigureCameraImageProcessor, Message)
-MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgProcessFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraImageProcessor::MsgCaptureActive, Message)
 
 CameraImageProcessor::CameraImageProcessor() :
     m_nextStage(nullptr),
@@ -121,21 +119,21 @@ void CameraImageProcessor::stopWork()
 
 bool CameraImageProcessor::handleMessage(const Message& cmd)
 {
-    if (MsgConfigureCameraImageProcessor::match(cmd))
+    if (Camera::MsgConfigureCamera::match(cmd))
     {
-        const MsgConfigureCameraImageProcessor& cfg = (const MsgConfigureCameraImageProcessor&) cmd;
+        const Camera::MsgConfigureCamera& cfg = (const Camera::MsgConfigureCamera&) cmd;
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
         return true;
     }
-    else if (MsgProcessFrame::match(cmd))
+    else if (Camera::MsgProcessFrame::match(cmd))
     {
-        const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
+        const Camera::MsgProcessFrame& frameMsg = (const Camera::MsgProcessFrame&) cmd;
         submitFrame(frameMsg.getFrame());
         return true;
     }
-    else if (MsgCaptureActive::match(cmd))
+    else if (Camera::MsgCaptureActive::match(cmd))
     {
-        const MsgCaptureActive& activeMsg = (const MsgCaptureActive&) cmd;
+        const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         m_captureActive = activeMsg.isActive();
         if (m_captureActive)
         {

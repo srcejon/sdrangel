@@ -56,32 +56,6 @@ class CameraWorker : public QObject
 {
     Q_OBJECT
 public:
-    class MsgConfigureCameraWorker : public Message {
-MESSAGE_CLASS_DECLARATION
-
-    public:
-        const CameraSettings& getSettings() const { return m_settings; }
-        const QList<QString>& getSettingsKeys() const { return m_settingsKeys; }
-        bool getForce() const { return m_force; }
-
-        static MsgConfigureCameraWorker* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
-        {
-            return new MsgConfigureCameraWorker(settings, settingsKeys, force);
-        }
-
-    private:
-        CameraSettings m_settings;
-        QList<QString> m_settingsKeys;
-        bool m_force;
-
-        MsgConfigureCameraWorker(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
-            Message(),
-            m_settings(settings),
-            m_settingsKeys(settingsKeys),
-            m_force(force)
-        { }
-    };
-
     class MsgReportAlpacaFilterWheelInfo : public Message {
         MESSAGE_CLASS_DECLARATION
 

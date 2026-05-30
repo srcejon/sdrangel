@@ -30,13 +30,11 @@
 
 #include "util/fits.h"
 #include "util/profiler.h"
+#include "camera.h"
 #include "cameraframealigner.h"
 #include "cameraframepreprocessor.h"
 #include "cameraimageutils.h"
 
-MESSAGE_CLASS_DEFINITION(CameraFramePreprocessor::MsgConfigureCameraFramePreprocessor, Message)
-MESSAGE_CLASS_DEFINITION(CameraFramePreprocessor::MsgProcessFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraFramePreprocessor::MsgCaptureActive, Message)
 
 CameraFramePreprocessor::CameraFramePreprocessor() :
     m_nextStage(nullptr),
@@ -61,21 +59,21 @@ void CameraFramePreprocessor::stopWork()
 
 bool CameraFramePreprocessor::handleMessage(const Message& cmd)
 {
-    if (MsgConfigureCameraFramePreprocessor::match(cmd))
+    if (Camera::MsgConfigureCamera::match(cmd))
     {
-        const MsgConfigureCameraFramePreprocessor& cfg = (const MsgConfigureCameraFramePreprocessor&) cmd;
+        const Camera::MsgConfigureCamera& cfg = (const Camera::MsgConfigureCamera&) cmd;
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
         return true;
     }
-    else if (MsgProcessFrame::match(cmd))
+    else if (Camera::MsgProcessFrame::match(cmd))
     {
-        const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
+        const Camera::MsgProcessFrame& frameMsg = (const Camera::MsgProcessFrame&) cmd;
         submitFrame(frameMsg.getFrame());
         return true;
     }
-    else if (MsgCaptureActive::match(cmd))
+    else if (Camera::MsgCaptureActive::match(cmd))
     {
-        const MsgCaptureActive& activeMsg = (const MsgCaptureActive&) cmd;
+        const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         m_captureActive = activeMsg.isActive();
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrames.clear();

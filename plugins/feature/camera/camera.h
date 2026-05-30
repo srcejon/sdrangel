@@ -96,23 +96,43 @@ public:
         { }
     };
 
-    class MsgProcessCurrentFrame : public Message {
+    class MsgProcessFrame : public Message {
         MESSAGE_CLASS_DECLARATION
 
     public:
         const CameraPipelineFramePtr& getFrame() const { return m_frame; }
 
-        static MsgProcessCurrentFrame* create(const CameraPipelineFramePtr& frame)
+        static MsgProcessFrame* create(const CameraPipelineFramePtr& frame)
         {
-            return new MsgProcessCurrentFrame(frame);
+            return new MsgProcessFrame(frame);
         }
 
     private:
         CameraPipelineFramePtr m_frame;
 
-        MsgProcessCurrentFrame(const CameraPipelineFramePtr& frame) :
+        MsgProcessFrame(const CameraPipelineFramePtr& frame) :
             Message(),
             m_frame(frame)
+        { }
+    };
+
+    class MsgCaptureActive : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool isActive() const { return m_active; }
+
+        static MsgCaptureActive* create(bool active)
+        {
+            return new MsgCaptureActive(active);
+        }
+
+    private:
+        bool m_active;
+
+        MsgCaptureActive(bool active) :
+            Message(),
+            m_active(active)
         { }
     };
 

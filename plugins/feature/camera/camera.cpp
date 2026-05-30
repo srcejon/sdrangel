@@ -38,7 +38,8 @@
 
 MESSAGE_CLASS_DEFINITION(Camera::MsgConfigureCamera, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgStartStop, Message)
-MESSAGE_CLASS_DEFINITION(Camera::MsgProcessCurrentFrame, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgProcessFrame, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgCaptureActive, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgReportError, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgDeleteStackFrame, Message)
@@ -85,7 +86,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_worker->setFramePreprocessor(getFramePreprocessor());
     m_worker->setPostProcessorInputMessageQueue(getPostProcessorInputMessageQueue());
     m_workerThread->start();
-    m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(m_settings, QList<QString>(), true));
+    m_worker->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_framePreprocessor->moveToThread(m_framePreprocessorThread);
     QObject::connect(m_framePreprocessorThread, &QThread::started, m_framePreprocessor, &CameraFramePreprocessor::startWork);
@@ -93,7 +94,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_framePreprocessorThread, &QThread::finished, m_framePreprocessorThread, &QThread::deleteLater);
     m_framePreprocessor->setNextStage(m_frameAligner);
     m_framePreprocessorThread->start();
-    m_framePreprocessor->getInputMessageQueue()->push(CameraFramePreprocessor::MsgConfigureCameraFramePreprocessor::create(m_settings, QList<QString>(), true));
+    m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_frameAligner->moveToThread(m_frameAlignerThread);
     QObject::connect(m_frameAlignerThread, &QThread::started, m_frameAligner, &CameraFrameAligner::startWork);
@@ -101,7 +102,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_frameAlignerThread, &QThread::finished, m_frameAlignerThread, &QThread::deleteLater);
     m_frameAligner->setNextStage(m_frameStacker);
     m_frameAlignerThread->start();
-    m_frameAligner->getInputMessageQueue()->push(CameraFrameAligner::MsgConfigureCameraFrameAligner::create(m_settings, QList<QString>(), true));
+    m_frameAligner->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_frameStacker->moveToThread(m_frameStackerThread);
     QObject::connect(m_frameStackerThread, &QThread::started, m_frameStacker, &CameraFrameStacker::startWork);
@@ -109,7 +110,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_frameStackerThread, &QThread::finished, m_frameStackerThread, &QThread::deleteLater);
     m_frameStacker->setNextStage(m_imageProcessor);
     m_frameStackerThread->start();
-    m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgConfigureCameraFrameStacker::create(m_settings, QList<QString>(), true));
+    m_frameStacker->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_imageProcessor->moveToThread(m_imageProcessorThread);
     QObject::connect(m_imageProcessorThread, &QThread::started, m_imageProcessor, &CameraImageProcessor::startWork);
@@ -117,7 +118,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_imageProcessorThread, &QThread::finished, m_imageProcessorThread, &QThread::deleteLater);
     m_imageProcessor->setNextStage(m_motionDetector);
     m_imageProcessorThread->start();
-    m_imageProcessor->getInputMessageQueue()->push(CameraImageProcessor::MsgConfigureCameraImageProcessor::create(m_settings, QList<QString>(), true));
+    m_imageProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_motionDetector->moveToThread(m_motionDetectorThread);
     QObject::connect(m_motionDetectorThread, &QThread::started, m_motionDetector, &CameraMotionDetector::startWork);
@@ -125,7 +126,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_motionDetectorThread, &QThread::finished, m_motionDetectorThread, &QThread::deleteLater);
     m_motionDetector->setNextStage(m_starDetector);
     m_motionDetectorThread->start();
-    m_motionDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(m_settings, QList<QString>(), true));
+    m_motionDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_starDetector->moveToThread(m_starDetectorThread);
     QObject::connect(m_starDetectorThread, &QThread::started, m_starDetector, &CameraStarDetector::startWork);
@@ -134,7 +135,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_starDetector->setNextStage(m_objectDetector);
     m_starDetector->setMessageQueueToGUI(getMessageQueueToGUI());
     m_starDetectorThread->start();
-    m_starDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(m_settings, QList<QString>(), true));
+    m_starDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_objectDetector->moveToThread(m_objectDetectorThread);
     QObject::connect(m_objectDetectorThread, &QThread::started, m_objectDetector, &CameraObjectDetector::startWork);
@@ -145,7 +146,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_objectDetector->setMessageQueueToGUI(getMessageQueueToGUI());
     m_objectDetector->setMessageQueueToFeature(getInputMessageQueue());
     m_objectDetectorThread->start();
-    m_objectDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(m_settings, QList<QString>(), true));
+    m_objectDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_diffDetector->moveToThread(m_diffDetectorThread);
     QObject::connect(m_diffDetectorThread, &QThread::started, m_diffDetector, &CameraDiffDetector::startWork);
@@ -153,7 +154,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_diffDetectorThread, &QThread::finished, m_diffDetectorThread, &QThread::deleteLater);
     m_diffDetector->setNextStageInputMessageQueue(getPostProcessorInputMessageQueue());
     m_diffDetectorThread->start();
-    m_diffDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(m_settings, QList<QString>(), true));
+    m_diffDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_recorder->moveToThread(m_recorderThread);
     QObject::connect(m_recorderThread, &QThread::started, m_recorder, &CameraRecorder::startWork);
@@ -162,7 +163,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_recorder->setMessageQueueToGUI(getMessageQueueToGUI());
     m_recorder->setMessageQueueToFeature(getInputMessageQueue());
     m_recorderThread->start();
-    m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgConfigureCameraRecorder::create(m_settings, QList<QString>(), true));
+    m_recorder->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     // The post-processor runs continously, to be able to update the image when post processing settings are changed.
     m_postProcessor->moveToThread(m_postProcessorThread);
@@ -172,7 +173,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_postProcessor->setMessageQueueToGUI(getMessageQueueToGUI());
     m_postProcessor->setNextStageInputMessageQueue(getRecorderInputMessageQueue());
     m_postProcessorThread->start();
-    m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgConfigureCameraPostProcessor::create(m_settings, QList<QString>(), true));
+    m_postProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 }
 
 Camera::~Camera()
@@ -281,34 +282,34 @@ void Camera::start()
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
     }
     if (m_framePreprocessor) {
-        m_framePreprocessor->getInputMessageQueue()->push(CameraFramePreprocessor::MsgCaptureActive::create(true));
+        m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_frameAligner) {
-        m_frameAligner->getInputMessageQueue()->push(CameraFrameAligner::MsgCaptureActive::create(true));
+        m_frameAligner->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_frameStacker) {
-        m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgCaptureActive::create(true));
+        m_frameStacker->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_imageProcessor) {
-        m_imageProcessor->getInputMessageQueue()->push(CameraImageProcessor::MsgCaptureActive::create(true));
+        m_imageProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_motionDetector) {
-        m_motionDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(true));
+        m_motionDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_starDetector) {
-        m_starDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(true));
+        m_starDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_objectDetector) {
-        m_objectDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(true));
+        m_objectDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_diffDetector) {
-        m_diffDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(true));
+        m_diffDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_recorder) {
-        m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgCaptureActive::create(true));
+        m_recorder->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_postProcessor) {
-        m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(true));
+        m_postProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
     }
     if (m_guiMessageQueue) {
         m_guiMessageQueue->push(Camera::MsgStartStop::create(true));
@@ -328,34 +329,34 @@ void Camera::stop()
         m_guiMessageQueue->push(Camera::MsgStartStop::create(false));
     }
     if (m_postProcessor) {
-        m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgCaptureActive::create(false));
+        m_postProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_recorder) {
-        m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgCaptureActive::create(false));
+        m_recorder->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_diffDetector) {
-        m_diffDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(false));
+        m_diffDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_objectDetector) {
-        m_objectDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(false));
+        m_objectDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_starDetector) {
-        m_starDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(false));
+        m_starDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_motionDetector) {
-        m_motionDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgCaptureActive::create(false));
+        m_motionDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_imageProcessor) {
-        m_imageProcessor->getInputMessageQueue()->push(CameraImageProcessor::MsgCaptureActive::create(false));
+        m_imageProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_frameStacker) {
-        m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgCaptureActive::create(false));
+        m_frameStacker->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_frameAligner) {
-        m_frameAligner->getInputMessageQueue()->push(CameraFrameAligner::MsgCaptureActive::create(false));
+        m_frameAligner->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_framePreprocessor) {
-        m_framePreprocessor->getInputMessageQueue()->push(CameraFramePreprocessor::MsgCaptureActive::create(false));
+        m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
     }
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(false));
@@ -405,11 +406,11 @@ bool Camera::handleMessage(const Message& cmd)
 
         return true;
     }
-    else if (MsgProcessCurrentFrame::match(cmd))
+    else if (MsgProcessFrame::match(cmd))
     {
-        const MsgProcessCurrentFrame& msg = (const MsgProcessCurrentFrame&) cmd;
+        const MsgProcessFrame& msg = (const MsgProcessFrame&) cmd;
         if (m_starDetector && msg.getFrame()) {
-            m_starDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgProcessFrame::create(msg.getFrame()));
+            m_starDetector->getInputMessageQueue()->push(Camera::MsgProcessFrame::create(msg.getFrame()));
         }
         return true;
     }
@@ -476,37 +477,37 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
     }
 
     if (m_worker) {
-        m_worker->getInputMessageQueue()->push(CameraWorker::MsgConfigureCameraWorker::create(settings, settingsKeys, force));
+        m_worker->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_framePreprocessor) {
-        m_framePreprocessor->getInputMessageQueue()->push(CameraFramePreprocessor::MsgConfigureCameraFramePreprocessor::create(settings, settingsKeys, force));
+        m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_frameAligner) {
-        m_frameAligner->getInputMessageQueue()->push(CameraFrameAligner::MsgConfigureCameraFrameAligner::create(settings, settingsKeys, force));
+        m_frameAligner->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_frameStacker) {
-        m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgConfigureCameraFrameStacker::create(settings, settingsKeys, force));
+        m_frameStacker->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_imageProcessor) {
-        m_imageProcessor->getInputMessageQueue()->push(CameraImageProcessor::MsgConfigureCameraImageProcessor::create(settings, settingsKeys, force));
+        m_imageProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_motionDetector) {
-        m_motionDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(settings, settingsKeys, force));
+        m_motionDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_starDetector) {
-        m_starDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(settings, settingsKeys, force));
+        m_starDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_objectDetector) {
-        m_objectDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(settings, settingsKeys, force));
+        m_objectDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_diffDetector) {
-        m_diffDetector->getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(settings, settingsKeys, force));
+        m_diffDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_recorder) {
-        m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgConfigureCameraRecorder::create(settings, settingsKeys, force));
+        m_recorder->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_postProcessor) {
-        m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgConfigureCameraPostProcessor::create(settings, settingsKeys, force));
+        m_postProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
 
     if (force) {

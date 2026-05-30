@@ -22,12 +22,10 @@
 #include <QDebug>
 
 #include "util/profiler.h"
+#include "camera.h"
 #include "cameradetector.h"
 #include "cameraimageutils.h"
 
-MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgConfigureCameraDetectionStage, Message)
-MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgProcessFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraDetectionStage::MsgCaptureActive, Message)
 CameraDetectionStage::CameraDetectionStage() :
     m_nextStageQueue(nullptr),
     m_processingFrame(false)
@@ -49,21 +47,21 @@ void CameraDetectionStage::stopWork()
 
 bool CameraDetectionStage::handleMessage(const Message& cmd)
 {
-    if (MsgConfigureCameraDetectionStage::match(cmd))
+    if (Camera::MsgConfigureCamera::match(cmd))
     {
-        const MsgConfigureCameraDetectionStage& cfg = (const MsgConfigureCameraDetectionStage&) cmd;
+        const Camera::MsgConfigureCamera& cfg = (const Camera::MsgConfigureCamera&) cmd;
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
         return true;
     }
-    else if (MsgProcessFrame::match(cmd))
+    else if (Camera::MsgProcessFrame::match(cmd))
     {
-        const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
+        const Camera::MsgProcessFrame& frameMsg = (const Camera::MsgProcessFrame&) cmd;
         submitFrame(frameMsg.getFrame());
         return true;
     }
-    else if (MsgCaptureActive::match(cmd))
+    else if (Camera::MsgCaptureActive::match(cmd))
     {
-        const MsgCaptureActive& activeMsg = (const MsgCaptureActive&) cmd;
+        const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         const bool active = activeMsg.isActive();
         captureActiveChanged(active);
         QMutexLocker locker(&m_frameMutex);
@@ -112,7 +110,7 @@ void CameraDetectionStage::handleInputMessages()
 void CameraDetectionStage::forwardFrame(const CameraPipelineFramePtr& frame)
 {
     if (m_nextStageQueue) {
-        m_nextStageQueue->push(MsgProcessFrame::create(frame));
+        m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
 }
 

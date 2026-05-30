@@ -44,6 +44,10 @@ target_link_libraries(featurecamera_star_tests PRIVATE
     sdrbase
 )
 
+if(Qt${QT_DEFAULT_MAJOR_VERSION}TextToSpeech_FOUND)
+    target_link_libraries(featurecamera_star_tests PRIVATE Qt::TextToSpeech)
+endif()
+
 if(WIN32)
     get_target_property(camera_star_tests_qmake Qt::qmake IMPORTED_LOCATION)
     get_filename_component(camera_star_tests_qt_bin_dir "${camera_star_tests_qmake}" DIRECTORY)

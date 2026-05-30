@@ -42,71 +42,7 @@ class CameraFrameAligner : public QObject
 {
     Q_OBJECT
 public:
-    class MsgConfigureCameraFrameAligner : public Message {
-        MESSAGE_CLASS_DECLARATION
 
-    public:
-        const CameraSettings& getSettings() const { return m_settings; }
-        const QList<QString>& getSettingsKeys() const { return m_settingsKeys; }
-        bool getForce() const { return m_force; }
-
-        static MsgConfigureCameraFrameAligner* create(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
-        {
-            return new MsgConfigureCameraFrameAligner(settings, settingsKeys, force);
-        }
-
-    private:
-        CameraSettings m_settings;
-        QList<QString> m_settingsKeys;
-        bool m_force;
-
-        MsgConfigureCameraFrameAligner(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force) :
-            Message(),
-            m_settings(settings),
-            m_settingsKeys(settingsKeys),
-            m_force(force)
-        { }
-    };
-
-    class MsgProcessFrame : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const CameraPipelineFramePtr& getFrame() const { return m_frame; }
-
-        static MsgProcessFrame* create(const CameraPipelineFramePtr& frame)
-        {
-            return new MsgProcessFrame(frame);
-        }
-
-    private:
-        CameraPipelineFramePtr m_frame;
-
-        MsgProcessFrame(const CameraPipelineFramePtr& frame) :
-            Message(),
-            m_frame(frame)
-        { }
-    };
-
-    class MsgCaptureActive : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        bool isActive() const { return m_active; }
-
-        static MsgCaptureActive* create(bool active)
-        {
-            return new MsgCaptureActive(active);
-        }
-
-    private:
-        bool m_active;
-
-        MsgCaptureActive(bool active) :
-            Message(),
-            m_active(active)
-        { }
-    };
 
     CameraFrameAligner();
     ~CameraFrameAligner();

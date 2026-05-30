@@ -31,8 +31,13 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include "camera.h"
 #include "camerastardetector.h"
 #include "util/astronomy.h"
+
+MESSAGE_CLASS_DEFINITION(Camera::MsgConfigureCamera, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgProcessFrame, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgCaptureActive, Message)
 
 #ifndef CAMERA_STAR_TEST_DATA_DIR
 #define CAMERA_STAR_TEST_DATA_DIR "."
@@ -858,10 +863,10 @@ DetectorRunResult runDetector(const StarTestCase& test)
         Message *message = nullptr;
         while ((message = outputQueue.pop()) != nullptr)
         {
-            if (CameraDetectionStage::MsgProcessFrame::match(*message))
+            if (Camera::MsgProcessFrame::match(*message))
             {
-                const CameraDetectionStage::MsgProcessFrame& frameMessage =
-                    static_cast<const CameraDetectionStage::MsgProcessFrame&>(*message);
+                const Camera::MsgProcessFrame& frameMessage =
+                    static_cast<const Camera::MsgProcessFrame&>(*message);
                 result.frame = frameMessage.getFrame();
                 result.completed = true;
                 delete message;
@@ -879,7 +884,7 @@ DetectorRunResult runDetector(const StarTestCase& test)
 
     detector.setNextStageInputMessageQueue(&outputQueue);
     detector.startWork();
-    detector.getInputMessageQueue()->push(CameraDetectionStage::MsgConfigureCameraDetectionStage::create(
+    detector.getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(
         makeSettings(test),
         QList<QString>(),
         true));
@@ -888,7 +893,7 @@ DetectorRunResult runDetector(const StarTestCase& test)
     frame->m_image = image;
     frame->m_unprocessedImage = image;
     frame->m_captureDateTime = test.dateTime;
-    detector.getInputMessageQueue()->push(CameraDetectionStage::MsgProcessFrame::create(frame));
+    detector.getInputMessageQueue()->push(Camera::MsgProcessFrame::create(frame));
 
     timeout.start(120000);
     loop.exec();

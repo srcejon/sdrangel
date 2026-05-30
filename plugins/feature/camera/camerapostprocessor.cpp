@@ -31,14 +31,12 @@
 #include "util/profiler.h"
 #include "maincore.h"
 #include "cameraimageutils.h"
+#include "camera.h"
 #include "camerapostprocessor.h"
 #include "camerarecorder.h"
 
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgConfigureCameraPostProcessor, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgCaptureActive, Message)
 
 namespace {
 
@@ -568,15 +566,15 @@ void CameraPostProcessor::handlePipeMessageQueue(MessageQueue* messageQueue)
 
 bool CameraPostProcessor::handleMessage(const Message& cmd)
 {
-    if (MsgConfigureCameraPostProcessor::match(cmd))
+    if (Camera::MsgConfigureCamera::match(cmd))
     {
-        MsgConfigureCameraPostProcessor& cfg = (MsgConfigureCameraPostProcessor&) cmd;
+        const Camera::MsgConfigureCamera& cfg = (const Camera::MsgConfigureCamera&) cmd;
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
         return true;
     }
-    else if (MsgProcessFrame::match(cmd))
+    else if (Camera::MsgProcessFrame::match(cmd))
     {
-        MsgProcessFrame& frameMsg = (MsgProcessFrame&) cmd;
+        Camera::MsgProcessFrame& frameMsg = (Camera::MsgProcessFrame&) cmd;
         submitFrame(frameMsg.getFrame());
         return true;
     }
@@ -592,9 +590,9 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         updateTrackedMapObject(msgMapItem.getPipeSource(), msgMapItem.getSWGMapItem());
         return true;
     }
-    else if (MsgCaptureActive::match(cmd))
+    else if (Camera::MsgCaptureActive::match(cmd))
     {
-        MsgCaptureActive& activeMsg = (MsgCaptureActive&) cmd;
+        Camera::MsgCaptureActive& activeMsg = (Camera::MsgCaptureActive&) cmd;
 
         if (activeMsg.isActive())
         {
@@ -834,7 +832,7 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     reportFrameToGUI(processed, *frame);
 
     if (m_nextStageQueue) {
-        m_nextStageQueue->push(CameraRecorder::MsgProcessFrame::create(frame));
+        m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
 }
 

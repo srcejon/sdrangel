@@ -27,6 +27,7 @@
 #endif
 
 #include "util/profiler.h"
+#include "camera.h"
 #include "cameradiffdetector.h"
 #include "camerapostprocessor.h"
 
@@ -134,7 +135,7 @@ void CameraDiffDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     m_lastInputFrame = inputFrameSnapshot;
 
     if (m_nextStageQueue) {
-        m_nextStageQueue->push(CameraPostProcessor::MsgProcessFrame::create(frame));
+        m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
 }
 

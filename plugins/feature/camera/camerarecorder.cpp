@@ -32,10 +32,7 @@
 #include "camerarecorder.h"
 #include "util/fits.h"
 
-MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgConfigureCameraRecorder, Message)
-MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgSetVideoRecordingEnabled, Message)
-MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgCaptureActive, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportSaveVideoState, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportSaveImageState, Message)
 
@@ -192,15 +189,15 @@ void CameraRecorder::stopWork()
 
 bool CameraRecorder::handleMessage(const Message& cmd)
 {
-    if (MsgConfigureCameraRecorder::match(cmd))
+    if (Camera::MsgConfigureCamera::match(cmd))
     {
-        const MsgConfigureCameraRecorder& cfg = (const MsgConfigureCameraRecorder&) cmd;
+        const Camera::MsgConfigureCamera& cfg = (const Camera::MsgConfigureCamera&) cmd;
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
         return true;
     }
-    else if (MsgProcessFrame::match(cmd))
+    else if (Camera::MsgProcessFrame::match(cmd))
     {
-        const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
+        const Camera::MsgProcessFrame& frameMsg = (const Camera::MsgProcessFrame&) cmd;
         submitFrame(frameMsg.getFrame());
         return true;
     }
@@ -210,9 +207,9 @@ bool CameraRecorder::handleMessage(const Message& cmd)
         setVideoRecordingEnabled(videoMsg.getEnabled());
         return true;
     }
-    else if (MsgCaptureActive::match(cmd))
+    else if (Camera::MsgCaptureActive::match(cmd))
     {
-        const MsgCaptureActive& activeMsg = (const MsgCaptureActive&) cmd;
+        const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         m_captureActive = activeMsg.isActive();
         if (m_captureActive) {
             resetRecordingLimits();

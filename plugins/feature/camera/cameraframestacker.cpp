@@ -32,13 +32,11 @@
 #endif
 
 #include "util/profiler.h"
+#include "camera.h"
 #include "cameraframestacker.h"
 #include "cameraimageutils.h"
 #include "cameraimageprocessor.h"
 
-MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgConfigureCameraFrameStacker, Message)
-MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgProcessFrame, Message)
-MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgCaptureActive, Message)
 MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgDeleteStackFrame, Message)
 
 CameraFrameStacker::CameraFrameStacker() :
@@ -570,21 +568,21 @@ double CameraFrameStacker::medianQualityValue(const std::deque<StackFrameQuality
 
 bool CameraFrameStacker::handleMessage(const Message& cmd)
 {
-    if (MsgConfigureCameraFrameStacker::match(cmd))
+    if (Camera::MsgConfigureCamera::match(cmd))
     {
-        const MsgConfigureCameraFrameStacker& cfg = (const MsgConfigureCameraFrameStacker&) cmd;
+        const Camera::MsgConfigureCamera& cfg = (const Camera::MsgConfigureCamera&) cmd;
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
         return true;
     }
-    else if (MsgProcessFrame::match(cmd))
+    else if (Camera::MsgProcessFrame::match(cmd))
     {
-        const MsgProcessFrame& frameMsg = (const MsgProcessFrame&) cmd;
+        const Camera::MsgProcessFrame& frameMsg = (const Camera::MsgProcessFrame&) cmd;
         submitFrame(frameMsg.getFrame());
         return true;
     }
-    else if (MsgCaptureActive::match(cmd))
+    else if (Camera::MsgCaptureActive::match(cmd))
     {
-        const MsgCaptureActive& activeMsg = (const MsgCaptureActive&) cmd;
+        const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         m_captureActive = activeMsg.isActive();
         if (m_captureActive) {
             resetFrameHistoryState();

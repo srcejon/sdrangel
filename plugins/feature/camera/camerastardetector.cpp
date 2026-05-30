@@ -448,12 +448,18 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     cv::Mat bgrMat;
     cv::Rect detectionRoi;
     cv::Mat highBitDepthGray;
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
     const cv::cuda::GpuMat* cachedBgrGpu = nullptr;
+#endif
 
-    if (m_settings.m_starDetect)
+    auto materializeStarCpuInput = [&]() -> bool
     {
+        if (!bgrMat.empty()) {
+            return true;
+        }
+
         if (!frame->ensureCpuImageFromCuda()) {
-            return;
+            return false;
         }
 
         // Capture a 16-bit luminance Mat *before* the RGB888 conversion truncates the
@@ -466,9 +472,32 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         cv::Mat mat = wrapRgb888Image(rgb);
         cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
         detectionRoi = resolveDetectionRoi(bgrMat.size());
-#if defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
         cachedBgrGpu = frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr;
 #endif
+        return true;
+    };
+
+    if (m_settings.m_starDetect)
+    {
+        const QSize frameSize = frame->imageSize();
+        if (frameSize.isEmpty()) {
+            return;
+        }
+        detectionRoi = resolveDetectionRoi(cv::Size(frameSize.width(), frameSize.height()));
+
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+        const bool canUseGpuOnlyStarPreprocessing = frame->hasCudaBgrImage()
+            && (frame->m_cudaBgrImage.depth() == CV_8U)
+            && (m_settings.m_starDebugView == CameraSettings::StarDebugViewOff)
+            && canUseCudaDetection();
+        if (canUseGpuOnlyStarPreprocessing) {
+            cachedBgrGpu = &frame->m_cudaBgrImage;
+        } else
+#endif
+        if (!materializeStarCpuInput()) {
+            return;
+        }
     }
 
     if (m_settings.m_starDetect)
@@ -476,7 +505,9 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         cv::Mat starDebugMask;
         applyStarDetection(
             bgrMat,
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
             cachedBgrGpu,
+#endif
             detectionRoi,
             highBitDepthGray,
             frame->m_starDetections,
@@ -484,6 +515,10 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 
         if (!starDebugMask.empty())
         {
+            if (!materializeStarCpuInput()) {
+                return;
+            }
+
             cv::Mat maskCanvas = cv::Mat::zeros(bgrMat.size(), starDebugMask.type());
             cv::Mat roiMask = starDebugMask;
             if (starDebugMask.size() != detectionRoi.size()) {
@@ -503,9 +538,10 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     if (m_settings.m_plateSolve && !frame->m_starDetections.isEmpty())
     {
         reportPlateSolveStatus(true);
+        const QSize solveImageSize = frame->imageSize();
         const CameraPlateSolveResult plateSolveResult = m_plateSolver.solve(
             m_settings,
-            frame->m_image.size(),
+            solveImageSize,
             frame->m_captureDateTime,
             frame->m_starDetections);
         reportPlateSolveStatus(false);
@@ -534,7 +570,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     forwardFrame(frame);
 }
 
-void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask)
+void CameraStarDetector::applyStarPreprocessing(const cv::Mat& bgrMat, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -680,7 +716,15 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
 }
 #endif
 
-void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask)
+void CameraStarDetector::applyStarDetection(
+    const cv::Mat& bgrMat,
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+    const cv::cuda::GpuMat* sourceBgrGpu,
+#endif
+    const cv::Rect& roi,
+    const cv::Mat& highBitDepthGray,
+    QVector<CameraPipelineStarDetection>& starDetections,
+    cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -701,8 +745,15 @@ void CameraStarDetector::applyStarDetection(const cv::Mat& bgrMat, const cv::cud
         useCPUStarPreprocessing = false;
     }
 #endif
-    if (useCPUStarPreprocessing) {
-        applyStarPreprocessing(bgrMat, sourceBgrGpu, roi, highBitDepthGray, gray, residual, thresholdMask, residualNoiseSigma, debugMask);
+    if (useCPUStarPreprocessing)
+    {
+        if (bgrMat.empty())
+        {
+            qWarning() << "CameraStarDetector: CUDA star preprocessing failed and no CPU image is available";
+            PROFILER_STOP(__FUNCTION__);
+            return;
+        }
+        applyStarPreprocessing(bgrMat, roi, highBitDepthGray, gray, residual, thresholdMask, residualNoiseSigma, debugMask);
     }
 
     cv::Mat satelliteTrailMask;

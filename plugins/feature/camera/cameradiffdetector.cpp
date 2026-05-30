@@ -321,9 +321,9 @@ bool CameraDiffDetector::applyDiffMaskCuda(CameraPipelineFrame& frame, const cv:
 
         cv::cuda::GpuMat resultGpu;
         cv::cuda::bitwise_and(bgrGpu, bgrGpu, resultGpu, fullMaskGpu, m_cudaDetectionStream);
-        resultGpu.copyTo(frame.m_cudaBgrImage, m_cudaDetectionStream);
-        frame.m_cudaGrayImage.release();
         m_cudaDetectionStream.waitForCompletion();
+        frame.m_cudaBgrImage = resultGpu;
+        frame.m_cudaGrayImage.release();
         frame.clearCpuImage();
         PROFILER_STOP(__FUNCTION__);
         return true;

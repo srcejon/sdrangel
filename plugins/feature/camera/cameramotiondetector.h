@@ -71,7 +71,7 @@ private:
     [[nodiscard]] const cv::cuda::GpuMat& cudaMotionExclusionMask(const cv::Rect& roi, const cv::Size& workSize);
     bool applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
 #endif
-    void applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
+    void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
     void updateMotionEventState(bool motionDetected, const QDateTime& eventTime, const QString& eventData);
     void sendEvent(bool detected, const QDateTime& eventTime, const QString& eventData);
 };

@@ -150,8 +150,6 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     const cv::Rect detectionRoi = resolveDetectionRoi(frameCvSize);
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     const cv::cuda::GpuMat* cachedBgrGpu = frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr;
-#else
-    const cv::cuda::GpuMat* cachedBgrGpu = nullptr;
 #endif
 
     cv::Mat bgrMat;
@@ -183,7 +181,6 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
         applyMotionDetection(
             bgrMat,
-            cachedBgrGpu,
             detectionRoi,
             frame->m_motionBoxes,
             (m_settings.m_motionMaskView != CameraSettings::MotionMaskViewOff) ? &motionDebugMask : nullptr);
@@ -508,7 +505,7 @@ bool CameraMotionDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const
 }
 #endif
 
-void CameraMotionDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
+void CameraMotionDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
 {
     PROFILER_START();
 

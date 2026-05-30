@@ -91,8 +91,16 @@ private:
     // detector preserves 16-bit precision in the residual and centroid weighting; the
     // saturation cutoff is scaled accordingly. When empty the detector falls back to the
     // legacy 8-bit pipeline derived from bgrMat.
-    void applyStarDetection(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, QVector<CameraPipelineStarDetection>& starDetections, cv::Mat* debugMask = nullptr);
-    void applyStarPreprocessing(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask);
+    void applyStarDetection(
+        const cv::Mat& bgrMat,
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+        const cv::cuda::GpuMat* bgrGpu,
+#endif
+        const cv::Rect& roi,
+        const cv::Mat& highBitDepthGray,
+        QVector<CameraPipelineStarDetection>& starDetections,
+        cv::Mat* debugMask = nullptr);
+    void applyStarPreprocessing(const cv::Mat& bgrMat, const cv::Rect& roi, const cv::Mat& highBitDepthGray, cv::Mat& gray, cv::Mat& residual, cv::Mat& thresholdMask, double& residualNoiseSigma, cv::Mat* debugMask);
 };
 
 #endif // INCLUDE_FEATURE_CAMERASTARDETECTOR_H_

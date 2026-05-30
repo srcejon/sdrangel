@@ -615,15 +615,15 @@ bool CameraFramePreprocessor::preprocessFrameCuda(CameraPipelineFrame& frame, co
             cv::cuda::cvtColor(frameGpu, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
         }
 
-        bgrGpu.copyTo(frame.m_cudaBgrImage, m_cudaStream);
-        frame.m_cudaGrayImage.release();
-        frame.m_bayerPattern = CameraPipelineFrame::BayerNone;
         if (shouldMaterializeUnprocessedImage(frame)) {
-            frame.m_unprocessedImage = downloadCudaBgrImage(frame.m_cudaBgrImage, true);
+            frame.m_unprocessedImage = downloadCudaBgrImage(bgrGpu, true);
         } else {
             frame.m_unprocessedImage = QImage();
         }
         m_cudaStream.waitForCompletion();
+        frame.m_cudaBgrImage = bgrGpu;
+        frame.m_cudaGrayImage.release();
+        frame.m_bayerPattern = CameraPipelineFrame::BayerNone;
         frame.clearCpuImage();
         PROFILER_STOP(__FUNCTION__);
         return true;

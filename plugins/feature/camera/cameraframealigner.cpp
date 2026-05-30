@@ -444,37 +444,6 @@ cv::Mat CameraFrameAligner::warpFrameAffine(const cv::Mat& frameMat, const cv::M
         return frameMat.clone();
     }
 
-#ifdef CAMERA_OPENCV_CUDA_STACKING
-    if (m_settings.m_postProcessUseCuda)
-    {
-        static bool warnedNoDevice = false;
-        if (cv::cuda::getCudaEnabledDeviceCount() > 0)
-        {
-            try
-            {
-                cv::cuda::GpuMat frameGpu;
-                cv::cuda::GpuMat alignedGpu;
-                frameGpu.upload(frameMat, m_cudaAlignmentStream);
-                cv::cuda::warpAffine(frameGpu, alignedGpu, transform, frameMat.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(), m_cudaAlignmentStream);
-
-                cv::Mat aligned;
-                alignedGpu.download(aligned, m_cudaAlignmentStream);
-                m_cudaAlignmentStream.waitForCompletion();
-                return aligned;
-            }
-            catch (const cv::Exception& error)
-            {
-                qWarning() << "CameraFrameAligner: CUDA affine warp failed; falling back to CPU:" << error.what();
-            }
-        }
-        else if (!warnedNoDevice)
-        {
-            qWarning() << "CameraFrameAligner: CUDA alignment requested, but no CUDA-enabled OpenCV device is available";
-            warnedNoDevice = true;
-        }
-    }
-#endif
-
     cv::Mat aligned;
     cv::warpAffine(frameMat, aligned, transform, frameMat.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT);
     return aligned;

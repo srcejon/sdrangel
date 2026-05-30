@@ -758,8 +758,8 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
             cv::cuda::bitwise_not(bgrGpu, bgrGpu, cv::noArray(), m_cudaStream);
         }
 
-        bgrGpu.copyTo(frame.m_cudaBgrImage, m_cudaStream);
         m_cudaStream.waitForCompletion();
+        frame.m_cudaBgrImage = bgrGpu;
         frame.m_cudaGrayImage.release();
         frame.clearCpuImage();
         PROFILER_STOP("CameraImageProcessor::applyImageProcessingCuda");

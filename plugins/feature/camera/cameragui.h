@@ -29,8 +29,8 @@
 #include <QSize>
 #include <QTimer>
 #include <QToolButton>
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QMediaPlayer>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QVideoFrame>
 #else
 #include <QAbstractVideoSurface>
@@ -64,7 +64,6 @@ class QTableWidgetItem;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 class QCamera;
 class QImageCapture;
-class QMediaPlayer;
 class QVideoSink;
 class QMediaCaptureSession;
 #else
@@ -94,6 +93,12 @@ public:
 signals:
     void frameAvailable(const QImage& image);
 };
+#endif
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+using CameraMediaPlayerState = QMediaPlayer::PlaybackState;
+#else
+using CameraMediaPlayerState = QMediaPlayer::State;
 #endif
 
 class CameraGUI : public FeatureGUI {
@@ -243,20 +248,20 @@ private:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
     QImageCapture *m_imageCapture;
-    QMediaPlayer *m_mediaPlayer;
     QVideoSink *m_videoSink;
     QMediaCaptureSession *m_captureSession;
-    qint64 m_mediaPlayerDurationMs = 0;
     QVideoFrame m_pendingQtVideoFrame;
     bool m_processingQtVideoFrame = false;
-    QTimer m_imageSequenceTimer;
-    bool m_imageSequenceLoaded = false;
-    int m_imageSequenceIndex = 0;
 #else
     QCamera *m_qtCamera;
     QCameraImageCapture *m_imageCapture;
     CameraVideoSurface *m_videoSurface;
 #endif
+    QMediaPlayer *m_mediaPlayer;
+    qint64 m_mediaPlayerDurationMs = 0;
+    QTimer m_imageSequenceTimer;
+    bool m_imageSequenceLoaded = false;
+    int m_imageSequenceIndex = 0;
     QTimer m_qtStillCaptureTimer;
 
     explicit CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
@@ -304,9 +309,7 @@ private:
     void updateCameraStatusDisplay();
     void handleMediaPlayerPositionChanged(qint64 position);
     void handleMediaPlayerDurationChanged(qint64 duration);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    void handleMediaPlayerPlaybackStateChanged(QMediaPlayer::PlaybackState state);
-#endif
+    void handleMediaPlayerPlaybackStateChanged(CameraMediaPlayerState state);
     void updateCameraSubframeControls();
     void updateImageWidget();
     void updateCaptureModeControls();
@@ -335,7 +338,6 @@ private:
     static void updateColorButton(QToolButton* btn, const QColor& color);
     void setupQtCapture();
     void cleanupQtCapture();
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     int imageSequenceIntervalMs() const;
     qint64 imageSequenceDurationMs() const;
     void updatePlaybackPositionLabel(qint64 videoPositionMs = -1);
@@ -344,7 +346,6 @@ private:
     void advanceImageSequenceFrame();
     void updateImageSequencePositionSlider();
     bool prepareImageSequenceManualStep(bool *wasLoaded);
-#endif
     void reportFeatureError(const QString& errorKey, const QString& title, const QString& errorMessage);
     void applyQtCameraSettings(const QList<QString>& settingsKeys, bool force);
     void applyImageToolTip();

@@ -232,7 +232,6 @@ void CameraFinder::finalizeCameraList(int requestId)
         return;
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     // Have file sources as the last entries
     m_currentCameras.append({
         CameraProtocol::video(),
@@ -252,7 +251,6 @@ void CameraFinder::finalizeCameraList(int requestId)
         {},
         0
         });
-#endif
 
     m_msgQueueToGUI->push(CameraWorker::MsgReportCameraList::create(m_currentCameras));
     m_msgQueueToGUI->push(CameraWorker::MsgReportAlpacaDeviceList::create(m_currentFocusers, m_currentFilterWheels));

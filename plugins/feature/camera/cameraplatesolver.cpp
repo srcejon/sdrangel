@@ -20,7 +20,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <limits>
@@ -459,12 +461,36 @@ void copySearchStateFrom(const SolverContext& other)
     m_detectionBrightnessRankIndices.clear();
 }
 
-static int refinementWorkerThreadCount(int candidateCount)
+static qint64 boundedMultiply(qint64 lhs, qint64 rhs)
+{
+    if ((lhs <= 0) || (rhs <= 0)) {
+        return 0;
+    }
+
+    const qint64 maxValue = std::numeric_limits<qint64>::max();
+    if (lhs > (maxValue / rhs)) {
+        return maxValue;
+    }
+
+    return lhs * rhs;
+}
+
+static qint64 estimateRefinementWorkUnits(int candidateCount, int visibleStarCount, int detectionCount)
+{
+    const qint64 perCandidateWork = boundedMultiply(
+        std::max<qint64>(1, visibleStarCount),
+        std::max<qint64>(1, detectionCount));
+    return boundedMultiply(std::max<qint64>(0, candidateCount), perCandidateWork);
+}
+
+static int refinementWorkerThreadCount(int candidateCount, qint64 estimatedWorkUnits)
 {
     static constexpr int kMinParallelRefinementCandidates = 128;
     static constexpr int kRefinementCandidatesPerWorker = 32;
+    static constexpr qint64 kMinParallelRefinementWorkUnits = 300LL * 1000LL * 1000LL;
+    static constexpr qint64 kRefinementWorkUnitsPerWorker = 250LL * 1000LL * 1000LL;
 
-    if (candidateCount < kMinParallelRefinementCandidates) {
+    if (candidateCount < 2) {
         return 1;
     }
 
@@ -473,12 +499,39 @@ static int refinementWorkerThreadCount(int candidateCount)
         return 1;
     }
 
-    const int workLimitedThreadCount = candidateCount / kRefinementCandidatesPerWorker;
-    if (workLimitedThreadCount < 2) {
+    const bool enoughCandidateCount = candidateCount >= kMinParallelRefinementCandidates;
+    const bool enoughEstimatedWork = estimatedWorkUnits >= kMinParallelRefinementWorkUnits;
+    if (!enoughCandidateCount && !enoughEstimatedWork) {
         return 1;
     }
 
-    return std::max(1, std::min(workLimitedThreadCount, idealThreadCount - 2));
+    const int countLimitedThreadCount = candidateCount / kRefinementCandidatesPerWorker;
+    const int workLimitedThreadCount = static_cast<int>(
+        (estimatedWorkUnits + kRefinementWorkUnitsPerWorker - 1) / kRefinementWorkUnitsPerWorker);
+    const int requestedThreadCount = std::max(countLimitedThreadCount, workLimitedThreadCount);
+    if (requestedThreadCount < 2) {
+        return 1;
+    }
+
+    return std::max(1, std::min({requestedThreadCount, candidateCount, idealThreadCount - 2}));
+}
+
+static int visibleCatalogWorkerThreadCount(int catalogStarCount)
+{
+    static constexpr int kMinParallelVisibleCatalogStars = 120000;
+    static constexpr int kVisibleCatalogStarsPerWorker = 80000;
+
+    if (catalogStarCount < kMinParallelVisibleCatalogStars) {
+        return 1;
+    }
+
+    const int idealThreadCount = QThread::idealThreadCount();
+    if (idealThreadCount <= 2) {
+        return 1;
+    }
+
+    const int requestedThreadCount = (catalogStarCount + kVisibleCatalogStarsPerWorker - 1) / kVisibleCatalogStarsPerWorker;
+    return std::max(1, std::min(requestedThreadCount, idealThreadCount - 2));
 }
 
 static constexpr double kSirilAutoMaxFovDegrees = 15.0;
@@ -487,6 +540,7 @@ static constexpr double kSirilAliasMaxSeparationArcSec = 30.0;
 static constexpr double kSirilAliasMaxMagnitudeDifference = 2.5;
 static constexpr double kWideFovMagnitudePreferenceThresholdDegrees = 30.0;
 static constexpr double kWideFovBrightFirstPassMaxMagnitude = 5.0;
+static constexpr double kNarrowGuidedBrightCatalogMaxMagnitude = 12.0;
 static constexpr double kWideFovMagnitudePreferenceMinDelta = 1.0;
 static constexpr double kWideFovMagnitudePreferenceMaxRmsPixels = 24.0;
 
@@ -1070,7 +1124,7 @@ static bool isLowMagnitudeNarrowGuidedSolve(const CameraSettings& settings)
 {
     return plateSolveStartUsesDirection(settings)
         && (settings.m_fov <= 5.0)
-        && (settings.m_plateSolveMaxMagnitude <= 15.0);
+        && (settings.m_plateSolveMaxMagnitude <= 17.0);
 }
 
 static QString sirilSpccChunkUrl(int chunkIndex, int sourceIndex)
@@ -1162,36 +1216,90 @@ static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path)
         return {};
     }
 
+    const QByteArray data = file.readAll();
+    const char *bytes = data.constData();
+    const qsizetype byteCount = data.size();
     QVector<CatalogStar> stars;
-    while (!file.atEnd())
+    stars.reserve(static_cast<int>(std::min<qsizetype>(
+        std::max<qsizetype>(0, byteCount / 48),
+        std::numeric_limits<int>::max())));
+
+    const auto findTab = [&](qsizetype first, qsizetype last) {
+        for (qsizetype i = first; i < last; ++i)
+        {
+            if (bytes[i] == '\t') {
+                return i;
+            }
+        }
+        return last;
+    };
+    const auto parseDoubleField = [&](qsizetype first, qsizetype last, double& value) {
+        if (first >= last) {
+            return false;
+        }
+
+        char *parsedEnd = nullptr;
+        value = std::strtod(bytes + first, &parsedEnd);
+        if (parsedEnd == bytes + first) {
+            return false;
+        }
+        while ((parsedEnd < bytes + last) && std::isspace(static_cast<unsigned char>(*parsedEnd))) {
+            ++parsedEnd;
+        }
+        return parsedEnd == bytes + last;
+    };
+
+    qsizetype lineStart = 0;
+    while (lineStart < byteCount)
     {
-        QByteArray line = file.readLine();
-        while (line.endsWith('\n') || line.endsWith('\r')) {
-            line.chop(1);
+        qsizetype lineEnd = lineStart;
+        while ((lineEnd < byteCount) && (bytes[lineEnd] != '\n')) {
+            ++lineEnd;
         }
-        if (line.isEmpty() || line.startsWith('#')) {
+
+        qsizetype trimmedEnd = lineEnd;
+        while ((trimmedEnd > lineStart)
+            && ((bytes[trimmedEnd - 1] == '\n') || (bytes[trimmedEnd - 1] == '\r')))
+        {
+            --trimmedEnd;
+        }
+
+        if ((trimmedEnd <= lineStart) || (bytes[lineStart] == '#'))
+        {
+            lineStart = lineEnd + 1;
             continue;
         }
-        const QList<QByteArray> fields = line.split('\t');
-        if (fields.size() < 4) {
+
+        const qsizetype tab0 = findTab(lineStart, trimmedEnd);
+        const qsizetype tab1 = findTab(tab0 + 1, trimmedEnd);
+        const qsizetype tab2 = findTab(tab1 + 1, trimmedEnd);
+        const qsizetype tab3 = findTab(tab2 + 1, trimmedEnd);
+        const qsizetype tab4 = (tab3 < trimmedEnd) ? findTab(tab3 + 1, trimmedEnd) : trimmedEnd;
+        if ((tab0 >= trimmedEnd) || (tab1 >= trimmedEnd) || (tab2 >= trimmedEnd) || (tab3 > trimmedEnd))
+        {
+            lineStart = lineEnd + 1;
             continue;
         }
-        bool raOk = false;
-        bool decOk = false;
-        bool magOk = false;
-        const double ra = fields[1].toDouble(&raOk);
-        const double dec = fields[2].toDouble(&decOk);
-        const double mag = fields[3].toDouble(&magOk);
-        if (!raOk || !decOk || !magOk) {
+
+        double ra = 0.0;
+        double dec = 0.0;
+        double mag = 0.0;
+        if (!parseDoubleField(tab0 + 1, tab1, ra)
+            || !parseDoubleField(tab1 + 1, tab2, dec)
+            || !parseDoubleField(tab2 + 1, tab3, mag))
+        {
+            lineStart = lineEnd + 1;
             continue;
         }
+
         stars.append({
-            QString::fromUtf8(fields[0]),
+            QString::fromUtf8(bytes + lineStart, tab0 - lineStart),
             ra,
             dec,
             mag,
-            fields.size() >= 5 ? QString::fromUtf8(fields[4]) : QString()
+            (tab3 < trimmedEnd) ? QString::fromUtf8(bytes + tab3 + 1, tab4 - tab3 - 1) : QString()
         });
+        lineStart = lineEnd + 1;
     }
     return stars;
 }
@@ -3652,34 +3760,69 @@ static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& set
                                                 const QDateTime& captureDateTimeUtc,
                                                 double maxMagnitude)
 {
+    const auto buildVisibleCatalogRange = [&](int firstStarIndex, int lastStarIndex) {
+        QVector<VisibleCatalogStar> visibleStars;
+        visibleStars.reserve(std::max(0, lastStarIndex - firstStarIndex));
+
+        for (int i = firstStarIndex; i < lastStarIndex; ++i)
+        {
+            const CatalogStar& star = catalogStars[i];
+            if (star.magnitude > maxMagnitude) {
+                continue;
+            }
+
+            const RADec raDec{star.rightAscensionDegrees / 15.0, star.declinationDegrees};
+            const AzAlt azAlt = Astronomy::raDecToAzAlt(
+                raDec,
+                settings.m_latitude,
+                settings.m_longitude,
+                captureDateTimeUtc,
+                true);
+            if (!std::isfinite(azAlt.az) || !std::isfinite(azAlt.alt) || (azAlt.alt < kVisibleAltitudeFloor)) {
+                continue;
+            }
+
+            visibleStars.append({
+                i,
+                azAlt.az,
+                azAlt.alt,
+                star.magnitude,
+                normalize(vectorFromAltAz(azAlt.az, azAlt.alt))
+            });
+        }
+
+        return visibleStars;
+    };
+
+    const int workerThreadCount = visibleCatalogWorkerThreadCount(catalogStars.size());
     QVector<VisibleCatalogStar> visibleStars;
-    visibleStars.reserve(catalogStars.size());
-
-    for (int i = 0; i < catalogStars.size(); ++i)
+    if (workerThreadCount <= 1)
     {
-        const CatalogStar& star = catalogStars[i];
-        if (star.magnitude > maxMagnitude) {
-            continue;
+        visibleStars = buildVisibleCatalogRange(0, catalogStars.size());
+    }
+    else
+    {
+        QVector<QVector<VisibleCatalogStar>> chunkVisibleStars(workerThreadCount);
+        QThreadPool workerPool;
+        workerPool.setMaxThreadCount(workerThreadCount);
+        for (int workerIndex = 0; workerIndex < workerThreadCount; ++workerIndex)
+        {
+            const int firstStarIndex = (catalogStars.size() * workerIndex) / workerThreadCount;
+            const int lastStarIndex = (catalogStars.size() * (workerIndex + 1)) / workerThreadCount;
+            workerPool.start(QRunnable::create([&, workerIndex, firstStarIndex, lastStarIndex]() {
+                chunkVisibleStars[workerIndex] = buildVisibleCatalogRange(firstStarIndex, lastStarIndex);
+            }));
         }
+        workerPool.waitForDone();
 
-        const RADec raDec{star.rightAscensionDegrees / 15.0, star.declinationDegrees};
-        const AzAlt azAlt = Astronomy::raDecToAzAlt(
-            raDec,
-            settings.m_latitude,
-            settings.m_longitude,
-            captureDateTimeUtc,
-            true);
-        if (!std::isfinite(azAlt.az) || !std::isfinite(azAlt.alt) || (azAlt.alt < kVisibleAltitudeFloor)) {
-            continue;
+        int visibleStarCount = 0;
+        for (const QVector<VisibleCatalogStar>& chunk : chunkVisibleStars) {
+            visibleStarCount += chunk.size();
         }
-
-        visibleStars.append({
-            i,
-            azAlt.az,
-            azAlt.alt,
-            star.magnitude,
-            normalize(vectorFromAltAz(azAlt.az, azAlt.alt))
-        });
+        visibleStars.reserve(visibleStarCount);
+        for (QVector<VisibleCatalogStar>& chunk : chunkVisibleStars) {
+            visibleStars += chunk;
+        }
     }
 
     std::sort(visibleStars.begin(), visibleStars.end(), [](const VisibleCatalogStar& lhs, const VisibleCatalogStar& rhs) {
@@ -3723,6 +3866,44 @@ static QStringList& visibleCatalogCacheOrder()
     return s_cacheOrder;
 }
 
+static QString visibleCatalogFingerprint(const QVector<CatalogStar>& catalogStars)
+{
+    if (catalogStars.isEmpty()) {
+        return QStringLiteral("0");
+    }
+
+    const int middleIndex = catalogStars.size() / 2;
+    const int lastIndex = catalogStars.size() - 1;
+    const int sampleIndexes[] = {0, middleIndex, lastIndex};
+    QStringList fields;
+    fields.reserve(1 + 3 * 3);
+    fields.append(QString::number(catalogStars.size()));
+    for (int index : sampleIndexes)
+    {
+        const CatalogStar& star = catalogStars[index];
+        fields.append(QString::number(qRound64(star.rightAscensionDegrees * 1000000.0)));
+        fields.append(QString::number(qRound64(star.declinationDegrees * 1000000.0)));
+        fields.append(QString::number(qRound64(star.magnitude * 1000.0)));
+    }
+    return fields.join(QLatin1Char(':'));
+}
+
+static double visibleCatalogCacheMagnitudeLimit(const QVector<CatalogStar>& catalogStars,
+                                                double maxMagnitude)
+{
+    double loadedMaxMagnitude = -std::numeric_limits<double>::infinity();
+    for (const CatalogStar& star : catalogStars)
+    {
+        if (std::isfinite(star.magnitude)) {
+            loadedMaxMagnitude = std::max(loadedMaxMagnitude, star.magnitude);
+        }
+    }
+
+    return std::isfinite(loadedMaxMagnitude)
+        ? std::min(maxMagnitude, loadedMaxMagnitude)
+        : maxMagnitude;
+}
+
 static QString visibleCatalogCacheKey(const CameraSettings& settings,
                                       const QVector<CatalogStar>& catalogStars,
                                       const QDateTime& captureDateTimeUtc,
@@ -3732,15 +3913,16 @@ static QString visibleCatalogCacheKey(const CameraSettings& settings,
     const bool isResource = path.startsWith(QLatin1String(":/"));
     const qint64 modifiedSecs = isResource ? 0 : QFileInfo(path).lastModified().toSecsSinceEpoch();
     const qint64 timeBucket = captureDateTimeUtc.toSecsSinceEpoch() / 30;
+    const double effectiveMaxMagnitude = visibleCatalogCacheMagnitudeLimit(catalogStars, maxMagnitude);
 
     return QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8")
         .arg(path)
         .arg(modifiedSecs)
-        .arg(catalogStars.size())
+        .arg(visibleCatalogFingerprint(catalogStars))
         .arg(qRound64(settings.m_latitude * 100000.0))
         .arg(qRound64(settings.m_longitude * 100000.0))
         .arg(timeBucket)
-        .arg(qRound64(maxMagnitude * 100.0))
+        .arg(qRound64(effectiveMaxMagnitude * 100.0))
         .arg(static_cast<int>(settings.m_plateSolveCatalogSource));
 }
 
@@ -3771,7 +3953,7 @@ static void storeVisibleCatalogCache(const CameraSettings& settings,
                                      const QVector<VisibleCatalogStar>& visibleStars,
                                      const QHash<int, int>& visibleStarIndexByCatalogIndex)
 {
-    static constexpr int kMaxVisibleCatalogCacheEntries = 32;
+    static constexpr int kMaxVisibleCatalogCacheEntries = 8;
 
     const QString key = visibleCatalogCacheKey(settings, catalogStars, captureDateTimeUtc, maxMagnitude);
     QMutexLocker locker(&visibleCatalogCacheMutex());
@@ -3903,8 +4085,7 @@ PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& set
         context.catalogSource = currentCatalogSource(settings);
     }
 
-    const bool allowVisibleCache = !context.catalogSource.contains(QStringLiteral("Siril"));
-    populateVisibleCatalogContext(context, settings, captureDateTimeUtc, maxMagnitude, allowVisibleCache);
+    populateVisibleCatalogContext(context, settings, captureDateTimeUtc, maxMagnitude, true);
     return context;
 }
 
@@ -3913,8 +4094,7 @@ void rebuildVisibleCatalogContext(PlateSolveCatalogContext& context,
                                   const QDateTime& captureDateTimeUtc,
                                   double maxMagnitude)
 {
-    const bool allowVisibleCache = !context.catalogSource.contains(QStringLiteral("Siril"));
-    populateVisibleCatalogContext(context, settings, captureDateTimeUtc, maxMagnitude, allowVisibleCache);
+    populateVisibleCatalogContext(context, settings, captureDateTimeUtc, maxMagnitude, true);
 }
 
 static QVector<VisibleCatalogStar> selectLocalVisibleStars(const QVector<VisibleCatalogStar>& visibleStars,
@@ -5226,7 +5406,7 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
 
     QVector<VisibleCatalogStar> brightCatalogStars;
     const double brightCatalogMaxMagnitude = useNarrowGuidedPairSeeds
-        ? std::min(settings.m_plateSolveMaxMagnitude, 11.0)
+        ? std::min(settings.m_plateSolveMaxMagnitude, kNarrowGuidedBrightCatalogMaxMagnitude)
         : kWideFovBrightFirstPassMaxMagnitude;
     const int brightCatalogLimit = useNarrowGuidedPairSeeds ? 96 : 20;
     brightCatalogStars.reserve(brightCatalogLimit);
@@ -5378,6 +5558,8 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
     SkyProjector radialProjector;
     QPointF radialCenter;
     double radialTolerancePixels = 0.0;
+    QVector<double> radialDetectionRadii;
+    QVector<double> brightCatalogRadialRadii;
     if (useNarrowGuidedNoRoll)
     {
         const bool useStartLens = plateSolveStartUsesLens(settings);
@@ -5395,19 +5577,37 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
         radialTolerancePixels = std::max(
             static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 6.0,
             std::max(imageSize.width(), imageSize.height()) * 0.12);
+        if (radialProjector.valid)
+        {
+            radialDetectionRadii.resize(starDetections.size());
+            for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex) {
+                radialDetectionRadii[detectionIndex] = pointDistancePixels(starDetections[detectionIndex].m_center, radialCenter);
+            }
+
+            brightCatalogRadialRadii.resize(brightCatalogStars.size());
+            for (int catalogIndex = 0; catalogIndex < brightCatalogStars.size(); ++catalogIndex)
+            {
+                QPointF projectedPoint;
+                brightCatalogRadialRadii[catalogIndex] = projectVector(radialProjector, brightCatalogStars[catalogIndex].vector, projectedPoint)
+                    ? pointDistancePixels(projectedPoint, radialCenter)
+                    : std::numeric_limits<double>::quiet_NaN();
+            }
+        }
     }
 
-    const auto isRadiallyCompatibleWithGuidedStart = [&](int detectionIndex, const VisibleCatalogStar& visibleStar) {
+    const auto isRadiallyCompatibleWithGuidedStart = [&](int detectionIndex, int brightCatalogIndex) {
         if (!useNarrowGuidedNoRoll || !radialProjector.valid) {
             return true;
         }
-        QPointF projectedPoint;
-        if (!projectVector(radialProjector, visibleStar.vector, projectedPoint)) {
+        if ((detectionIndex < 0)
+            || (detectionIndex >= radialDetectionRadii.size())
+            || (brightCatalogIndex < 0)
+            || (brightCatalogIndex >= brightCatalogRadialRadii.size())
+            || !std::isfinite(brightCatalogRadialRadii[brightCatalogIndex]))
+        {
             return false;
         }
-        const double projectedRadius = pointDistancePixels(projectedPoint, radialCenter);
-        const double detectionRadius = pointDistancePixels(starDetections[detectionIndex].m_center, radialCenter);
-        return std::fabs(detectionRadius - projectedRadius) <= radialTolerancePixels;
+        return std::fabs(radialDetectionRadii[detectionIndex] - brightCatalogRadialRadii[brightCatalogIndex]) <= radialTolerancePixels;
     };
 
     if (useNarrowGuidedNoRoll)
@@ -5419,13 +5619,14 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
             for (int detectionIndex : brightDetectionIndices) {
                 radialSeen.insert(detectionIndex);
             }
-            for (const VisibleCatalogStar& visibleStar : brightCatalogStars)
+            for (int catalogIndex = 0; catalogIndex < brightCatalogStars.size(); ++catalogIndex)
             {
-                QPointF projectedPoint;
-                if (!projectVector(radialProjector, visibleStar.vector, projectedPoint)) {
+                if ((catalogIndex >= brightCatalogRadialRadii.size())
+                    || !std::isfinite(brightCatalogRadialRadii[catalogIndex]))
+                {
                     continue;
                 }
-                const double projectedRadius = pointDistancePixels(projectedPoint, radialCenter);
+                const double projectedRadius = brightCatalogRadialRadii[catalogIndex];
                 QVector<QPair<double, int>> radialCandidates;
                 radialCandidates.reserve(starDetections.size());
                 for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex)
@@ -5438,7 +5639,7 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                     if (reliability <= 0.0) {
                         continue;
                     }
-                    const double detectionRadius = pointDistancePixels(detection.m_center, radialCenter);
+                    const double detectionRadius = radialDetectionRadii[detectionIndex];
                     const double radialError = std::fabs(detectionRadius - projectedRadius);
                     if (radialError > radialTolerancePixels) {
                         continue;
@@ -5708,8 +5909,8 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
                             continue;
                         }
                     }
-                    if (!isRadiallyCompatibleWithGuidedStart(detectionIndexA, brightCatalogStars[firstCatalog])
-                        || !isRadiallyCompatibleWithGuidedStart(detectionIndexB, brightCatalogStars[secondCatalog]))
+                    if (!isRadiallyCompatibleWithGuidedStart(detectionIndexA, firstCatalog)
+                        || !isRadiallyCompatibleWithGuidedStart(detectionIndexB, secondCatalog))
                     {
                         continue;
                     }
@@ -7628,7 +7829,7 @@ bool isAcceptableSparseGuidedPairEvaluation(const CameraSettings& settings,
         }
 
         const CatalogStar& catalogStar = catalogContext.catalogStars[match.catalogIndex];
-        if ((catalogStar.magnitude > std::min(static_cast<double>(settings.m_plateSolveMaxMagnitude), 11.0))
+        if ((catalogStar.magnitude > std::min(static_cast<double>(settings.m_plateSolveMaxMagnitude), kNarrowGuidedBrightCatalogMaxMagnitude))
             || !isNamedSparseGuidedCatalogStar(catalogStar)
             || !isStrongSparseGuidedDetection(starDetections[match.detectionIndex])
             || (match.distancePixels > maxAnchorDistance))
@@ -7825,6 +8026,40 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
         || !finalPass.projectorValid)
     {
         return false;
+    }
+
+    if (isLowMagnitudeNarrowGuidedSolve(settings))
+    {
+        if ((finalPass.brightCatalogShapeChecks >= 1)
+            && (finalPass.brightCatalogShapeMismatches > 0))
+        {
+            return true;
+        }
+        if ((finalPass.seedProjectedBrightStars >= 2)
+            && (finalPass.matchedSeedProjectedBrightStars < std::min(2, finalPass.seedProjectedBrightStars)))
+        {
+            return true;
+        }
+        if ((finalPass.brightProjectedStars >= 3)
+            && (finalPass.matchedBrightProjectedStars < 2))
+        {
+            return true;
+        }
+        if ((finalPass.brightProjectedStars >= 6)
+            && (finalPass.brightProjectedMatchFraction < 0.45))
+        {
+            return true;
+        }
+        if ((finalPass.seedProjectedBrightStars >= 1)
+            && (finalPass.matchedSeedProjectedBrightStars == 0))
+        {
+            return true;
+        }
+        if ((finalPass.brightDetections >= 6)
+            && (finalPass.brightDetectionMagnitudeError > 1.45))
+        {
+            return true;
+        }
     }
 
     if ((finalPass.seedProjectedBrightStars >= 6)
@@ -8118,6 +8353,21 @@ static int minimumDirectionSeedAcceptedMatches(const CameraSettings& settings,
         std::min(8, std::max(5, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.15)))));
 }
 
+static double maxDirectionSeedRmsError(const CameraSettings& settings, int matchCount)
+{
+    const bool narrowField = settings.m_fov <= 5.0;
+    const bool denseNarrowFieldSolve = narrowField
+        && (matchCount >= (isLowMagnitudeNarrowGuidedSolve(settings) ? 16 : 20));
+    if (narrowField)
+    {
+        return denseNarrowFieldSolve
+            ? std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 17.0)
+            : std::min(settings.m_plateSolveFinalMatchRadius * 0.62, 14.5);
+    }
+
+    return std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
+}
+
 static QString directionSeedRejectionReason(const CameraSettings& settings,
                                             const QVector<CameraPipelineStarDetection>& starDetections,
                                             const QVector<Match>& matches,
@@ -8129,12 +8379,7 @@ static QString directionSeedRejectionReason(const CameraSettings& settings,
     const bool narrowField = settings.m_fov <= 5.0;
     const int requiredMatches = minimumDirectionSeedAcceptedMatches(settings, starDetections);
     const double medianError = medianDistancePixels(matches);
-    const bool denseNarrowFieldSolve = narrowField && (matches.size() >= 20);
-    const double maxRmsError = narrowField
-        ? (denseNarrowFieldSolve
-            ? std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 17.0)
-            : std::min(settings.m_plateSolveFinalMatchRadius * 0.62, 14.5))
-        : std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
+    const double maxRmsError = maxDirectionSeedRmsError(settings, matches.size());
     // Narrow-field: residuals reflect real centroid noise with pinned FOV — use 0.75×.
     // Wide-field fisheye: lens distortion at large angles raises residuals even for correct
     // solves; 0.65x (= 15.6 px at 24 px radius) is needed to accept these valid solutions
@@ -8171,13 +8416,7 @@ static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
     }
 
     const int minAcceptedMatches = std::max(minMatchCount, 4);
-    const bool narrowField = settings.m_fov <= 5.0;
-    const bool denseNarrowFieldSolve = narrowField && (evaluation.matchCount >= 20);
-    const double maxRmsError = narrowField
-        ? (denseNarrowFieldSolve
-            ? std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 17.0)
-            : std::min(settings.m_plateSolveFinalMatchRadius * 0.62, 14.5))
-        : std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 20.0);
+    const double maxRmsError = maxDirectionSeedRmsError(settings, evaluation.matchCount);
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
@@ -8198,12 +8437,7 @@ static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
     // (= 15.6 px at 24 px radius) is needed to accept valid wide-angle solutions.
     const bool narrowField = settings.m_fov <= 5.0;
     const double medianError = medianDistancePixels(matches);
-    const bool denseNarrowFieldSolve = narrowField && (matches.size() >= 20);
-    const double maxRmsError = narrowField
-        ? (denseNarrowFieldSolve
-            ? std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 17.0)
-            : std::min(settings.m_plateSolveFinalMatchRadius * 0.62, 14.5))
-        : std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
+    const double maxRmsError = maxDirectionSeedRmsError(settings, matches.size());
     const double maxMedianError = narrowField
         ? std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 18.0)
         : std::min(settings.m_plateSolveFinalMatchRadius * 0.65, 18.0);
@@ -8343,6 +8577,17 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
         {
             return false;
         }
+        if (isLowMagnitudeNarrowGuidedSolve(settings)
+            && (evaluation.finalMatches.size() >= 16)
+            && (evaluation.rmsErrorPixels > std::min(settings.m_plateSolveFinalMatchRadius * 0.62, 14.5))
+            && (evaluation.brightProjectedStars >= 3)
+            && (evaluation.matchedBrightProjectedStars >= 2)
+            && (evaluation.brightDetectionMagnitudeError <= 1.45)
+            && (evaluation.brightCatalogShapeMismatches == 0)
+            && (!std::isfinite(evaluation.brightnessRankError) || (evaluation.brightnessRankError <= 0.70)))
+        {
+            return true;
+        }
         if (hasWeakNarrowGuidedBrightSupport(settings, evaluation)) {
             return false;
         }
@@ -8425,6 +8670,47 @@ bool hasAcceptableWideBrightAnchorSupport(const CameraSettings& settings,
 
     return brightDetectionsAgree
         && (brightProjectedStarsAgree || (evaluation.matchedBrightDetections >= 4));
+}
+
+bool isStrongEarlyGuidedFinalPass(const CameraSettings& settings,
+                                  const QVector<CameraPipelineStarDetection>& starDetections,
+                                  const FinalMatchPassEvaluation& evaluation,
+                                  int requiredMatches,
+                                  double finalMatchRadius)
+{
+    if (!m_useDirectionSeedPreference || !evaluation.projectorValid) {
+        return false;
+    }
+
+    const int minimumEarlyMatches = (settings.m_fov <= 5.0)
+        ? std::max(requiredMatches + 12, 16)
+        : std::max(requiredMatches + 6, 10);
+    if (evaluation.finalMatches.size() < minimumEarlyMatches) {
+        return false;
+    }
+
+    if (!hasAcceptableWideBrightAnchorSupport(settings, starDetections, evaluation)
+        || hasWeakNarrowGuidedBrightSupport(settings, evaluation)
+        || !hasAcceptableGuidedFinalBrightnessConsistency(settings, evaluation))
+    {
+        return false;
+    }
+
+    if (!isAcceptableDirectionSeedSolve(
+            settings,
+            starDetections,
+            evaluation.finalMatches,
+            evaluation.rmsErrorPixels,
+            evaluation.maxErrorPixels))
+    {
+        return false;
+    }
+
+    return hasGeometricallyConsistentMatches(
+        starDetections,
+        evaluation.projectedStars,
+        evaluation.finalMatches,
+        finalMatchRadius);
 }
 
 double directionSeedAffinity(const Evaluation& evaluation)
@@ -9312,6 +9598,21 @@ double narrowGuidedBrightConsistencyScore(const CameraSettings& settings,
         + 0.35 * static_cast<double>(evaluation.matchedBrightProjectedStars);
 }
 
+QString finalPassBrightDiagnosticSummary(const FinalMatchPassEvaluation& evaluation)
+{
+    return QStringLiteral("brightDetections=%1/%2 brightProjected=%3/%4 seedBright=%5/%6 brightMagErr=%7 brightShape=%8/%9 brightnessErr=%10")
+        .arg(evaluation.matchedBrightDetections)
+        .arg(evaluation.brightDetections)
+        .arg(evaluation.matchedBrightProjectedStars)
+        .arg(evaluation.brightProjectedStars)
+        .arg(evaluation.matchedSeedProjectedBrightStars)
+        .arg(evaluation.seedProjectedBrightStars)
+        .arg(evaluation.brightDetectionMagnitudeError, 0, 'f', 2)
+        .arg(evaluation.brightCatalogShapeMismatches)
+        .arg(evaluation.brightCatalogShapeChecks)
+        .arg(evaluation.brightnessRankError, 0, 'f', 3);
+}
+
 double finalMatchPassScore(const CameraSettings& settings,
                            const FinalMatchPassEvaluation& evaluation)
 {
@@ -9410,6 +9711,27 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
         const bool bestBrightnessAccepted = hasAcceptableGuidedFinalBrightnessConsistency(settings, best);
         if (candidateBrightnessAccepted != bestBrightnessAccepted) {
             return candidateBrightnessAccepted;
+        }
+
+        if (isLowMagnitudeNarrowGuidedSolve(settings)
+            && candidateDirectionAccepted
+            && bestDirectionAccepted
+            && candidateBrightnessAccepted
+            && bestBrightnessAccepted)
+        {
+            const int actualMatchDelta =
+                static_cast<int>(candidate.finalMatches.size()) - static_cast<int>(best.finalMatches.size());
+            const double rmsTolerance = std::max(2.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.10);
+            if ((std::abs(actualMatchDelta) >= 16)
+                && (candidate.rmsErrorPixels <= (best.rmsErrorPixels + rmsTolerance))
+                && (best.rmsErrorPixels <= (candidate.rmsErrorPixels + rmsTolerance)))
+            {
+                const double candidateBrightScore = narrowGuidedBrightConsistencyScore(settings, candidate);
+                const double bestBrightScore = narrowGuidedBrightConsistencyScore(settings, best);
+                if (std::fabs(candidateBrightScore - bestBrightScore) <= 1.0) {
+                    return actualMatchDelta > 0;
+                }
+            }
         }
     }
 
@@ -10450,7 +10772,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             256);
         const double firstPassMaxMagnitude = std::min(
             static_cast<double>(settings.m_plateSolveMaxMagnitude),
-            11.0);
+            kNarrowGuidedBrightCatalogMaxMagnitude);
         narrowGuidedFirstPassCatalogIndices.reserve(localBrightStars.size());
         for (const VisibleCatalogStar& star : localBrightStars)
         {
@@ -10974,7 +11296,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
             && !wideWeakMode
             && isAcceptableDirectionSeedSolve(settings, minMatchCount, best)
             && hasAcceptableBrightnessConsistency(best);
-        if (brightPairSeedAlreadyAcceptable)
+        const bool wideBrightPairSeedAlreadyAcceptable = wideWeakMode && hasGoodWideBlindSeed();
+        if (brightPairSeedAlreadyAcceptable || wideBrightPairSeedAlreadyAcceptable)
         {
             recordProfileMetric(QStringLiteral("search.blindTriangleSkipped"), 1);
             recordProfileMetric(QStringLiteral("search.blindQuadSkipped"), 1);
@@ -13067,7 +13390,38 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             .arg(settings.m_plateSolveMinMatches);
         return result;
     }
-    if (useMultiHypothesisRefine) {
+    bool skipMultiHypothesisRefine = false;
+    if (useMultiHypothesisRefine
+        && useStartDirection
+        && (settings.m_fov <= 5.0)
+        && best.valid)
+    {
+        stageStartMs = solveProfileTimer.elapsed();
+        const FinalMatchPassEvaluation earlyFinalPass = evaluateFinalMatchPass(
+            settings,
+            catalogContext,
+            imageSize,
+            starDetections,
+            allDetectionIndices,
+            best,
+            finalMatchRadius);
+        if (isStrongEarlyGuidedFinalPass(
+                settings,
+                starDetections,
+                earlyFinalPass,
+                result.m_requiredMatches,
+                finalMatchRadius))
+        {
+            best = earlyFinalPass.pose;
+            selectedFinalPass = earlyFinalPass;
+            skipMultiHypothesisRefine = true;
+            recordProfileMetric(QStringLiteral("solve.refineCandidatesSkipped"), 1);
+            logFinalMatchPassEvaluation("final-match-pass-early-guided", selectedFinalPass, true);
+        }
+        logSolveProfile("earlyFinalPass", stageStartMs);
+    }
+
+    if (useMultiHypothesisRefine && !skipMultiHypothesisRefine) {
         stageStartMs = solveProfileTimer.elapsed();
         insertDistinctEvaluationCandidate(
             coarseCandidates,
@@ -13131,7 +13485,19 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             }
         }
 
-        const int workerThreadCount = refinementWorkerThreadCount(refinableCandidateIndices.size());
+        const qint64 estimatedRefinementWorkUnits = estimateRefinementWorkUnits(
+            refinableCandidateIndices.size(),
+            catalogContext.visibleStars.size(),
+            allDetectionIndices.size());
+        recordProfileMetric(
+            QStringLiteral("solve.refineCandidateWorkM"),
+            estimatedRefinementWorkUnits / (1000LL * 1000LL));
+        recordProfileMetric(
+            QStringLiteral("solve.refineCandidatesQueued"),
+            refinableCandidateIndices.size());
+        const int workerThreadCount = refinementWorkerThreadCount(
+            refinableCandidateIndices.size(),
+            estimatedRefinementWorkUnits);
         recordProfileMetric(QStringLiteral("solve.refineCandidateThreads"), workerThreadCount);
         const auto applyRefinementResult = [&](const CandidateRefinementResult& refinementResult) -> bool
         {
@@ -13278,7 +13644,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 m_useDirectionSeedPreference
                 && (settings.m_fov <= 5.0)
                 && refinedBestFinalPass.projectorValid
-                && (refinedBestFinalPass.rmsErrorPixels > std::min(finalMatchRadius * 0.62, 14.5));
+                && (refinedBestFinalPass.rmsErrorPixels > maxDirectionSeedRmsError(settings, refinedBestFinalPass.finalMatches.size()));
             if (bestSparseGuidedPairFinalPass.projectorValid
                 && (hasWeakNarrowGuidedBrightSupport(settings, refinedBestFinalPass)
                     || narrowGuidedResidualWeak))
@@ -13292,7 +13658,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             best = refinePoseFromMatches(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, best);
             logPlateSolveEvaluation("refine-from-matches", best, true);
         }
-    } else {
+    } else if (!skipMultiHypothesisRefine) {
         best = refinePoseFromMatches(settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, best);
         logPlateSolveEvaluation("refine-from-matches", best, true);
     }
@@ -13584,11 +13950,13 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "rms=" << selectedFinalPassForAcceptance.rmsErrorPixels
                  << "max=" << selectedFinalPassForAcceptance.maxErrorPixels
                  << "brightnessErr=" << selectedFinalPassForAcceptance.brightnessRankError
+                 << "bright=" << finalPassBrightDiagnosticSummary(selectedFinalPassForAcceptance)
                  << "reason=" << rejectionReason
                  << "matchSummary=" << matchSummary(catalogContext, starDetections, selectedFinalPassForAcceptance.finalMatches);
-        result.m_failureReason = QStringLiteral("direction-seeded solution rejected: %1 brightnessErr=%2")
+        result.m_failureReason = QStringLiteral("direction-seeded solution rejected: %1 brightnessErr=%2 %3")
             .arg(rejectionReason)
-            .arg(selectedFinalPassForAcceptance.brightnessRankError, 0, 'f', 3);
+            .arg(selectedFinalPassForAcceptance.brightnessRankError, 0, 'f', 3)
+            .arg(finalPassBrightDiagnosticSummary(selectedFinalPassForAcceptance));
         clearSolvedStars(starDetections);
         result.m_solved = false;
         PROFILER_STOP(QString("%1: unacceptable direction-seeded solve").arg(__FUNCTION__));

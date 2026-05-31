@@ -201,6 +201,9 @@ struct CameraPipelineFrame
 #else
     void clearCudaCache() {}
 
+    bool hasCudaBgrImage() const { return false; }
+    bool hasCudaGrayImage() const { return false; }
+
     bool ensureCpuImageFromCuda()
     {
         return !m_image.isNull();

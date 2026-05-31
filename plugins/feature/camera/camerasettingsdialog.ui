@@ -961,8 +961,15 @@
        <string>Status</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_3">
-       <item>
-        <layout class="QHBoxLayout" name="statusLayout">
+       <item alignment="Qt::AlignTop">
+        <widget class="QWidget" name="statusContainer" native="true">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QHBoxLayout" name="statusLayout">
          <item>
           <layout class="QFormLayout" name="statusLeftLayout">
            <item row="0" column="0">
@@ -1156,7 +1163,8 @@
            </item>
           </layout>
          </item>
-        </layout>
+         </layout>
+        </widget>
        </item>
        <item alignment="Qt::AlignTop">
         <widget class="QToolButton" name="clearChart">
@@ -1202,6 +1210,9 @@
        <string>Alpaca</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_6">
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignTop</set>
+       </property>
        <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="alpacaServerSettingsGroup">
          <property name="sizePolicy">
@@ -1379,6 +1390,9 @@
        <string>Cal / Stack</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_stacking">
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignTop</set>
+       </property>
        <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="stackCalibrationGroup">
          <property name="sizePolicy">
@@ -1886,6 +1900,9 @@
        <string>Colour</string>
       </attribute>
       <layout class="QVBoxLayout" name="postProcessingTabLayout">
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignTop</set>
+       </property>
        <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="colorGroup">
          <property name="sizePolicy">
@@ -2642,6 +2659,9 @@
        <string>Filter</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_22">
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignTop</set>
+       </property>
        <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="filterGroup">
          <property name="sizePolicy">

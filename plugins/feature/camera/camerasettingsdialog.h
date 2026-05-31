@@ -57,6 +57,7 @@ public:
     Ui::CameraSettingsDialog *getUI() const { return ui; }
     void appendTemperatureSample(const QDateTime& timestamp, double temperatureC);
     void clearCameraStatus();
+    void shrinkToVisibleContent();
 
 private:
     Ui::CameraSettingsDialog *ui;

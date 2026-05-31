@@ -7888,7 +7888,10 @@ void CameraGUI::on_zoomSpin_valueChanged(double value)
 
 void CameraGUI::on_cameraSettingsButton_clicked()
 {
+    updateCameraSettingsVisibility();
+    m_settingsDialog->shrinkToVisibleContent();
     m_settingsDialog->show();
+    m_settingsDialog->shrinkToVisibleContent();
     m_settingsDialog->raise();
     m_settingsDialog->activateWindow();
 }

@@ -19,7 +19,9 @@
 #include "camerasettingsdialog.h"
 
 #include <algorithm>
+#include <QApplication>
 #include <QPainter>
+#include <QScreen>
 #include <QVBoxLayout>
 #include <QGraphicsLayout>
 #include <QtCharts/QChart>
@@ -155,6 +157,28 @@ void CameraSettingsDialog::clearCameraStatus()
     }
 
     updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
+}
+
+void CameraSettingsDialog::shrinkToVisibleContent()
+{
+    if (layout()) {
+        layout()->activate();
+    }
+
+    updateGeometry();
+    adjustSize();
+
+    QSize targetSize = sizeHint();
+    targetSize = targetSize.expandedTo(minimumSizeHint());
+
+    if (QScreen *screen = this->screen() ? this->screen() : QApplication::primaryScreen())
+    {
+        const QSize availableSize = screen->availableGeometry().size();
+        targetSize.setWidth(std::min(targetSize.width(), availableSize.width()));
+        targetSize.setHeight(std::min(targetSize.height(), availableSize.height()));
+    }
+
+    resize(targetSize);
 }
 
 void CameraSettingsDialog::on_clearChart_clicked()

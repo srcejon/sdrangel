@@ -318,6 +318,7 @@ QVector<double> m_detectionBrightnessRankCache;
 QVector<int> m_detectionBrightnessRankIndices;
 QVector<ProjectedCatalogStar> m_projectedCatalogScratch;
 QVector<CandidatePair> m_candidatePairScratch;
+QVector<CandidatePair> m_cappedCandidatePairScratch;
 QVector<BlindGridCachedStar> m_blindGridCache;
 QVector<ProjectedCatalogStar> m_blindGridProjectedScratch;
 QVector<int> m_projectedStarGridHeadsScratch;
@@ -326,6 +327,10 @@ QVector<int> m_projectedStarGridCellXScratch;
 QVector<int> m_projectedStarGridCellYScratch;
 QVector<double> m_projectedBrightnessRankScratch;
 QVector<int> m_projectedBrightnessRankSortScratch;
+QVector<double> m_catalogBrightnessRankScratch;
+QVector<int> m_catalogBrightnessRankGeneration;
+QVector<int> m_brightnessMatchedDetectionGeneration;
+int m_brightnessRankGeneration = 0;
 QVector<int> m_detectionMatchGeneration;
 QVector<int> m_catalogMatchGeneration;
 int m_matchGeneration = 0;
@@ -2671,7 +2676,7 @@ static QString resolveNamedAliasForCatalogStar(const CatalogStar& star,
             break;
         }
 
-        if (candidate.name.trimmed().isEmpty()) {
+        if (candidate.name.isEmpty()) {
             continue;
         }
 
@@ -2692,8 +2697,12 @@ static QString resolveNamedAliasForCatalogStar(const CatalogStar& star,
         const double score = separationArcSec + magnitudeDifference * 4.0;
         if (score < bestScore)
         {
+            const QString candidateName = candidate.name.trimmed();
+            if (candidateName.isEmpty()) {
+                continue;
+            }
             bestScore = score;
-            bestName = candidate.name.trimmed();
+            bestName = candidateName;
         }
     }
 
@@ -2779,6 +2788,16 @@ static void mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings,
         && (queryRadiusDegrees > 0.0);
     int addedCount = 0;
     int updatedCount = 0;
+    const int initialCatalogSize = catalogStars.size();
+    QVector<int> catalogIndicesByDeclination;
+    catalogIndicesByDeclination.resize(initialCatalogSize);
+    for (int i = 0; i < initialCatalogSize; ++i) {
+        catalogIndicesByDeclination[i] = i;
+    }
+    std::sort(catalogIndicesByDeclination.begin(), catalogIndicesByDeclination.end(), [&catalogStars](int lhs, int rhs) {
+        return catalogStars[lhs].declinationDegrees < catalogStars[rhs].declinationDegrees;
+    });
+    QVector<int> appendedCatalogIndices;
 
     for (const CatalogStar& brightStar : brightStars)
     {
@@ -2796,12 +2815,37 @@ static void mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings,
         }
 
         int duplicateIndex = -1;
-        for (int i = 0; i < catalogStars.size(); ++i)
+        const double minDeclination = brightStar.declinationDegrees - duplicateRadiusDegrees;
+        const double maxDeclination = brightStar.declinationDegrees + duplicateRadiusDegrees;
+        const auto first = std::lower_bound(
+            catalogIndicesByDeclination.cbegin(),
+            catalogIndicesByDeclination.cend(),
+            minDeclination,
+            [&catalogStars](int catalogIndex, double declination) {
+                return catalogStars[catalogIndex].declinationDegrees < declination;
+            });
+        for (auto it = first; it != catalogIndicesByDeclination.cend(); ++it)
         {
-            if (catalogAngularSeparationDegrees(brightStar, catalogStars[i]) <= duplicateRadiusDegrees)
-            {
-                duplicateIndex = i;
+            const int catalogIndex = *it;
+            if (catalogStars[catalogIndex].declinationDegrees > maxDeclination) {
                 break;
+            }
+            if (catalogAngularSeparationDegrees(brightStar, catalogStars[catalogIndex]) <= duplicateRadiusDegrees)
+            {
+                if ((duplicateIndex < 0) || (catalogIndex < duplicateIndex)) {
+                    duplicateIndex = catalogIndex;
+                }
+            }
+        }
+        if (duplicateIndex < 0)
+        {
+            for (int catalogIndex : appendedCatalogIndices)
+            {
+                if (catalogAngularSeparationDegrees(brightStar, catalogStars[catalogIndex]) <= duplicateRadiusDegrees)
+                {
+                    duplicateIndex = catalogIndex;
+                    break;
+                }
             }
         }
 
@@ -2825,6 +2869,7 @@ static void mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings,
         }
         else
         {
+            appendedCatalogIndices.append(catalogStars.size());
             catalogStars.append(brightStar);
             ++addedCount;
         }
@@ -6775,27 +6820,69 @@ double matchBrightnessRankError(const QVector<CameraPipelineStarDetection>& star
 
     const QVector<double>& detectionRanks = detectionBrightnessRanks(starDetections, detectionIndices);
     const QVector<double>& projectedRanks = projectedBrightnessRanks(projectedStars);
-    QHash<int, double> catalogRanks;
-    catalogRanks.reserve(projectedStars.size());
-    for (int i = 0; i < projectedStars.size(); ++i) {
-        catalogRanks.insert(projectedStars[i].catalogIndex, projectedRanks[i]);
+    int maxCatalogIndex = -1;
+    for (const ProjectedCatalogStar& projectedStar : projectedStars) {
+        maxCatalogIndex = std::max(maxCatalogIndex, projectedStar.catalogIndex);
+    }
+    if (maxCatalogIndex >= 0)
+    {
+        const int oldSize = m_catalogBrightnessRankGeneration.size();
+        if (oldSize <= maxCatalogIndex)
+        {
+            m_catalogBrightnessRankGeneration.resize(maxCatalogIndex + 1);
+            std::fill(
+                m_catalogBrightnessRankGeneration.begin() + oldSize,
+                m_catalogBrightnessRankGeneration.end(),
+                0);
+            m_catalogBrightnessRankScratch.resize(maxCatalogIndex + 1);
+        }
+    }
+    {
+        const int oldSize = m_brightnessMatchedDetectionGeneration.size();
+        if (oldSize < starDetections.size())
+        {
+            m_brightnessMatchedDetectionGeneration.resize(starDetections.size());
+            std::fill(
+                m_brightnessMatchedDetectionGeneration.begin() + oldSize,
+                m_brightnessMatchedDetectionGeneration.end(),
+                0);
+        }
+    }
+    ++m_brightnessRankGeneration;
+    if (m_brightnessRankGeneration == std::numeric_limits<int>::max())
+    {
+        std::fill(m_catalogBrightnessRankGeneration.begin(), m_catalogBrightnessRankGeneration.end(), 0);
+        std::fill(m_brightnessMatchedDetectionGeneration.begin(), m_brightnessMatchedDetectionGeneration.end(), 0);
+        m_brightnessRankGeneration = 1;
+    }
+    const int rankGeneration = m_brightnessRankGeneration;
+    for (int i = 0; i < projectedStars.size(); ++i)
+    {
+        const int catalogIndex = projectedStars[i].catalogIndex;
+        if ((catalogIndex >= 0) && (catalogIndex < m_catalogBrightnessRankGeneration.size()))
+        {
+            m_catalogBrightnessRankGeneration[catalogIndex] = rankGeneration;
+            m_catalogBrightnessRankScratch[catalogIndex] = (i < projectedRanks.size()) ? projectedRanks[i] : 0.5;
+        }
     }
 
     double sumError = 0.0;
     int count = 0;
-    QSet<int> matchedDetections;
-    matchedDetections.reserve(matches.size());
     for (const Match& match : matches)
     {
-        matchedDetections.insert(match.detectionIndex);
+        if ((match.detectionIndex >= 0) && (match.detectionIndex < m_brightnessMatchedDetectionGeneration.size())) {
+            m_brightnessMatchedDetectionGeneration[match.detectionIndex] = rankGeneration;
+        }
         const double detectionRank = ((match.detectionIndex >= 0) && (match.detectionIndex < detectionRanks.size()))
             ? detectionRanks[match.detectionIndex]
             : 0.5;
-        const auto catalogIt = catalogRanks.constFind(match.catalogIndex);
-        if (catalogIt == catalogRanks.cend()) {
+        if ((match.catalogIndex < 0)
+            || (match.catalogIndex >= m_catalogBrightnessRankGeneration.size())
+            || (m_catalogBrightnessRankGeneration[match.catalogIndex] != rankGeneration))
+        {
             continue;
         }
-        sumError += std::fabs(detectionRank - catalogIt.value());
+        sumError += std::fabs(detectionRank - m_catalogBrightnessRankScratch[match.catalogIndex]);
         ++count;
     }
 
@@ -6811,7 +6898,9 @@ double matchBrightnessRankError(const QVector<CameraPipelineStarDetection>& star
             ? detectionRanks[detectionIndex]
             : 0.5;
         if ((detectionRank > brightRankThreshold)
-            || matchedDetections.contains(detectionIndex))
+            || ((detectionIndex >= 0)
+                && (detectionIndex < m_brightnessMatchedDetectionGeneration.size())
+                && (m_brightnessMatchedDetectionGeneration[detectionIndex] == rankGeneration)))
         {
             continue;
         }
@@ -7028,7 +7117,8 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
         return lhsCost < rhsCost;
     });
     {
-        QVector<CandidatePair> cappedPairs;
+        QVector<CandidatePair>& cappedPairs = m_cappedCandidatePairScratch;
+        cappedPairs.clear();
         cappedPairs.reserve(candidatePairs.size());
         int lastDetectionIndex = -1;
         int countForDetection = 0;
@@ -7042,7 +7132,7 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
                 ++countForDetection;
             }
         }
-        candidatePairs = std::move(cappedPairs);
+        candidatePairs.swap(cappedPairs);
     }
 
     // Geometric-support tally. For each candidate (detection, catalog) pair we count how

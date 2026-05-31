@@ -3037,13 +3037,6 @@ QList<QVideoFrame::PixelFormat> CameraVideoSurface::supportedPixelFormats(
         QVideoFrame::Format_BGRA32,
         QVideoFrame::Format_BGR32,
         QVideoFrame::Format_BGR24,
-        QVideoFrame::Format_YUV444,
-        QVideoFrame::Format_YUV420P,
-        QVideoFrame::Format_YV12,
-        QVideoFrame::Format_UYVY,
-        QVideoFrame::Format_YUYV,
-        QVideoFrame::Format_NV12,
-        QVideoFrame::Format_NV21,
     };
 }
 
@@ -3344,7 +3337,7 @@ void CameraGUI::setupQtCapture()
         updateVideoFileControls();
 
         m_videoSurface = new CameraVideoSurface(this);
-        m_mediaPlayer = new QMediaPlayer(this);
+        m_mediaPlayer = new QMediaPlayer(this, QMediaPlayer::VideoSurface);
         m_mediaPlayer->setVideoOutput(m_videoSurface);
         connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
                 this, &CameraGUI::onQt5VideoFrame, Qt::QueuedConnection);

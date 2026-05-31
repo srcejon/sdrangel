@@ -155,14 +155,25 @@ Write-Host "  Test: $Executable"
 Write-Host "  CSV:  $Csv"
 Write-Host "  Out:  $diagsession"
 
-$launchArgs = "`"$Csv`" `"$OutputDirectory`""
+$testWorkingDirectory = Split-Path -Parent $Executable
+$testOutputFile = Join-Path $ProfileOutputDirectory "camera-star-tests-$timestamp-test-output.log"
+$testErrorFile = Join-Path $ProfileOutputDirectory "camera-star-tests-$timestamp-test-error.log"
+Remove-Item -LiteralPath $testOutputFile, $testErrorFile -Force -ErrorAction SilentlyContinue
+
+$testProcess = Start-Process `
+    -FilePath $Executable `
+    -ArgumentList @($Csv, $OutputDirectory) `
+    -WorkingDirectory $testWorkingDirectory `
+    -NoNewWindow `
+    -PassThru `
+    -RedirectStandardOutput $testOutputFile `
+    -RedirectStandardError $testErrorFile
+
 $startArgs = @(
     "start",
     $sessionId,
-    "/launch:$Executable",
-    "/launchArgs:$launchArgs",
+    "/attach:$($testProcess.Id)",
     "/loadConfig:$agentConfig",
-    "/monitor",
     "/scratchLocation:$scratchDirectory",
     "/package:opt"
 )
@@ -170,6 +181,22 @@ $startArgs = @(
 $startExitCode = Invoke-LoggedCommand $vsDiagnostics $startArgs $logFile
 if ($startExitCode -ne 0) {
     Write-Warning "Visual Studio Diagnostics start returned exit code $startExitCode. Attempting to stop/package the session anyway."
+}
+
+# Avoid /monitor because it can fail with a COM registration error on some
+# installs, and avoid /lifetimeProcess because it can close the session before
+# we package it. Wait explicitly, then stop/package the session ourselves.
+Write-Host "Waiting for camera star tests to finish..."
+$testProcess.WaitForExit()
+$testProcess.Refresh()
+$testExitCode = $testProcess.ExitCode
+$testOutputText = ""
+if (Test-Path -LiteralPath $testOutputFile) {
+    $testOutputText = Get-Content -LiteralPath $testOutputFile -Raw
+    $testOutputText | Tee-Object -FilePath $logFile -Append | Out-Host
+}
+if (Test-Path -LiteralPath $testErrorFile) {
+    Get-Content -LiteralPath $testErrorFile -Raw | Tee-Object -FilePath $logFile -Append | Out-Host
 }
 
 $stopArgs = @("stop", $sessionId, "/output:$diagsession")
@@ -185,9 +212,25 @@ if (($stopExitCode -ne 0) -and -not (Test-Path -LiteralPath $diagsession)) {
 if (-not (Test-Path -LiteralPath $diagsession)) {
     $logText = Get-NormalizedLogText $logFile
     if ($logText -match "Class not registered") {
-        throw "Visual Studio Diagnostics did not create a .diagsession because a DiagnosticsHub COM component is not registered. Try repairing Visual Studio Diagnostics Tools, or run this target from a full Visual Studio Developer Command Prompt. See $logFile"
+        throw "Visual Studio Diagnostics did not create a .diagsession because a DiagnosticsHub COM component is not registered. This script avoids /monitor, so check that the CPU Usage DiagnosticsHub components are installed and registered. See $logFile"
     }
     throw "Visual Studio Diagnostics completed but did not create $diagsession. See $logFile"
+}
+
+if ($null -eq $testExitCode) {
+    if (($testOutputText -match "\d+ camera star test\(s\) passed") -and ($testOutputText -notmatch "(?m)^FAIL ")) {
+        Write-Warning "Profiled test process exit code was not reported by Start-Process; treating the completed PASS output as success."
+        $testExitCode = 0
+    } else {
+        throw "Profiled test run finished, but PowerShell did not report an exit code. Visual Studio profile was written to $diagsession. See $logFile"
+    }
+}
+
+if ($testExitCode -ne 0) {
+    if (Test-WindowsLoaderFailure $testExitCode) {
+        throw "Profiled test run failed with Windows loader exit code $testExitCode. Check the runtime PATH for missing DLLs. See $logFile"
+    }
+    throw "Profiled test run failed with exit code $testExitCode. Visual Studio profile was written to $diagsession. See $logFile"
 }
 
 Write-Host "Visual Studio profile written to:"

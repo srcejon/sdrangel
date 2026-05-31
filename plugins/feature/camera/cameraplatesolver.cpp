@@ -8829,6 +8829,27 @@ bool isStrongEarlyGuidedFinalPass(const CameraSettings& settings,
         return false;
     }
 
+    const bool denseNarrowHighSupport =
+        (settings.m_fov <= 5.0)
+        && (evaluation.finalMatches.size() >= std::max(requiredMatches + 48, 64))
+        && (evaluation.rmsErrorPixels <= std::min(maxDirectionSeedRmsError(settings, evaluation.finalMatches.size()) * 0.95, finalMatchRadius * 0.70))
+        && (evaluation.maxErrorPixels <= std::min(finalMatchRadius * 1.05, 30.0));
+    if (denseNarrowHighSupport
+        && isAcceptableDirectionSeedSolve(
+            settings,
+            starDetections,
+            evaluation.finalMatches,
+            evaluation.rmsErrorPixels,
+            evaluation.maxErrorPixels)
+        && hasGeometricallyConsistentMatches(
+            starDetections,
+            evaluation.projectedStars,
+            evaluation.finalMatches,
+            finalMatchRadius))
+    {
+        return true;
+    }
+
     if (!hasAcceptableWideBrightAnchorSupport(settings, starDetections, evaluation)
         || hasWeakNarrowGuidedBrightSupport(settings, evaluation)
         || !hasAcceptableGuidedFinalBrightnessConsistency(settings, evaluation))
@@ -13584,7 +13605,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             && (settings.m_fov <= 5.0)
             && (starDetections.size() > kMaxDetectionsForSolve * 2));
     const int multiHypothesisCandidateLimit = (useStartDirection && (settings.m_fov <= 5.0))
-        ? (useStartRoll ? 24 : 256)
+        ? (useStartRoll ? 24 : 72)
         : rankFinalPassWithSelectedDetections ? 64
         : 10;
     if (useBrightFirstPassCatalog
@@ -14357,7 +14378,21 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         }
     };
 
-    auto runSolve = [&](const CameraSettings& runSettings) {
+    struct SolveRunProfile
+    {
+        QString reason;
+        qint64 elapsedMs = 0;
+        bool solved = false;
+        int matchedStars = 0;
+        QString summary;
+    };
+    QVector<SolveRunProfile> solveRunProfiles;
+    QElapsedTimer totalSolveTimer;
+    totalSolveTimer.start();
+
+    auto runSolve = [&](const CameraSettings& runSettings, const QString& reason) {
+        QElapsedTimer runTimer;
+        runTimer.start();
         SolverContext context(this);
 
         // Swap the persistent caches into the SolverContext so that Siril SPCC data
@@ -14367,6 +14402,13 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
 
         CameraPlateSolveResult runResult = context.solve(runSettings, imageSize, captureDateTime, starDetections);
         runResult.m_profileSummary = context.profileSummary();
+        solveRunProfiles.append({
+            reason,
+            runTimer.elapsed(),
+            runResult.m_solved,
+            runResult.m_matchedStars,
+            runResult.m_profileSummary
+        });
 
         std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
         std::swap(context.m_sirilIndexCache, m_sirilIndexCache);
@@ -14375,7 +14417,37 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         return runResult;
     };
 
-    CameraPlateSolveResult result = runSolve(settings);
+    CameraPlateSolveResult result;
+    auto appendOuterProfile = [&]() {
+        if (solveRunProfiles.size() <= 1)
+        {
+            if (!result.m_profileSummary.contains(QStringLiteral("solve.totalWallMs"))) {
+                if (!result.m_profileSummary.isEmpty()) {
+                    result.m_profileSummary.append(QLatin1Char(';'));
+                }
+                result.m_profileSummary.append(QStringLiteral("solve.totalWallMs=%1").arg(totalSolveTimer.elapsed()));
+            }
+            return;
+        }
+
+        QStringList outerProfile;
+        outerProfile.reserve(2 + solveRunProfiles.size() * 4);
+        outerProfile.append(QStringLiteral("solve.runs=%1").arg(solveRunProfiles.size()));
+        outerProfile.append(QStringLiteral("solve.totalWallMs=%1").arg(totalSolveTimer.elapsed()));
+        for (int i = 0; i < solveRunProfiles.size(); ++i)
+        {
+            const SolveRunProfile& runProfile = solveRunProfiles.at(i);
+            const QString prefix = QStringLiteral("solve.run%1.").arg(i + 1);
+            outerProfile.append(prefix + QStringLiteral("reason=%1").arg(runProfile.reason));
+            outerProfile.append(prefix + QStringLiteral("ms=%1").arg(runProfile.elapsedMs));
+            outerProfile.append(prefix + QStringLiteral("solved=%1").arg(runProfile.solved ? 1 : 0));
+            outerProfile.append(prefix + QStringLiteral("matches=%1").arg(runProfile.matchedStars));
+        }
+        if (!result.m_profileSummary.isEmpty()) {
+            result.m_profileSummary.append(QLatin1Char(';'));
+        }
+        result.m_profileSummary.append(outerProfile.join(QLatin1Char(';')));
+    };
 
     const bool solveUsesDirection =
         (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzEl)
@@ -14386,77 +14458,57 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll)
         || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens)
         || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartCurrentSettingsOnly);
+    const bool rollPriorNarrowDirectionSolve =
+        ((settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll)
+            || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens))
+        && (settings.m_fov <= 5.0);
     const bool denseNarrowDirectionSolve = solveUsesDirection
         && !solveUsesRoll
         && (settings.m_fov <= 5.0)
         && (starDetections.size() > 128);
+    const bool tryWithoutRollBeforeRollPrior =
+        rollPriorNarrowDirectionSolve
+        && (settings.m_plateSolveMaxMagnitude <= 13.0f)
+        && (starDetections.size() > 128);
     static constexpr double kRetrySearchRadiusDegrees = 12.0;
-    if (!result.m_solved
-        && denseNarrowDirectionSolve
-        && !isCancellationRequested()
-        && (static_cast<double>(settings.m_plateSolveSearchRadius) < kRetrySearchRadiusDegrees))
+    if (denseNarrowDirectionSolve
+        && (settings.m_plateSolveMaxMagnitude >= 18.0f)
+        && (starDetections.size() > 128))
     {
         CameraSettings retrySettings(settings);
-        retrySettings.m_plateSolveSearchRadius = kRetrySearchRadiusDegrees;
-        qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with search radius"
-                 << retrySettings.m_plateSolveSearchRadius;
-        CameraPlateSolveResult retryResult = runSolve(retrySettings);
-        if (retryResult.m_solved || (retryResult.m_matchedStars > result.m_matchedStars)) {
-            result = retryResult;
-        }
+        retrySettings.m_plateSolveMaxMagnitude = 15.0f;
+        retrySettings.m_plateSolveSearchRadius = static_cast<float>(std::max(
+            static_cast<double>(retrySettings.m_plateSolveSearchRadius),
+            kRetrySearchRadiusDegrees));
+        qDebug() << "CameraPlateSolver: trying dense narrow bright catalog before full catalog"
+                 << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
+                 << "searchRadius" << retrySettings.m_plateSolveSearchRadius;
+        result = runSolve(retrySettings, QStringLiteral("bright-catalog"));
+    }
+    if (tryWithoutRollBeforeRollPrior)
+    {
+        CameraSettings retrySettings(settings);
+        retrySettings.m_plateSolveStartMode = CameraSettings::PlateSolveStartFovAzEl;
+        qDebug() << "CameraPlateSolver: trying dense narrow roll-prior solve without roll constraint first"
+                 << "maxMagnitude" << settings.m_plateSolveMaxMagnitude;
+        result = runSolve(retrySettings, QStringLiteral("without-roll"));
+    }
+    if (!result.m_solved) {
+        result = runSolve(settings, QStringLiteral("initial"));
     }
 
-    if (!result.m_solved
-        && denseNarrowDirectionSolve
-        && !isCancellationRequested())
-    {
-        const double fovDegrees = std::max(0.1, static_cast<double>(settings.m_fov));
-        const std::array<std::pair<double, double>, 8> recenterOffsets = {{
-            { fovDegrees * 0.75, 0.0 },
-            { -fovDegrees * 0.75, 0.0 },
-            { fovDegrees, 0.0 },
-            { -fovDegrees, 0.0 },
-            { 0.0, fovDegrees * 0.75 },
-            { 0.0, -fovDegrees * 0.75 },
-            { fovDegrees * 0.75, fovDegrees * 0.75 },
-            { -fovDegrees * 0.75, -fovDegrees * 0.75 }
-        }};
-        for (const auto& offset : recenterOffsets)
+    bool denseNarrowBrightCatalogRetried = false;
+    auto retryDenseNarrowDirectionWithBrightCatalog = [&]() {
+        if (result.m_solved
+            || !denseNarrowDirectionSolve
+            || isCancellationRequested()
+            || (settings.m_plateSolveMaxMagnitude <= 13.0f)
+            || denseNarrowBrightCatalogRetried)
         {
-            if (isCancellationRequested()) {
-                break;
-            }
-            CameraSettings retrySettings(settings);
-            retrySettings.m_azimuth = static_cast<float>(SolverContext::normalizeDegrees(
-                static_cast<double>(settings.m_azimuth) + offset.first));
-            retrySettings.m_elevation = static_cast<float>(std::clamp(
-                static_cast<double>(settings.m_elevation) + offset.second,
-                -90.0,
-                90.0));
-            retrySettings.m_plateSolveSearchRadius = static_cast<float>(std::max(
-                static_cast<double>(retrySettings.m_plateSolveSearchRadius),
-                kRetrySearchRadiusDegrees));
-            qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with recentered seed"
-                     << "azimuth" << retrySettings.m_azimuth
-                     << "elevation" << retrySettings.m_elevation
-                     << "searchRadius" << retrySettings.m_plateSolveSearchRadius;
-            CameraPlateSolveResult retryResult = runSolve(retrySettings);
-            if (retryResult.m_solved)
-            {
-                result = retryResult;
-                break;
-            }
-            if (retryResult.m_matchedStars > result.m_matchedStars) {
-                result = retryResult;
-            }
+            return;
         }
-    }
+        denseNarrowBrightCatalogRetried = true;
 
-    if (!result.m_solved
-        && denseNarrowDirectionSolve
-        && !isCancellationRequested()
-        && (settings.m_plateSolveMaxMagnitude > 13.0f))
-    {
         QVector<double> brightRetryMagnitudes;
         const auto appendBrightRetryMagnitude = [&](double magnitude) {
             if ((magnitude >= static_cast<double>(settings.m_plateSolveMaxMagnitude))
@@ -14484,7 +14536,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with bright catalog"
                      << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
                      << "searchRadius" << retrySettings.m_plateSolveSearchRadius;
-            CameraPlateSolveResult retryResult = runSolve(retrySettings);
+            CameraPlateSolveResult retryResult = runSolve(retrySettings, QStringLiteral("bright-catalog"));
             if (retryResult.m_solved || (retryResult.m_matchedStars > result.m_matchedStars)) {
                 result = retryResult;
             }
@@ -14492,12 +14544,76 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 break;
             }
         }
+    };
+
+    if (result.m_matchedStars >= 100) {
+        retryDenseNarrowDirectionWithBrightCatalog();
     }
 
-    const bool rollPriorNarrowDirectionSolve =
-        ((settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll)
-            || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens))
-        && (settings.m_fov <= 5.0);
+    if (!result.m_solved
+        && denseNarrowDirectionSolve
+        && !isCancellationRequested())
+    {
+        const double fovDegrees = std::max(0.1, static_cast<double>(settings.m_fov));
+        QVector<std::pair<double, double>> recenterOffsets;
+        recenterOffsets.reserve(8);
+        const auto appendRecenteringOffset = [&](double azimuthOffset, double elevationOffset) {
+            for (const auto& existingOffset : recenterOffsets)
+            {
+                if ((std::fabs(existingOffset.first - azimuthOffset) < 0.05)
+                    && (std::fabs(existingOffset.second - elevationOffset) < 0.05))
+                {
+                    return;
+                }
+            }
+            recenterOffsets.append({azimuthOffset, elevationOffset});
+        };
+        const std::array<std::pair<double, double>, 8> defaultRecenterOffsets = {{
+            { fovDegrees * 0.75, 0.0 },
+            { -fovDegrees * 0.75, 0.0 },
+            { fovDegrees, 0.0 },
+            { -fovDegrees, 0.0 },
+            { 0.0, fovDegrees * 0.75 },
+            { 0.0, -fovDegrees * 0.75 },
+            { fovDegrees * 0.75, fovDegrees * 0.75 },
+            { -fovDegrees * 0.75, -fovDegrees * 0.75 }
+        }};
+        for (const auto& offset : defaultRecenterOffsets) {
+            appendRecenteringOffset(offset.first, offset.second);
+        }
+        for (const auto& offset : recenterOffsets)
+        {
+            if (isCancellationRequested()) {
+                break;
+            }
+            CameraSettings retrySettings(settings);
+            retrySettings.m_azimuth = static_cast<float>(SolverContext::normalizeDegrees(
+                static_cast<double>(settings.m_azimuth) + offset.first));
+            retrySettings.m_elevation = static_cast<float>(std::clamp(
+                static_cast<double>(settings.m_elevation) + offset.second,
+                -90.0,
+                90.0));
+            retrySettings.m_plateSolveSearchRadius = static_cast<float>(std::max(
+                static_cast<double>(retrySettings.m_plateSolveSearchRadius),
+                kRetrySearchRadiusDegrees));
+            qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with recentered seed"
+                     << "azimuth" << retrySettings.m_azimuth
+                     << "elevation" << retrySettings.m_elevation
+                     << "searchRadius" << retrySettings.m_plateSolveSearchRadius;
+            CameraPlateSolveResult retryResult = runSolve(retrySettings, QStringLiteral("recenter"));
+            if (retryResult.m_solved)
+            {
+                result = retryResult;
+                break;
+            }
+            if (retryResult.m_matchedStars > result.m_matchedStars) {
+                result = retryResult;
+            }
+        }
+    }
+
+    retryDenseNarrowDirectionWithBrightCatalog();
+
     const auto wrappedAngularDistanceDegrees = [](double lhs, double rhs) {
         double delta = std::fabs(lhs - rhs);
         while (delta > 360.0) {
@@ -14527,7 +14643,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         qDebug() << "CameraPlateSolver: retrying narrow roll-prior solve without roll constraint"
                  << "directionDelta" << (result.m_solved ? directionDeltaDegrees(result) : -1.0)
                  << "threshold" << rollPriorDirectionRetryThreshold;
-        CameraPlateSolveResult retryResult = runSolve(retrySettings);
+        CameraPlateSolveResult retryResult = runSolve(retrySettings, QStringLiteral("without-roll"));
         const double retryDirectionDelta = retryResult.m_solved
             ? directionDeltaDegrees(retryResult)
             : std::numeric_limits<double>::infinity();
@@ -14553,5 +14669,6 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         }
     }
 
+    appendOuterProfile();
     return result;
 }

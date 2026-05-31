@@ -24,7 +24,7 @@
        <string>Camera</string>
       </attribute>
       <layout class="QVBoxLayout" name="cameraTabLayout">
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QWidget" name="cameraSettingsContainer" native="true">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -1158,7 +1158,7 @@
          </item>
         </layout>
        </item>
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QToolButton" name="clearChart">
          <property name="toolTip">
           <string>Clear chart</string>
@@ -1202,7 +1202,7 @@
        <string>Alpaca</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_6">
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="alpacaServerSettingsGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -1316,7 +1316,7 @@
          </layout>
         </widget>
        </item>
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="alpacaDevicesGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -1379,7 +1379,7 @@
        <string>Cal / Stack</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_stacking">
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="stackCalibrationGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -1490,7 +1490,7 @@
          </layout>
         </widget>
        </item>
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="stackingGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -1886,7 +1886,7 @@
        <string>Colour</string>
       </attribute>
       <layout class="QVBoxLayout" name="postProcessingTabLayout">
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="colorGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -2328,7 +2328,7 @@
          </layout>
         </widget>
        </item>
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="histogramStretchGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -2642,7 +2642,7 @@
        <string>Filter</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_22">
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="filterGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -2882,7 +2882,7 @@
          </layout>
         </widget>
        </item>
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="imageGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -3788,7 +3788,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
        <string>Recording</string>
       </attribute>
       <layout class="QVBoxLayout" name="actionsTabLayout">
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="recordingGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -5954,7 +5954,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
        <string>Position</string>
       </attribute>
       <layout class="QVBoxLayout" name="positionTabLayout">
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="cameraPositionGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -6059,7 +6059,7 @@ Right-click: toggle continual synchronization from My Position.</string>
          </layout>
         </widget>
        </item>
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="cameraDirectionGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -6383,7 +6383,7 @@ Right-click: toggle continual synchronization from My Position.</string>
          </layout>
         </widget>
        </item>
-       <item>
+       <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="groupBox">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">

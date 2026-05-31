@@ -556,6 +556,12 @@ private:
     CameraFinder *m_cameraFinder;
     int m_stackFrameIndex;
     int m_hdrExposureIndex;
+    struct AutoExposureState {
+        bool m_valid = false;
+        double m_brightness = 0.0;
+        double m_saturatedFraction = 0.0;
+        int m_settleFramesRemaining = 0;
+    } m_autoExposure;
     struct AutoFocusState {
         bool m_active = false;
         bool m_movePending = false;

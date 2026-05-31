@@ -476,6 +476,7 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
         || (!m_settings.isAlpacaCamera() && !m_settings.isAsiCamera())
         || (currentStackBurstIndex() != (currentStackBurstFrameCount() - 1)))
     {
+        m_autoExposure = AutoExposureState();
         return;
     }
 
@@ -485,21 +486,45 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
         return;
     }
 
-    const double target = qBound(0.01, m_settings.m_autoExposureTargetBrightness / 100.0, 0.99);
-    const double measured = qBound(0.001, measuredBrightness, 1.0);
-    double factor = std::pow(target / measured, 0.5);
-
-    if (saturatedFraction > 0.01) {
-        factor = std::min(factor, 0.8);
-    }
-
-    const double maxChange = qBound(0.01, m_settings.m_autoExposureMaxChangePercent / 100.0, 1.0);
-    factor = qBound(1.0 - maxChange, factor, 1.0 + maxChange);
-
-    if (std::abs(std::log(factor)) < 0.02)
+    if (m_autoExposure.m_settleFramesRemaining > 0)
     {
+        --m_autoExposure.m_settleFramesRemaining;
+        m_autoExposure.m_valid = false;
         reportAutoExposureGainToGUI(measuredBrightness, saturatedFraction);
         return;
+    }
+
+    if (!m_autoExposure.m_valid)
+    {
+        m_autoExposure.m_brightness = measuredBrightness;
+        m_autoExposure.m_saturatedFraction = saturatedFraction;
+        m_autoExposure.m_valid = true;
+    }
+    else
+    {
+        static constexpr double smoothing = 0.25;
+        m_autoExposure.m_brightness += smoothing * (measuredBrightness - m_autoExposure.m_brightness);
+        m_autoExposure.m_saturatedFraction += smoothing * (saturatedFraction - m_autoExposure.m_saturatedFraction);
+    }
+
+    const double target = qBound(0.01, m_settings.m_autoExposureTargetBrightness / 100.0, 0.99);
+    const double measured = qBound(0.001, m_autoExposure.m_brightness, 1.0);
+    const double maxChange = qBound(0.01, m_settings.m_autoExposureMaxChangePercent / 100.0, 1.0);
+    const double maxLogChange = std::log(1.0 + maxChange);
+    const double error = std::log(target / measured);
+    const bool saturated = m_autoExposure.m_saturatedFraction > 0.01;
+    const double deadband = 0.05;
+
+    if (!saturated && (std::abs(error) < deadband))
+    {
+        reportAutoExposureGainToGUI(m_autoExposure.m_brightness, m_autoExposure.m_saturatedFraction);
+        return;
+    }
+
+    double factor = std::exp(qBound(-maxLogChange, error * 0.35, maxLogChange));
+
+    if (saturated) {
+        factor = std::min(factor, std::exp(-maxLogChange * 0.5));
     }
 
     double exposureMinMs = std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_autoExposureMinMs);
@@ -574,6 +599,7 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     {
         m_settings.m_exposureTimeMs = newExposureMs;
         m_settings.m_cameraGain = newGain;
+        m_autoExposure.m_settleFramesRemaining = 2;
 #ifdef ASICAMERA_FOUND
         if (m_settings.isAsiCamera()) {
             invalidateAsiSettings();
@@ -581,7 +607,7 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
 #endif
     }
 
-    reportAutoExposureGainToGUI(measuredBrightness, saturatedFraction);
+    reportAutoExposureGainToGUI(m_autoExposure.m_brightness, m_autoExposure.m_saturatedFraction);
 }
 
 void CameraWorker::reportAutoFocusToGUI(const QString& status, bool active, int position, double score, int stepIndex, int stepCount) const
@@ -870,6 +896,20 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     }
     if (stackCadenceChanged) {
         m_stackFrameIndex = 0;
+    }
+    if (force
+        || cameraSourceChanged
+        || settingsKeys.contains("autoExposureGainEnabled")
+        || settingsKeys.contains("autoExposureGainMode")
+        || settingsKeys.contains("autoExposureTargetBrightness")
+        || settingsKeys.contains("autoExposureTargetPercentile")
+        || settingsKeys.contains("autoExposureMaxChangePercent")
+        || settingsKeys.contains("autoExposureMinMs")
+        || settingsKeys.contains("autoExposureMaxMs")
+        || settingsKeys.contains("autoExposureMinGain")
+        || settingsKeys.contains("autoExposureMaxGain"))
+    {
+        m_autoExposure = AutoExposureState();
     }
 
     if (force

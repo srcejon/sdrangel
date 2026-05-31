@@ -5249,12 +5249,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </item>
              <item>
               <property name="text">
-               <string>Siril SPCC Gaia DR3</string>
+               <string>Siril Gaia DR3 SPCC (Online)</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>Siril Gaia DR3 Astrometric</string>
+               <string>Siril Gaia DR3 Astrometric (Local)</string>
               </property>
              </item>
             </widget>

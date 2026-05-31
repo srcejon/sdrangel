@@ -105,6 +105,13 @@
 
 namespace {
 
+enum AutoExposureGainControl
+{
+    AutoExposureGainNone = 0,
+    AutoExposureGainSoftware,
+    AutoExposureGainHardware
+};
+
 std::array<QLabel*, 4> hdrExposureLabels(Ui::CameraSettingsDialog *ui)
 {
     return {{
@@ -707,7 +714,7 @@ bool CameraGUI::handleMessage(const Message& message)
             settingsUI()->cameraGainSlider->setValue(report.getGain());
         }
 
-        settingsUI()->autoExposureGainCheck->setToolTip(tr("Measured %1%, saturated %2%")
+        settingsUI()->autoExposureGainCombo->setToolTip(tr("Measured %1%, saturated %2%")
             .arg(QString::number(report.getMeasuredBrightness() * 100.0, 'f', 1))
             .arg(QString::number(report.getSaturatedFraction() * 100.0, 'f', 2)));
         return true;
@@ -940,6 +947,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     settingsUI()->exposureUnitsCombo->addItem(tr("s"), 1000.0);
     settingsUI()->exposureUnitsCombo->addItem(tr("min"), 60000.0);
     settingsUI()->exposureUnitsCombo->setCurrentIndex(1);
+    settingsUI()->autoExposureGainCombo->addItem(tr("None"), AutoExposureGainNone);
+    settingsUI()->autoExposureGainCombo->addItem(tr("S/W"), AutoExposureGainSoftware);
+    settingsUI()->autoExposureGainCombo->addItem(tr("H/W"), AutoExposureGainHardware);
     settingsUI()->autoExposureGainModeCombo->addItem(tr("Exposure first"), CameraSettings::AutoExposureGainExposureFirst);
     settingsUI()->autoExposureGainModeCombo->addItem(tr("Gain first"), CameraSettings::AutoExposureGainGainFirst);
     settingsUI()->autoExposureGainModeCombo->addItem(tr("Exposure only"), CameraSettings::AutoExposureGainExposureOnly);
@@ -1380,8 +1390,11 @@ void CameraGUI::displaySettings()
         m_settings.m_asiTargetTemp == std::numeric_limits<int>::min() ? 0 : m_settings.m_asiTargetTemp);
     settingsUI()->asiUsbBandwidthSpin->setValue(std::max(0, m_settings.m_asiUsbBandwidth));
     settingsUI()->asiHighSpeedModeCheck->setChecked(m_settings.m_asiHighSpeedMode > 0);
-    settingsUI()->asiAutoExposureGainCheck->setChecked(m_settings.m_asiAutoExposureGain);
-    settingsUI()->autoExposureGainCheck->setChecked(m_settings.m_autoExposureGainEnabled);
+    const int autoExposureGainControl = m_settings.m_autoExposureGainEnabled
+        ? AutoExposureGainSoftware
+        : (m_settings.m_asiAutoExposureGain ? AutoExposureGainHardware : AutoExposureGainNone);
+    settingsUI()->autoExposureGainCombo->setCurrentIndex(std::max(0,
+        settingsUI()->autoExposureGainCombo->findData(autoExposureGainControl)));
     settingsUI()->autoExposureGainModeCombo->setCurrentIndex(std::max(0,
         settingsUI()->autoExposureGainModeCombo->findData(static_cast<int>(m_settings.m_autoExposureGainMode))));
     settingsUI()->autoExposureTargetSpin->setValue(m_settings.m_autoExposureTargetBrightness);
@@ -1838,8 +1851,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->asiTargetTempSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_asiTargetTempSpin_valueChanged);
     QObject::connect(settingsUI()->asiUsbBandwidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_asiUsbBandwidthSpin_valueChanged);
     QObject::connect(settingsUI()->asiHighSpeedModeCheck, &QCheckBox::toggled, this, &CameraGUI::on_asiHighSpeedModeCheck_toggled);
-    QObject::connect(settingsUI()->asiAutoExposureGainCheck, &QCheckBox::toggled, this, &CameraGUI::on_asiAutoExposureGainCheck_toggled);
-    QObject::connect(settingsUI()->autoExposureGainCheck, &QCheckBox::toggled, this, &CameraGUI::on_autoExposureGainCheck_toggled);
+    QObject::connect(settingsUI()->autoExposureGainCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_autoExposureGainCombo_currentIndexChanged);
     QObject::connect(settingsUI()->autoExposureGainModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_autoExposureGainModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->autoExposureTargetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_autoExposureTargetSpin_valueChanged);
     QObject::connect(settingsUI()->autoExposurePercentileSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_autoExposurePercentileSpin_valueChanged);
@@ -3810,10 +3822,8 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->asiUsbBandwidthSpin->setVisible(asi && m_asiUsbBandwidthSupported);
     settingsUI()->asiHighSpeedModeLabel->setVisible(asi && m_asiHighSpeedModeSupported);
     settingsUI()->asiHighSpeedModeCheck->setVisible(asi && m_asiHighSpeedModeSupported);
-    settingsUI()->asiAutoExposureGainLabel->setVisible(asi);
-    settingsUI()->asiAutoExposureGainCheck->setVisible(asi);
-    settingsUI()->autoExposureGainLabel->setVisible(sharedHardwareCamera);
-    settingsUI()->autoExposureGainCheck->setVisible(sharedHardwareCamera);
+    settingsUI()->asiAutoExposureGainLabel->setVisible(sharedHardwareCamera);
+    settingsUI()->autoExposureGainCombo->setVisible(sharedHardwareCamera);
     settingsUI()->autoExposureGainModeLabel->setVisible(sharedHardwareCamera);
     settingsUI()->autoExposureGainModeCombo->setVisible(sharedHardwareCamera);
     settingsUI()->autoExposureTargetLabel->setVisible(sharedHardwareCamera);
@@ -3849,10 +3859,17 @@ void CameraGUI::updateCameraSettingsVisibility()
     const bool softwareAutoExposureGainEnabled = sharedHardwareCamera && m_settings.m_autoExposureGainEnabled;
     const bool autoExposureGainSettingsEnabled = sharedHardwareCamera && m_settings.m_autoExposureGainEnabled;
     const bool asiManualExposureGainEnabled = !softwareAutoExposureGainEnabled && !(asi && m_settings.m_asiAutoExposureGain && asiAutoExposureGainEnabled);
-    settingsUI()->asiAutoExposureGainLabel->setEnabled(asiAutoExposureGainEnabled);
-    settingsUI()->asiAutoExposureGainCheck->setEnabled(asiAutoExposureGainEnabled);
-    settingsUI()->autoExposureGainLabel->setEnabled(sharedHardwareCamera);
-    settingsUI()->autoExposureGainCheck->setEnabled(sharedHardwareCamera);
+    settingsUI()->asiAutoExposureGainLabel->setEnabled(sharedHardwareCamera);
+    settingsUI()->autoExposureGainCombo->setEnabled(sharedHardwareCamera);
+    QStandardItemModel *autoExposureGainModel = qobject_cast<QStandardItemModel*>(settingsUI()->autoExposureGainCombo->model());
+    const int hardwareAutoExposureGainIndex = settingsUI()->autoExposureGainCombo->findData(AutoExposureGainHardware);
+    if (autoExposureGainModel && (hardwareAutoExposureGainIndex >= 0))
+    {
+        QStandardItem *hardwareItem = autoExposureGainModel->item(hardwareAutoExposureGainIndex);
+        if (hardwareItem) {
+            hardwareItem->setEnabled(asiAutoExposureGainEnabled);
+        }
+    }
     settingsUI()->autoExposureGainModeLabel->setEnabled(autoExposureGainSettingsEnabled);
     settingsUI()->autoExposureGainModeCombo->setEnabled(autoExposureGainSettingsEnabled);
     settingsUI()->autoExposureTargetLabel->setEnabled(autoExposureGainSettingsEnabled);
@@ -5153,18 +5170,26 @@ void CameraGUI::on_asiHighSpeedModeCheck_toggled(bool checked)
     applySetting("asiHighSpeedMode");
 }
 
-void CameraGUI::on_asiAutoExposureGainCheck_toggled(bool checked)
+void CameraGUI::on_autoExposureGainCombo_currentIndexChanged(int index)
 {
-    m_settings.m_asiAutoExposureGain = checked;
-    updateCameraSettingsVisibility();
-    applySetting("asiAutoExposureGain");
-}
+    if (index < 0) {
+        return;
+    }
 
-void CameraGUI::on_autoExposureGainCheck_toggled(bool checked)
-{
-    m_settings.m_autoExposureGainEnabled = checked;
+    const int mode = settingsUI()->autoExposureGainCombo->itemData(index).toInt();
+    const bool softwareAutoExposureGain = mode == AutoExposureGainSoftware;
+    const bool hardwareAutoExposureGain = mode == AutoExposureGainHardware;
+    if ((m_settings.m_autoExposureGainEnabled == softwareAutoExposureGain)
+        && (m_settings.m_asiAutoExposureGain == hardwareAutoExposureGain))
+    {
+        return;
+    }
+
+    m_settings.m_autoExposureGainEnabled = softwareAutoExposureGain;
+    m_settings.m_asiAutoExposureGain = hardwareAutoExposureGain;
     updateCameraSettingsVisibility();
     applySetting("autoExposureGainEnabled");
+    applySetting("asiAutoExposureGain");
 }
 
 void CameraGUI::on_autoExposureGainModeCombo_currentIndexChanged(int index)

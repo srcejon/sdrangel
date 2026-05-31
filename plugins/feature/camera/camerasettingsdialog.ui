@@ -648,40 +648,20 @@
           </widget>
          </item>
          <item row="3" column="1">
-          <widget class="QCheckBox" name="asiAutoExposureGainCheck">
+          <widget class="QComboBox" name="autoExposureGainCombo">
            <property name="toolTip">
-            <string>Enable ASI automatic exposure and gain while capture mode is set to frame rate.</string>
-           </property>
-           <property name="text">
-            <string/>
+            <string>Choose no auto exposure/gain, software control, or camera hardware control where available.</string>
            </property>
           </widget>
          </item>
          <item row="25" column="0">
-          <widget class="QLabel" name="autoExposureGainLabel">
+          <widget class="QLabel" name="autoExposureGainModeLabel">
            <property name="text">
-            <string>Software auto exp/gain</string>
+            <string>S/W mode</string>
            </property>
           </widget>
          </item>
          <item row="25" column="1">
-          <widget class="QCheckBox" name="autoExposureGainCheck">
-           <property name="toolTip">
-            <string>Measure captured images and adjust exposure time and gain in software.</string>
-           </property>
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-         <item row="25" column="2">
-          <widget class="QLabel" name="autoExposureGainModeLabel">
-           <property name="text">
-            <string>Mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="25" column="3">
           <widget class="QComboBox" name="autoExposureGainModeCombo">
            <property name="toolTip">
             <string>Choose whether software auto exposure adjusts exposure or gain first.</string>

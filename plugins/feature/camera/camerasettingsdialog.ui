@@ -25,7 +25,14 @@
       </attribute>
       <layout class="QVBoxLayout" name="cameraTabLayout">
        <item>
-        <layout class="QGridLayout" name="cameraSettingsLayout">
+        <widget class="QWidget" name="cameraSettingsContainer" native="true">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QGridLayout" name="cameraSettingsLayout">
          <item row="4" column="0">
           <widget class="QLabel" name="exposureLabel">
            <property name="text">
@@ -931,7 +938,8 @@
            </property>
           </widget>
          </item>
-        </layout>
+         </layout>
+        </widget>
        </item>
        <item>
         <spacer name="verticalSpacer_5">
@@ -1196,6 +1204,12 @@
       <layout class="QVBoxLayout" name="verticalLayout_6">
        <item>
         <widget class="QGroupBox" name="alpacaServerSettingsGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>ASCOM Alpaca</string>
          </property>
@@ -1304,6 +1318,12 @@
        </item>
        <item>
         <widget class="QGroupBox" name="alpacaDevicesGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Devices</string>
          </property>
@@ -1361,6 +1381,12 @@
       <layout class="QVBoxLayout" name="verticalLayout_stacking">
        <item>
         <widget class="QGroupBox" name="stackCalibrationGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Calibration</string>
          </property>
@@ -1466,6 +1492,12 @@
        </item>
        <item>
         <widget class="QGroupBox" name="stackingGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Image Stacking</string>
          </property>
@@ -1856,6 +1888,12 @@
       <layout class="QVBoxLayout" name="postProcessingTabLayout">
        <item>
         <widget class="QGroupBox" name="colorGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Color</string>
          </property>
@@ -2292,6 +2330,12 @@
        </item>
        <item>
         <widget class="QGroupBox" name="histogramStretchGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Histogram Stretch</string>
          </property>
@@ -2600,6 +2644,12 @@
       <layout class="QVBoxLayout" name="verticalLayout_22">
        <item>
         <widget class="QGroupBox" name="filterGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Filter</string>
          </property>
@@ -2834,6 +2884,12 @@
        </item>
        <item>
         <widget class="QGroupBox" name="imageGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Image</string>
          </property>
@@ -3734,6 +3790,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
       <layout class="QVBoxLayout" name="actionsTabLayout">
        <item>
         <widget class="QGroupBox" name="recordingGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Recording</string>
          </property>
@@ -5894,6 +5956,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
       <layout class="QVBoxLayout" name="positionTabLayout">
        <item>
         <widget class="QGroupBox" name="cameraPositionGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Camera position</string>
          </property>
@@ -5993,6 +6061,12 @@ Right-click: toggle continual synchronization from My Position.</string>
        </item>
        <item>
         <widget class="QGroupBox" name="cameraDirectionGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Camera direction</string>
          </property>
@@ -6311,6 +6385,12 @@ Right-click: toggle continual synchronization from My Position.</string>
        </item>
        <item>
         <widget class="QGroupBox" name="groupBox">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="title">
           <string>Weather</string>
          </property>

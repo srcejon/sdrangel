@@ -3711,7 +3711,8 @@ void CameraGUI::processPendingQtVideoFrame()
 #else
 void CameraGUI::onQt5VideoFrame(const QImage& image)
 {
-    submitQtImageFrame(image, m_mediaPlayer ? m_mediaPlayer->position() : -1);
+    // No QMediaPlayer on Qt5; playback position is unavailable.
+    submitQtImageFrame(image, -1);
 }
 #endif
 
@@ -3737,7 +3738,11 @@ void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionM
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
         const QDateTime captureDateTime = m_settings.isImageFileSequenceCamera()
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
             ? captureDateTimeFromFileName(m_settings.m_imageFileCameraPaths.value(m_imageSequenceIndex))
+#else
+            ? QDateTime()
+#endif
             : QDateTime();
         frame->m_playbackPositionMs = playbackPositionMs;
         frame->m_playbackFrameNumber = playbackFrameNumber;

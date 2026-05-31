@@ -561,6 +561,8 @@ private:
         double m_brightness = 0.0;
         double m_saturatedFraction = 0.0;
         int m_settleFramesRemaining = 0;
+        int m_adjustDirection = 0;
+        int m_adjustDirectionFrames = 0;
     } m_autoExposure;
     struct AutoFocusState {
         bool m_active = false;

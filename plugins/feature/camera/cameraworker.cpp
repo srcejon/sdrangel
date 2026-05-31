@@ -502,20 +502,37 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     }
     else
     {
-        static constexpr double smoothing = 0.25;
+        static constexpr double smoothing = 0.10;
         m_autoExposure.m_brightness += smoothing * (measuredBrightness - m_autoExposure.m_brightness);
         m_autoExposure.m_saturatedFraction += smoothing * (saturatedFraction - m_autoExposure.m_saturatedFraction);
     }
 
-    const double target = qBound(0.01, m_settings.m_autoExposureTargetBrightness / 100.0, 0.99);
+    const double target = qBound(0.01, m_settings.m_autoExposureTargetBrightness / 100.0, 0.995);
     const double measured = qBound(0.001, m_autoExposure.m_brightness, 1.0);
     const double maxChange = qBound(0.01, m_settings.m_autoExposureMaxChangePercent / 100.0, 1.0);
     const double maxLogChange = std::log(1.0 + maxChange);
     const double error = std::log(target / measured);
-    const bool saturated = m_autoExposure.m_saturatedFraction > 0.01;
-    const double deadband = 0.05;
+    const double saturationLimit = target >= 0.95 ? 0.05 : 0.01;
+    const bool saturated = m_autoExposure.m_saturatedFraction > saturationLimit;
+    const double deadband = 0.10;
 
     if (!saturated && (std::abs(error) < deadband))
+    {
+        m_autoExposure.m_adjustDirection = 0;
+        m_autoExposure.m_adjustDirectionFrames = 0;
+        reportAutoExposureGainToGUI(m_autoExposure.m_brightness, m_autoExposure.m_saturatedFraction);
+        return;
+    }
+
+    const int adjustDirection = saturated ? -1 : (error > 0.0 ? 1 : -1);
+    if (m_autoExposure.m_adjustDirection == adjustDirection) {
+        ++m_autoExposure.m_adjustDirectionFrames;
+    } else {
+        m_autoExposure.m_adjustDirection = adjustDirection;
+        m_autoExposure.m_adjustDirectionFrames = 1;
+    }
+
+    if (!saturated && (std::abs(error) < 0.22) && (m_autoExposure.m_adjustDirectionFrames < 5))
     {
         reportAutoExposureGainToGUI(m_autoExposure.m_brightness, m_autoExposure.m_saturatedFraction);
         return;
@@ -551,6 +568,9 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     int newGain = currentGain;
 
     auto adjustExposure = [&]() {
+        if (std::abs(std::log(factor)) < 0.04) {
+            return false;
+        }
         const double proposed = qBound(exposureMinMs, newExposureMs * factor, exposureMaxMs);
         const bool changed = std::abs(proposed - newExposureMs) >= 0.0005;
         newExposureMs = proposed;
@@ -562,8 +582,8 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
         }
         const int gainRange = gainMax - gainMin;
         int delta = static_cast<int>(std::lround((factor - 1.0) * static_cast<double>(gainRange) * 0.25));
-        if (delta == 0) {
-            delta = factor > 1.0 ? 1 : -1;
+        if ((delta == 0) || ((std::abs(error) < 0.22) && !saturated)) {
+            return false;
         }
         const int proposed = qBound(gainMin, newGain + delta, gainMax);
         const bool changed = proposed != newGain;

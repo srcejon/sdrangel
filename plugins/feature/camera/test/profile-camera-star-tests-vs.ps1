@@ -73,6 +73,29 @@ function Resolve-VisualStudioInstall()
     throw "Could not find Visual Studio Diagnostics tools. Install Visual Studio with the Diagnostics Tools components, or run from a Developer Command Prompt with VSINSTALLDIR set."
 }
 
+function Resolve-WindowsPerformanceToolkitTool([string]$ToolName)
+{
+    $candidates = @()
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    if ($programFilesX86) {
+        $candidates += Join-Path $programFilesX86 "Windows Kits\10\Windows Performance Toolkit\$ToolName"
+        $candidates += Join-Path $programFilesX86 "Windows Kits\8.1\Windows Performance Toolkit\$ToolName"
+    }
+
+    $pathCommand = Get-Command $ToolName -ErrorAction SilentlyContinue
+    if ($pathCommand) {
+        $candidates += $pathCommand.Source
+    }
+
+    foreach ($candidate in ($candidates | Where-Object { $_ } | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath $candidate) {
+            return (Resolve-Path -LiteralPath $candidate).ProviderPath
+        }
+    }
+
+    return ""
+}
+
 function Invoke-LoggedCommand([string]$Program, [string[]]$Arguments, [string]$LogFile)
 {
     $display = "`"$Program`" " + ($Arguments -join " ")
@@ -233,7 +256,81 @@ if ($testExitCode -ne 0) {
     throw "Profiled test run failed with exit code $testExitCode. Visual Studio profile was written to $diagsession. See $logFile"
 }
 
+$expandedSessionDirectory = [System.IO.Path]::ChangeExtension($diagsession, $null)
+$profileDetailFile = Join-Path $ProfileOutputDirectory "camera-star-tests-$timestamp-xperf-profile-detail-local.txt"
+$stackButterflyFile = Join-Path $ProfileOutputDirectory "camera-star-tests-$timestamp-xperf-stack-butterfly.txt"
+$xperf = Resolve-WindowsPerformanceToolkitTool "xperf.exe"
+
+if ($xperf) {
+    Write-Host "Expanding Visual Studio profile..."
+    $expandExitCode = Invoke-LoggedCommand $vsDiagnostics @("expandDiagSession", $diagsession) $logFile
+    if ($expandExitCode -ne 0) {
+        Write-Warning "Visual Studio Diagnostics expandDiagSession returned exit code $expandExitCode. Skipping xperf exports."
+    } else {
+        $etlFile = Get-ChildItem -LiteralPath $expandedSessionDirectory -Recurse -Filter "*.etl" -ErrorAction SilentlyContinue |
+            Sort-Object Length -Descending |
+            Select-Object -First 1
+
+        if ($etlFile) {
+            $symbolPaths = @($testWorkingDirectory)
+            $symbolPaths += $runtimePaths
+            $symbolPaths = $symbolPaths |
+                Where-Object { $_ -and (Test-Path -LiteralPath $_) } |
+                Select-Object -Unique
+
+            $oldSymbolPath = $env:_NT_SYMBOL_PATH
+            $oldSymCachePath = $env:_NT_SYMCACHE_PATH
+            $env:_NT_SYMBOL_PATH = $symbolPaths -join ";"
+            $env:_NT_SYMCACHE_PATH = Join-Path $ProfileOutputDirectory "symcache"
+            New-Item -ItemType Directory -Force -Path $env:_NT_SYMCACHE_PATH | Out-Null
+
+            try {
+                Write-Host "Exporting local-symbol sampled CPU profile..."
+                $profileExitCode = Invoke-LoggedCommand $xperf @(
+                    "-i", $etlFile.FullName,
+                    "-o", $profileDetailFile,
+                    "-symbols",
+                    "-a", "profile",
+                    "-detail"
+                ) $logFile
+                if ($profileExitCode -ne 0) {
+                    Write-Warning "xperf sampled CPU profile export returned exit code $profileExitCode."
+                }
+
+                Write-Host "Exporting local-symbol stack butterfly profile..."
+                $stackExitCode = Invoke-LoggedCommand $xperf @(
+                    "-i", $etlFile.FullName,
+                    "-o", $stackButterflyFile,
+                    "-symbols",
+                    "-a", "stack",
+                    "-butterfly", "20",
+                    "-process", "featurecamera_star_tests"
+                ) $logFile
+                if ($stackExitCode -ne 0) {
+                    Write-Warning "xperf stack butterfly export returned exit code $stackExitCode."
+                }
+            }
+            finally {
+                $env:_NT_SYMBOL_PATH = $oldSymbolPath
+                $env:_NT_SYMCACHE_PATH = $oldSymCachePath
+            }
+        } else {
+            Write-Warning "No ETL file found under expanded profile directory $expandedSessionDirectory. Skipping xperf exports."
+        }
+    }
+} else {
+    Write-Warning "xperf.exe was not found. Install Windows Performance Toolkit to generate text profile exports."
+}
+
 Write-Host "Visual Studio profile written to:"
 Write-Host "  $diagsession"
+if (Test-Path -LiteralPath $profileDetailFile) {
+    Write-Host "xperf sampled CPU profile written to:"
+    Write-Host "  $profileDetailFile"
+}
+if (Test-Path -LiteralPath $stackButterflyFile) {
+    Write-Host "xperf stack butterfly profile written to:"
+    Write-Host "  $stackButterflyFile"
+}
 Write-Host "Log written to:"
 Write-Host "  $logFile"

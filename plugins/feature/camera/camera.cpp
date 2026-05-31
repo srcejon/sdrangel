@@ -469,9 +469,11 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
 {
     qDebug() << "Camera::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
 
-    if (m_starDetector
-        && ((force && !settings.m_plateSolve)
-            || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve)))
+    const bool cancellingPlateSolve = (force && !settings.m_plateSolve)
+        || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve)
+        || (!force && settings.m_plateSolve && CameraStarDetector::plateSolveInputSettingsChanged(settingsKeys));
+
+    if (m_starDetector && cancellingPlateSolve)
     {
         m_starDetector->requestPlateSolveCancellation();
     }

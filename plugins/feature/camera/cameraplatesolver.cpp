@@ -1077,7 +1077,8 @@ static QVector<CatalogStar> loadCatalogFromTextFile(const QString& path)
 
 static QString currentCatalogPath(const CameraSettings& settings)
 {
-    if (settings.m_plateSolveUseDownloadedCatalog && QFileInfo::exists(downloadedCatalogReducedPath())) {
+    (void) settings;
+    if (QFileInfo::exists(downloadedCatalogReducedPath())) {
         return downloadedCatalogReducedPath();
     }
     return QString::fromUtf8(kBundledCatalogPath);
@@ -1085,7 +1086,8 @@ static QString currentCatalogPath(const CameraSettings& settings)
 
 static QString currentCatalogSource(const CameraSettings& settings)
 {
-    return (settings.m_plateSolveUseDownloadedCatalog && QFileInfo::exists(downloadedCatalogReducedPath()))
+    (void) settings;
+    return QFileInfo::exists(downloadedCatalogReducedPath())
         ? QStringLiteral("HYG")
         : QStringLiteral("Bundled");
 }
@@ -12781,6 +12783,18 @@ QString CameraPlateSolver::downloadedCatalogCsvPath()
 {
     SolverContext context;
     return QDir(context.downloadedCatalogDir()).filePath(QString::fromUtf8(SolverContext::kDownloadedCatalogCsvFile));
+}
+
+QString CameraPlateSolver::sirilAstroCatalogPath()
+{
+    SolverContext context;
+    return QDir(context.downloadedCatalogDir()).filePath(QString::fromUtf8(SolverContext::kSirilAstroFileName));
+}
+
+QString CameraPlateSolver::sirilAstroCompressedCatalogPath()
+{
+    SolverContext context;
+    return QDir(context.downloadedCatalogDir()).filePath(QString::fromUtf8(SolverContext::kSirilAstroCompressedFileName));
 }
 
 bool CameraPlateSolver::importDownloadedCatalogArchive(const QString& archivePath, QString* errorMessage)

@@ -67,6 +67,8 @@ public:
 
     static QString downloadedCatalogArchivePath();
     static QString downloadedCatalogCsvPath();
+    static QString sirilAstroCatalogPath();
+    static QString sirilAstroCompressedCatalogPath();
     static bool importDownloadedCatalogArchive(const QString& archivePath, QString* errorMessage = nullptr);
     CameraPlateSolveResult solve(const CameraSettings& settings,
                                  const QSize& imageSize,

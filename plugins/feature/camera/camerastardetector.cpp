@@ -299,17 +299,9 @@ void CameraStarDetector::reportPlateSolveStatus(bool solving) const
     }
 }
 
-bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys)
+bool CameraStarDetector::plateSolveInputSettingsChanged(const QList<QString>& settingsKeys)
 {
-    return settingsKeys.contains("starDetect")
-        || settingsKeys.contains("starDebugView")
-        || settingsKeys.contains("starThreshold")
-        || settingsKeys.contains("starBackgroundBlur")
-        || settingsKeys.contains("starMinArea")
-        || settingsKeys.contains("starMaxArea")
-        || settingsKeys.contains("starMaxAspectRatio")
-        || settingsKeys.contains("starColor")
-        || settingsKeys.contains("plateSolve")
+    return settingsKeys.contains("plateSolve")
         || settingsKeys.contains("plateSolveMaxMagnitude")
         || settingsKeys.contains("plateSolveMinMatches")
         || settingsKeys.contains("plateSolveMatchRadius")
@@ -320,7 +312,38 @@ bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settin
         || settingsKeys.contains("plateSolveDateTime")
         || settingsKeys.contains("plateSolveDateTimeUtc")
         || settingsKeys.contains("plateSolveUseDownloadedCatalog")
-        || settingsKeys.contains("plateSolveCatalogSource");
+        || settingsKeys.contains("plateSolveCatalogSource")
+        || settingsKeys.contains("latitude")
+        || settingsKeys.contains("longitude")
+        || settingsKeys.contains("altitude")
+        || settingsKeys.contains("positionSync")
+        || settingsKeys.contains("azimuth")
+        || settingsKeys.contains("elevation")
+        || settingsKeys.contains("roll")
+        || settingsKeys.contains("rotator")
+        || settingsKeys.contains("fov")
+        || settingsKeys.contains("fovMode")
+        || settingsKeys.contains("fovSensorWidthMm")
+        || settingsKeys.contains("fovSensorHeightMm")
+        || settingsKeys.contains("fovFocalLengthMm")
+        || settingsKeys.contains("lensProjection")
+        || settingsKeys.contains("lensCenterOffsetX")
+        || settingsKeys.contains("lensCenterOffsetY")
+        || settingsKeys.contains("lensDistortionK1");
+}
+
+bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys)
+{
+    return settingsKeys.contains("starDetect")
+        || settingsKeys.contains("starDebugView")
+        || settingsKeys.contains("starThreshold")
+        || settingsKeys.contains("starBackgroundBlur")
+        || settingsKeys.contains("starMinArea")
+        || settingsKeys.contains("starMaxArea")
+        || settingsKeys.contains("starMaxAspectRatio")
+        || settingsKeys.contains("starColor")
+        || settingsKeys.contains("plateSolveLabelMode")
+        || plateSolveInputSettingsChanged(settingsKeys);
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
@@ -402,7 +425,8 @@ void CameraStarDetector::applySettings(const CameraSettings& settings, const QLi
 {
     qDebug() << "CameraStarDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
     if ((force && !settings.m_plateSolve)
-        || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve))
+        || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve)
+        || (!force && settings.m_plateSolve && plateSolveInputSettingsChanged(settingsKeys)))
     {
         requestPlateSolveCancellation();
     }

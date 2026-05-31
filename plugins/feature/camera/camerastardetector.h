@@ -54,6 +54,7 @@ public:
     ~CameraStarDetector() override;
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
     void requestPlateSolveCancellation();
+    [[nodiscard]] static bool plateSolveInputSettingsChanged(const QList<QString>& settingsKeys);
 
 protected:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;

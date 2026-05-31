@@ -1571,7 +1571,6 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveDateTimeModeCombo->setCurrentIndex(m_settings.m_plateSolveUseCaptureDateTime ? 0 : 1);
     settingsUI()->plateSolveDateTimeUtcButton->setChecked(m_settings.m_plateSolveDateTimeUtc);
     updatePlateSolveDateTimeEdit();
-    settingsUI()->plateSolveUseDownloadedCatalogCheck->setChecked(m_settings.m_plateSolveUseDownloadedCatalog);
     settingsUI()->plateSolveCatalogSourceCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveCatalogSource));
     settingsUI()->plateSolveApplyModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveApplyMode));
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
@@ -2040,7 +2039,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveDateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, &CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged);
     QObject::connect(settingsUI()->plateSolveDateTimeUtcButton, &QToolButton::toggled, this, &CameraGUI::on_plateSolveDateTimeUtcButton_toggled);
     QObject::connect(settingsUI()->plateSolveDateTimeNowButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDateTimeNowButton_clicked);
-    QObject::connect(settingsUI()->plateSolveUseDownloadedCatalogCheck, &QCheckBox::toggled, this, &CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled);
     QObject::connect(settingsUI()->plateSolveCatalogSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveCatalogSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveApplyModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveDownloadCatalogButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDownloadCatalogButton_clicked);
@@ -6895,7 +6893,6 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveUseCaptureDateTime = defaults.m_plateSolveUseCaptureDateTime;
     m_settings.m_plateSolveDateTime = defaults.m_plateSolveDateTime;
     m_settings.m_plateSolveDateTimeUtc = defaults.m_plateSolveDateTimeUtc;
-    m_settings.m_plateSolveUseDownloadedCatalog = defaults.m_plateSolveUseDownloadedCatalog;
     m_settings.m_plateSolveCatalogSource = defaults.m_plateSolveCatalogSource;
     m_settings.m_plateSolveApplyMode = defaults.m_plateSolveApplyMode;
 
@@ -6951,7 +6948,6 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveUseCaptureDateTime",
         "plateSolveDateTime",
         "plateSolveDateTimeUtc",
-        "plateSolveUseDownloadedCatalog",
         "plateSolveCatalogSource",
         "plateSolveApplyMode",
         "diffMask",
@@ -7187,12 +7183,6 @@ void CameraGUI::on_plateSolveDateTimeNowButton_clicked()
     applySetting("plateSolveDateTime");
 }
 
-void CameraGUI::on_plateSolveUseDownloadedCatalogCheck_toggled(bool checked)
-{
-    m_settings.m_plateSolveUseDownloadedCatalog = checked;
-    applySetting("plateSolveUseDownloadedCatalog");
-}
-
 void CameraGUI::on_plateSolveCatalogSourceCombo_currentIndexChanged(int index)
 {
     m_settings.m_plateSolveCatalogSource = static_cast<CameraSettings::PlateSolveCatalogSource>(index);
@@ -7386,25 +7376,67 @@ void CameraGUI::requestYoloDownload(const QString& settingKey, const QString& pa
 
 void CameraGUI::requestPlateSolveCatalogDownload()
 {
-    static const QString kCatalogUrl = QStringLiteral("https://codeberg.org/astronexus/hyg/media/branch/main/data/hyg/CURRENT/hyg_v42.csv.gz");
-    const QString localArchiveFilename = CameraPlateSolver::downloadedCatalogArchivePath();
+    static const QString kHygCatalogUrl = QStringLiteral("https://codeberg.org/astronexus/hyg/media/branch/main/data/hyg/CURRENT/hyg_v42.csv.gz");
+    static const QString kSirilAstroCatalogUrl = QStringLiteral("https://zenodo.org/records/14692304/files/siril_cat_healpix8_astro.dat.bz2?download=1");
+
+    const bool downloadAuto = (m_settings.m_plateSolveCatalogSource == CameraSettings::PlateSolveCatalogAuto);
+    const bool downloadSirilAstro = downloadAuto
+        || (m_settings.m_plateSolveCatalogSource == CameraSettings::PlateSolveCatalogSirilAstroGaia);
+
+    if (m_settings.m_plateSolveCatalogSource == CameraSettings::PlateSolveCatalogSirilSpccGaia)
+    {
+        QMessageBox::information(this, tr("Catalog download"),
+            tr("Siril Gaia DR3 SPCC is fetched online as needed and does not have a single local catalog file to download here."));
+        return;
+    }
+
+    if (downloadAuto)
+    {
+        const QString hygArchiveFilename = CameraPlateSolver::downloadedCatalogArchivePath();
+
+        if (!m_pendingPlateSolveDownloads.contains(hygArchiveFilename))
+        {
+            m_pendingPlateSolveDownloads.insert(hygArchiveFilename, kHygCatalogUrl);
+
+            if (QFileInfo::exists(hygArchiveFilename))
+            {
+                if (!HttpDownloadManagerGUI::confirmDownload(hygArchiveFilename, this))
+                {
+                    handlePlateSolveCatalogDownloadComplete(hygArchiveFilename, true, kHygCatalogUrl, QString());
+                }
+                else
+                {
+                    m_dlm.download(QUrl(kHygCatalogUrl), hygArchiveFilename, this);
+                }
+            }
+            else
+            {
+                m_dlm.download(QUrl(kHygCatalogUrl), hygArchiveFilename, this);
+            }
+        }
+    }
+
+    const QString catalogUrl = downloadSirilAstro ? kSirilAstroCatalogUrl : kHygCatalogUrl;
+    const QString localArchiveFilename = downloadSirilAstro
+        ? CameraPlateSolver::sirilAstroCompressedCatalogPath()
+        : CameraPlateSolver::downloadedCatalogArchivePath();
 
     if (m_pendingPlateSolveDownloads.contains(localArchiveFilename)) {
         return;
     }
 
-    m_pendingPlateSolveDownloads.insert(localArchiveFilename, kCatalogUrl);
+    m_pendingPlateSolveDownloads.insert(localArchiveFilename, catalogUrl);
 
     if (QFileInfo::exists(localArchiveFilename))
     {
         if (!HttpDownloadManagerGUI::confirmDownload(localArchiveFilename, this))
         {
-            handlePlateSolveCatalogDownloadComplete(localArchiveFilename, true, kCatalogUrl, QString());
+            handlePlateSolveCatalogDownloadComplete(localArchiveFilename, true, catalogUrl, QString());
             return;
         }
     }
 
-    m_dlm.download(QUrl(kCatalogUrl), localArchiveFilename, this);
+    m_dlm.download(QUrl(catalogUrl), localArchiveFilename, this);
 }
 
 void CameraGUI::handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage)
@@ -7450,6 +7482,14 @@ void CameraGUI::handlePlateSolveCatalogDownloadComplete(const QString& filename,
         return;
     }
 
+    if (filename == CameraPlateSolver::sirilAstroCompressedCatalogPath())
+    {
+        QMessageBox::information(this, tr("Catalog downloaded"),
+            tr("Downloaded Siril Gaia DR3 Astrometric catalog to %1.\n\nDecompress this .bz2 file to %2 before using the local astrometric catalog.")
+                .arg(filename, CameraPlateSolver::sirilAstroCatalogPath()));
+        return;
+    }
+
     QString importError;
     if (!CameraPlateSolver::importDownloadedCatalogArchive(filename, &importError))
     {
@@ -7457,12 +7497,6 @@ void CameraGUI::handlePlateSolveCatalogDownloadComplete(const QString& filename,
             importError.isEmpty() ? tr("Failed to import downloaded HYG catalog.") : importError);
         return;
     }
-
-    m_settings.m_plateSolveUseDownloadedCatalog = true;
-    blockApplySettings(true);
-    displaySettings();
-    blockApplySettings(false);
-    applySetting("plateSolveUseDownloadedCatalog");
 
     QMessageBox::information(this, tr("Catalog imported"),
         tr("Imported HYG catalog to %1").arg(CameraPlateSolver::downloadedCatalogCsvPath()));

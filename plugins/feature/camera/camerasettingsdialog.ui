@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>854</width>
-    <height>940</height>
+    <height>886</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -26,16 +26,6 @@
       <layout class="QVBoxLayout" name="cameraTabLayout">
        <item>
         <layout class="QGridLayout" name="cameraSettingsLayout">
-         <item row="19" column="1" colspan="3">
-          <widget class="QSpinBox" name="asiTargetTempSpin">
-           <property name="minimum">
-            <number>-50</number>
-           </property>
-           <property name="maximum">
-            <number>50</number>
-           </property>
-          </widget>
-         </item>
          <item row="4" column="0">
           <widget class="QLabel" name="exposureLabel">
            <property name="text">
@@ -130,13 +120,6 @@
             </widget>
            </item>
           </layout>
-         </item>
-         <item row="20" column="1" colspan="3">
-          <widget class="QSpinBox" name="asiUsbBandwidthSpin">
-           <property name="maximum">
-            <number>1000</number>
-           </property>
-          </widget>
          </item>
          <item row="22" column="1">
           <widget class="QSpinBox" name="alpacaFocusPositionSpin">
@@ -298,13 +281,6 @@
           <widget class="QComboBox" name="asiColorImageTypeCombo">
            <property name="toolTip">
             <string>Select RGB24 for camera-side colour conversion, RAW16 for 16-bit Bayer data or RAW8 for 8-bit Bayer data debayered in SDRangel.</string>
-           </property>
-          </widget>
-         </item>
-         <item row="16" column="1" colspan="3">
-          <widget class="QComboBox" name="alpacaReadoutModeCombo">
-           <property name="toolTip">
-            <string>Sensor readout mode</string>
            </property>
           </widget>
          </item>
@@ -585,13 +561,6 @@
            </property>
           </widget>
          </item>
-         <item row="19" column="0">
-          <widget class="QLabel" name="asiTargetTempLabel">
-           <property name="text">
-            <string>Target temp</string>
-           </property>
-          </widget>
-         </item>
          <item row="13" column="1">
           <widget class="QSpinBox" name="cameraBinXSpin">
            <property name="toolTip">
@@ -637,34 +606,6 @@
           <widget class="QLabel" name="resolutionLabel">
            <property name="text">
             <string>Resolution</string>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="asiAutoExposureGainLabel">
-           <property name="text">
-            <string>Auto exp/gain</string>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <widget class="QComboBox" name="autoExposureGainCombo">
-           <property name="toolTip">
-            <string>Choose no auto exposure/gain, software control, or camera hardware control where available.</string>
-           </property>
-          </widget>
-         </item>
-         <item row="25" column="0">
-          <widget class="QLabel" name="autoExposureGainModeLabel">
-           <property name="text">
-            <string>S/W mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="25" column="1">
-          <widget class="QComboBox" name="autoExposureGainModeCombo">
-           <property name="toolTip">
-            <string>Choose whether software auto exposure adjusts exposure or gain first.</string>
            </property>
           </widget>
          </item>
@@ -842,20 +783,6 @@
            </property>
           </widget>
          </item>
-         <item row="18" column="2">
-          <widget class="QLabel" name="asiHighSpeedModeLabel">
-           <property name="text">
-            <string>High speed mode</string>
-           </property>
-          </widget>
-         </item>
-         <item row="18" column="3">
-          <widget class="QCheckBox" name="asiHighSpeedModeCheck">
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
          <item row="5" column="1">
           <widget class="QSpinBox" name="isoSpin">
            <property name="toolTip">
@@ -925,6 +852,82 @@
            </property>
            <property name="singleStep">
             <double>0.100000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="25" column="3">
+          <widget class="QComboBox" name="autoExposureGainModeCombo">
+           <property name="toolTip">
+            <string>Choose whether software auto exposure adjusts exposure or gain first.</string>
+           </property>
+          </widget>
+         </item>
+         <item row="25" column="2">
+          <widget class="QLabel" name="autoExposureGainModeLabel">
+           <property name="text">
+            <string>S/W mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="25" column="0">
+          <widget class="QLabel" name="asiAutoExposureGainLabel">
+           <property name="text">
+            <string>Auto exp/gain</string>
+           </property>
+          </widget>
+         </item>
+         <item row="25" column="1">
+          <widget class="QComboBox" name="autoExposureGainCombo">
+           <property name="toolTip">
+            <string>Choose no auto exposure/gain, software control, or camera hardware control where available.</string>
+           </property>
+          </widget>
+         </item>
+         <item row="20" column="1">
+          <widget class="QSpinBox" name="asiUsbBandwidthSpin">
+           <property name="suffix">
+            <string>%</string>
+           </property>
+           <property name="maximum">
+            <number>1000</number>
+           </property>
+          </widget>
+         </item>
+         <item row="20" column="2">
+          <widget class="QLabel" name="asiHighSpeedModeLabel">
+           <property name="text">
+            <string>High speed mode</string>
+           </property>
+          </widget>
+         </item>
+         <item row="20" column="3">
+          <widget class="QCheckBox" name="asiHighSpeedModeCheck">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="18" column="2">
+          <widget class="QLabel" name="asiTargetTempLabel">
+           <property name="text">
+            <string>Target temp</string>
+           </property>
+          </widget>
+         </item>
+         <item row="18" column="3">
+          <widget class="QSpinBox" name="asiTargetTempSpin">
+           <property name="minimum">
+            <number>-50</number>
+           </property>
+           <property name="maximum">
+            <number>50</number>
+           </property>
+          </widget>
+         </item>
+         <item row="16" column="1">
+          <widget class="QComboBox" name="alpacaReadoutModeCombo">
+           <property name="toolTip">
+            <string>Sensor readout mode</string>
            </property>
           </widget>
          </item>
@@ -6395,7 +6398,6 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>cameraStartYSpin</tabstop>
   <tabstop>alpacaReadoutModeCombo</tabstop>
   <tabstop>asiCoolerOnCheck</tabstop>
-  <tabstop>asiTargetTempSpin</tabstop>
   <tabstop>asiUsbBandwidthSpin</tabstop>
   <tabstop>alpacaFocusStepSizeSpin</tabstop>
   <tabstop>alpacaAutoFocusButton</tabstop>

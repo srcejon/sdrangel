@@ -26,6 +26,7 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <utility>
 
 #include <QDir>
 #include <QDebug>
@@ -8568,18 +8569,40 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
     }
 
     if (settings.m_fov <= 5.0) {
+        if ((evaluation.brightCatalogShapeChecks >= 2)
+            && (evaluation.brightCatalogShapeMismatches > 0))
+        {
+            return false;
+        }
+
+        const bool lowMagnitudeNarrowGuided = isLowMagnitudeNarrowGuidedSolve(settings);
+        if (lowMagnitudeNarrowGuided
+            && (evaluation.seedProjectedBrightStars > 0)
+            && (evaluation.matchedSeedProjectedBrightStars == 0))
+        {
+            const bool strongProjectedBrightSupport =
+                (evaluation.brightProjectedStars >= 4)
+                && (evaluation.brightProjectedMatchFraction >= 0.85)
+                && ((evaluation.brightDetections < 6)
+                    || (evaluation.brightDetectionMatchFraction >= 0.65))
+                && ((evaluation.brightDetectionMagnitudeError <= 1.50)
+                    || (evaluation.matchedBrightProjectedStars >= 6));
+            const bool strongDetectedBrightSupport =
+                (evaluation.brightDetections >= 8)
+                && (evaluation.brightDetectionMatchFraction >= 0.65)
+                && (evaluation.brightDetectionMagnitudeError <= 0.45);
+            if (!strongProjectedBrightSupport && !strongDetectedBrightSupport) {
+                return false;
+            }
+        }
+
         if ((evaluation.finalMatches.size() >= 20)
             && (evaluation.brightnessRankError <= 0.35))
         {
             return true;
         }
 
-        if ((evaluation.brightCatalogShapeChecks >= 2)
-            && (evaluation.brightCatalogShapeMismatches > 0))
-        {
-            return false;
-        }
-        if (isLowMagnitudeNarrowGuidedSolve(settings)
+        if (lowMagnitudeNarrowGuided
             && (evaluation.finalMatches.size() >= 16)
             && (evaluation.rmsErrorPixels > std::min(settings.m_plateSolveFinalMatchRadius * 0.62, 14.5))
             && (evaluation.brightProjectedStars >= 3)
@@ -8589,9 +8612,6 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
             && (!std::isfinite(evaluation.brightnessRankError) || (evaluation.brightnessRankError <= 0.70)))
         {
             return true;
-        }
-        if (hasWeakNarrowGuidedBrightSupport(settings, evaluation)) {
-            return false;
         }
         if ((evaluation.brightProjectedStars >= 2)
             && (evaluation.matchedBrightProjectedStars == 0))
@@ -9955,6 +9975,112 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
     return isBetterWeakModeRefinedEvaluation(candidate.pose, best.pose);
 }
 
+bool hasCompetitiveRollAlias(const CameraSettings& settings,
+                             const PlateSolveCatalogContext& catalogContext,
+                             const QSize& imageSize,
+                             const QVector<CameraPipelineStarDetection>& starDetections,
+                             const QVector<int>& detectionIndices,
+                             const FinalMatchPassEvaluation& winner,
+                             double finalMatchRadius,
+                             QString *reason)
+{
+    if (!m_useDirectionSeedPreference
+        || m_directionSeedHasRollPreference
+        || !winner.projectorValid
+        || (settings.m_fov > 5.0)
+        || (winner.finalMatches.size() < settings.m_plateSolveMinMatches)
+        || !std::isfinite(winner.rmsErrorPixels))
+    {
+        return false;
+    }
+
+    const int competitiveMatchCount = std::max(
+        settings.m_plateSolveMinMatches,
+        static_cast<int>(std::ceil(static_cast<double>(winner.finalMatches.size()) * 0.85)));
+    const double maxCompetitiveRms = std::max(
+        winner.rmsErrorPixels + 2.0,
+        winner.rmsErrorPixels * 1.15);
+    const double maxCompetitiveWorstError = std::max(
+        winner.maxErrorPixels + 4.0,
+        winner.maxErrorPixels * 1.15);
+    const std::array<double, 12> rollOffsets = {{
+        -30.0, 30.0,
+        -60.0, 60.0,
+        -90.0, 90.0,
+        -120.0, 120.0,
+        -150.0, 150.0,
+        180.0, -180.0
+    }};
+
+    for (double rollOffset : rollOffsets)
+    {
+        Evaluation competitorPose = winner.pose;
+        competitorPose.anchored = false;
+        competitorPose.sparseGuidedPair = false;
+        competitorPose.anchorDetectionIndex = -1;
+        competitorPose.anchorCatalogIndex = -1;
+        competitorPose.secondaryAnchorDetectionIndex = -1;
+        competitorPose.secondaryAnchorCatalogIndex = -1;
+        competitorPose.rollDegrees = normalizeDegrees(winner.pose.rollDegrees + rollOffset);
+        competitorPose.matches.clear();
+        competitorPose.matchCount = 0;
+        competitorPose.rmsErrorPixels = std::numeric_limits<double>::infinity();
+
+        if (angularDistanceDegrees(competitorPose.rollDegrees, winner.pose.rollDegrees) < 1.0) {
+            continue;
+        }
+
+        const FinalMatchPassEvaluation competitor = evaluateFinalMatchPass(
+            settings,
+            catalogContext,
+            imageSize,
+            starDetections,
+            detectionIndices,
+            competitorPose,
+            finalMatchRadius);
+        if (!competitor.projectorValid
+            || (competitor.finalMatches.size() < competitiveMatchCount)
+            || !std::isfinite(competitor.rmsErrorPixels)
+            || (competitor.rmsErrorPixels > maxCompetitiveRms)
+            || (competitor.maxErrorPixels > maxCompetitiveWorstError)
+            || !hasGeometricallyConsistentMatches(
+                starDetections,
+                competitor.projectedStars,
+                competitor.finalMatches,
+                finalMatchRadius)
+            || !isAcceptableDirectionSeedSolve(
+                settings,
+                starDetections,
+                competitor.finalMatches,
+                competitor.rmsErrorPixels,
+                competitor.maxErrorPixels)
+            || !hasAcceptableGuidedFinalBrightnessConsistency(settings, competitor))
+        {
+            continue;
+        }
+
+        if (reason)
+        {
+            *reason = QStringLiteral("roll alias at %1 deg: matches=%2/%3 RMS=%4/%5")
+                .arg(competitor.pose.rollDegrees, 0, 'f', 2)
+                .arg(competitor.finalMatches.size())
+                .arg(winner.finalMatches.size())
+                .arg(competitor.rmsErrorPixels, 0, 'f', 2)
+                .arg(winner.rmsErrorPixels, 0, 'f', 2);
+        }
+        qDebug() << "CameraPlateSolver: rejecting ambiguous direction-seeded solution"
+                 << "winnerRoll" << winner.pose.rollDegrees
+                 << "winnerMatches" << winner.finalMatches.size()
+                 << "winnerRms" << winner.rmsErrorPixels
+                 << "aliasRoll" << competitor.pose.rollDegrees
+                 << "aliasMatches" << competitor.finalMatches.size()
+                 << "aliasRms" << competitor.rmsErrorPixels;
+        return true;
+    }
+
+    return false;
+}
+
 bool isBetterEvaluationForMode(const Evaluation& candidate,
                                const Evaluation& best,
                                bool useWeakModeScoring,
@@ -10956,7 +11082,21 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
         const double fineStep = std::min(radius, std::max(0.02, static_cast<double>(settings.m_fov) * 0.04));
         const double fovStep = std::min(radius, std::max(0.10, static_cast<double>(settings.m_fov) * 0.45));
-        for (double value : {fineStep, fineStep * 2.0, fineStep * 4.0, fovStep, fovStep * 2.0, radius * 0.5, radius})
+        const double fovDegrees = std::max(0.01, static_cast<double>(settings.m_fov));
+        for (double value : {
+            fineStep,
+            fineStep * 2.0,
+            fineStep * 4.0,
+            fovStep,
+            fovStep * 2.0,
+            fovDegrees * 0.5,
+            fovDegrees * 0.75,
+            fovDegrees,
+            fovDegrees * 1.25,
+            fovDegrees * 1.5,
+            fovDegrees * 2.0,
+            radius * 0.5,
+            radius})
         {
             const double clamped = std::min(radius, value);
             appendUniqueOffset(offsets, -clamped);
@@ -12930,7 +13070,11 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     m_directionSeedReferenceRollDegrees = settings.m_roll;
     m_directionSeedReferenceFovDegrees = settings.m_fov;
     m_directionSeedAzElScaleDegrees = (settings.m_fov <= 5.0)
-        ? std::max(0.5, static_cast<double>(settings.m_fov) * 0.75)
+        ? std::max(
+            2.0,
+            std::min(
+                static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35,
+                static_cast<double>(settings.m_fov) * 2.0))
         : std::max(2.0, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35);
     m_directionSeedRollScaleDegrees = std::max(15.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.15));
     m_directionSeedFovScaleDegrees = (settings.m_fov <= 5.0)
@@ -13919,6 +14063,27 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         return result;
     }
 
+    QString rollAmbiguityReason;
+    if (hasCompetitiveRollAlias(
+            settings,
+            catalogContext,
+            imageSize,
+            starDetections,
+            allDetectionIndices,
+            selectedFinalPass,
+            finalMatchRadius,
+            &rollAmbiguityReason))
+    {
+        result.m_matchedStars = finalMatches.size();
+        result.m_rmsErrorPixels = selectedFinalPass.rmsErrorPixels;
+        result.m_maxErrorPixels = selectedFinalPass.maxErrorPixels;
+        result.m_matchSummary = matchSummary(catalogContext, starDetections, finalMatches);
+        result.m_failureReason = QStringLiteral("direction-seeded solution rejected: ambiguous roll (%1)")
+            .arg(rollAmbiguityReason);
+        PROFILER_STOP(QString("%1: ambiguous roll").arg(__FUNCTION__));
+        return result;
+    }
+
     QHash<int, QPointF> projectedPointsByCatalogIndex;
     for (const ProjectedCatalogStar& projectedStar : projectedStars) {
         projectedPointsByCatalogIndex.insert(projectedStar.catalogIndex, projectedStar.point);
@@ -14123,6 +14288,94 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         CameraPlateSolveResult retryResult = runSolve(retrySettings);
         if (retryResult.m_solved || (retryResult.m_matchedStars > result.m_matchedStars)) {
             result = retryResult;
+        }
+    }
+
+    if (!result.m_solved
+        && denseNarrowDirectionSolve
+        && !isCancellationRequested())
+    {
+        const double fovDegrees = std::max(0.1, static_cast<double>(settings.m_fov));
+        const std::array<std::pair<double, double>, 8> recenterOffsets = {{
+            { fovDegrees * 0.75, 0.0 },
+            { -fovDegrees * 0.75, 0.0 },
+            { fovDegrees, 0.0 },
+            { -fovDegrees, 0.0 },
+            { 0.0, fovDegrees * 0.75 },
+            { 0.0, -fovDegrees * 0.75 },
+            { fovDegrees * 0.75, fovDegrees * 0.75 },
+            { -fovDegrees * 0.75, -fovDegrees * 0.75 }
+        }};
+        for (const auto& offset : recenterOffsets)
+        {
+            if (isCancellationRequested()) {
+                break;
+            }
+            CameraSettings retrySettings(settings);
+            retrySettings.m_azimuth = static_cast<float>(SolverContext::normalizeDegrees(
+                static_cast<double>(settings.m_azimuth) + offset.first));
+            retrySettings.m_elevation = static_cast<float>(std::clamp(
+                static_cast<double>(settings.m_elevation) + offset.second,
+                -90.0,
+                90.0));
+            retrySettings.m_plateSolveSearchRadius = static_cast<float>(std::max(
+                static_cast<double>(retrySettings.m_plateSolveSearchRadius),
+                kRetrySearchRadiusDegrees));
+            qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with recentered seed"
+                     << "azimuth" << retrySettings.m_azimuth
+                     << "elevation" << retrySettings.m_elevation
+                     << "searchRadius" << retrySettings.m_plateSolveSearchRadius;
+            CameraPlateSolveResult retryResult = runSolve(retrySettings);
+            if (retryResult.m_solved)
+            {
+                result = retryResult;
+                break;
+            }
+            if (retryResult.m_matchedStars > result.m_matchedStars) {
+                result = retryResult;
+            }
+        }
+    }
+
+    if (!result.m_solved
+        && denseNarrowDirectionSolve
+        && !isCancellationRequested()
+        && (settings.m_plateSolveMaxMagnitude > 13.0f))
+    {
+        QVector<double> brightRetryMagnitudes;
+        const auto appendBrightRetryMagnitude = [&](double magnitude) {
+            if ((magnitude >= static_cast<double>(settings.m_plateSolveMaxMagnitude))
+                || (magnitude < 13.0))
+            {
+                return;
+            }
+            for (double existing : brightRetryMagnitudes)
+            {
+                if (std::fabs(existing - magnitude) < 1e-6) {
+                    return;
+                }
+            }
+            brightRetryMagnitudes.append(magnitude);
+        };
+        appendBrightRetryMagnitude(15.0);
+        appendBrightRetryMagnitude(13.0);
+        for (double retryMagnitude : brightRetryMagnitudes)
+        {
+            CameraSettings retrySettings(settings);
+            retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(retryMagnitude);
+            retrySettings.m_plateSolveSearchRadius = static_cast<float>(std::max(
+                static_cast<double>(retrySettings.m_plateSolveSearchRadius),
+                kRetrySearchRadiusDegrees));
+            qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with bright catalog"
+                     << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
+                     << "searchRadius" << retrySettings.m_plateSolveSearchRadius;
+            CameraPlateSolveResult retryResult = runSolve(retrySettings);
+            if (retryResult.m_solved || (retryResult.m_matchedStars > result.m_matchedStars)) {
+                result = retryResult;
+            }
+            if (result.m_solved || isCancellationRequested()) {
+                break;
+            }
         }
     }
 

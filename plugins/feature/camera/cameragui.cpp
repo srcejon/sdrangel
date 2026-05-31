@@ -53,6 +53,7 @@
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTextStream>
+#include <QTimer>
 #include <QWheelEvent>
 #include <QMessageBox>
 #include <QUrl>
@@ -7892,6 +7893,9 @@ void CameraGUI::on_cameraSettingsButton_clicked()
     m_settingsDialog->shrinkToVisibleContent();
     m_settingsDialog->show();
     m_settingsDialog->shrinkToVisibleContent();
+    QTimer::singleShot(0, m_settingsDialog, [this]() {
+        m_settingsDialog->shrinkToVisibleContent();
+    });
     m_settingsDialog->raise();
     m_settingsDialog->activateWindow();
 }

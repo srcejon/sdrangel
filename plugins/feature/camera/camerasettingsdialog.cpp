@@ -166,16 +166,19 @@ void CameraSettingsDialog::shrinkToVisibleContent()
     }
 
     updateGeometry();
-    adjustSize();
 
-    QSize targetSize = sizeHint();
-    targetSize = targetSize.expandedTo(minimumSizeHint());
+    QSize targetSize = minimumSizeHint();
+    targetSize = targetSize.expandedTo(minimumSize());
 
     if (QScreen *screen = this->screen() ? this->screen() : QApplication::primaryScreen())
     {
-        const QSize availableSize = screen->availableGeometry().size();
-        targetSize.setWidth(std::min(targetSize.width(), availableSize.width()));
-        targetSize.setHeight(std::min(targetSize.height(), availableSize.height()));
+        const QRect availableGeometry = screen->availableGeometry();
+        const QSize frameOverhead = frameGeometry().isValid()
+            ? frameGeometry().size() - geometry().size()
+            : QSize();
+        const QSize maximumContentSize = (availableGeometry.size() - frameOverhead - QSize(16, 16))
+            .expandedTo(QSize(320, 240));
+        targetSize = targetSize.boundedTo(maximumContentSize);
     }
 
     resize(targetSize);

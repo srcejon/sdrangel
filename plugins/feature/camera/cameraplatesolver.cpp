@@ -8684,6 +8684,13 @@ bool isStrongEarlyGuidedFinalPass(const CameraSettings& settings,
         return false;
     }
 
+    // A roll prior can make an early final pass look convincing while still
+    // sitting in the wrong local basin. Let narrow roll-constrained solves run
+    // the multi-hypothesis comparison before accepting a solution.
+    if ((settings.m_fov <= 5.0) && plateSolveStartUsesRoll(settings)) {
+        return false;
+    }
+
     const int minimumEarlyMatches = (settings.m_fov <= 5.0)
         ? std::max(requiredMatches + 12, 16)
         : std::max(requiredMatches + 6, 10);
@@ -10733,7 +10740,9 @@ Evaluation searchBestPose(const CameraSettings& settings,
         m_weakModeNormalizationPixels = std::max(m_weakModeNormalizationPixels, wideBlindSeedMatchRadius);
     }
     const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveSearchRadius);
-    const double coarseRollRadius = std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
+    const double coarseRollRadius = useStartRoll
+        ? std::max(15.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.20))
+        : std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
     const double coarseFovRadius = std::max(0.05, std::min(12.0, static_cast<double>(settings.m_fov) * 0.10));
     const double minimumFovRefineStep = std::max(0.02, std::min(0.5, static_cast<double>(settings.m_fov) * 0.02));
 
@@ -12921,12 +12930,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     m_directionSeedReferenceRollDegrees = settings.m_roll;
     m_directionSeedReferenceFovDegrees = settings.m_fov;
     m_directionSeedAzElScaleDegrees = (settings.m_fov <= 5.0)
-        ? std::max(
-            {0.5,
-             static_cast<double>(settings.m_fov) * 2.0,
-             static_cast<double>(settings.m_plateSolveSearchRadius) * 0.45})
+        ? std::max(0.5, static_cast<double>(settings.m_fov) * 0.75)
         : std::max(2.0, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35);
-    m_directionSeedRollScaleDegrees = std::max(8.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.15));
+    m_directionSeedRollScaleDegrees = std::max(15.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.15));
     m_directionSeedFovScaleDegrees = (settings.m_fov <= 5.0)
         ? std::max(0.3, static_cast<double>(settings.m_fov) * 0.25)
         : std::max(2.0, static_cast<double>(settings.m_fov) * 0.08);
@@ -12971,7 +12977,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         ? captureDateTime
         : configuredSolveDateTime;
     const QDateTime captureDateTimeUtc = (solveDateTime.isValid() ? solveDateTime : QDateTime::currentDateTime()).toUTC();
-    const double solveMaxMagnitude = firstPassPlateSolveMaxMagnitude(settings);
+    const double solveMaxMagnitude = useCurrentSettingsOnly
+        ? static_cast<double>(settings.m_plateSolveMaxMagnitude)
+        : firstPassPlateSolveMaxMagnitude(settings);
     const double fullSearchMaxMagnitude = narrowGuidedFullSearchMaxMagnitude(settings);
     const bool useBrightFirstPassCatalog = (solveMaxMagnitude < settings.m_plateSolveMaxMagnitude)
         && useStartDirection
@@ -14115,6 +14123,65 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         CameraPlateSolveResult retryResult = runSolve(retrySettings);
         if (retryResult.m_solved || (retryResult.m_matchedStars > result.m_matchedStars)) {
             result = retryResult;
+        }
+    }
+
+    const bool rollPriorNarrowDirectionSolve =
+        ((settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll)
+            || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens))
+        && (settings.m_fov <= 5.0);
+    const auto wrappedAngularDistanceDegrees = [](double lhs, double rhs) {
+        double delta = std::fabs(lhs - rhs);
+        while (delta > 360.0) {
+            delta -= 360.0;
+        }
+        if (delta > 180.0) {
+            delta = 360.0 - delta;
+        }
+        return delta;
+    };
+    const auto directionDeltaDegrees = [&settings, &wrappedAngularDistanceDegrees](const CameraPlateSolveResult& solveResult) {
+        const double azimuthDelta = wrappedAngularDistanceDegrees(
+            solveResult.m_azimuthDegrees,
+            settings.m_azimuth);
+        const double elevationDelta = std::fabs(
+            solveResult.m_elevationDegrees - static_cast<double>(settings.m_elevation));
+        return std::sqrt(azimuthDelta * azimuthDelta + elevationDelta * elevationDelta);
+    };
+    const double rollPriorDirectionRetryThreshold = std::max(0.5, static_cast<double>(settings.m_fov) * 0.5);
+    if (rollPriorNarrowDirectionSolve
+        && !isCancellationRequested()
+        && (!result.m_solved || (directionDeltaDegrees(result) > rollPriorDirectionRetryThreshold)))
+    {
+        QVector<CameraPipelineStarDetection> rollPriorDetections = starDetections;
+        CameraSettings retrySettings(settings);
+        retrySettings.m_plateSolveStartMode = CameraSettings::PlateSolveStartFovAzEl;
+        qDebug() << "CameraPlateSolver: retrying narrow roll-prior solve without roll constraint"
+                 << "directionDelta" << (result.m_solved ? directionDeltaDegrees(result) : -1.0)
+                 << "threshold" << rollPriorDirectionRetryThreshold;
+        CameraPlateSolveResult retryResult = runSolve(retrySettings);
+        const double retryDirectionDelta = retryResult.m_solved
+            ? directionDeltaDegrees(retryResult)
+            : std::numeric_limits<double>::infinity();
+        const double resultDirectionDelta = result.m_solved
+            ? directionDeltaDegrees(result)
+            : std::numeric_limits<double>::infinity();
+        const bool retryKeepsMatchSupport = retryResult.m_matchedStars >= std::max(
+            settings.m_plateSolveMinMatches,
+            result.m_solved ? (result.m_matchedStars - 2) : settings.m_plateSolveMinMatches);
+        const bool retryKeepsResidualQuality = !result.m_solved
+            || (retryResult.m_rmsErrorPixels <= (result.m_rmsErrorPixels
+                + std::max(3.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.15)));
+        if (retryResult.m_solved
+            && retryKeepsMatchSupport
+            && retryKeepsResidualQuality
+            && (!result.m_solved || ((retryDirectionDelta + 0.1) < resultDirectionDelta)))
+        {
+            result = retryResult;
+        }
+        else if (result.m_solved)
+        {
+            starDetections = rollPriorDetections;
         }
     }
 

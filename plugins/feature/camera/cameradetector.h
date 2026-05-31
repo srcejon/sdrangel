@@ -72,7 +72,7 @@ private:
     cv::Mat m_exclusionMask;
     cv::Rect m_exclusionMaskRoi;
     cv::Size m_exclusionMaskWorkSize;
-    QVector<QRect> m_exclusionMaskRects;
+    QList<QRect> m_exclusionMaskRects;
 
     bool handleMessage(const Message& cmd);
 

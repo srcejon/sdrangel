@@ -79,7 +79,7 @@ private:
     cv::cuda::GpuMat m_cudaStarExclusionMask;
     cv::Rect m_cudaStarExclusionRoi;
     cv::Size m_cudaStarExclusionWorkSize;
-    QVector<QRect> m_cudaStarExclusionRects;
+    QList<QRect> m_cudaStarExclusionRects;
 
     [[nodiscard]] bool canUseCudaDetection() const;
     [[nodiscard]] cv::Ptr<cv::cuda::Filter> cudaStarSmallBlurFilter(int inputType);

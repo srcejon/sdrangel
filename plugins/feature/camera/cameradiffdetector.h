@@ -57,7 +57,7 @@ private:
     cv::cuda::GpuMat m_cudaDiffExclusionMask;
     cv::Rect m_cudaDiffExclusionRoi;
     cv::Size m_cudaDiffExclusionWorkSize;
-    QVector<QRect> m_cudaDiffExclusionRects;
+    QList<QRect> m_cudaDiffExclusionRects;
 #endif
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION

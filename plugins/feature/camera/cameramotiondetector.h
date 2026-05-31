@@ -56,7 +56,7 @@ private:
     cv::cuda::GpuMat m_cudaMotionExclusionMask;
     cv::Rect m_cudaMotionExclusionRoi;
     cv::Size m_cudaMotionExclusionWorkSize;
-    QVector<QRect> m_cudaMotionExclusionRects;
+    QList<QRect> m_cudaMotionExclusionRects;
 #endif
     QVector<QRect> m_lastMotionBoxes;
     int m_motionPersistenceRemaining;

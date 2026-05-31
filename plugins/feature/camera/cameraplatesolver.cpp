@@ -136,6 +136,8 @@ struct CandidatePair
     double catalogMagnitude = 0.0;
     int geometricSupport = 0;
     double detectionReliability = 0.0;
+    double catalogAssignmentPenalty = 0.0;
+    double detectionReliabilityLog = 0.0;
 };
 
 struct Match
@@ -7039,7 +7041,14 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
         {
             continue;
         }
-        const QPointF detectionPoint = starDetections[detectionIndex].m_center;
+        const CameraPipelineStarDetection& detection = starDetections[detectionIndex];
+        const QPointF detectionPoint = detection.m_center;
+        const double detectionRank = (detectionIndex < detectionRanks.size())
+            ? detectionRanks[detectionIndex]
+            : 0.5;
+        const double detectionReliabilityValue = (detectionIndex < detectionReliability.size())
+            ? detectionReliability[detectionIndex]
+            : cachedDetectionReliabilityMetric(starDetections, detectionIndex);
         const int cellX = static_cast<int>(std::floor(detectionPoint.x() / cellSize));
         const int cellY = static_cast<int>(std::floor(detectionPoint.y() / cellSize));
         for (int dy = -1; dy <= 1; ++dy)
@@ -7061,7 +7070,7 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
                     const ProjectedCatalogStar& projected = projectedStars[projectedIndex];
                     if (useNarrowGuidedBrightShapePrior
                         && isImplausiblyCompactBrightCatalogDetection(
-                            starDetections[detectionIndex],
+                            detection,
                             projected.magnitude,
                             true))
                     {
@@ -7074,15 +7083,11 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
                         continue;
                     }
 
-                    const double detectionRank = ((detectionIndex >= 0) && (detectionIndex < detectionRanks.size()))
-                        ? detectionRanks[detectionIndex]
-                        : 0.5;
-                    const double detectionReliabilityValue = ((detectionIndex >= 0) && (detectionIndex < detectionReliability.size()))
-                        ? detectionReliability[detectionIndex]
-                        : cachedDetectionReliabilityMetric(starDetections, detectionIndex);
-                    const double catalogRank = (projectedIndex >= 0) && (projectedIndex < projectedRanks.size())
+                    const double catalogRank = (projectedIndex < projectedRanks.size())
                         ? projectedRanks[projectedIndex]
                         : 0.5;
+                    const double catalogAssignmentPenalty = faintCatalogAssignmentPenalty(projected.magnitude);
+                    const double detectionReliabilityLog = std::log1p(detectionReliabilityValue);
                     candidatePairs.append({
                         detectionIndex,
                         projected.catalogIndex,
@@ -7091,7 +7096,9 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
                         std::fabs(detectionRank - catalogRank),
                         projected.magnitude,
                         0,
-                        detectionReliabilityValue
+                        detectionReliabilityValue,
+                        catalogAssignmentPenalty,
+                        detectionReliabilityLog
                     });
                 }
             }
@@ -7109,11 +7116,11 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
             return lhs.detectionIndex < rhs.detectionIndex;
         }
         const double lhsCost = lhs.distancePixels
-            + matchRadiusPixels * (0.75 * lhs.brightnessRankError + faintCatalogAssignmentPenalty(lhs.catalogMagnitude))
-            - std::min(matchRadiusPixels * 0.25, std::log1p(lhs.detectionReliability));
+            + matchRadiusPixels * (0.75 * lhs.brightnessRankError + lhs.catalogAssignmentPenalty)
+            - std::min(matchRadiusPixels * 0.25, lhs.detectionReliabilityLog);
         const double rhsCost = rhs.distancePixels
-            + matchRadiusPixels * (0.75 * rhs.brightnessRankError + faintCatalogAssignmentPenalty(rhs.catalogMagnitude))
-            - std::min(matchRadiusPixels * 0.25, std::log1p(rhs.detectionReliability));
+            + matchRadiusPixels * (0.75 * rhs.brightnessRankError + rhs.catalogAssignmentPenalty)
+            - std::min(matchRadiusPixels * 0.25, rhs.detectionReliabilityLog);
         return lhsCost < rhsCost;
     });
     {
@@ -7181,21 +7188,21 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
     std::sort(candidatePairs.begin(), candidatePairs.end(), [&catalogStars, &starDetections, matchRadiusPixels](const CandidatePair& lhs, const CandidatePair& rhs) {
         const double lhsSupportScore = static_cast<double>(lhs.geometricSupport)
             - 1.25 * lhs.brightnessRankError
-            - faintCatalogAssignmentPenalty(lhs.catalogMagnitude)
-            + 0.20 * std::log1p(lhs.detectionReliability);
+            - lhs.catalogAssignmentPenalty
+            + 0.20 * lhs.detectionReliabilityLog;
         const double rhsSupportScore = static_cast<double>(rhs.geometricSupport)
             - 1.25 * rhs.brightnessRankError
-            - faintCatalogAssignmentPenalty(rhs.catalogMagnitude)
-            + 0.20 * std::log1p(rhs.detectionReliability);
+            - rhs.catalogAssignmentPenalty
+            + 0.20 * rhs.detectionReliabilityLog;
         if (std::fabs(lhsSupportScore - rhsSupportScore) > 0.20) {
             return lhsSupportScore > rhsSupportScore;
         }
         const double lhsCost = lhs.distancePixels
-            + matchRadiusPixels * (0.75 * lhs.brightnessRankError + faintCatalogAssignmentPenalty(lhs.catalogMagnitude))
-            - std::min(matchRadiusPixels * 0.25, std::log1p(lhs.detectionReliability));
+            + matchRadiusPixels * (0.75 * lhs.brightnessRankError + lhs.catalogAssignmentPenalty)
+            - std::min(matchRadiusPixels * 0.25, lhs.detectionReliabilityLog);
         const double rhsCost = rhs.distancePixels
-            + matchRadiusPixels * (0.75 * rhs.brightnessRankError + faintCatalogAssignmentPenalty(rhs.catalogMagnitude))
-            - std::min(matchRadiusPixels * 0.25, std::log1p(rhs.detectionReliability));
+            + matchRadiusPixels * (0.75 * rhs.brightnessRankError + rhs.catalogAssignmentPenalty)
+            - std::min(matchRadiusPixels * 0.25, rhs.detectionReliabilityLog);
         if (!qFuzzyCompare(lhsCost + 1.0, rhsCost + 1.0)) {
             return lhsCost < rhsCost;
         }

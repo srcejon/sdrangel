@@ -343,8 +343,8 @@ QHash<QString, qint64> m_profileMetrics;
 // m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
 static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
 static constexpr const char* kSirilCacheDir = "siril-spcc-cache/v1";
-static constexpr const char* kSirilRegionCacheDir = "siril-spcc-region-cache/v2";
-static constexpr const char* kSirilAstroRegionCacheDir = "siril-astro-region-cache/v2";
+static constexpr const char* kSirilRegionCacheDir = "siril-spcc-region-cache/v3";
+static constexpr const char* kSirilAstroRegionCacheDir = "siril-astro-region-cache/v3";
 static constexpr const char* kBundledCatalogPath = ":/camera/brightstarcatalog.txt";
 static constexpr const char* kDownloadedCatalogDir = "camera";
 static constexpr const char* kDownloadedCatalogArchiveFile = "hyg_v42.csv.gz";
@@ -1187,7 +1187,7 @@ static QString sirilRegionCacheKey(double centerRaDegrees,
                                    double queryRadiusDegrees,
                                    double maxMagnitude)
 {
-    return QStringLiteral("ra%1_dec%2_r%3_m%4.tsv")
+    return QStringLiteral("ra%1_dec%2_r%3_m%4.bin")
         .arg(qRound64(normalizeDegrees(centerRaDegrees) * 1000.0))
         .arg(qRound64(centerDecDegrees * 1000.0))
         .arg(qRound64(queryRadiusDegrees * 1000.0))
@@ -1212,6 +1212,29 @@ static QString sirilAstroRegionDiskCachePath(double centerRaDegrees,
         sirilRegionCacheKey(centerRaDegrees, centerDecDegrees, queryRadiusDegrees, maxMagnitude));
 }
 
+// Binary region cache format (v3, little-endian):
+//
+//   Header (9 bytes):
+//     char[4]   magic      "SRCB"
+//     uint8_t   version    1
+//     uint32_t  starCount
+//
+//   Per star (variable length):
+//     double    ra         right ascension in degrees
+//     double    dec        declination in degrees
+//     float     mag        magnitude  (float gives ~7 sig. digits, plenty for mag)
+//     uint8_t   nameLen    length of name in bytes  (0–255)
+//     char[]    name       UTF-8, nameLen bytes, no null terminator
+//     uint8_t   spectralLen
+//     char[]    spectralType UTF-8, spectralLen bytes
+//
+// This format is ~2–4× smaller than the equivalent TSV (no text representation of
+// doubles, no line terminators, shorter per-record overhead) and reads with a single
+// memcpy-style scan rather than strtod + string parsing.
+
+static constexpr char kBinCacheMagic[4] = {'S', 'R', 'C', 'B'};
+static constexpr quint8 kBinCacheVersion = 1;
+
 static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path)
 {
     QFile file(path);
@@ -1220,90 +1243,67 @@ static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path)
     }
 
     const QByteArray data = file.readAll();
-    const char *bytes = data.constData();
-    const qsizetype byteCount = data.size();
-    QVector<CatalogStar> stars;
-    stars.reserve(static_cast<int>(std::min<qsizetype>(
-        std::max<qsizetype>(0, byteCount / 48),
-        std::numeric_limits<int>::max())));
+    const char *p = data.constData();
+    const char *end = p + data.size();
 
-    const auto findTab = [&](qsizetype first, qsizetype last) {
-        for (qsizetype i = first; i < last; ++i)
-        {
-            if (bytes[i] == '\t') {
-                return i;
-            }
-        }
-        return last;
-    };
-    const auto parseDoubleField = [&](qsizetype first, qsizetype last, double& value) {
-        if (first >= last) {
-            return false;
-        }
-
-        char *parsedEnd = nullptr;
-        value = std::strtod(bytes + first, &parsedEnd);
-        if (parsedEnd == bytes + first) {
-            return false;
-        }
-        while ((parsedEnd < bytes + last) && std::isspace(static_cast<unsigned char>(*parsedEnd))) {
-            ++parsedEnd;
-        }
-        return parsedEnd == bytes + last;
-    };
-
-    qsizetype lineStart = 0;
-    while (lineStart < byteCount)
+    // Validate header
+    if (data.size() < 9
+        || p[0] != kBinCacheMagic[0]
+        || p[1] != kBinCacheMagic[1]
+        || p[2] != kBinCacheMagic[2]
+        || p[3] != kBinCacheMagic[3]
+        || static_cast<quint8>(p[4]) != kBinCacheVersion)
     {
-        qsizetype lineEnd = lineStart;
-        while ((lineEnd < byteCount) && (bytes[lineEnd] != '\n')) {
-            ++lineEnd;
-        }
+        return {};
+    }
+    p += 5;
 
-        qsizetype trimmedEnd = lineEnd;
-        while ((trimmedEnd > lineStart)
-            && ((bytes[trimmedEnd - 1] == '\n') || (bytes[trimmedEnd - 1] == '\r')))
-        {
-            --trimmedEnd;
-        }
+    quint32 starCount = 0;
+    std::memcpy(&starCount, p, 4);
+    starCount = qFromLittleEndian(starCount);
+    p += 4;
 
-        if ((trimmedEnd <= lineStart) || (bytes[lineStart] == '#'))
-        {
-            lineStart = lineEnd + 1;
-            continue;
-        }
+    if (starCount == 0) {
+        return {};
+    }
 
-        const qsizetype tab0 = findTab(lineStart, trimmedEnd);
-        const qsizetype tab1 = findTab(tab0 + 1, trimmedEnd);
-        const qsizetype tab2 = findTab(tab1 + 1, trimmedEnd);
-        const qsizetype tab3 = findTab(tab2 + 1, trimmedEnd);
-        const qsizetype tab4 = (tab3 < trimmedEnd) ? findTab(tab3 + 1, trimmedEnd) : trimmedEnd;
-        if ((tab0 >= trimmedEnd) || (tab1 >= trimmedEnd) || (tab2 >= trimmedEnd) || (tab3 > trimmedEnd))
-        {
-            lineStart = lineEnd + 1;
-            continue;
+    QVector<CatalogStar> stars;
+    stars.reserve(static_cast<int>(std::min<quint32>(starCount, 8000000u)));
+
+    for (quint32 i = 0; i < starCount; ++i)
+    {
+        // Need at least ra(8) + dec(8) + mag(4) + nameLen(1) + spectralLen(1) = 22 bytes
+        if ((end - p) < 22) {
+            return {};
         }
 
         double ra = 0.0;
         double dec = 0.0;
-        double mag = 0.0;
-        if (!parseDoubleField(tab0 + 1, tab1, ra)
-            || !parseDoubleField(tab1 + 1, tab2, dec)
-            || !parseDoubleField(tab2 + 1, tab3, mag))
-        {
-            lineStart = lineEnd + 1;
-            continue;
-        }
+        float mag = 0.0f;
+        std::memcpy(&ra, p, 8); p += 8;
+        std::memcpy(&dec, p, 8); p += 8;
+        std::memcpy(&mag, p, 4); p += 4;
+        ra  = qFromLittleEndian(ra);
+        dec = qFromLittleEndian(dec);
+        mag = qFromLittleEndian(mag);
 
-        stars.append({
-            QString::fromUtf8(bytes + lineStart, tab0 - lineStart),
-            ra,
-            dec,
-            mag,
-            (tab3 < trimmedEnd) ? QString::fromUtf8(bytes + tab3 + 1, tab4 - tab3 - 1) : QString()
-        });
-        lineStart = lineEnd + 1;
+        const quint8 nameLen = static_cast<quint8>(*p++);
+        if ((end - p) < nameLen + 1) {
+            return {};
+        }
+        const QString name = QString::fromUtf8(p, nameLen);
+        p += nameLen;
+
+        const quint8 spectralLen = static_cast<quint8>(*p++);
+        if ((end - p) < spectralLen) {
+            return {};
+        }
+        const QString spectralType = spectralLen > 0 ? QString::fromUtf8(p, spectralLen) : QString();
+        p += spectralLen;
+
+        stars.append({name, ra, dec, static_cast<double>(mag), spectralType});
     }
+
     return stars;
 }
 
@@ -1322,22 +1322,39 @@ static void writeSirilRegionDiskCacheFile(const QString& path, const QVector<Cat
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return;
     }
-    file.write("#name\tra\tdec\tmag\tspectral\n");
+
+    // Binary format — see readSirilRegionDiskCacheFile for layout.
+    // Pre-size by ~22 bytes/star (minimum record) + header; actual size varies by
+    // name/spectral length but is always smaller than the equivalent TSV.
+    QByteArray buf;
+    buf.reserve(static_cast<qsizetype>(stars.size()) * 24 + 9);
+
+    // Header
+    buf.append(kBinCacheMagic, 4);
+    buf.append(static_cast<char>(kBinCacheVersion));
+    const quint32 starCountLE = qToLittleEndian(static_cast<quint32>(stars.size()));
+    buf.append(reinterpret_cast<const char*>(&starCountLE), 4);
+
     for (const CatalogStar& star : stars)
     {
-        QByteArray line;
-        line += star.name.toUtf8();
-        line += '\t';
-        line += QByteArray::number(star.rightAscensionDegrees, 'g', 16);
-        line += '\t';
-        line += QByteArray::number(star.declinationDegrees, 'g', 16);
-        line += '\t';
-        line += QByteArray::number(star.magnitude, 'g', 8);
-        line += '\t';
-        line += star.spectralType.toUtf8();
-        line += '\n';
-        file.write(line);
+        const double raLE  = qToLittleEndian(star.rightAscensionDegrees);
+        const double decLE = qToLittleEndian(star.declinationDegrees);
+        const float  magLE = qToLittleEndian(static_cast<float>(star.magnitude));
+        buf.append(reinterpret_cast<const char*>(&raLE),  8);
+        buf.append(reinterpret_cast<const char*>(&decLE), 8);
+        buf.append(reinterpret_cast<const char*>(&magLE), 4);
+
+        const QByteArray nameUtf8     = star.name.toUtf8();
+        const QByteArray spectralUtf8 = star.spectralType.toUtf8();
+        const quint8 nameLen     = static_cast<quint8>(std::min<int>(nameUtf8.size(),     255));
+        const quint8 spectralLen = static_cast<quint8>(std::min<int>(spectralUtf8.size(), 255));
+        buf.append(static_cast<char>(nameLen));
+        buf.append(nameUtf8.constData(), nameLen);
+        buf.append(static_cast<char>(spectralLen));
+        buf.append(spectralUtf8.constData(), spectralLen);
     }
+
+    file.write(buf);
     file.commit();
 }
 
@@ -3758,11 +3775,110 @@ static QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatal
     return projectedStars;
 }
 
+// Precomputed per-solve constants for the raDecToAzAlt inner loop.
+// All fields depend only on (latitude, longitude, datetime) which are constant
+// for every star in a catalog build — so we compute them once and reuse.
+struct RaDecToAzAltParams
+{
+    double sinLat;      // sin(latitude_rad)
+    double cosLat;      // cos(latitude_rad)
+    double lst_deg;     // local sidereal time in degrees
+    double jd;          // Julian date (for precession)
+    double jd_from;     // J2000 Julian date
+    // Precession rotation matrix row/col [row][col]
+    double rot[3][3];
+};
+
+static RaDecToAzAltParams buildRaDecToAzAltParams(double latitude,
+                                                   double longitude,
+                                                   const QDateTime& captureDateTimeUtc)
+{
+    RaDecToAzAltParams p;
+    const double lat_rad = degToRad(latitude);
+    p.sinLat = std::sin(lat_rad);
+    p.cosLat = std::cos(lat_rad);
+    p.lst_deg = Astronomy::localSiderealTime(captureDateTimeUtc, longitude);
+    p.jd = Astronomy::julianDate(captureDateTimeUtc);
+    p.jd_from = Astronomy::jd_j2000();
+
+    // Precession rotation matrix — same formula as Astronomy::precess(),
+    // precomputed once for (J2000 → current epoch) so each star only needs
+    // a 3x3 matrix multiply instead of rebuilding the matrix from scratch.
+    const double days_per_century = 36524.219878;
+    const double t0 = (p.jd_from - Astronomy::jd_b1950()) / days_per_century;
+    const double t  = (p.jd       - p.jd_from)            / days_per_century;
+    p.rot[0][0] = 1.0 - ((29696.0 + 26.0*t0)*t*t - 13.0*t*t*t)*1e-8;
+    p.rot[1][0] = ((2234941.0 + 1355.0*t0)*t - 676.0*t*t + 221.0*t*t*t)*1e-8;
+    p.rot[2][0] = ((971690.0  -  414.0*t0)*t + 207.0*t*t +  96.0*t*t*t)*1e-8;
+    p.rot[0][1] = -p.rot[1][0];
+    p.rot[1][1] = 1.0 - ((24975.0 + 30.0*t0)*t*t - 15.0*t*t*t)*1e-8;
+    p.rot[2][1] = -((10858.0 + 2.0*t0)*t*t)*1e-8;
+    p.rot[0][2] = -p.rot[2][0];
+    p.rot[1][2] = p.rot[2][1];
+    p.rot[2][2] = 1.0 - ((4721.0 - 4.0*t0)*t*t)*1e-8;
+    return p;
+}
+
+// Fast per-star RaDecToAzAlt using precomputed constants.
+// Returns false if the star is below the horizon (or non-finite).
+static bool raDecToAzAltFast(const RaDecToAzAltParams& p,
+                              double rightAscensionDegrees,
+                              double declinationDegrees,
+                              double& az,
+                              double& alt)
+{
+    // Apply precession (J2000 → current epoch) via precomputed rotation matrix.
+    // Convert RA/Dec to unit vector, rotate, convert back.
+    const double ra_rad  = degToRad(rightAscensionDegrees);
+    const double dec_rad0 = degToRad(declinationDegrees);
+    const double cosDec = std::cos(dec_rad0);
+    double x = cosDec * std::cos(ra_rad);
+    double y = cosDec * std::sin(ra_rad);
+    double z = std::sin(dec_rad0);
+    const double xp = p.rot[0][0]*x + p.rot[0][1]*y + p.rot[0][2]*z;
+    const double yp = p.rot[1][0]*x + p.rot[1][1]*y + p.rot[1][2]*z;
+    const double zp = p.rot[2][0]*x + p.rot[2][1]*y + p.rot[2][2]*z;
+
+    // Recover precessed RA/Dec from rotated vector.
+    const double dec_rad = std::asin(std::clamp(zp, -1.0, 1.0));
+    const double ra_prec_rad = std::atan2(yp, xp);
+    const double ra_prec_deg = (ra_prec_rad < 0.0 ? ra_prec_rad + 2.0 * kPi : ra_prec_rad) * (180.0 / kPi);
+
+    // Hour angle.
+    const double ha_deg = std::fmod(p.lst_deg - ra_prec_deg, 360.0);
+    const double ha_rad = degToRad(ha_deg);
+
+    // Altitude and azimuth.
+    const double sinDec = std::sin(dec_rad);
+    const double cosDec2 = std::cos(dec_rad);
+    const double cosHa  = std::cos(ha_rad);
+    const double alt_rad = std::asin(std::clamp(sinDec*p.sinLat + cosDec2*p.cosLat*cosHa, -1.0, 1.0));
+    alt = alt_rad * (180.0 / kPi);
+
+    if (!std::isfinite(alt) || (alt < kVisibleAltitudeFloor)) {
+        return false;
+    }
+
+    const double cosAlt = std::cos(alt_rad);
+    if (std::fabs(cosAlt) < 1e-12) {
+        az = 0.0;
+        return true;
+    }
+    const double cosA = std::clamp((sinDec - std::sin(alt_rad)*p.sinLat) / (cosAlt*p.cosLat), -1.0, 1.0);
+    const double a = std::acos(cosA) * (180.0 / kPi);
+    az = (std::sin(ha_rad) < 0.0) ? a : 360.0 - a;
+    return std::isfinite(az);
+}
+
 static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& settings,
                                                 const QVector<CatalogStar>& catalogStars,
                                                 const QDateTime& captureDateTimeUtc,
                                                 double maxMagnitude)
 {
+    // Precompute all time/location-dependent constants once for all stars.
+    const RaDecToAzAltParams azAltParams = buildRaDecToAzAltParams(
+        settings.m_latitude, settings.m_longitude, captureDateTimeUtc);
+
     const auto buildVisibleCatalogRange = [&](int firstStarIndex, int lastStarIndex) {
         QVector<VisibleCatalogStar> visibleStars;
         visibleStars.reserve(std::max(0, lastStarIndex - firstStarIndex));
@@ -3774,23 +3890,18 @@ static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& set
                 continue;
             }
 
-            const RADec raDec{star.rightAscensionDegrees / 15.0, star.declinationDegrees};
-            const AzAlt azAlt = Astronomy::raDecToAzAlt(
-                raDec,
-                settings.m_latitude,
-                settings.m_longitude,
-                captureDateTimeUtc,
-                true);
-            if (!std::isfinite(azAlt.az) || !std::isfinite(azAlt.alt) || (azAlt.alt < kVisibleAltitudeFloor)) {
+            double az = 0.0;
+            double alt = 0.0;
+            if (!raDecToAzAltFast(azAltParams, star.rightAscensionDegrees, star.declinationDegrees, az, alt)) {
                 continue;
             }
 
             visibleStars.append({
                 i,
-                azAlt.az,
-                azAlt.alt,
+                az,
+                alt,
                 star.magnitude,
-                normalize(vectorFromAltAz(azAlt.az, azAlt.alt))
+                normalize(vectorFromAltAz(az, alt))
             });
         }
 
@@ -13390,11 +13501,13 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         if (useBrightFirstPassCatalog)
         {
             guidedAnchorCatalogContext = catalogContext;
+            const qint64 rebuildStartMs = solveProfileTimer.elapsed();
             rebuildVisibleCatalogContext(
                 guidedAnchorCatalogContext,
                 settings,
                 captureDateTimeUtc,
                 fullSearchMaxMagnitude);
+            logSolveProfile("catalog.rebuild.guidedAnchor", rebuildStartMs);
             if (!guidedAnchorCatalogContext.catalogStars.isEmpty()) {
                 guidedAnchorCatalogContextPtr = &guidedAnchorCatalogContext;
             }
@@ -13851,12 +13964,14 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
 
     if (useBrightFirstPassCatalog && !usingRequestedMaxMagnitudeCatalog)
     {
+        const qint64 rebuildStartMs = solveProfileTimer.elapsed();
         PlateSolveCatalogContext fullCatalogContext = catalogContext;
         rebuildVisibleCatalogContext(
             fullCatalogContext,
             settings,
             captureDateTimeUtc,
             settings.m_plateSolveMaxMagnitude);
+        logSolveProfile("catalog.rebuild.finalPass", rebuildStartMs);
         if (!fullCatalogContext.catalogStars.isEmpty())
         {
             catalogContext = std::move(fullCatalogContext);

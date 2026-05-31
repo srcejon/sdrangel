@@ -72,4 +72,50 @@ if(WIN32)
             COMMENT "Deploying Qt TLS plugins for camera star tests"
         )
     endif()
+
+    if(MSVC)
+        find_program(camera_star_tests_powershell NAMES powershell.exe powershell)
+        if(camera_star_tests_powershell)
+            set(camera_star_tests_profile_runtime_paths
+                "$<TARGET_FILE_DIR:featurecamera_star_tests>"
+                "${CMAKE_BINARY_DIR}/bin"
+                "${camera_star_tests_qt_bin_dir}"
+            )
+
+            foreach(camera_star_tests_runtime_dir IN ITEMS
+                    "${OpenCV_LIBS_BIN_DIR}"
+                    "${FFTW3F_DLL_DIR}"
+                    "${LIBSIGMF_DLL_DIR}"
+                    "${ASICAMERA_DLL_DIR}")
+                if(camera_star_tests_runtime_dir)
+                    list(APPEND camera_star_tests_profile_runtime_paths "${camera_star_tests_runtime_dir}")
+                endif()
+            endforeach()
+
+            if(DEFINED CUDA_TOOLKIT_ROOT_DIR AND EXISTS "${CUDA_TOOLKIT_ROOT_DIR}/bin")
+                list(APPEND camera_star_tests_profile_runtime_paths "${CUDA_TOOLKIT_ROOT_DIR}/bin")
+            endif()
+            list(JOIN camera_star_tests_profile_runtime_paths "|" camera_star_tests_profile_runtime_path_arg)
+
+            add_custom_target(featurecamera_star_tests_vs_profile
+                COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/vs-profile"
+                COMMAND "${camera_star_tests_powershell}"
+                    -NoProfile
+                    -ExecutionPolicy Bypass
+                    -File "${CMAKE_CURRENT_SOURCE_DIR}/profile-camera-star-tests-vs.ps1"
+                    -Executable "$<TARGET_FILE:featurecamera_star_tests>"
+                    -Csv "${CMAKE_CURRENT_SOURCE_DIR}/star-tests.csv"
+                    -OutputDirectory "${CMAKE_CURRENT_BINARY_DIR}/star-test-output"
+                    -ProfileOutputDirectory "${CMAKE_CURRENT_BINARY_DIR}/vs-profile"
+                    -QtPluginPath "${camera_star_tests_qt_dir}/plugins"
+                    -RuntimePath "${camera_star_tests_profile_runtime_path_arg}"
+                    -Warmup
+                DEPENDS featurecamera_star_tests
+                VERBATIM
+                COMMENT "Profiling camera star/plate solver tests with Visual Studio Diagnostics"
+            )
+        else()
+            message(WARNING "PowerShell was not found; featurecamera_star_tests_vs_profile will not be available")
+        endif()
+    endif()
 endif()

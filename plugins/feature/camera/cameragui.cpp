@@ -417,6 +417,7 @@ bool CameraGUI::handleMessage(const Message& message)
             probeQtCameraCapabilities();
             updateCameraSettingsVisibility();
         }
+        updateVideoFileControls();
 
         return true;
     }
@@ -2323,8 +2324,14 @@ void CameraGUI::updateExposureControls()
 
 void CameraGUI::updateVideoFileControls()
 {
-    const bool fileCameraSelected = m_settings.isFileCamera();
-    const bool imageSequenceSelected = m_settings.isImageFileSequenceCamera();
+    const int comboIndex = ui->cameraCombo->currentIndex();
+    const QString comboProtocol = comboIndex >= 0
+        ? ui->cameraCombo->itemData(comboIndex, CameraProtocolRole).toString()
+        : QString();
+    const bool comboFileCameraSelected = CameraProtocol::isPlaybackSource(comboProtocol);
+    const bool fileCameraSelected = m_settings.isFileCamera() || comboFileCameraSelected;
+    const bool imageSequenceSelected =
+        (comboProtocol == CameraProtocol::images()) || m_settings.isImageFileSequenceCamera();
     const bool hasVideoFile = fileCameraSelected && m_settings.hasFileCameraSource();
     const qint64 playbackDurationMs = imageSequenceSelected ? imageSequenceDurationMs() : m_mediaPlayerDurationMs;
     const bool hasPlaybackPosition = hasVideoFile && (playbackDurationMs > 0);
@@ -2355,7 +2362,7 @@ void CameraGUI::updateVideoFileControls()
     setVisibleEnabled(ui->playbackPositionLabel, fileCameraSelected, hasPlaybackPosition);
     ui->videoLine->setVisible(fileCameraSelected);
     if (!fileCameraSelected || !hasVideoFile) {
-        ui->playbackPositionLabel->setText(m_settings.isImageFileSequenceCamera() ? QStringLiteral("0/0") : QStringLiteral("00:00:00"));
+        ui->playbackPositionLabel->setText(imageSequenceSelected ? QStringLiteral("0/0") : QStringLiteral("00:00:00"));
     }
     updateVideoPreRecordBufferMemoryLabel();
 }

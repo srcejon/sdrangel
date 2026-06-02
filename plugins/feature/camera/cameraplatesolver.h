@@ -28,6 +28,7 @@
 #include <QVector>
 
 #include <atomic>
+#include <limits>
 
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
@@ -54,6 +55,13 @@ struct CameraPlateSolveResult
     QString m_matchSummary;
     QString m_profileSummary;
     int m_requiredMatches = 0;
+    double m_solverQualityScore = 0.0;
+    double m_seedConsistencyScore = 0.0;
+    int m_namedBrightAnchorMatches = 0;
+    double m_namedBrightAnchorRmsErrorPixels = std::numeric_limits<double>::infinity();
+    double m_seedRadialMagnitudeMatchFraction = 1.0;
+    int m_prioritySeedProjectedChecks = 0;
+    double m_prioritySeedProjectedErrorPixels = std::numeric_limits<double>::infinity();
 };
 
 class QNetworkAccessManager;

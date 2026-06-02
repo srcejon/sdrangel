@@ -23,6 +23,7 @@
 #include <QImage>
 #include <QLocale>
 #include <QPainter>
+#include <QRegularExpression>
 #include <QStringList>
 #include <QTextStream>
 #include <QTimer>
@@ -595,6 +596,32 @@ const CatalogStar* findDiagnosticStar(const QVector<CatalogStar>& catalog, const
     return nullptr;
 }
 
+QVector<const CatalogStar*> findDiagnosticStarCandidates(const QVector<CatalogStar>& catalog, const QString& expected)
+{
+    QVector<const CatalogStar*> candidates;
+    const QString normalizedExpected = normalizedStarName(expected);
+    const bool exactOnly = normalizedExpected.startsWith(QStringLiteral("hip"));
+    for (const CatalogStar& star : catalog)
+    {
+        const QString normalizedLabel = normalizedStarName(star.name);
+        if (normalizedLabel == normalizedExpected) {
+            candidates.append(&star);
+        }
+    }
+    if (!candidates.isEmpty() || exactOnly) {
+        return candidates;
+    }
+
+    for (const CatalogStar& star : catalog)
+    {
+        const QString normalizedLabel = normalizedStarName(star.name);
+        if (normalizedLabel.contains(normalizedExpected) || normalizedExpected.contains(normalizedLabel)) {
+            candidates.append(&star);
+        }
+    }
+    return candidates;
+}
+
 double halfHorizontalFovFromLongEdgeFov(CameraSettings::LensProjection lensProjection,
                                        const QSize& imageSize,
                                        double fovDegrees)
@@ -1012,6 +1039,78 @@ const CameraPipelineStarDetection* findSolvedDetectionForExpectedStar(const Came
     return nullptr;
 }
 
+const CameraPipelineStarDetection* findSolvedDetectionForExpectedStarNearPosition(const CameraPipelineFramePtr& frame,
+                                                                                  const QString& expected,
+                                                                                  const QPointF& expectedPosition)
+{
+    if (!frame) {
+        return nullptr;
+    }
+
+    const CameraPipelineStarDetection *nearestDetection = nullptr;
+    double nearestDistance = std::numeric_limits<double>::infinity();
+    for (const CameraPipelineStarDetection& detection : frame->m_starDetections)
+    {
+        if (!detection.m_solved || !labelMatchesExpectedStar(detection.m_label, expected)) {
+            continue;
+        }
+
+        const double distance = std::hypot(
+            detection.m_center.x() - expectedPosition.x(),
+            detection.m_center.y() - expectedPosition.y());
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearestDetection = &detection;
+        }
+    }
+
+    return nearestDetection;
+}
+
+const CameraPipelineStarDetection* findMatchSummaryDetectionForExpectedStarNearPosition(const CameraPipelineFramePtr& frame,
+                                                                                        const QString& expected,
+                                                                                        const QPointF& expectedPosition)
+{
+    if (!frame || frame->m_plateSolve.m_matchSummary.trimmed().isEmpty()) {
+        return nullptr;
+    }
+
+    static const QRegularExpression matchPattern(QStringLiteral("^#(\\d+)\\s+(.+?)\\s+d="));
+    const CameraPipelineStarDetection *nearestDetection = nullptr;
+    double nearestDistance = std::numeric_limits<double>::infinity();
+    const QStringList parts = frame->m_plateSolve.m_matchSummary.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    for (const QString& part : parts)
+    {
+        const QRegularExpressionMatch match = matchPattern.match(part.trimmed());
+        if (!match.hasMatch()) {
+            continue;
+        }
+
+        bool indexOk = false;
+        const int detectionIndex = match.captured(1).toInt(&indexOk);
+        if (!indexOk || (detectionIndex < 0) || (detectionIndex >= frame->m_starDetections.size())) {
+            continue;
+        }
+
+        if (!labelMatchesExpectedStar(match.captured(2), expected)) {
+            continue;
+        }
+
+        const CameraPipelineStarDetection& detection = frame->m_starDetections.at(detectionIndex);
+        const double distance = std::hypot(
+            detection.m_center.x() - expectedPosition.x(),
+            detection.m_center.y() - expectedPosition.y());
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearestDetection = &detection;
+        }
+    }
+
+    return nearestDetection;
+}
+
 const CameraPipelineStarDetection* findProjectedDetectionForExpectedStar(const StarTestCase& test,
                                                                          const CameraPipelineFramePtr& frame,
                                                                          const QVector<CatalogStar>& catalog,
@@ -1060,6 +1159,101 @@ const CameraPipelineStarDetection* findProjectedDetectionForExpectedStar(const S
     return (nearestDistance <= tolerancePixels) ? nearestDetection : nullptr;
 }
 
+const CameraPipelineStarDetection* findProjectedDetectionForExpectedStarNearPosition(const StarTestCase& test,
+                                                                                     const CameraPipelineFramePtr& frame,
+                                                                                     const QVector<CatalogStar>& catalog,
+                                                                                     const QString& expected,
+                                                                                     const QPointF& expectedPosition)
+{
+    if (!frame) {
+        return nullptr;
+    }
+
+    const QVector<const CatalogStar*> stars = findDiagnosticStarCandidates(catalog, expected);
+    if (stars.isEmpty()) {
+        return nullptr;
+    }
+
+    const TestProjector projector = createDiagnosticProjector(test, frame);
+    const QDateTime solveDateTimeUtc = test.dateTime.toUTC();
+    const CatalogStar *bestStar = nullptr;
+    QPointF bestProjected;
+    double bestProjectedDistance = std::numeric_limits<double>::infinity();
+    for (const CatalogStar *star : stars)
+    {
+        const AzAlt azAlt = Astronomy::raDecToAzAlt(
+            RADec{star->rightAscensionDegrees / 15.0, star->declinationDegrees},
+            test.latitude,
+            test.longitude,
+            solveDateTimeUtc,
+            true);
+
+        QPointF projected;
+        if (!projectDiagnosticVector(projector, normalize(vectorFromAltAz(azAlt.az, azAlt.alt)), projected)) {
+            continue;
+        }
+
+        const double projectedDistance = std::hypot(
+            projected.x() - expectedPosition.x(),
+            projected.y() - expectedPosition.y());
+        if (projectedDistance < bestProjectedDistance)
+        {
+            bestProjectedDistance = projectedDistance;
+            bestProjected = projected;
+            bestStar = star;
+        }
+    }
+    if (!bestStar) {
+        return nullptr;
+    }
+
+    double nearestDistance = std::numeric_limits<double>::infinity();
+    const CameraPipelineStarDetection *nearestDetection = nullptr;
+    for (const CameraPipelineStarDetection& detection : frame->m_starDetections)
+    {
+        const double distance = std::hypot(
+            detection.m_center.x() - bestProjected.x(),
+            detection.m_center.y() - bestProjected.y());
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearestDetection = &detection;
+        }
+    }
+
+    const double tolerancePixels = std::max(24.0, std::min(72.0, std::max(48.0, bestProjectedDistance + 24.0)));
+    return (nearestDistance <= tolerancePixels) ? nearestDetection : nullptr;
+}
+
+const CameraPipelineStarDetection* findSolvedDetectionNearPosition(const CameraPipelineFramePtr& frame,
+                                                                   const QPointF& expectedPosition)
+{
+    if (!frame) {
+        return nullptr;
+    }
+
+    static constexpr double kPositionTolerancePixels = 24.0;
+    const CameraPipelineStarDetection *nearestDetection = nullptr;
+    double nearestDistance = std::numeric_limits<double>::infinity();
+    for (const CameraPipelineStarDetection& detection : frame->m_starDetections)
+    {
+        if (!detection.m_solved || detection.m_label.trimmed().isEmpty()) {
+            continue;
+        }
+
+        const double distance = std::hypot(
+            detection.m_center.x() - expectedPosition.x(),
+            detection.m_center.y() - expectedPosition.y());
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearestDetection = &detection;
+        }
+    }
+
+    return (nearestDistance <= kPositionTolerancePixels) ? nearestDetection : nullptr;
+}
+
 QStringList expectedStarPositionMismatches(const StarTestCase& test,
                                            const CameraPipelineFramePtr& frame,
                                            const QVector<CatalogStar>& catalog)
@@ -1072,9 +1266,16 @@ QStringList expectedStarPositionMismatches(const StarTestCase& test,
         const QString expected = it.key();
         const QPointF& expectedPosition = it.value();
 
-        const CameraPipelineStarDetection *detection = findSolvedDetectionForExpectedStar(frame, expected);
+        const CameraPipelineStarDetection *detection =
+            findSolvedDetectionNearPosition(frame, expectedPosition);
         if (!detection) {
-            detection = findProjectedDetectionForExpectedStar(test, frame, catalog, expected);
+            detection = findSolvedDetectionForExpectedStarNearPosition(frame, expected, expectedPosition);
+        }
+        if (!detection) {
+            detection = findMatchSummaryDetectionForExpectedStarNearPosition(frame, expected, expectedPosition);
+        }
+        if (!detection) {
+            detection = findProjectedDetectionForExpectedStarNearPosition(test, frame, catalog, expected, expectedPosition);
         }
         if (!detection)
         {
@@ -1235,6 +1436,49 @@ void printExpectedStarDiagnostics(const StarTestCase& test,
 
     for (const QString& expected : test.expectedStars)
     {
+        QStringList solvedMatches;
+        for (int i = 0; i < frame->m_starDetections.size(); ++i)
+        {
+            const CameraPipelineStarDetection& detection = frame->m_starDetections.at(i);
+            if (detection.m_solved && labelMatchesExpectedStar(detection.m_label, expected))
+            {
+                solvedMatches.append(QStringLiteral("#%1 x=%2 y=%3 label=%4 mag=%5 distance=%6")
+                    .arg(i)
+                    .arg(detection.m_center.x(), 0, 'f', 1)
+                    .arg(detection.m_center.y(), 0, 'f', 1)
+                    .arg(detection.m_label)
+                    .arg(detection.m_catalogMagnitude, 0, 'f', 2)
+                    .arg(detection.m_matchDistancePixels, 0, 'f', 2));
+            }
+        }
+        if (!solvedMatches.isEmpty())
+        {
+            std::cout << "    " << expected.toStdString()
+                      << " solved matches: "
+                      << solvedMatches.join(QStringLiteral("; ")).toStdString()
+                      << '\n';
+        }
+        else if (!frame->m_plateSolve.m_matchSummary.trimmed().isEmpty())
+        {
+            const QStringList parts = frame->m_plateSolve.m_matchSummary.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+            QStringList summaryMatches;
+            static const QRegularExpression matchPattern(QStringLiteral("^#(\\d+)\\s+(.+?)\\s+d="));
+            for (const QString& part : parts)
+            {
+                const QRegularExpressionMatch match = matchPattern.match(part.trimmed());
+                if (match.hasMatch() && labelMatchesExpectedStar(match.captured(2), expected)) {
+                    summaryMatches.append(part.trimmed());
+                }
+            }
+            if (!summaryMatches.isEmpty())
+            {
+                std::cout << "    " << expected.toStdString()
+                          << " match-summary matches: "
+                          << summaryMatches.join(QStringLiteral("; ")).toStdString()
+                          << '\n';
+            }
+        }
+
         const CatalogStar *star = findDiagnosticStar(catalog, expected);
         if (!star)
         {

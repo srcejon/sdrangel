@@ -967,6 +967,104 @@ void CameraStarDetector::applyStarDetection(
         }
     }
 
+    // --- Supplementary saturated-core recovery --------------------------------
+    // Very bright stars bloom into large, flat-topped saturated regions. The
+    // background estimator reads an elevated local background under such a region,
+    // so its residual ≈ 0 and it never reaches the threshold mask above — the star
+    // is silently lost (e.g. Jabbah in stars-narrow-8). Recover these by
+    // thresholding the *gray* image directly at the saturation level and emitting a
+    // detection for each saturated core that no existing detection already covers.
+    // (Skipped on the CUDA fast-path where gray was not downloaded.)
+    if (hasGray)
+    {
+        const cv::Mat saturatedMask = gray >= saturationThreshold;   // CV_8U 0/255
+        std::vector<std::vector<cv::Point>> saturatedContours;
+        cv::findContours(saturatedMask, saturatedContours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+        for (const std::vector<cv::Point>& contour : saturatedContours)
+        {
+            const double area = cv::contourArea(contour);
+            // Skip single-pixel specks (saturated hot pixels) and pathologically
+            // large regions (overexposed frames, not point sources).
+            if ((area < std::max(6.0, static_cast<double>(m_settings.m_starMinArea)))
+                || (area > static_cast<double>(CameraSettings::m_maxContourAreaBound))) {
+                continue;
+            }
+
+            const cv::Moments mu = cv::moments(contour);
+            if (mu.m00 <= 0.0) {
+                continue;
+            }
+            const double centerX = mu.m10 / mu.m00;
+            const double centerY = mu.m01 / mu.m00;
+            const cv::Rect box = cv::boundingRect(contour);
+
+            // Dedupe: if an existing detection already lies inside this saturated core
+            // (its centroid within roughly the core radius), the star is already
+            // represented by the normal pipeline — skip it.
+            const double dedupeRadius = 0.5 * std::max(box.width, box.height) + 4.0;
+            const double dedupeRadiusSq = dedupeRadius * dedupeRadius;
+            const QPointF center(centerX + roi.x, centerY + roi.y);
+            bool alreadyDetected = false;
+            for (const CameraPipelineStarDetection& existing : starDetections) {
+                const double dx = existing.m_center.x() - center.x();
+                const double dy = existing.m_center.y() - center.y();
+                if ((dx * dx + dy * dy) <= dedupeRadiusSq) {
+                    alreadyDetected = true;
+                    break;
+                }
+            }
+            if (alreadyDetected) {
+                continue;
+            }
+
+            const double width = std::max(1, box.width);
+            const double height = std::max(1, box.height);
+            const double aspectRatio = std::max(width / height, height / width);
+            if (aspectRatio > m_settings.m_starMaxAspectRatio) {
+                continue;
+            }
+            const double boundingArea = std::max(1.0, width * height);
+            const double fillRatio = area / boundingArea;
+            const double perimeter = std::max(1.0, cv::arcLength(contour, true));
+            const double roundness = std::clamp((4.0 * CV_PI * area) / (perimeter * perimeter), 0.0, 1.0);
+
+            // Spatial RMS radius from central moments → FWHM.
+            const double varX = std::max(0.0, mu.mu20 / mu.m00);
+            const double varY = std::max(0.0, mu.mu02 / mu.m00);
+            const double rmsRadius = std::sqrt(0.5 * (varX + varY));
+            const double fwhm = 2.354820045 * rmsRadius;
+
+            double grayPeak = 0.0;
+            cv::minMaxLoc(gray(box), nullptr, &grayPeak);
+            const double flux = grayPeak * area;
+            const double snr = flux / std::max(1.0, residualNoiseSigma * std::sqrt(area));
+
+            CameraPipelineStarDetection detection;
+            detection.m_center = center;
+            detection.m_peakValue = static_cast<float>(grayPeak);
+            detection.m_radius = static_cast<float>(std::max(1.0, std::sqrt(area / CV_PI)));
+            detection.m_flux = static_cast<float>(flux);
+            detection.m_snr = static_cast<float>(snr);
+            detection.m_fwhm = static_cast<float>(fwhm);
+            detection.m_centroidUncertainty = static_cast<float>(std::max(0.1, 0.5 * rmsRadius));
+            detection.m_qualityScore = static_cast<float>(grayPeak
+                * std::max(0.25, roundness)
+                * std::max(0.25, fillRatio)
+                / std::max(1.0, aspectRatio)
+                * 0.85);
+            detection.m_roundness = static_cast<float>(roundness);
+            detection.m_fillRatio = static_cast<float>(fillRatio);
+            detection.m_aspectRatio = static_cast<float>(aspectRatio);
+            detection.m_saturated = true;
+            detection.m_hotPixelSuspect = false;
+            starDetections.append(detection);
+
+            if (!finalMask.empty()) {
+                cv::rectangle(finalMask, box, cv::Scalar(255), 1);
+            }
+        }
+    }
+
     if (debugMask && (m_settings.m_starDebugView == CameraSettings::StarDebugViewFinal)) {
         *debugMask = finalMask;
     }

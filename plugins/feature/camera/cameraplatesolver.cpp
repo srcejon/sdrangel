@@ -309,6 +309,10 @@ struct SkyProjector
 
 static constexpr double kPi = 3.14159265358979323846;
 static constexpr double kVisibleAltitudeFloor = -5.0;
+// FoV at/below which the field is treated as a narrow (telescope) view rather than a
+// wide-angle/all-sky view. This boundary selects narrow- vs wide-field behaviour
+// throughout the solver (search strategy, residual gates, bright-anchor support).
+static constexpr double kNarrowFieldMaxFovDegrees = 5.0;
 static constexpr int kMaxDetectionsForSolve = 96;
 static constexpr double kBlindSeedRatioTolerance = 0.035;
 static constexpr double kBlindSeedMaxRmsPixels = 18.0;
@@ -1137,7 +1141,7 @@ static QString currentCatalogSource(const CameraSettings& settings)
 static double firstPassPlateSolveMaxMagnitude(const CameraSettings& settings)
 {
     if (plateSolveStartUsesDirection(settings)
-        && (settings.m_fov <= 5.0)
+        && (isNarrowField(settings))
         && (settings.m_plateSolveMaxMagnitude > kNarrowGuidedBrightCatalogMaxMagnitude))
     {
         return kNarrowGuidedBrightCatalogMaxMagnitude;
@@ -1154,7 +1158,7 @@ static double firstPassPlateSolveMaxMagnitude(const CameraSettings& settings)
 
 static double narrowGuidedFullSearchMaxMagnitude(const CameraSettings& settings)
 {
-    if (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0))
+    if (isNarrowGuidedDirectionSolve(settings))
     {
         // Mag 18 is a good Gaia depth for narrow guided solving: enough stars
         // for galaxy fields without letting dense faint stars dominate matches.
@@ -1167,7 +1171,7 @@ static double narrowGuidedFullSearchMaxMagnitude(const CameraSettings& settings)
 static bool isLowMagnitudeNarrowGuidedSolve(const CameraSettings& settings)
 {
     return plateSolveStartUsesDirection(settings)
-        && (settings.m_fov <= 5.0)
+        && (isNarrowField(settings))
         && (settings.m_plateSolveMaxMagnitude <= 17.0);
 }
 
@@ -2529,6 +2533,14 @@ static bool plateSolveStartUsesCurrentSettingsOnly(const CameraSettings& setting
     return settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartCurrentSettingsOnly;
 }
 
+// The seed-projected bright-star gate only applies when the user pinned roll (or is
+// re-solving the current settings), so the seed orientation -- and therefore the
+// projected positions of the bright catalog stars -- can be trusted.
+static bool usesSeedProjectedBrightGate(const CameraSettings& settings)
+{
+    return plateSolveStartUsesRoll(settings) || plateSolveStartUsesCurrentSettingsOnly(settings);
+}
+
 static bool plateSolveStartUsesElevation(const CameraSettings& settings)
 {
     switch (settings.m_plateSolveStartMode)
@@ -2588,6 +2600,19 @@ static bool isWidePlateSolveContext(const CameraSettings& settings)
     return (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
         && ((settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees)
             || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartBlind));
+}
+
+// True for narrow (telescope) fields. See kNarrowFieldMaxFovDegrees.
+static bool isNarrowField(const CameraSettings& settings)
+{
+    return settings.m_fov <= kNarrowFieldMaxFovDegrees;
+}
+
+// The common "user gave us a direction and it's a narrow telescope field" case that
+// many search and acceptance paths special-case.
+static bool isNarrowGuidedDirectionSolve(const CameraSettings& settings)
+{
+    return plateSolveStartUsesDirection(settings) && isNarrowField(settings);
 }
 
 static bool seedFovCompatibleWithStartFov(const CameraSettings& settings, double seedFovDegrees)
@@ -2819,7 +2844,7 @@ static void mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings,
 {
     const QVector<CatalogStar>& brightStars = brightStarCatalog(settings);
     const bool narrowDirectionSolve = plateSolveStartUsesDirection(settings)
-        && (settings.m_fov <= 5.0);
+        && (isNarrowField(settings));
     const double mergeMaxMagnitude = std::min(
         maxMagnitude,
         narrowDirectionSolve ? 10.5 : 7.0);
@@ -4256,7 +4281,7 @@ static bool hasPoorNoRollSeedRadialSupport(const CameraSettings& settings,
                                            bool useSeedProjectedBrightGate)
 {
     if (useSeedProjectedBrightGate
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || (evaluation.seedRadialMagnitudeSupport < 40.0)
         || (evaluation.prioritySeedRadialChecks < 8)
         || !std::isfinite(evaluation.prioritySeedRadialErrorPixels))
@@ -5264,7 +5289,7 @@ QVector<GuidedAnchorPair> findGuidedAnchorPairs(const CameraSettings& settings,
     const bool useWidePlateSolve = isWidePlateSolveContext(settings);
     const bool useFaintNarrowAnchors = useStartDirection
         && !useWidePlateSolve
-        && (settings.m_fov <= 5.0);
+        && (isNarrowField(settings));
     const bool useWideWeakAnchorSearch = !useStartDirection
         && useWidePlateSolve;
     if ((!useStartDirection && !useWideWeakAnchorSearch)
@@ -5706,7 +5731,7 @@ bool isStrongBlindSeedEvaluation(const CameraSettings& settings,
         return false;
     }
 
-    const int minBlindSeedMatches = (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0))
+    const int minBlindSeedMatches = (isNarrowGuidedDirectionSolve(settings))
         ? std::max(settings.m_plateSolveMinMatches, 4)
         : std::max(settings.m_plateSolveMinMatches + 1,
             std::min(6, static_cast<int>(detectionIndices.size())));
@@ -5846,7 +5871,7 @@ Evaluation verifyBlindSeedCandidate(const CameraSettings& settings,
         std::min(settings.m_plateSolveMatchRadius, 12.0),
         &outlierCount);
 
-    const int minConsensusMatches = (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0))
+    const int minConsensusMatches = (isNarrowGuidedDirectionSolve(settings))
         ? std::max(settings.m_plateSolveMinMatches, 4)
         : std::max(settings.m_plateSolveMinMatches + 1, std::min(6, static_cast<int>(detectionIndices.size())));
     if (inlierMatches.size() < minConsensusMatches) {
@@ -6473,16 +6498,16 @@ QVector<Evaluation> buildBlindTriangleSeeds(const CameraSettings& settings,
     }
     const bool brightGuidedTriangleMode = signatureDetectionIndicesOverride
         && plateSolveStartUsesDirection(settings)
-        && (settings.m_fov <= 5.0)
+        && (isNarrowField(settings))
         && !isWideFisheyeLens;
     const double ratioTolerance = brightGuidedTriangleMode
         ? 0.055
-        : (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0))
+        : (isNarrowGuidedDirectionSolve(settings))
         ? 0.08
         : isWideFisheyeLens ? 0.08
         : kBlindSeedRatioTolerance;
     const bool ignoreOrientationHandedness = isWideFisheyeLens
-        || (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0));
+        || (isNarrowGuidedDirectionSolve(settings));
     const QHash<qint64, QVector<int>> catalogTriangleBuckets =
         buildTriangleSignatureBuckets(catalogTriangles, ratioTolerance);
     const int bucketRadius = 1;
@@ -6983,7 +7008,7 @@ QVector<Evaluation> buildBrightGuidedTriangleSeeds(const CameraSettings& setting
     if (isCancellationRequested()
         || !plateSolveStartUsesDirection(settings)
         || isWidePlateSolveContext(settings)
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || (starDetections.size() < 3)
         || (visibleStars.size() < 3))
     {
@@ -7048,7 +7073,7 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
     if (isCancellationRequested()
         || !plateSolveStartUsesDirection(settings)
         || isWidePlateSolveContext(settings)
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || (starDetections.size() < 3)
         || (visibleStars.size() < 3))
     {
@@ -7508,7 +7533,7 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
             ++rollConsensusDirectSeeds;
         }
 
-        if (!plateSolveStartUsesRoll(settings) && plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0))
+        if (!plateSolveStartUsesRoll(settings) && isNarrowGuidedDirectionSolve(settings))
         {
             static const std::array<double, 17> localRollOffsets {{
                 -20.0, -15.0, -12.5, -10.0, -7.5, -5.0, -2.5, 0.0, 2.5,
@@ -9340,7 +9365,7 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
     QVector<Evaluation> seeds;
     const bool useNarrowGuidedPairSeeds = plateSolveStartUsesDirection(settings)
         && !isWidePlateSolveContext(settings)
-        && (settings.m_fov <= 5.0);
+        && (isNarrowField(settings));
     if (isCancellationRequested()
         || (!isWidePlateSolveContext(settings) && !useNarrowGuidedPairSeeds)
         || (starDetections.size() < settings.m_plateSolveMinMatches)
@@ -10499,12 +10524,12 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
     if (isCancellationRequested() || detectionQuads.isEmpty() || catalogQuads.isEmpty()) {
         return seeds;
     }
-    const double ratioTolerance = (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0))
+    const double ratioTolerance = (isNarrowGuidedDirectionSolve(settings))
         ? 0.06
         : isWideFisheyeLens ? 0.06
         : 0.03;
     const bool ignoreOrientationHandedness = isWideFisheyeLens
-        || (plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0));
+        || (isNarrowGuidedDirectionSolve(settings));
     const QHash<qint64, QVector<int>> catalogQuadBuckets =
         buildQuadSignatureBuckets(catalogQuads, ratioTolerance);
     const int bucketRadius = 1;
@@ -12046,6 +12071,22 @@ static double maxDistancePixels(const QVector<Match>& matches)
     return maxDistance;
 }
 
+// RMS ceiling for a sparse guided-anchor solve, relaxed as more matches accumulate
+// (more matches => a high RMS is less likely to be a coincidence). Shared by the
+// pre-final evaluation gate and the final-pass ranking gate so the ladder stays in
+// one place.
+static double sparseGuidedMaxRms(const CameraSettings& settings, int matchCount)
+{
+    const double radius = static_cast<double>(settings.m_plateSolveFinalMatchRadius);
+    if (matchCount >= std::max(settings.m_plateSolveMinMatches + 8, 12)) {
+        return std::min(radius * 0.75, 18.0);
+    }
+    if (matchCount >= std::max(settings.m_plateSolveMinMatches + 4, 8)) {
+        return std::min(radius * 0.68, 16.0);
+    }
+    return std::min(radius * 0.62, 14.5);
+}
+
 bool isAcceptableSparseGuidedPairEvaluation(const CameraSettings& settings,
                                             const PlateSolveCatalogContext& catalogContext,
                                             const QVector<CameraPipelineStarDetection>& starDetections,
@@ -12056,7 +12097,7 @@ bool isAcceptableSparseGuidedPairEvaluation(const CameraSettings& settings,
         || !isGuidedAnchorPose
         || !plateSolveStartUsesDirection(settings)
         || isWidePlateSolveContext(settings)
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || (evaluation.matches.size() < (evaluation.guidedTriangle ? 3 : 2)))
     {
         return false;
@@ -12085,21 +12126,7 @@ bool isAcceptableSparseGuidedPairEvaluation(const CameraSettings& settings,
         return false;
     }
 
-    double maxPairRms = std::min(
-        static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.62,
-        14.5);
-    if (evaluation.matchCount >= std::max(settings.m_plateSolveMinMatches + 8, 12))
-    {
-        maxPairRms = std::min(
-            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.75,
-            18.0);
-    }
-    else if (evaluation.matchCount >= std::max(settings.m_plateSolveMinMatches + 4, 8))
-    {
-        maxPairRms = std::min(
-            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.68,
-            16.0);
-    }
+    const double maxPairRms = sparseGuidedMaxRms(settings, evaluation.matchCount);
     if (!std::isfinite(evaluation.rmsErrorPixels) || (evaluation.rmsErrorPixels > maxPairRms)) {
         return false;
     }
@@ -12221,7 +12248,7 @@ Evaluation promoteSparseGuidedPairFromMatches(const CameraSettings& settings,
         || !plateSolveStartUsesDirection(settings)
         || plateSolveStartUsesRoll(settings)
         || isWidePlateSolveContext(settings)
-        || (settings.m_fov > 5.0))
+        || (!isNarrowField(settings)))
     {
         return promoted;
     }
@@ -12320,18 +12347,163 @@ Evaluation promoteSparseGuidedPairFromMatches(const CameraSettings& settings,
     return promoted;
 }
 
+// Strong, largely roll-independent final-pass evidence that justifies ignoring a weak
+// seed-radial signal: many final matches, solid matched bright-detection and
+// bright-projected support, good magnitude support, low brightness-rank error and a
+// tight RMS. This stops the no-roll seed-radial gate from vetoing a pose that is
+// clearly correct on its own merits -- e.g. a free-roll narrow solve whose roll is
+// far from the (default-0) seed roll, which inflates the seed-projected radial error
+// even though the solve is right (galaxy-m101 @maxMag16: 300 matches, 11/12 bright
+// projected, both named anchors within 9 px). The bright-magnitude-error ceiling is
+// 1.30 rather than 1.0 because narrow-field frames routinely include a saturated
+// bright star whose measured magnitude is unreliable; the strong match-count and
+// bright-support requirements still exclude the genuinely weak poses (e.g.
+// stars-narrow-1/3, which match only ~3 bright detections).
+static bool hasDenseFinalEvidenceOverridingSeedRadial(const CameraSettings& settings,
+                                                      const FinalMatchPassEvaluation& finalPass)
+{
+    return !usesSeedProjectedBrightGate(settings)
+        && (finalPass.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 50, 80)))
+        && (finalPass.matchedBrightDetections >= std::min(12, std::max(4, finalPass.brightDetections / 2)))
+        && (finalPass.matchedBrightProjectedStars >= std::min(8, std::max(3, finalPass.brightProjectedStars / 2)))
+        && (finalPass.matchedProjectedMagnitudeSupport >= 60.0)
+        && (finalPass.brightDetectionMagnitudeError <= 1.30)
+        && (!std::isfinite(finalPass.brightnessRankError) || (finalPass.brightnessRankError <= 0.30))
+        && (finalPass.rmsErrorPixels <= std::min(
+                static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.60,
+                16.0));
+}
+
+// ---------------------------------------------------------------------------------
+// Experimental robust verifier (SHADOW MODE -- computed and logged for corpus
+// comparison, not yet wired into the accept/reject decision).
+//
+// Replaces the hand-tuned bright-support heuristics with a single statistical test:
+// the log-odds that the matched configuration is a true alignment (H1) rather than a
+// chance coincidence (H0), summed over matches as a foreground/background likelihood
+// ratio (cf. astrometry.net's verification step; Sutherland & Saunders 1992):
+//
+//   log LR_i = -d_i^2 / (2 sigma^2)        // H1: real star, Gaussian centroid scatter
+//              - log(2 pi sigma^2)         // H1 normalisation (per px^2)
+//              - log( rho(<= m_i) )        // H0: uniform catalog background (per px^2)
+//
+// rho(<= m) = (# catalog stars projected into the field at least as bright as m) /
+// image area. A match to a *rare* (bright) star therefore contributes far more
+// evidence than a match to a common faint star -- the bright-star weighting that the
+// heuristics hand-code falls out of the density automatically, with no per-channel
+// rules. Loose matches (d >> sigma) contribute little or negative evidence, so a
+// wrong pose riding on many loose faint coincidences scores low.
+//
+// sigma is tied to the geometric match radius (r/4) rather than a tuned setting: a
+// real match is expected well inside the match disk. The only free knob this exposes
+// to an eventual accept decision is a single log-odds threshold.
+static double poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogContext,
+                                    const FinalMatchPassEvaluation& finalPass,
+                                    const QSize& imageSize,
+                                    double matchRadiusPixels,
+                                    int detectionCount)
+{
+    if (!finalPass.projectorValid
+        || finalPass.finalMatches.isEmpty()
+        || (imageSize.width() <= 0)
+        || (imageSize.height() <= 0)
+        || (matchRadiusPixels <= 0.0)
+        || finalPass.projectedStars.isEmpty())
+    {
+        return 0.0;
+    }
+
+    const double area = static_cast<double>(imageSize.width())
+        * static_cast<double>(imageSize.height());
+    const double matchDiskArea = kPi * matchRadiusPixels * matchRadiusPixels;
+    const int projectedCount = static_cast<int>(finalPass.projectedStars.size());
+    // Tightness scale for the bright bonus. Real matches here sit well inside the match
+    // radius but not sub-pixel (pose-model error), so r/2 gives a gentle discount to
+    // loose matches rather than killing them.
+    const double sigma = std::max(1.0, matchRadiusPixels * 0.5);
+    const double inverseTwoSigmaSquared = 1.0 / (2.0 * sigma * sigma);
+
+    // Sorted projected-catalog magnitudes for a fast rho(<= m) lookup.
+    QVector<double> projectedMagnitudes;
+    projectedMagnitudes.reserve(finalPass.projectedStars.size());
+    for (const ProjectedCatalogStar& star : finalPass.projectedStars) {
+        projectedMagnitudes.append(star.magnitude);
+    }
+    std::sort(projectedMagnitudes.begin(), projectedMagnitudes.end());
+
+    // Magnitude-limited count-surprise (Poisson log-likelihood ratio). Under H0 (chance)
+    // the number of *bright* detection<->catalog coincidences within the match radius is
+    // ~Poisson(lambda_bright). Observing K_bright >> lambda_bright is strong evidence of
+    // a real alignment. Restricting the count to bright stars is deliberate: in a deep
+    // field (mag 15-19) a *wrong* roll still matches hundreds of faint stars, so an
+    // all-magnitude count-surprise rewards wrong rolls too; limiting it to the bright
+    // tier means only a roll that lands the genuinely-bright stars earns count-surprise,
+    // which is what separates the correct roll from a faint-coincidence one. A correct
+    // dense solve still wins comfortably because it matches far more bright stars than a
+    // wrong roll (so m51-2 stays safe). Fields with no bright tier fall back to the
+    // rarity bonus below.
+    constexpr double kCountSurpriseBrightLimit = 13.0;
+    int brightMatches = 0;
+    for (const Match& match : finalPass.finalMatches) {
+        if ((match.catalogIndex >= 0)
+            && (match.catalogIndex < catalogContext.catalogStars.size())
+            && (catalogContext.catalogStars[match.catalogIndex].magnitude <= kCountSurpriseBrightLimit)) {
+            ++brightMatches;
+        }
+    }
+    const int brightProjectedCount = static_cast<int>(
+        std::upper_bound(projectedMagnitudes.cbegin(), projectedMagnitudes.cend(), kCountSurpriseBrightLimit)
+        - projectedMagnitudes.cbegin());
+    const double safeDetections = static_cast<double>(std::max(detectionCount, 1));
+    const double brightDensity = static_cast<double>(brightProjectedCount) / area;
+    const double lambda = std::min(
+        std::min(safeDetections, static_cast<double>(std::max(1, brightProjectedCount))),
+        safeDetections * brightDensity * matchDiskArea);
+    double logOdds = 0.0;
+    if ((static_cast<double>(brightMatches) > lambda) && (lambda > 0.0))
+    {
+        logOdds += static_cast<double>(brightMatches)
+                * std::log(static_cast<double>(brightMatches) / lambda)
+            - (static_cast<double>(brightMatches) - lambda);
+    }
+
+    // Bright-rarity bonus: a tight match to a star rarer than the field average (a
+    // bright star) is far more surprising than one to a common faint star. The rarity
+    // is log(projectedCount / #stars-at-least-this-bright); it is weighted by tightness
+    // so loose coincidences add little. This is what separates the correct roll (which
+    // lands the rare bright stars on detections) from a faint-coincidence roll.
+    for (const Match& match : finalPass.finalMatches)
+    {
+        if ((match.catalogIndex < 0) || (match.catalogIndex >= catalogContext.catalogStars.size())) {
+            continue;
+        }
+        const double magnitude = catalogContext.catalogStars[match.catalogIndex].magnitude;
+        const int brighterOrEqual = static_cast<int>(
+            std::upper_bound(projectedMagnitudes.cbegin(), projectedMagnitudes.cend(), magnitude)
+            - projectedMagnitudes.cbegin());
+        const double rarity = std::log(
+            static_cast<double>(projectedCount) / static_cast<double>(std::max(1, brighterOrEqual)));
+        if (rarity <= 0.0) {
+            continue;
+        }
+        const double d = match.distancePixels;
+        const double tightness = std::exp(-d * d * inverseTwoSigmaSquared);
+        logOdds += rarity * tightness;
+    }
+    return logOdds;
+}
+
 bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
                                       const FinalMatchPassEvaluation& finalPass)
 {
     if (!m_useDirectionSeedPreference
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || !finalPass.projectorValid)
     {
         return false;
     }
 
-    const bool useSeedProjectedBrightGate =
-        plateSolveStartUsesRoll(settings) || plateSolveStartUsesCurrentSettingsOnly(settings);
+    const bool useSeedProjectedBrightGate = usesSeedProjectedBrightGate(settings);
     const bool debugSparse = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE");
 
     if (hasHighConfidenceGuidedTriangleSupport(settings, finalPass)
@@ -12341,27 +12513,22 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
     }
 
     const bool denseFinalEvidenceOverridesSeedRadial =
+        hasDenseFinalEvidenceOverridingSeedRadial(settings, finalPass);
+
+    // Computed once and shared by both the low-magnitude branch below and the
+    // general bright-support checks afterwards (previously duplicated verbatim in
+    // both scopes with identical inputs).
+    const bool poorNoRollSeedRadialSupport =
+        hasPoorNoRollSeedRadialSupport(settings, finalPass, useSeedProjectedBrightGate);
+    const bool projectedBrightSupportCanOverrideDetectedBright =
         !useSeedProjectedBrightGate
-        && (finalPass.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 50, 80)))
-        && (finalPass.matchedBrightDetections >= std::min(12, std::max(4, finalPass.brightDetections / 2)))
-        && (finalPass.matchedBrightProjectedStars >= std::min(8, std::max(3, finalPass.brightProjectedStars / 2)))
-        && (finalPass.matchedProjectedMagnitudeSupport >= 60.0)
-        && (finalPass.brightDetectionMagnitudeError <= 1.0)
-        && (!std::isfinite(finalPass.brightnessRankError) || (finalPass.brightnessRankError <= 0.30))
-        && (finalPass.rmsErrorPixels <= std::min(
-                static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.60,
-                16.0));
+        && !poorNoRollSeedRadialSupport
+        && (finalPass.matchedBrightProjectedStars >= 5)
+        && (finalPass.projectedMagnitudeMatchFraction >= 0.30)
+        && (finalPass.seedProjectedMagnitudeSupport < 80.0);
 
     if (isLowMagnitudeNarrowGuidedSolve(settings))
     {
-        const bool poorNoRollSeedRadialSupport =
-            hasPoorNoRollSeedRadialSupport(settings, finalPass, useSeedProjectedBrightGate);
-        const bool projectedBrightSupportCanOverrideDetectedBright =
-            !useSeedProjectedBrightGate
-            && !poorNoRollSeedRadialSupport
-            && (finalPass.matchedBrightProjectedStars >= 5)
-            && (finalPass.projectedMagnitudeMatchFraction >= 0.30)
-            && (finalPass.seedProjectedMagnitudeSupport < 80.0);
         const bool projectedMagnitudeSupportGood =
             (finalPass.matchedProjectedMagnitudeSupport >= 12.0)
             && (finalPass.projectedMagnitudeMatchFraction >= 0.35);
@@ -12466,14 +12633,6 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
         }
     }
 
-    const bool poorNoRollSeedRadialSupport =
-        hasPoorNoRollSeedRadialSupport(settings, finalPass, useSeedProjectedBrightGate);
-    const bool projectedBrightSupportCanOverrideDetectedBright =
-        !useSeedProjectedBrightGate
-        && !poorNoRollSeedRadialSupport
-        && (finalPass.matchedBrightProjectedStars >= 5)
-        && (finalPass.projectedMagnitudeMatchFraction >= 0.30)
-        && (finalPass.seedProjectedMagnitudeSupport < 80.0);
     return ((finalPass.brightDetections >= 6)
             && (finalPass.matchedBrightDetections < 2)
             && !projectedBrightSupportCanOverrideDetectedBright)
@@ -12489,7 +12648,7 @@ bool isAcceptableSparseGuidedRankingFinalPass(const CameraSettings& settings,
         || !finalPass.pose.sparseGuidedPair
         || !plateSolveStartUsesDirection(settings)
         || isWidePlateSolveContext(settings)
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || (finalPass.finalMatches.size() < std::max(4, settings.m_plateSolveMinMatches))
         || (finalPass.matchedBrightProjectedStars < 2))
     {
@@ -12500,21 +12659,7 @@ bool isAcceptableSparseGuidedRankingFinalPass(const CameraSettings& settings,
         return false;
     }
 
-    double maxRmsError = std::min(
-        static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.62,
-        14.5);
-    if (finalPass.finalMatches.size() >= std::max(settings.m_plateSolveMinMatches + 8, 12))
-    {
-        maxRmsError = std::min(
-            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.75,
-            18.0);
-    }
-    else if (finalPass.finalMatches.size() >= std::max(settings.m_plateSolveMinMatches + 4, 8))
-    {
-        maxRmsError = std::min(
-            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.68,
-            16.0);
-    }
+    const double maxRmsError = sparseGuidedMaxRms(settings, static_cast<int>(finalPass.finalMatches.size()));
 
     return std::isfinite(finalPass.rmsErrorPixels)
         && (finalPass.rmsErrorPixels <= maxRmsError);
@@ -12524,7 +12669,7 @@ bool hasStrongDenseNarrowGuidedFinalPass(const CameraSettings& settings,
                                          const FinalMatchPassEvaluation& finalPass)
 {
     if (!m_useDirectionSeedPreference
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || !finalPass.projectorValid
         || (finalPass.finalMatches.size() < static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 18, 24)))
         || !std::isfinite(finalPass.rmsErrorPixels)
@@ -12704,26 +12849,45 @@ static QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
     return inliers;
 }
 
+// Residual acceptance thresholds shared by the seed-mode "is this solve good
+// enough" checks. Every mode applies the same shape -- a minimum match count, then
+// an RMS / median / worst-case pixel-error ceiling -- and differs only in the
+// threshold values, so the shape lives in passesResidualGates() and each mode just
+// fills in its own numbers.
+struct ResidualGates
+{
+    int minMatches = 0;
+    double maxRms = std::numeric_limits<double>::infinity();
+    double maxMedian = std::numeric_limits<double>::infinity();
+    double maxWorst = std::numeric_limits<double>::infinity();
+};
+
+static bool passesResidualGates(const QVector<Match>& matches,
+                                double rmsErrorPixels,
+                                double maxErrorPixels,
+                                const ResidualGates& gates)
+{
+    if (matches.size() < gates.minMatches) {
+        return false;
+    }
+    return (rmsErrorPixels <= gates.maxRms)
+        && (medianDistancePixels(matches) <= gates.maxMedian)
+        && (maxErrorPixels <= gates.maxWorst);
+}
+
 static bool isAcceptableBlindSolve(const CameraSettings& settings,
                             const QVector<CameraPipelineStarDetection>& starDetections,
                             const QVector<Match>& matches,
                             double rmsErrorPixels,
                             double maxErrorPixels)
 {
-    const int minAcceptedMatches = std::max(settings.m_plateSolveMinMatches + 2,
+    ResidualGates gates;
+    gates.minMatches = std::max(settings.m_plateSolveMinMatches + 2,
         std::min(10, std::max(6, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.20)))));
-    if (matches.size() < minAcceptedMatches) {
-        return false;
-    }
-
-    const double medianError = medianDistancePixels(matches);
-    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 20.0);
-    const double maxMedianError = std::min(settings.m_plateSolveFinalMatchRadius * 0.55, 15.0);
-    const double maxWorstError = std::min(settings.m_plateSolveFinalMatchRadius * 1.10, 45.0);
-
-    return (rmsErrorPixels <= maxRmsError)
-        && (medianError <= maxMedianError)
-        && (maxErrorPixels <= maxWorstError);
+    gates.maxRms = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 20.0);
+    gates.maxMedian = std::min(settings.m_plateSolveFinalMatchRadius * 0.55, 15.0);
+    gates.maxWorst = std::min(settings.m_plateSolveFinalMatchRadius * 1.10, 45.0);
+    return passesResidualGates(matches, rmsErrorPixels, maxErrorPixels, gates);
 }
 
 static bool isAcceptableSparseWideBlindSolve(const CameraSettings& settings,
@@ -12767,7 +12931,7 @@ static int minimumDirectionSeedAcceptedMatches(const CameraSettings& settings,
     // so requiring extra matches just because the detector found many faint blobs rejects
     // valid 1-degree telescope images. Keep the match count at the configured floor and
     // let RMS/median/max-distance gates carry the false-positive protection.
-    if (settings.m_fov <= 5.0) {
+    if (isNarrowField(settings)) {
         return configuredMinimum;
     }
     if (settings.m_fov <= 15.0)
@@ -12785,7 +12949,7 @@ static int minimumDirectionSeedAcceptedMatches(const CameraSettings& settings,
 
 static double maxDirectionSeedRmsError(const CameraSettings& settings, int matchCount)
 {
-    const bool narrowField = settings.m_fov <= 5.0;
+    const bool narrowField = isNarrowField(settings);
     const bool denseNarrowFieldSolve = narrowField
         && (matchCount >= (isLowMagnitudeNarrowGuidedSolve(settings) ? 16 : 20));
     if (narrowField)
@@ -12807,7 +12971,7 @@ static bool isAcceptableNarrowGuidedFov(const CameraSettings& settings, double f
 {
     if (!plateSolveStartUsesDirection(settings)
         || !plateSolveStartUsesFov(settings)
-        || (settings.m_fov > 5.0))
+        || (!isNarrowField(settings)))
     {
         return true;
     }
@@ -12824,41 +12988,52 @@ static QString narrowGuidedFovRejectionReason(const CameraSettings& settings, do
         .arg(maxNarrowGuidedFovDeltaDegrees(settings), 0, 'f', 3);
 }
 
+// Residual gates for a direction-seeded solve. Shared by isAcceptableDirectionSeedSolve()
+// and directionSeedRejectionReason() so the accept decision and the human-readable
+// reason can never drift apart.
+//
+// Narrow-field (telescope) solves pin the FoV, so residuals reflect real centroid noise
+// -> looser 0.75x median gate. Wide-field fisheye distortion at large angles raises
+// residuals even for correct solves, so the median gate is 0.65x (= 15.6 px at a 24 px
+// radius) to accept those while still rejecting clearly wrong ones.
+static ResidualGates directionSeedResidualGates(const CameraSettings& settings,
+                                                const QVector<CameraPipelineStarDetection>& starDetections,
+                                                int matchCount)
+{
+    const bool narrowField = isNarrowField(settings);
+    ResidualGates gates;
+    gates.minMatches = minimumDirectionSeedAcceptedMatches(settings, starDetections);
+    gates.maxRms = maxDirectionSeedRmsError(settings, matchCount);
+    gates.maxMedian = narrowField
+        ? std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 18.0)
+        : std::min(settings.m_plateSolveFinalMatchRadius * 0.65, 18.0);
+    gates.maxWorst = std::min(
+        settings.m_plateSolveFinalMatchRadius * (isWidePlateSolveContext(settings) ? 1.15 : 1.05),
+        36.0);
+    return gates;
+}
+
 static QString directionSeedRejectionReason(const CameraSettings& settings,
                                             const QVector<CameraPipelineStarDetection>& starDetections,
                                             const QVector<Match>& matches,
                                             double rmsErrorPixels,
                                             double maxErrorPixels)
 {
-    // For narrow-field (telescope) solves the FOV is pinned, so residuals reflect true
-    // centroid accuracy rather than FOV-absorbed error.  Use slightly looser thresholds.
-    const bool narrowField = settings.m_fov <= 5.0;
-    const int requiredMatches = minimumDirectionSeedAcceptedMatches(settings, starDetections);
+    const ResidualGates gates = directionSeedResidualGates(settings, starDetections, matches.size());
     const double medianError = medianDistancePixels(matches);
-    const double maxRmsError = maxDirectionSeedRmsError(settings, matches.size());
-    // Narrow-field: residuals reflect real centroid noise with pinned FOV — use 0.75×.
-    // Wide-field fisheye: lens distortion at large angles raises residuals even for correct
-    // solves; 0.65x (= 15.6 px at 24 px radius) is needed to accept these valid solutions
-    // while still rejecting clearly wrong ones.
-    const double maxMedianError = narrowField
-        ? std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 18.0)
-        : std::min(settings.m_plateSolveFinalMatchRadius * 0.65, 18.0);
-    const double maxWorstError = std::min(
-        settings.m_plateSolveFinalMatchRadius * (isWidePlateSolveContext(settings) ? 1.15 : 1.05),
-        36.0);
 
     QStringList reasons;
-    if (matches.size() < requiredMatches) {
-        reasons.append(QStringLiteral("matches %1 < required %2").arg(matches.size()).arg(requiredMatches));
+    if (matches.size() < gates.minMatches) {
+        reasons.append(QStringLiteral("matches %1 < required %2").arg(matches.size()).arg(gates.minMatches));
     }
-    if (rmsErrorPixels > maxRmsError) {
-        reasons.append(QStringLiteral("RMS %1 > %2").arg(rmsErrorPixels, 0, 'f', 2).arg(maxRmsError, 0, 'f', 2));
+    if (rmsErrorPixels > gates.maxRms) {
+        reasons.append(QStringLiteral("RMS %1 > %2").arg(rmsErrorPixels, 0, 'f', 2).arg(gates.maxRms, 0, 'f', 2));
     }
-    if (medianError > maxMedianError) {
-        reasons.append(QStringLiteral("median %1 > %2").arg(medianError, 0, 'f', 2).arg(maxMedianError, 0, 'f', 2));
+    if (medianError > gates.maxMedian) {
+        reasons.append(QStringLiteral("median %1 > %2").arg(medianError, 0, 'f', 2).arg(gates.maxMedian, 0, 'f', 2));
     }
-    if (maxErrorPixels > maxWorstError) {
-        reasons.append(QStringLiteral("max %1 > %2").arg(maxErrorPixels, 0, 'f', 2).arg(maxWorstError, 0, 'f', 2));
+    if (maxErrorPixels > gates.maxWorst) {
+        reasons.append(QStringLiteral("max %1 > %2").arg(maxErrorPixels, 0, 'f', 2).arg(gates.maxWorst, 0, 'f', 2));
     }
     return reasons.isEmpty() ? QStringLiteral("accepted") : reasons.join(QStringLiteral(", "));
 }
@@ -12885,28 +13060,8 @@ static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
                                     double rmsErrorPixels,
                                     double maxErrorPixels)
 {
-    const int minAcceptedMatches = minimumDirectionSeedAcceptedMatches(settings, starDetections);
-    if (matches.size() < minAcceptedMatches) {
-        return false;
-    }
-
-    // For narrow-field (telescope) solves the FOV is pinned, so residuals reflect true
-    // centroid accuracy rather than FOV-absorbed error.  Use slightly looser thresholds.
-    // For wide-field fisheye, lens distortion at large angles raises residuals; 0.65x
-    // (= 15.6 px at 24 px radius) is needed to accept valid wide-angle solutions.
-    const bool narrowField = settings.m_fov <= 5.0;
-    const double medianError = medianDistancePixels(matches);
-    const double maxRmsError = maxDirectionSeedRmsError(settings, matches.size());
-    const double maxMedianError = narrowField
-        ? std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 18.0)
-        : std::min(settings.m_plateSolveFinalMatchRadius * 0.65, 18.0);
-    const double maxWorstError = std::min(
-        settings.m_plateSolveFinalMatchRadius * (isWidePlateSolveContext(settings) ? 1.15 : 1.05),
-        36.0);
-
-    return (rmsErrorPixels <= maxRmsError)
-        && (medianError <= maxMedianError)
-        && (maxErrorPixels <= maxWorstError);
+    const ResidualGates gates = directionSeedResidualGates(settings, starDetections, matches.size());
+    return passesResidualGates(matches, rmsErrorPixels, maxErrorPixels, gates);
 }
 
 static bool isAcceptableElevationSeedEvaluation(const CameraSettings& settings,
@@ -12928,20 +13083,13 @@ static bool isAcceptableElevationSeedSolve(const CameraSettings& settings,
                                     double rmsErrorPixels,
                                     double maxErrorPixels)
 {
-    const int minAcceptedMatches = std::max(settings.m_plateSolveMinMatches + 1,
+    ResidualGates gates;
+    gates.minMatches = std::max(settings.m_plateSolveMinMatches + 1,
         std::min(8, std::max(5, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.15)))));
-    if (matches.size() < minAcceptedMatches) {
-        return false;
-    }
-
-    const double medianError = medianDistancePixels(matches);
-    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.85, 24.0);
-    const double maxMedianError = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
-    const double maxWorstError = std::min(settings.m_plateSolveFinalMatchRadius * 1.20, 50.0);
-
-    return (rmsErrorPixels <= maxRmsError)
-        && (medianError <= maxMedianError)
-        && (maxErrorPixels <= maxWorstError);
+    gates.maxRms = std::min(settings.m_plateSolveFinalMatchRadius * 0.85, 24.0);
+    gates.maxMedian = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
+    gates.maxWorst = std::min(settings.m_plateSolveFinalMatchRadius * 1.20, 50.0);
+    return passesResidualGates(matches, rmsErrorPixels, maxErrorPixels, gates);
 }
 
 double evaluationRmsQuality(const Evaluation& evaluation,
@@ -13024,7 +13172,7 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
         return true;
     }
 
-    if (settings.m_fov <= 5.0) {
+    if (isNarrowField(settings)) {
         if ((evaluation.brightCatalogShapeChecks >= 2)
             && (evaluation.brightCatalogShapeMismatches > 0))
         {
@@ -13032,8 +13180,7 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
         }
 
         const bool lowMagnitudeNarrowGuided = isLowMagnitudeNarrowGuidedSolve(settings);
-        const bool useSeedProjectedBrightGate =
-            plateSolveStartUsesRoll(settings) || plateSolveStartUsesCurrentSettingsOnly(settings);
+        const bool useSeedProjectedBrightGate = usesSeedProjectedBrightGate(settings);
         const bool poorNoRollSeedRadialSupport =
             hasPoorNoRollSeedRadialSupport(settings, evaluation, useSeedProjectedBrightGate);
         const bool projectedBrightSupportCanOverrideDetectedBright =
@@ -13042,7 +13189,9 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
             && (evaluation.matchedBrightProjectedStars >= 5)
             && (evaluation.projectedMagnitudeMatchFraction >= 0.30)
             && (evaluation.seedProjectedMagnitudeSupport < 80.0);
-        if (lowMagnitudeNarrowGuided && poorNoRollSeedRadialSupport) {
+        if (lowMagnitudeNarrowGuided
+            && poorNoRollSeedRadialSupport
+            && !hasDenseFinalEvidenceOverridingSeedRadial(settings, evaluation)) {
             return false;
         }
         if (useSeedProjectedBrightGate
@@ -13184,14 +13333,14 @@ bool isStrongEarlyGuidedFinalPass(const CameraSettings& settings,
     // A roll prior can make an early final pass look convincing while still
     // sitting in the wrong local basin. Let narrow roll-constrained solves run
     // the multi-hypothesis comparison before accepting a solution.
-    if ((settings.m_fov <= 5.0) && plateSolveStartUsesRoll(settings)) {
+    if ((isNarrowField(settings)) && plateSolveStartUsesRoll(settings)) {
         return false;
     }
     if (!isAcceptableNarrowGuidedFov(settings, evaluation.pose.fovDegrees)) {
         return false;
     }
 
-    const int minimumEarlyMatches = (settings.m_fov <= 5.0)
+    const int minimumEarlyMatches = (isNarrowField(settings))
         ? std::max(requiredMatches + 12, 16)
         : std::max(requiredMatches + 6, 10);
     if (evaluation.finalMatches.size() < minimumEarlyMatches) {
@@ -13199,7 +13348,7 @@ bool isStrongEarlyGuidedFinalPass(const CameraSettings& settings,
     }
 
     const bool denseNarrowHighSupport =
-        (settings.m_fov <= 5.0)
+        (isNarrowField(settings))
         && (evaluation.finalMatches.size() >= std::max(requiredMatches + 48, 64))
         && (evaluation.rmsErrorPixels <= std::min(maxDirectionSeedRmsError(settings, evaluation.finalMatches.size()) * 0.95, finalMatchRadius * 0.70))
         && (evaluation.maxErrorPixels <= std::min(finalMatchRadius * 1.05, 30.0));
@@ -13327,6 +13476,40 @@ double guidedDirectionEvaluationScore(const Evaluation& evaluation,
         * allSkyZenithAffinity(evaluation);
 }
 
+// Aggregate "how much non-zero lens calibration this pose carries" — smaller is
+// preferred as a tie-break so the solver does not invent center-offset/distortion
+// it does not need. The 100x weight puts distortion k1 (a small dimensionless
+// value) on a comparable footing with the pixel offsets.
+static double calibrationMagnitude(const Evaluation& evaluation)
+{
+    return std::fabs(evaluation.centerOffsetXPixels)
+        + std::fabs(evaluation.centerOffsetYPixels)
+        + 100.0 * std::fabs(evaluation.distortionK1);
+}
+
+// Deterministic geometric tie-break shared by the evaluation comparators: prefer
+// more matches, then lower RMS, then less lens calibration, then the narrower FoV
+// (or smaller roll at equal FoV). Callers handle validity and any higher-priority
+// scoring before delegating here. Assumes both evaluations are valid.
+static bool isBetterByGeometricTieBreak(const Evaluation& candidate, const Evaluation& best)
+{
+    if (candidate.matchCount != best.matchCount) {
+        return candidate.matchCount > best.matchCount;
+    }
+    if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
+        return candidate.rmsErrorPixels < best.rmsErrorPixels;
+    }
+    const double candidateCalibrationMagnitude = calibrationMagnitude(candidate);
+    const double bestCalibrationMagnitude = calibrationMagnitude(best);
+    if (!qFuzzyCompare(candidateCalibrationMagnitude + 1.0, bestCalibrationMagnitude + 1.0)) {
+        return candidateCalibrationMagnitude < bestCalibrationMagnitude;
+    }
+
+    return candidate.fovDegrees == best.fovDegrees
+        ? candidate.rollDegrees < best.rollDegrees
+        : candidate.fovDegrees < best.fovDegrees;
+}
+
 static bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
 {
     if (!candidate.valid) {
@@ -13335,25 +13518,7 @@ static bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& be
     if (!best.valid) {
         return true;
     }
-    if (candidate.matchCount != best.matchCount) {
-        return candidate.matchCount > best.matchCount;
-    }
-    if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
-        return candidate.rmsErrorPixels < best.rmsErrorPixels;
-    }
-    const double candidateCalibrationMagnitude = std::fabs(candidate.centerOffsetXPixels)
-        + std::fabs(candidate.centerOffsetYPixels)
-        + 100.0 * std::fabs(candidate.distortionK1);
-    const double bestCalibrationMagnitude = std::fabs(best.centerOffsetXPixels)
-        + std::fabs(best.centerOffsetYPixels)
-        + 100.0 * std::fabs(best.distortionK1);
-    if (!qFuzzyCompare(candidateCalibrationMagnitude + 1.0, bestCalibrationMagnitude + 1.0)) {
-        return candidateCalibrationMagnitude < bestCalibrationMagnitude;
-    }
-
-    return candidate.fovDegrees == best.fovDegrees
-        ? candidate.rollDegrees < best.rollDegrees
-        : candidate.fovDegrees < best.fovDegrees;
+    return isBetterByGeometricTieBreak(candidate, best);
 }
 
 double weakModeEvaluationScore(const Evaluation& evaluation,
@@ -13407,26 +13572,7 @@ bool isBetterWeakModeEvaluation(const Evaluation& candidate, const Evaluation& b
         return candidateScore > bestScore;
     }
 
-    if (candidate.matchCount != best.matchCount) {
-        return candidate.matchCount > best.matchCount;
-    }
-    if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
-        return candidate.rmsErrorPixels < best.rmsErrorPixels;
-    }
-
-    const double candidateCalibrationMagnitude = std::fabs(candidate.centerOffsetXPixels)
-        + std::fabs(candidate.centerOffsetYPixels)
-        + 100.0 * std::fabs(candidate.distortionK1);
-    const double bestCalibrationMagnitude = std::fabs(best.centerOffsetXPixels)
-        + std::fabs(best.centerOffsetYPixels)
-        + 100.0 * std::fabs(best.distortionK1);
-    if (!qFuzzyCompare(candidateCalibrationMagnitude + 1.0, bestCalibrationMagnitude + 1.0)) {
-        return candidateCalibrationMagnitude < bestCalibrationMagnitude;
-    }
-
-    return candidate.fovDegrees == best.fovDegrees
-        ? candidate.rollDegrees < best.rollDegrees
-        : candidate.fovDegrees < best.fovDegrees;
+    return isBetterByGeometricTieBreak(candidate, best);
 }
 
 bool isBetterGuidedDirectionEvaluation(const Evaluation& candidate, const Evaluation& best)
@@ -13558,7 +13704,7 @@ FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
                 isImplausiblyCompactBrightCatalogDetection(
                     starDetections[detectionIndex],
                     catalogContext.catalogStars[catalogIndex].magnitude,
-                    m_useDirectionSeedPreference && (settings.m_fov <= 5.0));
+                    m_useDirectionSeedPreference && (isNarrowField(settings)));
             if ((anchorDistance > finalMatchRadius) || anchorHasImplausibleBrightShape) {
                 return false;
             }
@@ -13697,7 +13843,7 @@ FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
         }
     }
 
-    const bool useNarrowGuidedBrightPrior = m_useDirectionSeedPreference && (settings.m_fov <= 5.0);
+    const bool useNarrowGuidedBrightPrior = m_useDirectionSeedPreference && (isNarrowField(settings));
     appendSupplementalMatches(
         starDetections,
         finalPass.projectedStars,
@@ -13995,7 +14141,7 @@ FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
             const double catalogMagnitude = ((catalogIndex >= 0) && (catalogIndex < catalogContext.catalogStars.size()))
                 ? catalogContext.catalogStars[catalogIndex].magnitude
                 : std::numeric_limits<double>::infinity();
-            const double expectedMaxMagnitude = m_useDirectionSeedPreference && (settings.m_fov <= 5.0)
+            const double expectedMaxMagnitude = m_useDirectionSeedPreference && (isNarrowField(settings))
                 ? ((i == 0) ? 8.5 : (i < 3) ? 10.0 : 11.5)
                 : ((i == 0) ? 1.0 : (i < 3) ? 3.0 : 4.5);
             brightMagnitudePenalty += rankWeight * std::max(0.0, catalogMagnitude - expectedMaxMagnitude);
@@ -14146,7 +14292,7 @@ FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
             -finalMatchRadius,
             imageSize.width() + 2.0 * finalMatchRadius,
             imageSize.height() + 2.0 * finalMatchRadius);
-        const bool useNarrowGuidedBrightProjectedPrior = m_useDirectionSeedPreference && (settings.m_fov <= 5.0);
+        const bool useNarrowGuidedBrightProjectedPrior = m_useDirectionSeedPreference && (isNarrowField(settings));
         const double brightProjectedMagnitudeLimit = useNarrowGuidedBrightProjectedPrior
             ? std::min(settings.m_plateSolveMaxMagnitude, 13.0)
             : 5.0;
@@ -14329,7 +14475,7 @@ double wideFinalPassMatchWeight(const CameraSettings& settings,
                                 int matchCount)
 {
     const bool useNarrowGuidedMatchCap = m_useDirectionSeedPreference
-        && (settings.m_fov <= 5.0);
+        && (isNarrowField(settings));
     if (!m_useWideCatalogMagnitudePreference && !useNarrowGuidedMatchCap) {
         return static_cast<double>(matchCount);
     }
@@ -14359,7 +14505,7 @@ double brightDetectionCoverageAffinity(const CameraSettings& settings,
                                        const FinalMatchPassEvaluation& evaluation)
 {
     const bool useBrightDetectionPreference = isWidePlateSolveContext(settings)
-        || (m_useDirectionSeedPreference && (settings.m_fov <= 5.0));
+        || (m_useDirectionSeedPreference && (isNarrowField(settings)));
     if (!useBrightDetectionPreference
         || (evaluation.brightDetections < 3))
     {
@@ -14374,7 +14520,7 @@ double brightProjectedCoverageAffinity(const CameraSettings& settings,
                                        const FinalMatchPassEvaluation& evaluation)
 {
     const bool useNarrowGuidedProjectedPreference = m_useDirectionSeedPreference
-        && (settings.m_fov <= 5.0);
+        && (isNarrowField(settings));
     const int minimumProjectedStars = useNarrowGuidedProjectedPreference ? 2 : 3;
     if ((!isWidePlateSolveContext(settings) && !useNarrowGuidedProjectedPreference)
         || (evaluation.brightProjectedStars < minimumProjectedStars))
@@ -14391,7 +14537,7 @@ double brightDetectionMagnitudeAffinity(const CameraSettings& settings,
                                         const FinalMatchPassEvaluation& evaluation)
 {
     const bool useNarrowGuidedMagnitudePrior = m_useDirectionSeedPreference
-        && (settings.m_fov <= 5.0);
+        && (isNarrowField(settings));
     if ((!isWidePlateSolveContext(settings) && !useNarrowGuidedMagnitudePrior)
         || (evaluation.brightDetections < 3))
     {
@@ -14407,7 +14553,7 @@ double projectedMagnitudeCoverageAffinity(const CameraSettings& settings,
                                           const FinalMatchPassEvaluation& evaluation)
 {
     if (!m_useDirectionSeedPreference
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || (evaluation.projectedMagnitudeSupport <= 0.0))
     {
         return 1.0;
@@ -14457,15 +14603,14 @@ double narrowGuidedSeedConsistencyScore(const CameraSettings& settings,
                                         const FinalMatchPassEvaluation& evaluation)
 {
     if (!m_useDirectionSeedPreference
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || !evaluation.projectorValid)
     {
         return 0.0;
     }
 
     double score = 0.0;
-    const bool useSeedProjectedBrightGate =
-        plateSolveStartUsesRoll(settings) || plateSolveStartUsesCurrentSettingsOnly(settings);
+    const bool useSeedProjectedBrightGate = usesSeedProjectedBrightGate(settings);
     if (useSeedProjectedBrightGate && (evaluation.seedProjectedMagnitudeSupport > 0.0))
     {
         const double weightedCoverage = std::clamp(
@@ -14568,7 +14713,7 @@ bool hasHighConfidenceSparseGuidedAnchors(const CameraSettings& settings,
     if (!evaluation.projectorValid
         || !evaluation.pose.sparseGuidedPair
         || !m_useDirectionSeedPreference
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || (evaluation.sparseGuidedNamedAnchorMatches < 2)
         || !std::isfinite(evaluation.sparseGuidedAnchorRmsErrorPixels)
         || !std::isfinite(evaluation.sparseGuidedAnchorBrightnessRankError))
@@ -14600,7 +14745,7 @@ bool hasHighConfidenceGuidedTriangleSupport(const CameraSettings& settings,
     if (!evaluation.projectorValid
         || !evaluation.pose.guidedTriangle
         || !m_useDirectionSeedPreference
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || (evaluation.finalMatches.size() < std::max(settings.m_plateSolveMinMatches + 12, 16))
         || !std::isfinite(evaluation.rmsErrorPixels)
         || (evaluation.rmsErrorPixels > maxDirectionSeedRmsError(settings, evaluation.finalMatches.size()))
@@ -14698,7 +14843,7 @@ double finalMatchPassScore(const CameraSettings& settings,
         std::max(1.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius)));
     double matchSupport = wideFinalPassMatchWeight(settings, evaluation.finalMatches.size());
     if (m_useDirectionSeedPreference
-        && (settings.m_fov <= 5.0)
+        && (isNarrowField(settings))
         && (evaluation.magnitudeWeightedSupport > 0.0))
     {
         const double prioritySupport = narrowGuidedMagnitudePriorityScore(evaluation);
@@ -14720,7 +14865,7 @@ double finalMatchPassScore(const CameraSettings& settings,
         * prioritySeedRadialAffinity(evaluation, settings.m_plateSolveFinalMatchRadius)
         * seedProjectedMagnitudeCoverageAffinity(evaluation)
         * seedRadialMagnitudeCoverageAffinity(evaluation)
-        * (m_useDirectionSeedPreference && (settings.m_fov <= 5.0)
+        * (m_useDirectionSeedPreference && (isNarrowField(settings))
             ? (1.0 + 0.18 * namedBrightAnchorEvidenceScore(evaluation))
             : 1.0)
         * directionSeedAffinity(pose)
@@ -14732,7 +14877,7 @@ double narrowGuidedEvidenceScore(const CameraSettings& settings,
                                  const FinalMatchPassEvaluation& evaluation)
 {
     if (!m_useDirectionSeedPreference
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || !evaluation.projectorValid
         || !std::isfinite(evaluation.rmsErrorPixels))
     {
@@ -14770,7 +14915,7 @@ double finalMatchPassEvidenceScore(const CameraSettings& settings,
     }
 
     const bool narrowGuided =
-        m_useDirectionSeedPreference && (settings.m_fov <= 5.0);
+        m_useDirectionSeedPreference && (isNarrowField(settings));
     const int usefulMatchCap = narrowGuided
         ? std::max(settings.m_plateSolveMinMatches + 14, 18)
         : std::max(settings.m_plateSolveMinMatches + 8, 12);
@@ -14940,7 +15085,7 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
     }
 
     const bool useNarrowGuidedMatchCap = m_useDirectionSeedPreference
-        && (settings.m_fov <= 5.0);
+        && (isNarrowField(settings));
     if (useNarrowGuidedMatchCap)
     {
         const int candidateMatches = static_cast<int>(candidate.finalMatches.size());
@@ -15250,8 +15395,7 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
 
     if (useNarrowGuidedMatchCap && (std::abs(finalMatchDelta) <= 1))
     {
-        const bool useSeedProjectedBrightTieBreak =
-            plateSolveStartUsesRoll(settings) || plateSolveStartUsesCurrentSettingsOnly(settings);
+        const bool useSeedProjectedBrightTieBreak = usesSeedProjectedBrightGate(settings);
         const int seedBrightDelta =
             candidate.matchedSeedProjectedBrightStars - best.matchedSeedProjectedBrightStars;
         if (useSeedProjectedBrightTieBreak
@@ -15271,7 +15415,7 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
         }
     }
 
-    if (m_useDirectionSeedPreference && (settings.m_fov <= 5.0))
+    if (m_useDirectionSeedPreference && (isNarrowField(settings)))
     {
         const double candidateFovDelta = std::fabs(candidate.pose.fovDegrees - m_directionSeedReferenceFovDegrees);
         const double bestFovDelta = std::fabs(best.pose.fovDegrees - m_directionSeedReferenceFovDegrees);
@@ -15347,7 +15491,7 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
         }
     }
 
-    if (isWidePlateSolveContext(settings) || (m_useDirectionSeedPreference && (settings.m_fov <= 5.0)))
+    if (isWidePlateSolveContext(settings) || (m_useDirectionSeedPreference && (isNarrowField(settings))))
     {
         if (isWidePlateSolveContext(settings))
         {
@@ -15367,7 +15511,7 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
                 return magnitudeErrorDelta < 0.0;
             }
         }
-        else if (m_useDirectionSeedPreference && (settings.m_fov <= 5.0))
+        else if (m_useDirectionSeedPreference && (isNarrowField(settings)))
         {
             const double projectedCoverageDelta = candidate.brightProjectedMatchFraction - best.brightProjectedMatchFraction;
             if ((candidate.brightProjectedStars >= 2)
@@ -15391,7 +15535,7 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
         const double coverageDelta = candidate.brightDetectionMatchFraction - best.brightDetectionMatchFraction;
         if ((candidate.brightDetections >= 3)
             && (best.brightDetections >= 3)
-            && (!(m_useDirectionSeedPreference && (settings.m_fov <= 5.0))
+            && (!(m_useDirectionSeedPreference && (isNarrowField(settings)))
                 || narrowGuidedActualMatchCountsAreClose)
             && (std::fabs(coverageDelta) >= 0.15))
         {
@@ -15478,12 +15622,13 @@ bool hasCompetitiveRollAlias(const CameraSettings& settings,
                              const QVector<int>& detectionIndices,
                              const FinalMatchPassEvaluation& winner,
                              double finalMatchRadius,
-                             QString *reason)
+                             QString *reason,
+                             FinalMatchPassEvaluation *betterAlias = nullptr)
 {
     if (!m_useDirectionSeedPreference
         || m_directionSeedHasRollPreference
         || !winner.projectorValid
-        || (settings.m_fov > 5.0)
+        || (!isNarrowField(settings))
         || (winner.finalMatches.size() < settings.m_plateSolveMinMatches)
         || !std::isfinite(winner.rmsErrorPixels))
     {
@@ -15516,6 +15661,19 @@ bool hasCompetitiveRollAlias(const CameraSettings& settings,
     const double winnerFinalScore = std::max(
         finalMatchPassScore(settings, winner),
         finalMatchPassEvidenceScore(settings, winner));
+    const double winnerLogOdds = poseFalseAlarmLogOdds(
+        catalogContext, winner, imageSize, finalMatchRadius, static_cast<int>(starDetections.size()));
+
+    // Adoption: if a roll alias matches the rare *bright* stars far better than the
+    // winner (much higher bright-weighted log-odds), it is almost certainly the true
+    // pose and the winner is a faint-coincidence look-alike. Rather than reject as
+    // ambiguous, hand that alias back so the caller adopts it. Tracked across all roll
+    // offsets so the best such alias wins, and preferred over an ambiguity rejection.
+    constexpr double kRollAdoptLogOddsMargin = 15.0;
+    FinalMatchPassEvaluation adoptableAlias;
+    double adoptableAliasLogOdds = -std::numeric_limits<double>::infinity();
+    bool haveAdoptableAlias = false;
+    bool ambiguousAliasFound = false;
 
     for (double rollOffset : rollOffsets)
     {
@@ -15573,6 +15731,41 @@ bool hasCompetitiveRollAlias(const CameraSettings& settings,
             continue;
         }
 
+        // Bright-weighted log-odds tie-break. Roll ambiguity in deep fields is a
+        // false-alarm problem: many rolls match hundreds of *faint* stars at similar
+        // count/RMS, so those statistics cannot tell the correct roll apart. The
+        // false-alarm log-odds weights each match by the rarity of its catalog star
+        // (-log density), so the rare *bright* stars dominate -- whichever roll lands
+        // them on real detections wins decisively. If the winner's log-odds clearly
+        // beats this alias, the alias is a faint-coincidence look-alike, not a genuine
+        // competitor, so dismiss it. This overrides the count/RMS-based
+        // aliasIsStrictlyBetterFit below, which is precisely what gets fooled in deep
+        // fields (e.g. galaxy-m101 @maxMag15). It cannot create a false positive: a
+        // wrong winner matching only faint coincidences has *lower* log-odds than a
+        // correct bright-matching alias, so it never wins this comparison.
+        const double competitorLogOdds = poseFalseAlarmLogOdds(
+            catalogContext, competitor, imageSize, finalMatchRadius, static_cast<int>(starDetections.size()));
+        constexpr double kRollLogOddsMargin = 5.0;
+        if (winnerLogOdds >= (competitorLogOdds + kRollLogOddsMargin))
+        {
+            qDebug() << "CameraPlateSolver: ignoring roll alias with weaker bright-weighted log-odds"
+                     << "winnerRoll" << winner.pose.rollDegrees << "winnerLogOdds" << winnerLogOdds
+                     << "aliasRoll" << competitor.pose.rollDegrees << "aliasLogOdds" << competitorLogOdds;
+            continue;
+        }
+        // Adopt direction: this alias matches the rare bright stars far better than the
+        // winner -> it is the true pose. Record the best such alias (do not reject).
+        if (competitorLogOdds >= (winnerLogOdds + kRollAdoptLogOddsMargin))
+        {
+            if (!haveAdoptableAlias || (competitorLogOdds > adoptableAliasLogOdds))
+            {
+                adoptableAlias = competitor;
+                adoptableAliasLogOdds = competitorLogOdds;
+                haveAdoptableAlias = true;
+            }
+            continue;
+        }
+
         const double competitorSeedConsistency =
             narrowGuidedSeedConsistencyScore(settings, competitor);
         const double competitorBrightConsistency =
@@ -15601,7 +15794,29 @@ bool hasCompetitiveRollAlias(const CameraSettings& settings,
             return winnerFinalScore >= (competitorFinalScore * factor);
         };
 
-        if (!plateSolveStartUsesRoll(settings))
+        // When the roll alias is a strictly better geometric fit than the winner --
+        // a comparable number of final matches but a meaningfully lower RMS -- the
+        // winner is almost certainly the wrong pose, and the soft seed-consistency /
+        // brightness / final-score heuristics below must not be allowed to dismiss the
+        // alias. Doing so returns a confident wrong-roll pose: e.g. galaxy-m101 at
+        // maxMag 16 returns roll ~-2.6 deg (123 matches, RMS 16.23) when the true roll
+        // is ~+87 deg (120 matches, RMS 15.80) -- the alias matches nearly as many
+        // stars at a clearly lower RMS, yet scores higher on the seed-consistency
+        // heuristic, so the dismissal accepts the wrong pose.
+        //
+        // The "strictly lower RMS" requirement is what keeps this from over-rejecting
+        // correct solves in ultra-dense fields. There, coincidental roll aliases can
+        // tie the winner on match count, but the correct winner still has the lowest
+        // RMS (e.g. galaxy-m31: winner RMS 15.87 vs nearest alias 15.95), so the guard
+        // does not fire and the existing seed-consistency dismissals still apply.
+        const double kAliasRmsImprovementMargin = 0.25;
+        const bool aliasIsStrictlyBetterFit =
+            std::isfinite(competitor.rmsErrorPixels)
+            && (competitor.finalMatches.size()
+                >= static_cast<qsizetype>(std::floor(static_cast<double>(winner.finalMatches.size()) * 0.95)))
+            && (competitor.rmsErrorPixels <= (winner.rmsErrorPixels - kAliasRmsImprovementMargin));
+
+        if (!plateSolveStartUsesRoll(settings) && !aliasIsStrictlyBetterFit)
         {
             const double seedConsistencyMargin =
                 winner.pose.sparseGuidedPair ? 0.75 : 1.5;
@@ -15706,10 +15921,28 @@ bool hasCompetitiveRollAlias(const CameraSettings& settings,
                  << "aliasSeed" << competitorSeedConsistency
                  << "aliasBright" << competitorBrightConsistency
                  << "aliasScore" << competitorFinalScore;
-        return true;
+        // Genuinely ambiguous on count/RMS. Don't reject yet -- keep scanning, because
+        // a later roll offset may be an adoptable bright-better alias, which is the
+        // correct resolution and takes precedence over an ambiguity rejection.
+        ambiguousAliasFound = true;
     }
 
-    return false;
+    // A bright-better alias decisively wins (matches the rare bright stars) -> adopt it
+    // rather than rejecting. Takes precedence over a count/RMS ambiguity.
+    if (haveAdoptableAlias)
+    {
+        if (betterAlias) {
+            *betterAlias = adoptableAlias;
+        }
+        qDebug() << "CameraPlateSolver: adopting bright-better roll alias"
+                 << "winnerRoll" << winner.pose.rollDegrees << "winnerLogOdds" << winnerLogOdds
+                 << "aliasRoll" << adoptableAlias.pose.rollDegrees
+                 << "aliasLogOdds" << adoptableAliasLogOdds
+                 << "aliasMatches" << adoptableAlias.finalMatches.size();
+        return false;
+    }
+
+    return ambiguousAliasFound;
 }
 
 bool isBetterEvaluationForMode(const Evaluation& candidate,
@@ -15821,7 +16054,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
     const bool useWidePlateSolve = isWidePlateSolveContext(settings);
     const bool useFaintNarrowAnchors = useStartDirection
         && !useWidePlateSolve
-        && (settings.m_fov <= 5.0);
+        && (isNarrowField(settings));
     const bool useDenseWideGuidedDirection = useStartDirection
         && useWidePlateSolve
         && (starDetections.size() > 32);
@@ -16009,7 +16242,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
                                 seedCenterOffsetY,
                                 seedDistortionK1,
                                 anchorMatchRadius,
-                                settings.m_fov > 5.0);
+                                !isNarrowField(settings));
                         }
                         logPlateSolveEvaluation("guided-anchor", localBest);
                         if (candidatePool && localBest.valid && (localBest.matchCount >= 2)) {
@@ -16086,7 +16319,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
     const bool denseNarrowDirectionSolve = useStartDirection
         && !useStartRoll
         && !useWidePlateSolve
-        && (settings.m_fov <= 5.0)
+        && (isNarrowField(settings))
         && (starDetections.size() > kMaxDetectionsForSolve * 2);
     if (!best.valid || (best.matchCount < expandedRollMinMatches) || denseNarrowDirectionSolve) {
         evaluateRollSeedOffsets(expandedRollSeedOffsets);
@@ -16468,7 +16701,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         && !useStartDirection
         && !isWidePlateSolveContext(settings)
         && (settings.m_fov < 15.0);
-    const int maxMultiHypothesisCandidates = (useStartDirection && (settings.m_fov <= 5.0))
+    const int maxMultiHypothesisCandidates = (useStartDirection && (isNarrowField(settings)))
         ? (useStartRoll ? 24 : 256)
         : wideWeakMode ? 64
         : 10;
@@ -16495,7 +16728,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     const double wideBlindSeedMatchRadius = useWideBlindSeedRadius
         ? std::max(finalMatchRadius, std::min(240.0, std::max(120.0, maxImageDimension * 0.065)))
         : finalMatchRadius;
-    const double guidedSeedMatchRadius = (useStartDirection && (settings.m_fov <= 5.0))
+    const double guidedSeedMatchRadius = (useStartDirection && (isNarrowField(settings)))
         ? std::max(finalMatchRadius,
             std::min(96.0, std::max(finalMatchRadius, static_cast<double>(settings.m_plateSolveMatchRadius)) * 4.0))
         : finalMatchRadius;
@@ -16503,7 +16736,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         ? guidedSeedMatchRadius
         : useWideFovSeedRadius ? wideFovSeedMatchRadius
         : -1.0;
-    if (useStartDirection && (settings.m_fov <= 5.0)) {
+    if (useStartDirection && (isNarrowField(settings))) {
         m_weakModeNormalizationPixels = std::max(m_weakModeNormalizationPixels, guidedSeedMatchRadius);
     }
     if (useWideFovSeedRadius) {
@@ -16543,7 +16776,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     }};
     QVector<int> narrowGuidedFirstPassCatalogIndices;
     const QVector<int>* guidedFirstPassCatalogIndices = nullptr;
-    if (useStartDirection && (settings.m_fov <= 5.0))
+    if (useStartDirection && (isNarrowField(settings)))
     {
         const double localRadiusDegrees = std::max(
             static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
@@ -16762,7 +16995,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
             return offsets;
         }
 
-        const double step = (settings.m_fov <= 5.0) ? 10.0
+        const double step = (isNarrowField(settings)) ? 10.0
             : (settings.m_fov <= 15.0) ? 15.0
             : 30.0;
         appendUniqueOffset(offsets, 0.0);
@@ -16989,7 +17222,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         const qint64 stageStartMs = searchProfileTimer.elapsed();
         QVector<VisibleCatalogStar> localVisibleStars;
         const QVector<VisibleCatalogStar>* blindVisibleStars = &catalogContext.visibleStars;
-        if (useStartDirection && (settings.m_fov <= 5.0))
+        if (useStartDirection && (isNarrowField(settings)))
         {
             const double localRadiusDegrees = std::max(
                 static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
@@ -17073,7 +17306,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
 
         const bool useBrightGuidedTriangles = useStartDirection
             && !wideWeakMode
-            && (settings.m_fov <= 5.0);
+            && (isNarrowField(settings));
 
         qint64 seedStageStartMs = searchProfileTimer.elapsed();
         if (isCancellationRequested()) {
@@ -18315,7 +18548,7 @@ QVector<Match> rebuildRefinementMatchesAtPose(const CameraSettings& settings,
         projectedStars,
         matchRadiusPixels,
         &detectionIndices,
-        m_useDirectionSeedPreference && (settings.m_fov <= 5.0),
+        m_useDirectionSeedPreference && (isNarrowField(settings)),
         matches);
     appendWideBrightSupplementalMatches(
         settings,
@@ -18387,7 +18620,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
         true,
         true,
         true,
-        !(useGuidedDirectionScoring && settings.m_fov <= 5.0),
+        !(useGuidedDirectionScoring && isNarrowField(settings)),
         calibratePrincipalPoint,
         calibratePrincipalPoint,
         calibrateLens
@@ -18506,6 +18739,68 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
     return best;
 }
 
+// Sharpen a narrow-field final pass by progressively shrinking the match radius and
+// re-fitting on the tight inlier core. The full match radius (e.g. 24 px) admits many
+// coincidental associations in dense catalogs, which bias the least-squares pose and
+// inflate residuals to a uniform ~r/2 floor that has nothing to do with astrometric
+// accuracy (it is matching contamination, not distortion). Re-matching at a tighter
+// radius and re-fitting drives the pose from the astrometric core, which both
+// stabilises edge-star associations and collapses real-match residuals toward the
+// true precision -- the latter being what lets a statistical verifier separate real
+// alignments from chance.
+//
+// Safe by construction: the tightened pose is adopted only if, re-evaluated at the
+// full radius, it keeps a comparable match count and a strictly-not-worse RMS. Any
+// drift to a worse local optimum is discarded and the original pose is returned.
+FinalMatchPassEvaluation tightenNarrowFinalPass(const CameraSettings& settings,
+                                                const PlateSolveCatalogContext& catalogContext,
+                                                const QSize& imageSize,
+                                                const QVector<CameraPipelineStarDetection>& starDetections,
+                                                const QVector<int>& detectionIndices,
+                                                const FinalMatchPassEvaluation& original,
+                                                double finalMatchRadius)
+{
+    const int minMatches = std::max(4, settings.m_plateSolveMinMatches);
+    if (!original.projectorValid
+        || !isNarrowField(settings)
+        || (original.finalMatches.size() < minMatches))
+    {
+        return original;
+    }
+
+    Evaluation pose = original.pose;
+    for (const double fraction : {0.5, 0.33})
+    {
+        const double tightRadius = std::max(4.0, finalMatchRadius * fraction);
+        const FinalMatchPassEvaluation tightPass = evaluateFinalMatchPass(
+            settings, catalogContext, imageSize, starDetections, detectionIndices, pose, tightRadius);
+        if (!tightPass.projectorValid || (tightPass.finalMatches.size() < minMatches)) {
+            break;
+        }
+        Evaluation tightSeed = pose;
+        tightSeed.valid = true;
+        tightSeed.matches = tightPass.finalMatches;
+        tightSeed.matchCount = static_cast<int>(tightPass.finalMatches.size());
+        const Evaluation refined = refinePoseFromMatches(
+            settings, catalogContext, imageSize, QDateTime(), starDetections, tightSeed);
+        if (refined.valid) {
+            pose = refined;
+        }
+    }
+
+    const FinalMatchPassEvaluation tightened = evaluateFinalMatchPass(
+        settings, catalogContext, imageSize, starDetections, detectionIndices, pose, finalMatchRadius);
+    if (tightened.projectorValid
+        && std::isfinite(tightened.rmsErrorPixels)
+        && (tightened.finalMatches.size()
+            >= static_cast<qsizetype>(std::floor(static_cast<double>(original.finalMatches.size()) * 0.9)))
+        && (tightened.rmsErrorPixels <= original.rmsErrorPixels))
+    {
+        return tightened;
+    }
+    return original;
+}
+
 CandidateRefinementResult refineMultiHypothesisCandidate(const CameraSettings& settings,
                                                          const PlateSolveCatalogContext& catalogContext,
                                                          const QSize& imageSize,
@@ -18559,7 +18854,7 @@ CandidateRefinementResult refineMultiHypothesisCandidate(const CameraSettings& s
     // full pass first and only fall back to the selected-detection pass when needed.
     if (rankFinalPassWithSelectedDetections
         && useStartDirection
-        && (settings.m_fov <= 5.0))
+        && (isNarrowField(settings)))
     {
         result.finalPassEvaluation = evaluateFinalMatchPass(
             settings,
@@ -18770,7 +19065,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     m_directionSeedReferenceElevationDegrees = settings.m_elevation;
     m_directionSeedReferenceRollDegrees = settings.m_roll;
     m_directionSeedReferenceFovDegrees = settings.m_fov;
-    m_directionSeedAzElScaleDegrees = (settings.m_fov <= 5.0)
+    m_directionSeedAzElScaleDegrees = (isNarrowField(settings))
         ? std::max(
             2.0,
             std::min(
@@ -18778,7 +19073,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 static_cast<double>(settings.m_fov) * 2.0))
         : std::max(2.0, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35);
     m_directionSeedRollScaleDegrees = std::max(15.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.15));
-    m_directionSeedFovScaleDegrees = (settings.m_fov <= 5.0)
+    m_directionSeedFovScaleDegrees = (isNarrowField(settings))
         ? std::max(0.3, static_cast<double>(settings.m_fov) * 0.25)
         : std::max(2.0, static_cast<double>(settings.m_fov) * 0.08);
     m_directionSeedMinMatchCount = useStartDirection
@@ -18786,7 +19081,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         : std::max(1, settings.m_plateSolveMinMatches);
     m_useFovSeedPreference = useStartFov;
     m_fovSeedReferenceDegrees = settings.m_fov;
-    m_fovSeedScaleDegrees = (settings.m_fov <= 5.0)
+    m_fovSeedScaleDegrees = (isNarrowField(settings))
         ? std::max(0.3, static_cast<double>(settings.m_fov) * 0.25)
         : std::max(2.0, static_cast<double>(settings.m_fov) * 0.06);
     m_useWideCatalogMagnitudePreference = isWidePlateSolveContext(settings);
@@ -18828,7 +19123,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     const double fullSearchMaxMagnitude = narrowGuidedFullSearchMaxMagnitude(settings);
     const bool useBrightFirstPassCatalog = (solveMaxMagnitude < settings.m_plateSolveMaxMagnitude)
         && useStartDirection
-        && (settings.m_fov <= 5.0);
+        && (isNarrowField(settings));
     if (useBrightFirstPassCatalog)
     {
         qDebug() << "CameraPlateSolver: guided narrow-field solve using bright first-pass catalog"
@@ -18903,7 +19198,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             projectedStars,
             finalMatchRadius,
             nullptr,
-            plateSolveStartUsesDirection(settings) && (settings.m_fov <= 5.0),
+            isNarrowGuidedDirectionSolve(settings),
             finalMatches);
 
         if (finalMatches.isEmpty()) {
@@ -19130,7 +19425,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             if (guidedAnchorMatchesActiveCatalog)
             {
                 const int guidedAnchorPoolLimit = useWideWeakAnchorSearch ? 64
-                    : (useStartDirection && (settings.m_fov <= 5.0) && !useStartRoll) ? 96
+                    : (useStartDirection && (isNarrowField(settings)) && !useStartRoll) ? 96
                     : 24;
                 coarseCandidates.prepend(guidedAnchorBest);
                 for (const Evaluation& guidedAnchorCandidate : guidedAnchorCandidates)
@@ -19173,9 +19468,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     const int weakModeRefineMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
     const bool rankFinalPassWithSelectedDetections = isWidePlateSolveContext(settings)
         || (useStartDirection
-            && (settings.m_fov <= 5.0)
+            && (isNarrowField(settings))
             && (starDetections.size() > kMaxDetectionsForSolve * 2));
-    const int multiHypothesisCandidateLimit = (useStartDirection && (settings.m_fov <= 5.0))
+    const int multiHypothesisCandidateLimit = (useStartDirection && (isNarrowField(settings)))
         ? (useStartRoll ? 24 : 72)
         : rankFinalPassWithSelectedDetections ? 64
         : 10;
@@ -19264,7 +19559,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     bool skipMultiHypothesisRefine = false;
     if (useMultiHypothesisRefine
         && useStartDirection
-        && (settings.m_fov <= 5.0)
+        && (isNarrowField(settings))
         && best.valid)
     {
         stageStartMs = solveProfileTimer.elapsed();
@@ -19530,7 +19825,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         if (refinedBest.valid) {
             const bool narrowGuidedResidualWeak =
                 m_useDirectionSeedPreference
-                && (settings.m_fov <= 5.0)
+                && (isNarrowField(settings))
                 && refinedBestFinalPass.projectorValid
                 && (refinedBestFinalPass.rmsErrorPixels > maxDirectionSeedRmsError(settings, refinedBestFinalPass.finalMatches.size()));
             if (bestSparseGuidedPairFinalPass.projectorValid
@@ -19596,10 +19891,86 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         }
     }
 
+    // Shared "selection already strong" predicate (named-anchor / dense-guided / large
+    // accepted support). Used to skip the expensive fov-pinned and roll-recovery
+    // recovery grids when the current selection is already a confident solve — those
+    // grids exist to rescue weak/ambiguous solves, so a strong selection cannot benefit.
+    const auto selectionHasStrongSupport = [&](const FinalMatchPassEvaluation& sel) -> bool {
+        if (!sel.projectorValid) {
+            return false;
+        }
+        const double namedAnchorRmsCap = std::max(
+            std::min(
+                maxDirectionSeedRmsError(settings, std::max(
+                    settings.m_plateSolveMinMatches,
+                    static_cast<int>(sel.finalMatches.size()))) * 1.10,
+                static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.75),
+            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.65);
+        const bool strongNamedAnchors =
+            (sel.namedBrightAnchorMatches >= 3)
+            && std::isfinite(sel.namedBrightAnchorRmsErrorPixels)
+            && (sel.namedBrightAnchorRmsErrorPixels <= namedAnchorRmsCap)
+            && (sel.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 6, 10)));
+        const bool strongDenseGuided = hasStrongDenseNarrowGuidedFinalPass(settings, sel);
+        const bool largeAcceptedDenseGuided =
+            (isNarrowField(settings))
+            && (sel.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 156, 160)))
+            && std::isfinite(sel.rmsErrorPixels)
+            && (sel.rmsErrorPixels <= std::min(
+                static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.75,
+                18.0));
+        return strongNamedAnchors || strongDenseGuided || largeAcceptedDenseGuided;
+    };
+
+    // Evaluate `count` independent recovery-grid poses across worker threads, each with
+    // its own SolverContext (mirrors the candidate-refinement parallelism). evalFn must
+    // depend only on the index and read-only shared state — never on the mutable accept
+    // bookkeeping — and the caller merges results in index order, so the outcome is
+    // bit-identical to the serial loop. Falls back to serial for small grids.
+    const auto evaluateRecoveryPosesParallel = [&](int count, const auto& evalFn) {
+        using ResultType = std::decay_t<decltype(evalFn(*this, 0))>;
+        QVector<ResultType> results(std::max(0, count));
+        if (count <= 0) {
+            return results;
+        }
+        const qint64 estimatedWork = estimateRefinementWorkUnits(
+            count, catalogContext.visibleStars.size(), allDetectionIndices.size());
+        const int threadCount = refinementWorkerThreadCount(count, estimatedWork);
+        if (threadCount <= 1)
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                if (isCancellationRequested()) {
+                    break;
+                }
+                results[i] = evalFn(*this, i);
+            }
+            return results;
+        }
+        QThreadPool recoveryPool;
+        recoveryPool.setMaxThreadCount(threadCount);
+        for (int workerIndex = 0; workerIndex < threadCount; ++workerIndex)
+        {
+            recoveryPool.start(QRunnable::create([&, workerIndex]() {
+                SolverContext workerContext(m_owner);
+                workerContext.copySearchStateFrom(*this);
+                for (int i = workerIndex; i < count; i += threadCount)
+                {
+                    if (workerContext.isCancellationRequested()) {
+                        break;
+                    }
+                    results[i] = evalFn(workerContext, i);
+                }
+            }));
+        }
+        recoveryPool.waitForDone();
+        return results;
+    };
+
     const bool useNarrowKnownFovRecovery =
         m_useDirectionSeedPreference
         && useStartFov
-        && (settings.m_fov <= 5.0)
+        && (isNarrowField(settings))
         && selectedFinalPass.projectorValid
         && (std::fabs(best.fovDegrees - settings.m_fov)
             >= std::max(0.01, static_cast<double>(settings.m_fov) * 0.008));
@@ -19612,9 +19983,21 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         stageStartMs = solveProfileTimer.elapsed();
         Evaluation bestFovPinnedEvaluation;
         FinalMatchPassEvaluation bestFovPinnedFinalPass;
-        const QVector<double> distortionSeeds = useNarrowKnownFovRecovery
+        QVector<double> distortionSeeds = useNarrowKnownFovRecovery
             ? QVector<double>{best.distortionK1, 0.0}
             : QVector<double>{best.distortionK1, 0.0, 0.05, -0.05, 0.10};
+        // best.distortionK1 is frequently 0.0 (narrow fields rarely seed lens
+        // distortion), which collides with the literal 0.0 seed and would evaluate
+        // the entire az/el/roll grid a second time for identical results. Drop the
+        // duplicate seed(s) — the outcome is bit-identical, the cost is halved.
+        for (int i = distortionSeeds.size() - 1; i >= 1; --i) {
+            for (int j = 0; j < i; ++j) {
+                if (std::fabs(distortionSeeds[i] - distortionSeeds[j]) < 1e-9) {
+                    distortionSeeds.removeAt(i);
+                    break;
+                }
+            }
+        }
         const QVector<double> azimuthOffsets = useNarrowKnownFovRecovery
             ? QVector<double>{-0.6, -0.3, 0.0, 0.3, 0.6}
             : QVector<double>{-2.0, 0.0, 2.0};
@@ -19644,6 +20027,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 }
             }
         }
+        QVector<Evaluation> fovPinnedPoses;
+        fovPinnedPoses.reserve(static_cast<qsizetype>(distortionSeeds.size())
+            * azimuthOffsets.size() * elevationOffsets.size() * rollOffsets.size());
         for (double distortionSeed : distortionSeeds)
         {
             for (double azimuthOffset : azimuthOffsets)
@@ -19652,37 +20038,48 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 {
                     for (double rollOffset : rollOffsets)
                     {
-                        if (isCancellationRequested()) {
-                            return finishCancelled();
-                        }
                         Evaluation fovPinnedBest = best;
                         fovPinnedBest.azimuthDegrees += azimuthOffset;
                         fovPinnedBest.elevationDegrees += elevationOffset;
                         fovPinnedBest.rollDegrees += rollOffset;
                         fovPinnedBest.fovDegrees = settings.m_fov;
                         fovPinnedBest.distortionK1 = distortionSeed;
-                        const FinalMatchPassEvaluation fovPinnedFinalPass = evaluateFinalMatchPass(
-                            settings,
-                            catalogContext,
-                            imageSize,
-                            starDetections,
-                            detectionIndices,
-                            fovPinnedBest,
-                            finalMatchRadius,
-                            true);
-                        logFinalMatchPassEvaluation("final-match-pass-fov-pinned", fovPinnedFinalPass);
-                        if (isBetterWeakModeFinalMatchPass(
-                                settings,
-                                starDetections,
-                                !useStartFov,
-                                fovPinnedFinalPass,
-                                bestFovPinnedFinalPass))
-                        {
-                            bestFovPinnedEvaluation = fovPinnedBest;
-                            bestFovPinnedFinalPass = fovPinnedFinalPass;
-                        }
+                        fovPinnedPoses.append(fovPinnedBest);
                     }
                 }
+            }
+        }
+        // The grid points are independent full final-match-pass evaluations — evaluate
+        // them across worker threads, then merge in index order (identical to serial).
+        const QVector<FinalMatchPassEvaluation> fovPinnedResults = evaluateRecoveryPosesParallel(
+            static_cast<int>(fovPinnedPoses.size()),
+            [&](SolverContext& workerContext, int i) {
+                return workerContext.evaluateFinalMatchPass(
+                    settings,
+                    catalogContext,
+                    imageSize,
+                    starDetections,
+                    detectionIndices,
+                    fovPinnedPoses[i],
+                    finalMatchRadius,
+                    true);
+            });
+        if (isCancellationRequested()) {
+            return finishCancelled();
+        }
+        for (int i = 0; i < fovPinnedPoses.size(); ++i)
+        {
+            const FinalMatchPassEvaluation& fovPinnedFinalPass = fovPinnedResults[i];
+            logFinalMatchPassEvaluation("final-match-pass-fov-pinned", fovPinnedFinalPass);
+            if (isBetterWeakModeFinalMatchPass(
+                    settings,
+                    starDetections,
+                    !useStartFov,
+                    fovPinnedFinalPass,
+                    bestFovPinnedFinalPass))
+            {
+                bestFovPinnedEvaluation = fovPinnedPoses[i];
+                bestFovPinnedFinalPass = fovPinnedFinalPass;
             }
         }
         if (bestFovPinnedFinalPass.projectorValid
@@ -19695,39 +20092,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         logSolveProfile("fovPinnedFinalPass", stageStartMs);
     }
 
-    const double selectedStrongNamedAnchorRmsCap = std::max(
-        std::min(
-            maxDirectionSeedRmsError(settings, std::max(
-                settings.m_plateSolveMinMatches,
-                static_cast<int>(selectedFinalPass.finalMatches.size()))) * 1.10,
-            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.75),
-        static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.65);
-    const bool selectedHasStrongNamedAnchors =
-        selectedFinalPass.projectorValid
-        && (selectedFinalPass.namedBrightAnchorMatches >= 3)
-        && std::isfinite(selectedFinalPass.namedBrightAnchorRmsErrorPixels)
-        && (selectedFinalPass.namedBrightAnchorRmsErrorPixels <= selectedStrongNamedAnchorRmsCap)
-        && (selectedFinalPass.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 6, 10)));
-    const bool selectedHasStrongDenseGuidedSupport =
-        hasStrongDenseNarrowGuidedFinalPass(settings, selectedFinalPass);
-    const bool selectedHasLargeAcceptedDenseGuidedSupport =
-        selectedFinalPass.projectorValid
-        && (settings.m_fov <= 5.0)
-        && (selectedFinalPass.finalMatches.size() >= static_cast<qsizetype>(
-            std::max(settings.m_plateSolveMinMatches + 156, 160)))
-        && std::isfinite(selectedFinalPass.rmsErrorPixels)
-        && (selectedFinalPass.rmsErrorPixels <= std::min(
-            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.75,
-            18.0));
-
     if (!m_disableRollRecovery
         && useStartDirection
         && useStartFov
         && !useStartRoll
-        && (settings.m_fov <= 5.0)
-        && !selectedHasStrongNamedAnchors
-        && !selectedHasStrongDenseGuidedSupport
-        && !selectedHasLargeAcceptedDenseGuidedSupport)
+        && (isNarrowField(settings))
+        && !selectionHasStrongSupport(selectedFinalPass))
     {
         stageStartMs = solveProfileTimer.elapsed();
         static const std::array<double, 21> rollRecoveryOffsets {{
@@ -19749,16 +20119,20 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 && hasAcceptableGuidedFinalBrightnessConsistency(settings, finalPass)
                 && hasAcceptableWideBrightAnchorSupport(settings, starDetections, finalPass);
         };
+        // Build the deduped recovery-pose grid sequentially (preserving order so the
+        // selection below is identical to the serial version), then evaluate each pose
+        // (final-match-pass + optional refine + re-evaluate) across worker threads. The
+        // per-pose work is pure; all acceptance/selection stays in the serial merge.
+        const bool useRecoveryLens = plateSolveStartUsesLens(settings);
+        QVector<Evaluation> rollRecoveryPoses;
+        rollRecoveryPoses.reserve(static_cast<qsizetype>(directionRecoveryAzimuthOffsets.size())
+            * directionRecoveryElevationOffsets.size() * rollRecoveryOffsets.size());
         for (double azimuthOffset : directionRecoveryAzimuthOffsets)
         {
             for (double elevationOffset : directionRecoveryElevationOffsets)
             {
                 for (double rollOffset : rollRecoveryOffsets)
                 {
-                    if (isCancellationRequested()) {
-                        return finishCancelled();
-                    }
-
                     const double azimuthDegrees = normalizeDegrees(
                         static_cast<double>(settings.m_azimuth) + azimuthOffset);
                     const double elevationDegrees = std::clamp(
@@ -19785,91 +20159,115 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                     rollRecoveryPose.elevationDegrees = elevationDegrees;
                     rollRecoveryPose.rollDegrees = rollDegrees;
                     rollRecoveryPose.fovDegrees = settings.m_fov;
-                    const bool useRecoveryLens = plateSolveStartUsesLens(settings);
                     rollRecoveryPose.centerOffsetXPixels = useRecoveryLens ? settings.m_lensCenterOffsetX : 0.0;
                     rollRecoveryPose.centerOffsetYPixels = useRecoveryLens ? settings.m_lensCenterOffsetY : 0.0;
                     rollRecoveryPose.distortionK1 = useRecoveryLens ? settings.m_lensDistortionK1 : 0.0;
+                    rollRecoveryPoses.append(rollRecoveryPose);
+                }
+            }
+        }
 
-                    FinalMatchPassEvaluation rollRecoveryFinalPass = evaluateFinalMatchPass(
+        struct RollRecoveryWorkResult {
+            FinalMatchPassEvaluation raw;
+            FinalMatchPassEvaluation refined;
+            bool refinedComputed = false;
+        };
+        const QVector<RollRecoveryWorkResult> rollRecoveryResults = evaluateRecoveryPosesParallel(
+            static_cast<int>(rollRecoveryPoses.size()),
+            [&](SolverContext& workerContext, int i) {
+                RollRecoveryWorkResult out;
+                out.raw = workerContext.evaluateFinalMatchPass(
+                    settings,
+                    catalogContext,
+                    imageSize,
+                    starDetections,
+                    allDetectionIndices,
+                    rollRecoveryPoses[i],
+                    finalMatchRadius,
+                    false);
+                if (out.raw.projectorValid
+                    && (out.raw.finalMatches.size() >= settings.m_plateSolveMinMatches)
+                    && (out.raw.rmsErrorPixels <= std::min(
+                        static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 1.25,
+                        32.0)))
+                {
+                    Evaluation refinementSeed = out.raw.pose;
+                    refinementSeed.matches = out.raw.finalMatches;
+                    refinementSeed.matchCount = out.raw.finalMatches.size();
+                    refinementSeed.rmsErrorPixels = out.raw.rmsErrorPixels;
+                    refinementSeed.brightnessRankError = out.raw.brightnessRankError;
+                    refinementSeed.meanCatalogMagnitude = out.raw.meanCatalogMagnitude;
+                    const Evaluation refinedRollRecoveryPose = workerContext.refinePoseFromMatches(
                         settings,
                         catalogContext,
                         imageSize,
+                        captureDateTimeUtc,
                         starDetections,
-                        allDetectionIndices,
-                        rollRecoveryPose,
-                        finalMatchRadius,
-                        false);
-                    if (rollRecoveryFinalPass.projectorValid
-                        && (rollRecoveryFinalPass.finalMatches.size() >= settings.m_plateSolveMinMatches)
-                        && (rollRecoveryFinalPass.rmsErrorPixels <= std::min(
-                            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 1.25,
-                            32.0)))
+                        refinementSeed);
+                    if (refinedRollRecoveryPose.valid)
                     {
-                        Evaluation refinementSeed = rollRecoveryFinalPass.pose;
-                        refinementSeed.matches = rollRecoveryFinalPass.finalMatches;
-                        refinementSeed.matchCount = rollRecoveryFinalPass.finalMatches.size();
-                        refinementSeed.rmsErrorPixels = rollRecoveryFinalPass.rmsErrorPixels;
-                        refinementSeed.brightnessRankError = rollRecoveryFinalPass.brightnessRankError;
-                        refinementSeed.meanCatalogMagnitude = rollRecoveryFinalPass.meanCatalogMagnitude;
-                        const Evaluation refinedRollRecoveryPose = refinePoseFromMatches(
+                        out.refined = workerContext.evaluateFinalMatchPass(
                             settings,
                             catalogContext,
                             imageSize,
-                            captureDateTimeUtc,
                             starDetections,
-                            refinementSeed);
-                        if (refinedRollRecoveryPose.valid)
-                        {
-                            const FinalMatchPassEvaluation refinedRollRecoveryFinalPass = evaluateFinalMatchPass(
-                                settings,
-                                catalogContext,
-                                imageSize,
-                                starDetections,
-                                allDetectionIndices,
-                                refinedRollRecoveryPose,
-                                finalMatchRadius,
-                                false);
-                            const bool refinedLosesNamedAnchorSupport =
-                                (rollRecoveryFinalPass.namedBrightAnchorMatches >= 2)
-                                && (refinedRollRecoveryFinalPass.namedBrightAnchorMatches
-                                    < rollRecoveryFinalPass.namedBrightAnchorMatches);
-                            const bool refinedIsAccepted = rollRecoveryAccepted(refinedRollRecoveryFinalPass);
-                            const bool rawIsAccepted = rollRecoveryAccepted(rollRecoveryFinalPass);
-                            if (!refinedLosesNamedAnchorSupport
-                                && ((refinedIsAccepted && !rawIsAccepted)
-                                    || ((refinedIsAccepted == rawIsAccepted)
-                                        && isBetterWeakModeFinalMatchPass(
-                                    settings,
-                                    starDetections,
-                                    false,
-                                    refinedRollRecoveryFinalPass,
-                                    rollRecoveryFinalPass))))
-                            {
-                                rollRecoveryFinalPass = refinedRollRecoveryFinalPass;
-                            }
-                        }
+                            allDetectionIndices,
+                            refinedRollRecoveryPose,
+                            finalMatchRadius,
+                            false);
+                        out.refinedComputed = true;
                     }
-                    logFinalMatchPassEvaluation("final-match-pass-roll-recovery", rollRecoveryFinalPass);
-                    const bool rollRecoveryIsAccepted = rollRecoveryAccepted(rollRecoveryFinalPass);
-                    const bool selectedIsAccepted = rollRecoveryAccepted(selectedFinalPass);
-                    if ((rollRecoveryIsAccepted && !selectedIsAccepted)
-                        || (rollRecoveryIsAccepted
-                            && selectedIsAccepted
-                            && (rollRecoveryFinalPass.namedBrightAnchorMatches >= 2)
-                            && (selectedFinalPass.namedBrightAnchorMatches < 2))
-                        || ((rollRecoveryIsAccepted == selectedIsAccepted)
+                }
+                return out;
+            });
+        if (isCancellationRequested()) {
+            return finishCancelled();
+        }
+
+        for (int i = 0; i < rollRecoveryPoses.size(); ++i)
+        {
+            FinalMatchPassEvaluation rollRecoveryFinalPass = rollRecoveryResults[i].raw;
+            if (rollRecoveryResults[i].refinedComputed)
+            {
+                const FinalMatchPassEvaluation& refinedRollRecoveryFinalPass = rollRecoveryResults[i].refined;
+                const bool refinedLosesNamedAnchorSupport =
+                    (rollRecoveryFinalPass.namedBrightAnchorMatches >= 2)
+                    && (refinedRollRecoveryFinalPass.namedBrightAnchorMatches
+                        < rollRecoveryFinalPass.namedBrightAnchorMatches);
+                const bool refinedIsAccepted = rollRecoveryAccepted(refinedRollRecoveryFinalPass);
+                const bool rawIsAccepted = rollRecoveryAccepted(rollRecoveryFinalPass);
+                if (!refinedLosesNamedAnchorSupport
+                    && ((refinedIsAccepted && !rawIsAccepted)
+                        || ((refinedIsAccepted == rawIsAccepted)
                             && isBetterWeakModeFinalMatchPass(
                             settings,
                             starDetections,
                             false,
-                            rollRecoveryFinalPass,
-                            selectedFinalPass)))
-                    {
-                        best = rollRecoveryFinalPass.pose;
-                        selectedFinalPass = rollRecoveryFinalPass;
-                        logFinalMatchPassEvaluation("final-match-pass-roll-recovery", selectedFinalPass, true);
-                    }
+                            refinedRollRecoveryFinalPass,
+                            rollRecoveryFinalPass))))
+                {
+                    rollRecoveryFinalPass = refinedRollRecoveryFinalPass;
                 }
+            }
+            logFinalMatchPassEvaluation("final-match-pass-roll-recovery", rollRecoveryFinalPass);
+            const bool rollRecoveryIsAccepted = rollRecoveryAccepted(rollRecoveryFinalPass);
+            const bool selectedIsAccepted = rollRecoveryAccepted(selectedFinalPass);
+            if ((rollRecoveryIsAccepted && !selectedIsAccepted)
+                || (rollRecoveryIsAccepted
+                    && selectedIsAccepted
+                    && (rollRecoveryFinalPass.namedBrightAnchorMatches >= 2)
+                    && (selectedFinalPass.namedBrightAnchorMatches < 2))
+                || ((rollRecoveryIsAccepted == selectedIsAccepted)
+                    && isBetterWeakModeFinalMatchPass(
+                    settings,
+                    starDetections,
+                    false,
+                    rollRecoveryFinalPass,
+                    selectedFinalPass)))
+            {
+                best = rollRecoveryFinalPass.pose;
+                selectedFinalPass = rollRecoveryFinalPass;
+                logFinalMatchPassEvaluation("final-match-pass-roll-recovery", selectedFinalPass, true);
             }
         }
         recordProfileMetric(QStringLiteral("solve.rollRecoveryEvaluations"), evaluatedDirectionRollBins.size());
@@ -19905,7 +20303,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
     if (!selectedFinalPassForAcceptance.projectorValid
         || !rankFinalPassWithSelectedDetections
-        || (useStartDirection && (settings.m_fov <= 5.0)))
+        || (useStartDirection && (isNarrowField(settings))))
     {
         selectedFinalPassForAcceptance = selectedFinalPass;
     }
@@ -19915,6 +20313,22 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         return result;
     }
     logSolveProfile("finalMatchPass", stageStartMs);
+
+    // Tighten the pose on its inlier core (see tightenNarrowFinalPass). Adopted only
+    // if it is a strict improvement, so it can sharpen edge-star associations and
+    // residuals without destabilising solves that are already good.
+    {
+        const bool acceptanceTracksSelected =
+            (selectedFinalPassForAcceptance.finalMatches.size() == selectedFinalPass.finalMatches.size())
+            && (selectedFinalPassForAcceptance.rmsErrorPixels == selectedFinalPass.rmsErrorPixels)
+            && (selectedFinalPassForAcceptance.pose.rollDegrees == selectedFinalPass.pose.rollDegrees);
+        selectedFinalPass = tightenNarrowFinalPass(
+            settings, catalogContext, imageSize, starDetections, allDetectionIndices,
+            selectedFinalPass, finalMatchRadius);
+        if (acceptanceTracksSelected) {
+            selectedFinalPassForAcceptance = selectedFinalPass;
+        }
+    }
 
     const QVector<ProjectedCatalogStar>& projectedStars = selectedFinalPass.projectedStars;
     const QVector<Match>& finalMatches = selectedFinalPass.finalMatches;
@@ -19929,6 +20343,15 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     result.m_seedRadialMagnitudeMatchFraction = selectedFinalPass.seedRadialMagnitudeMatchFraction;
     result.m_prioritySeedProjectedChecks = selectedFinalPass.prioritySeedProjectedChecks;
     result.m_prioritySeedProjectedErrorPixels = selectedFinalPass.prioritySeedProjectedErrorPixels;
+
+    // SHADOW MODE: record the robust false-alarm log-odds for the selected pose so it
+    // can be compared against the heuristic accept/reject decision across the corpus.
+    // Does not affect the decision yet (see poseFalseAlarmLogOdds).
+    recordProfileMetric(QStringLiteral("verify.faLogOddsMilli"),
+        static_cast<qint64>(std::llround(
+            poseFalseAlarmLogOdds(catalogContext, selectedFinalPass, imageSize, finalMatchRadius,
+                static_cast<int>(starDetections.size()))
+            * 1000.0)));
 
     const bool selectedWideBrightAnchorAccepted =
         hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass);
@@ -20017,6 +20440,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
 
     QString rollAmbiguityReason;
+    FinalMatchPassEvaluation rollAdoptedAlias;
     if (hasCompetitiveRollAlias(
             settings,
             catalogContext,
@@ -20025,7 +20449,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             allDetectionIndices,
             selectedFinalPass,
             finalMatchRadius,
-            &rollAmbiguityReason))
+            &rollAmbiguityReason,
+            &rollAdoptedAlias))
     {
         result.m_matchedStars = finalMatches.size();
         result.m_rmsErrorPixels = selectedFinalPass.rmsErrorPixels;
@@ -20035,6 +20460,17 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             .arg(rollAmbiguityReason);
         PROFILER_STOP(QString("%1: ambiguous roll").arg(__FUNCTION__));
         return result;
+    }
+    // A roll alias matched the rare bright stars decisively better -> adopt it as the
+    // solution. The projectedStars/finalMatches const-refs above alias selectedFinalPass
+    // members, so reassigning it makes them reflect the adopted pose for the labelling
+    // and result population below; the remaining acceptance gates re-run on it too.
+    if (rollAdoptedAlias.projectorValid)
+    {
+        selectedFinalPass = rollAdoptedAlias;
+        selectedFinalPassForAcceptance = rollAdoptedAlias;
+        result.m_catalogCandidateStars = selectedFinalPass.projectedStars.size();
+        result.m_outlierStars = selectedFinalPass.outlierCount;
     }
 
     QHash<int, QPointF> projectedPointsByCatalogIndex;
@@ -20069,7 +20505,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     result.m_distortionK1 = selectedFinalPass.pose.distortionK1;
     if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE")
         && useStartDirection
-        && (settings.m_fov <= 5.0))
+        && (isNarrowField(settings)))
     {
         qDebug() << "CameraPlateSolver: final direction acceptance"
                  << "sparsePairAccepted" << sparseGuidedPairAccepted
@@ -20307,10 +20743,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     const bool rollPriorNarrowDirectionSolve =
         ((settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll)
             || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens))
-        && (settings.m_fov <= 5.0);
+        && (SolverContext::isNarrowField(settings));
     const bool denseNarrowDirectionSolve = solveUsesDirection
         && !solveUsesRoll
-        && (settings.m_fov <= 5.0)
+        && (SolverContext::isNarrowField(settings))
         && (starDetections.size() > 128);
     const bool tryWithoutRollBeforeRollPrior =
         rollPriorNarrowDirectionSolve

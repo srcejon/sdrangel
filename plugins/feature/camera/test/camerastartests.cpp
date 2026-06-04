@@ -214,6 +214,11 @@ QDateTime parseDateTime(const QString& value, int lineNumber, bool* ok)
         return QDateTime();
     }
 
+    // CSV timestamps are UTC. Interpret the parsed wall-clock as UTC (not the test
+    // machine's local time) so results are reproducible regardless of the machine
+    // timezone -- QDateTime::fromString defaults to Qt::LocalTime, which previously
+    // made the solve depend on where the test was run.
+    dateTime.setTimeSpec(Qt::UTC);
     return dateTime;
 }
 
@@ -396,7 +401,9 @@ double wrappedAngleDistanceDegrees(double a, double b)
 
 QString normalizedStarName(const QString& value)
 {
-    return value.trimmed().toCaseFolded();
+    // simplified() trims and collapses internal whitespace runs to a single space, so
+    // catalog/CSV name spacing differences (e.g. "11    Sgr" vs "11 Sgr") still match.
+    return value.simplified().toCaseFolded();
 }
 
 double degToRad(double value)
@@ -892,7 +899,9 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_lensDistortionK1 = test.distortionK1;
     settings.m_plateSolveUseCaptureDateTime = false;
     settings.m_plateSolveDateTime = test.dateTime;
-    settings.m_plateSolveDateTimeUtc = false;
+    // CSV timestamps are UTC, so tell the solver to interpret m_plateSolveDateTime as
+    // UTC rather than (test-machine) local time -- makes results machine-independent.
+    settings.m_plateSolveDateTimeUtc = true;
     settings.m_plateSolveUseDownloadedCatalog = true;
     settings.m_plateSolveCatalogSource = CameraSettings::PlateSolveCatalogAuto;
     settings.m_plateSolveStartMode = test.plateSolveStartMode;

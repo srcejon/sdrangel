@@ -20939,13 +20939,21 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // adopts a clearly-better *solved* pose, so always attempting it is safe; the seed
     // offset, not catalog depth, is what these cases need to overcome (see
     // doc/camera/plate-solver-notes.md "REFRAMING").
+    // The recenter retry (az/el seed-jitter) is eligible for any narrow direction-seeded
+    // solve, including sparse fields: a ~0.3-1° pointing error throws the seed out of the
+    // solve basin regardless of star count (e.g. stars-narrow-1 has only 29 detections but
+    // solves cleanly at 25 matches / rms 0.3 once the ~0.31° elevation seed error is
+    // corrected). `denseNarrowDirectionSolve` (its >128-detection bright-catalog retry
+    // sibling) is too strict here.
+    const bool narrowDirectionRecenterEligible =
+        solveUsesDirection && !solveUsesRoll && SolverContext::isNarrowField(settings);
     if (!result.m_solved
-        && denseNarrowDirectionSolve
+        && narrowDirectionRecenterEligible
         && !isCancellationRequested())
     {
         const double fovDegrees = std::max(0.1, static_cast<double>(settings.m_fov));
         QVector<std::pair<double, double>> recenterOffsets;
-        recenterOffsets.reserve(8);
+        recenterOffsets.reserve(16);
         const auto appendRecenteringOffset = [&](double azimuthOffset, double elevationOffset) {
             for (const auto& existingOffset : recenterOffsets)
             {
@@ -20961,8 +20969,12 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         // these are kept in their original order so they still resolve as before), then a
         // finer az tier: a sub-fov seed error (e.g. m101 @15 is only ~0.42° = 0.33-fov off)
         // is *overshot* by the ±0.75/±1.0-fov steps, so a near-true seed is never sampled
-        // and the solve locks onto a wrong roll. The finer steps land within the basin.
-        const std::array<std::pair<double, double>, 12> defaultRecenterOffsets = {{
+        // and the solve locks onto a wrong roll. Then the same coverage in *elevation*
+        // (stars-narrow-1's seed is ~0.31° = 0.24-fov low in elevation) — previously the
+        // elevation offsets sat past the attempt budget and never ran, so the recenter was
+        // azimuth-only in practice. Cases that resolve on an az offset early-stop (strong
+        // solved candidate) before reaching the elevation tier, so ordering is preserved.
+        const std::array<std::pair<double, double>, 16> defaultRecenterOffsets = {{
             { fovDegrees * 0.75, 0.0 },
             { -fovDegrees * 0.75, 0.0 },
             { fovDegrees, 0.0 },
@@ -20971,6 +20983,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             { -fovDegrees * 0.33, 0.0 },
             { fovDegrees * 0.5, 0.0 },
             { -fovDegrees * 0.5, 0.0 },
+            { 0.0, fovDegrees * 0.33 },
+            { 0.0, -fovDegrees * 0.33 },
+            { 0.0, fovDegrees * 0.5 },
+            { 0.0, -fovDegrees * 0.5 },
             { 0.0, fovDegrees * 0.75 },
             { 0.0, -fovDegrees * 0.75 },
             { fovDegrees * 0.75, fovDegrees * 0.75 },
@@ -21017,10 +21033,11 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 - directionPenalty;
         };
         const int strongRecenterMatchCount = std::max(settings.m_plateSolveMinMatches + 48, 80);
-        // Budget enough attempts to reach the finer az tier (indices 4..7) so a sub-fov
-        // seed error is recovered; the coarse offsets that already resolve a case early-stop
-        // well before this, so the extra budget only costs time on otherwise-failing solves.
-        const int maxRecenterAttempts = 8;
+        // Budget enough attempts to reach the finer az tier (indices 4..7) and the
+        // elevation tier (indices 8..13) so a sub-fov seed error in either axis is
+        // recovered; the coarse offsets that already resolve a case early-stop well before
+        // this, so the extra budget only costs time on otherwise-failing solves.
+        const int maxRecenterAttempts = 14;
         int recenterAttempts = 0;
         for (const auto& offset : recenterOffsets)
         {

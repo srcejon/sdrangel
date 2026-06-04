@@ -20818,26 +20818,6 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             + 0.05 * static_cast<double>(std::min(solveResult.m_matchedStars, 160))
             + (solveResult.m_solved ? 1.5 : 0.0);
     };
-    const auto hasStrongRejectedNarrowAnchorCandidate = [&settings, denseNarrowDirectionSolve](const CameraPlateSolveResult& solveResult) {
-        if (!denseNarrowDirectionSolve || solveResult.m_solved || (solveResult.m_matchedStars <= 0)) {
-            return false;
-        }
-
-        const double rmsCap = std::min(
-            SolverContext::maxDirectionSeedRmsError(settings, solveResult.m_matchedStars) * 1.15,
-            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.78);
-        const double namedAnchorRmsCap = std::max(
-            std::min(
-                SolverContext::maxDirectionSeedRmsError(settings, solveResult.m_matchedStars) * 1.10,
-                static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.75),
-            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.65);
-        return (solveResult.m_matchedStars >= std::max(settings.m_plateSolveMinMatches + 6, 10))
-            && (solveResult.m_namedBrightAnchorMatches >= 3)
-            && std::isfinite(solveResult.m_namedBrightAnchorRmsErrorPixels)
-            && (solveResult.m_namedBrightAnchorRmsErrorPixels <= namedAnchorRmsCap)
-            && (solveResult.m_rmsErrorPixels <= rmsCap);
-    };
-
     bool denseNarrowBrightCatalogRetried = false;
     auto retryDenseNarrowDirectionWithBrightCatalog = [&]() {
         if (!denseNarrowDirectionSolve
@@ -20951,21 +20931,16 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         retryDenseNarrowDirectionWithBrightCatalog();
     }
 
-    const bool skipRecenterForStrongRejectedAnchor =
-        hasStrongRejectedNarrowAnchorCandidate(result);
-    if (skipRecenterForStrongRejectedAnchor)
-    {
-        qDebug() << "CameraPlateSolver: not recentering dense narrow direction solve with strong rejected anchor candidate"
-                 << "matches" << result.m_matchedStars
-                 << "namedAnchors" << result.m_namedBrightAnchorMatches
-                 << "namedRms" << result.m_namedBrightAnchorRmsErrorPixels
-                 << "rms" << result.m_rmsErrorPixels
-                 << "failure" << result.m_failureReason;
-    }
-
+    // NB: a "strong rejected anchor" guard used to suppress the recenter retry here, but
+    // it mis-fired on wrong-roll aliases that coincidentally match a few named bright
+    // anchors (e.g. m51 @16 from a ~1° offset seed locks onto a roll-58° alias with 3
+    // named anchors at low RMS) and so blocked the az/el recenter that actually finds the
+    // true pose. The recenter loop below keeps the current result as its floor and only
+    // adopts a clearly-better *solved* pose, so always attempting it is safe; the seed
+    // offset, not catalog depth, is what these cases need to overcome (see
+    // doc/camera/plate-solver-notes.md "REFRAMING").
     if (!result.m_solved
         && denseNarrowDirectionSolve
-        && !skipRecenterForStrongRejectedAnchor
         && !isCancellationRequested())
     {
         const double fovDegrees = std::max(0.1, static_cast<double>(settings.m_fov));
@@ -20982,11 +20957,20 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             }
             recenterOffsets.append({azimuthOffset, elevationOffset});
         };
-        const std::array<std::pair<double, double>, 8> defaultRecenterOffsets = {{
+        // Coarse az offsets first (a ~1° / 0.75-fov pointing error is the common case and
+        // these are kept in their original order so they still resolve as before), then a
+        // finer az tier: a sub-fov seed error (e.g. m101 @15 is only ~0.42° = 0.33-fov off)
+        // is *overshot* by the ±0.75/±1.0-fov steps, so a near-true seed is never sampled
+        // and the solve locks onto a wrong roll. The finer steps land within the basin.
+        const std::array<std::pair<double, double>, 12> defaultRecenterOffsets = {{
             { fovDegrees * 0.75, 0.0 },
             { -fovDegrees * 0.75, 0.0 },
             { fovDegrees, 0.0 },
             { -fovDegrees, 0.0 },
+            { fovDegrees * 0.33, 0.0 },
+            { -fovDegrees * 0.33, 0.0 },
+            { fovDegrees * 0.5, 0.0 },
+            { -fovDegrees * 0.5, 0.0 },
             { 0.0, fovDegrees * 0.75 },
             { 0.0, -fovDegrees * 0.75 },
             { fovDegrees * 0.75, fovDegrees * 0.75 },
@@ -21033,7 +21017,10 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 - directionPenalty;
         };
         const int strongRecenterMatchCount = std::max(settings.m_plateSolveMinMatches + 48, 80);
-        const int maxRecenterAttempts = 4;
+        // Budget enough attempts to reach the finer az tier (indices 4..7) so a sub-fov
+        // seed error is recovered; the coarse offsets that already resolve a case early-stop
+        // well before this, so the extra budget only costs time on otherwise-failing solves.
+        const int maxRecenterAttempts = 8;
         int recenterAttempts = 0;
         for (const auto& offset : recenterOffsets)
         {

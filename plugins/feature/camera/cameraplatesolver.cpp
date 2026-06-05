@@ -1071,7 +1071,10 @@ static bool isGenericGaiaCatalogName(const QString& name)
 
 static bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path, QString* errorMessage)
 {
-    QFile outputFile(path);
+    // QSaveFile (write-to-temp + atomic rename) so concurrent solver processes can't read a
+    // half-written reduced catalog or corrupt each other when both regenerate it at once;
+    // concurrent writers resolve to last-writer-wins with each version complete.
+    QSaveFile outputFile(path);
     if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
     {
         if (errorMessage) {
@@ -1098,12 +1101,20 @@ static bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString
 
     if (outputFile.write(data) != data.size())
     {
+        outputFile.cancelWriting();
         if (errorMessage) {
             *errorMessage = QStringLiteral("Failed to fully write reduced HYG catalog: %1").arg(path);
         }
         return false;
     }
 
+    if (!outputFile.commit())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to commit reduced HYG catalog: %1").arg(path);
+        }
+        return false;
+    }
     return true;
 }
 
@@ -18996,7 +19007,9 @@ bool CameraPlateSolver::importDownloadedCatalogArchive(const QString& archivePat
         return false;
     }
 
-    QFile outputFile(downloadedCatalogCsvPath());
+    // Atomic write (write-temp + rename) so a concurrent solver process can't observe a
+    // partially-written catalog or race another import of the same file.
+    QSaveFile outputFile(downloadedCatalogCsvPath());
     if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
     {
         if (errorMessage) {
@@ -19007,8 +19020,17 @@ bool CameraPlateSolver::importDownloadedCatalogArchive(const QString& archivePat
 
     if (outputFile.write(uncompressedData) != uncompressedData.size())
     {
+        outputFile.cancelWriting();
         if (errorMessage) {
             *errorMessage = QStringLiteral("Failed to fully write imported HYG catalog: %1").arg(downloadedCatalogCsvPath());
+        }
+        return false;
+    }
+
+    if (!outputFile.commit())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to commit imported HYG catalog: %1").arg(downloadedCatalogCsvPath());
         }
         return false;
     }

@@ -21207,6 +21207,48 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         }
     }
 
+    // Depth-escape retry. A dense narrow direction-seeded solve can fail purely because
+    // the requested catalog is deep enough for faint stars to feed a coincidental (often
+    // 180°) roll-alias that out-counts the true roll — the *same* field/seed solves at a
+    // shallower catalog (verified on the synthetic random corpus: rand-007/027/008 fail at
+    // mag 13 but solve at mag 11/12, zero seed offset). When still unsolved, retry one then
+    // two magnitudes shallower and adopt only a *solved* result. Acceptance still requires a
+    // tight, well-supported fit, so a wrong pose at shallower depth is rejected — this
+    // cannot introduce a false positive, and (gated to already-failed dense solves) cannot
+    // regress a passing case.
+    // Density floor lower than denseNarrowDirectionSolve's (>128): the depth-induced
+    // roll-alias also strikes moderate fields (e.g. synth-rand-015/028/032 at 87-117
+    // detections solve at mag 11/12 but not 13), which the >128 gate wrongly excluded.
+    const bool moderateNarrowDirectionSolve =
+        solveUsesDirection && !solveUsesRoll && SolverContext::isNarrowField(settings)
+        && (starDetections.size() > 64);
+    if (!result.m_solved
+        && moderateNarrowDirectionSolve
+        && !isCancellationRequested()
+        && (settings.m_plateSolveMaxMagnitude >= 12.0f))
+    {
+        const QVector<CameraPipelineStarDetection> detectionsBeforeDepthEscape = starDetections;
+        const double requestedMag = static_cast<double>(settings.m_plateSolveMaxMagnitude);
+        for (double escapeMagnitude : {requestedMag - 1.0, requestedMag - 2.0})
+        {
+            if ((escapeMagnitude < 10.0) || hasAttemptedDenseNarrowBrightCatalogMagnitude(escapeMagnitude)) {
+                continue;
+            }
+            markAttemptedDenseNarrowBrightCatalogMagnitude(escapeMagnitude);
+            CameraSettings retrySettings(settings);
+            retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(escapeMagnitude);
+            qDebug() << "CameraPlateSolver: depth-escape retry at shallower catalog"
+                     << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude;
+            CameraPlateSolveResult escapeResult = runSolve(retrySettings, QStringLiteral("depth-escape"));
+            if (escapeResult.m_solved)
+            {
+                result = escapeResult;
+                break;
+            }
+            starDetections = detectionsBeforeDepthEscape;
+        }
+    }
+
     appendOuterProfile();
     return result;
 }

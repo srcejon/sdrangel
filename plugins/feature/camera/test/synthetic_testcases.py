@@ -91,13 +91,24 @@ def build_wcs(ra_deg, dec_deg, scale_deg, crota2_deg, W, H):
               [ s*math.sin(r),  s*math.cos(r)]]
     return w
 
-def query_catalog(ra,dec,radius_deg, cat, cols, magcol, magmax, limit):
+def query_catalog(ra,dec,radius_deg, cat, cols, magcol, magmax, limit, retries=4):
+    # Resilient to transient Vizier read-timeouts/5xx (common over a long batch): retry with
+    # backoff, and return None on persistent failure so the caller can reject/resample the
+    # scene instead of crashing the whole run.
     from astroquery.vizier import Vizier
     from astropy.coordinates import SkyCoord
     import astropy.units as u
+    import time
+    Vizier.TIMEOUT=120
     v=Vizier(columns=cols, catalog=cat, column_filters={magcol:f"<{magmax}"}); v.ROW_LIMIT=limit
-    res=v.query_region(SkyCoord(ra,dec,unit="deg"), radius=radius_deg*u.deg)
-    return res[0] if res else None
+    for attempt in range(retries):
+        try:
+            res=v.query_region(SkyCoord(ra,dec,unit="deg"), radius=radius_deg*u.deg)
+            return res[0] if res else None
+        except Exception as e:
+            print(f"  vizier query failed ({cat}) attempt {attempt+1}/{retries}: {e}", flush=True)
+            time.sleep(3*(attempt+1))
+    return None
 
 def slugify(s): return re.sub(r"[^A-Za-z0-9]+","-",s).strip("-").lower()
 
@@ -137,6 +148,16 @@ def main():
     ap.add_argument("--lat", type=float, default=51.5)
     ap.add_argument("--lon", type=float, default=-0.13)
     ap.add_argument("--time", default="2026-09-22 21:30:00", help="UTC")
+    # Random-scene generation (for a large tuning corpus). When --random N > 0 the four
+    # built-in scenes are replaced by N random pointings, each at a random roll. Pointings
+    # are biased to the Milky Way (|galactic b| <= --gal-lat-max) so the field is rich, and
+    # rejected if below the horizon (el < --min-el), too sparse (< --min-stars rendered) or
+    # carrying no in-frame named HIP star (so every case has usable ground truth).
+    ap.add_argument("--random", type=int, default=0, help="generate N random scenes")
+    ap.add_argument("--random-seed", type=int, default=20260604, help="RNG seed (reproducible)")
+    ap.add_argument("--min-el", type=float, default=20.0, help="reject pointings below this elevation")
+    ap.add_argument("--gal-lat-max", type=float, default=22.0, help="max |galactic latitude| deg")
+    ap.add_argument("--min-stars", type=int, default=120, help="reject scenes with fewer rendered stars")
     args=ap.parse_args()
     import cv2
 
@@ -149,44 +170,32 @@ def main():
     bright_mag, faint_mag = 4.0, args.render_mag
     rng=np.random.default_rng(1234)
 
-    # Default scenes target rich, low-galactic-latitude Milky Way regions (so the field
-    # has enough stars for a meaningful solve) at a few rolls (to exercise roll
-    # disambiguation). Each is a real sky region given by RA/Dec; az/el is derived at the
-    # configured location/time. Edit/extend freely (ra_deg, dec_deg, roll_deg).
-    scenes=[
-        dict(label="synth-cyg-r0",  ra=305.5, dec=40.2, roll=0.0),    # Cygnus (dense)
-        dict(label="synth-cyg-r60", ra=305.5, dec=40.2, roll=60.0),   # same field, rolled
-        dict(label="synth-cas-r0",  ra=14.0,  dec=60.7, roll=0.0),    # Cassiopeia (dense)
-        dict(label="synth-cas-r90", ra=14.0,  dec=60.7, roll=90.0),   # same field, rolled
-    ]
+    from astropy.coordinates import SkyCoord
 
-    rows=[]
-    for sc in scenes:
-        ra,dec,roll=sc["ra"],sc["dec"],sc["roll"]
+    # Render + ground-truth one scene; returns its CSV rows (one per test magnitude), or
+    # None if the scene is rejected (no Gaia stars, too sparse, or — when require_named —
+    # no in-frame named HIP star). The image is only written once the scene is accepted.
+    def process_scene(label, ra, dec, roll, require_named, min_stars):
         ha=norm180(lst_deg(jd,args.lon)-ra)
         az,el=radec_to_azel(ra,dec,args.lat,args.lon,jd)
         crota2=norm180(roll - parallactic_deg(ha,dec,args.lat))
         wcs=build_wcs(ra,dec,scale,crota2,args.width,args.height)
         flag="" if el>=15 else "  (LOW ELEVATION)"
-        print(f"\n=== {sc['label']}  RA/Dec={ra/15:.3f}h/{dec:+.2f}  roll={roll}  -> az/el={az:.1f}/{el:.1f}{flag}  CROTA2={crota2:.2f}")
+        print(f"\n=== {label}  RA/Dec={ra/15:.3f}h/{dec:+.2f}  roll={roll:.1f}  -> az/el={az:.1f}/{el:.1f}{flag}  CROTA2={crota2:.2f}")
 
-        # render from Gaia DR3
-        from astropy.coordinates import SkyCoord
         gcat=query_catalog(ra,dec, radius_deg=args.fov*0.62, cat="I/355/gaiadr3",
                            cols=["_RAJ2000","_DEJ2000","Gmag"], magcol="Gmag",
                            magmax=args.render_mag, limit=50000)
         if gcat is None or len(gcat)==0:
-            print("  no Gaia stars; skipping"); continue
+            print("  no Gaia stars; skipping"); return None
         gsky=SkyCoord(np.asarray(gcat["_RAJ2000"],float), np.asarray(gcat["_DEJ2000"],float), unit="deg")
         gx,gy=wcs.world_to_pixel(gsky)
         gmag=np.asarray(gcat["Gmag"],float)
         xy_peak=[(float(x),float(y),mag_to_peak(m,bright_mag,faint_mag))
                  for x,y,m in zip(gx,gy,gmag)
                  if -5<=x<args.width+5 and -5<=y<args.height+5 and np.isfinite(m)]
-        img=render_field(xy_peak,args.width,args.height,seed=int(rng.integers(1e9)))
-        jpg=outimg/f"{sc['label']}.jpg"
-        cv2.imwrite(str(jpg),img,[int(cv2.IMWRITE_JPEG_QUALITY),95])
-        print(f"  rendered {len(xy_peak)} Gaia stars (<=mag {args.render_mag}) -> {jpg.name}")
+        if len(xy_peak) < min_stars:
+            print(f"  only {len(xy_peak)} in-frame stars (< {min_stars}); skipping"); return None
 
         # named HIP stars (solver-recognised labels), exact positions. Skip the very
         # brightest (saturated, hard to label); relax the window if the field is sparse.
@@ -206,7 +215,14 @@ def main():
             return picked
         chosen=pick_named(3.5,11.0) or pick_named(0.0,12.5)
         if not chosen:
+            if require_named:
+                print("  no in-frame named HIP star; skipping"); return None
             print("  WARNING: no in-frame HIP named stars; case has empty starPositions")
+
+        img=render_field(xy_peak,args.width,args.height,seed=int(rng.integers(1e9)))
+        jpg=outimg/f"{label}.jpg"
+        cv2.imwrite(str(jpg),img,[int(cv2.IMWRITE_JPEG_QUALITY),95])
+        print(f"  rendered {len(xy_peak)} Gaia stars (<=mag {args.render_mag}) -> {jpg.name}")
 
         # az/el seed (optionally jittered to mimic mount-pointing error)
         jx=args.seed_jitter
@@ -215,10 +231,51 @@ def main():
         names=",".join(f"HIP {h}" for h,_,_ in chosen)
         spos=",".join(f"HIP {h}:{int(round(X))}:{int(round(Y))}" for h,X,Y in chosen)
         print(f"  named: {spos if spos else '(none)'}")
+        srows=[]
+        img_dir_name=Path(args.out_images).name
         for mag in mags:
-            rows.append(f'"images-synthetic/{sc["label"]}.jpg",{args.time},{args.lat:.6f},'
-                        f'{args.lon:.6f},0.0,{az_s:.2f},{el_s:.2f},0.0,{args.fov:.3f},'
-                        f'"rectilinear",0.0,0.0,0.0,"{names}",{mag:g},3,0,0,0,0,,,"{spos}"')
+            srows.append(f'"{img_dir_name}/{label}.jpg",{args.time},{args.lat:.6f},'
+                         f'{args.lon:.6f},0.0,{az_s:.2f},{el_s:.2f},0.0,{args.fov:.3f},'
+                         f'"rectilinear",0.0,0.0,0.0,"{names}",{mag:g},3,0,0,0,0,,,"{spos}"')
+        return srows
+
+    rows=[]
+    if args.random > 0:
+        # Random pointings biased to the Milky Way (|galactic b| <= gal-lat-max) so the
+        # field is rich; above the horizon; rich enough; with a named HIP star. The
+        # galactic-latitude and elevation rejections are free (no network), so only viable
+        # pointings cost a catalog query.
+        srng=np.random.default_rng(args.random_seed)
+        accepted=0; attempts=0; maxatt=args.random*40
+        while accepted < args.random and attempts < maxatt:
+            attempts+=1
+            ra=float(srng.uniform(0.0,360.0))
+            dec=math.degrees(math.asin(float(srng.uniform(-1.0,1.0))))   # uniform on sphere
+            if abs(float(SkyCoord(ra,dec,unit="deg").galactic.b.deg)) > args.gal_lat_max:
+                continue
+            az,el=radec_to_azel(ra,dec,args.lat,args.lon,jd)
+            if el < args.min_el:
+                continue
+            roll=float(srng.uniform(0.0,360.0))
+            srows=process_scene(f"synth-rand-{accepted+1:03d}", ra, dec, roll,
+                                require_named=True, min_stars=args.min_stars)
+            if srows:
+                rows.extend(srows); accepted+=1
+        print(f"\nAccepted {accepted}/{args.random} random scenes in {attempts} attempts")
+    else:
+        # Built-in rich scenes at a few rolls (RA/Dec given; az/el derived at the
+        # configured location/time). Edit/extend freely.
+        scenes=[
+            dict(label="synth-cyg-r0",  ra=305.5, dec=40.2, roll=0.0),    # Cygnus (dense)
+            dict(label="synth-cyg-r60", ra=305.5, dec=40.2, roll=60.0),   # same field, rolled
+            dict(label="synth-cas-r0",  ra=14.0,  dec=60.7, roll=0.0),    # Cassiopeia (dense)
+            dict(label="synth-cas-r90", ra=14.0,  dec=60.7, roll=90.0),   # same field, rolled
+        ]
+        for sc in scenes:
+            srows=process_scene(sc["label"], sc["ra"], sc["dec"], sc["roll"],
+                                require_named=False, min_stars=1)
+            if srows:
+                rows.extend(srows)
 
     header=("image,time,latitude,longitude,altitude,azimuth,elevation,roll,fov,projection,"
             "cx,cy,k1,stars,plateSolveMaxMagnitude,plateSolveStartMode,roiX,roiY,roiW,roiH,"

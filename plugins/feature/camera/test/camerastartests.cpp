@@ -1311,6 +1311,44 @@ QStringList expectedStarPositionMismatches(const StarTestCase& test,
     return mismatches;
 }
 
+// An expected star carrying an explicit pixel position is "found" when a solved detection
+// lands within the position tolerance of it — regardless of what name the solver attached.
+// This reconciles synonym labelling: a bright star the solver labels by its proper name
+// (e.g. "Pollux") still satisfies a CSV ground-truth that names it by catalogue id
+// ("HIP 37826"), since the position is the authoritative ground truth and the HYG
+// diagnostic catalogue cannot cross-reference HIP ids to proper names.
+bool expectedStarPositionSatisfied(const StarTestCase& test,
+                                   const CameraPipelineFramePtr& frame,
+                                   const QVector<CatalogStar>& catalog,
+                                   const QString& expected)
+{
+    const auto it = test.expectedStarPositions.constFind(expected);
+    if (it == test.expectedStarPositions.constEnd()) {
+        return false;
+    }
+    const QPointF& expectedPosition = it.value();
+
+    const CameraPipelineStarDetection *detection =
+        findSolvedDetectionNearPosition(frame, expectedPosition);
+    if (!detection) {
+        detection = findSolvedDetectionForExpectedStarNearPosition(frame, expected, expectedPosition);
+    }
+    if (!detection) {
+        detection = findMatchSummaryDetectionForExpectedStarNearPosition(frame, expected, expectedPosition);
+    }
+    if (!detection) {
+        detection = findProjectedDetectionForExpectedStarNearPosition(test, frame, catalog, expected, expectedPosition);
+    }
+    if (!detection) {
+        return false;
+    }
+
+    const double distance = std::hypot(
+        detection->m_center.x() - expectedPosition.x(),
+        detection->m_center.y() - expectedPosition.y());
+    return distance <= 24.0;
+}
+
 QStringList expectedPoseMismatches(const StarTestCase& test, const CameraPipelineFramePtr& frame)
 {
     QStringList mismatches;
@@ -1710,7 +1748,22 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
             diagnosticCatalog,
             labels);
         const QStringList requiredStars = requiredExpectedStars(test);
-        const QStringList missing = missingExpectedStars(labels, projectedDetections, requiredStars);
+        QStringList missing = missingExpectedStars(labels, projectedDetections, requiredStars);
+        // A required star whose explicit pixel position is satisfied by a solved detection
+        // is found even if the solver labelled it with a synonym (proper name vs catalogue
+        // id), so don't also report it as name-missing — the position check below is the
+        // authoritative assertion for such stars.
+        if (!missing.isEmpty() && !test.expectedStarPositions.isEmpty())
+        {
+            QStringList stillMissing;
+            for (const QString& name : missing)
+            {
+                if (!expectedStarPositionSatisfied(test, result.frame, diagnosticCatalog, name)) {
+                    stillMissing.append(name);
+                }
+            }
+            missing = stillMissing;
+        }
         const QStringList positionMismatches = expectedStarPositionMismatches(
             test,
             result.frame,

@@ -12493,6 +12493,32 @@ static double poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogConte
     return logOdds;
 }
 
+// A narrow guided-direction final pass with many matches at sub-pixel RMS is a true
+// alignment by overwhelming statistical evidence (cf. poseFalseAlarmLogOdds): scores of
+// catalog stars cannot land sub-pixel on detections by chance. Such a pose is genuinely
+// solved even when the field carries NO bright/saturated anchors — faint Milky-Way or
+// high-galactic-latitude fields legitimately lack them, and the bright-anchor support
+// gates then wrongly reject an otherwise perfect solve (surfaced by the synthetic random
+// corpus: 9/38 zero-jitter failures were correct fits at rms 0.15-0.30 with 55-89 matches).
+// Used to bypass the *brightness* acceptance gates only; the FoV and direction-seed
+// quality gates still apply.
+bool hasOverwhelmingFaintGuidedSupport(const CameraSettings& settings,
+                                       const FinalMatchPassEvaluation& finalPass)
+{
+    if (!finalPass.projectorValid || (!isNarrowField(settings))) {
+        return false;
+    }
+    const int matchCount = finalPass.finalMatches.size();
+    const double rms = finalPass.rmsErrorPixels;
+    const double maxErr = finalPass.maxErrorPixels;
+    const int strongFloor = std::max(settings.m_plateSolveMinMatches + 20, 30);
+    const double tightRms = std::min(1.5, static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.12);
+    const double maxErrCap = std::max(6.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.5);
+    return (matchCount >= strongFloor)
+        && std::isfinite(rms) && (rms <= tightRms)
+        && std::isfinite(maxErr) && (maxErr <= maxErrCap);
+}
+
 bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
                                       const FinalMatchPassEvaluation& finalPass)
 {
@@ -20518,9 +20544,15 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                  << "Roll" << selectedFinalPassForAcceptance.pose.rollDegrees
                  << "FoV" << selectedFinalPassForAcceptance.pose.fovDegrees;
     }
+    // A tight, richly-matched fit is a true alignment even without bright anchors; let it
+    // bypass the bright-support gates (but not the FoV / direction-seed quality gates).
+    const bool overwhelmingFaintSupport =
+        useStartDirection
+        && hasOverwhelmingFaintGuidedSupport(settings, selectedFinalPassForAcceptance);
     const bool weakNarrowGuidedBrightSupport =
         useStartDirection
         && !sparseGuidedPairAccepted
+        && !overwhelmingFaintSupport
         && !hasHighConfidenceSparseGuidedAnchors(settings, selectedFinalPassForAcceptance)
         && hasWeakNarrowGuidedBrightSupport(settings, selectedFinalPassForAcceptance);
     const bool narrowGuidedFovAccepted =
@@ -20535,7 +20567,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 selectedFinalPassForAcceptance.finalMatches,
                 selectedFinalPassForAcceptance.rmsErrorPixels,
                 selectedFinalPassForAcceptance.maxErrorPixels)
-            && hasAcceptableGuidedFinalBrightnessConsistency(settings, selectedFinalPassForAcceptance));
+            && (overwhelmingFaintSupport
+                || hasAcceptableGuidedFinalBrightnessConsistency(settings, selectedFinalPassForAcceptance)));
     if (!directionSeedSolveAcceptable)
     {
         const QString rejectionReason = !narrowGuidedFovAccepted

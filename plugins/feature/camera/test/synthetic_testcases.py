@@ -77,6 +77,20 @@ def radec_to_azel(ra_deg, dec_deg, lat, lon, jd):
     az = a if math.sin(hr)<0.0 else 360.0-a
     return az, math.degrees(el)
 
+def precess_j2000_to_date(ra_deg, dec_deg, jd):
+    """Low-precision (Meeus) general precession of mean J2000 RA/Dec to the epoch of `jd`.
+    The Vizier catalogues return J2000 (_RAJ2000/_DEJ2000), but the SDRangel solver works at
+    epoch-of-date, so the camera-pointing SEED must be the epoch-of-date direction of the
+    field — otherwise every case carries a ~0.1-0.7° (J2000->date precession) seed offset
+    that the solver's recenter must absorb (and which, combined with a roll-alias, made the
+    densest fields wrongly look like a 'blind-solve' failure class). ~26 years -> ~0.36°."""
+    yrs = (jd - JD2000) / 365.25
+    m, n_ra, n_dec = 3.07496, 1.33621, 20.0431   # sec/yr, sec/yr, arcsec/yr
+    rr, dr = math.radians(ra_deg), math.radians(dec_deg)
+    ra_out = norm360(ra_deg + (m + n_ra*math.sin(rr)*math.tan(dr))*yrs * 15.0/3600.0)
+    dec_out = dec_deg + (n_dec*math.cos(rr))*yrs / 3600.0
+    return ra_out, dec_out
+
 # --- WCS / catalog ----------------------------------------------------------------
 def build_wcs(ra_deg, dec_deg, scale_deg, crota2_deg, W, H):
     """TAN WCS centred on the image, positive-determinant CD (matches Seestar parity)."""
@@ -155,6 +169,9 @@ def main():
     # carrying no in-frame named HIP star (so every case has usable ground truth).
     ap.add_argument("--random", type=int, default=0, help="generate N random scenes")
     ap.add_argument("--random-seed", type=int, default=20260604, help="RNG seed (reproducible)")
+    ap.add_argument("--label", default="synth-rand",
+                    help="scene label prefix (use distinct labels + seeds + out-csv per "
+                         "parallel instance to a shared --out-images so they don't collide)")
     ap.add_argument("--min-el", type=float, default=20.0, help="reject pointings below this elevation")
     ap.add_argument("--gal-lat-max", type=float, default=22.0, help="max |galactic latitude| deg")
     ap.add_argument("--min-stars", type=int, default=120, help="reject scenes with fewer rendered stars")
@@ -177,7 +194,12 @@ def main():
     # no in-frame named HIP star). The image is only written once the scene is accepted.
     def process_scene(label, ra, dec, roll, require_named, min_stars):
         ha=norm180(lst_deg(jd,args.lon)-ra)
-        az,el=radec_to_azel(ra,dec,args.lat,args.lon,jd)
+        # The field is rendered from J2000 catalogue positions, but the camera-pointing seed
+        # the solver consumes must be at epoch-of-date (the solver works at date). Compute the
+        # seed az/el from the precessed field centre so there is no built-in seed offset; the
+        # WCS / CROTA2 / named-star pixels stay in the rendered (J2000) frame.
+        ra_d,dec_d=precess_j2000_to_date(ra,dec,jd)
+        az,el=radec_to_azel(ra_d,dec_d,args.lat,args.lon,jd)
         crota2=norm180(roll - parallactic_deg(ha,dec,args.lat))
         wcs=build_wcs(ra,dec,scale,crota2,args.width,args.height)
         flag="" if el>=15 else "  (LOW ELEVATION)"
@@ -257,7 +279,7 @@ def main():
             if el < args.min_el:
                 continue
             roll=float(srng.uniform(0.0,360.0))
-            srows=process_scene(f"synth-rand-{accepted+1:03d}", ra, dec, roll,
+            srows=process_scene(f"{args.label}-{accepted+1:03d}", ra, dec, roll,
                                 require_named=True, min_stars=args.min_stars)
             if srows:
                 rows.extend(srows); accepted+=1

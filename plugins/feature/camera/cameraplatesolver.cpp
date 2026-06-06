@@ -21073,7 +21073,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     {
         const double fovDegrees = std::max(0.1, static_cast<double>(settings.m_fov));
         QVector<std::pair<double, double>> recenterOffsets;
-        recenterOffsets.reserve(16);
+        recenterOffsets.reserve(18);
         const auto appendRecenteringOffset = [&](double azimuthOffset, double elevationOffset) {
             for (const auto& existingOffset : recenterOffsets)
             {
@@ -21094,7 +21094,9 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         // elevation offsets sat past the attempt budget and never ran, so the recenter was
         // azimuth-only in practice. Cases that resolve on an az offset early-stop (strong
         // solved candidate) before reaching the elevation tier, so ordering is preserved.
-        const std::array<std::pair<double, double>, 16> defaultRecenterOffsets = {{
+        // El now matches az coverage: ±0.33/0.5/0.75/1.0·fov (sweep data showed el at 54%
+        // vs az at 78%, partly due to the missing el ±1.0·fov tier).
+        const std::array<std::pair<double, double>, 18> defaultRecenterOffsets = {{
             { fovDegrees * 0.75, 0.0 },
             { -fovDegrees * 0.75, 0.0 },
             { fovDegrees, 0.0 },
@@ -21109,6 +21111,8 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             { 0.0, -fovDegrees * 0.5 },
             { 0.0, fovDegrees * 0.75 },
             { 0.0, -fovDegrees * 0.75 },
+            { 0.0, fovDegrees },
+            { 0.0, -fovDegrees },
             { fovDegrees * 0.75, fovDegrees * 0.75 },
             { -fovDegrees * 0.75, -fovDegrees * 0.75 }
         }};
@@ -21153,11 +21157,11 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 - directionPenalty;
         };
         const int strongRecenterMatchCount = std::max(settings.m_plateSolveMinMatches + 48, 80);
-        // Budget enough attempts to reach the finer az tier (indices 4..7) and the
-        // elevation tier (indices 8..13) so a sub-fov seed error in either axis is
-        // recovered; the coarse offsets that already resolve a case early-stop well before
+        // Budget enough attempts to reach the finer az tier (indices 4..7), the
+        // elevation tier (indices 8..13), and now also the el ±1.0·fov tier (indices
+        // 14..15); the coarse offsets that already resolve a case early-stop well before
         // this, so the extra budget only costs time on otherwise-failing solves.
-        const int maxRecenterAttempts = 14;
+        const int maxRecenterAttempts = 16;
         int recenterAttempts = 0;
         for (const auto& offset : recenterOffsets)
         {

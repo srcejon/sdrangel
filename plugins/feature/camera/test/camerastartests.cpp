@@ -1739,7 +1739,12 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
         }
 
         QString overlayPath;
-        const bool wroteOverlay = writeMatchOverlayImage(test, result.frame, outputDirectory, &overlayPath);
+        // STAR_TESTS_NO_OVERLAY skips the per-case diagnostic overlay PNG. The overlays are
+        // full-frame images written once per row; for bulk/parallel validation runs (e.g. the
+        // seed-jitter sweep with hundreds of rows) they dominate disk writes and are the main
+        // thing that fills the disk, so allow turning them off.
+        const bool wroteOverlay = !qEnvironmentVariableIsSet("STAR_TESTS_NO_OVERLAY")
+            && writeMatchOverlayImage(test, result.frame, outputDirectory, &overlayPath);
 
         const QStringList labels = solvedStarLabels(result.frame);
         const QStringList projectedDetections = projectedExpectedStarDetections(

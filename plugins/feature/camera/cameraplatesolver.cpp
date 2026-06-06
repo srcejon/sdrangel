@@ -387,6 +387,12 @@ QHash<QString, qint64> m_profileMetrics;
 // Maximum total size of m_sirilRangeCache before it is cleared after a solve.
 // m_sirilIndexCache is bounded naturally (≤ 48 chunks × 64 KB = 3 MB) and never evicted.
 static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
+// Maximum total size of an on-disk per-region star cache directory (siril-*-region-cache).
+// Each region file is ~12-68 MB (one per unique ra/dec/radius/mag) and they accumulated
+// unbounded — the astro-region cache had grown to ~63 GB and filled the disk. After writing a
+// region file the oldest files in its directory are evicted (FIFO by mtime) until back under
+// this cap. Overridable via SDRANGEL_CAMERA_SIRIL_REGION_CACHE_MAX_BYTES (0 = unlimited).
+static constexpr qint64 kSirilRegionDiskCacheMaxBytes = 32LL * 1024 * 1024 * 1024;  // 32 GB
 static constexpr const char* kSirilCacheDir = "siril-spcc-cache/v1";
 static constexpr const char* kSirilRegionCacheDir = "siril-spcc-region-cache/v3";
 static constexpr const char* kSirilAstroRegionCacheDir = "siril-astro-region-cache/v3";
@@ -1363,6 +1369,62 @@ static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path)
     return stars;
 }
 
+static qint64 sirilRegionDiskCacheMaxBytes()
+{
+    static const qint64 limit = []() -> qint64 {
+        const QByteArray env = qgetenv("SDRANGEL_CAMERA_SIRIL_REGION_CACHE_MAX_BYTES");
+        if (!env.isEmpty()) {
+            bool ok = false;
+            const qlonglong v = env.toLongLong(&ok);
+            if (ok && (v >= 0)) {
+                return static_cast<qint64>(v);
+            }
+        }
+        return kSirilRegionDiskCacheMaxBytes;
+    }();
+    return limit;
+}
+
+// Cap a per-region disk-cache directory at sirilRegionDiskCacheMaxBytes(), evicting the
+// oldest files (FIFO by modification time) until back under the cap. Best-effort and
+// concurrency-safe across solver processes: a delete that loses a race (file already gone,
+// or held open by another process mid-read) is simply skipped — a missing region file is a
+// cache miss that re-fetches, never a corruption.
+static void enforceSirilRegionDiskCacheLimit(const QString& directoryPath)
+{
+    const qint64 maxBytes = sirilRegionDiskCacheMaxBytes();
+    if (maxBytes <= 0) {   // 0 = unlimited
+        return;
+    }
+    QDir dir(directoryPath);
+    if (!dir.exists()) {
+        return;
+    }
+    // Oldest first (QDir::Time is newest-first; Reversed flips it).
+    const QFileInfoList files = dir.entryInfoList(
+        QStringList() << QStringLiteral("*.bin"),
+        QDir::Files | QDir::NoSymLinks,
+        QDir::Time | QDir::Reversed);
+    qint64 total = 0;
+    for (const QFileInfo& info : files) {
+        total += info.size();
+    }
+    if (total <= maxBytes) {
+        return;
+    }
+    // Evict to a low-water mark (95%) so we don't re-scan/evict on every subsequent write.
+    const qint64 lowWater = maxBytes - (maxBytes / 20);
+    for (const QFileInfo& info : files) {
+        if (total <= lowWater) {
+            break;
+        }
+        const qint64 size = info.size();
+        if (QFile::remove(info.absoluteFilePath())) {
+            total -= size;
+        }
+    }
+}
+
 static void writeSirilRegionDiskCacheFile(const QString& path, const QVector<CatalogStar>& stars)
 {
     if (stars.isEmpty()) {
@@ -1411,7 +1473,10 @@ static void writeSirilRegionDiskCacheFile(const QString& path, const QVector<Cat
     }
 
     file.write(buf);
-    file.commit();
+    if (!file.commit()) {
+        return;
+    }
+    enforceSirilRegionDiskCacheLimit(QFileInfo(path).absolutePath());
 }
 
 static QByteArray readSirilDiskCacheFile(const QString& path, qint64 expectedSize)

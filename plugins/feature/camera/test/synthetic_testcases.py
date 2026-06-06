@@ -175,7 +175,45 @@ def main():
     ap.add_argument("--min-el", type=float, default=20.0, help="reject pointings below this elevation")
     ap.add_argument("--gal-lat-max", type=float, default=22.0, help="max |galactic latitude| deg")
     ap.add_argument("--min-stars", type=int, default=120, help="reject scenes with fewer rendered stars")
+    # Deterministic seed-jitter SWEEP (stress dataset). --expand <baseline.csv> re-emits each
+    # baseline row plus, for every (magnitude x direction x sign), a copy with the camera SEED
+    # perturbed by that offset — same image, same ground truth, only the starting guess moves.
+    # This maps the solver's solve-success boundary vs seed-pointing error (the dominant real
+    # weakness) without any re-rendering or network. Rows stay in order (baseline then its
+    # offsets) so output can be zipped back to offsets for analysis.
+    ap.add_argument("--expand", default="", help="baseline CSV to expand into a seed-jitter sweep")
+    ap.add_argument("--jitter-sweep", default="0.5,1.0,1.5", help="offset magnitudes (deg)")
+    ap.add_argument("--jitter-dirs", default="az,el", help="offset directions: az,el,diag")
     args=ap.parse_args()
+
+    if args.expand:
+        import csv as _csv
+        rows=list(_csv.reader(Path(args.expand).read_text().splitlines()))
+        mags=[float(m) for m in args.jitter_sweep.split(",") if m.strip()]
+        dirs=[d.strip() for d in args.jitter_dirs.split(",") if d.strip()]
+        quoted={0,9,13,22}   # image, projection, stars, starPositions (generator format)
+        emit=lambda fs: ",".join((f'"{v}"' if i in quoted else v) for i,v in enumerate(fs))
+        out=[emit(rows[0])]; n_base=n_off=0
+        for r in rows[1:]:
+            if len(r)<7: continue
+            out.append(emit(r)); n_base+=1                 # baseline (offset 0)
+            az0,el0=float(r[5]),float(r[6])
+            for m in mags:
+                for d in dirs:
+                    for s in (1.0,-1.0):
+                        daz=dele=0.0
+                        if d=="az": daz=s*m
+                        elif d=="el": dele=s*m
+                        elif d=="diag": daz=s*m/math.sqrt(2); dele=s*m/math.sqrt(2)
+                        rr=list(r)
+                        rr[5]=f"{(az0+daz)%360.0:.4f}"
+                        rr[6]=f"{max(-90.0,min(90.0,el0+dele)):.4f}"
+                        out.append(emit(rr)); n_off+=1
+        Path(args.out_csv).write_text("\n".join(out)+"\n")
+        print(f"expanded {n_base} baseline -> {n_base+n_off} rows "
+              f"({len(mags)} mags x {len(dirs)} dirs x 2 signs + baseline) -> {args.out_csv}")
+        return
+
     import cv2
 
     outimg=Path(args.out_images); outimg.mkdir(exist_ok=True)

@@ -2792,8 +2792,13 @@ static QVector<int> aliasCatalogDeclinationSortedIndices(const QVector<CatalogSt
 
 static QString resolveNamedAliasForCatalogStar(const CatalogStar& star,
                                                const QVector<CatalogStar>& aliasStars,
-                                               const QVector<int>& sortedAliasIndices)
+                                               const QVector<int>& sortedAliasIndices,
+                                               double* outScore = nullptr)
 {
+    if (outScore) {
+        *outScore = std::numeric_limits<double>::infinity();
+    }
+
     if (aliasStars.isEmpty() || sortedAliasIndices.isEmpty()) {
         return QString();
     }
@@ -2849,6 +2854,10 @@ static QString resolveNamedAliasForCatalogStar(const CatalogStar& star,
         }
     }
 
+    if (outScore && !bestName.isEmpty()) {
+        *outScore = bestScore;
+    }
+
     return bestName;
 }
 
@@ -2862,16 +2871,46 @@ static void applyNamedAliasesToCatalog(const CameraSettings& settings, QVector<C
 
     const QVector<CatalogStar>& aliasStars = bundledAliasCatalog();
     const QVector<int> sortedAliasIndices = aliasCatalogDeclinationSortedIndices(aliasStars);
-    int aliasCount = 0;
 
-    for (CatalogStar& star : stars)
+    // Resolve alias names as a one-to-one assignment: each named alias (e.g. "HIP 37078")
+    // must end up on at most one catalog star -- the single closest/best-scoring match.
+    //
+    // Resolving independently per catalog star (the previous approach: "for every Gaia star,
+    // find its best alias and stamp the name on") is a many-to-one match. With a 30 arcsec /
+    // 2.5 magnitude tolerance, several distinct nearby Gaia DR3 sources can each independently
+    // consider the same bright named star their best (or only) alias candidate, so the same
+    // name (e.g. "HIP 37078") ends up stamped onto multiple catalog entries scattered around
+    // the true star's position. That confuses anchor-based searches, which key off named
+    // stars and implicitly assume a name identifies a single, unique catalog entry -- the
+    // search can latch onto a spurious duplicate (wrong position, "right" name) instead of
+    // the genuine star.
+    //
+    // To keep the assignment unique, gather every candidate (catalogIndex, alias, score) and
+    // keep only the best-scoring catalog star for each alias name.
+    QHash<QString, int> bestIndexForAlias;
+    QHash<QString, double> bestScoreForAlias;
+
+    for (int i = 0; i < stars.size(); ++i)
     {
-        const QString alias = resolveNamedAliasForCatalogStar(star, aliasStars, sortedAliasIndices);
-        if (!alias.isEmpty())
-        {
-            star.name = alias;
-            ++aliasCount;
+        double score = std::numeric_limits<double>::infinity();
+        const QString alias = resolveNamedAliasForCatalogStar(stars[i], aliasStars, sortedAliasIndices, &score);
+        if (alias.isEmpty()) {
+            continue;
         }
+
+        const auto existing = bestScoreForAlias.constFind(alias);
+        if ((existing == bestScoreForAlias.constEnd()) || (score < existing.value()))
+        {
+            bestIndexForAlias.insert(alias, i);
+            bestScoreForAlias.insert(alias, score);
+        }
+    }
+
+    int aliasCount = 0;
+    for (auto it = bestIndexForAlias.constBegin(); it != bestIndexForAlias.constEnd(); ++it)
+    {
+        stars[it.value()].name = it.key();
+        ++aliasCount;
     }
 
     if (aliasCount > 0) {
@@ -2881,12 +2920,16 @@ static void applyNamedAliasesToCatalog(const CameraSettings& settings, QVector<C
 
 static QString catalogDisplayName(const CatalogStar& star)
 {
-    const QVector<CatalogStar>& aliasStars = bundledAliasCatalog();
-    const QVector<int> sortedAliasIndices = aliasCatalogDeclinationSortedIndices(aliasStars);
-    const QString alias = resolveNamedAliasForCatalogStar(star, aliasStars, sortedAliasIndices);
-    if (!alias.isEmpty()) {
-        return alias;
-    }
+    // Trust the name already assigned to this star (set when the catalog was loaded/merged,
+    // see applyNamedAliasesToCatalog/mergeBundledBrightStarsIntoCatalog -- both perform a
+    // one-to-one assignment so a given alias name identifies a single catalog entry).
+    //
+    // Previously this independently re-resolved the alias for every star on every call,
+    // which duplicated applyNamedAliasesToCatalog's matching (with the same many-to-one
+    // pitfalls) and could override an already-correct name with a different, merely
+    // closer-scoring alias on the fly -- e.g. turning a correctly merged bright star's name
+    // into a different nearby alias's name purely because of how display happened to be
+    // invoked for it.
     if (isGenericGaiaCatalogName(star.name)) {
         return formatGaiaCoordinateLabel(star.rightAscensionDegrees, star.declinationDegrees, star.magnitude);
     }
@@ -20785,6 +20828,14 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         qint64 elapsedMs = 0;
         bool solved = false;
         int matchedStars = 0;
+        double azimuthDegrees = 0.0;
+        double elevationDegrees = 0.0;
+        double rollDegrees = 0.0;
+        double rmsErrorPixels = 0.0;
+        double fovDegrees = 0.0;
+        double centerOffsetXPixels = 0.0;
+        double centerOffsetYPixels = 0.0;
+        double distortionK1 = 0.0;
         QString summary;
     };
     QVector<SolveRunProfile> solveRunProfiles;
@@ -20809,6 +20860,14 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             runTimer.elapsed(),
             runResult.m_solved,
             runResult.m_matchedStars,
+            runResult.m_azimuthDegrees,
+            runResult.m_elevationDegrees,
+            runResult.m_rollDegrees,
+            runResult.m_rmsErrorPixels,
+            runResult.m_fovDegrees,
+            runResult.m_centerOffsetXPixels,
+            runResult.m_centerOffsetYPixels,
+            runResult.m_distortionK1,
             runResult.m_profileSummary
         });
 
@@ -20844,6 +20903,14 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             outerProfile.append(prefix + QStringLiteral("ms=%1").arg(runProfile.elapsedMs));
             outerProfile.append(prefix + QStringLiteral("solved=%1").arg(runProfile.solved ? 1 : 0));
             outerProfile.append(prefix + QStringLiteral("matches=%1").arg(runProfile.matchedStars));
+            outerProfile.append(prefix + QStringLiteral("az=%1").arg(runProfile.azimuthDegrees, 0, 'f', 4));
+            outerProfile.append(prefix + QStringLiteral("el=%1").arg(runProfile.elevationDegrees, 0, 'f', 4));
+            outerProfile.append(prefix + QStringLiteral("roll=%1").arg(runProfile.rollDegrees, 0, 'f', 4));
+            outerProfile.append(prefix + QStringLiteral("rms=%1").arg(runProfile.rmsErrorPixels, 0, 'f', 4));
+            outerProfile.append(prefix + QStringLiteral("fov=%1").arg(runProfile.fovDegrees, 0, 'f', 4));
+            outerProfile.append(prefix + QStringLiteral("cx=%1").arg(runProfile.centerOffsetXPixels, 0, 'f', 3));
+            outerProfile.append(prefix + QStringLiteral("cy=%1").arg(runProfile.centerOffsetYPixels, 0, 'f', 3));
+            outerProfile.append(prefix + QStringLiteral("k1=%1").arg(runProfile.distortionK1, 0, 'f', 6));
         }
         if (!result.m_profileSummary.isEmpty()) {
             result.m_profileSummary.append(QLatin1Char(';'));

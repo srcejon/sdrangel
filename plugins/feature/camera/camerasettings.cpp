@@ -404,6 +404,19 @@ void CameraSettings::resetToDefaults()
     m_plateSolve = false;
     m_plateSolveMaxMagnitude = 5.0;
     m_plateSolveMinMatches = 4;
+    // NOTE (2026-06-08): investigated lowering this from 24.0 to fix a real misconvergence on
+    // ngc-2403.jpg (dense field, ~1000+ detections) where a 24px radius let wrong-pose candidates
+    // accidentally accumulate match counts/RMS similar to the correct pose. A global reduction to
+    // 8px DID make ngc-2403.jpg converge correctly (217@RMS~17px unsolved -> 380@RMS~0.24px solved),
+    // proving the correct pose sits in a separate optimisation basin only reachable by tightening
+    // the search/seed stage itself (refinement-only fixes -- a separate discrimination radius, and
+    // two progressive radius-annealing schedules -- could not cross into that basin). However, a
+    // full 42-test regression at 8px showed this is NOT a viable global default: it causes severe
+    // under-matching regressions across ~11 other image types (sparse/wide fields, galaxies,
+    // clusters, nebulae -- e.g. stars-wide-1.jpg matched dropped to 0), flipping the suite from
+    // PASS=36/FAIL=6 to PASS=19/FAIL=23. Reverted to the original 24.0 default; ngc-2403.jpg
+    // remains a known edge-case limitation for unusually dense star fields pending a smarter
+    // (e.g. detection-density-adaptive) radius strategy.
     m_plateSolveMatchRadius = 24.0;
     m_plateSolveFinalMatchRadius = 24.0;
     m_plateSolveSearchRadius = 12.0;

@@ -813,6 +813,86 @@ coincidental tight pose in dense fields — deferred.
   unrelated classes. narrow-3 may be a larger seed offset or genuinely too sparse — worth a
   ground-truth + seed-offset check like narrow-1 before assuming it's a solver limit.
 
+## ngc-2403 — match-radius deep dive (2026-06-08, conclusive: no viable fix exists)
+
+Follow-up to the "still failing — accept-gate problem" note above: investigated whether
+the `m_plateSolveMatchRadius`/`m_plateSolveFinalMatchRadius` (default 24 px) is the real
+lever, since ngc-2403 is unusually dense (1178 detections, ~400 catalog stars projected)
+and the rejected pose's RMS (~16.4 px) sits suspiciously close to the radius itself —
+the classic signature of **matching contamination**: a radius loose enough that ~20
+wrong-pose candidates accidentally accumulate match counts (170–230) and RMS (15–17 px)
+similar to the true pose, so the true pose never wins selection (and, per the discussion
+above, isn't even reliably generated as a refined candidate).
+
+**Five attempts, all instrumented/validated against the full 42-case suite:**
+
+| # | Approach | Scope | ngc-2403 result |
+|---|---|---|---|
+| 1 | Baseline (24 px) | — | FAIL: matched=217, rms=16.8, solved=false, degenerate pose |
+| 2 | Global 24→8 px (blunt sanity check) | search + seed + refine | **PASS**: matched=380, rms=0.24, solved=true, roll −32.83° (= ground truth) |
+| 3 | `candidateDiscriminationAffinity` — separate, *tighter* scoring/discrimination radius layered on top of the existing match radius (only re-ranks already-generated candidates) | refinement/selection only | FAIL — proves discrimination/re-ranking isn't the bottleneck: the correct pose is never *in* the candidate pool to rank |
+| 4 | Progressive radius annealing (2 variants — ICP/EM-style alternating fit/associate while geometrically shrinking the inlier radius from 24px toward a target) | refinement only | FAIL, **and regressed**: both variants converge to a *new*, never-before-seen wrong basin (roll ≈ +64°, rms still ~16) and — worse — the harness reports `solved=true` there: a false positive with no ground truth to catch it |
+| 5 | Global 24→8 px **production default**, validated end-to-end (harness genuinely pinned to 8 px, not just `camerasettings.cpp`, so the search/seed stage itself is exercised) + full 42-case regression | search + seed + refine | **PASS**, identical to #2: matched=380, rms=0.237, solved=true, roll −32.8327° |
+
+**Why #3/#4 (refinement-side fixes) cannot work — basin geometry, proven not assumed.**
+The correct pose (roll ≈ −32.8°, 380 matches @ 0.24 px) occupies a *separate optimization
+basin* that the loose-radius (24 px) search/seed stage never lands near. Any tight-radius
+refinement seeded from a loose-radius local optimum gets trapped in a different
+nearby-but-still-wrong basin — proven empirically: both annealing variants (which differ
+in their walk strategy) independently converge to the *same* never-before-seen wrong
+basin (roll ≈ +64°), never the correct one. ICP-style annealing can refine *within* a
+basin but structurally cannot *cross* basin boundaries — that requires the search/seed
+stage itself to operate at a tighter radius so it lands near the true basin in the first
+place. Hence only a change that affects search/seeding (not just refinement) can work —
+which is exactly why the blunt global-8px experiment (#2) and the real default change (#5)
+both succeed identically while #3/#4 fail identically.
+
+**Why the global fix (#2/#5) cannot be deployed — full-suite regression, severe.**
+Validated #5 the *correct* way: the test harness hardcodes
+`settings.m_plateSolveMatchRadius/FinalMatchRadius = 24.0` directly on the per-test
+settings object (`camerastartests.cpp` ~line 911), **completely overriding**
+`camerasettings.cpp`'s defaults — so simply changing the production default is invisible
+to the automated suite. (This is the same hardcoding that the original sanity check in #2
+had to work around.) Temporarily re-pinning the harness to 8 px, rebuilding, and running
+the full 42-case suite gives:
+
+| harness match radius | suite PASS | suite FAIL |
+|---|---|---|
+| 24 px (clean-revert baseline) | **36** | **6** |
+| 8 px (global reduction) | **19** | **23** |
+
+Net **−17 passing tests for +1 fixed**. Eleven distinct image types that pass cleanly at
+24 px newly fail at 8 px — `stars-narrow-4/5/6`, `stars-wide-1` (matched count drops to
+**0**), `stars-wide-3`, `galaxy-m101-1`, `galaxy-m51-2`, `galaxy-c7-1`, `cluster-m3-1`,
+`nebula-c11-1`, `pollux` — i.e. essentially every sparser/wider/less-dense field class in
+the corpus. The 24 px default exists precisely to give the search/seed stage enough
+latitude to find correct matches when fields are sparser or geometry less precise; ngc-2403
+sits at the *opposite* extreme (unusually dense), so the single global constant cannot
+serve both regimes. This is exactly the "under-matching regression on sparse/wide fields"
+risk anticipated before running the experiment — it proved far more severe (a >2× swing in
+the failure count) than a marginal edge case.
+
+**Final disposition: reverted to the original 24 px default; ngc-2403 remains a known,
+narrow, accepted limitation** of unusually dense star fields (where ~20 wrong-pose
+candidates coincidentally accumulate match counts/RMS similar to the true pose at the
+default radius, and the true pose's basin is never reached by the search stage). All
+experimental code (`candidateDiscriminationAffinity`, `DiscriminationStats`, both
+annealing variants) was fully reverted from `cameraplatesolver.cpp` (verified clean by
+grep — zero remnants); `camerasettings.cpp` keeps its 24 px defaults with a comment
+summarising this investigation so it isn't blindly repeated; `camerastartests.cpp`'s
+temporary 8 px pin was cleanly reverted to 24 px.
+
+**What a real fix would require:** not a single global constant but a
+**density-/field-adaptive match radius** — tighter when detection density is unusually
+high (à la ngc-2403), looser when sparse — selected per-solve from local field statistics
+before the search stage commits to a radius. That is a substantially larger, higher-risk
+change (new tuning parameters, its own full regression cycle, risk of destabilising the
+already-finely-balanced 36/42 baseline) and was explicitly deferred rather than rushed.
+It is the natural complement to the verifier-driven candidate-selection work already noted
+above (`poseFalseAlarmLogOdds`) — both are instances of "replace a single hand-tuned global
+constant with a statistic computed from the actual field," and both await the larger
+calibration corpus needed to do so without overfitting.
+
 ## Structural note (not started)
 
 `CameraPlateSolver::SolverContext` is one ~18.5k-line inline class body (lines ~63 to

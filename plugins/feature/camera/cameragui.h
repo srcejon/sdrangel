@@ -237,6 +237,7 @@ private:
 
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
+    QList<QGraphicsItem *> m_starLabelItems;
     QList<QGraphicsRectItem *> m_motionExclusionRectItems;
     QGraphicsRectItem *m_detectionRoiRectItem = nullptr;
     QGraphicsRectItem *m_previewDrawRectItem = nullptr;
@@ -312,6 +313,8 @@ private:
     void handleMediaPlayerPlaybackStateChanged(CameraMediaPlayerState state);
     void updateCameraSubframeControls();
     void updateImageWidget();
+    void updateStarLabelPreview();
+    void clearStarLabelPreview();
     void updateCaptureModeControls();
     void updateCaptureIntervalWarning();
     void updateExposureControls();

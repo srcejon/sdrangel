@@ -35,6 +35,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
+#include <QGraphicsPathItem>
 #include <QGraphicsView>
 #include <QGraphicsRectItem>
 #include <QMenu>
@@ -43,6 +44,7 @@
 #include <QMediaPlayer>
 #include <QNetworkReply>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPixmap>
 #include <QProgressDialog>
 #include <QPushButton>
@@ -215,6 +217,25 @@ QUrl simbadUrlForStarDetection(const CameraPipelineStarDetection& star, const QS
     query.addQueryItem(QStringLiteral("Ident"), target);
     url.setQuery(query);
     return url;
+}
+
+QString previewStarLabel(const CameraSettings& settings, const CameraPipelineStarDetection& detection)
+{
+    if (!detection.m_solved || detection.m_label.trimmed().isEmpty()) {
+        return QString();
+    }
+
+    QString label = detection.m_label.trimmed();
+    if (settings.m_plateSolveLabelMode >= CameraSettings::PlateSolveLabelNameMagnitude) {
+        label += QStringLiteral("\nmag %1").arg(detection.m_catalogMagnitude, 0, 'f', 1);
+    }
+    if ((settings.m_plateSolveLabelMode >= CameraSettings::PlateSolveLabelNameMagnitudeSpectralType)
+        && !detection.m_catalogSpectralType.trimmed().isEmpty())
+    {
+        label += QStringLiteral("\n%1").arg(detection.m_catalogSpectralType.trimmed());
+    }
+
+    return label;
 }
 
 }
@@ -1769,13 +1790,16 @@ void CameraGUI::populateAlpacaAccessoryCombos()
 
 void CameraGUI::updateImageWidget()
 {
-    if (m_lastImage.isNull() || !m_imagePixmapItem) {
+    if (m_lastImage.isNull() || !m_imagePixmapItem)
+    {
+        clearStarLabelPreview();
         return;
     }
 
     const QPixmap pixmap = QPixmap::fromImage(m_lastImage);
     m_imagePixmapItem->setPixmap(pixmap);
     m_imageScene->setSceneRect(pixmap.rect());
+    updateStarLabelPreview();
 
     // Fit the image in the view (preserving aspect ratio) only when no zoom has been applied
     if (ui->imageView->transform().isIdentity()) {
@@ -1792,6 +1816,86 @@ void CameraGUI::updateImageWidget()
     settingsUI()->spectrumOffsetXSlider->setMaximum(maxX);
     settingsUI()->spectrumOffsetYSlider->setMaximum(maxY);
     updateMotionExclusionPreview();
+}
+
+void CameraGUI::clearStarLabelPreview()
+{
+    if (!m_imageScene) {
+        m_starLabelItems.clear();
+        return;
+    }
+
+    for (QGraphicsItem *item : m_starLabelItems)
+    {
+        m_imageScene->removeItem(item);
+        delete item;
+    }
+    m_starLabelItems.clear();
+}
+
+void CameraGUI::updateStarLabelPreview()
+{
+    clearStarLabelPreview();
+
+    if (!m_imageScene || m_lastImage.isNull() || m_lastStarDetections.isEmpty()) {
+        return;
+    }
+
+    QFont font;
+    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_gridLabelFontFamily);
+    }
+    font.setPointSizeF(std::max(6.0, m_settings.m_gridLabelFontScale));
+    const QFontMetrics fontMetrics(font);
+    const QRect imageRect(QPoint(0, 0), m_lastImage.size());
+
+    for (const CameraPipelineStarDetection& detection : m_lastStarDetections)
+    {
+        const QString label = previewStarLabel(m_settings, detection);
+        if (label.isEmpty()) {
+            continue;
+        }
+
+        const QStringList lines = label.split(QChar('\n'));
+        int textWidth = 0;
+        for (const QString& line : lines) {
+            textWidth = std::max(textWidth, fontMetrics.horizontalAdvance(line));
+        }
+        if (textWidth <= 0 || lines.isEmpty()) {
+            continue;
+        }
+
+        const QPointF labelPoint = detection.m_center + QPointF(4.0, -4.0);
+        const int lineSpacing = fontMetrics.lineSpacing();
+        QRect targetRect(
+            qRound(labelPoint.x()),
+            qRound(labelPoint.y()) - lines.size() * lineSpacing,
+            textWidth + 4,
+            lines.size() * lineSpacing + 2);
+
+        if (!imageRect.adjusted(0, 0, -1, -1).intersects(targetRect)) {
+            continue;
+        }
+
+        QPainterPath path;
+        const qreal left = targetRect.left() + 2.0;
+        qreal baseline = targetRect.top() + fontMetrics.ascent() + 1.0;
+        for (const QString& line : lines)
+        {
+            path.addText(left, baseline, font, line);
+            baseline += lineSpacing;
+        }
+
+        const QColor starColor = detection.m_solved
+            ? m_settings.m_starColor
+            : QColor(160, 160, 160);
+        QGraphicsPathItem *item = m_imageScene->addPath(
+            path,
+            QPen(Qt::black, 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin),
+            QBrush(starColor));
+        item->setZValue(1.5);
+        m_starLabelItems.append(item);
+    }
 }
 
 void CameraGUI::makeUIConnections()

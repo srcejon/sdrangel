@@ -175,6 +175,17 @@ static QString formatSolvedStarLabel(const CameraSettings& settings, const Camer
     return label;
 }
 
+static bool hasDrawableStarLabels(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections)
+{
+    for (const CameraPipelineStarDetection& detection : starDetections)
+    {
+        if (!formatSolvedStarLabel(settings, detection).isEmpty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void drawOutlinedLabel(QPainter& painter,
                               const QRect& imageRect,
                               const QPointF& point,
@@ -673,8 +684,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     }
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
-        const QImage processed = applyPostProcessing(m_lastFrame);
-        reportFrameToGUI(processed, m_lastFrame);
+        const QImage preview = applyPostProcessing(m_lastFrame, false);
+        reportFrameToGUI(preview, m_lastFrame);
     }
 }
 
@@ -713,8 +724,8 @@ void CameraPostProcessor::weatherUpdated(float temperature, float pressure, floa
 
     if (!m_lastFrame.m_image.isNull())
     {
-        const QImage processed = applyPostProcessing(m_lastFrame);
-        reportFrameToGUI(processed, m_lastFrame);
+        const QImage preview = applyPostProcessing(m_lastFrame, false);
+        reportFrameToGUI(preview, m_lastFrame);
     }
 }
 
@@ -824,12 +835,15 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
-    const QImage processed = applyPostProcessing(*frame);
+    const QImage processed = applyPostProcessing(*frame, true);
     frame->m_postProcessedImage = processed;
 
     m_lastFrame = *frame;
 
-    reportFrameToGUI(processed, *frame);
+    const QImage preview = hasDrawableStarLabels(m_settings, frame->m_starDetections)
+        ? applyPostProcessing(*frame, false)
+        : processed;
+    reportFrameToGUI(preview, *frame);
 
     if (m_nextStageQueue) {
         m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
@@ -923,7 +937,7 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections) const
+void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels) const
 {
     PROFILER_START();
 
@@ -963,9 +977,12 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
             painter.setPen(pen);
         }
 
-        const QString solvedStarLabel = formatSolvedStarLabel(m_settings, detection);
-        if (!solvedStarLabel.isEmpty()) {
-            drawOutlinedLabel(painter, image.rect(), detection.m_center, solvedStarLabel, starColor, fontMetrics);
+        if (drawLabels)
+        {
+            const QString solvedStarLabel = formatSolvedStarLabel(m_settings, detection);
+            if (!solvedStarLabel.isEmpty()) {
+                drawOutlinedLabel(painter, image.rect(), detection.m_center, solvedStarLabel, starColor, fontMetrics);
+            }
         }
     }
 
@@ -1353,7 +1370,7 @@ void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlay
     PROFILER_STOP(__FUNCTION__);
 }
 
-QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame)
+QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame, bool drawStarLabels)
 {
     PROFILER_START();
 
@@ -1394,7 +1411,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(result, frame.m_motionBoxes); }
     if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(result, frame.m_detections); }
     if (needsSpectrumOverlay) { applySpectrumOverlay(result); }
-    if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections); }
+    if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections, drawStarLabels); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
     if (m_settings.m_constellation) { applyConstellationOverlay(result); }
     if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }

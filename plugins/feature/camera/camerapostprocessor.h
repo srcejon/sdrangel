@@ -173,10 +173,10 @@ private:
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
-    [[nodiscard]] QImage applyPostProcessing(const CameraPipelineFrame& frame);
+    [[nodiscard]] QImage applyPostProcessing(const CameraPipelineFrame& frame, bool drawStarLabels = true);
     void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes) const;
     void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections) const;
-    void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections) const;
+    void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels) const;
     void applySpectrumOverlay(QImage& image) const;
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);

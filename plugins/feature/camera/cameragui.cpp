@@ -1889,11 +1889,18 @@ void CameraGUI::updateStarLabelPreview()
         const QColor starColor = detection.m_solved
             ? m_settings.m_starColor
             : QColor(160, 160, 160);
-        QGraphicsPathItem *item = m_imageScene->addPath(
+        QGraphicsPathItem *outlineItem = m_imageScene->addPath(
             path,
             QPen(Qt::black, 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin),
+            QBrush(Qt::NoBrush));
+        outlineItem->setZValue(1.5);
+        m_starLabelItems.append(outlineItem);
+
+        QGraphicsPathItem *item = m_imageScene->addPath(
+            path,
+            QPen(Qt::NoPen),
             QBrush(starColor));
-        item->setZValue(1.5);
+        item->setZValue(1.6);
         m_starLabelItems.append(item);
     }
 }

@@ -240,15 +240,8 @@ public:
     static const char* const m_featureId;
 
     MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
-    CameraFramePreprocessor* getFramePreprocessor() { return m_framePreprocessor; }
     CameraFrameAligner* getFrameAligner() { return m_frameAligner; }
-    MessageQueue* getFramePreprocessorInputMessageQueue() { return m_framePreprocessor ? m_framePreprocessor->getInputMessageQueue() : nullptr; }
-    MessageQueue* getFrameAlignerInputMessageQueue() { return m_frameAligner ? m_frameAligner->getInputMessageQueue() : nullptr; }
-    MessageQueue* getFrameStackerInputMessageQueue() { return m_frameStacker ? m_frameStacker->getInputMessageQueue() : nullptr; }
-    MessageQueue* getImageProcessorInputMessageQueue() { return m_imageProcessor ? m_imageProcessor->getInputMessageQueue() : nullptr; }
     MessageQueue* getDetectorInputMessageQueue() { return m_objectDetector ? m_objectDetector->getInputMessageQueue() : nullptr; }
-    MessageQueue* getRecorderInputMessageQueue() { return m_recorder ? m_recorder->getInputMessageQueue() : nullptr; }
-    MessageQueue* getPostProcessorInputMessageQueue() { return m_postProcessor ? m_postProcessor->getInputMessageQueue() : nullptr; }
     void setMessageQueueToGUI(MessageQueue *queue) override;
 
 private:
@@ -278,6 +271,9 @@ private:
 
     void start();
     void stop();
+    CameraFramePreprocessor* getFramePreprocessor() { return m_framePreprocessor; }
+    MessageQueue* getRecorderInputMessageQueue() { return m_recorder ? m_recorder->getInputMessageQueue() : nullptr; }
+    MessageQueue* getPostProcessorInputMessageQueue() { return m_postProcessor ? m_postProcessor->getInputMessageQueue() : nullptr; }
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void webapiFormatFeatureReport(SWGSDRangel::SWGFeatureReport& response);
 };

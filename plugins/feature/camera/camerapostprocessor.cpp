@@ -139,12 +139,12 @@ static double greenwichMeanSiderealDegrees(const QDateTime& utcDateTime)
 static QString formatSignedDegrees(double value)
 {
     const int rounded = qRound(value);
-    return QStringLiteral("%1%2Â°").arg(rounded >= 0 ? "+" : "").arg(rounded);
+    return QStringLiteral("%1%2°").arg(rounded >= 0 ? "+" : "").arg(rounded);
 }
 
 static QString formatAzimuthDegrees(double value)
 {
-    return QStringLiteral("%1Â°").arg(qRound(normalizeDegrees(value)));
+    return QStringLiteral("%1°").arg(qRound(normalizeDegrees(value)));
 }
 
 static QString formatRightAscensionDegrees(double value)
@@ -1377,7 +1377,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     const QImage& input = frame.m_image;
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
     const QString expandedOverlayText = expandOverlayTextTemplate();
-    // Build the overlay text document once with font/style/HTML â€” used for both the
+    // Build the overlay text document once with font/style/HTML used for both the
     // empty-check and rendering, so we only call QTextDocument::setHtml() once per frame.
     QTextDocument overlayTextDocument;
     bool needsTextOverlay = false;

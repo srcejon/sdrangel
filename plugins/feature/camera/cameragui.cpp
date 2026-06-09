@@ -1879,11 +1879,15 @@ void CameraGUI::updateStarLabelPreview()
         const QColor starColor = detection.m_solved
             ? m_settings.m_starColor
             : QColor(160, 160, 160);
+        QGraphicsSimpleTextItem *shadowItem = m_imageScene->addSimpleText(label, font);
+        shadowItem->setPos(targetRect.topLeft() + QPointF(1.0, 1.0));
+        shadowItem->setBrush(QBrush(Qt::black));
+        shadowItem->setZValue(1.5);
+        m_starLabelItems.append(shadowItem);
+
         QGraphicsSimpleTextItem *item = m_imageScene->addSimpleText(label, font);
         item->setPos(targetRect.topLeft());
-        item->setPen(QPen(Qt::black, 1.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         item->setBrush(QBrush(starColor));
-        item->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
         item->setZValue(1.6);
         m_starLabelItems.append(item);
     }

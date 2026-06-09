@@ -35,7 +35,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
-#include <QGraphicsPathItem>
+#include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
 #include <QGraphicsRectItem>
 #include <QMenu>
@@ -44,7 +44,6 @@
 #include <QMediaPlayer>
 #include <QNetworkReply>
 #include <QPainter>
-#include <QPainterPath>
 #include <QPixmap>
 #include <QProgressDialog>
 #include <QPushButton>
@@ -1877,29 +1876,14 @@ void CameraGUI::updateStarLabelPreview()
             continue;
         }
 
-        QPainterPath path;
-        const qreal left = targetRect.left() + 2.0;
-        qreal baseline = targetRect.top() + fontMetrics.ascent() + 1.0;
-        for (const QString& line : lines)
-        {
-            path.addText(left, baseline, font, line);
-            baseline += lineSpacing;
-        }
-
         const QColor starColor = detection.m_solved
             ? m_settings.m_starColor
             : QColor(160, 160, 160);
-        QGraphicsPathItem *outlineItem = m_imageScene->addPath(
-            path,
-            QPen(Qt::black, 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin),
-            QBrush(Qt::NoBrush));
-        outlineItem->setZValue(1.5);
-        m_starLabelItems.append(outlineItem);
-
-        QGraphicsPathItem *item = m_imageScene->addPath(
-            path,
-            QPen(Qt::NoPen),
-            QBrush(starColor));
+        QGraphicsSimpleTextItem *item = m_imageScene->addSimpleText(label, font);
+        item->setPos(targetRect.topLeft());
+        item->setPen(QPen(Qt::black, 1.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        item->setBrush(QBrush(starColor));
+        item->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
         item->setZValue(1.6);
         m_starLabelItems.append(item);
     }

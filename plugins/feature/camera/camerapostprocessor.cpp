@@ -835,14 +835,21 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
-    const QImage processed = applyPostProcessing(*frame, true);
-    frame->m_postProcessedImage = processed;
+    const bool hasStarLabels = hasDrawableStarLabels(m_settings, frame->m_starDetections);
+    const QImage preview = applyPostProcessing(*frame, !hasStarLabels);
+    if (hasStarLabels)
+    {
+        QImage processed = preview.copy();
+        applyStarLabelOverlay(processed, frame->m_starDetections);
+        frame->m_postProcessedImage = processed;
+    }
+    else
+    {
+        frame->m_postProcessedImage = preview;
+    }
 
     m_lastFrame = *frame;
 
-    const QImage preview = hasDrawableStarLabels(m_settings, frame->m_starDetections)
-        ? applyPostProcessing(*frame, false)
-        : processed;
     reportFrameToGUI(preview, *frame);
 
     if (m_nextStageQueue) {
@@ -984,6 +991,41 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
                 drawOutlinedLabel(painter, image.rect(), detection.m_center, solvedStarLabel, starColor, fontMetrics);
             }
         }
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraPostProcessor::applyStarLabelOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections) const
+{
+    PROFILER_START();
+
+    if (starDetections.isEmpty()) {
+        return;
+    }
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    QFont font;
+    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_gridLabelFontFamily);
+    }
+    font.setPointSizeF(std::max(6.0, m_settings.m_gridLabelFontScale));
+    painter.setFont(font);
+    const QFontMetrics fontMetrics(font);
+
+    for (const CameraPipelineStarDetection& detection : starDetections)
+    {
+        const QString solvedStarLabel = formatSolvedStarLabel(m_settings, detection);
+        if (solvedStarLabel.isEmpty()) {
+            continue;
+        }
+
+        const QColor starColor = detection.m_solved
+            ? m_settings.m_starColor
+            : QColor(160, 160, 160);
+        drawOutlinedLabel(painter, image.rect(), detection.m_center, solvedStarLabel, starColor, fontMetrics);
     }
 
     PROFILER_STOP(__FUNCTION__);

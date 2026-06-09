@@ -177,6 +177,7 @@ private:
     void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes) const;
     void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections) const;
     void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels) const;
+    void applyStarLabelOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections) const;
     void applySpectrumOverlay(QImage& image) const;
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);

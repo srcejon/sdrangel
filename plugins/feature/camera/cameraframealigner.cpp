@@ -60,6 +60,7 @@ void CameraFrameAligner::resetAlignmentState()
     m_previousStarAlignmentTransform = cv::Mat();
     m_lastStarAlignmentTransform = cv::Mat();
     m_lastStarAlignmentTargetStars.clear();
+    m_recentStarAlignmentReferences.clear();
 }
 
 bool CameraFrameAligner::preserveFrameOrder() const
@@ -840,8 +841,18 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                 }
             }
 
-            if (matchedTargetPoints.size() < minTentativeMatches)
+        }
+
+        if (matchedTargetPoints.size() < minTentativeMatches)
+        {
+            for (const StarAlignmentReference& rollingReference : m_recentStarAlignmentReferences)
             {
+                if (!isValidSeedTransform(rollingReference.transform)
+                    || (rollingReference.targetStars.size() < minTentativeMatches))
+                {
+                    continue;
+                }
+
                 std::vector<cv::Point2f> rollingTargetPoints;
                 std::vector<cv::Point2f> rollingPreviousPoints;
                 double bestRollingRawDistance = std::numeric_limits<double>::infinity();
@@ -855,7 +866,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
 
                     std::vector<cv::Point2f> candidateTargetPoints;
                     std::vector<cv::Point2f> candidatePreviousPoints;
-                    const double candidateDistance = matchForTransform(m_lastStarAlignmentTargetStars, currentToPreviousTransform, candidateTargetPoints, candidatePreviousPoints);
+                    const double candidateDistance = matchForTransform(rollingReference.targetStars, currentToPreviousTransform, candidateTargetPoints, candidatePreviousPoints);
 
                     if ((candidateTargetPoints.size() > rollingTargetPoints.size())
                         || ((candidateTargetPoints.size() == rollingTargetPoints.size()) && (candidateDistance < bestRollingRawDistance)))
@@ -867,16 +878,14 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                     }
                 };
 
-                considerRawRollingTransform(makeTranslationTransform(cv::Point2f(static_cast<float>(shift.x), static_cast<float>(shift.y))), QStringLiteral("phase-raw-rolling"));
-
-                const size_t previousSeedCount = std::min(m_lastStarAlignmentTargetStars.size(), maxSeedStars);
+                const size_t previousSeedCount = std::min(rollingReference.targetStars.size(), maxSeedStars);
                 for (size_t previousIndex = 0; previousIndex < previousSeedCount; ++previousIndex)
                 {
                     for (size_t targetIndex = 0; targetIndex < targetSeedCount; ++targetIndex)
                     {
                         considerRawRollingTransform(makeTranslationTransform(
-                            cv::Point2f(m_lastStarAlignmentTargetStars[previousIndex].x - targetStars[targetIndex].x,
-                                        m_lastStarAlignmentTargetStars[previousIndex].y - targetStars[targetIndex].y)),
+                            cv::Point2f(rollingReference.targetStars[previousIndex].x - targetStars[targetIndex].x,
+                                        rollingReference.targetStars[previousIndex].y - targetStars[targetIndex].y)),
                             QStringLiteral("pair-raw-rolling"));
                     }
                 }
@@ -893,13 +902,14 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                         matchedReferencePoints.clear();
                         matchedReferencePoints.reserve(rollingPreviousPoints.size());
                         for (const cv::Point2f& previousPoint : rollingPreviousPoints) {
-                            matchedReferencePoints.push_back(transformPoint(m_lastStarAlignmentTransform, previousPoint));
+                            matchedReferencePoints.push_back(transformPoint(rollingReference.transform, previousPoint));
                         }
 
-                        const cv::Mat composedTransform = composeTransforms(m_lastStarAlignmentTransform, currentToPreviousTransform);
+                        const cv::Mat composedTransform = composeTransforms(rollingReference.transform, currentToPreviousTransform);
                         bestSeedShift = cv::Point2f(static_cast<float>(composedTransform.at<double>(0, 2)),
                                                     static_cast<float>(composedTransform.at<double>(1, 2)));
                         bestSeedKind = bestRollingRawSeedKind;
+                        break;
                     }
                 }
             }
@@ -1026,6 +1036,11 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     }
     m_lastStarAlignmentTransform = transform.clone();
     m_lastStarAlignmentTargetStars = targetStars;
+    m_recentStarAlignmentReferences.push_front({m_lastStarAlignmentTransform.clone(), m_lastStarAlignmentTargetStars});
+    constexpr size_t maxRecentStarAlignmentReferences = 6;
+    while (m_recentStarAlignmentReferences.size() > maxRecentStarAlignmentReferences) {
+        m_recentStarAlignmentReferences.pop_back();
+    }
 
     if (appliedTransform) {
         *appliedTransform = transform.clone();

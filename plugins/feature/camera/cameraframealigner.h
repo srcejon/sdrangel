@@ -69,6 +69,11 @@ private:
     cv::Mat m_previousStarAlignmentTransform;
     cv::Mat m_lastStarAlignmentTransform;
     std::vector<cv::Point2f> m_lastStarAlignmentTargetStars;
+    struct StarAlignmentReference {
+        cv::Mat transform;
+        std::vector<cv::Point2f> targetStars;
+    };
+    std::deque<StarAlignmentReference> m_recentStarAlignmentReferences;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     cv::cuda::Stream m_cudaAlignmentStream;
 #endif

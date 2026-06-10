@@ -110,6 +110,7 @@ public:
         const QVector<PreviewTextLabel>& getPreviewTextLabels() const { return m_previewTextLabels; }
         const QVector<QRect>& getMotionBoxes() const { return m_motionBoxes; }
         const QVector<CameraPipelineDetection>& getDetections() const { return m_detections; }
+        const QVector<CameraPipelineTrackedObject>& getTrackedObjects() const { return m_trackedObjects; }
         const QDateTime& getCaptureDateTime() const { return m_captureDateTime; }
         quint64 getCaptureEpoch() const { return m_captureEpoch; }
         bool isManualPreviewFrame() const { return m_manualPreviewFrame; }
@@ -121,6 +122,7 @@ public:
                                       const CameraPipelinePlateSolve& plateSolve,
                                       const QVector<QRect>& motionBoxes,
                                       const QVector<CameraPipelineDetection>& detections,
+                                      const QVector<CameraPipelineTrackedObject>& trackedObjects,
                                       const QDateTime& captureDateTime,
                                       quint64 captureEpoch,
                                       bool manualPreviewFrame,
@@ -134,6 +136,7 @@ public:
                 plateSolve,
                 motionBoxes,
                 detections,
+                trackedObjects,
                 captureDateTime,
                 captureEpoch,
                 manualPreviewFrame,
@@ -148,6 +151,7 @@ public:
         CameraPipelinePlateSolve m_plateSolve;
         QVector<QRect> m_motionBoxes;
         QVector<CameraPipelineDetection> m_detections;
+        QVector<CameraPipelineTrackedObject> m_trackedObjects;
         QDateTime m_captureDateTime;
         quint64 m_captureEpoch;
         bool m_manualPreviewFrame;
@@ -160,6 +164,7 @@ public:
                        const CameraPipelinePlateSolve& plateSolve,
                        const QVector<QRect>& motionBoxes,
                        const QVector<CameraPipelineDetection>& detections,
+                       const QVector<CameraPipelineTrackedObject>& trackedObjects,
                        const QDateTime& captureDateTime,
                        quint64 captureEpoch,
                        bool manualPreviewFrame,
@@ -172,6 +177,7 @@ public:
             m_plateSolve(plateSolve),
             m_motionBoxes(motionBoxes),
             m_detections(detections),
+            m_trackedObjects(trackedObjects),
             m_captureDateTime(captureDateTime),
             m_captureEpoch(captureEpoch),
             m_manualPreviewFrame(manualPreviewFrame),
@@ -193,6 +199,7 @@ public:
 private:
     struct TrackedMapObject
     {
+        QString m_name;
         QString m_label;
         double m_latitude = 0.0;
         double m_longitude = 0.0;
@@ -227,7 +234,8 @@ private:
     [[nodiscard]] QImage applyPostProcessing(
         const CameraPipelineFrame& frame,
         bool drawPreviewText = true,
-        QVector<PreviewTextLabel> *previewTextLabels = nullptr);
+        QVector<PreviewTextLabel> *previewTextLabels = nullptr,
+        QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
     void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes) const;
     void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
@@ -237,13 +245,13 @@ private:
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     void applySkyGridOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyConstellationOverlay(QImage& image) const;
-    void applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
+    void applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr) const;
     void applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     [[nodiscard]] QString expandOverlayTextTemplate() const;
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void restartWeatherUpdates();
-    void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels = {});
+    void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels = {}, const QVector<CameraPipelineTrackedObject>& trackedObjects = {});
 private slots:
     void handleInputMessages();
     void handlePipeMessageQueue(MessageQueue* messageQueue);

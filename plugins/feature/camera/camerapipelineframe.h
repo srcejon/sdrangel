@@ -44,6 +44,15 @@ struct CameraPipelineDetection
     float m_score;
 };
 
+struct CameraPipelineTrackedObject
+{
+    QString m_name;
+    QString m_label;
+    QPointF m_position;
+    double m_azimuth = 0.0;
+    double m_elevation = 0.0;
+};
+
 struct CameraHistogramData
 {
     QVector<float> m_redBins;

@@ -725,8 +725,9 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
         m_lastFrame.m_manualPreviewFrame = true;
         QVector<PreviewTextLabel> previewTextLabels;
-        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels);
-        reportFrameToGUI(preview, m_lastFrame, previewTextLabels);
+        QVector<CameraPipelineTrackedObject> trackedObjects;
+        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &trackedObjects);
+        reportFrameToGUI(preview, m_lastFrame, previewTextLabels, trackedObjects);
     }
 }
 
@@ -766,8 +767,9 @@ void CameraPostProcessor::weatherUpdated(float temperature, float pressure, floa
     if (!m_lastFrame.m_image.isNull())
     {
         QVector<PreviewTextLabel> previewTextLabels;
-        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels);
-        reportFrameToGUI(preview, m_lastFrame, previewTextLabels);
+        QVector<CameraPipelineTrackedObject> trackedObjects;
+        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &trackedObjects);
+        reportFrameToGUI(preview, m_lastFrame, previewTextLabels, trackedObjects);
     }
 }
 
@@ -792,6 +794,7 @@ void CameraPostProcessor::updateTrackedMapObject(const QObject* pipeSource, SWGS
     else
     {
         TrackedMapObject object;
+        object.m_name = name;
         object.m_label = (swgMapItem->getLabel() && !swgMapItem->getLabel()->trimmed().isEmpty())
             ? swgMapItem->getLabel()->trimmed()
             : name;
@@ -886,7 +889,8 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     QVector<PreviewTextLabel> previewTextLabels;
-    const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels);
+    QVector<CameraPipelineTrackedObject> trackedObjects;
+    const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels, &trackedObjects);
     if (!previewTextLabels.isEmpty())
     {
         QImage processed = preview.copy();
@@ -904,14 +908,14 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    reportFrameToGUI(preview, *frame, previewTextLabels);
+    reportFrameToGUI(preview, *frame, previewTextLabels, trackedObjects);
 
     if (m_nextStageQueue) {
         m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
 }
 
-void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels)
+void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels, const QVector<CameraPipelineTrackedObject>& trackedObjects)
 {
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportFrame::create(
@@ -922,6 +926,7 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_plateSolve,
             frame.m_motionBoxes,
             frame.m_detections,
+            trackedObjects,
             frame.m_captureDateTime,
             frame.m_captureEpoch,
             frame.m_manualPreviewFrame,
@@ -1483,7 +1488,7 @@ void CameraPostProcessor::applyConstellationOverlay(QImage& image) const
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
+void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects) const
 {
     PROFILER_START();
 
@@ -1536,6 +1541,17 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
             continue;
         }
 
+        if (trackedObjects)
+        {
+            CameraPipelineTrackedObject trackedObject;
+            trackedObject.m_name = object.m_name;
+            trackedObject.m_label = object.m_label;
+            trackedObject.m_position = point;
+            trackedObject.m_azimuth = azEl.getAzimuth();
+            trackedObject.m_elevation = azEl.getElevation();
+            trackedObjects->append(trackedObject);
+        }
+
         if (drawLabels) {
             drawOutlinedLabel(painter, image.rect(), point, object.m_label, m_settings.m_trackObjectColor, fontMetrics);
         } else {
@@ -1570,7 +1586,7 @@ void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlay
     PROFILER_STOP(__FUNCTION__);
 }
 
-QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame, bool drawPreviewText, QVector<PreviewTextLabel> *previewTextLabels)
+QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame, bool drawPreviewText, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects)
 {
     PROFILER_START();
 
@@ -1614,7 +1630,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result, drawPreviewText, previewTextLabels); }
     if (m_settings.m_constellation) { applyConstellationOverlay(result); }
-    if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result, drawPreviewText, previewTextLabels); }
+    if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result, drawPreviewText, previewTextLabels, trackedObjects); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result, drawPreviewText, previewTextLabels); }
     if (needsTextOverlay) { applyTextOverlay(result, overlayTextDocument); }
 

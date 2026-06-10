@@ -358,6 +358,7 @@ bool CameraGUI::handleMessage(const Message& message)
         m_captureEpoch = cfg.getCaptureEpoch();
         m_displayedMotionEventActive = false;
         m_displayedObjectEventClasses.clear();
+        m_displayedTrackedObjectsInView.clear();
         discardQueuedReportFrames(*getInputMessageQueue(), false);
 
         if (!sameCameraIdentity(previousCamera, selectedCameraFromSettings())) {
@@ -516,7 +517,7 @@ bool CameraGUI::handleMessage(const Message& message)
         }
 
         // Send events first, to make Scheduler response as fast as possible
-        sendDisplayedFrameEvents(report.getMotionBoxes(), report.getDetections(), report.getCaptureDateTime());
+        sendDisplayedFrameEvents(report.getMotionBoxes(), report.getDetections(), report.getTrackedObjects(), report.getImage().size(), report.getCaptureDateTime());
 
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         QSize oldSize = m_lastImage.size();
@@ -1858,7 +1859,7 @@ void CameraGUI::updateImageWidget()
     updateMotionExclusionPreview();
 }
 
-void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QDateTime& captureDateTime)
+void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime)
 {
     if (!m_camera) {
         return;
@@ -1924,6 +1925,60 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
         }
     }
     m_displayedObjectEventClasses = displayedObjectClasses;
+
+    QRectF detectionRoi;
+    if (imageSize.isValid())
+    {
+        const QRect imageBounds(QPoint(0, 0), imageSize);
+        QRect roi = imageBounds;
+        if ((m_settings.m_detectionRoiWidth > 0) && (m_settings.m_detectionRoiHeight > 0))
+        {
+            roi = QRect(
+                m_settings.m_detectionRoiX,
+                m_settings.m_detectionRoiY,
+                m_settings.m_detectionRoiWidth,
+                m_settings.m_detectionRoiHeight).intersected(imageBounds);
+        }
+        detectionRoi = QRectF(roi);
+    }
+
+    QSet<QString> trackedObjectsInView;
+    if (detectionRoi.isValid())
+    {
+        for (const CameraPipelineTrackedObject& trackedObject : trackedObjects)
+        {
+            const QString name = trackedObject.m_name.trimmed();
+            if (name.isEmpty() || !detectionRoi.contains(trackedObject.m_position)) {
+                continue;
+            }
+            trackedObjectsInView.insert(name);
+            if (!m_displayedTrackedObjectsInView.contains(name))
+            {
+                pendingEvents.append({
+                    MainCore::MsgEvent::EventType::CameraObjectInViewEvent,
+                    QStringLiteral("name=%1,label=%2,x=%3,y=%4,azimuth=%5,elevation=%6")
+                        .arg(name)
+                        .arg(trackedObject.m_label)
+                        .arg(trackedObject.m_position.x(), 0, 'f', 1)
+                        .arg(trackedObject.m_position.y(), 0, 'f', 1)
+                        .arg(trackedObject.m_azimuth, 0, 'f', 3)
+                        .arg(trackedObject.m_elevation, 0, 'f', 3)
+                });
+            }
+        }
+    }
+
+    for (const QString& name : m_displayedTrackedObjectsInView)
+    {
+        if (!trackedObjectsInView.contains(name))
+        {
+            pendingEvents.append({
+                MainCore::MsgEvent::EventType::CameraObjectOutOfViewEvent,
+                QStringLiteral("name=%1").arg(name)
+            });
+        }
+    }
+    m_displayedTrackedObjectsInView = trackedObjectsInView;
 
     if (pendingEvents.isEmpty()) {
         return;

@@ -26,6 +26,7 @@
 #include <QGraphicsPixmapItem>
 #include <QNetworkReply>
 #include <QPair>
+#include <QSet>
 #include <QSize>
 #include <QTimer>
 #include <QToolButton>
@@ -161,6 +162,7 @@ private:
     quint64 m_captureEpoch = 0;
     bool m_displayedMotionEventActive = false;
     QSet<QString> m_displayedObjectEventClasses;
+    QSet<QString> m_displayedTrackedObjectsInView;
     QTimer m_updateTimer;
     bool m_updatingMotionExclusionRectsTable = false;
     QList<qint64> m_pipelineFrameTimes;
@@ -315,7 +317,7 @@ private:
     void handleMediaPlayerPlaybackStateChanged(CameraMediaPlayerState state);
     void updateCameraSubframeControls();
     void updateImageWidget();
-    void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QDateTime& captureDateTime);
+    void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime);
     void updateStarLabelPreview();
     void clearStarLabelPreview();
     void updateCaptureModeControls();

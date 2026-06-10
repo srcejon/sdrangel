@@ -637,9 +637,10 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     constexpr float maxMatchDistance = 12.0f;
     constexpr size_t maxSeedStars = 12;
 
-    auto makeTranslationTransform = [](const cv::Point2f& candidateShift)
+    auto makeTranslationTransform = [](const cv::Point2f& candidateShift) -> cv::Mat
     {
-        return (cv::Mat_<double>(2, 3) << 1.0, 0.0, candidateShift.x, 0.0, 1.0, candidateShift.y);
+        cv::Mat transform = (cv::Mat_<double>(2, 3) << 1.0, 0.0, candidateShift.x, 0.0, 1.0, candidateShift.y);
+        return transform;
     };
 
     auto isValidSeedTransform = [](const cv::Mat& candidateTransform)

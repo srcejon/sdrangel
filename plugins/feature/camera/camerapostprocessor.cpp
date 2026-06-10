@@ -945,7 +945,6 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
     const QFontMetrics fontMetrics(font);
     QPen pen(m_settings.m_yoloBoxColor);
     pen.setWidth(2);
-    const QBrush textBackground(Qt::black);
 
     for (const CameraPipelineDetection& detection : detections)
     {
@@ -970,14 +969,10 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
 
         if (drawLabels)
         {
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(textBackground);
-            painter.drawRect(labelRect);
-            painter.setPen(m_settings.m_yoloBoxColor);
-            painter.drawText(
-                labelRect.adjusted(3, 2, -3, -2),
-                Qt::AlignLeft | Qt::AlignVCenter,
-                label);
+            const QPointF labelPoint(
+                labelRect.left() - 4.0,
+                labelRect.top() + fontMetrics.lineSpacing() + 4.0);
+            drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_yoloBoxColor, fontMetrics);
         }
         else
         {
@@ -988,7 +983,7 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
                 m_settings.m_yoloBoxColor,
                 font.family(),
                 font.pointSizeF(),
-                true);
+                false);
         }
     }
 
@@ -1101,14 +1096,22 @@ void CameraPostProcessor::applyPreviewTextLabels(QImage& image, const QVector<Pr
                 painter.drawRect(labelRect);
             }
 
-            painter.setPen(label.m_color);
-            painter.setBrush(Qt::NoBrush);
-            int baselineY = labelRect.top() + fontMetrics.ascent() + 2;
-            for (const QString& line : lines)
+            auto drawLines = [&](const QPoint& offset, const QColor& penColor)
             {
-                painter.drawText(labelRect.left() + 3, baselineY, line);
-                baselineY += fontMetrics.lineSpacing();
+                painter.setPen(penColor);
+                int baselineY = labelRect.top() + fontMetrics.ascent() + 2;
+                for (const QString& line : lines)
+                {
+                    painter.drawText(labelRect.left() + 3 + offset.x(), baselineY + offset.y(), line);
+                    baselineY += fontMetrics.lineSpacing();
+                }
+            };
+
+            painter.setBrush(Qt::NoBrush);
+            if (!label.m_background) {
+                drawLines(QPoint(1, 1), Qt::black);
             }
+            drawLines(QPoint(0, 0), label.m_color);
         }
         else
         {

@@ -5498,6 +5498,29 @@ li.checked::marker { content: &quot;\2612&quot;; }
                 </property>
                </widget>
               </item>
+              <item row="6" column="0">
+               <widget class="QLabel" name="starCatalogDiskCacheSizeLabel">
+                <property name="text">
+                 <string>Cache size</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="1">
+               <widget class="QSpinBox" name="starCatalogDiskCacheSizeSpin">
+                <property name="toolTip">
+                 <string>Maximum size of the star catalog region disk cache; 0 disables pruning</string>
+                </property>
+                <property name="suffix">
+                 <string> GB</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>1024</number>
+                </property>
+               </widget>
+              </item>
               <item row="4" column="0">
                <widget class="QLabel" name="plateSolveCatalogSourceLabel">
                 <property name="text">

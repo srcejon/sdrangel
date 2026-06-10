@@ -344,6 +344,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveUseDownloadedCatalog = false;
     m_plateSolveCatalogSource = PlateSolveCatalogAuto;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
+    m_starCatalogDiskCacheSizeGb = 32;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
     m_spectrumOffsetX = 0;
@@ -614,6 +615,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(234, m_recordRawFits);
     s.writeBool(235, m_recordCalibratedMedia);
     s.writeBool(236, m_recordPostProcessedMedia);
+    s.writeS32(237, m_starCatalogDiskCacheSizeGb);
 
     return s.final();
 }
@@ -1059,6 +1061,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(230, &m_autoExposureMaxMs, 60000.0);
         d.readS32(231, &m_autoExposureMinGain, 0);
         d.readS32(232, &m_autoExposureMaxGain, 100);
+        d.readS32(237, &m_starCatalogDiskCacheSizeGb, 32);
+        m_starCatalogDiskCacheSizeGb = qBound(
+            m_minStarCatalogDiskCacheSizeGb,
+            m_starCatalogDiskCacheSizeGb,
+            m_maxStarCatalogDiskCacheSizeGb);
         m_asiCoolerOn = qBound(m_minAsiControl, m_asiCoolerOn, m_maxAsiControl);
         m_asiUsbBandwidth = std::max(m_minAsiControl, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(m_minAsiControl, m_asiHighSpeedMode, m_maxAsiControl);
@@ -1678,6 +1685,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("plateSolveApplyMode")) {
         m_plateSolveApplyMode = settings.m_plateSolveApplyMode;
+    }
+    if (settingsKeys.contains("starCatalogDiskCacheSizeGb")) {
+        m_starCatalogDiskCacheSizeGb = qBound(
+            m_minStarCatalogDiskCacheSizeGb,
+            settings.m_starCatalogDiskCacheSizeGb,
+            m_maxStarCatalogDiskCacheSizeGb);
     }
     if (settingsKeys.contains("recordRawFits")) {
         m_recordRawFits = settings.m_recordRawFits;
@@ -2353,6 +2366,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveApplyMode") || force) {
         ostr << " m_plateSolveApplyMode: " << static_cast<int>(m_plateSolveApplyMode);
+    }
+    if (settingsKeys.contains("starCatalogDiskCacheSizeGb") || force) {
+        ostr << " m_starCatalogDiskCacheSizeGb: " << m_starCatalogDiskCacheSizeGb;
     }
     if (settingsKeys.contains("recordRawFits") || force) {
         ostr << " m_recordRawFits: " << m_recordRawFits;

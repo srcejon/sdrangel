@@ -281,6 +281,8 @@ struct CameraSettings
     static constexpr double m_maxPlateSolveMatchRadius = 256.0;
     static constexpr double m_minPlateSolveSearchRadius = 0.0;
     static constexpr double m_maxPlateSolveSearchRadius = 45.0;
+    static constexpr int m_minStarCatalogDiskCacheSizeGb = 0;
+    static constexpr int m_maxStarCatalogDiskCacheSizeGb = 1024;
     static constexpr qint64 m_minPlateSolveDateTimeMs = 0;
     static constexpr double m_minLensCenterOffset = -2048.0;
     static constexpr double m_maxLensCenterOffset = 2048.0;
@@ -502,6 +504,7 @@ struct CameraSettings
     bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available
     PlateSolveCatalogSource m_plateSolveCatalogSource; ///< Catalog source used for plate solving
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
+    int    m_starCatalogDiskCacheSizeGb; ///< Maximum Siril/Gaia region disk cache size in GB; 0 = unlimited
     // Spectrum overlay settings
     bool   m_overlaySpectrum;   ///< Enable overlaying the spectrum view image on the post-processed frame
     QString m_spectrumDevice;   ///< Long ID of the device whose spectrum view to overlay (e.g. "R0 HackRF")

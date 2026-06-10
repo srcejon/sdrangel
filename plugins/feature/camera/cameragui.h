@@ -641,6 +641,7 @@ private slots:
     void on_plateSolveDateTimeUtcButton_toggled(bool checked);
     void on_plateSolveDateTimeNowButton_clicked();
     void on_plateSolveCatalogSourceCombo_currentIndexChanged(int index);
+    void on_starCatalogDiskCacheSizeSpin_valueChanged(int value);
     void on_plateSolveApplyModeCombo_currentIndexChanged(int index);
     void on_plateSolveDownloadCatalogButton_clicked();
     void on_plateSolveApplyButton_clicked();

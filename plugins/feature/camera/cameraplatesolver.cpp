@@ -391,8 +391,7 @@ static constexpr qint64 kSirilMaxRangeCacheBytes = 32LL * 1024 * 1024;
 // Each region file is ~12-68 MB (one per unique ra/dec/radius/mag) and they accumulated
 // unbounded — the astro-region cache had grown to ~63 GB and filled the disk. After writing a
 // region file the oldest files in its directory are evicted (FIFO by mtime) until back under
-// this cap. Overridable via SDRANGEL_CAMERA_SIRIL_REGION_CACHE_MAX_BYTES (0 = unlimited).
-static constexpr qint64 kSirilRegionDiskCacheMaxBytes = 32LL * 1024 * 1024 * 1024;  // 32 GB
+// the configured cap. A 0 GB cap disables pruning.
 static constexpr const char* kSirilCacheDir = "siril-spcc-cache/v1";
 static constexpr const char* kSirilRegionCacheDir = "siril-spcc-region-cache/v3";
 static constexpr const char* kSirilAstroRegionCacheDir = "siril-astro-region-cache/v3";
@@ -1369,20 +1368,13 @@ static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path)
     return stars;
 }
 
-static qint64 sirilRegionDiskCacheMaxBytes()
+static qint64 sirilRegionDiskCacheMaxBytes(int maxSizeGb)
 {
-    static const qint64 limit = []() -> qint64 {
-        const QByteArray env = qgetenv("SDRANGEL_CAMERA_SIRIL_REGION_CACHE_MAX_BYTES");
-        if (!env.isEmpty()) {
-            bool ok = false;
-            const qlonglong v = env.toLongLong(&ok);
-            if (ok && (v >= 0)) {
-                return static_cast<qint64>(v);
-            }
-        }
-        return kSirilRegionDiskCacheMaxBytes;
-    }();
-    return limit;
+    if (maxSizeGb <= 0) {
+        return 0;
+    }
+
+    return static_cast<qint64>(maxSizeGb) * 1024LL * 1024LL * 1024LL;
 }
 
 // Cap a per-region disk-cache directory at sirilRegionDiskCacheMaxBytes(), evicting the
@@ -1390,9 +1382,9 @@ static qint64 sirilRegionDiskCacheMaxBytes()
 // concurrency-safe across solver processes: a delete that loses a race (file already gone,
 // or held open by another process mid-read) is simply skipped — a missing region file is a
 // cache miss that re-fetches, never a corruption.
-static void enforceSirilRegionDiskCacheLimit(const QString& directoryPath)
+static void enforceSirilRegionDiskCacheLimit(const QString& directoryPath, int maxSizeGb)
 {
-    const qint64 maxBytes = sirilRegionDiskCacheMaxBytes();
+    const qint64 maxBytes = sirilRegionDiskCacheMaxBytes(maxSizeGb);
     if (maxBytes <= 0) {   // 0 = unlimited
         return;
     }
@@ -1425,7 +1417,7 @@ static void enforceSirilRegionDiskCacheLimit(const QString& directoryPath)
     }
 }
 
-static void writeSirilRegionDiskCacheFile(const QString& path, const QVector<CatalogStar>& stars)
+static void writeSirilRegionDiskCacheFile(const QString& path, const QVector<CatalogStar>& stars, int maxSizeGb)
 {
     if (stars.isEmpty()) {
         return;
@@ -1476,7 +1468,7 @@ static void writeSirilRegionDiskCacheFile(const QString& path, const QVector<Cat
     if (!file.commit()) {
         return;
     }
-    enforceSirilRegionDiskCacheLimit(QFileInfo(path).absolutePath());
+    enforceSirilRegionDiskCacheLimit(QFileInfo(path).absolutePath(), maxSizeGb);
 }
 
 static QByteArray readSirilDiskCacheFile(const QString& path, qint64 expectedSize)
@@ -2367,7 +2359,7 @@ QVector<CatalogStar> loadSirilAstroCatalog(const CameraSettings& settings,
     if (catalogSource) {
         *catalogSource = QStringLiteral("Siril Gaia DR3 Astrometric");
     }
-    writeSirilRegionDiskCacheFile(regionCachePath, stars);
+    writeSirilRegionDiskCacheFile(regionCachePath, stars, settings.m_starCatalogDiskCacheSizeGb);
     qDebug() << "CameraPlateSolver: loaded Siril Gaia astrometric stars"
              << stars.size()
              << "pixels" << pixels.size()
@@ -2588,7 +2580,7 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
     if (catalogSource) {
         *catalogSource = QStringLiteral("Siril SPCC Gaia DR3");
     }
-    writeSirilRegionDiskCacheFile(regionCachePath, stars);
+    writeSirilRegionDiskCacheFile(regionCachePath, stars, settings.m_starCatalogDiskCacheSizeGb);
     qDebug() << "CameraPlateSolver: loaded Siril SPCC Gaia stars"
              << stars.size()
              << "pixels" << pixels.size()

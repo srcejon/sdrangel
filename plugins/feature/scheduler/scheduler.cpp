@@ -18,6 +18,7 @@
 #include <QDebug>
 #include <QProcess>
 #include <QRegularExpression>
+#include <algorithm>
 
 #include "SWGDeviceState.h"
 #include "SWGFeatureSettings.h"
@@ -608,7 +609,7 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription);
     }
 
-    QTimer::singleShot(1000, this, [this, rule, context, deviceActions, channelActions, featureActions]() {
+    const auto executeActions = [this, rule, context, deviceActions, channelActions, featureActions]() {
         executeDeviceActions(deviceActions);
         executeChannelActions(channelActions);
         executeFeatureActions(featureActions);
@@ -626,7 +627,20 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
                 executeDurationStopsByRuleId(ruleId, state);
             });
         }
+    };
+
+    const bool hasPresetToLoad = std::any_of(deviceActions.cbegin(), deviceActions.cend(), [](const SchedulerSettings::DeviceSetAction& action) {
+        return !action.m_presetGroup.isEmpty();
     });
+
+    if (hasPresetToLoad)
+    {
+        QTimer::singleShot(1000, this, executeActions);
+    }
+    else
+    {
+        executeActions();
+    }
 }
 
 void Scheduler::executeDurationStopsByRuleId(const QString& ruleId, const QByteArray& state)

@@ -642,6 +642,14 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
         return (cv::Mat_<double>(2, 3) << 1.0, 0.0, candidateShift.x, 0.0, 1.0, candidateShift.y);
     };
 
+    auto isValidSeedTransform = [](const cv::Mat& candidateTransform)
+    {
+        return !candidateTransform.empty()
+            && (candidateTransform.rows == 2)
+            && (candidateTransform.cols == 3)
+            && (candidateTransform.type() == CV_64F);
+    };
+
     auto transformPoint = [](const cv::Mat& candidateTransform, const cv::Point2f& point)
     {
         return cv::Point2f(
@@ -659,6 +667,10 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     {
         candidateTargetPoints.clear();
         candidateReferencePoints.clear();
+        if (!isValidSeedTransform(candidateTransform)) {
+            return std::numeric_limits<double>::infinity();
+        }
+
         std::vector<bool> targetUsed(targetStars.size(), false);
         double totalDistance = 0.0;
 
@@ -705,6 +717,10 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
 
     auto considerTransform = [&](const cv::Mat& candidateTransform, const QString& seedKind)
     {
+        if (!isValidSeedTransform(candidateTransform)) {
+            return;
+        }
+
         std::vector<cv::Point2f> candidateTargetPoints;
         std::vector<cv::Point2f> candidateReferencePoints;
         const double candidateDistance = matchForTransform(candidateTransform, candidateTargetPoints, candidateReferencePoints);
@@ -722,8 +738,10 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     };
 
     considerTransform(makeTranslationTransform(cv::Point2f(static_cast<float>(shift.x), static_cast<float>(shift.y))), QStringLiteral("phase"));
-    if (!m_lastStarAlignmentTransform.empty()) {
+    if (isValidSeedTransform(m_lastStarAlignmentTransform)) {
         considerTransform(m_lastStarAlignmentTransform, QStringLiteral("previous"));
+    } else if (!m_lastStarAlignmentTransform.empty()) {
+        m_lastStarAlignmentTransform.release();
     }
 
     const size_t referenceSeedCount = std::min(referenceStars.size(), maxSeedStars);

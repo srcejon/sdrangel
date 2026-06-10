@@ -218,6 +218,36 @@ QUrl simbadUrlForStarDetection(const CameraPipelineStarDetection& star, const QS
     return url;
 }
 
+int discardQueuedReportFrames(MessageQueue& queue, bool requireStartStop)
+{
+    QList<Message*> messages;
+    Message *message = nullptr;
+    bool hasStartStop = false;
+
+    while ((message = queue.pop()) != nullptr)
+    {
+        hasStartStop = hasStartStop || Camera::MsgStartStop::match(*message);
+        messages.append(message);
+    }
+
+    int dropped = 0;
+
+    for (Message *queuedMessage : messages)
+    {
+        if ((!requireStartStop || hasStartStop) && CameraPostProcessor::MsgReportFrame::match(*queuedMessage))
+        {
+            delete queuedMessage;
+            ++dropped;
+        }
+        else
+        {
+            queue.push(queuedMessage, false);
+        }
+    }
+
+    return dropped;
+}
+
 }
 
 CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
@@ -323,6 +353,7 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (Camera::MsgStartStop::match(message))
     {
         const Camera::MsgStartStop& cfg = (Camera::MsgStartStop&) message;
+        discardQueuedReportFrames(*getInputMessageQueue(), false);
 
         if (!sameCameraIdentity(previousCamera, selectedCameraFromSettings())) {
             resetCameraStatus();
@@ -773,6 +804,8 @@ bool CameraGUI::handleMessage(const Message& message)
 void CameraGUI::handleInputMessages()
 {
     Message* message;
+
+    discardQueuedReportFrames(*getInputMessageQueue(), true);
 
     while ((message = getInputMessageQueue()->pop()))
     {

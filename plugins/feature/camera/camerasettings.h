@@ -441,6 +441,7 @@ struct CameraSettings
     QColor m_constellationColor; ///< Colour for constellation star boxes
     ConstellationOverlay m_constellationOverlay; ///< Which constellation's major stars to project
     bool m_trackObjects;      ///< Draw ADS-B / satellite tracked object overlay
+    bool m_trackObjectTrails; ///< Draw recent tracks for ADS-B / satellite tracked objects
     double m_trackObjectMinElevation; ///< Minimum elevation in degrees for tracked object overlay
     QColor m_trackObjectColor; ///< Colour for tracked object labels
     double m_trackObjectFontScale; ///< Font point size for tracked object labels: 4.0..144.0

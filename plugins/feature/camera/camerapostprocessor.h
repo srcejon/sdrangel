@@ -199,12 +199,20 @@ public:
 private:
     struct TrackedMapObject
     {
+        struct TrackPoint
+        {
+            double m_latitude = 0.0;
+            double m_longitude = 0.0;
+            double m_altitude = 0.0;
+        };
+
         QString m_name;
         QString m_label;
         double m_latitude = 0.0;
         double m_longitude = 0.0;
         double m_altitude = 0.0;
         QDateTime m_availableUntil;
+        QVector<TrackPoint> m_track;
     };
 
     MessageQueue m_inputMessageQueue;

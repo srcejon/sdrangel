@@ -1567,6 +1567,7 @@ void CameraGUI::displaySettings()
     ui->constellationButton->setChecked(m_settings.m_constellation);
     settingsUI()->constellationOverlayCombo->setCurrentIndex(static_cast<int>(m_settings.m_constellationOverlay));
     ui->trackObjectsButton->setChecked(m_settings.m_trackObjects);
+    settingsUI()->trackObjectTrailsCheck->setChecked(m_settings.m_trackObjectTrails);
     settingsUI()->trackObjectMinElevationSpin->setValue(m_settings.m_trackObjectMinElevation);
     settingsUI()->trackObjectFontScaleSpin->setValue(m_settings.m_trackObjectFontScale);
     settingsUI()->gridLabelFontCombo->setCurrentText(m_settings.m_gridLabelFontFamily);
@@ -2299,6 +2300,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->constellationOverlayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_constellationOverlayCombo_currentIndexChanged);
     QObject::connect(settingsUI()->constellationColorButton, &QToolButton::clicked, this, &CameraGUI::on_constellationColorButton_clicked);
     QObject::connect(ui->trackObjectsButton, &QToolButton::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
+    QObject::connect(settingsUI()->trackObjectTrailsCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectTrailsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
     QObject::connect(settingsUI()->trackObjectColorButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectColorButton_clicked);
     QObject::connect(settingsUI()->trackObjectFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectFontScaleSpin_valueChanged);
@@ -6753,6 +6755,12 @@ void CameraGUI::on_trackObjectsCheck_toggled(bool checked)
 {
     m_settings.m_trackObjects = checked;
     applySetting("trackObjects");
+}
+
+void CameraGUI::on_trackObjectTrailsCheck_toggled(bool checked)
+{
+    m_settings.m_trackObjectTrails = checked;
+    applySetting("trackObjectTrails");
 }
 
 void CameraGUI::on_trackObjectMinElevationSpin_valueChanged(double value)

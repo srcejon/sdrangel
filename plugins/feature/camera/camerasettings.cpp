@@ -268,6 +268,7 @@ void CameraSettings::resetToDefaults()
     m_constellationColor = QColor(255, 255, 120);
     m_constellationOverlay = ConstellationOverlayUrsaMajor;
     m_trackObjects = false;
+    m_trackObjectTrails = false;
     m_trackObjectMinElevation = 0.0;
     m_trackObjectColor = QColor(80, 255, 80);
     m_trackObjectFontScale = 9.0;
@@ -616,6 +617,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(235, m_recordCalibratedMedia);
     s.writeBool(236, m_recordPostProcessedMedia);
     s.writeS32(237, m_starCatalogDiskCacheSizeGb);
+    s.writeBool(238, m_trackObjectTrails);
 
     return s.final();
 }
@@ -971,6 +973,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_constellationColor = QColor::fromRgba(constellationColorRgba);
         d.readS32(155, reinterpret_cast<qint32*>(&m_constellationOverlay), static_cast<qint32>(ConstellationOverlayUrsaMajor));
         d.readBool(156, &m_trackObjects, false);
+        d.readBool(238, &m_trackObjectTrails, false);
         d.readDouble(157, &m_trackObjectMinElevation, 0.0);
         m_trackObjectMinElevation = qBound(m_minNormalized, m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
         uint32_t trackObjectColorRgba = QColor(80, 255, 80).rgba();
@@ -1749,6 +1752,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("trackObjects")) {
         m_trackObjects = settings.m_trackObjects;
     }
+    if (settingsKeys.contains("trackObjectTrails")) {
+        m_trackObjectTrails = settings.m_trackObjectTrails;
+    }
     if (settingsKeys.contains("trackObjectMinElevation")) {
         m_trackObjectMinElevation = qBound(m_minNormalized, settings.m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
     }
@@ -2426,6 +2432,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("trackObjects") || force) {
         ostr << " m_trackObjects: " << m_trackObjects;
+    }
+    if (settingsKeys.contains("trackObjectTrails") || force) {
+        ostr << " m_trackObjectTrails: " << m_trackObjectTrails;
     }
     if (settingsKeys.contains("trackObjectMinElevation") || force) {
         ostr << " m_trackObjectMinElevation: " << m_trackObjectMinElevation;

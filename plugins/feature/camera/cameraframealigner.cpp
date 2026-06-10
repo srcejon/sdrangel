@@ -639,11 +639,41 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
 
     constexpr float maxMatchDistance = 12.0f;
     constexpr size_t maxSeedStars = 12;
+    constexpr size_t maxPairSeedStars = 8;
 
     auto makeTranslationTransform = [](const cv::Point2f& candidateShift) -> cv::Mat
     {
         cv::Mat transform = (cv::Mat_<double>(2, 3) << 1.0, 0.0, candidateShift.x, 0.0, 1.0, candidateShift.y);
         return transform;
+    };
+
+    auto makePairSimilarityTransform = [](const cv::Point2f& referenceA,
+                                           const cv::Point2f& referenceB,
+                                           const cv::Point2f& targetA,
+                                           const cv::Point2f& targetB) -> cv::Mat
+    {
+        const double referenceDx = static_cast<double>(referenceB.x - referenceA.x);
+        const double referenceDy = static_cast<double>(referenceB.y - referenceA.y);
+        const double targetDx = static_cast<double>(targetB.x - targetA.x);
+        const double targetDy = static_cast<double>(targetB.y - targetA.y);
+        const double referenceLength = std::hypot(referenceDx, referenceDy);
+        const double targetLength = std::hypot(targetDx, targetDy);
+        if ((referenceLength < 8.0) || (targetLength < 8.0)) {
+            return cv::Mat();
+        }
+
+        const double scale = referenceLength / targetLength;
+        if ((scale < 0.90) || (scale > 1.10)) {
+            return cv::Mat();
+        }
+
+        const double angle = std::atan2(referenceDy, referenceDx) - std::atan2(targetDy, targetDx);
+        const double a = scale * std::cos(angle);
+        const double b = scale * std::sin(angle);
+        const double tx = static_cast<double>(referenceA.x) - (a * static_cast<double>(targetA.x)) + (b * static_cast<double>(targetA.y));
+        const double ty = static_cast<double>(referenceA.y) - (b * static_cast<double>(targetA.x)) - (a * static_cast<double>(targetA.y));
+
+        return (cv::Mat_<double>(2, 3) << a, -b, tx, b, a, ty);
     };
 
     auto isValidSeedTransform = [](const cv::Mat& candidateTransform)
@@ -904,6 +934,33 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                             cv::Point2f(rollingReference.targetStars[previousIndex].x - targetStars[targetIndex].x,
                                         rollingReference.targetStars[previousIndex].y - targetStars[targetIndex].y)),
                             QStringLiteral("pair-raw-rolling"));
+                    }
+                }
+
+                const size_t previousPairSeedCount = std::min(rollingReference.targetStars.size(), maxPairSeedStars);
+                const size_t targetPairSeedCount = std::min(targetStars.size(), maxPairSeedStars);
+                for (size_t previousA = 0; previousA < previousPairSeedCount; ++previousA)
+                {
+                    for (size_t previousB = previousA + 1; previousB < previousPairSeedCount; ++previousB)
+                    {
+                        for (size_t targetA = 0; targetA < targetPairSeedCount; ++targetA)
+                        {
+                            for (size_t targetB = targetA + 1; targetB < targetPairSeedCount; ++targetB)
+                            {
+                                considerRawRollingTransform(makePairSimilarityTransform(
+                                    rollingReference.targetStars[previousA],
+                                    rollingReference.targetStars[previousB],
+                                    targetStars[targetA],
+                                    targetStars[targetB]),
+                                    QStringLiteral("pair-affine-raw-rolling"));
+                                considerRawRollingTransform(makePairSimilarityTransform(
+                                    rollingReference.targetStars[previousA],
+                                    rollingReference.targetStars[previousB],
+                                    targetStars[targetB],
+                                    targetStars[targetA]),
+                                    QStringLiteral("pair-affine-raw-rolling"));
+                            }
+                        }
                     }
                 }
 

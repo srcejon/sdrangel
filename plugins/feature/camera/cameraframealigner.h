@@ -66,6 +66,7 @@ private:
     // frame. Reset on capture start, on settings changes that invalidate the source, or
     // when the frame geometry changes.
     cv::Mat m_alignmentReference;
+    cv::Mat m_previousStarAlignmentTransform;
     cv::Mat m_lastStarAlignmentTransform;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     cv::cuda::Stream m_cudaAlignmentStream;

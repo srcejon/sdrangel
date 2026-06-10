@@ -57,6 +57,7 @@ void CameraFrameAligner::stopWork()
 void CameraFrameAligner::resetAlignmentState()
 {
     m_alignmentReference = cv::Mat();
+    m_previousStarAlignmentTransform = cv::Mat();
     m_lastStarAlignmentTransform = cv::Mat();
 }
 
@@ -651,6 +652,19 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
             && (candidateTransform.type() == CV_64F);
     };
 
+    auto makePredictedTransform = [&](const cv::Mat& previousTransform, const cv::Mat& lastTransform) -> cv::Mat
+    {
+        if (!isValidSeedTransform(previousTransform) || !isValidSeedTransform(lastTransform)) {
+            return cv::Mat();
+        }
+
+        cv::Mat predicted = lastTransform + (lastTransform - previousTransform);
+        if (predicted.type() != CV_64F) {
+            predicted.convertTo(predicted, CV_64F);
+        }
+        return predicted;
+    };
+
     auto transformPoint = [](const cv::Mat& candidateTransform, const cv::Point2f& point)
     {
         return cv::Point2f(
@@ -739,10 +753,17 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     };
 
     considerTransform(makeTranslationTransform(cv::Point2f(static_cast<float>(shift.x), static_cast<float>(shift.y))), QStringLiteral("phase"));
+    const cv::Mat predictedTransform = makePredictedTransform(m_previousStarAlignmentTransform, m_lastStarAlignmentTransform);
+    if (isValidSeedTransform(predictedTransform)) {
+        considerTransform(predictedTransform, QStringLiteral("predicted"));
+    }
     if (isValidSeedTransform(m_lastStarAlignmentTransform)) {
         considerTransform(m_lastStarAlignmentTransform, QStringLiteral("previous"));
     } else if (!m_lastStarAlignmentTransform.empty()) {
         m_lastStarAlignmentTransform.release();
+    }
+    if (!m_previousStarAlignmentTransform.empty() && !isValidSeedTransform(m_previousStarAlignmentTransform)) {
+        m_previousStarAlignmentTransform.release();
     }
 
     const size_t referenceSeedCount = std::min(referenceStars.size(), maxSeedStars);
@@ -871,6 +892,11 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     }
 
     logStarAlignment("accepted");
+    if (isValidSeedTransform(m_lastStarAlignmentTransform)) {
+        m_previousStarAlignmentTransform = m_lastStarAlignmentTransform.clone();
+    } else {
+        m_previousStarAlignmentTransform.release();
+    }
     m_lastStarAlignmentTransform = transform.clone();
 
     if (appliedTransform) {

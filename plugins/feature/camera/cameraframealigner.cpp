@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #include <QDebug>
 #ifdef CAMERA_OPENCV_CUDA_STACKING
@@ -582,7 +583,16 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
 
     const std::vector<cv::Point2f> referenceStars = detectStarCentroids(referenceGray);
     const std::vector<cv::Point2f> targetStars = detectStarCentroids(targetGray);
-    if (referenceStars.size() < 2 || targetStars.size() < 2) {
+    constexpr size_t minTentativeMatches = 4;
+    constexpr int minInlierMatches = 4;
+    constexpr double minInlierRatio = 0.50;
+    constexpr double maxInlierRmsPixels = 3.0;
+    constexpr double maxInlierResidualPixels = 8.0;
+
+    if (referenceStars.size() < minTentativeMatches || targetStars.size() < minTentativeMatches) {
+        qDebug() << "CameraFrameAligner: star alignment fallback: insufficient centroids"
+                 << "reference" << referenceStars.size()
+                 << "target" << targetStars.size();
         return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
 
@@ -631,18 +641,61 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
         }
     }
 
-    if (matchedTargetPoints.size() < 2) {
+    if (matchedTargetPoints.size() < minTentativeMatches)
+    {
+        qDebug() << "CameraFrameAligner: star alignment fallback: insufficient tentative matches"
+                 << "reference" << referenceStars.size()
+                 << "target" << targetStars.size()
+                 << "matches" << matchedTargetPoints.size()
+                 << "phaseResponse" << response
+                 << "phaseShift" << shift.x << shift.y;
         return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
-    frame.m_stack.m_alignmentMatchedStars = static_cast<int>(matchedTargetPoints.size());
 
     cv::Mat inliers;
     cv::Mat transform = cv::estimateAffinePartial2D(
         matchedTargetPoints, matchedReferencePoints, inliers, cv::RANSAC, 3.0);
 
-    if (transform.empty()) {
+    if (transform.empty())
+    {
+        qDebug() << "CameraFrameAligner: star alignment fallback: affine estimate failed"
+                 << "reference" << referenceStars.size()
+                 << "target" << targetStars.size()
+                 << "matches" << matchedTargetPoints.size()
+                 << "phaseResponse" << response;
         return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
+
+    const int inlierCount = inliers.empty() ? 0 : cv::countNonZero(inliers);
+    frame.m_stack.m_alignmentMatchedStars = inlierCount;
+    const double inlierRatio = matchedTargetPoints.empty()
+        ? 0.0
+        : static_cast<double>(inlierCount) / static_cast<double>(matchedTargetPoints.size());
+
+    double residualSquaredSum = 0.0;
+    double maxResidual = 0.0;
+    for (int i = 0; i < static_cast<int>(matchedTargetPoints.size()); ++i)
+    {
+        if (inliers.empty() || (inliers.at<uchar>(i, 0) == 0)) {
+            continue;
+        }
+
+        const cv::Point2f& targetPoint = matchedTargetPoints[static_cast<size_t>(i)];
+        const cv::Point2f& referencePoint = matchedReferencePoints[static_cast<size_t>(i)];
+        const double alignedX = (transform.at<double>(0, 0) * targetPoint.x)
+            + (transform.at<double>(0, 1) * targetPoint.y)
+            + transform.at<double>(0, 2);
+        const double alignedY = (transform.at<double>(1, 0) * targetPoint.x)
+            + (transform.at<double>(1, 1) * targetPoint.y)
+            + transform.at<double>(1, 2);
+        const double residual = std::hypot(alignedX - referencePoint.x, alignedY - referencePoint.y);
+        residualSquaredSum += residual * residual;
+        maxResidual = std::max(maxResidual, residual);
+    }
+
+    const double residualRms = inlierCount > 0
+        ? std::sqrt(residualSquaredSum / static_cast<double>(inlierCount))
+        : std::numeric_limits<double>::infinity();
 
     const double shiftPixels = std::hypot(transform.at<double>(0, 2), transform.at<double>(1, 2));
     const double scaleX = std::hypot(transform.at<double>(0, 0), transform.at<double>(1, 0));
@@ -651,26 +704,52 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     const double maxReasonableShift = 0.25 * static_cast<double>(std::min(targetFrame.cols, targetFrame.rows));
     frame.m_stack.m_alignmentShiftPixels = static_cast<float>(shiftPixels);
 
+    const double rotationDegrees = std::atan2(transform.at<double>(1, 0), transform.at<double>(0, 0)) * 180.0 / CV_PI;
+    auto logStarAlignment = [&](const char *status)
+    {
+        qDebug() << "CameraFrameAligner: star alignment" << status
+                 << "reference" << referenceStars.size()
+                 << "target" << targetStars.size()
+                 << "matches" << matchedTargetPoints.size()
+                 << "inliers" << inlierCount
+                 << "inlierRatio" << inlierRatio
+                 << "rms" << residualRms
+                 << "maxResidual" << maxResidual
+                 << "shift" << transform.at<double>(0, 2) << transform.at<double>(1, 2)
+                 << "rotation" << rotationDegrees
+                 << "scale" << scale
+                 << "phaseResponse" << response;
+    };
+
     if (!std::isfinite(shiftPixels) || !std::isfinite(scale))
     {
-        frame.m_stack.m_alignmentAccepted = false;
-        frame.m_stack.m_alignmentRejectReason = QStringLiteral("star alignment returned invalid transform");
-        return targetFrame.clone();
+        logStarAlignment("fallback-invalid-transform");
+        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
 
     if (shiftPixels > maxReasonableShift)
     {
-        frame.m_stack.m_alignmentAccepted = false;
-        frame.m_stack.m_alignmentRejectReason = QStringLiteral("star alignment shift too large (%1 px)").arg(shiftPixels, 0, 'f', 1);
-        return targetFrame.clone();
+        logStarAlignment("fallback-shift-too-large");
+        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
 
     if ((scale < 0.80) || (scale > 1.25))
     {
-        frame.m_stack.m_alignmentAccepted = false;
-        frame.m_stack.m_alignmentRejectReason = QStringLiteral("star alignment scale out of range (%1)").arg(scale, 0, 'f', 3);
-        return targetFrame.clone();
+        logStarAlignment("fallback-scale-out-of-range");
+        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
+
+    if ((inlierCount < minInlierMatches)
+        || (inlierRatio < minInlierRatio)
+        || !std::isfinite(residualRms)
+        || (residualRms > maxInlierRmsPixels)
+        || (maxResidual > maxInlierResidualPixels))
+    {
+        logStarAlignment("fallback-poor-fit");
+        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
+    }
+
+    logStarAlignment("accepted");
 
     if (appliedTransform) {
         *appliedTransform = transform.clone();

@@ -514,22 +514,44 @@ std::vector<cv::Point2f> CameraFrameAligner::detectStarCentroids(const cv::Mat& 
         return stars;
     }
 
+    cv::Mat gray8;
+    if (grayFrame.depth() == CV_8U) {
+        gray8 = grayFrame;
+    } else if (grayFrame.depth() == CV_16U) {
+        grayFrame.convertTo(gray8, CV_8U, 255.0 / 65535.0);
+    } else {
+        grayFrame.convertTo(gray8, CV_8U);
+    }
+
     cv::Mat blurred;
-    cv::GaussianBlur(grayFrame, blurred, cv::Size(0, 0), 1.2);
+    cv::GaussianBlur(gray8, blurred, cv::Size(0, 0), 1.0);
+
+    cv::Mat background;
+    cv::GaussianBlur(gray8, background, cv::Size(0, 0), 10.0);
+
+    cv::Mat blurredFloat;
+    cv::Mat backgroundFloat;
+    blurred.convertTo(blurredFloat, CV_32F);
+    background.convertTo(backgroundFloat, CV_32F);
+
+    cv::Mat enhancedFloat;
+    cv::subtract(blurredFloat, backgroundFloat, enhancedFloat);
+    cv::max(enhancedFloat, cv::Scalar::all(0.0), enhancedFloat);
 
     cv::Scalar mean;
     cv::Scalar stddev;
-    cv::meanStdDev(blurred, mean, stddev);
+    cv::meanStdDev(enhancedFloat, mean, stddev);
 
     double maxValue = 0.0;
-    cv::minMaxLoc(blurred, nullptr, &maxValue);
-    const double thresholdValue = std::max(mean[0] + (2.5 * stddev[0]), maxValue * 0.55);
+    cv::minMaxLoc(enhancedFloat, nullptr, &maxValue);
+    const double thresholdValue = std::max(mean[0] + (2.0 * stddev[0]), maxValue * 0.18);
     if (thresholdValue <= 0.0) {
         return stars;
     }
 
     cv::Mat binary;
-    cv::threshold(blurred, binary, thresholdValue, 255, cv::THRESH_BINARY);
+    cv::threshold(enhancedFloat, binary, thresholdValue, 255.0, cv::THRESH_BINARY);
+    binary.convertTo(binary, CV_8U);
 
     cv::Mat labels;
     cv::Mat stats;
@@ -545,7 +567,7 @@ std::vector<cv::Point2f> CameraFrameAligner::detectStarCentroids(const cv::Mat& 
     for (int component = 1; component < componentCount; ++component)
     {
         const int area = stats.at<int>(component, cv::CC_STAT_AREA);
-        if (area < 1 || area > 200) {
+        if (area < 1 || area > 500) {
             continue;
         }
 
@@ -556,10 +578,17 @@ std::vector<cv::Point2f> CameraFrameAligner::detectStarCentroids(const cv::Mat& 
         const cv::Rect roi(left, top, width, height);
 
         cv::Mat componentMask = (labels(roi) == component);
-        const double brightness = cv::mean(blurred(roi), componentMask)[0] * area;
+        cv::Mat weightedComponent = cv::Mat::zeros(roi.size(), CV_32F);
+        enhancedFloat(roi).copyTo(weightedComponent, componentMask);
+        const cv::Moments moments = cv::moments(weightedComponent, false);
+        if (moments.m00 <= 0.0) {
+            continue;
+        }
+
+        const double brightness = cv::sum(weightedComponent)[0];
         candidates.push_back({
-            cv::Point2f(static_cast<float>(centroids.at<double>(component, 0)),
-                        static_cast<float>(centroids.at<double>(component, 1))),
+            cv::Point2f(static_cast<float>(left + (moments.m10 / moments.m00)),
+                        static_cast<float>(top + (moments.m01 / moments.m00))),
             brightness
         });
     }

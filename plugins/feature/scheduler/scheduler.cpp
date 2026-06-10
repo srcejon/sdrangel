@@ -394,6 +394,7 @@ void Scheduler::applySettings(const SchedulerSettings& settings, const QStringLi
 void Scheduler::rebuildNextRuns()
 {
     m_nextRuns.clear();
+    m_eventMatchCounts.clear();
     const QDateTime now = QDateTime::currentDateTime();
 
     for (const SchedulerSettings::ScheduleRule& rule : m_settings.m_rules) {
@@ -479,6 +480,16 @@ void Scheduler::handleEvent(const MainCore::MsgEvent& eventMessage)
         context.m_eventName = eventTypeName(context.m_eventType);
         context.m_source = sourceId;
         context.m_data = eventMessage.getData();
+
+        const int eventCount = qMax(1, rule.m_eventCount);
+        int& matchedCount = m_eventMatchCounts[rule.m_id];
+        matchedCount += 1;
+
+        if (matchedCount < eventCount) {
+            continue;
+        }
+
+        matchedCount = 0;
 
         const QString ruleId = rule.m_id;
         const int delayMs = SchedulerSettings::delaySeconds(rule) * 1000;

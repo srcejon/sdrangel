@@ -154,6 +154,7 @@ private:
     void updateTriggerVisibility();
     void updateTimeScheduleVisibility();
     void updateRegexState();
+    QString eventCountText(const SchedulerSettings::ScheduleRule& rule) const;
     void selectRule(int row);
     void selectDeviceAction(int row);
     void selectChannelAction(int row);

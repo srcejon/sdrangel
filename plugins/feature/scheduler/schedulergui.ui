@@ -414,13 +414,30 @@
              <widget class="QLineEdit" name="eventDataRegex"/>
             </item>
             <item row="3" column="0">
+             <widget class="QLabel" name="eventCountLabel">
+              <property name="text">
+               <string>Count</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QSpinBox" name="eventCount">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>1000000</number>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0">
              <widget class="QLabel" name="eventDelayLabel">
               <property name="text">
                <string>Delay</string>
               </property>
              </widget>
             </item>
-            <item row="3" column="1">
+            <item row="4" column="1">
              <layout class="QHBoxLayout" name="delayLayout">
               <item>
                <widget class="QSpinBox" name="eventDelay">

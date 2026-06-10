@@ -241,6 +241,92 @@ QDataStream& operator>>(QDataStream& in, SchedulerSettings::ScheduleRule& rule)
     return in;
 }
 
+namespace {
+
+QByteArray serializeRuleV2(const SchedulerSettings::ScheduleRule& rule)
+{
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+
+    out << static_cast<qint32>(1);
+    out << rule.m_id;
+    out << rule.m_name;
+    out << rule.m_enabled;
+    out << static_cast<qint32>(rule.m_triggerType);
+    out << rule.m_time;
+    out << rule.m_dateUntil;
+    out << static_cast<qint32>(rule.m_recurrence);
+    out << rule.m_weekdayMask;
+    out << rule.m_eventType;
+    out << rule.m_eventSourceId;
+    out << rule.m_eventDataRegex;
+    out << rule.m_eventCount;
+    out << rule.m_eventDelay;
+    out << static_cast<qint32>(rule.m_eventDelayUnit);
+    out << rule.m_duration;
+    out << static_cast<qint32>(rule.m_durationUnit);
+    out << rule.m_command;
+    out << rule.m_speech;
+    out << rule.m_deviceSetActions;
+    out << rule.m_channelActions;
+    out << rule.m_featureActions;
+    out << rule.m_lastRun;
+
+    return blob;
+}
+
+bool deserializeRuleV2(const QByteArray& blob, SchedulerSettings::ScheduleRule& rule)
+{
+    QDataStream in(blob);
+    qint32 version;
+    qint32 triggerType;
+    qint32 recurrence;
+    qint32 delayUnit;
+    qint32 durationUnit;
+
+    in >> version;
+    if (version != 1) {
+        return false;
+    }
+
+    in >> rule.m_id;
+    in >> rule.m_name;
+    in >> rule.m_enabled;
+    in >> triggerType;
+    in >> rule.m_time;
+    in >> rule.m_dateUntil;
+    in >> recurrence;
+    in >> rule.m_weekdayMask;
+    in >> rule.m_eventType;
+    in >> rule.m_eventSourceId;
+    in >> rule.m_eventDataRegex;
+    in >> rule.m_eventCount;
+    in >> rule.m_eventDelay;
+    in >> delayUnit;
+    in >> rule.m_duration;
+    in >> durationUnit;
+    in >> rule.m_command;
+    in >> rule.m_speech;
+    in >> rule.m_deviceSetActions;
+    in >> rule.m_channelActions;
+    in >> rule.m_featureActions;
+    in >> rule.m_lastRun;
+
+    rule.m_triggerType = static_cast<SchedulerSettings::TriggerType>(triggerType);
+    rule.m_recurrence = static_cast<SchedulerSettings::Recurrence>(recurrence);
+    rule.m_eventDelayUnit = static_cast<SchedulerSettings::DelayUnit>(delayUnit);
+    rule.m_durationUnit = static_cast<SchedulerSettings::DelayUnit>(durationUnit);
+    rule.m_eventCount = qMax(1, rule.m_eventCount);
+
+    if (rule.m_id.isEmpty()) {
+        rule.m_id = SchedulerSettings::newRuleId();
+    }
+
+    return in.status() == QDataStream::Ok;
+}
+
+}
+
 SchedulerSettings::SettingValue::SettingValue() :
     m_type(SettingString)
 {
@@ -283,6 +369,7 @@ SchedulerSettings::ScheduleRule::ScheduleRule() :
     m_recurrence(RecurrenceOnce),
     m_weekdayMask(DefaultWeekdayMask),
     m_eventType(0),
+    m_eventCount(1),
     m_eventDelay(0),
     m_eventDelayUnit(DelaySeconds),
     m_duration(0),
@@ -307,11 +394,14 @@ void SchedulerSettings::resetToDefaults()
 
 QByteArray SchedulerSettings::serialize() const
 {
-    SimpleSerializer s(1);
+    SimpleSerializer s(2);
     QByteArray rulesBlob;
     QDataStream rulesStream(&rulesBlob, QIODevice::WriteOnly);
 
-    rulesStream << m_rules;
+    rulesStream << static_cast<qint32>(m_rules.size());
+    for (const ScheduleRule& rule : m_rules) {
+        rulesStream << serializeRuleV2(rule);
+    }
 
     s.writeString(1, m_title);
     s.writeS32(2, m_workspaceIndex);
@@ -357,6 +447,47 @@ bool SchedulerSettings::deserialize(const QByteArray& data)
         {
             QDataStream rulesStream(blob);
             rulesStream >> m_rules;
+        }
+
+        for (ScheduleRule& rule : m_rules) {
+            rule.m_eventCount = qMax(1, rule.m_eventCount);
+        }
+
+        return true;
+    }
+
+    if (d.getVersion() == 2)
+    {
+        d.readString(1, &m_title, "Scheduler");
+        d.readS32(2, &m_workspaceIndex, -1);
+        d.readBlob(3, &m_geometryBytes);
+        if (m_rollupState)
+        {
+            d.readBlob(4, &blob);
+            m_rollupState->deserialize(blob);
+        }
+        d.readU32(5, &rgb, QColor(229, 156, 64).rgb());
+        m_rgbColor = rgb;
+
+        d.readBlob(6, &blob);
+        m_rules.clear();
+
+        if (!blob.isEmpty())
+        {
+            QDataStream rulesStream(blob);
+            qint32 ruleCount = 0;
+
+            rulesStream >> ruleCount;
+            for (qint32 i = 0; i < ruleCount; ++i)
+            {
+                QByteArray ruleBlob;
+                ScheduleRule rule;
+
+                rulesStream >> ruleBlob;
+                if (deserializeRuleV2(ruleBlob, rule)) {
+                    m_rules.append(rule);
+                }
+            }
         }
 
         return true;

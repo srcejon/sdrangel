@@ -150,6 +150,7 @@ struct SchedulerSettings
         int m_eventType;
         QString m_eventSourceId;
         QString m_eventDataRegex;
+        int m_eventCount;
         int m_eventDelay;
         DelayUnit m_eventDelayUnit;
         int m_duration;

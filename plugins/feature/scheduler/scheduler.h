@@ -121,6 +121,7 @@ private:
     SchedulerSettings m_settings;
     QTimer m_timer;
     QMap<QString, QDateTime> m_nextRuns;
+    QMap<QString, int> m_eventMatchCounts;
     AvailableChannelOrFeatureHandler m_eventSourceHandler;
 #ifdef QT_TEXTTOSPEECH_FOUND
     QTextToSpeech *m_speech;

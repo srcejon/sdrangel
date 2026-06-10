@@ -208,6 +208,7 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->speech->setToolTip(tr("Text to speak. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source} and ${data}."));
     ui->eventSource->setToolTip(tr("Optional event source. Leave empty to match all producers on the event pipe."));
     ui->eventDataRegex->setToolTip(tr("Optional regular expression matched against the event data string."));
+    ui->eventCount->setToolTip(tr("Number of matching events required before actions are triggered."));
 
     m_settings.setRollupState(&m_rollupState);
 
@@ -259,6 +260,7 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->eventType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventSource, &QComboBox::currentTextChanged, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventDataRegex, &QLineEdit::textChanged, this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->eventCount, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventDelay, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventDelayUnit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->command, &QLineEdit::editingFinished, this, &SchedulerGUI::onRuleEditorChanged);
@@ -775,6 +777,7 @@ void SchedulerGUI::displayRuleEditor()
         ui->eventType->setCurrentIndex(ui->eventType->findData(rule->m_eventType));
         updateEventSourceList(rule->m_eventSourceId);
         ui->eventDataRegex->setText(rule->m_eventDataRegex);
+        ui->eventCount->setValue(qMax(1, rule->m_eventCount));
         ui->eventDelay->setValue(rule->m_eventDelay);
         ui->eventDelayUnit->setCurrentIndex(ui->eventDelayUnit->findData(rule->m_eventDelayUnit));
         ui->command->setText(rule->m_command);
@@ -793,6 +796,7 @@ void SchedulerGUI::displayRuleEditor()
         ui->durationUnit->setCurrentIndex(ui->durationUnit->findData(SchedulerSettings::DelaySeconds));
         updateEventSourceList(QString());
         ui->eventDataRegex->clear();
+        ui->eventCount->setValue(1);
         ui->eventDelay->setValue(0);
         ui->command->clear();
         ui->speech->clear();
@@ -1040,6 +1044,7 @@ bool SchedulerGUI::updateCurrentRuleFromWidgets()
     }
 
     rule->m_eventDataRegex = regex;
+    rule->m_eventCount = ui->eventCount->value();
     rule->m_eventDelay = ui->eventDelay->value();
     rule->m_eventDelayUnit = static_cast<SchedulerSettings::DelayUnit>(ui->eventDelayUnit->currentData().toInt());
     rule->m_command = ui->command->text();
@@ -1842,14 +1847,19 @@ QString SchedulerGUI::ruleRecurrenceDelayText(const SchedulerSettings::ScheduleR
     }
     else
     {
+        text = eventCountText(rule);
         const int delay = SchedulerSettings::delaySeconds(rule);
         if (delay > 0)
         {
-            if (rule.m_eventDelayUnit == SchedulerSettings::DelayMinutes) {
-                text = tr("%1 min").arg(rule.m_eventDelay);
-            } else {
-                text = tr("%1 s").arg(delay);
+            const QString delayText = rule.m_eventDelayUnit == SchedulerSettings::DelayMinutes
+                ? tr("%1 min").arg(rule.m_eventDelay)
+                : tr("%1 s").arg(delay);
+
+            if (!text.isEmpty()) {
+                text += QStringLiteral(", ");
             }
+
+            text += delayText;
         }
     }
 
@@ -1863,6 +1873,12 @@ QString SchedulerGUI::ruleRecurrenceDelayText(const SchedulerSettings::ScheduleR
     }
 
     return text;
+}
+
+QString SchedulerGUI::eventCountText(const SchedulerSettings::ScheduleRule& rule) const
+{
+    const int count = qMax(1, rule.m_eventCount);
+    return count > 1 ? tr("%1 hits").arg(count) : QString();
 }
 
 QString SchedulerGUI::ruleActionSummary(const SchedulerSettings::ScheduleRule& rule) const

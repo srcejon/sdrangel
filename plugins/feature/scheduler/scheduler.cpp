@@ -608,7 +608,7 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
     bool presetLoaded = false;
     for (const SchedulerSettings::DeviceSetAction& action : deviceActions)
     {
-        presetLoaded = loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription) || presetLoaded;
+        presetLoaded |= loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription);
     }
 
     const auto executeActions = [this, rule, context, deviceActions, channelActions, featureActions]() {

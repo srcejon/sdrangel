@@ -59,6 +59,7 @@ void CameraFrameAligner::resetAlignmentState()
     m_alignmentReference = cv::Mat();
     m_previousStarAlignmentTransform = cv::Mat();
     m_lastStarAlignmentTransform = cv::Mat();
+    m_lastStarAlignmentTargetStars.clear();
 }
 
 bool CameraFrameAligner::preserveFrameOrder() const
@@ -676,7 +677,8 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                 + candidateTransform.at<double>(1, 2)));
     };
 
-    auto matchForTransform = [&](const cv::Mat& candidateTransform,
+    auto matchForTransform = [&](const std::vector<cv::Point2f>& candidateReferenceStars,
+                                 const cv::Mat& candidateTransform,
                                  std::vector<cv::Point2f>& candidateTargetPoints,
                                  std::vector<cv::Point2f>& candidateReferencePoints) -> double
     {
@@ -689,7 +691,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
         std::vector<bool> targetUsed(targetStars.size(), false);
         double totalDistance = 0.0;
 
-        for (const cv::Point2f& referenceStar : referenceStars)
+        for (const cv::Point2f& referenceStar : candidateReferenceStars)
         {
             int bestIndex = -1;
             float bestDistance = maxMatchDistance;
@@ -738,7 +740,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
 
         std::vector<cv::Point2f> candidateTargetPoints;
         std::vector<cv::Point2f> candidateReferencePoints;
-        const double candidateDistance = matchForTransform(candidateTransform, candidateTargetPoints, candidateReferencePoints);
+        const double candidateDistance = matchForTransform(referenceStars, candidateTransform, candidateTargetPoints, candidateReferencePoints);
 
         if ((candidateTargetPoints.size() > matchedTargetPoints.size())
             || ((candidateTargetPoints.size() == matchedTargetPoints.size()) && (candidateDistance < bestMatchDistance)))
@@ -781,15 +783,65 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
 
     if (matchedTargetPoints.size() < minTentativeMatches)
     {
-        qDebug() << "CameraFrameAligner: star alignment fallback: insufficient tentative matches"
-                 << "reference" << referenceStars.size()
-                 << "target" << targetStars.size()
-                 << "matches" << matchedTargetPoints.size()
-                 << "phaseResponse" << response
-                 << "phaseShift" << shift.x << shift.y
-                 << "bestSeedShift" << bestSeedShift.x << bestSeedShift.y
-                 << "bestSeedKind" << bestSeedKind;
-        return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
+        if (isValidSeedTransform(m_lastStarAlignmentTransform)
+            && (m_lastStarAlignmentTargetStars.size() >= minTentativeMatches))
+        {
+            std::vector<cv::Point2f> rollingReferenceStars;
+            rollingReferenceStars.reserve(m_lastStarAlignmentTargetStars.size());
+            for (const cv::Point2f& previousTargetStar : m_lastStarAlignmentTargetStars) {
+                rollingReferenceStars.push_back(transformPoint(m_lastStarAlignmentTransform, previousTargetStar));
+            }
+
+            auto considerRollingTransform = [&](const cv::Mat& candidateTransform, const QString& seedKind)
+            {
+                if (!isValidSeedTransform(candidateTransform)) {
+                    return;
+                }
+
+                std::vector<cv::Point2f> candidateTargetPoints;
+                std::vector<cv::Point2f> candidateReferencePoints;
+                const double candidateDistance = matchForTransform(rollingReferenceStars, candidateTransform, candidateTargetPoints, candidateReferencePoints);
+
+                if ((candidateTargetPoints.size() > matchedTargetPoints.size())
+                    || ((candidateTargetPoints.size() == matchedTargetPoints.size()) && (candidateDistance < bestMatchDistance)))
+                {
+                    matchedTargetPoints = std::move(candidateTargetPoints);
+                    matchedReferencePoints = std::move(candidateReferencePoints);
+                    bestMatchDistance = candidateDistance;
+                    bestSeedShift = cv::Point2f(static_cast<float>(candidateTransform.at<double>(0, 2)),
+                                                static_cast<float>(candidateTransform.at<double>(1, 2)));
+                    bestSeedKind = seedKind;
+                }
+            };
+
+            considerRollingTransform(predictedTransform, QStringLiteral("predicted-rolling"));
+            considerRollingTransform(m_lastStarAlignmentTransform, QStringLiteral("previous-rolling"));
+
+            const size_t rollingReferenceSeedCount = std::min(rollingReferenceStars.size(), maxSeedStars);
+            for (size_t referenceIndex = 0; referenceIndex < rollingReferenceSeedCount; ++referenceIndex)
+            {
+                for (size_t targetIndex = 0; targetIndex < targetSeedCount; ++targetIndex)
+                {
+                    considerRollingTransform(makeTranslationTransform(
+                        cv::Point2f(rollingReferenceStars[referenceIndex].x - targetStars[targetIndex].x,
+                                    rollingReferenceStars[referenceIndex].y - targetStars[targetIndex].y)),
+                        QStringLiteral("pair-rolling"));
+                }
+            }
+        }
+
+        if (matchedTargetPoints.size() < minTentativeMatches)
+        {
+            qDebug() << "CameraFrameAligner: star alignment fallback: insufficient tentative matches"
+                     << "reference" << referenceStars.size()
+                     << "target" << targetStars.size()
+                     << "matches" << matchedTargetPoints.size()
+                     << "phaseResponse" << response
+                     << "phaseShift" << shift.x << shift.y
+                     << "bestSeedShift" << bestSeedShift.x << bestSeedShift.y
+                     << "bestSeedKind" << bestSeedKind;
+            return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
+        }
     }
 
     cv::Mat inliers;
@@ -898,6 +950,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
         m_previousStarAlignmentTransform.release();
     }
     m_lastStarAlignmentTransform = transform.clone();
+    m_lastStarAlignmentTargetStars = targetStars;
 
     if (appliedTransform) {
         *appliedTransform = transform.clone();

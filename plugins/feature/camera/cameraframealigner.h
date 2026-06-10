@@ -68,6 +68,7 @@ private:
     cv::Mat m_alignmentReference;
     cv::Mat m_previousStarAlignmentTransform;
     cv::Mat m_lastStarAlignmentTransform;
+    std::vector<cv::Point2f> m_lastStarAlignmentTargetStars;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     cv::cuda::Stream m_cudaAlignmentStream;
 #endif

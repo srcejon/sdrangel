@@ -689,6 +689,20 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
         return composed3x3(cv::Rect(0, 0, 3, 2)).clone();
     };
 
+    auto makeRelativeTransform = [&](const cv::Mat& referenceFromIntermediate, const cv::Mat& referenceFromTarget) -> cv::Mat
+    {
+        if (!isValidSeedTransform(referenceFromIntermediate) || !isValidSeedTransform(referenceFromTarget)) {
+            return cv::Mat();
+        }
+
+        cv::Mat intermediateFromReference;
+        cv::invertAffineTransform(referenceFromIntermediate, intermediateFromReference);
+        if (intermediateFromReference.type() != CV_64F) {
+            intermediateFromReference.convertTo(intermediateFromReference, CV_64F);
+        }
+        return composeTransforms(intermediateFromReference, referenceFromTarget);
+    };
+
     auto matchForTransform = [&](const std::vector<cv::Point2f>& candidateReferenceStars,
                                  const cv::Mat& candidateTransform,
                                  std::vector<cv::Point2f>& candidateTargetPoints,
@@ -877,6 +891,9 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                         bestRollingRawSeedKind = seedKind;
                     }
                 };
+
+                considerRawRollingTransform(makeRelativeTransform(rollingReference.transform, predictedTransform), QStringLiteral("predicted-affine-raw-rolling"));
+                considerRawRollingTransform(makeRelativeTransform(rollingReference.transform, m_lastStarAlignmentTransform), QStringLiteral("previous-affine-raw-rolling"));
 
                 const size_t previousSeedCount = std::min(rollingReference.targetStars.size(), maxSeedStars);
                 for (size_t previousIndex = 0; previousIndex < previousSeedCount; ++previousIndex)

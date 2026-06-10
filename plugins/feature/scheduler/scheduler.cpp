@@ -18,7 +18,6 @@
 #include <QDebug>
 #include <QProcess>
 #include <QRegularExpression>
-#include <algorithm>
 
 #include "SWGDeviceState.h"
 #include "SWGFeatureSettings.h"
@@ -562,9 +561,9 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
     const QList<SchedulerSettings::ChannelAction> channelActions = rule.m_channelActions;
     const QList<SchedulerSettings::FeatureAction> featureActions = rule.m_featureActions;
 
-    auto loadPreset = [](int deviceSetIndex, const QString& presetGroup, quint64 presetFrequency, const QString& presetDescription) {
+    auto loadPreset = [](int deviceSetIndex, const QString& presetGroup, quint64 presetFrequency, const QString& presetDescription) -> bool {
         if (presetGroup.isEmpty()) {
-            return;
+            return false;
         }
 
         MainCore *mainCore = MainCore::instance();
@@ -573,7 +572,7 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         if ((deviceSetIndex < 0) || (deviceSetIndex >= (int) deviceSets.size()))
         {
             qWarning() << "Scheduler::executeRuleActions: no device set" << deviceSetIndex;
-            return;
+            return false;
         }
 
         const DeviceSet *deviceSet = deviceSets[deviceSetIndex];
@@ -596,17 +595,20 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         if (preset)
         {
             mainCore->getMainMessageQueue()->push(MainCore::MsgLoadPreset::create(preset, deviceSetIndex));
+            return true;
         }
         else
         {
             qWarning() << "Scheduler::executeRuleActions: unable to find preset"
                        << presetGroup << presetFrequency << presetDescription;
+            return false;
         }
     };
 
+    bool presetLoaded = false;
     for (const SchedulerSettings::DeviceSetAction& action : deviceActions)
     {
-        loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription);
+        presetLoaded = loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription) || presetLoaded;
     }
 
     const auto executeActions = [this, rule, context, deviceActions, channelActions, featureActions]() {
@@ -629,11 +631,7 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         }
     };
 
-    const bool hasPresetToLoad = std::any_of(deviceActions.cbegin(), deviceActions.cend(), [](const SchedulerSettings::DeviceSetAction& action) {
-        return !action.m_presetGroup.isEmpty();
-    });
-
-    if (hasPresetToLoad)
+    if (presetLoaded)
     {
         QTimer::singleShot(1000, this, executeActions);
     }

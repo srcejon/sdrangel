@@ -51,6 +51,8 @@ protected:
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_nextStageQueue;
     CameraSettings m_settings;
+    bool m_captureActive;
+    quint64 m_captureEpoch = 0;
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
     bool m_processingFrame;

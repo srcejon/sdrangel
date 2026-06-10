@@ -82,18 +82,21 @@ public:
 
     public:
         bool getStartStop() const { return m_startStop; }
+        quint64 getCaptureEpoch() const { return m_captureEpoch; }
 
-        static MsgStartStop* create(bool startStop)
+        static MsgStartStop* create(bool startStop, quint64 captureEpoch = 0)
         {
-            return new MsgStartStop(startStop);
+            return new MsgStartStop(startStop, captureEpoch);
         }
 
     private:
         bool m_startStop;
+        quint64 m_captureEpoch;
 
-        MsgStartStop(bool startStop) :
+        MsgStartStop(bool startStop, quint64 captureEpoch) :
             Message(),
-            m_startStop(startStop)
+            m_startStop(startStop),
+            m_captureEpoch(captureEpoch)
         { }
     };
 
@@ -122,18 +125,21 @@ public:
 
     public:
         bool isActive() const { return m_active; }
+        quint64 getCaptureEpoch() const { return m_captureEpoch; }
 
-        static MsgCaptureActive* create(bool active)
+        static MsgCaptureActive* create(bool active, quint64 captureEpoch = 0)
         {
-            return new MsgCaptureActive(active);
+            return new MsgCaptureActive(active, captureEpoch);
         }
 
     private:
         bool m_active;
+        quint64 m_captureEpoch;
 
-        MsgCaptureActive(bool active) :
+        MsgCaptureActive(bool active, quint64 captureEpoch) :
             Message(),
-            m_active(active)
+            m_active(active),
+            m_captureEpoch(captureEpoch)
         { }
     };
 
@@ -175,6 +181,7 @@ public:
 
     static int discardQueuedProcessFrames(MessageQueue& queue);
     static int discardQueuedProcessFramesOnCaptureActive(MessageQueue& queue);
+    static bool acceptsPipelineFrame(const CameraPipelineFramePtr& frame, bool captureActive, quint64 captureEpoch);
 
     class MsgDeleteStackFrame : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -272,6 +279,7 @@ private:
     QThread *m_postProcessorThread;
     CameraPostProcessor *m_postProcessor;
     CameraSettings m_settings;
+    quint64 m_captureEpoch;
 
     void start();
     void stop();

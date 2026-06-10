@@ -89,6 +89,12 @@ int Camera::discardQueuedProcessFramesOnCaptureActive(MessageQueue& queue)
     return ::discardQueuedProcessFrames(queue, true);
 }
 
+bool Camera::acceptsPipelineFrame(const CameraPipelineFramePtr& frame, bool captureActive, quint64 captureEpoch)
+{
+    return frame
+        && (frame->m_manualPreviewFrame || (captureActive && (frame->m_captureEpoch == captureEpoch)));
+}
+
 Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),
     m_workerThread(new QThread()),
@@ -112,7 +118,8 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_recorderThread(new QThread()),
     m_recorder(new CameraRecorder()),
     m_postProcessorThread(new QThread()),
-    m_postProcessor(new CameraPostProcessor())
+    m_postProcessor(new CameraPostProcessor()),
+    m_captureEpoch(0)
 {
     setObjectName(m_featureId);
     m_state = StIdle;
@@ -318,43 +325,44 @@ void Camera::start()
         return;
     }
 
+    const quint64 captureEpoch = ++m_captureEpoch;
     m_state = StRunning;
 
     if (m_worker) {
-        m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true));
+        m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true, captureEpoch));
     }
     if (m_framePreprocessor) {
-        m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_frameAligner) {
-        m_frameAligner->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_frameAligner->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_frameStacker) {
-        m_frameStacker->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_frameStacker->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_imageProcessor) {
-        m_imageProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_imageProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_motionDetector) {
-        m_motionDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_motionDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_starDetector) {
-        m_starDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_starDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_objectDetector) {
-        m_objectDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_objectDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_diffDetector) {
-        m_diffDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_diffDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_recorder) {
-        m_recorder->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_recorder->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_postProcessor) {
-        m_postProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true));
+        m_postProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
     if (m_guiMessageQueue) {
-        m_guiMessageQueue->push(Camera::MsgStartStop::create(true));
+        m_guiMessageQueue->push(Camera::MsgStartStop::create(true, captureEpoch));
     }
 }
 
@@ -365,43 +373,44 @@ void Camera::stop()
         return;
     }
 
+    const quint64 captureEpoch = ++m_captureEpoch;
     m_state = StIdle;
 
     if (m_guiMessageQueue) {
-        m_guiMessageQueue->push(Camera::MsgStartStop::create(false));
+        m_guiMessageQueue->push(Camera::MsgStartStop::create(false, captureEpoch));
     }
     if (m_postProcessor) {
-        m_postProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_postProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_recorder) {
-        m_recorder->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_recorder->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_diffDetector) {
-        m_diffDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_diffDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_objectDetector) {
-        m_objectDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_objectDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_starDetector) {
-        m_starDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_starDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_motionDetector) {
-        m_motionDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_motionDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_imageProcessor) {
-        m_imageProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_imageProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_frameStacker) {
-        m_frameStacker->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_frameStacker->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_frameAligner) {
-        m_frameAligner->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_frameAligner->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_framePreprocessor) {
-        m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false));
+        m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_worker) {
-        m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(false));
+        m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(false, captureEpoch));
     }
 }
 

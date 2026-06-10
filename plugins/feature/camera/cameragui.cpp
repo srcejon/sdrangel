@@ -353,6 +353,8 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (Camera::MsgStartStop::match(message))
     {
         const Camera::MsgStartStop& cfg = (Camera::MsgStartStop&) message;
+        m_captureActive = cfg.getStartStop();
+        m_captureEpoch = cfg.getCaptureEpoch();
         discardQueuedReportFrames(*getInputMessageQueue(), false);
 
         if (!sameCameraIdentity(previousCamera, selectedCameraFromSettings())) {
@@ -506,6 +508,10 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (CameraPostProcessor::MsgReportFrame::match(message))
     {
         const CameraPostProcessor::MsgReportFrame& report = (CameraPostProcessor::MsgReportFrame&) message;
+        if (!report.isManualPreviewFrame() && (!m_captureActive || (report.getCaptureEpoch() != m_captureEpoch))) {
+            return true;
+        }
+
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
@@ -3956,6 +3962,8 @@ void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionM
         frame->m_playbackPositionMs = playbackPositionMs;
         frame->m_playbackFrameNumber = playbackFrameNumber;
         populateFrameExposureMetadata(*frame, exposureTimeMs, hdrExposureIndex, hdrExposureCount, captureDateTime);
+        frame->m_captureEpoch = m_captureEpoch;
+        frame->m_manualPreviewFrame = !m_captureActive;
         frameAligner->submitFrame(frame);
     }
 

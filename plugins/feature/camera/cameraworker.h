@@ -84,18 +84,21 @@ public:
 
     public:
         bool getStartStop() const { return m_startStop; }
+        quint64 getCaptureEpoch() const { return m_captureEpoch; }
 
-        static MsgStartStop* create(bool startStop)
+        static MsgStartStop* create(bool startStop, quint64 captureEpoch = 0)
         {
-            return new MsgStartStop(startStop);
+            return new MsgStartStop(startStop, captureEpoch);
         }
 
     private:
         bool m_startStop;
+        quint64 m_captureEpoch;
 
-        MsgStartStop(bool startStop) :
+        MsgStartStop(bool startStop, quint64 captureEpoch) :
             Message(),
-            m_startStop(startStop)
+            m_startStop(startStop),
+            m_captureEpoch(captureEpoch)
         { }
     };
 
@@ -551,6 +554,7 @@ private:
     AvailableDeviceList m_availableDevices;
     QSet<QString> m_reportedFeatureErrorKeys;
     bool m_capturing;
+    quint64 m_captureEpoch;
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
     CameraFinder *m_cameraFinder;

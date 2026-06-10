@@ -55,6 +55,7 @@ private:
     CameraFrameAligner *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
+    quint64 m_captureEpoch = 0;
     cv::Mat m_darkCalibrationFrame;
     cv::Mat m_flatCalibrationFrame;
     cv::Mat m_biasCalibrationFrame;

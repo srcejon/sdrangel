@@ -76,6 +76,7 @@ bool CameraFramePreprocessor::handleMessage(const Message& cmd)
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         m_captureActive = activeMsg.isActive();
+        m_captureEpoch = activeMsg.getCaptureEpoch();
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrames.clear();
         m_droppedFrameCount = 0;
@@ -168,6 +169,9 @@ void CameraFramePreprocessor::submitFrame(const CameraPipelineFramePtr& frame)
     if (!frame) {
         return;
     }
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        return;
+    }
 
     bool schedule = false;
     {
@@ -227,7 +231,9 @@ void CameraFramePreprocessor::processNextFrame()
         }
     }
 
-    processNewFrame(frame);
+    if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        processNewFrame(frame);
+    }
 
     bool schedule = false;
     {
@@ -430,7 +436,7 @@ void CameraFramePreprocessor::processNewFrame(const CameraPipelineFramePtr& fram
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     if (m_settings.m_postProcessUseCuda && canUseCudaPreprocessing() && preprocessFrameCuda(*frame, frameMat))
     {
-        if (m_nextStage) {
+        if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
             m_nextStage->submitFrame(frame);
         }
         PROFILER_STOP(__FUNCTION__);
@@ -471,7 +477,7 @@ void CameraFramePreprocessor::preprocessFrame(const CameraPipelineFramePtr& fram
         frame->m_unprocessedImage = QImage();
     }
 
-    if (m_nextStage) {
+    if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
         m_nextStage->submitFrame(frame);
     }
 

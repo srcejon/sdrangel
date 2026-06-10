@@ -137,6 +137,8 @@ struct CameraPipelineFrame
     QImage m_rawInputImage;
     CameraHistogramData m_histogramData;
     QDateTime m_captureDateTime;
+    quint64 m_captureEpoch = 0;
+    bool m_manualPreviewFrame = false;
     qint64 m_playbackPositionMs = -1;
     int m_playbackFrameNumber = -1;
     double m_exposureTimeMs = 0.0;

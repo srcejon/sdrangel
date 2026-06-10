@@ -58,6 +58,7 @@ private:
     CameraDetectionStage *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
+    quint64 m_captureEpoch = 0;
     CameraPipelineFrame m_lastInputFrame;
     cv::Vec3d m_autoWhiteBalanceGains;
     bool m_autoWhiteBalanceInitialized;

@@ -58,6 +58,7 @@ private:
     CameraFrameStacker *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
+    quint64 m_captureEpoch = 0;
     // Single fixed alignment reference, holding the UNALIGNED first frame of the current
     // sequence. Storing one frame (instead of a rolling deque of warped output frames)
     // avoids accumulating registration error and the discontinuity that occurred when the

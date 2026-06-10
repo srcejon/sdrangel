@@ -108,12 +108,16 @@ public:
         float getPlateSolveDistortionK1() const { return m_plateSolve.m_distortionK1; }
         const QString& getPlateSolveCatalogSource() const { return m_plateSolve.m_catalogSource; }
         const QVector<PreviewTextLabel>& getPreviewTextLabels() const { return m_previewTextLabels; }
+        quint64 getCaptureEpoch() const { return m_captureEpoch; }
+        bool isManualPreviewFrame() const { return m_manualPreviewFrame; }
 
         static MsgReportFrame* create(const QImage& image,
                                       const CameraHistogramData& histogramData,
                                       const CameraPipelineStacking& stack,
                                       const QVector<CameraPipelineStarDetection>& starDetections,
                                       const CameraPipelinePlateSolve& plateSolve,
+                                      quint64 captureEpoch,
+                                      bool manualPreviewFrame,
                                       const QVector<PreviewTextLabel>& previewTextLabels)
         {
             return new MsgReportFrame(
@@ -122,6 +126,8 @@ public:
                 stack,
                 starDetections,
                 plateSolve,
+                captureEpoch,
+                manualPreviewFrame,
                 previewTextLabels);
         }
 
@@ -131,6 +137,8 @@ public:
         CameraPipelineStacking m_stack;
         QVector<CameraPipelineStarDetection> m_starDetections;
         CameraPipelinePlateSolve m_plateSolve;
+        quint64 m_captureEpoch;
+        bool m_manualPreviewFrame;
         QVector<PreviewTextLabel> m_previewTextLabels;
 
         MsgReportFrame(const QImage& image,
@@ -138,6 +146,8 @@ public:
                        const CameraPipelineStacking& stack,
                        const QVector<CameraPipelineStarDetection>& starDetections,
                        const CameraPipelinePlateSolve& plateSolve,
+                       quint64 captureEpoch,
+                       bool manualPreviewFrame,
                        const QVector<PreviewTextLabel>& previewTextLabels) :
             Message(),
             m_image(image),
@@ -145,6 +155,8 @@ public:
             m_stack(stack),
             m_starDetections(starDetections),
             m_plateSolve(plateSolve),
+            m_captureEpoch(captureEpoch),
+            m_manualPreviewFrame(manualPreviewFrame),
             m_previewTextLabels(previewTextLabels)
         { }
     };
@@ -177,6 +189,8 @@ private:
     CameraSettings m_settings;
     CameraPipelineFrame m_lastFrame;
     QDateTime m_captureDateTime;
+    bool m_captureActive = false;
+    quint64 m_captureEpoch = 0;
     QImage m_spectrumViewImage;
     Weather *m_weather = nullptr;
     float m_weatherTemperature = std::numeric_limits<float>::quiet_NaN();

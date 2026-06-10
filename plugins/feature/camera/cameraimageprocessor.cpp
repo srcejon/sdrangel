@@ -136,6 +136,7 @@ bool CameraImageProcessor::handleMessage(const Message& cmd)
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         m_captureActive = activeMsg.isActive();
+        m_captureEpoch = activeMsg.getCaptureEpoch();
         if (m_captureActive)
         {
             m_lastInputFrame = CameraPipelineFrame();
@@ -270,6 +271,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
 
     if (imageProcessingChanged && m_lastInputFrame.hasImageData()) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
+        frame->m_manualPreviewFrame = true;
         submitFrame(frame);
     }
 }
@@ -277,6 +279,9 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
 void CameraImageProcessor::submitFrame(const CameraPipelineFramePtr& frame)
 {
     if (!frame) {
+        return;
+    }
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
         return;
     }
 
@@ -315,7 +320,9 @@ void CameraImageProcessor::processNextFrame()
         }
     }
 
-    processNewFrame(frame);
+    if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        processNewFrame(frame);
+    }
 
     bool schedule = false;
     {
@@ -345,7 +352,7 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         ? computeHistogramData(*frame)
         : CameraHistogramData();
 
-    if (m_nextStage) {
+    if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
         m_nextStage->submitFrame(frame);
     }
 }

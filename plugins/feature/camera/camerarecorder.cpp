@@ -212,6 +212,7 @@ bool CameraRecorder::handleMessage(const Message& cmd)
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         m_captureActive = activeMsg.isActive();
+        m_captureEpoch = activeMsg.getCaptureEpoch();
         if (m_captureActive) {
             resetRecordingLimits();
         } else {
@@ -299,6 +300,9 @@ void CameraRecorder::submitFrame(const CameraPipelineFramePtr& frame)
     if (!frame) {
         return;
     }
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        return;
+    }
 
     bool schedule = false;
     {
@@ -341,7 +345,9 @@ void CameraRecorder::processNextFrames()
             m_pendingFrames.pop_front();
         }
 
-        processNewFrame(frame);
+        if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+            processNewFrame(frame);
+        }
     }
 }
 
@@ -440,7 +446,7 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
 
 void CameraRecorder::forwardFrame(const CameraPipelineFramePtr& frame)
 {
-    if (m_nextStage && frame) {
+    if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
         m_nextStage->submitFrame(frame);
     }
 }

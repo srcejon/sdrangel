@@ -28,6 +28,7 @@
 
 CameraDetectionStage::CameraDetectionStage() :
     m_nextStageQueue(nullptr),
+    m_captureActive(false),
     m_processingFrame(false)
 {
 }
@@ -64,6 +65,8 @@ bool CameraDetectionStage::handleMessage(const Message& cmd)
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         const bool active = activeMsg.isActive();
+        m_captureActive = active;
+        m_captureEpoch = activeMsg.getCaptureEpoch();
         captureActiveChanged(active);
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrame.reset();
@@ -112,6 +115,10 @@ void CameraDetectionStage::handleInputMessages()
 
 void CameraDetectionStage::forwardFrame(const CameraPipelineFramePtr& frame)
 {
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        return;
+    }
+
     if (m_nextStageQueue) {
         m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
@@ -121,6 +128,9 @@ void CameraDetectionStage::forwardFrame(const CameraPipelineFramePtr& frame)
 void CameraDetectionStage::submitFrame(const CameraPipelineFramePtr& frame)
 {
     if (!frame) {
+        return;
+    }
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
         return;
     }
 
@@ -159,7 +169,9 @@ void CameraDetectionStage::processNextFrame()
         }
     }
 
-    processNewFrame(frame);
+    if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        processNewFrame(frame);
+    }
 
     bool schedule = false;
     {

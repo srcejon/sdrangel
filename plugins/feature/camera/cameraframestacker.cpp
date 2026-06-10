@@ -582,6 +582,7 @@ bool CameraFrameStacker::handleMessage(const Message& cmd)
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         m_captureActive = activeMsg.isActive();
+        m_captureEpoch = activeMsg.getCaptureEpoch();
         if (m_captureActive) {
             resetFrameHistoryState();
         }
@@ -680,6 +681,9 @@ void CameraFrameStacker::submitFrame(const CameraPipelineFramePtr& frame)
     if (!frame) {
         return;
     }
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        return;
+    }
 
     bool schedule = false;
     {
@@ -740,7 +744,9 @@ void CameraFrameStacker::processNextFrame()
         }
     }
 
-    processNewFrame(frame);
+    if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        processNewFrame(frame);
+    }
 
     bool schedule = false;
     {
@@ -767,7 +773,7 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     if (passThroughFrame)
     {
         frame->m_stack.m_count = 1;
-        if (m_nextStage) {
+        if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
             m_nextStage->submitFrame(frame);
         }
         return;
@@ -800,7 +806,7 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     frame->m_stack.m_count = std::max(1, stackCount);
     m_lastFrameTemplate.reset(new CameraPipelineFrame(*frame));
 
-    if (m_nextStage) {
+    if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
         m_nextStage->submitFrame(frame);
     }
 }
@@ -974,6 +980,7 @@ void CameraFrameStacker::emitHistoryPreviewFrame()
     }
 
     CameraPipelineFramePtr previewFrame(new CameraPipelineFrame(*m_lastFrameTemplate));
+    previewFrame->m_manualPreviewFrame = true;
     previewFrame->m_image = outputImage;
     previewFrame->m_unprocessedImage = outputImage;
     previewFrame->clearCudaCache();

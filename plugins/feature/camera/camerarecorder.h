@@ -127,6 +127,7 @@ private:
     CameraPostProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
+    quint64 m_captureEpoch = 0;
     cv::VideoWriter m_calibratedVideoWriter;
     cv::VideoWriter m_processedVideoWriter;
     QSize m_calibratedVideoWriterSize;

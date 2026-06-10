@@ -57,6 +57,7 @@ CameraWorker::CameraWorker() :
     m_postProcessorInputMessageQueue(nullptr),
     m_availableDeviceHandler({}, QStringList{"spectrumview"}),
     m_capturing(false),
+    m_captureEpoch(0),
     m_captureTimer(this),
     m_networkManager(nullptr),
     m_cameraFinder(new CameraFinder(this)),
@@ -397,6 +398,8 @@ void CameraWorker::scheduleNextCaptureAfterFailure()
 void CameraWorker::populateFrameExposureMetadata(CameraPipelineFrame& frame) const
 {
     frame.m_captureDateTime = QDateTime::currentDateTime();
+    frame.m_captureEpoch = m_captureEpoch;
+    frame.m_manualPreviewFrame = false;
     frame.m_exposureTimeMs = currentCaptureExposureTimeMs();
     frame.m_hdrExposureIndex = currentHdrExposureIndex();
     frame.m_hdrExposureCount = currentHdrExposureCount();
@@ -814,6 +817,7 @@ bool CameraWorker::handleMessage(const Message& cmd)
     else if (MsgStartStop::match(cmd))
     {
         MsgStartStop& cfg = (MsgStartStop&) cmd;
+        m_captureEpoch = cfg.getCaptureEpoch();
         m_reportedFeatureErrorKeys.clear();
 
         if (cfg.getStartStop()) {

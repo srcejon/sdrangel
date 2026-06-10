@@ -435,6 +435,7 @@ void CameraStarDetector::applySettings(const CameraSettings& settings, const QLi
     if (!force && starDisplaySettingsChanged(settingsKeys) && m_lastInputFrame)
     {
         CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
+        frame->m_manualPreviewFrame = true;
         submitFrame(frame);
     }
 }

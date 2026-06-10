@@ -92,6 +92,7 @@ bool CameraFrameAligner::handleMessage(const Message& cmd)
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
         Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         m_captureActive = activeMsg.isActive();
+        m_captureEpoch = activeMsg.getCaptureEpoch();
         if (m_captureActive) {
             resetAlignmentState();
         }
@@ -168,6 +169,9 @@ void CameraFrameAligner::submitFrame(const CameraPipelineFramePtr& frame)
     if (!frame) {
         return;
     }
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        return;
+    }
 
     bool schedule = false;
     {
@@ -227,7 +231,9 @@ void CameraFrameAligner::processNextFrame()
         }
     }
 
-    processNewFrame(frame);
+    if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        processNewFrame(frame);
+    }
 
     bool schedule = false;
     {
@@ -266,7 +272,7 @@ void CameraFrameAligner::processNewFrame(const CameraPipelineFramePtr& frame)
         }
     }
 
-    if (m_nextStage) {
+    if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
         m_nextStage->submitFrame(frame);
     }
     PROFILER_STOP(__FUNCTION__);

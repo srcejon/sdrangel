@@ -158,6 +158,8 @@ private:
     RollupState m_rollupState;
     bool m_doApplySettings;
     bool m_forceSettings;
+    bool m_captureActive = false;
+    quint64 m_captureEpoch = 0;
     QTimer m_updateTimer;
     bool m_updatingMotionExclusionRectsTable = false;
     QList<qint64> m_pipelineFrameTimes;

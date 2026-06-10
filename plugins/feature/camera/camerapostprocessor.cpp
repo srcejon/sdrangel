@@ -641,6 +641,8 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     {
         Camera::MsgCaptureActive& activeMsg = (Camera::MsgCaptureActive&) cmd;
         Camera::discardQueuedProcessFrames(m_inputMessageQueue);
+        m_captureActive = activeMsg.isActive();
+        m_captureEpoch = activeMsg.getCaptureEpoch();
 
         if (activeMsg.isActive())
         {
@@ -648,7 +650,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         }
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrame.reset();
-        if (!activeMsg.isActive()) {
+        if (!m_captureActive) {
             m_processingFrame = false;
         }
 
@@ -721,6 +723,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     }
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
+        m_lastFrame.m_manualPreviewFrame = true;
         QVector<PreviewTextLabel> previewTextLabels;
         const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels);
         reportFrameToGUI(preview, m_lastFrame, previewTextLabels);
@@ -810,6 +813,9 @@ void CameraPostProcessor::submitFrame(const CameraPipelineFramePtr& frame)
     if (!frame) {
         return;
     }
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        return;
+    }
 
     bool schedule = false;
     {
@@ -846,7 +852,9 @@ void CameraPostProcessor::processNextFrame()
         }
     }
 
-    processNewFrame(frame);
+    if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        processNewFrame(frame);
+    }
 
     bool schedule = false;
     {
@@ -866,6 +874,9 @@ void CameraPostProcessor::processNextFrame()
 void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 {
     if (!frame || !frame->hasImageData()) {
+        return;
+    }
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
         return;
     }
 
@@ -889,6 +900,10 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     m_lastFrame = *frame;
 
+    if (!Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
+        return;
+    }
+
     reportFrameToGUI(preview, *frame, previewTextLabels);
 
     if (m_nextStageQueue) {
@@ -905,6 +920,8 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_stack,
             frame.m_starDetections,
             frame.m_plateSolve,
+            frame.m_captureEpoch,
+            frame.m_manualPreviewFrame,
             previewTextLabels));
     }
 }

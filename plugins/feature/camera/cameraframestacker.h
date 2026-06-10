@@ -94,6 +94,7 @@ private:
     CameraImageProcessor *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
+    quint64 m_captureEpoch = 0;
     std::deque<cv::Mat> m_stackFrameHistory;
     std::deque<StackFrameQuality> m_stackFrameQualityHistory;
     std::deque<QImage> m_stackFrameThumbnails;

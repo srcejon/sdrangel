@@ -677,6 +677,17 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                 + candidateTransform.at<double>(1, 2)));
     };
 
+    auto composeTransforms = [](const cv::Mat& referenceFromIntermediate, const cv::Mat& intermediateFromTarget) -> cv::Mat
+    {
+        cv::Mat reference3x3 = cv::Mat::eye(3, 3, CV_64F);
+        cv::Mat intermediate3x3 = cv::Mat::eye(3, 3, CV_64F);
+        referenceFromIntermediate.copyTo(reference3x3(cv::Rect(0, 0, 3, 2)));
+        intermediateFromTarget.copyTo(intermediate3x3(cv::Rect(0, 0, 3, 2)));
+
+        const cv::Mat composed3x3 = reference3x3 * intermediate3x3;
+        return composed3x3(cv::Rect(0, 0, 3, 2)).clone();
+    };
+
     auto matchForTransform = [&](const std::vector<cv::Point2f>& candidateReferenceStars,
                                  const cv::Mat& candidateTransform,
                                  std::vector<cv::Point2f>& candidateTargetPoints,
@@ -826,6 +837,70 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                         cv::Point2f(rollingReferenceStars[referenceIndex].x - targetStars[targetIndex].x,
                                     rollingReferenceStars[referenceIndex].y - targetStars[targetIndex].y)),
                         QStringLiteral("pair-rolling"));
+                }
+            }
+
+            if (matchedTargetPoints.size() < minTentativeMatches)
+            {
+                std::vector<cv::Point2f> rollingTargetPoints;
+                std::vector<cv::Point2f> rollingPreviousPoints;
+                double bestRollingRawDistance = std::numeric_limits<double>::infinity();
+                QString bestRollingRawSeedKind;
+
+                auto considerRawRollingTransform = [&](const cv::Mat& currentToPreviousTransform, const QString& seedKind)
+                {
+                    if (!isValidSeedTransform(currentToPreviousTransform)) {
+                        return;
+                    }
+
+                    std::vector<cv::Point2f> candidateTargetPoints;
+                    std::vector<cv::Point2f> candidatePreviousPoints;
+                    const double candidateDistance = matchForTransform(m_lastStarAlignmentTargetStars, currentToPreviousTransform, candidateTargetPoints, candidatePreviousPoints);
+
+                    if ((candidateTargetPoints.size() > rollingTargetPoints.size())
+                        || ((candidateTargetPoints.size() == rollingTargetPoints.size()) && (candidateDistance < bestRollingRawDistance)))
+                    {
+                        rollingTargetPoints = std::move(candidateTargetPoints);
+                        rollingPreviousPoints = std::move(candidatePreviousPoints);
+                        bestRollingRawDistance = candidateDistance;
+                        bestRollingRawSeedKind = seedKind;
+                    }
+                };
+
+                considerRawRollingTransform(makeTranslationTransform(cv::Point2f(static_cast<float>(shift.x), static_cast<float>(shift.y))), QStringLiteral("phase-raw-rolling"));
+
+                const size_t previousSeedCount = std::min(m_lastStarAlignmentTargetStars.size(), maxSeedStars);
+                for (size_t previousIndex = 0; previousIndex < previousSeedCount; ++previousIndex)
+                {
+                    for (size_t targetIndex = 0; targetIndex < targetSeedCount; ++targetIndex)
+                    {
+                        considerRawRollingTransform(makeTranslationTransform(
+                            cv::Point2f(m_lastStarAlignmentTargetStars[previousIndex].x - targetStars[targetIndex].x,
+                                        m_lastStarAlignmentTargetStars[previousIndex].y - targetStars[targetIndex].y)),
+                            QStringLiteral("pair-raw-rolling"));
+                    }
+                }
+
+                if (rollingTargetPoints.size() >= minTentativeMatches)
+                {
+                    cv::Mat rollingInliers;
+                    const cv::Mat currentToPreviousTransform = cv::estimateAffinePartial2D(
+                        rollingTargetPoints, rollingPreviousPoints, rollingInliers, cv::RANSAC, 3.0);
+
+                    if (isValidSeedTransform(currentToPreviousTransform))
+                    {
+                        matchedTargetPoints = rollingTargetPoints;
+                        matchedReferencePoints.clear();
+                        matchedReferencePoints.reserve(rollingPreviousPoints.size());
+                        for (const cv::Point2f& previousPoint : rollingPreviousPoints) {
+                            matchedReferencePoints.push_back(transformPoint(m_lastStarAlignmentTransform, previousPoint));
+                        }
+
+                        const cv::Mat composedTransform = composeTransforms(m_lastStarAlignmentTransform, currentToPreviousTransform);
+                        bestSeedShift = cv::Point2f(static_cast<float>(composedTransform.at<double>(0, 2)),
+                                                    static_cast<float>(composedTransform.at<double>(1, 2)));
+                        bestSeedKind = bestRollingRawSeedKind;
+                    }
                 }
             }
         }

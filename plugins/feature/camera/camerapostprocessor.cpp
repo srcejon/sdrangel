@@ -175,17 +175,6 @@ static QString formatSolvedStarLabel(const CameraSettings& settings, const Camer
     return label;
 }
 
-static bool hasDrawableStarLabels(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections)
-{
-    for (const CameraPipelineStarDetection& detection : starDetections)
-    {
-        if (!formatSolvedStarLabel(settings, detection).isEmpty()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static void drawOutlinedLabel(QPainter& painter,
                               const QRect& imageRect,
                               const QPointF& point,
@@ -245,6 +234,51 @@ static void drawOutlinedLabel(QPainter& painter,
     }
     drawLines(QPoint(0, 0), color);
     painter.restore();
+}
+
+static void appendOutlinedPreviewTextLabel(QVector<CameraPostProcessor::PreviewTextLabel> *labels,
+                                           const QString& text,
+                                           const QPointF& point,
+                                           const QColor& color,
+                                           const QString& fontFamily,
+                                           double fontPointSize)
+{
+    if (!labels || text.isEmpty()) {
+        return;
+    }
+
+    CameraPostProcessor::PreviewTextLabel label;
+    label.m_text = text;
+    label.m_position = point;
+    label.m_color = color;
+    label.m_fontFamily = fontFamily;
+    label.m_fontPointSize = fontPointSize;
+    label.m_positionIsTopLeft = false;
+    label.m_background = false;
+    labels->append(label);
+}
+
+static void appendTopLeftPreviewTextLabel(QVector<CameraPostProcessor::PreviewTextLabel> *labels,
+                                          const QString& text,
+                                          const QPointF& topLeft,
+                                          const QColor& color,
+                                          const QString& fontFamily,
+                                          double fontPointSize,
+                                          bool background)
+{
+    if (!labels || text.isEmpty()) {
+        return;
+    }
+
+    CameraPostProcessor::PreviewTextLabel label;
+    label.m_text = text;
+    label.m_position = topLeft;
+    label.m_color = color;
+    label.m_fontFamily = fontFamily;
+    label.m_fontPointSize = fontPointSize;
+    label.m_positionIsTopLeft = true;
+    label.m_background = background;
+    labels->append(label);
 }
 
 static SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
@@ -684,8 +718,9 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     }
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
-        const QImage preview = applyPostProcessing(m_lastFrame, false);
-        reportFrameToGUI(preview, m_lastFrame);
+        QVector<PreviewTextLabel> previewTextLabels;
+        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels);
+        reportFrameToGUI(preview, m_lastFrame, previewTextLabels);
     }
 }
 
@@ -724,8 +759,9 @@ void CameraPostProcessor::weatherUpdated(float temperature, float pressure, floa
 
     if (!m_lastFrame.m_image.isNull())
     {
-        const QImage preview = applyPostProcessing(m_lastFrame, false);
-        reportFrameToGUI(preview, m_lastFrame);
+        QVector<PreviewTextLabel> previewTextLabels;
+        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels);
+        reportFrameToGUI(preview, m_lastFrame, previewTextLabels);
     }
 }
 
@@ -835,12 +871,12 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
-    const bool hasStarLabels = hasDrawableStarLabels(m_settings, frame->m_starDetections);
-    const QImage preview = applyPostProcessing(*frame, !hasStarLabels);
-    if (hasStarLabels)
+    QVector<PreviewTextLabel> previewTextLabels;
+    const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels);
+    if (!previewTextLabels.isEmpty())
     {
         QImage processed = preview.copy();
-        applyStarLabelOverlay(processed, frame->m_starDetections);
+        applyPreviewTextLabels(processed, previewTextLabels);
         frame->m_postProcessedImage = processed;
     }
     else
@@ -850,14 +886,14 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     m_lastFrame = *frame;
 
-    reportFrameToGUI(preview, *frame);
+    reportFrameToGUI(preview, *frame, previewTextLabels);
 
     if (m_nextStageQueue) {
         m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
 }
 
-void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame)
+void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels)
 {
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportFrame::create(
@@ -865,7 +901,8 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_histogramData,
             frame.m_stack,
             frame.m_starDetections,
-            frame.m_plateSolve));
+            frame.m_plateSolve,
+            previewTextLabels));
     }
 }
 
@@ -891,7 +928,7 @@ void CameraPostProcessor::applyMotionOverlay(QImage& image, const QVector<QRect>
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections) const
+void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
 
@@ -931,20 +968,34 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
             labelRect.moveTop(std::min(image.height() - labelRect.height(), box.top()));
         }
 
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(textBackground);
-        painter.drawRect(labelRect);
-        painter.setPen(m_settings.m_yoloBoxColor);
-        painter.drawText(
-            labelRect.adjusted(3, 2, -3, -2),
-            Qt::AlignLeft | Qt::AlignVCenter,
-            label);
+        if (drawLabels)
+        {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(textBackground);
+            painter.drawRect(labelRect);
+            painter.setPen(m_settings.m_yoloBoxColor);
+            painter.drawText(
+                labelRect.adjusted(3, 2, -3, -2),
+                Qt::AlignLeft | Qt::AlignVCenter,
+                label);
+        }
+        else
+        {
+            appendTopLeftPreviewTextLabel(
+                previewTextLabels,
+                label,
+                labelRect.topLeft(),
+                m_settings.m_yoloBoxColor,
+                font.family(),
+                font.pointSizeF(),
+                true);
+        }
     }
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels) const
+void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
 
@@ -991,41 +1042,78 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
                 drawOutlinedLabel(painter, image.rect(), detection.m_center, solvedStarLabel, starColor, fontMetrics);
             }
         }
+        else
+        {
+            appendOutlinedPreviewTextLabel(
+                previewTextLabels,
+                formatSolvedStarLabel(m_settings, detection),
+                detection.m_center,
+                starColor,
+                font.family(),
+                font.pointSizeF());
+        }
     }
 
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyStarLabelOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections) const
+void CameraPostProcessor::applyPreviewTextLabels(QImage& image, const QVector<PreviewTextLabel>& labels) const
 {
     PROFILER_START();
 
-    if (starDetections.isEmpty()) {
+    if (labels.isEmpty())
+    {
+        PROFILER_STOP(__FUNCTION__);
         return;
     }
 
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::TextAntialiasing);
-    QFont font;
-    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
-        font.setFamily(m_settings.m_gridLabelFontFamily);
-    }
-    font.setPointSizeF(std::max(6.0, m_settings.m_gridLabelFontScale));
-    painter.setFont(font);
-    const QFontMetrics fontMetrics(font);
 
-    for (const CameraPipelineStarDetection& detection : starDetections)
+    for (const PreviewTextLabel& label : labels)
     {
-        const QString solvedStarLabel = formatSolvedStarLabel(m_settings, detection);
-        if (solvedStarLabel.isEmpty()) {
-            continue;
+        QFont font;
+        if (!label.m_fontFamily.isEmpty()) {
+            font.setFamily(label.m_fontFamily);
         }
+        font.setPointSizeF(std::max(6.0, label.m_fontPointSize));
+        painter.setFont(font);
+        const QFontMetrics fontMetrics(font);
 
-        const QColor starColor = detection.m_solved
-            ? m_settings.m_starColor
-            : QColor(160, 160, 160);
-        drawOutlinedLabel(painter, image.rect(), detection.m_center, solvedStarLabel, starColor, fontMetrics);
+        if (label.m_positionIsTopLeft)
+        {
+            const QStringList lines = label.m_text.split(QChar('\n'));
+            int textWidth = 0;
+            for (const QString& line : lines) {
+                textWidth = std::max(textWidth, fontMetrics.horizontalAdvance(line));
+            }
+            QRect labelRect(
+                qRound(label.m_position.x()),
+                qRound(label.m_position.y()),
+                textWidth + 6,
+                lines.size() * fontMetrics.lineSpacing() + 4);
+
+            if (label.m_background)
+            {
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(Qt::black);
+                painter.drawRect(labelRect);
+            }
+
+            painter.setPen(label.m_color);
+            painter.setBrush(Qt::NoBrush);
+            int baselineY = labelRect.top() + fontMetrics.ascent() + 2;
+            for (const QString& line : lines)
+            {
+                painter.drawText(labelRect.left() + 3, baselineY, line);
+                baselineY += fontMetrics.lineSpacing();
+            }
+        }
+        else
+        {
+            drawOutlinedLabel(painter, image.rect(), label.m_position, label.m_text, label.m_color, fontMetrics);
+        }
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1065,7 +1153,7 @@ cv::Mat CameraPostProcessor::wrapRgb888Image(const QImage& image)
     return CameraImageUtils::wrapRgb888Image(image);
 }
 
-void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const
+void CameraPostProcessor::applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
     const QString fmt = m_settings.m_dateTimeFormat.isEmpty()
@@ -1078,13 +1166,27 @@ void CameraPostProcessor::applyDateTimeOverlay(QImage& image) const
     }
     font.setPointSizeF(m_settings.m_overlayFontScale);
     const QFontMetrics fm(font);
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::TextAntialiasing);
-    painter.setFont(font);
-    painter.setPen(m_settings.m_dateTimeColor);
     const int x = m_settings.m_dateTimePosX;
-    const int y = m_settings.m_dateTimePosY + fm.ascent();
-    painter.drawText(x, y, text);
+    const int y = m_settings.m_dateTimePosY;
+    if (drawLabel)
+    {
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::TextAntialiasing);
+        painter.setFont(font);
+        painter.setPen(m_settings.m_dateTimeColor);
+        painter.drawText(x, y + fm.ascent(), text);
+    }
+    else
+    {
+        appendTopLeftPreviewTextLabel(
+            previewTextLabels,
+            text,
+            QPointF(x, y),
+            m_settings.m_dateTimeColor,
+            font.family(),
+            font.pointSizeF(),
+            false);
+    }
     PROFILER_STOP(__FUNCTION__);
 }
 
@@ -1121,7 +1223,7 @@ QString CameraPostProcessor::expandOverlayTextTemplate() const
     return overlayText;
 }
 
-void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
+void CameraPostProcessor::applySkyGridOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
 
@@ -1170,7 +1272,12 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
 
             QPointF labelPoint;
             if (projector.projectAltAz(m_settings.m_azimuth, static_cast<double>(altitude), labelPoint)) {
-                drawOutlinedLabel(painter, image.rect(), labelPoint, formatSignedDegrees(static_cast<double>(altitude)), m_settings.m_altAzGridColor, fontMetrics);
+                const QString label = formatSignedDegrees(static_cast<double>(altitude));
+                if (drawLabels) {
+                    drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_altAzGridColor, fontMetrics);
+                } else {
+                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, m_settings.m_altAzGridColor, font.family(), font.pointSizeF());
+                }
             }
         }
 
@@ -1201,7 +1308,12 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
             }
 
             if (foundLabelPoint) {
-                drawOutlinedLabel(painter, image.rect(), labelPoint, formatAzimuthDegrees(static_cast<double>(azimuth)), m_settings.m_altAzGridColor, fontMetrics);
+                const QString label = formatAzimuthDegrees(static_cast<double>(azimuth));
+                if (drawLabels) {
+                    drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_altAzGridColor, fontMetrics);
+                } else {
+                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, m_settings.m_altAzGridColor, font.family(), font.pointSizeF());
+                }
             }
         }
     }
@@ -1249,7 +1361,12 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
                     labelElevation)
                 && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
             {
-                drawOutlinedLabel(painter, image.rect(), labelPoint, formatSignedDegrees(static_cast<double>(declination)), m_settings.m_equatorialGridColor, fontMetrics);
+                const QString label = formatSignedDegrees(static_cast<double>(declination));
+                if (drawLabels) {
+                    drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_equatorialGridColor, fontMetrics);
+                } else {
+                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, m_settings.m_equatorialGridColor, font.family(), font.pointSizeF());
+                }
             }
         }
 
@@ -1292,7 +1409,12 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image) const
                     labelElevation)
                 && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
             {
-                drawOutlinedLabel(painter, image.rect(), labelPoint, formatRightAscensionDegrees(static_cast<double>(rightAscension)), m_settings.m_equatorialGridColor, fontMetrics);
+                const QString label = formatRightAscensionDegrees(static_cast<double>(rightAscension));
+                if (drawLabels) {
+                    drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_equatorialGridColor, fontMetrics);
+                } else {
+                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, m_settings.m_equatorialGridColor, font.family(), font.pointSizeF());
+                }
             }
         }
     }
@@ -1335,7 +1457,7 @@ void CameraPostProcessor::applyConstellationOverlay(QImage& image) const
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
+void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
 
@@ -1388,7 +1510,17 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image) const
             continue;
         }
 
-        drawOutlinedLabel(painter, image.rect(), point, object.m_label, m_settings.m_trackObjectColor, fontMetrics);
+        if (drawLabels) {
+            drawOutlinedLabel(painter, image.rect(), point, object.m_label, m_settings.m_trackObjectColor, fontMetrics);
+        } else {
+            appendOutlinedPreviewTextLabel(
+                previewTextLabels,
+                object.m_label,
+                point,
+                m_settings.m_trackObjectColor,
+                font.family(),
+                font.pointSizeF());
+        }
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1412,7 +1544,7 @@ void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlay
     PROFILER_STOP(__FUNCTION__);
 }
 
-QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame, bool drawStarLabels)
+QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame, bool drawPreviewText, QVector<PreviewTextLabel> *previewTextLabels)
 {
     PROFILER_START();
 
@@ -1451,13 +1583,13 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     QImage result = input.convertToFormat(QImage::Format_RGB32);
     if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(result, frame.m_motionBoxes); }
-    if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(result, frame.m_detections); }
+    if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(result, frame.m_detections, drawPreviewText, previewTextLabels); }
     if (needsSpectrumOverlay) { applySpectrumOverlay(result); }
-    if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections, drawStarLabels); }
-    if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result); }
+    if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); }
+    if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result, drawPreviewText, previewTextLabels); }
     if (m_settings.m_constellation) { applyConstellationOverlay(result); }
-    if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result); }
-    if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result); }
+    if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result, drawPreviewText, previewTextLabels); }
+    if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result, drawPreviewText, previewTextLabels); }
     if (needsTextOverlay) { applyTextOverlay(result, overlayTextDocument); }
 
     PROFILER_STOP("CameraPostProcessor::applyPostProcessing");

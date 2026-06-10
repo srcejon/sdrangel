@@ -202,6 +202,7 @@ private:
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
     QVector<CameraPipelineStarDetection> m_lastStarDetections;
+    QVector<CameraPostProcessor::PreviewTextLabel> m_lastPreviewTextLabels;
     QList<CameraDetectionHistoryEntry> m_detectionHistory;
     int m_lastStackCount = 1;
     int m_lastStackQueuedCount = 0;
@@ -341,6 +342,7 @@ private:
     static void updateColorButton(QToolButton* btn, const QColor& color);
     void setupQtCapture();
     void cleanupQtCapture();
+    bool ensureVideoFilePlayer(bool startPlayback);
     int imageSequenceIntervalMs() const;
     qint64 imageSequenceDurationMs() const;
     void updatePlaybackPositionLabel(qint64 videoPositionMs = -1);

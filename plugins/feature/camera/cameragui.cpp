@@ -218,25 +218,6 @@ QUrl simbadUrlForStarDetection(const CameraPipelineStarDetection& star, const QS
     return url;
 }
 
-QString previewStarLabel(const CameraSettings& settings, const CameraPipelineStarDetection& detection)
-{
-    if (!detection.m_solved || detection.m_label.trimmed().isEmpty()) {
-        return QString();
-    }
-
-    QString label = detection.m_label.trimmed();
-    if (settings.m_plateSolveLabelMode >= CameraSettings::PlateSolveLabelNameMagnitude) {
-        label += QStringLiteral("\nmag %1").arg(detection.m_catalogMagnitude, 0, 'f', 1);
-    }
-    if ((settings.m_plateSolveLabelMode >= CameraSettings::PlateSolveLabelNameMagnitudeSpectralType)
-        && !detection.m_catalogSpectralType.trimmed().isEmpty())
-    {
-        label += QStringLiteral("\n%1").arg(detection.m_catalogSpectralType.trimmed());
-    }
-
-    return label;
-}
-
 }
 
 CameraGUI* CameraGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
@@ -499,6 +480,7 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastImage = report.getImage();
         m_lastHistogramData = report.getHistogramData();
         m_lastStarDetections = report.getStarDetections();
+        m_lastPreviewTextLabels = report.getPreviewTextLabels();
         m_lastStackCount = report.getStackCount();
         m_lastStackQueuedCount = report.getStackQueuedCount();
         m_lastStackDroppedCount = report.getStackDroppedCount();
@@ -1632,10 +1614,30 @@ void CameraGUI::displaySettings()
     settingsUI()->spectrumOffsetYSlider->setValue(m_settings.m_spectrumOffsetY);
     settingsUI()->spectrumOffsetYValue->setText(QString::number(m_settings.m_spectrumOffsetY));
     settingsUI()->spectrumScaleSpin->setValue(m_settings.m_spectrumScale);
-    ui->yoloButton->setChecked(m_settings.m_yoloEnabled);
-    settingsUI()->yoloModelPathCombo->setCurrentText(m_settings.m_yoloModelPath);
-    settingsUI()->yoloLabelsPathCombo->setCurrentText(m_settings.m_yoloLabelsPath);
-    updateYoloButtonEnabled();
+    {
+        const bool yoloEnabled = m_settings.m_yoloEnabled;
+        QComboBox *modelPathCombo = settingsUI()->yoloModelPathCombo;
+        QComboBox *labelsPathCombo = settingsUI()->yoloLabelsPathCombo;
+        const QSignalBlocker yoloButtonBlocker(ui->yoloButton);
+        const QSignalBlocker modelComboBlocker(modelPathCombo);
+        const QSignalBlocker labelsComboBlocker(labelsPathCombo);
+        QLineEdit *modelLineEdit = modelPathCombo->lineEdit();
+        QLineEdit *labelsLineEdit = labelsPathCombo->lineEdit();
+        const bool modelLineEditWasBlocked = modelLineEdit && modelLineEdit->blockSignals(true);
+        const bool labelsLineEditWasBlocked = labelsLineEdit && labelsLineEdit->blockSignals(true);
+
+        modelPathCombo->setCurrentText(m_settings.m_yoloModelPath);
+        labelsPathCombo->setCurrentText(m_settings.m_yoloLabelsPath);
+        updateYoloButtonEnabled();
+        ui->yoloButton->setChecked(yoloEnabled && ui->yoloButton->isEnabled());
+
+        if (modelLineEdit) {
+            modelLineEdit->blockSignals(modelLineEditWasBlocked);
+        }
+        if (labelsLineEdit) {
+            labelsLineEdit->blockSignals(labelsLineEditWasBlocked);
+        }
+    }
     settingsUI()->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
     settingsUI()->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
     settingsUI()->yoloTargetCombo->setCurrentIndex((int) m_settings.m_yoloDnnTarget);
@@ -1836,26 +1838,25 @@ void CameraGUI::updateStarLabelPreview()
 {
     clearStarLabelPreview();
 
-    if (!m_imageScene || m_lastImage.isNull() || m_lastStarDetections.isEmpty()) {
+    if (!m_imageScene || m_lastImage.isNull() || m_lastPreviewTextLabels.isEmpty()) {
         return;
     }
 
-    QFont font;
-    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
-        font.setFamily(m_settings.m_gridLabelFontFamily);
-    }
-    font.setPointSizeF(std::max(6.0, m_settings.m_gridLabelFontScale));
-    const QFontMetrics fontMetrics(font);
     const QRect imageRect(QPoint(0, 0), m_lastImage.size());
 
-    for (const CameraPipelineStarDetection& detection : m_lastStarDetections)
+    for (const CameraPostProcessor::PreviewTextLabel& previewLabel : m_lastPreviewTextLabels)
     {
-        const QString label = previewStarLabel(m_settings, detection);
-        if (label.isEmpty()) {
+        if (previewLabel.m_text.isEmpty()) {
             continue;
         }
 
-        const QStringList lines = label.split(QChar('\n'));
+        QFont font;
+        if (!previewLabel.m_fontFamily.isEmpty()) {
+            font.setFamily(previewLabel.m_fontFamily);
+        }
+        font.setPointSizeF(std::max(6.0, previewLabel.m_fontPointSize));
+        const QFontMetrics fontMetrics(font);
+        const QStringList lines = previewLabel.m_text.split(QChar('\n'));
         int textWidth = 0;
         for (const QString& line : lines) {
             textWidth = std::max(textWidth, fontMetrics.horizontalAdvance(line));
@@ -1864,30 +1865,56 @@ void CameraGUI::updateStarLabelPreview()
             continue;
         }
 
-        const QPointF labelPoint = detection.m_center + QPointF(4.0, -4.0);
         const int lineSpacing = fontMetrics.lineSpacing();
-        QRect targetRect(
-            qRound(labelPoint.x()),
-            qRound(labelPoint.y()) - lines.size() * lineSpacing,
-            textWidth + 4,
-            lines.size() * lineSpacing + 2);
+        QRect targetRect;
+
+        if (previewLabel.m_positionIsTopLeft)
+        {
+            targetRect = QRect(
+                qRound(previewLabel.m_position.x()),
+                qRound(previewLabel.m_position.y()),
+                textWidth + 6,
+                lines.size() * lineSpacing + 4);
+        }
+        else
+        {
+            const QPointF labelPoint = previewLabel.m_position + QPointF(4.0, -4.0);
+            targetRect = QRect(
+                qRound(labelPoint.x()),
+                qRound(labelPoint.y()) - lines.size() * lineSpacing,
+                textWidth + 4,
+                lines.size() * lineSpacing + 2);
+        }
 
         if (!imageRect.adjusted(0, 0, -1, -1).intersects(targetRect)) {
             continue;
         }
 
-        const QColor starColor = detection.m_solved
-            ? m_settings.m_starColor
-            : QColor(160, 160, 160);
-        QGraphicsSimpleTextItem *shadowItem = m_imageScene->addSimpleText(label, font);
-        shadowItem->setPos(targetRect.topLeft() + QPointF(1.0, 1.0));
-        shadowItem->setBrush(QBrush(Qt::black));
-        shadowItem->setZValue(1.5);
-        m_starLabelItems.append(shadowItem);
+        const QPointF textPos = previewLabel.m_positionIsTopLeft
+            ? QPointF(targetRect.left() + 3.0, targetRect.top() + 2.0)
+            : targetRect.topLeft();
 
-        QGraphicsSimpleTextItem *item = m_imageScene->addSimpleText(label, font);
-        item->setPos(targetRect.topLeft());
-        item->setBrush(QBrush(starColor));
+        if (previewLabel.m_background)
+        {
+            QGraphicsRectItem *backgroundItem = m_imageScene->addRect(
+                targetRect,
+                QPen(Qt::NoPen),
+                QBrush(Qt::black));
+            backgroundItem->setZValue(1.45);
+            m_starLabelItems.append(backgroundItem);
+        }
+        else
+        {
+            QGraphicsSimpleTextItem *shadowItem = m_imageScene->addSimpleText(previewLabel.m_text, font);
+            shadowItem->setPos(textPos + QPointF(1.0, 1.0));
+            shadowItem->setBrush(QBrush(Qt::black));
+            shadowItem->setZValue(1.5);
+            m_starLabelItems.append(shadowItem);
+        }
+
+        QGraphicsSimpleTextItem *item = m_imageScene->addSimpleText(previewLabel.m_text, font);
+        item->setPos(textPos);
+        item->setBrush(QBrush(previewLabel.m_color));
         item->setZValue(1.6);
         m_starLabelItems.append(item);
     }
@@ -3179,6 +3206,77 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 }
 #endif // Qt 5
 
+bool CameraGUI::ensureVideoFilePlayer(bool startPlayback)
+{
+    if (!m_settings.isVideoFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
+        return false;
+    }
+
+    if (m_mediaPlayer)
+    {
+        if (startPlayback) {
+            m_mediaPlayer->play();
+        }
+        return true;
+    }
+
+    m_mediaPlayerDurationMs = 0;
+    {
+        QSignalBlocker blocker(ui->playbackPositionSlider);
+        ui->playbackPositionSlider->setValue(0);
+    }
+    updateVideoFileControls();
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    m_pendingQtVideoFrame = QVideoFrame();
+    m_processingQtVideoFrame = false;
+    m_mediaPlayer = new QMediaPlayer(this);
+    m_videoSink = new QVideoSink(this);
+    m_mediaPlayer->setVideoOutput(m_videoSink);
+    connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
+    connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &CameraGUI::handleMediaPlayerPositionChanged);
+    connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this, &CameraGUI::handleMediaPlayerDurationChanged);
+    connect(m_mediaPlayer, &QMediaPlayer::playbackStateChanged, this, &CameraGUI::handleMediaPlayerPlaybackStateChanged);
+    m_mediaPlayer->setSource(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath));
+    m_mediaPlayer->setLoops(m_settings.m_videoLoop ? QMediaPlayer::Infinite : 1);
+#else
+    m_videoSurface = new CameraVideoSurface(this);
+    m_mediaPlayer = new QMediaPlayer(this, QMediaPlayer::VideoSurface);
+    m_mediaPlayer->setVideoOutput(m_videoSurface);
+    connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
+            this, &CameraGUI::onQt5VideoFrame, Qt::QueuedConnection);
+    connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &CameraGUI::handleMediaPlayerPositionChanged);
+    connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this, &CameraGUI::handleMediaPlayerDurationChanged);
+    connect(m_mediaPlayer, &QMediaPlayer::stateChanged, this, &CameraGUI::handleMediaPlayerPlaybackStateChanged);
+    connect(m_mediaPlayer, &QMediaPlayer::mediaStatusChanged, this,
+            [this](QMediaPlayer::MediaStatus status)
+            {
+                if ((status == QMediaPlayer::EndOfMedia) && m_settings.m_videoLoop && m_mediaPlayer)
+                {
+                    m_mediaPlayer->setPosition(0);
+                    m_mediaPlayer->play();
+                }
+            });
+    m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath)));
+#endif
+    m_mediaPlayer->setPlaybackRate(m_settings.m_videoPlaybackRate);
+
+    m_qtZoomSupported = false;
+    m_qtManualExposureSupported = false;
+    m_qtIsoSensitivitySupported = false;
+    m_qtWhiteBalanceModeSupported = false;
+    m_qtExposureCompensationSupported = false;
+    updateCameraSettingsVisibility();
+
+    if (startPlayback) {
+        m_mediaPlayer->play();
+    } else {
+        m_mediaPlayer->pause();
+    }
+
+    return true;
+}
+
 void CameraGUI::setupQtCapture()
 {
     cleanupQtCapture();
@@ -3221,37 +3319,7 @@ void CameraGUI::setupQtCapture()
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     if (m_settings.isVideoFileCamera())
     {
-        if (m_settings.m_videoFileCameraPath.isEmpty()) {
-            return;
-        }
-
-        m_pendingQtVideoFrame = QVideoFrame();
-        m_processingQtVideoFrame = false;
-        m_mediaPlayerDurationMs = 0;
-        {
-            QSignalBlocker blocker(ui->playbackPositionSlider);
-            ui->playbackPositionSlider->setValue(0);
-        }
-        updateVideoFileControls();
-
-        m_mediaPlayer = new QMediaPlayer(this);
-        m_videoSink = new QVideoSink(this);
-        m_mediaPlayer->setVideoOutput(m_videoSink);
-        connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
-        connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &CameraGUI::handleMediaPlayerPositionChanged);
-        connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this, &CameraGUI::handleMediaPlayerDurationChanged);
-        connect(m_mediaPlayer, &QMediaPlayer::playbackStateChanged, this, &CameraGUI::handleMediaPlayerPlaybackStateChanged);
-        m_mediaPlayer->setSource(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath));
-        m_mediaPlayer->setLoops(m_settings.m_videoLoop ? QMediaPlayer::Infinite : 1);
-        m_mediaPlayer->setPlaybackRate(m_settings.m_videoPlaybackRate);
-        m_mediaPlayer->play();
-
-        m_qtZoomSupported = false;
-        m_qtManualExposureSupported = false;
-        m_qtIsoSensitivitySupported = false;
-        m_qtWhiteBalanceModeSupported = false;
-        m_qtExposureCompensationSupported = false;
-        updateCameraSettingsVisibility();
+        ensureVideoFilePlayer(true);
         return;
     }
 
@@ -3431,44 +3499,7 @@ void CameraGUI::setupQtCapture()
 
     if (m_settings.isVideoFileCamera())
     {
-        if (m_settings.m_videoFileCameraPath.isEmpty()) {
-            return;
-        }
-
-        m_mediaPlayerDurationMs = 0;
-        {
-            QSignalBlocker blocker(ui->playbackPositionSlider);
-            ui->playbackPositionSlider->setValue(0);
-        }
-        updateVideoFileControls();
-
-        m_videoSurface = new CameraVideoSurface(this);
-        m_mediaPlayer = new QMediaPlayer(this, QMediaPlayer::VideoSurface);
-        m_mediaPlayer->setVideoOutput(m_videoSurface);
-        connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
-                this, &CameraGUI::onQt5VideoFrame, Qt::QueuedConnection);
-        connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &CameraGUI::handleMediaPlayerPositionChanged);
-        connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this, &CameraGUI::handleMediaPlayerDurationChanged);
-        connect(m_mediaPlayer, &QMediaPlayer::stateChanged, this, &CameraGUI::handleMediaPlayerPlaybackStateChanged);
-        connect(m_mediaPlayer, &QMediaPlayer::mediaStatusChanged, this,
-                [this](QMediaPlayer::MediaStatus status)
-                {
-                    if ((status == QMediaPlayer::EndOfMedia) && m_settings.m_videoLoop && m_mediaPlayer)
-                    {
-                        m_mediaPlayer->setPosition(0);
-                        m_mediaPlayer->play();
-                    }
-                });
-        m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath)));
-        m_mediaPlayer->setPlaybackRate(m_settings.m_videoPlaybackRate);
-        m_mediaPlayer->play();
-
-        m_qtZoomSupported = false;
-        m_qtManualExposureSupported = false;
-        m_qtIsoSensitivitySupported = false;
-        m_qtWhiteBalanceModeSupported = false;
-        m_qtExposureCompensationSupported = false;
-        updateCameraSettingsVisibility();
+        ensureVideoFilePlayer(true);
         return;
     }
 
@@ -4325,15 +4356,13 @@ bool CameraGUI::prepareImageSequenceManualStep(bool *wasLoaded)
         ui->playPauseVideo->setChecked(false);
     }
 
-    if (!m_imageSequenceLoaded && (m_camera->getState() == Feature::StRunning))
-    {
-        setupQtCapture();
-        m_imageSequenceTimer.stop();
-        QSignalBlocker blocker(ui->playPauseVideo);
-        ui->playPauseVideo->setChecked(false);
+    if (!m_settings.m_imageFileCameraPaths.isEmpty()) {
+        m_mediaPlayerDurationMs = imageSequenceDurationMs();
+        updateVideoFileControls();
+        return true;
     }
 
-    return m_imageSequenceLoaded && !m_settings.m_imageFileCameraPaths.isEmpty();
+    return false;
 }
 
 
@@ -4694,11 +4723,7 @@ void CameraGUI::on_stepBackVideo_clicked()
         return;
     }
 
-    if (!m_mediaPlayer && (m_camera->getState() == Feature::StRunning)) {
-        setupQtCapture();
-    }
-
-    if (!m_mediaPlayer) {
+    if (!ensureVideoFilePlayer(false)) {
         return;
     }
 
@@ -4726,11 +4751,7 @@ void CameraGUI::on_stepForwardVideo_clicked()
         return;
     }
 
-    if (!m_mediaPlayer && (m_camera->getState() == Feature::StRunning)) {
-        setupQtCapture();
-    }
-
-    if (!m_mediaPlayer) {
+    if (!ensureVideoFilePlayer(false)) {
         return;
     }
 
@@ -4836,7 +4857,11 @@ void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)
         return;
     }
 
-    if (!m_mediaPlayer || (m_mediaPlayerDurationMs <= 0)) {
+    if (!m_mediaPlayer && !ensureVideoFilePlayer(false)) {
+        return;
+    }
+
+    if (m_mediaPlayerDurationMs <= 0) {
         return;
     }
 

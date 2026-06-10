@@ -24,7 +24,9 @@
 #include <QHash>
 #include <QMutex>
 #include <QImage>
+#include <QColor>
 #include <QDateTime>
+#include <QPointF>
 #include <QTextDocument>
 
 #include <opencv2/core/core.hpp>
@@ -45,6 +47,17 @@ class CameraPostProcessor : public QObject
 {
     Q_OBJECT
 public:
+
+    struct PreviewTextLabel
+    {
+        QString m_text;
+        QPointF m_position;
+        QColor m_color;
+        QString m_fontFamily;
+        double m_fontPointSize = 9.0;
+        bool m_positionIsTopLeft = false;
+        bool m_background = false;
+    };
 
     class MsgSpectrumFrame : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -94,19 +107,22 @@ public:
         float getPlateSolveCenterOffsetY() const { return m_plateSolve.m_centerOffsetY; }
         float getPlateSolveDistortionK1() const { return m_plateSolve.m_distortionK1; }
         const QString& getPlateSolveCatalogSource() const { return m_plateSolve.m_catalogSource; }
+        const QVector<PreviewTextLabel>& getPreviewTextLabels() const { return m_previewTextLabels; }
 
         static MsgReportFrame* create(const QImage& image,
                                       const CameraHistogramData& histogramData,
                                       const CameraPipelineStacking& stack,
                                       const QVector<CameraPipelineStarDetection>& starDetections,
-                                      const CameraPipelinePlateSolve& plateSolve)
+                                      const CameraPipelinePlateSolve& plateSolve,
+                                      const QVector<PreviewTextLabel>& previewTextLabels)
         {
             return new MsgReportFrame(
                 image,
                 histogramData,
                 stack,
                 starDetections,
-                plateSolve);
+                plateSolve,
+                previewTextLabels);
         }
 
     private:
@@ -115,18 +131,21 @@ public:
         CameraPipelineStacking m_stack;
         QVector<CameraPipelineStarDetection> m_starDetections;
         CameraPipelinePlateSolve m_plateSolve;
+        QVector<PreviewTextLabel> m_previewTextLabels;
 
         MsgReportFrame(const QImage& image,
                        const CameraHistogramData& histogramData,
                        const CameraPipelineStacking& stack,
                        const QVector<CameraPipelineStarDetection>& starDetections,
-                       const CameraPipelinePlateSolve& plateSolve) :
+                       const CameraPipelinePlateSolve& plateSolve,
+                       const QVector<PreviewTextLabel>& previewTextLabels) :
             Message(),
             m_image(image),
             m_histogramData(histogramData),
             m_stack(stack),
             m_starDetections(starDetections),
-            m_plateSolve(plateSolve)
+            m_plateSolve(plateSolve),
+            m_previewTextLabels(previewTextLabels)
         { }
     };
 
@@ -173,23 +192,26 @@ private:
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
-    [[nodiscard]] QImage applyPostProcessing(const CameraPipelineFrame& frame, bool drawStarLabels = true);
+    [[nodiscard]] QImage applyPostProcessing(
+        const CameraPipelineFrame& frame,
+        bool drawPreviewText = true,
+        QVector<PreviewTextLabel> *previewTextLabels = nullptr);
     void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes) const;
-    void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections) const;
-    void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels) const;
-    void applyStarLabelOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections) const;
+    void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
+    void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
+    void applyPreviewTextLabels(QImage& image, const QVector<PreviewTextLabel>& labels) const;
     void applySpectrumOverlay(QImage& image) const;
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
-    void applySkyGridOverlay(QImage& image) const;
+    void applySkyGridOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyConstellationOverlay(QImage& image) const;
-    void applyTrackedObjectOverlay(QImage& image) const;
-    void applyDateTimeOverlay(QImage& image) const;
+    void applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
+    void applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     [[nodiscard]] QString expandOverlayTextTemplate() const;
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void restartWeatherUpdates();
-    void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame);
+    void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels = {});
 private slots:
     void handleInputMessages();
     void handlePipeMessageQueue(MessageQueue* messageQueue);

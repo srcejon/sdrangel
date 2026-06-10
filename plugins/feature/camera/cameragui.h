@@ -43,7 +43,6 @@
 #include "settings/rollupstate.h"
 #include "camerainfo.h"
 #include "cameradetectionhistoryentry.h"
-#include "cameraobjectdevicesettingsgui.h"
 #include "camerasettings.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
@@ -238,8 +237,6 @@ private:
     bool m_asiRaw16Supported;
     bool m_asiRaw8Supported;
     QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
-    QList<CameraObjectDeviceSettingsGUI *> m_actionDeviceSettingsGUIs;
-
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
     QList<QGraphicsItem *> m_starLabelItems;
@@ -360,12 +357,6 @@ private:
     void applyQtCameraSettings(const QList<QString>& settingsKeys, bool force);
     void applyImageToolTip();
     void applyVideoToolTip();
-    QStringList loadActionObjectClasses() const;
-    void saveCurrentActionClassSettings();
-    void populateActionClasses();
-    void rebuildActionTabsForCurrentClass();
-    void updateActionControls();
-    void applyActionSettings();
     void updatePostProcessWhiteBalanceControls();
     void setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description,
                            const QString& alpacaHost = QString(), quint16 alpacaPort = 0);
@@ -667,10 +658,6 @@ private slots:
     void on_yoloLabelsPathEdit_editingFinished();
     void on_yoloLabelsPathButton_clicked();
     void on_yoloTargetCombo_currentIndexChanged(int index);
-    void on_actionsClassCombo_currentIndexChanged(int index);
-    void on_actionsDisappearDebounceSpin_valueChanged(double value);
-    void on_actionsAddButton_clicked();
-    void on_actionsTabWidget_tabCloseRequested(int index);
     void on_yoloConfSpin_valueChanged(double value);
     void on_yoloNmsSpin_valueChanged(double value);
     void on_yoloTileLargeImagesCheck_toggled(bool checked);

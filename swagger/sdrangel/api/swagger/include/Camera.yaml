@@ -798,10 +798,6 @@ CameraSettings:
     yoloBoxColor:
       description: "Default bounding box colour as 0xRRGGBB integer (used when no per-class colour is set)"
       type: integer
-    yoloDisappearDebounce:
-      description: "Seconds a class must remain absent before it is treated as disappeared"
-      type: number
-      format: double
     yoloTileLargeImages:
       description: "Tile images larger than the YOLO model input size before inference (1 for yes, 0 for no)"
       type: integer
@@ -817,11 +813,6 @@ CameraSettings:
           * 3 - TensorRT FP32
           * 4 - TensorRT FP16
       type: integer
-    objectDeviceSettings:
-      description: "Per-YOLO-class device control settings"
-      type: array
-      items:
-        $ref: "http://swgserver:8081/api/swagger/include/Camera.yaml#/CameraObjectClassSettings"
     audioMute:
       description: "Silence captured camera audio (1 for yes, 0 for no)"
       type: integer
@@ -861,62 +852,6 @@ CameraSettings:
       $ref: "http://swgserver:8081/api/swagger/include/RollupState.yaml#/RollupState"
     workspaceIndex:
       type: integer
-
-CameraObjectClassSettings:
-  description: "Device control settings for a single YOLO object class"
-  properties:
-    className:
-      description: "YOLO class name this entry applies to"
-      type: string
-    deviceSettings:
-      description: "List of SDRangel device set actions to trigger on detection or disappearance"
-      type: array
-      items:
-        $ref: "http://swgserver:8081/api/swagger/include/Camera.yaml#/CameraObjectDeviceSettings"
-
-CameraObjectDeviceSettings:
-  description: "SDRangel device set actions triggered by YOLO object detection or disappearance"
-  properties:
-    deviceSetIndex:
-      description: "Device set index in SDRangel"
-      type: integer
-    presetGroup:
-      description: "Preset group to load on object detection"
-      type: string
-    presetFrequency:
-      description: "Preset centre frequency in Hz"
-      type: integer
-      format: int64
-    presetDescription:
-      description: "Preset description to identify the preset"
-      type: string
-    startOnDetect:
-      description: "Start acquisition when the object class is detected (1 for yes, 0 for no)"
-      type: integer
-    stopOnDisappear:
-      description: "Stop acquisition when the object class disappears (1 for yes, 0 for no)"
-      type: integer
-    startStopFileSink:
-      description: "Start/stop file sinks with detection/disappearance (1 for yes, 0 for no)"
-      type: integer
-    saveCurrentImage:
-      description: "Save the current image when the object class is detected (1 for yes, 0 for no)"
-      type: integer
-    recordVideo:
-      description: "Start video recording on detection and stop when the object disappears (1 for yes, 0 for no)"
-      type: integer
-    detectCommand:
-      description: "Command or script to execute when the object class is detected"
-      type: string
-    disappearCommand:
-      description: "Command or script to execute when the object class disappears"
-      type: string
-    detectSpeech:
-      description: "Text to speak when the object class is detected"
-      type: string
-    disappearSpeech:
-      description: "Text to speak when the object class disappears"
-      type: string
 
 CameraReport:
   description: "Camera feature report"

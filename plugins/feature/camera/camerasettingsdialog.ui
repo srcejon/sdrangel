@@ -3807,7 +3807,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
       <attribute name="title">
        <string>Recording</string>
       </attribute>
-      <layout class="QVBoxLayout" name="actionsTabLayout">
+      <layout class="QVBoxLayout" name="recordingTabLayout">
        <item alignment="Qt::AlignTop">
         <widget class="QGroupBox" name="recordingGroup">
          <property name="sizePolicy">
@@ -5885,90 +5885,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="actionsTab">
-      <attribute name="title">
-       <string>Actions</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_7">
-       <item>
-        <widget class="QLabel" name="actionsStatusLabel">
-         <property name="text">
-          <string/>
-         </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <layout class="QFormLayout" name="actionsLayout">
-         <item row="0" column="0">
-          <widget class="QLabel" name="actionsClassLabel">
-           <property name="text">
-            <string>Object class</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="QComboBox" name="actionsClassCombo">
-           <property name="toolTip">
-            <string>YOLO object class whose actions are being configured</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="actionsDisappearDebounceLabel">
-           <property name="text">
-            <string>Disappear debounce (s)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QDoubleSpinBox" name="actionsDisappearDebounceSpin">
-           <property name="toolTip">
-            <string>How long a class must stay absent before disappearance actions run</string>
-           </property>
-           <property name="decimals">
-            <number>1</number>
-           </property>
-           <property name="minimum">
-            <double>0.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>60.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.500000000000000</double>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item>
-        <widget class="QToolButton" name="actionsAddButton">
-         <property name="toolTip">
-          <string>Add device set control settings for the selected object class</string>
-         </property>
-         <property name="text">
-          <string>Add device set</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QTabWidget" name="actionsTabWidget">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-           <horstretch>0</horstretch>
-           <verstretch>1</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="tabsClosable">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
      <widget class="QWidget" name="positionTab">
       <attribute name="title">
        <string>Position</string>
@@ -6561,10 +6477,6 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>videoPreRecordBufferSpin</tabstop>
   <tabstop>imageRecordLimitSpin</tabstop>
   <tabstop>videoRecordLimitSpin</tabstop>
-  <tabstop>actionsClassCombo</tabstop>
-  <tabstop>actionsDisappearDebounceSpin</tabstop>
-  <tabstop>actionsAddButton</tabstop>
-  <tabstop>actionsTabWidget</tabstop>
   <tabstop>fpsSpin</tabstop>
   <tabstop>intervalSpin</tabstop>
  </tabstops>

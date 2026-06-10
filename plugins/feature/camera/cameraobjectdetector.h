@@ -22,9 +22,6 @@
 #include <QHash>
 #include <QSet>
 #include <vector>
-#ifdef QT_TEXTTOSPEECH_FOUND
-#include <QTextToSpeech>
-#endif
 
 #include <opencv2/dnn/dnn.hpp>
 
@@ -101,7 +98,6 @@ public:
     ~CameraObjectDetector() override;
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
     void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
-    void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
 
 protected:
     bool handleStageMessage(const Message& cmd) override;
@@ -119,7 +115,6 @@ private:
     Camera *m_camera;
     MessageQueue *m_msgQueueToGUI;
     MessageQueue *m_msgQueueToFeature;
-    MessageQueue *m_postProcessorInputMessageQueue;
     cv::dnn::Net m_yoloNet;
     cv::Size m_yoloInputSize;
 #ifdef CAMERA_TENSORRT_YOLO
@@ -132,7 +127,6 @@ private:
     // compute graph when targets change.
     int m_appliedYoloDnnTarget = -1;
     bool m_yoloBatchedInferenceSupported = true;
-    bool m_videoRecordingStartedByObject = false;
     QString m_yoloLoadedModelPath;
     QSet<QString> m_reportedErrorKeys;
     QStringList m_yoloLabels;
@@ -141,10 +135,6 @@ private:
     QHash<QString, PendingDisappearState> m_pendingDisappearStates;
     QHash<QString, CameraDetectionHistoryEntry> m_activeObjectDetectionHistory;
     QList<CameraDetectionHistoryEntry> m_completedObjectDetectionHistory;
-#ifdef QT_TEXTTOSPEECH_FOUND
-    QTextToSpeech *m_speech;
-#endif
-
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
         std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds) const;
@@ -160,12 +150,6 @@ private:
     void reportObjectDetectionHistoryToGUI() const;
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     [[nodiscard]] QList<CameraDetectionHistoryEntry> getObjectDetectionHistorySnapshot() const;
-    bool applyObjectDetectedSettings(const QString& className, const QDateTime& now);
-    void applyObjectDisappearedSettings(const QString& className, const QDateTime& now);
-    void executeCommand(const QString& command, const QString& className);
-    void saySpeech(const QString& speech, const QString& className);
-    bool shouldRecordVideoForDetectedObjects() const;
-    void setVideoRecordingEnabled(bool enabled);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAOBJECTDETECTOR_H_

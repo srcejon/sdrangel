@@ -22,20 +22,13 @@
 #include <QDebug>
 #include <QFile>
 #include <QMutableHashIterator>
-#include <QProcess>
 #include <QTextStream>
-#include <QTimer>
 
 #include "maincore.h"
-#include "channel/channelwebapiutils.h"
-#include "device/deviceset.h"
 #include "pipes/objectpipe.h"
-#include "settings/mainsettings.h"
-#include "settings/preset.h"
 #include "util/profiler.h"
 #include "camera.h"
 #include "cameraobjectdetector.h"
-#include "camerarecorder.h"
 #include "SWGTargetAzimuthElevation.h"
 
 MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgReportObjectDetectionHistory, Message)
@@ -43,12 +36,6 @@ MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgClearObjectDetectionHistory, M
 MESSAGE_CLASS_DEFINITION(CameraObjectDetector::MsgReportTensorRtConversion, Message)
 
 namespace {
-QString substituteObjectClass(QString text, const QString& className)
-{
-    text.replace(QStringLiteral("${class}"), className);
-    return text;
-}
-
 class ProtoReader
 {
 public:
@@ -612,11 +599,7 @@ CameraObjectDetector::CameraObjectDetector(Camera *camera) :
     m_camera(camera),
     m_msgQueueToGUI(nullptr),
     m_msgQueueToFeature(nullptr),
-    m_postProcessorInputMessageQueue(nullptr),
     m_yoloInputSize(640, 640)
-#ifdef QT_TEXTTOSPEECH_FOUND
-    , m_speech(new QTextToSpeech(this))
-#endif
 {
 #ifdef CAMERA_TENSORRT_YOLO
     m_yoloTensorRt.setProgressCallback([this](bool active, const QString& modelPath, const QString& enginePath)
@@ -667,14 +650,9 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
 
     if ((force && !m_settings.m_yoloEnabled)
         || settingsKeys.contains("yoloEnabled")
-        || settingsKeys.contains("yoloLabelsPath")
-        || settingsKeys.contains("objectDeviceSettings"))
+        || settingsKeys.contains("yoloLabelsPath"))
     {
         clearObjectDetectionState();
-    }
-
-    if (force || settingsKeys.contains("saveVideo")) {
-        m_videoRecordingStartedByObject = false;
     }
 }
 
@@ -1484,9 +1462,6 @@ void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineD
         if (!m_detectedObjectClasses.contains(className))
         {
             m_detectedObjectClasses.insert(className);
-            if (applyObjectDetectedSettings(className, now)) {
-                frame.m_saveCurrentImage = true;
-            }
         }
     }
 
@@ -1496,7 +1471,7 @@ void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineD
         {
             PendingDisappearState state;
             state.m_firstMissing = now;
-            state.m_deadline = now.addMSecs(static_cast<qint64>(m_settings.m_yoloDisappearDebounce * 1000.0));
+            state.m_deadline = now;
             m_pendingDisappearStates.insert(className, state);
         }
     }
@@ -1522,238 +1497,11 @@ void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineD
                 m_activeObjectDetectionHistory.erase(activeHistoryIt);
                 historyChanged = true;
             }
-            applyObjectDisappearedSettings(it.key(), now);
             it.remove();
         }
     }
 
     if (historyChanged) {
         reportObjectDetectionHistoryToGUI();
-    }
-}
-
-bool CameraObjectDetector::shouldRecordVideoForDetectedObjects() const
-{
-    for (const QString& className : m_detectedObjectClasses)
-    {
-        QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
-        if (deviceSettingsList == nullptr) {
-            continue;
-        }
-
-        for (CameraSettings::ObjectDeviceSettings *devSettings : *deviceSettingsList)
-        {
-            if (devSettings && devSettings->m_recordVideo) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-void CameraObjectDetector::setVideoRecordingEnabled(bool enabled)
-{
-    if (m_settings.m_saveVideo == enabled) {
-        return;
-    }
-
-    m_settings.m_saveVideo = enabled;
-    if (!enabled) {
-        m_videoRecordingStartedByObject = false;
-    }
-
-    if (m_postProcessorInputMessageQueue) {
-        m_postProcessorInputMessageQueue->push(CameraRecorder::MsgSetVideoRecordingEnabled::create(enabled));
-    }
-}
-
-void CameraObjectDetector::executeCommand(const QString& command, const QString& className)
-{
-    if (command.isEmpty()) {
-        return;
-    }
-
-#if QT_CONFIG(process)
-    const QString cmd = substituteObjectClass(command, className);
-    QStringList allArgs = QProcess::splitCommand(cmd);
-
-    if (allArgs.isEmpty()) {
-        return;
-    }
-
-    qDebug() << "CameraObjectDetector::executeCommand: Executing:" << allArgs;
-    const QString program = allArgs.takeFirst();
-    QProcess::startDetached(program, allArgs);
-#else
-    qWarning() << "CameraObjectDetector::executeCommand: QProcess not supported. Can't run:" << command;
-    (void) className;
-#endif
-}
-
-void CameraObjectDetector::saySpeech(const QString& speech, const QString& className)
-{
-    if (speech.isEmpty()) {
-        return;
-    }
-
-    const QString expandedSpeech = substituteObjectClass(speech, className);
-
-#ifdef QT_TEXTTOSPEECH_FOUND
-    m_speech->say(expandedSpeech);
-#else
-    qWarning() << "CameraObjectDetector::saySpeech: TextToSpeech not supported. Unable to say" << expandedSpeech;
-#endif
-}
-
-bool CameraObjectDetector::applyObjectDetectedSettings(const QString& className, const QDateTime& now)
-{
-    if (!m_settings.m_objectDeviceSettings.contains(className)) {
-        return false;
-    }
-
-    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
-    if (deviceSettingsList == nullptr) {
-        return false;
-    }
-
-    MainCore *mainCore = MainCore::instance();
-    const MainSettings& mainSettings = mainCore->getSettings();
-    const std::vector<DeviceSet*>& deviceSets = mainCore->getDeviceSets();
-    bool saveCurrentImage = false;
-
-    for (int i = 0; i < deviceSettingsList->size(); ++i)
-    {
-        CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
-        if (devSettings == nullptr) {
-            continue;
-        }
-
-        if (devSettings->m_deviceSetIndex < 0 || devSettings->m_deviceSetIndex >= static_cast<int>(deviceSets.size()))
-        {
-            qWarning() << "CameraObjectDetector::applyObjectDetectedSettings: device set at"
-                       << devSettings->m_deviceSetIndex << "does not exist";
-            continue;
-        }
-
-        if (!devSettings->m_presetGroup.isEmpty())
-        {
-            const DeviceSet *deviceSet = deviceSets[devSettings->m_deviceSetIndex];
-            QString presetType;
-            if (deviceSet->m_deviceSourceEngine != nullptr) {
-                presetType = "R";
-            } else if (deviceSet->m_deviceSinkEngine != nullptr) {
-                presetType = "T";
-            } else if (deviceSet->m_deviceMIMOEngine != nullptr) {
-                presetType = "M";
-            }
-
-            const Preset *preset = mainSettings.getPreset(
-                devSettings->m_presetGroup,
-                devSettings->m_presetFrequency,
-                devSettings->m_presetDescription,
-                presetType);
-
-            if (preset != nullptr)
-            {
-                qDebug() << "CameraObjectDetector::applyObjectDetectedSettings: loading preset"
-                         << preset->getDescription() << "for class" << className
-                         << "to device set" << devSettings->m_deviceSetIndex;
-                mainCore->getMainMessageQueue()->push(
-                    MainCore::MsgLoadPreset::create(preset, devSettings->m_deviceSetIndex));
-            }
-            else
-            {
-                qWarning() << "CameraObjectDetector::applyObjectDetectedSettings: unable to get preset"
-                           << devSettings->m_presetGroup
-                           << devSettings->m_presetFrequency
-                           << devSettings->m_presetDescription;
-            }
-        }
-
-        if (devSettings->m_saveCurrentImage) {
-            saveCurrentImage = true;
-        }
-
-        if (devSettings->m_recordVideo) {
-            if (!m_settings.m_saveVideo) {
-                m_videoRecordingStartedByObject = true;
-            }
-            setVideoRecordingEnabled(true);
-        }
-    }
-
-    QTimer::singleShot(1000, this, [this, deviceSettingsList, className]()
-    {
-        for (int i = 0; i < deviceSettingsList->size(); ++i)
-        {
-            CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
-            if (devSettings == nullptr) {
-                continue;
-            }
-
-            if (devSettings->m_startOnDetect) {
-                ChannelWebAPIUtils::run(devSettings->m_deviceSetIndex);
-            }
-
-            if (devSettings->m_startStopFileSink) {
-                ChannelWebAPIUtils::startStopFileSinks(devSettings->m_deviceSetIndex, true);
-            }
-
-            if (!devSettings->m_detectCommand.isEmpty()) {
-                executeCommand(devSettings->m_detectCommand, className);
-            }
-
-            if (!devSettings->m_detectSpeech.isEmpty()) {
-                saySpeech(devSettings->m_detectSpeech, className);
-            }
-        }
-    });
-
-    return saveCurrentImage;
-}
-
-void CameraObjectDetector::applyObjectDisappearedSettings(const QString& className, const QDateTime& now)
-{
-    if (!m_settings.m_objectDeviceSettings.contains(className)) {
-        return;
-    }
-
-    QList<CameraSettings::ObjectDeviceSettings *> *deviceSettingsList = m_settings.m_objectDeviceSettings.value(className);
-    if (deviceSettingsList == nullptr) {
-        return;
-    }
-
-    bool classHadRecordVideoAction = false;
-    for (int i = 0; i < deviceSettingsList->size(); ++i)
-    {
-        CameraSettings::ObjectDeviceSettings *devSettings = deviceSettingsList->at(i);
-        if (devSettings == nullptr) {
-            continue;
-        }
-
-        if (devSettings->m_recordVideo) {
-            classHadRecordVideoAction = true;
-        }
-
-        if (devSettings->m_startStopFileSink) {
-            ChannelWebAPIUtils::startStopFileSinks(devSettings->m_deviceSetIndex, false);
-        }
-
-        if (devSettings->m_stopOnDisappear) {
-            ChannelWebAPIUtils::stop(devSettings->m_deviceSetIndex);
-        }
-
-        if (!devSettings->m_disappearCommand.isEmpty()) {
-            executeCommand(devSettings->m_disappearCommand, className);
-        }
-
-        if (!devSettings->m_disappearSpeech.isEmpty()) {
-            saySpeech(devSettings->m_disappearSpeech, className);
-        }
-    }
-
-    if (classHadRecordVideoAction && m_videoRecordingStartedByObject && !shouldRecordVideoForDetectedObjects()) {
-        setVideoRecordingEnabled(false);
     }
 }

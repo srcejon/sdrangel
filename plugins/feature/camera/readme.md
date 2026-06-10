@@ -381,18 +381,6 @@ On the Difference Detection sub-tab:
 
 If a YOLO model or labels entry is an HTTP or HTTPS URL, the file is downloaded when selected and the local downloaded file is then used.
 
-<h3>Actions tab</h3>
-
-The Actions tab defines what happens when an object class is detected.
-
-<ul>
-<li>Object class selects the YOLO class whose actions are being configured.</li>
-<li>Disappear debounce sets how long a class must stay absent before disappearance actions run.</li>
-<li>Add device set adds device set control settings for the selected object class.</li>
-<li>The device set tabs configure per-device actions such as preset recalls, commands and speech. Tabs can be closed to remove a device set action.</li>
-<li>The status label reports action configuration status. Changes on this tab are applied immediately.</li>
-</ul>
-
 <h3>Position tab</h3>
 
 The Position tab configures camera location, pointing, lens model and weather lookup.

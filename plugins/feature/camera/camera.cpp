@@ -191,7 +191,6 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_objectDetectorThread, &QThread::finished, m_objectDetector, &QObject::deleteLater);
     QObject::connect(m_objectDetectorThread, &QThread::finished, m_objectDetectorThread, &QThread::deleteLater);
     m_objectDetector->setNextStage(m_diffDetector);
-    m_objectDetector->setPostProcessorInputMessageQueue(getRecorderInputMessageQueue());
     m_objectDetector->setMessageQueueToGUI(getMessageQueueToGUI());
     m_objectDetector->setMessageQueueToFeature(getInputMessageQueue());
     m_objectDetectorThread->start();
@@ -1044,42 +1043,9 @@ void Camera::webapiFormatFeatureSettings(
     swg->setYoloConfThreshold(settings.m_yoloConfThreshold);
     swg->setYoloNmsThreshold(settings.m_yoloNmsThreshold);
     swg->setYoloBoxColor((qint32) settings.m_yoloBoxColor.rgb());
-    swg->setYoloDisappearDebounce(settings.m_yoloDisappearDebounce);
     swg->setYoloTileLargeImages(settings.m_yoloTileLargeImages ? 1 : 0);
     swg->setYoloTileOverlapPercent(settings.m_yoloTileOverlapPercent);
     swg->setYoloDnnTarget((int) settings.m_yoloDnnTarget);
-
-    // YOLO per-class device settings
-    auto *swgObjectList = new QList<SWGSDRangel::SWGCameraObjectClassSettings*>();
-    for (auto it = settings.m_objectDeviceSettings.cbegin(); it != settings.m_objectDeviceSettings.cend(); ++it)
-    {
-        auto *swgClassSettings = new SWGSDRangel::SWGCameraObjectClassSettings();
-        swgClassSettings->init();
-        swgClassSettings->setClassName(new QString(it.key()));
-        auto *swgDeviceList = new QList<SWGSDRangel::SWGCameraObjectDeviceSettings*>();
-        for (const auto *ds : *it.value())
-        {
-            auto *swgDs = new SWGSDRangel::SWGCameraObjectDeviceSettings();
-            swgDs->init();
-            swgDs->setDeviceSetIndex(ds->m_deviceSetIndex);
-            swgDs->setPresetGroup(new QString(ds->m_presetGroup));
-            swgDs->setPresetFrequency(ds->m_presetFrequency);
-            swgDs->setPresetDescription(new QString(ds->m_presetDescription));
-            swgDs->setStartOnDetect(ds->m_startOnDetect ? 1 : 0);
-            swgDs->setStopOnDisappear(ds->m_stopOnDisappear ? 1 : 0);
-            swgDs->setStartStopFileSink(ds->m_startStopFileSink ? 1 : 0);
-            swgDs->setSaveCurrentImage(ds->m_saveCurrentImage ? 1 : 0);
-            swgDs->setRecordVideo(ds->m_recordVideo ? 1 : 0);
-            swgDs->setDetectCommand(new QString(ds->m_detectCommand));
-            swgDs->setDisappearCommand(new QString(ds->m_disappearCommand));
-            swgDs->setDetectSpeech(new QString(ds->m_detectSpeech));
-            swgDs->setDisappearSpeech(new QString(ds->m_disappearSpeech));
-            swgDeviceList->append(swgDs);
-        }
-        swgClassSettings->setDeviceSettings(swgDeviceList);
-        swgObjectList->append(swgClassSettings);
-    }
-    swg->setObjectDeviceSettings(swgObjectList);
 
     // Audio (Qt camera)
     swg->setAudioMute(settings.m_audioMute ? 1 : 0);
@@ -1817,9 +1783,6 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("yoloBoxColor")) {
         settings.m_yoloBoxColor = QColor(swg->getYoloBoxColor());
     }
-    if (featureSettingsKeys.contains("yoloDisappearDebounce")) {
-        settings.m_yoloDisappearDebounce = swg->getYoloDisappearDebounce();
-    }
     if (featureSettingsKeys.contains("yoloTileLargeImages")) {
         settings.m_yoloTileLargeImages = swg->getYoloTileLargeImages() != 0;
     }
@@ -1828,50 +1791,6 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("yoloDnnTarget")) {
         settings.m_yoloDnnTarget = (CameraSettings::DNNTarget) swg->getYoloDnnTarget();
-    }
-
-    // YOLO per-class device settings
-    if (featureSettingsKeys.contains("objectDeviceSettings"))
-    {
-        // Clear existing entries
-        for (auto it = settings.m_objectDeviceSettings.begin(); it != settings.m_objectDeviceSettings.end(); ++it) {
-            qDeleteAll(*it.value());
-            delete it.value();
-        }
-        settings.m_objectDeviceSettings.clear();
-
-        QList<SWGSDRangel::SWGCameraObjectClassSettings*> *swgObjectList = swg->getObjectDeviceSettings();
-        if (swgObjectList)
-        {
-            for (auto *swgClassSettings : *swgObjectList)
-            {
-                QString className = swgClassSettings->getClassName() ? *swgClassSettings->getClassName() : QString();
-                auto *deviceList = new QList<CameraSettings::ObjectDeviceSettings*>();
-                QList<SWGSDRangel::SWGCameraObjectDeviceSettings*> *swgDeviceList = swgClassSettings->getDeviceSettings();
-                if (swgDeviceList)
-                {
-                    for (auto *swgDs : *swgDeviceList)
-                    {
-                        auto *ds = new CameraSettings::ObjectDeviceSettings();
-                        ds->m_deviceSetIndex    = swgDs->getDeviceSetIndex();
-                        ds->m_presetGroup       = swgDs->getPresetGroup()       ? *swgDs->getPresetGroup()       : QString();
-                        ds->m_presetFrequency   = (quint64) swgDs->getPresetFrequency();
-                        ds->m_presetDescription = swgDs->getPresetDescription() ? *swgDs->getPresetDescription() : QString();
-                        ds->m_startOnDetect     = swgDs->getStartOnDetect()     != 0;
-                        ds->m_stopOnDisappear   = swgDs->getStopOnDisappear()   != 0;
-                        ds->m_startStopFileSink = swgDs->getStartStopFileSink() != 0;
-                        ds->m_saveCurrentImage  = swgDs->getSaveCurrentImage()  != 0;
-                        ds->m_recordVideo       = swgDs->getRecordVideo()       != 0;
-                        ds->m_detectCommand     = swgDs->getDetectCommand()     ? *swgDs->getDetectCommand()     : QString();
-                        ds->m_disappearCommand  = swgDs->getDisappearCommand()  ? *swgDs->getDisappearCommand()  : QString();
-                        ds->m_detectSpeech      = swgDs->getDetectSpeech()      ? *swgDs->getDetectSpeech()      : QString();
-                        ds->m_disappearSpeech   = swgDs->getDisappearSpeech()   ? *swgDs->getDisappearSpeech()   : QString();
-                        deviceList->append(ds);
-                    }
-                }
-                settings.m_objectDeviceSettings[className] = deviceList;
-            }
-        }
     }
 
     // Audio (Qt camera)

@@ -118,90 +118,6 @@ QStringList deserializeStringList(const QString& json)
 }
 }
 
-QDataStream& operator<<(QDataStream& out, const CameraSettings::ObjectDeviceSettings* settings)
-{
-    out << settings->m_deviceSetIndex;
-    out << settings->m_presetGroup;
-    out << settings->m_presetFrequency;
-    out << settings->m_presetDescription;
-    out << settings->m_startOnDetect;
-    out << settings->m_stopOnDisappear;
-    out << settings->m_startStopFileSink;
-    out << settings->m_detectCommand;
-    out << settings->m_disappearCommand;
-    out << settings->m_recordVideo;
-    out << settings->m_detectSpeech;
-    out << settings->m_disappearSpeech;
-    out << settings->m_saveCurrentImage;
-    return out;
-}
-
-QDataStream& operator>>(QDataStream& in, CameraSettings::ObjectDeviceSettings*& settings)
-{
-    settings = new CameraSettings::ObjectDeviceSettings();
-    in >> settings->m_deviceSetIndex;
-    in >> settings->m_presetGroup;
-    in >> settings->m_presetFrequency;
-    in >> settings->m_presetDescription;
-    in >> settings->m_startOnDetect;
-    in >> settings->m_stopOnDisappear;
-    in >> settings->m_startStopFileSink;
-    in >> settings->m_detectCommand;
-    in >> settings->m_disappearCommand;
-    in >> settings->m_recordVideo;
-    in >> settings->m_detectSpeech;
-    in >> settings->m_disappearSpeech;
-    in >> settings->m_saveCurrentImage;
-    return in;
-}
-
-QDataStream& operator<<(QDataStream& out, const QList<CameraSettings::ObjectDeviceSettings *> *list)
-{
-    out << *list;
-    return out;
-}
-
-QDataStream& operator>>(QDataStream& in, QList<CameraSettings::ObjectDeviceSettings *>*& list)
-{
-    list = new QList<CameraSettings::ObjectDeviceSettings *>();
-    in >> *list;
-    return in;
-}
-
-CameraSettings::ObjectDeviceSettings::ObjectDeviceSettings() :
-    m_deviceSetIndex(0),
-    m_presetFrequency(0),
-    m_startOnDetect(true),
-    m_stopOnDisappear(true),
-    m_startStopFileSink(false),
-    m_saveCurrentImage(false),
-    m_recordVideo(false)
-{
-    m_detectCommand.clear();
-    m_disappearCommand.clear();
-    m_detectSpeech.clear();
-    m_disappearSpeech.clear();
-}
-
-void CameraSettings::ObjectDeviceSettings::getDebugString(std::ostringstream& ostr) const
-{
-    ostr << "{"
-         << " deviceSetIndex: " << m_deviceSetIndex
-         << " presetGroup: " << m_presetGroup.toStdString()
-         << " presetFrequency: " << m_presetFrequency
-         << " presetDescription: " << m_presetDescription.toStdString()
-         << " startOnDetect: " << m_startOnDetect
-         << " stopOnDisappear: " << m_stopOnDisappear
-         << " startStopFileSink: " << m_startStopFileSink
-         << " saveCurrentImage: " << m_saveCurrentImage
-         << " recordVideo: " << m_recordVideo
-         << " detectCommand: " << m_detectCommand.toStdString()
-         << " disappearCommand: " << m_disappearCommand.toStdString()
-         << " detectSpeech: " << m_detectSpeech.toStdString()
-         << " disappearSpeech: " << m_disappearSpeech.toStdString()
-         << " }";
-}
-
 CameraSettings::CameraSettings() :
     m_rollupState(nullptr)
 {
@@ -439,7 +355,6 @@ void CameraSettings::resetToDefaults()
     m_yoloConfThreshold = 0.5;
     m_yoloNmsThreshold = 0.45;
     m_yoloBoxColor = Qt::green;
-    m_yoloDisappearDebounce = 0.0;
     m_yoloTileLargeImages = true;
     m_yoloTileOverlapPercent = 20;
     m_yoloDnnTarget = CPU;
@@ -632,9 +547,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(165, m_yoloConfThreshold);
     s.writeDouble(166, m_yoloNmsThreshold);
     s.writeU32(167, m_yoloBoxColor.rgba());
-    s.writeDouble(168, m_yoloDisappearDebounce);
     s.writeS32(169, m_yoloDnnTarget);
-    s.writeBlob(170, serializeObjectDeviceSettings(m_objectDeviceSettings));
     s.writeBool(171, m_audioMute);
     s.writeString(172, m_audioDeviceName);
     s.writeS32(173, m_whiteBalanceMode);
@@ -1088,11 +1001,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         uint32_t yoloBoxColorRgba = QColor(Qt::green).rgba();
         d.readU32(167, &yoloBoxColorRgba, QColor(Qt::green).rgba());
         m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
-        d.readDouble(168, &m_yoloDisappearDebounce, 0.0);
-        m_yoloDisappearDebounce = qBound(m_minYoloDisappearDebounce, m_yoloDisappearDebounce, m_maxYoloDisappearDebounce);
         d.readS32(169, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
-        d.readBlob(170, &bytetmp);
-        deserializeObjectDeviceSettings(bytetmp, m_objectDeviceSettings);
 
         d.readBool(171, &m_audioMute, true);
         d.readString(172, &m_audioDeviceName, "");
@@ -1189,25 +1098,6 @@ bool CameraSettings::deserialize(const QByteArray& data)
 
     resetToDefaults();
     return false;
-}
-
-QByteArray CameraSettings::serializeObjectDeviceSettings(QHash<QString, QList<ObjectDeviceSettings *> *> objectDeviceSettings) const
-{
-    QByteArray data;
-    QDataStream stream(&data, QIODevice::WriteOnly);
-    stream << objectDeviceSettings;
-    return data;
-}
-
-void CameraSettings::deserializeObjectDeviceSettings(const QByteArray& data, QHash<QString, QList<ObjectDeviceSettings *> *>& objectDeviceSettings)
-{
-    if (data.isEmpty()) {
-        objectDeviceSettings.clear();
-        return;
-    }
-
-    QDataStream stream(data);
-    stream >> objectDeviceSettings;
 }
 
 QByteArray CameraSettings::serializeMotionExclusionRects(const QList<QRect>& rects) const
@@ -1900,9 +1790,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("yoloBoxColor")) {
         m_yoloBoxColor = settings.m_yoloBoxColor;
     }
-    if (settingsKeys.contains("yoloDisappearDebounce")) {
-        m_yoloDisappearDebounce = qBound(m_minYoloDisappearDebounce, settings.m_yoloDisappearDebounce, m_maxYoloDisappearDebounce);
-    }
     if (settingsKeys.contains("yoloTileLargeImages")) {
         m_yoloTileLargeImages = settings.m_yoloTileLargeImages;
     }
@@ -1911,9 +1798,6 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("yoloDnnTarget")) {
         m_yoloDnnTarget = qBound(CPU, settings.m_yoloDnnTarget, TensorRT_FP16);
-    }
-    if (settingsKeys.contains("objectDeviceSettings")) {
-        m_objectDeviceSettings = settings.m_objectDeviceSettings;
     }
     if (settingsKeys.contains("audioMute")) {
         m_audioMute = settings.m_audioMute;
@@ -2578,9 +2462,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("yoloNmsThreshold") || force) {
         ostr << " m_yoloNmsThreshold: " << m_yoloNmsThreshold;
     }
-    if (settingsKeys.contains("yoloDisappearDebounce") || force) {
-        ostr << " m_yoloDisappearDebounce: " << m_yoloDisappearDebounce;
-    }
     if (settingsKeys.contains("yoloTileLargeImages") || force) {
         ostr << " m_yoloTileLargeImages: " << m_yoloTileLargeImages;
     }
@@ -2589,30 +2470,6 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("yoloDnnTarget") || force) {
         ostr << " m_yoloDnnTarget: " << m_yoloDnnTarget;
-    }
-    if (settingsKeys.contains("objectDeviceSettings") || force)
-    {
-        ostr << " m_objectDeviceSettings: [";
-        QHash<QString, QList<ObjectDeviceSettings *> *>::const_iterator it;
-        for (it = m_objectDeviceSettings.cbegin(); it != m_objectDeviceSettings.cend(); ++it)
-        {
-            ostr << " class=" << it.key().toStdString() << " settings=";
-            if (it.value())
-            {
-                ostr << "[";
-                for (const auto *devSettings : *it.value()) {
-                    if (devSettings) {
-                        devSettings->getDebugString(ostr);
-                    }
-                }
-                ostr << "]";
-            }
-            else
-            {
-                ostr << "null";
-            }
-        }
-        ostr << " ]";
     }
     if (settingsKeys.contains("audioMute") || force) {
         ostr << " m_audioMute: " << m_audioMute;

@@ -186,26 +186,6 @@ struct CameraSettings
         FovModeSensorFocalLength
     };
 
-    struct ObjectDeviceSettings
-    {
-        int m_deviceSetIndex;           //!< Device set index in SDRangel
-        QString m_presetGroup;          //!< Preset group to load on object detection
-        quint64 m_presetFrequency;      //!< Preset center frequency
-        QString m_presetDescription;    //!< Preset description to identify the preset
-        bool m_startOnDetect;           //!< Start acquisition when the object class is detected
-        bool m_stopOnDisappear;         //!< Stop acquisition when the object class disappears
-        bool m_startStopFileSink;       //!< Start/stop file sinks with detection/disappearance
-        bool m_saveCurrentImage;        //!< Save a single image when the object class is detected
-        bool m_recordVideo;             //!< Start video recording on detection and stop when the object disappears
-        QString m_detectCommand;        //!< Command/script to execute when the object class is detected
-        QString m_disappearCommand;     //!< Command/script to execute when the object class disappears
-        QString m_detectSpeech;         //!< Speech to say when the object class is detected
-        QString m_disappearSpeech;      //!< Speech to say when the object class disappears
-
-        ObjectDeviceSettings();
-        void getDebugString(std::ostringstream& ostr) const;
-    };
-
     static constexpr int m_minHdrExposureCount = 2;
     static constexpr int m_maxHdrExposureCount = 4;
 
@@ -308,8 +288,6 @@ struct CameraSettings
     static constexpr double m_maxLensDistortionK1 = 1.0;
     static constexpr double m_minSpectrumScale = 0.1;
     static constexpr double m_maxSpectrumScale = 4.0;
-    static constexpr double m_minYoloDisappearDebounce = 0.0;
-    static constexpr double m_maxYoloDisappearDebounce = 60.0;
     static constexpr double m_minExposureCompensation = -2.0;
     static constexpr double m_maxExposureCompensation = 2.0;
     static constexpr double m_minZoomFactor = 1.0;
@@ -538,10 +516,8 @@ struct CameraSettings
     double m_yoloConfThreshold;  ///< Minimum confidence to keep a detection: 0.0..1.0
     double m_yoloNmsThreshold;   ///< IoU threshold for non-maximum suppression: 0.0..1.0
     QColor m_yoloBoxColor;       ///< Bounding-box colour when no per-class colour is available
-    double m_yoloDisappearDebounce; ///< Seconds a class must remain absent before it is treated as disappeared
     bool   m_yoloTileLargeImages; ///< Tile frames larger than the YOLO input size and batch infer the tiles
     int    m_yoloTileOverlapPercent; ///< Tile overlap percentage for large-image YOLO inference: 0..90
-    QHash<QString, QList<ObjectDeviceSettings *> *> m_objectDeviceSettings; //!< Device control settings per YOLO class name
     enum DNNTarget {
         CPU,
         CUDA,
@@ -573,8 +549,6 @@ struct CameraSettings
     QByteArray serialize() const;
     bool deserialize(const QByteArray& data);
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
-    QByteArray serializeObjectDeviceSettings(QHash<QString, QList<ObjectDeviceSettings *> *> objectDeviceSettings) const;
-    void deserializeObjectDeviceSettings(const QByteArray& data, QHash<QString, QList<ObjectDeviceSettings *> *>& objectDeviceSettings);
     QByteArray serializeMotionExclusionRects(const QList<QRect>& rects) const;
     void deserializeMotionExclusionRects(const QByteArray& data, QList<QRect>& rects);
     void applySettings(const QStringList& settingsKeys, const CameraSettings& settings);

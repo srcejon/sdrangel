@@ -515,6 +515,9 @@ bool CameraGUI::handleMessage(const Message& message)
             return true;
         }
 
+        // Send events first, to make Scheduler response as fast as possible
+        sendDisplayedFrameEvents(report.getMotionBoxes(), report.getDetections(), report.getCaptureDateTime());
+
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
@@ -595,7 +598,6 @@ bool CameraGUI::handleMessage(const Message& message)
 
         settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
-        sendDisplayedFrameEvents(report.getMotionBoxes(), report.getDetections(), report.getCaptureDateTime());
         if (m_histogramDialog) {
             m_histogramDialog->updateHistogram(m_lastHistogramData);
         }

@@ -160,6 +160,8 @@ private:
     bool m_forceSettings;
     bool m_captureActive = false;
     quint64 m_captureEpoch = 0;
+    bool m_displayedMotionEventActive = false;
+    QSet<QString> m_displayedObjectEventClasses;
     QTimer m_updateTimer;
     bool m_updatingMotionExclusionRectsTable = false;
     QList<qint64> m_pipelineFrameTimes;
@@ -316,6 +318,7 @@ private:
     void handleMediaPlayerPlaybackStateChanged(CameraMediaPlayerState state);
     void updateCameraSubframeControls();
     void updateImageWidget();
+    void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QDateTime& captureDateTime);
     void updateStarLabelPreview();
     void clearStarLabelPreview();
     void updateCaptureModeControls();

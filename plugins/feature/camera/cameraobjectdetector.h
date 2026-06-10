@@ -162,7 +162,6 @@ private:
     [[nodiscard]] QList<CameraDetectionHistoryEntry> getObjectDetectionHistorySnapshot() const;
     bool applyObjectDetectedSettings(const QString& className, const QDateTime& now);
     void applyObjectDisappearedSettings(const QString& className, const QDateTime& now);
-    void sendEvent(const QString& className, bool detected, const QDateTime& eventTime);
     void executeCommand(const QString& command, const QString& className);
     void saySpeech(const QString& speech, const QString& className);
     bool shouldRecordVideoForDetectedObjects() const;

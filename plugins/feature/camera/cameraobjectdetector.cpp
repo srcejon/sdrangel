@@ -1608,8 +1608,6 @@ void CameraObjectDetector::saySpeech(const QString& speech, const QString& class
 
 bool CameraObjectDetector::applyObjectDetectedSettings(const QString& className, const QDateTime& now)
 {
-    sendEvent(className, true, now);
-
     if (!m_settings.m_objectDeviceSettings.contains(className)) {
         return false;
     }
@@ -1717,8 +1715,6 @@ bool CameraObjectDetector::applyObjectDetectedSettings(const QString& className,
 
 void CameraObjectDetector::applyObjectDisappearedSettings(const QString& className, const QDateTime& now)
 {
-    sendEvent(className, false, now);
-
     if (!m_settings.m_objectDeviceSettings.contains(className)) {
         return;
     }
@@ -1759,20 +1755,5 @@ void CameraObjectDetector::applyObjectDisappearedSettings(const QString& classNa
 
     if (classHadRecordVideoAction && m_videoRecordingStartedByObject && !shouldRecordVideoForDetectedObjects()) {
         setVideoRecordingEnabled(false);
-    }
-}
-
-void CameraObjectDetector::sendEvent(const QString& className, bool detected, const QDateTime& eventTime)
-{
-    QList<ObjectPipe*> eventPipes;
-    MainCore::instance()->getMessagePipes().getMessagePipes(m_camera, "event", eventPipes);
-    QString eventData = QString("name=%1").arg(className);
-    MainCore::MsgEvent::EventType eventType = detected ? MainCore::MsgEvent::EventType::CameraObjectDetectedEvent : MainCore::MsgEvent::CameraObjectLostEvent;
-    for (const auto& pipe : eventPipes)
-    {
-        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
-        if (messageQueue) {
-            messageQueue->push(MainCore::MsgEvent::create(m_camera, eventTime, eventType, eventData));
-        }
     }
 }

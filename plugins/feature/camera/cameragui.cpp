@@ -93,6 +93,7 @@
 #include "feature/featureset.h"
 #include "channel/channelwebapiutils.h"
 #include "feature/featurewebapiutils.h"
+#include "pipes/objectpipe.h"
 
 #include "cameraplatesolver.h"
 #include "ui_cameragui.h"
@@ -355,6 +356,8 @@ bool CameraGUI::handleMessage(const Message& message)
         const Camera::MsgStartStop& cfg = (Camera::MsgStartStop&) message;
         m_captureActive = cfg.getStartStop();
         m_captureEpoch = cfg.getCaptureEpoch();
+        m_displayedMotionEventActive = false;
+        m_displayedObjectEventClasses.clear();
         discardQueuedReportFrames(*getInputMessageQueue(), false);
 
         if (!sameCameraIdentity(previousCamera, selectedCameraFromSettings())) {
@@ -592,6 +595,7 @@ bool CameraGUI::handleMessage(const Message& message)
 
         settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
+        sendDisplayedFrameEvents(report.getMotionBoxes(), report.getDetections(), report.getCaptureDateTime());
         if (m_histogramDialog) {
             m_histogramDialog->updateHistogram(m_lastHistogramData);
         }
@@ -1856,6 +1860,96 @@ void CameraGUI::updateImageWidget()
     settingsUI()->spectrumOffsetXSlider->setMaximum(maxX);
     settingsUI()->spectrumOffsetYSlider->setMaximum(maxY);
     updateMotionExclusionPreview();
+}
+
+void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QDateTime& captureDateTime)
+{
+    if (!m_camera) {
+        return;
+    }
+
+    struct PendingEvent
+    {
+        MainCore::MsgEvent::EventType m_eventType;
+        QString m_data;
+    };
+
+    QVector<PendingEvent> pendingEvents;
+    const bool motionDetected = !motionBoxes.isEmpty();
+    if (motionDetected != m_displayedMotionEventActive)
+    {
+        QString eventData = QStringLiteral("boxes=%1").arg(motionBoxes.size());
+        if (!motionBoxes.isEmpty())
+        {
+            const QRect& box = motionBoxes.first();
+            eventData += QStringLiteral(",x=%1,y=%2,width=%3,height=%4")
+                .arg(box.x())
+                .arg(box.y())
+                .arg(box.width())
+                .arg(box.height());
+        }
+
+        pendingEvents.append({
+            motionDetected
+                ? MainCore::MsgEvent::EventType::CameraMotionDetectedEvent
+                : MainCore::MsgEvent::EventType::CameraMotionStoppedEvent,
+            eventData
+        });
+        m_displayedMotionEventActive = motionDetected;
+    }
+
+    QSet<QString> displayedObjectClasses;
+    for (const CameraPipelineDetection& detection : detections)
+    {
+        if (!detection.m_label.isEmpty()) {
+            displayedObjectClasses.insert(detection.m_label);
+        }
+    }
+
+    for (const QString& className : displayedObjectClasses)
+    {
+        if (!m_displayedObjectEventClasses.contains(className))
+        {
+            pendingEvents.append({
+                MainCore::MsgEvent::EventType::CameraObjectDetectedEvent,
+                QStringLiteral("name=%1").arg(className)
+            });
+        }
+    }
+
+    for (const QString& className : m_displayedObjectEventClasses)
+    {
+        if (!displayedObjectClasses.contains(className))
+        {
+            pendingEvents.append({
+                MainCore::MsgEvent::EventType::CameraObjectLostEvent,
+                QStringLiteral("name=%1").arg(className)
+            });
+        }
+    }
+    m_displayedObjectEventClasses = displayedObjectClasses;
+
+    if (pendingEvents.isEmpty()) {
+        return;
+    }
+
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_camera, "event", eventPipes);
+    if (eventPipes.isEmpty()) {
+        return;
+    }
+
+    const QDateTime eventTime = captureDateTime.isValid() ? captureDateTime : QDateTime::currentDateTime();
+    for (const PendingEvent& event : pendingEvents)
+    {
+        for (const ObjectPipe *pipe : eventPipes)
+        {
+            MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+            if (messageQueue) {
+                messageQueue->push(MainCore::MsgEvent::create(m_camera, eventTime, event.m_eventType, event.m_data));
+            }
+        }
+    }
 }
 
 void CameraGUI::clearStarLabelPreview()

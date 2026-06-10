@@ -920,6 +920,9 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_stack,
             frame.m_starDetections,
             frame.m_plateSolve,
+            frame.m_motionBoxes,
+            frame.m_detections,
+            frame.m_captureDateTime,
             frame.m_captureEpoch,
             frame.m_manualPreviewFrame,
             previewTextLabels));

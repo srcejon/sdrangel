@@ -108,6 +108,9 @@ public:
         float getPlateSolveDistortionK1() const { return m_plateSolve.m_distortionK1; }
         const QString& getPlateSolveCatalogSource() const { return m_plateSolve.m_catalogSource; }
         const QVector<PreviewTextLabel>& getPreviewTextLabels() const { return m_previewTextLabels; }
+        const QVector<QRect>& getMotionBoxes() const { return m_motionBoxes; }
+        const QVector<CameraPipelineDetection>& getDetections() const { return m_detections; }
+        const QDateTime& getCaptureDateTime() const { return m_captureDateTime; }
         quint64 getCaptureEpoch() const { return m_captureEpoch; }
         bool isManualPreviewFrame() const { return m_manualPreviewFrame; }
 
@@ -116,6 +119,9 @@ public:
                                       const CameraPipelineStacking& stack,
                                       const QVector<CameraPipelineStarDetection>& starDetections,
                                       const CameraPipelinePlateSolve& plateSolve,
+                                      const QVector<QRect>& motionBoxes,
+                                      const QVector<CameraPipelineDetection>& detections,
+                                      const QDateTime& captureDateTime,
                                       quint64 captureEpoch,
                                       bool manualPreviewFrame,
                                       const QVector<PreviewTextLabel>& previewTextLabels)
@@ -126,6 +132,9 @@ public:
                 stack,
                 starDetections,
                 plateSolve,
+                motionBoxes,
+                detections,
+                captureDateTime,
                 captureEpoch,
                 manualPreviewFrame,
                 previewTextLabels);
@@ -137,6 +146,9 @@ public:
         CameraPipelineStacking m_stack;
         QVector<CameraPipelineStarDetection> m_starDetections;
         CameraPipelinePlateSolve m_plateSolve;
+        QVector<QRect> m_motionBoxes;
+        QVector<CameraPipelineDetection> m_detections;
+        QDateTime m_captureDateTime;
         quint64 m_captureEpoch;
         bool m_manualPreviewFrame;
         QVector<PreviewTextLabel> m_previewTextLabels;
@@ -146,6 +158,9 @@ public:
                        const CameraPipelineStacking& stack,
                        const QVector<CameraPipelineStarDetection>& starDetections,
                        const CameraPipelinePlateSolve& plateSolve,
+                       const QVector<QRect>& motionBoxes,
+                       const QVector<CameraPipelineDetection>& detections,
+                       const QDateTime& captureDateTime,
                        quint64 captureEpoch,
                        bool manualPreviewFrame,
                        const QVector<PreviewTextLabel>& previewTextLabels) :
@@ -155,6 +170,9 @@ public:
             m_stack(stack),
             m_starDetections(starDetections),
             m_plateSolve(plateSolve),
+            m_motionBoxes(motionBoxes),
+            m_detections(detections),
+            m_captureDateTime(captureDateTime),
             m_captureEpoch(captureEpoch),
             m_manualPreviewFrame(manualPreviewFrame),
             m_previewTextLabels(previewTextLabels)

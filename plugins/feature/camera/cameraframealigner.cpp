@@ -633,40 +633,85 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
     const cv::Point2d shift = cv::phaseCorrelate(targetFloat, referenceFloat, cv::noArray(), &response);
     frame.m_stack.m_alignmentResponse = static_cast<float>(response);
 
-    std::vector<cv::Point2f> matchedTargetPoints;
-    std::vector<cv::Point2f> matchedReferencePoints;
-    std::vector<bool> targetUsed(targetStars.size(), false);
     constexpr float maxMatchDistance = 12.0f;
+    constexpr size_t maxSeedStars = 12;
 
-    for (const cv::Point2f& referenceStar : referenceStars)
+    auto matchForShift = [&](const cv::Point2f& candidateShift,
+                             std::vector<cv::Point2f>& candidateTargetPoints,
+                             std::vector<cv::Point2f>& candidateReferencePoints) -> double
     {
-        int bestIndex = -1;
-        float bestDistance = maxMatchDistance;
+        candidateTargetPoints.clear();
+        candidateReferencePoints.clear();
+        std::vector<bool> targetUsed(targetStars.size(), false);
+        double totalDistance = 0.0;
 
-        for (size_t i = 0; i < targetStars.size(); ++i)
+        for (const cv::Point2f& referenceStar : referenceStars)
         {
-            if (targetUsed[i]) {
-                continue;
+            int bestIndex = -1;
+            float bestDistance = maxMatchDistance;
+
+            for (size_t i = 0; i < targetStars.size(); ++i)
+            {
+                if (targetUsed[i]) {
+                    continue;
+                }
+
+                const cv::Point2f shiftedTarget(targetStars[i].x + candidateShift.x,
+                                                targetStars[i].y + candidateShift.y);
+                const float dx = shiftedTarget.x - referenceStar.x;
+                const float dy = shiftedTarget.y - referenceStar.y;
+                const float distance = std::sqrt((dx * dx) + (dy * dy));
+
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestIndex = static_cast<int>(i);
+                }
             }
 
-            const cv::Point2f shiftedTarget(targetStars[i].x + static_cast<float>(shift.x),
-                                            targetStars[i].y + static_cast<float>(shift.y));
-            const float dx = shiftedTarget.x - referenceStar.x;
-            const float dy = shiftedTarget.y - referenceStar.y;
-            const float distance = std::sqrt((dx * dx) + (dy * dy));
-
-            if (distance < bestDistance)
+            if (bestIndex >= 0)
             {
-                bestDistance = distance;
-                bestIndex = static_cast<int>(i);
+                targetUsed[bestIndex] = true;
+                candidateTargetPoints.push_back(targetStars[static_cast<size_t>(bestIndex)]);
+                candidateReferencePoints.push_back(referenceStar);
+                totalDistance += bestDistance;
             }
         }
 
-        if (bestIndex >= 0)
+        return totalDistance;
+    };
+
+    std::vector<cv::Point2f> matchedTargetPoints;
+    std::vector<cv::Point2f> matchedReferencePoints;
+    double bestMatchDistance = std::numeric_limits<double>::infinity();
+    cv::Point2f bestSeedShift(static_cast<float>(shift.x), static_cast<float>(shift.y));
+
+    auto considerShift = [&](const cv::Point2f& candidateShift)
+    {
+        std::vector<cv::Point2f> candidateTargetPoints;
+        std::vector<cv::Point2f> candidateReferencePoints;
+        const double candidateDistance = matchForShift(candidateShift, candidateTargetPoints, candidateReferencePoints);
+
+        if ((candidateTargetPoints.size() > matchedTargetPoints.size())
+            || ((candidateTargetPoints.size() == matchedTargetPoints.size()) && (candidateDistance < bestMatchDistance)))
         {
-            targetUsed[bestIndex] = true;
-            matchedTargetPoints.push_back(targetStars[bestIndex]);
-            matchedReferencePoints.push_back(referenceStar);
+            matchedTargetPoints = std::move(candidateTargetPoints);
+            matchedReferencePoints = std::move(candidateReferencePoints);
+            bestMatchDistance = candidateDistance;
+            bestSeedShift = candidateShift;
+        }
+    };
+
+    considerShift(cv::Point2f(static_cast<float>(shift.x), static_cast<float>(shift.y)));
+
+    const size_t referenceSeedCount = std::min(referenceStars.size(), maxSeedStars);
+    const size_t targetSeedCount = std::min(targetStars.size(), maxSeedStars);
+    for (size_t referenceIndex = 0; referenceIndex < referenceSeedCount; ++referenceIndex)
+    {
+        for (size_t targetIndex = 0; targetIndex < targetSeedCount; ++targetIndex)
+        {
+            considerShift(cv::Point2f(referenceStars[referenceIndex].x - targetStars[targetIndex].x,
+                                      referenceStars[referenceIndex].y - targetStars[targetIndex].y));
         }
     }
 
@@ -677,7 +722,8 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                  << "target" << targetStars.size()
                  << "matches" << matchedTargetPoints.size()
                  << "phaseResponse" << response
-                 << "phaseShift" << shift.x << shift.y;
+                 << "phaseShift" << shift.x << shift.y
+                 << "bestSeedShift" << bestSeedShift.x << bestSeedShift.y;
         return alignWithPhaseCorrelation(referenceFrame, targetFrame, frame, appliedTransform, deferWarp);
     }
 
@@ -745,6 +791,7 @@ cv::Mat CameraFrameAligner::alignWithStarCentroids(const cv::Mat& referenceFrame
                  << "rms" << residualRms
                  << "maxResidual" << maxResidual
                  << "shift" << transform.at<double>(0, 2) << transform.at<double>(1, 2)
+                 << "seedShift" << bestSeedShift.x << bestSeedShift.y
                  << "rotation" << rotationDegrees
                  << "scale" << scale
                  << "phaseResponse" << response;

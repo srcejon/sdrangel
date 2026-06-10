@@ -210,6 +210,7 @@ bool CameraRecorder::handleMessage(const Message& cmd)
     else if (Camera::MsgCaptureActive::match(cmd))
     {
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
+        Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         m_captureActive = activeMsg.isActive();
         if (m_captureActive) {
             resetRecordingLimits();
@@ -231,6 +232,8 @@ bool CameraRecorder::handleMessage(const Message& cmd)
 void CameraRecorder::handleInputMessages()
 {
     Message *message;
+
+    Camera::discardQueuedProcessFramesOnCaptureActive(m_inputMessageQueue);
 
     while ((message = m_inputMessageQueue.pop()) != nullptr)
     {

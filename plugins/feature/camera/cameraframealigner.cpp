@@ -90,6 +90,7 @@ bool CameraFrameAligner::handleMessage(const Message& cmd)
     else if (Camera::MsgCaptureActive::match(cmd))
     {
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
+        Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         m_captureActive = activeMsg.isActive();
         if (m_captureActive) {
             resetAlignmentState();
@@ -109,6 +110,8 @@ bool CameraFrameAligner::handleMessage(const Message& cmd)
 void CameraFrameAligner::handleInputMessages()
 {
     Message *message;
+
+    Camera::discardQueuedProcessFramesOnCaptureActive(m_inputMessageQueue);
 
     while ((message = m_inputMessageQueue.pop()) != nullptr)
     {

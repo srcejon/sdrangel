@@ -38,6 +38,7 @@
 #include "cameraworker.h"
 
 class WebAPIAdapterInterface;
+class MessageQueue;
 
 namespace SWGSDRangel {
     class SWGDeviceState;
@@ -171,6 +172,9 @@ public:
             m_errorMessage(errorMessage)
         { }
     };
+
+    static int discardQueuedProcessFrames(MessageQueue& queue);
+    static int discardQueuedProcessFramesOnCaptureActive(MessageQueue& queue);
 
     class MsgDeleteStackFrame : public Message {
         MESSAGE_CLASS_DECLARATION

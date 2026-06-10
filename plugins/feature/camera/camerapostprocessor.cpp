@@ -586,6 +586,8 @@ void CameraPostProcessor::handleInputMessages()
 {
     Message* message;
 
+    Camera::discardQueuedProcessFramesOnCaptureActive(m_inputMessageQueue);
+
     while ((message = m_inputMessageQueue.pop()) != nullptr)
     {
         if (handleMessage(*message)) {
@@ -638,6 +640,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     else if (Camera::MsgCaptureActive::match(cmd))
     {
         Camera::MsgCaptureActive& activeMsg = (Camera::MsgCaptureActive&) cmd;
+        Camera::discardQueuedProcessFrames(m_inputMessageQueue);
 
         if (activeMsg.isActive())
         {

@@ -62,6 +62,7 @@ bool CameraDetectionStage::handleMessage(const Message& cmd)
     else if (Camera::MsgCaptureActive::match(cmd))
     {
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
+        Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         const bool active = activeMsg.isActive();
         captureActiveChanged(active);
         QMutexLocker locker(&m_frameMutex);
@@ -98,6 +99,8 @@ void CameraDetectionStage::captureActiveChanged(bool active)
 void CameraDetectionStage::handleInputMessages()
 {
     Message *message;
+
+    Camera::discardQueuedProcessFramesOnCaptureActive(m_inputMessageQueue);
 
     while ((message = m_inputMessageQueue.pop()) != nullptr)
     {

@@ -21,6 +21,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QJsonObject>
+#include <QList>
 
 #include "SWGFeatureSettings.h"
 #include "SWGFeatureReport.h"
@@ -32,6 +33,7 @@
 #include "SWGCameraActions.h"
 
 #include "settings/serializable.h"
+#include "util/messagequeue.h"
 
 #include "camera.h"
 #include "cameraworker.h"
@@ -46,6 +48,46 @@ MESSAGE_CLASS_DEFINITION(Camera::MsgDeleteStackFrame, Message)
 
 const char* const Camera::m_featureIdURI = "sdrangel.feature.camera";
 const char* const Camera::m_featureId = "Camera";
+
+static int discardQueuedProcessFrames(MessageQueue& queue, bool requireCaptureActive)
+{
+    QList<Message*> messages;
+    Message *message = nullptr;
+    bool hasCaptureActive = false;
+
+    while ((message = queue.pop()) != nullptr)
+    {
+        hasCaptureActive = hasCaptureActive || Camera::MsgCaptureActive::match(*message);
+        messages.append(message);
+    }
+
+    int dropped = 0;
+
+    for (Message *queuedMessage : messages)
+    {
+        if ((!requireCaptureActive || hasCaptureActive) && Camera::MsgProcessFrame::match(*queuedMessage))
+        {
+            delete queuedMessage;
+            ++dropped;
+        }
+        else
+        {
+            queue.push(queuedMessage, false);
+        }
+    }
+
+    return dropped;
+}
+
+int Camera::discardQueuedProcessFrames(MessageQueue& queue)
+{
+    return ::discardQueuedProcessFrames(queue, false);
+}
+
+int Camera::discardQueuedProcessFramesOnCaptureActive(MessageQueue& queue)
+{
+    return ::discardQueuedProcessFrames(queue, true);
+}
 
 Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),

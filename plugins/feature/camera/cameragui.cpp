@@ -1472,6 +1472,7 @@ void CameraGUI::displaySettings()
     settingsUI()->youtubeStreamUrlEdit->setText(m_settings.m_youtubeStreamUrl);
     settingsUI()->youtubeStreamKeyEdit->setText(m_settings.m_youtubeStreamKey);
     settingsUI()->youtubeStreamSourceCombo->setCurrentIndex(m_settings.m_youtubeStreamPostProcessed ? 1 : 0);
+    updateYouTubeStreamButtonEnabled();
     settingsUI()->youtubeStreamBitrateSpin->setValue(m_settings.m_youtubeStreamBitrateKbps);
     settingsUI()->youtubeStreamFpsSpin->setValue(m_settings.m_youtubeStreamFps);
     settingsUI()->youtubeStreamWidthSpin->setValue(m_settings.m_youtubeStreamWidth);
@@ -2216,6 +2217,15 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->youtubeStreamButton, &QToolButton::toggled, this, &CameraGUI::on_youtubeStreamButton_toggled);
     QObject::connect(settingsUI()->youtubeStreamUrlEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_youtubeStreamUrlEdit_editingFinished);
     QObject::connect(settingsUI()->youtubeStreamKeyEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_youtubeStreamKeyEdit_editingFinished);
+    QObject::connect(settingsUI()->youtubeStreamKeyEdit, &QLineEdit::textChanged, this, [this]() {
+        updateYouTubeStreamButtonEnabled();
+
+        if (settingsUI()->youtubeStreamKeyEdit->text().trimmed().isEmpty() && m_settings.m_youtubeStreamEnabled)
+        {
+            m_settings.m_youtubeStreamEnabled = false;
+            applySetting("youtubeStreamEnabled");
+        }
+    });
     QObject::connect(settingsUI()->youtubeStreamSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_youtubeStreamSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->youtubeStreamBitrateSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamBitrateSpin_valueChanged);
     QObject::connect(settingsUI()->youtubeStreamFpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamFpsSpin_valueChanged);
@@ -5703,8 +5713,26 @@ void CameraGUI::on_keogramPreviewCheck_toggled(bool checked)
 
 void CameraGUI::on_youtubeStreamButton_toggled(bool checked)
 {
+    const QString key = settingsUI()->youtubeStreamKeyEdit->text();
+
+    if (checked && key.trimmed().isEmpty())
+    {
+        updateYouTubeStreamButtonEnabled();
+        return;
+    }
+
+    const bool keyChanged = m_settings.m_youtubeStreamKey != key;
+    m_settings.m_youtubeStreamKey = key;
     m_settings.m_youtubeStreamEnabled = checked;
-    applySetting("youtubeStreamEnabled");
+
+    if (keyChanged)
+    {
+        applySettings({"youtubeStreamKey", "youtubeStreamEnabled"});
+    }
+    else
+    {
+        applySetting("youtubeStreamEnabled");
+    }
 }
 
 void CameraGUI::on_youtubeStreamUrlEdit_editingFinished()
@@ -5716,7 +5744,17 @@ void CameraGUI::on_youtubeStreamUrlEdit_editingFinished()
 void CameraGUI::on_youtubeStreamKeyEdit_editingFinished()
 {
     m_settings.m_youtubeStreamKey = settingsUI()->youtubeStreamKeyEdit->text();
-    applySetting("youtubeStreamKey");
+    updateYouTubeStreamButtonEnabled();
+
+    if (m_settings.m_youtubeStreamKey.trimmed().isEmpty() && m_settings.m_youtubeStreamEnabled)
+    {
+        m_settings.m_youtubeStreamEnabled = false;
+        applySettings({"youtubeStreamKey", "youtubeStreamEnabled"});
+    }
+    else
+    {
+        applySetting("youtubeStreamKey");
+    }
 }
 
 void CameraGUI::on_youtubeStreamSourceCombo_currentIndexChanged(int index)
@@ -7764,6 +7802,19 @@ void CameraGUI::updateYoloButtonEnabled()
 
     if (!enabled && ui->yoloButton->isChecked()) {
         ui->yoloButton->setChecked(false);
+    }
+}
+
+void CameraGUI::updateYouTubeStreamButtonEnabled()
+{
+    const bool enabled = !settingsUI()->youtubeStreamKeyEdit->text().trimmed().isEmpty();
+
+    ui->youtubeStreamButton->setEnabled(enabled);
+
+    if (!enabled && ui->youtubeStreamButton->isChecked())
+    {
+        const QSignalBlocker blocker(ui->youtubeStreamButton);
+        ui->youtubeStreamButton->setChecked(false);
     }
 }
 

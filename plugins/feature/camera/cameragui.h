@@ -292,6 +292,7 @@ private:
     void applyMotionExclusionRectsFromTable();
     void updateMotionExclusionPreview();
     void updateYoloButtonEnabled();
+    void updateYouTubeStreamButtonEnabled();
     void updatePlateSolveStartModeUi();
     void updatePlateSolveDateTimeEdit();
     void setPreviewDrawMode(PreviewDrawMode mode);

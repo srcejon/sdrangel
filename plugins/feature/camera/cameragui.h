@@ -19,6 +19,8 @@
 #ifndef INCLUDE_FEATURE_CAMERAGUI_H_
 #define INCLUDE_FEATURE_CAMERAGUI_H_
 
+#include <memory>
+
 #include <QColor>
 #include <QHash>
 #include <QImage>
@@ -32,6 +34,7 @@
 #include <QToolButton>
 #include <QMediaPlayer>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QAudioOutput>
 #include <QVideoFrame>
 #else
 #include <QAbstractVideoSurface>
@@ -56,6 +59,8 @@ class Feature;
 class CameraSettingsDialog;
 class CameraDetectionHistory;
 class CameraHistogramDialog;
+class CameraVideoFileAudioDecoder;
+class CameraVideoFileVideoDecoder;
 class Message;
 class QLabel;
 class QDialog;
@@ -267,7 +272,14 @@ private:
     CameraVideoSurface *m_videoSurface;
 #endif
     QMediaPlayer *m_mediaPlayer;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    QAudioOutput *m_mediaAudioOutput = nullptr;
+#endif
     qint64 m_mediaPlayerDurationMs = 0;
+    std::unique_ptr<CameraVideoFileAudioDecoder> m_videoFileAudioDecoder;
+    std::unique_ptr<CameraVideoFileVideoDecoder> m_videoFileVideoDecoder;
+    QTimer m_videoFileVideoTimer;
+    qint64 m_videoFileVideoPositionMs = 0;
     QTimer m_imageSequenceTimer;
     bool m_imageSequenceLoaded = false;
     int m_imageSequenceIndex = 0;
@@ -353,9 +365,20 @@ private:
     void setupQtCapture();
     void cleanupQtCapture();
     bool ensureVideoFilePlayer(bool startPlayback);
+    bool ensureFfmpegVideoFilePlayer(bool startPlayback);
+    void closeFfmpegVideoFilePlayer();
+    void startFfmpegVideoFilePlayback();
+    void pauseFfmpegVideoFilePlayback();
+    void seekFfmpegVideoFilePlayback(qint64 positionMs);
+    void processFfmpegVideoFileFrame();
+    int videoFileFrameIntervalMs() const;
     int imageSequenceIntervalMs() const;
     qint64 imageSequenceDurationMs() const;
     void updatePlaybackPositionLabel(qint64 videoPositionMs = -1);
+    void openVideoFileAudioDecoder();
+    void closeVideoFileAudioDecoder();
+    void seekVideoFileAudioDecoder(qint64 positionMs);
+    void submitVideoFileAudio(qint64 playbackPositionMs);
     bool loadImageSequenceFrame(int index, QImage& image) const;
     void showImageSequenceFrame(int index);
     void advanceImageSequenceFrame();

@@ -19,6 +19,7 @@
 #ifndef INCLUDE_FEATURE_CAMERA_H_
 #define INCLUDE_FEATURE_CAMERA_H_
 
+#include <QByteArray>
 #include <QThread>
 
 #include "feature/feature.h"
@@ -268,6 +269,7 @@ public:
     MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
     CameraFrameAligner* getFrameAligner() { return m_frameAligner; }
     MessageQueue* getDetectorInputMessageQueue() { return m_objectDetector ? m_objectDetector->getInputMessageQueue() : nullptr; }
+    void submitRecorderAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     void setMessageQueueToGUI(MessageQueue *queue) override;
 
 private:

@@ -438,6 +438,13 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
     }
 }
 
+void Camera::submitRecorderAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate)
+{
+    if (m_recorder) {
+        m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgAudioSamples::create(pcmS16Stereo, sampleRate));
+    }
+}
+
 bool Camera::handleMessage(const Message& cmd)
 {
     if (MsgConfigureCamera::match(cmd))

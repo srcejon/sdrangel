@@ -23,6 +23,7 @@
 #include <QByteArray>
 #include <QDebug>
 #include <QPainter>
+#include <QUrl>
 
 #ifdef CAMERA_FFMPEG_STREAMING
 extern "C" {
@@ -66,6 +67,13 @@ QString CameraYouTubeStreamer::streamTargetUrl(const Settings& settings)
     QString url = settings.m_url.trimmed();
     const QString key = settings.m_key.trimmed();
 
+    if (url.startsWith(QStringLiteral("rtmp://a.rtmps.youtube.com/"), Qt::CaseInsensitive)) {
+        url.replace(0, 7, QStringLiteral("rtmps://"));
+    }
+    else if (url.startsWith(QStringLiteral("rtmps://a.rtmp.youtube.com/"), Qt::CaseInsensitive)) {
+        url.replace(0, 8, QStringLiteral("rtmp://"));
+    }
+
     if (!key.isEmpty())
     {
         if (!url.endsWith('/')) {
@@ -75,6 +83,25 @@ QString CameraYouTubeStreamer::streamTargetUrl(const Settings& settings)
     }
 
     return url;
+}
+
+QString CameraYouTubeStreamer::redactedStreamTargetUrl(const QString& targetUrl)
+{
+    QUrl url(targetUrl);
+
+    if (!url.isValid()) {
+        return QStringLiteral("<invalid>");
+    }
+
+    QString path = url.path();
+    const int slash = path.lastIndexOf('/');
+    if (slash >= 0) {
+        path = path.left(slash + 1) + QStringLiteral("<key>");
+    }
+    url.setPath(path);
+    url.setQuery(QString());
+    url.setFragment(QString());
+    return url.toString(QUrl::RemovePassword);
 }
 
 QSize CameraYouTubeStreamer::evenSize(const QSize& size)
@@ -117,6 +144,11 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
         errorMessage = QStringLiteral("YouTube stream URL is empty");
         return false;
     }
+    if (settings.m_key.trimmed().isEmpty())
+    {
+        errorMessage = QStringLiteral("YouTube stream key is empty");
+        return false;
+    }
 
     QSize streamSize = settings.m_size.isValid() ? settings.m_size : firstFrame.size();
     streamSize = evenSize(streamSize);
@@ -137,7 +169,8 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
         return false;
     }
 
-    int ret = avformat_alloc_output_context2(&m_formatContext, nullptr, "flv", targetUrl.toUtf8().constData());
+    const QByteArray targetUrlUtf8 = targetUrl.toUtf8();
+    int ret = avformat_alloc_output_context2(&m_formatContext, nullptr, "flv", targetUrlUtf8.constData());
     if ((ret < 0) || !m_formatContext)
     {
         errorMessage = QStringLiteral("Cannot create FLV output context: %1").arg(avErrorString(ret));
@@ -197,7 +230,10 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
     }
     stream->time_base = m_codecContext->time_base;
 
-    ret = avio_open2(&m_formatContext->pb, targetUrl.toUtf8().constData(), AVIO_FLAG_WRITE, nullptr, nullptr);
+    AVDictionary *ioOptions = nullptr;
+    av_dict_set(&ioOptions, "rtmp_live", "live", 0);
+    ret = avio_open2(&m_formatContext->pb, targetUrlUtf8.constData(), AVIO_FLAG_WRITE, nullptr, &ioOptions);
+    av_dict_free(&ioOptions);
     if (ret < 0)
     {
         errorMessage = QStringLiteral("Cannot open YouTube stream URL: %1").arg(avErrorString(ret));
@@ -205,7 +241,10 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
         return false;
     }
 
-    ret = avformat_write_header(m_formatContext, nullptr);
+    AVDictionary *formatOptions = nullptr;
+    av_dict_set(&formatOptions, "flvflags", "no_duration_filesize", 0);
+    ret = avformat_write_header(m_formatContext, &formatOptions);
+    av_dict_free(&formatOptions);
     if (ret < 0)
     {
         errorMessage = QStringLiteral("Cannot write YouTube stream header: %1").arg(avErrorString(ret));
@@ -255,39 +294,21 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
     m_streamSize = streamSize;
     m_frameIndex = 0;
     m_lastFrameElapsedMs = -1;
+    m_nextFrameElapsedMs = 0;
     m_streamTimer.restart();
-    qDebug() << "CameraYouTubeStreamer: opened stream" << streamSize << "fps" << fps << "bitrateKbps" << settings.m_bitrateKbps;
+    qDebug() << "CameraYouTubeStreamer: opened stream" << redactedStreamTargetUrl(targetUrl)
+             << streamSize << "fps" << fps << "bitrateKbps" << settings.m_bitrateKbps;
     return true;
 #endif
 }
 
-bool CameraYouTubeStreamer::writeFrame(const QImage& image, QString& errorMessage)
+bool CameraYouTubeStreamer::encodeAndWriteRgbFrame(const QImage& rgb, QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
-    Q_UNUSED(image)
+    Q_UNUSED(rgb)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
-    if (!isOpen())
-    {
-        errorMessage = QStringLiteral("YouTube stream is not open");
-        return false;
-    }
-
-    const int framePeriodMs = std::max(1, 1000 / std::max(1, m_settings.m_fps));
-    const qint64 elapsedMs = m_streamTimer.elapsed();
-    if ((m_lastFrameElapsedMs >= 0) && ((elapsedMs - m_lastFrameElapsedMs) < framePeriodMs)) {
-        return true;
-    }
-    m_lastFrameElapsedMs = elapsedMs;
-
-    const QImage rgb = prepareRgbImage(image, m_streamSize);
-    if (rgb.isNull())
-    {
-        errorMessage = QStringLiteral("Cannot prepare frame for YouTube streaming");
-        return false;
-    }
-
     int ret = av_frame_make_writable(m_frame);
     if (ret < 0)
     {
@@ -340,6 +361,57 @@ bool CameraYouTubeStreamer::writeFrame(const QImage& image, QString& errorMessag
 #endif
 }
 
+bool CameraYouTubeStreamer::writeFrame(const QImage& image, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(image)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    if (!isOpen())
+    {
+        errorMessage = QStringLiteral("YouTube stream is not open");
+        return false;
+    }
+
+    const int fps = std::max(1, m_settings.m_fps);
+    const int framePeriodMs = std::max(1, 1000 / fps);
+    const qint64 elapsedMs = m_streamTimer.elapsed();
+    if ((m_lastFrameElapsedMs >= 0) && (elapsedMs < m_nextFrameElapsedMs)) {
+        return true;
+    }
+
+    const QImage rgb = prepareRgbImage(image, m_streamSize);
+    if (rgb.isNull())
+    {
+        errorMessage = QStringLiteral("Cannot prepare frame for YouTube streaming");
+        return false;
+    }
+
+    if (m_nextFrameElapsedMs <= 0) {
+        m_nextFrameElapsedMs = elapsedMs;
+    }
+    if ((elapsedMs - m_nextFrameElapsedMs) > 2000) {
+        m_nextFrameElapsedMs = elapsedMs;
+    }
+
+    const int maxFramesPerInputFrame = std::max(1, fps);
+    int framesWritten = 0;
+    do
+    {
+        if (!encodeAndWriteRgbFrame(rgb, errorMessage)) {
+            return false;
+        }
+
+        m_lastFrameElapsedMs = elapsedMs;
+        m_nextFrameElapsedMs += framePeriodMs;
+        ++framesWritten;
+    } while ((m_nextFrameElapsedMs <= elapsedMs) && (framesWritten < maxFramesPerInputFrame));
+
+    return true;
+#endif
+}
+
 void CameraYouTubeStreamer::close()
 {
 #ifdef CAMERA_FFMPEG_STREAMING
@@ -386,6 +458,7 @@ void CameraYouTubeStreamer::close()
     m_streamIndex = -1;
     m_frameIndex = 0;
     m_lastFrameElapsedMs = -1;
+    m_nextFrameElapsedMs = 0;
     m_headerWritten = false;
     m_streamSize = QSize();
 }

@@ -70,6 +70,21 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
     m_capturing = true;
 }
 
+void CameraQtAudioController::startFilePlayback(const CameraSettings& settings, MessageQueue *messageQueue)
+{
+    stop();
+
+    AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
+    const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(settings.m_audioDeviceName);
+    const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
+    qDebug() << "CameraQtAudioController: starting file audio monitor: outputDeviceIndex" << outputDeviceIndex;
+    audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
+    m_muted = settings.m_audioMute;
+    m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
+    m_outputAudioFifo.clear();
+    m_capturing = true;
+}
+
 void CameraQtAudioController::stop()
 {
     if (!m_capturing) {
@@ -81,6 +96,8 @@ void CameraQtAudioController::stop()
     AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
     audioDeviceManager->removeAudioSource(&m_captureAudioFifo);
     audioDeviceManager->removeAudioSink(&m_outputAudioFifo);
+    m_captureAudioFifo.clear();
+    m_outputAudioFifo.clear();
     m_capturing = false;
 }
 
@@ -89,6 +106,24 @@ void CameraQtAudioController::setMuted(bool muted)
     m_muted = muted;
     if (m_muted) {
         m_captureAudioFifo.clear();
+        m_outputAudioFifo.clear();
+    }
+}
+
+void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate)
+{
+    static constexpr int bytesPerSampleFrame = 4;
+    if (pcmS16Stereo.isEmpty() || (sampleRate <= 0)) {
+        return;
+    }
+
+    const int sampleFrames = pcmS16Stereo.size() / bytesPerSampleFrame;
+    if (!m_muted && m_capturing && (sampleFrames > 0)) {
+        m_outputAudioFifo.write(reinterpret_cast<const quint8*>(pcmS16Stereo.constData()), sampleFrames);
+    }
+
+    if (m_recordingMessageQueue) {
+        m_recordingMessageQueue->push(CameraRecorder::MsgAudioSamples::create(pcmS16Stereo, sampleRate));
     }
 }
 

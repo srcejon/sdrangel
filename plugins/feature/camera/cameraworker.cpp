@@ -35,12 +35,15 @@
 #include "camerafinder.h"
 #include "cameraframepreprocessor.h"
 #include "camerapostprocessor.h"
+#include "cameravideofiledecoder.h"
 #include "cameraworker.h"
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartAutoFocus, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgVideoFileControl, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportVideoFilePlayback, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaDeviceList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAsiCameraInfo, Message)
@@ -59,6 +62,9 @@ CameraWorker::CameraWorker() :
     m_capturing(false),
     m_captureEpoch(0),
     m_captureTimer(this),
+    m_videoFilePositionMs(0),
+    m_videoFileDurationMs(0),
+    m_videoFilePlaying(false),
     m_networkManager(nullptr),
     m_cameraFinder(new CameraFinder(this)),
     m_stackFrameIndex(0),
@@ -841,6 +847,33 @@ bool CameraWorker::handleMessage(const Message& cmd)
         startAutoFocus();
         return true;
     }
+    else if (MsgVideoFileControl::match(cmd))
+    {
+        const MsgVideoFileControl& msg = (const MsgVideoFileControl&) cmd;
+        switch (msg.getAction())
+        {
+        case MsgVideoFileControl::Play:
+            setVideoFilePlaying(true);
+            break;
+        case MsgVideoFileControl::Pause:
+            setVideoFilePlaying(false);
+            break;
+        case MsgVideoFileControl::Restart:
+            seekVideoFile(0, true);
+            setVideoFilePlaying(true);
+            break;
+        case MsgVideoFileControl::StepBack:
+            stepVideoFile(-1);
+            break;
+        case MsgVideoFileControl::StepForward:
+            stepVideoFile(1);
+            break;
+        case MsgVideoFileControl::Seek:
+            seekVideoFile(msg.getPositionMs(), true);
+            break;
+        }
+        return true;
+    }
     else if (MainCore::MsgImage::match(cmd))
     {
         MainCore::MsgImage& imgMsg = (MainCore::MsgImage&) cmd;
@@ -882,6 +915,9 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     const bool recapture = m_capturing && (
         cameraSourceChanged
         || (m_settings.isQtCamera() && (force || settingsKeys.contains("audioDeviceName")))
+        || (m_settings.isVideoFileCamera() && (force
+            || settingsKeys.contains("videoFileCameraPath")
+            || settingsKeys.contains("audioDeviceName")))
         || (m_settings.isAsiCamera() && captureModeChanged));
     const bool alpacaEndpointChanged = force
         || settingsKeys.contains("cameraProtocol")
@@ -954,6 +990,14 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         && m_cameraFinder)
     {
         m_cameraFinder->reportCameraList(m_settings);
+    }
+
+    if (!recapture && m_capturing && m_settings.isVideoFileCamera()
+        && (captureCadenceChanged || settingsKeys.contains("videoPlaybackRate")))
+    {
+        if (m_videoFilePlaying) {
+            m_captureTimer.start(videoFileFrameIntervalMs());
+        }
     }
 
     if (!recapture && m_capturing && (m_settings.isAlpacaCamera() || m_settings.isAsiCamera()) && captureCadenceChanged)
@@ -1151,6 +1195,18 @@ void CameraWorker::startCapture()
         // Qt camera capture is mainly managed by CameraGUI on the main thread. The worker only bridges audio.
         m_qtAudio.start(m_settings, getInputMessageQueue());
     }
+    else if (m_settings.isVideoFileCamera())
+    {
+        if (openVideoFileDecoder())
+        {
+            readVideoFileFrame();
+            setVideoFilePlaying(true);
+        }
+        else
+        {
+            m_capturing = false;
+        }
+    }
 }
 
 void CameraWorker::stopCapture()
@@ -1175,11 +1231,18 @@ void CameraWorker::stopCapture()
 #endif
 
     m_qtAudio.stop();
+    closeVideoFileDecoder();
 }
 
 void CameraWorker::captureTick()
 {
     if (!m_capturing) {
+        return;
+    }
+
+    if (m_settings.isVideoFileCamera())
+    {
+        readVideoFileFrame();
         return;
     }
 
@@ -1212,6 +1275,168 @@ void CameraWorker::captureTick()
     }
     m_alpaca.m_frameRequestPending = true;
     applyControllerCameraParams();
+}
+
+bool CameraWorker::openVideoFileDecoder()
+{
+    closeVideoFileDecoder();
+
+    if (!m_settings.isVideoFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
+        return false;
+    }
+
+    m_videoFileDecoder.reset(new CameraVideoFileDecoder());
+    QString errorMessage;
+    if (!m_videoFileDecoder->open(m_settings.m_videoFileCameraPath, errorMessage))
+    {
+        reportErrorToFeature(
+            QStringLiteral("videoFileOpen:%1").arg(m_settings.m_videoFileCameraPath),
+            tr("Video file could not be opened"),
+            errorMessage);
+        m_videoFileDecoder.reset();
+        reportVideoFilePlaybackToGUI();
+        return false;
+    }
+
+    m_videoFilePositionMs = 0;
+    m_videoFileDurationMs = m_videoFileDecoder->durationMs();
+    m_videoFilePlaying = false;
+    m_qtAudio.startFilePlayback(m_settings, getInputMessageQueue());
+    reportVideoFilePlaybackToGUI();
+    return true;
+}
+
+void CameraWorker::closeVideoFileDecoder()
+{
+    m_captureTimer.stop();
+    m_videoFileDecoder.reset();
+    m_videoFilePositionMs = 0;
+    m_videoFileDurationMs = 0;
+    m_videoFilePlaying = false;
+    if (m_settings.isVideoFileCamera()) {
+        m_qtAudio.stop();
+    }
+    reportVideoFilePlaybackToGUI();
+}
+
+void CameraWorker::setVideoFilePlaying(bool playing)
+{
+    if (!m_capturing || !m_settings.isVideoFileCamera() || !m_videoFileDecoder)
+    {
+        m_videoFilePlaying = false;
+        reportVideoFilePlaybackToGUI();
+        return;
+    }
+
+    m_videoFilePlaying = playing;
+    if (m_videoFilePlaying) {
+        m_captureTimer.start(videoFileFrameIntervalMs());
+    } else {
+        m_captureTimer.stop();
+    }
+    reportVideoFilePlaybackToGUI();
+}
+
+void CameraWorker::readVideoFileFrame()
+{
+    if (!m_capturing || !m_settings.isVideoFileCamera() || !m_videoFileDecoder) {
+        return;
+    }
+
+    QImage image;
+    qint64 positionMs = -1;
+    QByteArray pcmS16Stereo;
+    int audioSampleRate = 0;
+    QString errorMessage;
+    if (!m_videoFileDecoder->readNextFrame(image, positionMs, pcmS16Stereo, audioSampleRate, errorMessage))
+    {
+        reportErrorToFeature(
+            QStringLiteral("videoFileDecode:%1").arg(m_settings.m_videoFileCameraPath),
+            tr("Video file decode failed"),
+            errorMessage);
+        setVideoFilePlaying(false);
+        return;
+    }
+
+    if (image.isNull())
+    {
+        if (m_settings.m_videoLoop)
+        {
+            seekVideoFile(0, false);
+            readVideoFileFrame();
+            setVideoFilePlaying(true);
+        }
+        else
+        {
+            setVideoFilePlaying(false);
+        }
+        return;
+    }
+
+    if (positionMs >= 0) {
+        m_videoFilePositionMs = positionMs;
+    } else {
+        m_videoFilePositionMs += videoFileFrameIntervalMs();
+    }
+
+    if (!pcmS16Stereo.isEmpty()) {
+        m_qtAudio.submitPcmSamples(pcmS16Stereo, audioSampleRate);
+    }
+
+    if (m_framePreprocessor)
+    {
+        CameraPipelineFramePtr frame(new CameraPipelineFrame);
+        frame->m_image = image;
+        populateFrameExposureMetadata(*frame);
+        frame->m_playbackPositionMs = m_videoFilePositionMs;
+        m_framePreprocessor->submitFrame(frame);
+    }
+
+    reportVideoFilePlaybackToGUI();
+}
+
+void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
+{
+    if (!m_videoFileDecoder) {
+        return;
+    }
+
+    m_videoFilePositionMs = qBound<qint64>(0, positionMs, m_videoFileDurationMs > 0 ? m_videoFileDurationMs : std::numeric_limits<qint64>::max());
+    m_videoFileDecoder->seek(m_videoFilePositionMs);
+    reportVideoFilePlaybackToGUI();
+    if (displayFrame) {
+        readVideoFileFrame();
+    }
+}
+
+void CameraWorker::stepVideoFile(int direction)
+{
+    setVideoFilePlaying(false);
+    const qint64 maxPosition = m_videoFileDurationMs > 0 ? m_videoFileDurationMs : std::numeric_limits<qint64>::max();
+    const qint64 position = qBound<qint64>(
+        0,
+        m_videoFilePositionMs + (direction >= 0 ? videoFileFrameIntervalMs() : -videoFileFrameIntervalMs()),
+        maxPosition);
+    seekVideoFile(position, true);
+}
+
+int CameraWorker::videoFileFrameIntervalMs() const
+{
+    const double decoderFps = m_videoFileDecoder ? m_videoFileDecoder->frameRate() : m_settings.m_framesPerSecond;
+    return qMax(1, static_cast<int>(1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings.m_videoPlaybackRate)) + 0.5));
+}
+
+void CameraWorker::reportVideoFilePlaybackToGUI() const
+{
+    if (!m_msgQueueToGUI) {
+        return;
+    }
+
+    m_msgQueueToGUI->push(MsgReportVideoFilePlayback::create(
+        m_videoFilePositionMs,
+        m_videoFileDurationMs,
+        m_videoFilePlaying,
+        m_videoFileDecoder != nullptr));
 }
 
 void CameraWorker::disconnectControllerCamera(const CameraSettings& settings)

@@ -26,6 +26,7 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QDateTime>
 #include <QDateTimeEdit>
 #include <QDesktopServices>
@@ -43,7 +44,6 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QLineEdit>
-#include <QMediaPlayer>
 #include <QNetworkReply>
 #include <QPainter>
 #include <QPixmap>
@@ -75,7 +75,6 @@
 #include <QVideoSink>
 #else
 #include <QAbstractVideoBuffer>
-#include <QMediaContent>
 #include <QAbstractVideoSurface>
 #include <QCamera>
 #include <QCameraExposure>
@@ -108,7 +107,6 @@
 #include "camerafilesequencedialog.h"
 #include "camerarecorder.h"
 #include "camerasettingsdialog.h"
-#include "cameravideofiledecoder.h"
 #include "cameraworker.h"
 #include "cameragui.h"
 
@@ -155,6 +153,63 @@ void setVisibleEnabled(QWidget *widget, bool visible, bool enabled)
 {
     widget->setVisible(visible);
     widget->setEnabled(enabled);
+}
+
+struct YouTubeBitratePreset
+{
+    const char *m_label;
+    int m_kbps;
+};
+
+const std::array<YouTubeBitratePreset, 14>& youtubeBitratePresets()
+{
+    static const std::array<YouTubeBitratePreset, 14> presets = {{
+        {"8K standard - 80 Mbps", 80000},
+        {"8K standard - 160 Mbps", 160000},
+        {"8K high frame rate - 120 Mbps", 120000},
+        {"8K high frame rate - 240 Mbps", 240000},
+        {"2160p (4K) standard - 35 Mbps", 35000},
+        {"2160p (4K) standard - 45 Mbps", 45000},
+        {"2160p (4K) high frame rate - 53 Mbps", 53000},
+        {"2160p (4K) high frame rate - 68 Mbps", 68000},
+        {"1440p (2K) standard - 16 Mbps", 16000},
+        {"1440p (2K) high frame rate - 24 Mbps", 24000},
+        {"1080p standard - 8 Mbps", 8000},
+        {"1080p high frame rate - 12 Mbps", 12000},
+        {"720p standard - 5 Mbps", 5000},
+        {"720p high frame rate - 7.5 Mbps", 7500}
+    }};
+    return presets;
+}
+
+QString youtubeBitrateText(int kbps)
+{
+    if ((kbps % 1000) == 0) {
+        return QStringLiteral("%1 Mbps").arg(kbps / 1000);
+    }
+    return QStringLiteral("%1 Mbps").arg(kbps / 1000.0, 0, 'f', 1);
+}
+
+int parseYouTubeBitrateKbps(const QString& text, int fallbackKbps)
+{
+    const QString trimmed = text.trimmed();
+    const QRegularExpressionMatch match = QRegularExpression(QStringLiteral("([0-9]+(?:[\\.,][0-9]+)?)")).match(trimmed);
+    if (!match.hasMatch()) {
+        return fallbackKbps;
+    }
+
+    bool ok = false;
+    const double value = QString(match.captured(1)).replace(QLatin1Char(','), QLatin1Char('.')).toDouble(&ok);
+    if (!ok || (value <= 0.0)) {
+        return fallbackKbps;
+    }
+
+    const QString lower = trimmed.toLower();
+    const bool explicitKbps = lower.contains(QStringLiteral("kbps")) || lower.contains(QStringLiteral("kbit"));
+    const bool explicitMbps = lower.contains(QStringLiteral("mbps")) || lower.contains(QStringLiteral("mbit"));
+    const bool assumeMbps = !explicitKbps && !explicitMbps && (value < 1000.0);
+    const int kbps = static_cast<int>((explicitMbps || assumeMbps ? value * 1000.0 : value) + 0.5);
+    return qBound(100, kbps, 240000);
 }
 
 QDateTime captureDateTimeFromFileName(const QString& fileName)
@@ -372,7 +427,7 @@ bool CameraGUI::handleMessage(const Message& message)
 
         if (cfg.getStartStop())
         {
-            if (m_settings.isQtCamera() || m_settings.isFileCamera()) {
+            if (m_settings.isQtCamera() || m_settings.isImageFileSequenceCamera()) {
                 setupQtCapture();
             }
         }
@@ -381,6 +436,30 @@ bool CameraGUI::handleMessage(const Message& message)
             cleanupQtCapture();
         }
 
+        return true;
+    }
+    else if (CameraWorker::MsgReportVideoFilePlayback::match(message))
+    {
+        const CameraWorker::MsgReportVideoFilePlayback& report = (const CameraWorker::MsgReportVideoFilePlayback&) message;
+        m_playbackDurationMs = report.getDurationMs();
+        m_videoFileVideoPositionMs = report.getPositionMs();
+        updatePlaybackPositionLabel(m_videoFileVideoPositionMs);
+
+        if ((m_playbackDurationMs > 0) && !ui->playbackPositionSlider->isSliderDown())
+        {
+            const int sliderValue = static_cast<int>(
+                qBound<qint64>(0,
+                    (m_videoFileVideoPositionMs * PlaybackPositionSliderMaximum) / m_playbackDurationMs,
+                    static_cast<qint64>(PlaybackPositionSliderMaximum)));
+            QSignalBlocker blocker(ui->playbackPositionSlider);
+            ui->playbackPositionSlider->setValue(sliderValue);
+        }
+
+        {
+            QSignalBlocker blocker(ui->playPauseVideo);
+            ui->playPauseVideo->setChecked(report.isPlaying());
+        }
+        updateVideoFileControls();
         return true;
     }
     else if (CameraWorker::MsgReportCameraList::match(message))
@@ -891,8 +970,6 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_imageCapture(nullptr),
     m_videoSurface(nullptr),
 #endif
-    m_mediaPlayer(nullptr),
-    m_videoFileVideoTimer(this),
     m_imageSequenceTimer(this)
 {
     m_feature = feature;
@@ -917,16 +994,14 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     m_camera = reinterpret_cast<Camera*>(feature);
     m_camera->setMessageQueueToGUI(&m_inputMessageQueue);
-    m_videoFileAudioMonitorFifo.setSize(48000);
-    m_videoFileAudioMonitorFifo.setLabel(QStringLiteral("Camera video file audio monitor"));
 
     connect(getInputMessageQueue(), SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
-    connect(&m_videoFileVideoTimer, &QTimer::timeout, this, &CameraGUI::processFfmpegVideoFileFrame);
 
     m_settings.setRollupState(&m_rollupState);
 
     m_settingsDialog = new CameraSettingsDialog(this);
     new DialogPositioner(m_settingsDialog, false);
+    initialiseYouTubeBitrateCombo();
 
 #ifndef CAMERA_TENSORRT_YOLO
     if (QStandardItemModel *yoloTargetModel = qobject_cast<QStandardItemModel*>(settingsUI()->yoloTargetCombo->model()))
@@ -1478,7 +1553,7 @@ void CameraGUI::displaySettings()
     settingsUI()->youtubeStreamKeyEdit->setText(m_settings.m_youtubeStreamKey);
     settingsUI()->youtubeStreamSourceCombo->setCurrentIndex(m_settings.m_youtubeStreamPostProcessed ? 1 : 0);
     updateYouTubeStreamButtonEnabled();
-    settingsUI()->youtubeStreamBitrateSpin->setValue(m_settings.m_youtubeStreamBitrateKbps);
+    updateYouTubeBitrateCombo();
     settingsUI()->youtubeStreamFpsSpin->setValue(m_settings.m_youtubeStreamFps);
     settingsUI()->youtubeStreamWidthSpin->setValue(m_settings.m_youtubeStreamWidth);
     settingsUI()->youtubeStreamHeightSpin->setValue(m_settings.m_youtubeStreamHeight);
@@ -2233,7 +2308,10 @@ void CameraGUI::makeUIConnections()
         }
     });
     QObject::connect(settingsUI()->youtubeStreamSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_youtubeStreamSourceCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->youtubeStreamBitrateSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamBitrateSpin_valueChanged);
+    QObject::connect(settingsUI()->youtubeStreamBitrateCombo, QOverload<int>::of(&QComboBox::activated), this, &CameraGUI::on_youtubeStreamBitrateCombo_activated);
+    if (settingsUI()->youtubeStreamBitrateCombo->lineEdit()) {
+        QObject::connect(settingsUI()->youtubeStreamBitrateCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_youtubeStreamBitrateCombo_editingFinished);
+    }
     QObject::connect(settingsUI()->youtubeStreamFpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamFpsSpin_valueChanged);
     QObject::connect(settingsUI()->youtubeStreamWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamWidthSpin_valueChanged);
     QObject::connect(settingsUI()->youtubeStreamHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamHeightSpin_valueChanged);
@@ -2702,7 +2780,7 @@ void CameraGUI::updateVideoFileControls()
     const bool imageSequenceSelected =
         (comboProtocol == CameraProtocol::images()) || m_settings.isImageFileSequenceCamera();
     const bool hasVideoFile = fileCameraSelected && m_settings.hasFileCameraSource();
-    const qint64 playbackDurationMs = imageSequenceSelected ? imageSequenceDurationMs() : m_mediaPlayerDurationMs;
+    const qint64 playbackDurationMs = imageSequenceSelected ? imageSequenceDurationMs() : m_playbackDurationMs;
     const bool hasPlaybackPosition = hasVideoFile && (playbackDurationMs > 0);
 
     if (fileCameraSelected)
@@ -3117,6 +3195,51 @@ void CameraGUI::updateKeogramPreview(const QImage& image, const QString& fileNam
     m_keogramPreviewDialog->show();
 }
 
+void CameraGUI::initialiseYouTubeBitrateCombo()
+{
+    QComboBox *combo = settingsUI()->youtubeStreamBitrateCombo;
+    combo->clear();
+
+    for (const YouTubeBitratePreset& preset : youtubeBitratePresets()) {
+        combo->addItem(QString::fromLatin1(preset.m_label), preset.m_kbps);
+    }
+
+    combo->addItem(QStringLiteral("480p standard - 2.5 Mbps"), 2500);
+    combo->addItem(QStringLiteral("480p high frame rate - 4 Mbps"), 4000);
+    combo->addItem(QStringLiteral("360p standard - 1 Mbps"), 1000);
+    combo->addItem(QStringLiteral("360p high frame rate - 1.5 Mbps"), 1500);
+    combo->setInsertPolicy(QComboBox::NoInsert);
+    updateYouTubeBitrateCombo();
+}
+
+void CameraGUI::updateYouTubeBitrateCombo()
+{
+    QComboBox *combo = settingsUI()->youtubeStreamBitrateCombo;
+    QSignalBlocker blocker(combo);
+    const int index = combo->findData(m_settings.m_youtubeStreamBitrateKbps);
+    if (index >= 0) {
+        combo->setCurrentIndex(index);
+    } else {
+        combo->setCurrentText(youtubeBitrateText(m_settings.m_youtubeStreamBitrateKbps));
+    }
+}
+
+void CameraGUI::applyYouTubeBitrateComboText()
+{
+    const int bitrateKbps = parseYouTubeBitrateKbps(
+        settingsUI()->youtubeStreamBitrateCombo->currentText(),
+        m_settings.m_youtubeStreamBitrateKbps);
+    if (bitrateKbps == m_settings.m_youtubeStreamBitrateKbps)
+    {
+        updateYouTubeBitrateCombo();
+        return;
+    }
+
+    m_settings.m_youtubeStreamBitrateKbps = bitrateKbps;
+    updateYouTubeBitrateCombo();
+    applySetting("youtubeStreamBitrateKbps");
+}
+
 void CameraGUI::syncFromMainSettings()
 {
     settingsUI()->latitudeSpin->setValue(MainCore::instance()->getSettings().getLatitude());
@@ -3378,221 +3501,21 @@ bool CameraGUI::ensureVideoFilePlayer(bool startPlayback)
         return false;
     }
 
-    if (m_videoFileDecoder)
-    {
-        if (startPlayback) {
-            startFfmpegVideoFilePlayback();
-        }
-        return true;
-    }
-    if (ensureFfmpegVideoFilePlayer(startPlayback)) {
-        return true;
-    }
-
-    if (m_mediaPlayer)
-    {
-        if (startPlayback) {
-            m_mediaPlayer->play();
-        }
-        return true;
-    }
-
-    m_mediaPlayerDurationMs = 0;
-    {
-        QSignalBlocker blocker(ui->playbackPositionSlider);
-        ui->playbackPositionSlider->setValue(0);
+    if ((m_camera->getState() == Feature::StRunning) && startPlayback) {
+        sendVideoFileControl(CameraWorker::MsgVideoFileControl::Play);
     }
     updateVideoFileControls();
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    m_pendingQtVideoFrame = QVideoFrame();
-    m_processingQtVideoFrame = false;
-    m_mediaPlayer = new QMediaPlayer(this);
-    m_mediaAudioOutput = new QAudioOutput(this);
-    m_mediaAudioOutput->setMuted(m_settings.m_audioMute);
-    m_mediaPlayer->setAudioOutput(m_mediaAudioOutput);
-    m_videoSink = new QVideoSink(this);
-    m_mediaPlayer->setVideoOutput(m_videoSink);
-    connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &CameraGUI::onQtVideoFrame);
-    connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &CameraGUI::handleMediaPlayerPositionChanged);
-    connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this, &CameraGUI::handleMediaPlayerDurationChanged);
-    connect(m_mediaPlayer, &QMediaPlayer::playbackStateChanged, this, &CameraGUI::handleMediaPlayerPlaybackStateChanged);
-    m_mediaPlayer->setSource(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath));
-    m_mediaPlayer->setLoops(m_settings.m_videoLoop ? QMediaPlayer::Infinite : 1);
-#else
-    m_videoSurface = new CameraVideoSurface(this);
-    m_mediaPlayer = new QMediaPlayer(this, QMediaPlayer::VideoSurface);
-    m_mediaPlayer->setVideoOutput(m_videoSurface);
-    m_mediaPlayer->setMuted(m_settings.m_audioMute);
-    connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
-            this, &CameraGUI::onQt5VideoFrame, Qt::QueuedConnection);
-    connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &CameraGUI::handleMediaPlayerPositionChanged);
-    connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this, &CameraGUI::handleMediaPlayerDurationChanged);
-    connect(m_mediaPlayer, &QMediaPlayer::stateChanged, this, &CameraGUI::handleMediaPlayerPlaybackStateChanged);
-    connect(m_mediaPlayer, &QMediaPlayer::mediaStatusChanged, this,
-            [this](QMediaPlayer::MediaStatus status)
-            {
-                if ((status == QMediaPlayer::EndOfMedia) && m_settings.m_videoLoop && m_mediaPlayer)
-                {
-                    m_mediaPlayer->setPosition(0);
-                    m_mediaPlayer->play();
-                }
-            });
-    m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(m_settings.m_videoFileCameraPath)));
-#endif
-    m_mediaPlayer->setPlaybackRate(m_settings.m_videoPlaybackRate);
-    m_qtZoomSupported = false;
-    m_qtManualExposureSupported = false;
-    m_qtIsoSensitivitySupported = false;
-    m_qtWhiteBalanceModeSupported = false;
-    m_qtExposureCompensationSupported = false;
-    updateCameraSettingsVisibility();
-
-    if (startPlayback) {
-        m_mediaPlayer->play();
-    } else {
-        m_mediaPlayer->pause();
-    }
-
     return true;
 }
 
-bool CameraGUI::ensureFfmpegVideoFilePlayer(bool startPlayback)
+void CameraGUI::sendVideoFileControl(CameraWorker::MsgVideoFileControl::Action action, qint64 positionMs)
 {
-    if (!m_settings.isVideoFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
-        return false;
-    }
-
-    m_videoFileDecoder.reset(new CameraVideoFileDecoder());
-    QString errorMessage;
-    if (!m_videoFileDecoder->open(m_settings.m_videoFileCameraPath, errorMessage))
-    {
-        qDebug() << "CameraGUI: FFmpeg video file playback unavailable:" << errorMessage;
-        m_videoFileDecoder.reset();
-        return false;
-    }
-
-    m_mediaPlayerDurationMs = m_videoFileDecoder->durationMs();
-    m_videoFileVideoPositionMs = 0;
-    {
-        QSignalBlocker blocker(ui->playbackPositionSlider);
-        ui->playbackPositionSlider->setValue(0);
-    }
-    updatePlaybackPositionLabel(0);
-    updateVideoFileControls();
-    startVideoFileAudioMonitor();
-
-    m_qtZoomSupported = false;
-    m_qtManualExposureSupported = false;
-    m_qtIsoSensitivitySupported = false;
-    m_qtWhiteBalanceModeSupported = false;
-    m_qtExposureCompensationSupported = false;
-    updateCameraSettingsVisibility();
-
-    processFfmpegVideoFileFrame();
-    if (startPlayback) {
-        startFfmpegVideoFilePlayback();
-    }
-
-    return true;
-}
-
-void CameraGUI::closeFfmpegVideoFilePlayer()
-{
-    m_videoFileVideoTimer.stop();
-    stopVideoFileAudioMonitor();
-    if (m_videoFileDecoder) {
-        m_videoFileDecoder.reset();
-    }
-    m_videoFileVideoPositionMs = 0;
-}
-
-void CameraGUI::startFfmpegVideoFilePlayback()
-{
-    if (!m_videoFileDecoder) {
+    MessageQueue *queue = m_camera ? m_camera->getWorkerInputMessageQueue() : nullptr;
+    if (!queue) {
         return;
     }
 
-    m_videoFileVideoTimer.start(videoFileFrameIntervalMs());
-    QSignalBlocker blocker(ui->playPauseVideo);
-    ui->playPauseVideo->setChecked(true);
-}
-
-void CameraGUI::pauseFfmpegVideoFilePlayback()
-{
-    m_videoFileVideoTimer.stop();
-    QSignalBlocker blocker(ui->playPauseVideo);
-    ui->playPauseVideo->setChecked(false);
-}
-
-void CameraGUI::seekFfmpegVideoFilePlayback(qint64 positionMs)
-{
-    if (!m_videoFileDecoder) {
-        return;
-    }
-
-    m_videoFileVideoPositionMs = qMax<qint64>(0, positionMs);
-    m_videoFileDecoder->seek(m_videoFileVideoPositionMs);
-    processFfmpegVideoFileFrame();
-}
-
-void CameraGUI::processFfmpegVideoFileFrame()
-{
-    if (!m_videoFileDecoder) {
-        return;
-    }
-
-    QImage image;
-    qint64 positionMs = -1;
-    QByteArray pcmS16Stereo;
-    int audioSampleRate = 0;
-    QString errorMessage;
-    if (!m_videoFileDecoder->readNextFrame(image, positionMs, pcmS16Stereo, audioSampleRate, errorMessage))
-    {
-        qDebug() << "CameraGUI: FFmpeg video file frame decode failed:" << errorMessage;
-        pauseFfmpegVideoFilePlayback();
-        return;
-    }
-
-    if (image.isNull())
-    {
-        if (m_settings.m_videoLoop)
-        {
-            seekFfmpegVideoFilePlayback(0);
-            startFfmpegVideoFilePlayback();
-        }
-        else
-        {
-            pauseFfmpegVideoFilePlayback();
-        }
-        return;
-    }
-
-    if (positionMs >= 0) {
-        m_videoFileVideoPositionMs = positionMs;
-    } else {
-        m_videoFileVideoPositionMs += videoFileFrameIntervalMs();
-    }
-
-    updatePlaybackPositionLabel(m_videoFileVideoPositionMs);
-    if ((m_mediaPlayerDurationMs > 0) && !ui->playbackPositionSlider->isSliderDown())
-    {
-        const int sliderValue = static_cast<int>(
-            qBound<qint64>(0,
-                (m_videoFileVideoPositionMs * PlaybackPositionSliderMaximum) / m_mediaPlayerDurationMs,
-                static_cast<qint64>(PlaybackPositionSliderMaximum)));
-        QSignalBlocker blocker(ui->playbackPositionSlider);
-        ui->playbackPositionSlider->setValue(sliderValue);
-    }
-
-    submitQtImageFrame(image, m_videoFileVideoPositionMs);
-    submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
-}
-
-int CameraGUI::videoFileFrameIntervalMs() const
-{
-    const double decoderFps = m_videoFileDecoder ? m_videoFileDecoder->frameRate() : m_settings.m_framesPerSecond;
-    return qMax(1, static_cast<int>(1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings.m_videoPlaybackRate)) + 0.5));
+    queue->push(CameraWorker::MsgVideoFileControl::create(action, positionMs));
 }
 
 void CameraGUI::setupQtCapture()
@@ -3613,7 +3536,7 @@ void CameraGUI::setupQtCapture()
         m_processingQtVideoFrame = false;
 #endif
         m_imageSequenceLoaded = true;
-        m_mediaPlayerDurationMs = imageSequenceDurationMs();
+        m_playbackDurationMs = imageSequenceDurationMs();
         m_imageSequenceIndex = 0;
         updateImageSequencePositionSlider();
         updateVideoFileControls();
@@ -3635,12 +3558,6 @@ void CameraGUI::setupQtCapture()
     }
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (m_settings.isVideoFileCamera())
-    {
-        ensureVideoFilePlayer(true);
-        return;
-    }
-
     const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
     if (cameras.isEmpty()) {
         return;
@@ -3949,7 +3866,6 @@ void CameraGUI::cleanupQtCapture()
     m_imageSequenceTimer.stop();
     m_imageSequenceLoaded = false;
     m_imageSequenceIndex = 0;
-    closeFfmpegVideoFilePlayer();
     resetQtHdrBracketState();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     m_pendingQtVideoFrame = QVideoFrame();
@@ -3963,27 +3879,7 @@ void CameraGUI::cleanupQtCapture()
         m_imageCapture = nullptr;
     }
 #endif
-    if (m_mediaPlayer)
-    {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        m_mediaPlayer->setVideoOutput(static_cast<QVideoSink *>(nullptr));
-        m_mediaPlayer->setAudioOutput(nullptr);
-        m_mediaPlayer->stop();
-        m_mediaPlayer->setSource(QUrl());
-#else
-        m_mediaPlayer->setVideoOutput(static_cast<QAbstractVideoSurface *>(nullptr));
-        m_mediaPlayer->stop();
-        m_mediaPlayer->setMedia(QMediaContent());
-#endif
-        delete m_mediaPlayer;
-        m_mediaPlayer = nullptr;
-    }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (m_mediaAudioOutput)
-    {
-        delete m_mediaAudioOutput;
-        m_mediaAudioOutput = nullptr;
-    }
     if (m_videoSink)
     {
         disconnect(m_videoSink, nullptr, this, nullptr);
@@ -4021,7 +3917,7 @@ void CameraGUI::cleanupQtCapture()
         m_qtCamera = nullptr;
     }
 #endif
-    m_mediaPlayerDurationMs = 0;
+    m_playbackDurationMs = 0;
     {
         QSignalBlocker blocker(ui->playbackPositionSlider);
         ui->playbackPositionSlider->setValue(0);
@@ -4063,8 +3959,6 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
     {
         // Camera type switched away from Qt — stop any running Qt camera
         if (m_qtCamera
-            || m_mediaPlayer
-            || m_videoFileDecoder
             || m_imageSequenceLoaded
             || m_imageSequenceTimer.isActive())
         {
@@ -4106,12 +4000,13 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
 
     const bool hasActiveVisualSource =
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        (m_qtCamera != nullptr) || (m_mediaPlayer != nullptr) || (m_videoFileDecoder != nullptr) || m_imageSequenceLoaded;
+        (m_qtCamera != nullptr) || m_imageSequenceLoaded;
 #else
-        (m_qtCamera != nullptr) || (m_mediaPlayer != nullptr) || (m_videoFileDecoder != nullptr) || m_imageSequenceLoaded;
+        (m_qtCamera != nullptr) || m_imageSequenceLoaded;
 #endif
 
-    if (!hasActiveVisualSource && (m_camera->getState() == Feature::StRunning))
+    if (!hasActiveVisualSource && (m_camera->getState() == Feature::StRunning)
+        && (m_settings.isQtCamera() || m_settings.isImageFileSequenceCamera()))
     {
         // Start the visual source (we've probably just switched to Qt or file camera type)
         setupQtCapture();
@@ -4196,15 +4091,7 @@ void CameraGUI::processPendingQtVideoFrame()
     }
 
     const QImage image = frame.toImage();
-    qint64 playbackPositionMs = -1;
-    if (m_settings.isVideoFileCamera())
-    {
-        const qint64 frameStartTimeUs = frame.startTime();
-        playbackPositionMs = frameStartTimeUs >= 0
-            ? frameStartTimeUs / 1000
-            : (m_mediaPlayer ? m_mediaPlayer->position() : -1);
-    }
-    submitQtImageFrame(image, playbackPositionMs);
+    submitQtImageFrame(image);
 
     if (m_pendingQtVideoFrame.isValid()) {
         QMetaObject::invokeMethod(this, &CameraGUI::processPendingQtVideoFrame, Qt::QueuedConnection);
@@ -4215,10 +4102,7 @@ void CameraGUI::processPendingQtVideoFrame()
 #else
 void CameraGUI::onQt5VideoFrame(const QImage& image)
 {
-    const qint64 playbackPositionMs = m_settings.isVideoFileCamera() && m_mediaPlayer
-        ? m_mediaPlayer->position()
-        : -1;
-    submitQtImageFrame(image, playbackPositionMs);
+    submitQtImageFrame(image);
 }
 #endif
 
@@ -4526,43 +4410,6 @@ void CameraGUI::updateCameraStatusDisplay()
         m_lastAlpacaErrorMessage.isEmpty() ? "-" : m_lastAlpacaErrorMessage);
 }
 
-void CameraGUI::handleMediaPlayerPositionChanged(qint64 position)
-{
-    updatePlaybackPositionLabel(position);
-    if (m_mediaPlayerDurationMs <= 0 || ui->playbackPositionSlider->isSliderDown()) {
-        return;
-    }
-
-    const int sliderValue = static_cast<int>(
-        qBound<qint64>(0,
-            (position * PlaybackPositionSliderMaximum) / m_mediaPlayerDurationMs,
-            static_cast<qint64>(PlaybackPositionSliderMaximum)));
-    QSignalBlocker blocker(ui->playbackPositionSlider);
-    ui->playbackPositionSlider->setValue(sliderValue);
-}
-
-void CameraGUI::handleMediaPlayerDurationChanged(qint64 duration)
-{
-    m_mediaPlayerDurationMs = qMax<qint64>(0, duration);
-    if (m_mediaPlayerDurationMs <= 0)
-    {
-        QSignalBlocker blocker(ui->playbackPositionSlider);
-        ui->playbackPositionSlider->setValue(0);
-    }
-    updatePlaybackPositionLabel();
-    updateVideoFileControls();
-}
-
-void CameraGUI::handleMediaPlayerPlaybackStateChanged(CameraMediaPlayerState state)
-{
-    QSignalBlocker blocker(ui->playPauseVideo);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    ui->playPauseVideo->setChecked(state == QMediaPlayer::PlayingState);
-#else
-    ui->playPauseVideo->setChecked(state == QMediaPlayer::PlayingState);
-#endif
-}
-
 int CameraGUI::imageSequenceIntervalMs() const
 {
     return qMax(1, static_cast<int>(1000.0 / qMax(0.1, m_settings.m_videoPlaybackRate) + 0.5));
@@ -4589,9 +4436,6 @@ void CameraGUI::updatePlaybackPositionLabel(qint64 videoPositionMs)
     }
 
     qint64 positionMs = videoPositionMs;
-    if ((positionMs < 0) && m_mediaPlayer) {
-        positionMs = m_mediaPlayer->position();
-    }
     positionMs = qMax<qint64>(0, positionMs);
     const qint64 totalSeconds = positionMs / 1000;
     const qint64 hours = totalSeconds / 3600;
@@ -4601,51 +4445,6 @@ void CameraGUI::updatePlaybackPositionLabel(qint64 videoPositionMs)
         .arg(hours, 2, 10, QLatin1Char('0'))
         .arg(minutes, 2, 10, QLatin1Char('0'))
         .arg(seconds, 2, 10, QLatin1Char('0')));
-}
-
-void CameraGUI::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int sampleRate)
-{
-    if (pcmS16Stereo.isEmpty() || !m_camera || (sampleRate <= 0)) {
-        return;
-    }
-
-    writeVideoFileAudioMonitor(pcmS16Stereo);
-    m_camera->submitRecorderAudioSamples(pcmS16Stereo, sampleRate);
-}
-
-void CameraGUI::startVideoFileAudioMonitor()
-{
-    if (m_videoFileAudioMonitorActive || !m_camera) {
-        return;
-    }
-
-    AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
-    const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(m_settings.m_audioDeviceName);
-    audioDeviceManager->addAudioSink(&m_videoFileAudioMonitorFifo, m_camera->getInputMessageQueue(), outputDeviceIndex);
-    m_videoFileAudioMonitorActive = true;
-}
-
-void CameraGUI::stopVideoFileAudioMonitor()
-{
-    if (!m_videoFileAudioMonitorActive) {
-        return;
-    }
-
-    DSPEngine::instance()->getAudioDeviceManager()->removeAudioSink(&m_videoFileAudioMonitorFifo);
-    m_videoFileAudioMonitorFifo.clear();
-    m_videoFileAudioMonitorActive = false;
-}
-
-void CameraGUI::writeVideoFileAudioMonitor(const QByteArray& pcmS16Stereo)
-{
-    if (!m_videoFileAudioMonitorActive || m_settings.m_audioMute || pcmS16Stereo.isEmpty()) {
-        return;
-    }
-
-    const int sampleFrames = pcmS16Stereo.size() / 4;
-    if (sampleFrames > 0) {
-        m_videoFileAudioMonitorFifo.write(reinterpret_cast<const quint8*>(pcmS16Stereo.constData()), sampleFrames);
-    }
 }
 
 bool CameraGUI::loadImageSequenceFrame(int index, QImage& image) const
@@ -4730,7 +4529,7 @@ bool CameraGUI::prepareImageSequenceManualStep(bool *wasLoaded)
     }
 
     if (!m_settings.m_imageFileCameraPaths.isEmpty()) {
-        m_mediaPlayerDurationMs = imageSequenceDurationMs();
+        m_playbackDurationMs = imageSequenceDurationMs();
         updateVideoFileControls();
         return true;
     }
@@ -5070,21 +4869,10 @@ void CameraGUI::on_restartVideo_clicked()
         return;
     }
 
-    if (!m_mediaPlayer && !m_videoFileDecoder && (m_camera->getState() == Feature::StRunning)) {
-        setupQtCapture();
-    }
-
-    if (m_videoFileDecoder)
+    if (m_settings.isVideoFileCamera())
     {
-        seekFfmpegVideoFilePlayback(0);
-        startFfmpegVideoFilePlayback();
+        sendVideoFileControl(CameraWorker::MsgVideoFileControl::Restart);
         return;
-    }
-
-    if (m_mediaPlayer)
-    {
-        m_mediaPlayer->setPosition(0);
-        m_mediaPlayer->play();
     }
 }
 
@@ -5103,23 +4891,11 @@ void CameraGUI::on_stepBackVideo_clicked()
         return;
     }
 
-    if (!ensureVideoFilePlayer(false)) {
-        return;
-    }
-
-    if (m_videoFileDecoder)
+    if (m_settings.isVideoFileCamera())
     {
-        pauseFfmpegVideoFilePlayback();
-        const qint64 position = qMax<qint64>(0, m_videoFileVideoPositionMs - videoFileFrameIntervalMs());
-        seekFfmpegVideoFilePlayback(position);
+        sendVideoFileControl(CameraWorker::MsgVideoFileControl::StepBack);
         return;
     }
-
-    m_mediaPlayer->pause();
-    const qint64 stepMs = qMax<qint64>(1, static_cast<qint64>(1000.0 / qMax(1, m_settings.m_framesPerSecond) + 0.5));
-    const qint64 position = qMax<qint64>(0, m_mediaPlayer->position() - stepMs);
-    updatePlaybackPositionLabel(position);
-    m_mediaPlayer->setPosition(position);
 }
 
 void CameraGUI::on_stepForwardVideo_clicked()
@@ -5139,25 +4915,11 @@ void CameraGUI::on_stepForwardVideo_clicked()
         return;
     }
 
-    if (!ensureVideoFilePlayer(false)) {
-        return;
-    }
-
-    if (m_videoFileDecoder)
+    if (m_settings.isVideoFileCamera())
     {
-        pauseFfmpegVideoFilePlayback();
-        const qint64 maxPosition = m_mediaPlayerDurationMs > 0 ? m_mediaPlayerDurationMs : std::numeric_limits<qint64>::max();
-        const qint64 position = qMin(maxPosition, m_videoFileVideoPositionMs + videoFileFrameIntervalMs());
-        seekFfmpegVideoFilePlayback(position);
+        sendVideoFileControl(CameraWorker::MsgVideoFileControl::StepForward);
         return;
     }
-
-    m_mediaPlayer->pause();
-    const qint64 stepMs = qMax<qint64>(1, static_cast<qint64>(1000.0 / qMax(1, m_settings.m_framesPerSecond) + 0.5));
-    const qint64 maxPosition = m_mediaPlayerDurationMs > 0 ? m_mediaPlayerDurationMs : std::numeric_limits<qint64>::max();
-    const qint64 position = qMin(maxPosition, m_mediaPlayer->position() + stepMs);
-    updatePlaybackPositionLabel(position);
-    m_mediaPlayer->setPosition(position);
 }
 
 void CameraGUI::on_playPauseVideo_clicked(bool checked)
@@ -5183,30 +4945,9 @@ void CameraGUI::on_playPauseVideo_clicked(bool checked)
         return;
     }
 
-    if (!m_mediaPlayer && !m_videoFileDecoder && checked && (m_camera->getState() == Feature::StRunning)) {
-        setupQtCapture();
-    }
-
-    if (m_videoFileDecoder)
+    if (m_settings.isVideoFileCamera())
     {
-        if (checked) {
-            startFfmpegVideoFilePlayback();
-        } else {
-            pauseFfmpegVideoFilePlayback();
-        }
-        return;
-    }
-
-    if (!m_mediaPlayer) {
-        QSignalBlocker blocker(ui->playPauseVideo);
-        ui->playPauseVideo->setChecked(false);
-        return;
-    }
-
-    if (checked) {
-        m_mediaPlayer->play();
-    } else {
-        m_mediaPlayer->pause();
+        sendVideoFileControl(checked ? CameraWorker::MsgVideoFileControl::Play : CameraWorker::MsgVideoFileControl::Pause);
     }
 }
 
@@ -5214,26 +4955,6 @@ void CameraGUI::on_loopVideo_clicked(bool checked)
 {
     m_settings.m_videoLoop = checked;
     applySetting("videoLoop");
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (m_mediaPlayer)
-    {
-        // On Windows, setLoops doesn't appear to apply if already playing
-        bool wasPlaying = m_mediaPlayer->isPlaying();
-        qint64 position;
-
-        if (wasPlaying)
-        {
-            position = m_mediaPlayer->position();
-            m_mediaPlayer->stop();
-        }
-        m_mediaPlayer->setLoops(checked ? QMediaPlayer::Infinite : 1);
-        if (wasPlaying)
-        {
-            m_mediaPlayer->setPosition(position);
-            m_mediaPlayer->play();
-        }
-    }
-#endif
 }
 
 void CameraGUI::on_playbackRateSpin_valueChanged(double value)
@@ -5241,15 +4962,9 @@ void CameraGUI::on_playbackRateSpin_valueChanged(double value)
     m_settings.m_videoPlaybackRate = value;
     applySetting("videoPlaybackRate");
     if (m_settings.isImageFileSequenceCamera() && m_imageSequenceTimer.isActive()) {
-        m_mediaPlayerDurationMs = imageSequenceDurationMs();
+        m_playbackDurationMs = imageSequenceDurationMs();
         m_imageSequenceTimer.start(imageSequenceIntervalMs());
         updatePlaybackPositionLabel();
-    }
-    if (m_videoFileDecoder && m_videoFileVideoTimer.isActive()) {
-        m_videoFileVideoTimer.start(videoFileFrameIntervalMs());
-    }
-    if (m_mediaPlayer) {
-        m_mediaPlayer->setPlaybackRate(value);
     }
 }
 
@@ -5267,21 +4982,13 @@ void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)
         return;
     }
 
-    if (!m_mediaPlayer && !m_videoFileDecoder && !ensureVideoFilePlayer(false)) {
+    if (m_playbackDurationMs <= 0) {
         return;
     }
 
-    if (m_mediaPlayerDurationMs <= 0) {
-        return;
-    }
-
-    const qint64 position = (static_cast<qint64>(value) * m_mediaPlayerDurationMs) / PlaybackPositionSliderMaximum;
+    const qint64 position = (static_cast<qint64>(value) * m_playbackDurationMs) / PlaybackPositionSliderMaximum;
     updatePlaybackPositionLabel(position);
-    if (m_videoFileDecoder) {
-        seekFfmpegVideoFilePlayback(position);
-    } else {
-        m_mediaPlayer->setPosition(position);
-    }
+    sendVideoFileControl(CameraWorker::MsgVideoFileControl::Seek, position);
 }
 
 void CameraGUI::on_playbackPositionSlider_sliderReleased()
@@ -6016,10 +5723,23 @@ void CameraGUI::on_youtubeStreamSourceCombo_currentIndexChanged(int index)
     applySetting("youtubeStreamPostProcessed");
 }
 
-void CameraGUI::on_youtubeStreamBitrateSpin_valueChanged(int value)
+void CameraGUI::on_youtubeStreamBitrateCombo_activated(int index)
 {
-    m_settings.m_youtubeStreamBitrateKbps = value;
+    const QVariant bitrateData = settingsUI()->youtubeStreamBitrateCombo->itemData(index);
+    if (bitrateData.isValid()) {
+        m_settings.m_youtubeStreamBitrateKbps = qBound(100, bitrateData.toInt(), 240000);
+    } else {
+        m_settings.m_youtubeStreamBitrateKbps = parseYouTubeBitrateKbps(
+            settingsUI()->youtubeStreamBitrateCombo->currentText(),
+            m_settings.m_youtubeStreamBitrateKbps);
+    }
+    updateYouTubeBitrateCombo();
     applySetting("youtubeStreamBitrateKbps");
+}
+
+void CameraGUI::on_youtubeStreamBitrateCombo_editingFinished()
+{
+    applyYouTubeBitrateComboText();
 }
 
 void CameraGUI::on_youtubeStreamFpsSpin_valueChanged(int value)
@@ -7445,22 +7165,11 @@ void CameraGUI::on_detectionHistoryEntryActivated(const CameraDetectionHistoryEn
 
     if (m_settings.isVideoFileCamera() && (entry.m_playbackPositionMs >= 0))
     {
-        if (!m_mediaPlayer && !m_videoFileDecoder && (m_camera->getState() == Feature::StRunning)) {
-            setupQtCapture();
-        }
-
-        const qint64 maxPosition = m_mediaPlayerDurationMs > 0 ? m_mediaPlayerDurationMs : entry.m_playbackPositionMs;
+        const qint64 maxPosition = m_playbackDurationMs > 0 ? m_playbackDurationMs : entry.m_playbackPositionMs;
         const qint64 position = qBound<qint64>(0, entry.m_playbackPositionMs, maxPosition);
         updatePlaybackPositionLabel(position);
-        if (m_videoFileDecoder)
-        {
-            pauseFfmpegVideoFilePlayback();
-            seekFfmpegVideoFilePlayback(position);
-        }
-        else if (m_mediaPlayer)
-        {
-            m_mediaPlayer->setPosition(position);
-        }
+        sendVideoFileControl(CameraWorker::MsgVideoFileControl::Pause);
+        sendVideoFileControl(CameraWorker::MsgVideoFileControl::Seek, position);
     }
 }
 
@@ -8513,18 +8222,6 @@ void CameraGUI::on_fitInViewButton_clicked()
 void CameraGUI::on_audioMute_toggled(bool checked)
 {
     m_settings.m_audioMute = checked;
-    if (checked) {
-        m_videoFileAudioMonitorFifo.clear();
-    }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    if (m_mediaAudioOutput) {
-        m_mediaAudioOutput->setMuted(checked);
-    }
-#else
-    if (m_mediaPlayer) {
-        m_mediaPlayer->setMuted(checked);
-    }
-#endif
     applySetting("audioMute");
 }
 
@@ -8540,11 +8237,6 @@ void CameraGUI::audioSelect(const QPoint& p)
     {
         m_settings.m_audioDeviceName = audioSelect.m_audioDeviceName;
         applySetting("audioDeviceName");
-        if (m_videoFileAudioMonitorActive)
-        {
-            stopVideoFileAudioMonitor();
-            startVideoFileAudioMonitor();
-        }
     }
 }
 

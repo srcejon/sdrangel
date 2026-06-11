@@ -32,9 +32,7 @@
 #include <QSize>
 #include <QTimer>
 #include <QToolButton>
-#include <QMediaPlayer>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#include <QAudioOutput>
 #include <QVideoFrame>
 #else
 #include <QAbstractVideoSurface>
@@ -43,7 +41,6 @@
 #endif
 
 #include "feature/featuregui.h"
-#include "audio/audiofifo.h"
 #include "util/messagequeue.h"
 #include "settings/rollupstate.h"
 #include "camerainfo.h"
@@ -60,7 +57,6 @@ class Feature;
 class CameraSettingsDialog;
 class CameraDetectionHistory;
 class CameraHistogramDialog;
-class CameraVideoFileDecoder;
 class Message;
 class QLabel;
 class QDialog;
@@ -100,12 +96,6 @@ public:
 signals:
     void frameAvailable(const QImage& image);
 };
-#endif
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-using CameraMediaPlayerState = QMediaPlayer::PlaybackState;
-#else
-using CameraMediaPlayerState = QMediaPlayer::State;
 #endif
 
 class CameraGUI : public FeatureGUI {
@@ -271,16 +261,8 @@ private:
     QCameraImageCapture *m_imageCapture;
     CameraVideoSurface *m_videoSurface;
 #endif
-    QMediaPlayer *m_mediaPlayer;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    QAudioOutput *m_mediaAudioOutput = nullptr;
-#endif
-    qint64 m_mediaPlayerDurationMs = 0;
-    std::unique_ptr<CameraVideoFileDecoder> m_videoFileDecoder;
-    QTimer m_videoFileVideoTimer;
+    qint64 m_playbackDurationMs = 0;
     qint64 m_videoFileVideoPositionMs = 0;
-    AudioFifo m_videoFileAudioMonitorFifo;
-    bool m_videoFileAudioMonitorActive = false;
     QTimer m_imageSequenceTimer;
     bool m_imageSequenceLoaded = false;
     int m_imageSequenceIndex = 0;
@@ -324,6 +306,9 @@ private:
     void updateFovControls();
     void updateCalculatedFov();
     void updateKeogramPreview(const QImage& image, const QString& fileName, bool visible);
+    void initialiseYouTubeBitrateCombo();
+    void updateYouTubeBitrateCombo();
+    void applyYouTubeBitrateComboText();
     void syncFromMainSettings();
     void syncFromSelectedGs232Controller();
     QPair<int, int> selectedGs232ControllerIndices() const;
@@ -331,9 +316,6 @@ private:
     void updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCameraInfo& info);
     void updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo& info);
     void updateCameraStatusDisplay();
-    void handleMediaPlayerPositionChanged(qint64 position);
-    void handleMediaPlayerDurationChanged(qint64 duration);
-    void handleMediaPlayerPlaybackStateChanged(CameraMediaPlayerState state);
     void updateCameraSubframeControls();
     void updateImageWidget();
     void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime);
@@ -366,20 +348,10 @@ private:
     void setupQtCapture();
     void cleanupQtCapture();
     bool ensureVideoFilePlayer(bool startPlayback);
-    bool ensureFfmpegVideoFilePlayer(bool startPlayback);
-    void closeFfmpegVideoFilePlayer();
-    void startFfmpegVideoFilePlayback();
-    void pauseFfmpegVideoFilePlayback();
-    void seekFfmpegVideoFilePlayback(qint64 positionMs);
-    void processFfmpegVideoFileFrame();
-    int videoFileFrameIntervalMs() const;
+    void sendVideoFileControl(CameraWorker::MsgVideoFileControl::Action action, qint64 positionMs = -1);
     int imageSequenceIntervalMs() const;
     qint64 imageSequenceDurationMs() const;
     void updatePlaybackPositionLabel(qint64 videoPositionMs = -1);
-    void submitVideoFileAudio(const QByteArray& pcmS16Stereo, int sampleRate);
-    void startVideoFileAudioMonitor();
-    void stopVideoFileAudioMonitor();
-    void writeVideoFileAudioMonitor(const QByteArray& pcmS16Stereo);
     bool loadImageSequenceFrame(int index, QImage& image) const;
     void showImageSequenceFrame(int index);
     void advanceImageSequenceFrame();
@@ -517,7 +489,8 @@ private slots:
     void on_youtubeStreamUrlEdit_editingFinished();
     void on_youtubeStreamKeyEdit_editingFinished();
     void on_youtubeStreamSourceCombo_currentIndexChanged(int index);
-    void on_youtubeStreamBitrateSpin_valueChanged(int value);
+    void on_youtubeStreamBitrateCombo_activated(int index);
+    void on_youtubeStreamBitrateCombo_editingFinished();
     void on_youtubeStreamFpsSpin_valueChanged(int value);
     void on_youtubeStreamWidthSpin_valueChanged(int value);
     void on_youtubeStreamHeightSpin_valueChanged(int value);

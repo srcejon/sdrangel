@@ -1148,7 +1148,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_keogramDirection = static_cast<KeogramDirection>(qBound(0, static_cast<int>(m_keogramDirection), 1));
         m_keogramDayMode = static_cast<KeogramDayMode>(qBound(0, static_cast<int>(m_keogramDayMode), 1));
         m_keogramSamplePeriodMinutes = qBound(1, m_keogramSamplePeriodMinutes, 1440);
-        m_youtubeStreamBitrateKbps = qBound(100, m_youtubeStreamBitrateKbps, 50000);
+        m_youtubeStreamBitrateKbps = qBound(100, m_youtubeStreamBitrateKbps, 240000);
         m_youtubeStreamFps = qBound(1, m_youtubeStreamFps, 120);
         m_youtubeStreamWidth = qBound(0, m_youtubeStreamWidth, 16384);
         m_youtubeStreamHeight = qBound(0, m_youtubeStreamHeight, 16384);
@@ -1421,7 +1421,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_youtubeStreamPostProcessed = settings.m_youtubeStreamPostProcessed;
     }
     if (settingsKeys.contains("youtubeStreamBitrateKbps")) {
-        m_youtubeStreamBitrateKbps = qBound(100, settings.m_youtubeStreamBitrateKbps, 50000);
+        m_youtubeStreamBitrateKbps = qBound(100, settings.m_youtubeStreamBitrateKbps, 240000);
     }
     if (settingsKeys.contains("youtubeStreamFps")) {
         m_youtubeStreamFps = qBound(1, settings.m_youtubeStreamFps, 120);

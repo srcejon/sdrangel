@@ -28,6 +28,7 @@
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QRecursiveMutex>
+#include <memory>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -51,6 +52,7 @@ class QUrl;
 class CameraPostProcessor;
 class CameraFramePreprocessor;
 class CameraFinder;
+class CameraVideoFileDecoder;
 
 class CameraWorker : public QObject
 {
@@ -126,6 +128,68 @@ public:
 
     private:
         MsgStartAutoFocus() : Message() {}
+    };
+
+    class MsgVideoFileControl : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        enum Action
+        {
+            Play,
+            Pause,
+            Restart,
+            StepBack,
+            StepForward,
+            Seek
+        };
+
+        Action getAction() const { return m_action; }
+        qint64 getPositionMs() const { return m_positionMs; }
+
+        static MsgVideoFileControl* create(Action action, qint64 positionMs = -1)
+        {
+            return new MsgVideoFileControl(action, positionMs);
+        }
+
+    private:
+        Action m_action;
+        qint64 m_positionMs;
+
+        MsgVideoFileControl(Action action, qint64 positionMs) :
+            Message(),
+            m_action(action),
+            m_positionMs(positionMs)
+        { }
+    };
+
+    class MsgReportVideoFilePlayback : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        qint64 getPositionMs() const { return m_positionMs; }
+        qint64 getDurationMs() const { return m_durationMs; }
+        bool isPlaying() const { return m_playing; }
+        bool isOpen() const { return m_open; }
+
+        static MsgReportVideoFilePlayback* create(qint64 positionMs, qint64 durationMs, bool playing, bool open)
+        {
+            return new MsgReportVideoFilePlayback(positionMs, durationMs, playing, open);
+        }
+
+    private:
+        qint64 m_positionMs;
+        qint64 m_durationMs;
+        bool m_playing;
+        bool m_open;
+
+        MsgReportVideoFilePlayback(qint64 positionMs, qint64 durationMs, bool playing, bool open) :
+            Message(),
+            m_positionMs(positionMs),
+            m_durationMs(durationMs),
+            m_playing(playing),
+            m_open(open)
+        { }
     };
 
     class MsgReportCameraList : public Message {
@@ -557,6 +621,10 @@ private:
     bool m_capturing;
     quint64 m_captureEpoch;
     QTimer m_captureTimer;
+    std::unique_ptr<CameraVideoFileDecoder> m_videoFileDecoder;
+    qint64 m_videoFilePositionMs;
+    qint64 m_videoFileDurationMs;
+    bool m_videoFilePlaying;
     QNetworkAccessManager *m_networkManager;
     CameraFinder *m_cameraFinder;
     int m_stackFrameIndex;
@@ -616,6 +684,14 @@ private:
     void reportAutoFocusToGUI(const QString& status, bool active, int position, double score, int stepIndex, int stepCount) const;
     void startCapture();
     void stopCapture();
+    bool openVideoFileDecoder();
+    void closeVideoFileDecoder();
+    void setVideoFilePlaying(bool playing);
+    void readVideoFileFrame();
+    void seekVideoFile(qint64 positionMs, bool displayFrame);
+    void stepVideoFile(int direction);
+    int videoFileFrameIntervalMs() const;
+    void reportVideoFilePlaybackToGUI() const;
     QImage createPlaceholderFrame() const;
     void reportAlpacaCameraInfoToGUI(const CameraAlpacaController::CapabilitiesReport& report);
     void reportAlpacaStatusToGUI(int cameraState = -1, double ccdTemperature = NAN, bool ccdTemperatureValid = false);

@@ -389,8 +389,8 @@
          <string/>
         </property>
         <property name="icon">
-         <iconset resource="../../../sdrgui/resources/res.qrc">
-          <normaloff>:/picture.png</normaloff>:/picture.png</iconset>
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/aurora.png</normaloff>:/camera/icons/aurora.png</iconset>
         </property>
        </widget>
       </item>
@@ -403,8 +403,8 @@
          <string/>
         </property>
         <property name="icon">
-         <iconset resource="../../../sdrgui/resources/res.qrc">
-          <normaloff>:/stream.png</normaloff>:/stream.png</iconset>
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/youtube.png</normaloff>:/camera/icons/youtube.png</iconset>
         </property>
        </widget>
       </item>

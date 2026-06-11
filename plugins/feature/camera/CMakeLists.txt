@@ -128,12 +128,16 @@ if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_F
     target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_OPENCV_CUDA_MOTION_DETECTION)
 endif()
 
+find_package(FFmpeg COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
 if(FFMPEG_FOUND)
+    message(STATUS "FFmpeg found for camera: ${FFMPEG_VERSION_STRING}")
     target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_FFMPEG_STREAMING)
     target_include_directories(${TARGET_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
     if(DEFINED FFMPEG_DEPENDS)
         add_dependencies(${TARGET_NAME} ${FFMPEG_DEPENDS})
     endif()
+else()
+    message(STATUS "FFmpeg not found for camera")
 endif()
 
 if(ENABLE_CAMERA_TENSORRT)

@@ -454,3 +454,4 @@ To start capturing:
 - constellation by BomSymbols from Noun Project (CC BY 3.0)
 - constellation by verry poernomo from from Noun Project (CC BY 3.0)
 - order by kumakamu from Noun Project (CC BY 3.0)
+- youtube by Kholila wale from Noun Project (CC BY 3.0)

@@ -35,10 +35,60 @@
 #include "camera.h"
 #include "camerastardetector.h"
 #include "util/astronomy.h"
+#include "util/messagequeue.h"
 
 MESSAGE_CLASS_DEFINITION(Camera::MsgConfigureCamera, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgProcessFrame, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgCaptureActive, Message)
+
+// The test executable links cameradetector.cpp but not camera.cpp, so the
+// pipeline-frame helpers used by the detector are duplicated here verbatim
+// (same pattern as the message definitions above).
+static int discardQueuedProcessFramesImpl(MessageQueue& queue, bool requireCaptureActive)
+{
+    QList<Message*> messages;
+    Message *message = nullptr;
+    bool hasCaptureActive = false;
+
+    while ((message = queue.pop()) != nullptr)
+    {
+        hasCaptureActive = hasCaptureActive || Camera::MsgCaptureActive::match(*message);
+        messages.append(message);
+    }
+
+    int dropped = 0;
+
+    for (Message *queuedMessage : messages)
+    {
+        if ((!requireCaptureActive || hasCaptureActive) && Camera::MsgProcessFrame::match(*queuedMessage))
+        {
+            delete queuedMessage;
+            ++dropped;
+        }
+        else
+        {
+            queue.push(queuedMessage, false);
+        }
+    }
+
+    return dropped;
+}
+
+int Camera::discardQueuedProcessFrames(MessageQueue& queue)
+{
+    return discardQueuedProcessFramesImpl(queue, false);
+}
+
+int Camera::discardQueuedProcessFramesOnCaptureActive(MessageQueue& queue)
+{
+    return discardQueuedProcessFramesImpl(queue, true);
+}
+
+bool Camera::acceptsPipelineFrame(const CameraPipelineFramePtr& frame, bool captureActive, quint64 captureEpoch)
+{
+    return frame
+        && (frame->m_manualPreviewFrame || (captureActive && (frame->m_captureEpoch == captureEpoch)));
+}
 
 #ifndef CAMERA_STAR_TEST_DATA_DIR
 #define CAMERA_STAR_TEST_DATA_DIR "."
@@ -987,6 +1037,10 @@ DetectorRunResult runDetector(const StarTestCase& test)
         makeSettings(test),
         QList<QString>(),
         true));
+    // Pipeline stages reject frames unless a capture is active with a matching epoch
+    // (Camera::acceptsPipelineFrame), so mark capture active before submitting the
+    // test frame (which carries the default epoch of 0).
+    detector.getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, 0));
 
     CameraPipelineFramePtr frame(new CameraPipelineFrame);
     frame->m_image = image;

@@ -279,6 +279,37 @@ bool CameraVideoFileDecoder::readNextFrame(
 #endif
 }
 
+bool CameraVideoFileDecoder::readNextFrameAtOrAfter(
+    qint64 targetPositionMs,
+    QImage& image,
+    qint64& positionMs,
+    QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(targetPositionMs)
+    Q_UNUSED(image)
+    Q_UNUSED(positionMs)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    QByteArray discardedAudio;
+    int discardedSampleRate = 0;
+    const qint64 toleranceMs = std::max<qint64>(1, static_cast<qint64>((500.0 / std::max(1.0, m_frameRate)) + 0.5));
+
+    for (;;)
+    {
+        if (!readNextFrame(image, positionMs, discardedAudio, discardedSampleRate, errorMessage)) {
+            return false;
+        }
+        discardedAudio.clear();
+
+        if (image.isNull() || (positionMs < 0) || (positionMs + toleranceMs >= targetPositionMs)) {
+            return true;
+        }
+    }
+#endif
+}
+
 bool CameraVideoFileDecoder::openVideoDecoder(QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING

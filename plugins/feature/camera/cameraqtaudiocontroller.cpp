@@ -40,8 +40,8 @@ CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     m_sampleRate(AudioDeviceManager::m_defaultAudioSampleRate),
     m_recordingMessageQueue(nullptr)
 {
-    // Audio FIFO: stereo 16-bit PCM at 48 kHz; 4800 sample frames x 4 bytes each.
-    static constexpr int audioFifoFrames = 4800 * 4;
+    // Audio FIFO: stereo 16-bit PCM at 48 kHz; keep enough decoded file audio to absorb timer jitter.
+    static constexpr int audioFifoFrames = 48000 * 2;
     static constexpr int bytesPerSampleFrame = 4;
     m_captureAudioFifo.setSize(audioFifoFrames);
     m_outputAudioFifo.setSize(audioFifoFrames);
@@ -108,6 +108,11 @@ void CameraQtAudioController::setMuted(bool muted)
         m_captureAudioFifo.clear();
         m_outputAudioFifo.clear();
     }
+}
+
+void CameraQtAudioController::clearMonitorAudio()
+{
+    m_outputAudioFifo.clear();
 }
 
 void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate)

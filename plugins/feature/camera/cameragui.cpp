@@ -4988,12 +4988,23 @@ void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)
 
     const qint64 position = (static_cast<qint64>(value) * m_playbackDurationMs) / PlaybackPositionSliderMaximum;
     updatePlaybackPositionLabel(position);
-    sendVideoFileControl(CameraWorker::MsgVideoFileControl::Seek, position);
 }
 
 void CameraGUI::on_playbackPositionSlider_sliderReleased()
 {
-    on_playbackPositionSlider_sliderMoved(ui->playbackPositionSlider->value());
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        on_playbackPositionSlider_sliderMoved(ui->playbackPositionSlider->value());
+        return;
+    }
+
+    if (m_playbackDurationMs <= 0) {
+        return;
+    }
+
+    const qint64 position = (static_cast<qint64>(ui->playbackPositionSlider->value()) * m_playbackDurationMs) / PlaybackPositionSliderMaximum;
+    updatePlaybackPositionLabel(position);
+    sendVideoFileControl(CameraWorker::MsgVideoFileControl::Seek, position);
 }
 
 void CameraGUI::on_cameraCombo_currentIndexChanged(int index)

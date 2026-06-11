@@ -687,7 +687,7 @@ private:
     bool openVideoFileDecoder();
     void closeVideoFileDecoder();
     void setVideoFilePlaying(bool playing);
-    void readVideoFileFrame();
+    void readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
     void seekVideoFile(qint64 positionMs, bool displayFrame);
     void stepVideoFile(int direction);
     int videoFileFrameIntervalMs() const;

@@ -46,6 +46,11 @@ public:
         QByteArray& pcmS16Stereo,
         int& audioSampleRate,
         QString& errorMessage);
+    [[nodiscard]] bool readNextFrameAtOrAfter(
+        qint64 targetPositionMs,
+        QImage& image,
+        qint64& positionMs,
+        QString& errorMessage);
     [[nodiscard]] qint64 durationMs() const { return m_durationMs; }
     [[nodiscard]] double frameRate() const { return m_frameRate; }
 

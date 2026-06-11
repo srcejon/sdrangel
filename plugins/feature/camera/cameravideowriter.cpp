@@ -204,9 +204,14 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
         m_codecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     }
 
-    av_opt_set(m_codecContext->priv_data, "preset", "veryfast", 0);
-    if (settings.m_codec == CameraSettings::VideoCodecH264) {
-        av_opt_set(m_codecContext->priv_data, "tune", "zerolatency", 0);
+    const QString encoderName = QString::fromLatin1(codec->name);
+    const bool nvencEncoder = encoderName.contains(QStringLiteral("nvenc"), Qt::CaseInsensitive);
+    if (!nvencEncoder)
+    {
+        av_opt_set(m_codecContext->priv_data, "preset", "veryfast", 0);
+        if (settings.m_codec == CameraSettings::VideoCodecH264) {
+            av_opt_set(m_codecContext->priv_data, "tune", "zerolatency", 0);
+        }
     }
 
     ret = avcodec_open2(m_codecContext, codec, nullptr);

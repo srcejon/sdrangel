@@ -1337,7 +1337,7 @@ void CameraWorker::setVideoFilePlaying(bool playing)
     reportVideoFilePlaybackToGUI();
 }
 
-void CameraWorker::readVideoFileFrame()
+void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs)
 {
     if (!m_capturing || !m_settings.isVideoFileCamera() || !m_videoFileDecoder) {
         return;
@@ -1348,7 +1348,10 @@ void CameraWorker::readVideoFileFrame()
     QByteArray pcmS16Stereo;
     int audioSampleRate = 0;
     QString errorMessage;
-    if (!m_videoFileDecoder->readNextFrame(image, positionMs, pcmS16Stereo, audioSampleRate, errorMessage))
+    const bool readOk = minimumPositionMs >= 0
+        ? m_videoFileDecoder->readNextFrameAtOrAfter(minimumPositionMs, image, positionMs, errorMessage)
+        : m_videoFileDecoder->readNextFrame(image, positionMs, pcmS16Stereo, audioSampleRate, errorMessage);
+    if (!readOk)
     {
         reportErrorToFeature(
             QStringLiteral("videoFileDecode:%1").arg(m_settings.m_videoFileCameraPath),
@@ -1379,7 +1382,7 @@ void CameraWorker::readVideoFileFrame()
         m_videoFilePositionMs += videoFileFrameIntervalMs();
     }
 
-    if (!pcmS16Stereo.isEmpty()) {
+    if (submitAudio && !pcmS16Stereo.isEmpty()) {
         m_qtAudio.submitPcmSamples(pcmS16Stereo, audioSampleRate);
     }
 
@@ -1403,21 +1406,29 @@ void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
 
     m_videoFilePositionMs = qBound<qint64>(0, positionMs, m_videoFileDurationMs > 0 ? m_videoFileDurationMs : std::numeric_limits<qint64>::max());
     m_videoFileDecoder->seek(m_videoFilePositionMs);
+    m_qtAudio.clearMonitorAudio();
     reportVideoFilePlaybackToGUI();
     if (displayFrame) {
-        readVideoFileFrame();
+        readVideoFileFrame(false, m_videoFilePositionMs);
     }
 }
 
 void CameraWorker::stepVideoFile(int direction)
 {
     setVideoFilePlaying(false);
-    const qint64 maxPosition = m_videoFileDurationMs > 0 ? m_videoFileDurationMs : std::numeric_limits<qint64>::max();
-    const qint64 position = qBound<qint64>(
-        0,
-        m_videoFilePositionMs + (direction >= 0 ? videoFileFrameIntervalMs() : -videoFileFrameIntervalMs()),
-        maxPosition);
-    seekVideoFile(position, true);
+    if (direction >= 0)
+    {
+        readVideoFileFrame(false);
+    }
+    else
+    {
+        const qint64 maxPosition = m_videoFileDurationMs > 0 ? m_videoFileDurationMs : std::numeric_limits<qint64>::max();
+        const qint64 position = qBound<qint64>(
+            0,
+            m_videoFilePositionMs - videoFileFrameIntervalMs(),
+            maxPosition);
+        seekVideoFile(position, true);
+    }
 }
 
 int CameraWorker::videoFileFrameIntervalMs() const

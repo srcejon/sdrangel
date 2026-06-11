@@ -41,6 +41,7 @@ public:
     void startFilePlayback(const CameraSettings& settings, MessageQueue *messageQueue);
     void stop();
     void setMuted(bool muted);
+    void clearMonitorAudio();
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
 
 private slots:

@@ -103,6 +103,32 @@ public:
         { }
     };
 
+    class MsgReportKeogram : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QImage& getImage() const { return m_image; }
+        const QString& getFileName() const { return m_fileName; }
+        bool getVisible() const { return m_visible; }
+
+        static MsgReportKeogram* create(const QImage& image, const QString& fileName, bool visible)
+        {
+            return new MsgReportKeogram(image, fileName, visible);
+        }
+
+    private:
+        QImage m_image;
+        QString m_fileName;
+        bool m_visible;
+
+        MsgReportKeogram(const QImage& image, const QString& fileName, bool visible) :
+            Message(),
+            m_image(image),
+            m_fileName(fileName),
+            m_visible(visible)
+        { }
+    };
+
     CameraRecorder();
     ~CameraRecorder();
 
@@ -136,6 +162,11 @@ private:
     bool m_preRecordBufferFlushed;
     int m_recordedImageFrames;
     QDateTime m_videoRecordingStartDateTime;
+    QImage m_keogramImage;
+    QDateTime m_keogramWindowStartUtc;
+    QSize m_keogramSourceSize;
+    QString m_keogramOutputFileName;
+    int m_keogramLastSampleIndex;
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrames;
@@ -167,6 +198,13 @@ private:
     void trimPreRecordBuffer();
     void appendPreRecordFrame(const QImage& calibratedImage, const QImage& processedImage);
     void flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentProcessedImage);
+    void updateKeogram(const QImage& calibratedImage, const QDateTime& captureDateTime);
+    void resetKeogram();
+    [[nodiscard]] QDateTime keogramWindowStartUtc(const QDateTime& captureDateTime) const;
+    [[nodiscard]] int keogramSampleCount() const;
+    [[nodiscard]] int keogramSampleIndex(const QDateTime& captureDateTime) const;
+    [[nodiscard]] QString keogramOutputFileName(const QDateTime& windowStartUtc) const;
+    [[nodiscard]] static QImage rgbImageForKeogram(const QImage& image);
 
 private slots:
     void handleInputMessages();

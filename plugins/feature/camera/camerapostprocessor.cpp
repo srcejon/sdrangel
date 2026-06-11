@@ -52,6 +52,7 @@ static constexpr int kTrackedObjectMaxTrackPoints = 256;
 static constexpr double kTrackedObjectTrackMinDeltaDegrees = 1e-6;
 static constexpr double kTrackedObjectTrackMinDeltaAltitudeMetres = 0.5;
 static constexpr double kTrackedObjectHeatMapRadiusPixels = 18.0;
+static constexpr double kTrackedObjectHeatMapLineWidthPixels = 10.0;
 
 struct EquatorialStar
 {
@@ -1559,7 +1560,6 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
         heatMap.fill(Qt::transparent);
         QPainter heatPainter(&heatMap);
         heatPainter.setRenderHint(QPainter::Antialiasing);
-        heatPainter.setPen(Qt::NoPen);
         heatPainter.setCompositionMode(QPainter::CompositionMode_Plus);
         const QRectF paddedImageRect = QRectF(image.rect()).adjusted(
             -kTrackedObjectHeatMapRadiusPixels,
@@ -1574,6 +1574,40 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
                 continue;
             }
 
+            QPolygonF projectedTrack;
+            auto flushProjectedHeatTrack = [&heatPainter, &projectedTrack]() {
+                if (projectedTrack.size() > 1)
+                {
+                    heatPainter.setBrush(Qt::NoBrush);
+                    QPen heatLinePen(QColor(255, 120, 0, 32), kTrackedObjectHeatMapLineWidthPixels);
+                    heatLinePen.setCapStyle(Qt::RoundCap);
+                    heatLinePen.setJoinStyle(Qt::RoundJoin);
+                    heatPainter.setPen(heatLinePen);
+                    heatPainter.drawPolyline(projectedTrack);
+
+                    QPen heatCorePen(QColor(255, 220, 0, 20), kTrackedObjectHeatMapLineWidthPixels * 0.45);
+                    heatCorePen.setCapStyle(Qt::RoundCap);
+                    heatCorePen.setJoinStyle(Qt::RoundJoin);
+                    heatPainter.setPen(heatCorePen);
+                    heatPainter.drawPolyline(projectedTrack);
+                }
+                projectedTrack.clear();
+            };
+
+            for (const TrackedMapObject::TrackPoint& trackPoint : object.m_track)
+            {
+                QPointF heatPoint;
+                if (!projectTrackPoint(trackPoint, heatPoint) || !paddedImageRect.contains(heatPoint))
+                {
+                    flushProjectedHeatTrack();
+                    continue;
+                }
+
+                projectedTrack.append(heatPoint);
+            }
+            flushProjectedHeatTrack();
+
+            heatPainter.setPen(Qt::NoPen);
             for (const TrackedMapObject::TrackPoint& trackPoint : object.m_track)
             {
                 QPointF heatPoint;

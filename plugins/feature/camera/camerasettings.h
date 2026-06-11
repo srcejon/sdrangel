@@ -91,6 +91,18 @@ struct CameraSettings
         AutoExposureGainGainOnly
     };
 
+    enum KeogramDirection
+    {
+        KeogramHorizontal = 0,
+        KeogramVertical
+    };
+
+    enum KeogramDayMode
+    {
+        KeogramMidnightToMidnight = 0,
+        KeogramMiddayToMidday
+    };
+
     enum LensProjection
     {
         LensProjectionRectilinear = 0,
@@ -357,6 +369,12 @@ struct CameraSettings
     bool m_recordRawFits;          ///< Save uncalibrated Bayer still images as FITS
     bool m_recordCalibratedMedia;  ///< Save calibrated/debayered image/video media
     bool m_recordPostProcessedMedia; ///< Save post-processed image/video media
+    bool m_keogramEnabled;         ///< Build and save a 24-hour keogram from calibrated frames
+    QString m_keogramFileName;     ///< File basename for saved keograms (.jpg/.png)
+    KeogramDirection m_keogramDirection; ///< Whether samples are horizontal or vertical image slices
+    KeogramDayMode m_keogramDayMode; ///< Whether the 24-hour keogram window starts at midnight or midday
+    int m_keogramSamplePeriodMinutes; ///< Keogram sample period in minutes
+    bool m_keogramShowPreview;     ///< Show a live keogram preview dialog in the GUI
     bool m_videoLoop;
     double m_videoPlaybackRate;
     bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported

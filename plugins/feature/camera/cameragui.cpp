@@ -29,6 +29,7 @@
 #include <QDateTime>
 #include <QDateTimeEdit>
 #include <QDesktopServices>
+#include <QDialog>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
@@ -38,6 +39,7 @@
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
 #include <QGraphicsRectItem>
+#include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QLineEdit>
@@ -50,6 +52,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QSignalBlocker>
+#include <QSizePolicy>
 #include <QSpinBox>
 #include <QStandardItemModel>
 #include <QTableWidget>
@@ -60,6 +63,7 @@
 #include <QMessageBox>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QVBoxLayout>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QCamera>
 #include <QCameraDevice>
@@ -673,6 +677,12 @@ bool CameraGUI::handleMessage(const Message& message)
         ui->saveImageCheck->setChecked(m_settings.m_saveImage);
         ui->saveImageCheck->blockSignals(false);
         applySetting("saveImage");
+        return true;
+    }
+    else if (CameraRecorder::MsgReportKeogram::match(message))
+    {
+        const CameraRecorder::MsgReportKeogram& report = (CameraRecorder::MsgReportKeogram&) message;
+        updateKeogramPreview(report.getImage(), report.getFileName(), report.getVisible());
         return true;
     }
     else if (CameraWorker::MsgReportAlpacaCameraInfo::match(message))
@@ -1452,6 +1462,12 @@ void CameraGUI::displaySettings()
     settingsUI()->imagePathEdit->setText(m_settings.m_imageFileName);
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
     settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
+    ui->keogramButton->setChecked(m_settings.m_keogramEnabled);
+    settingsUI()->keogramPathEdit->setText(m_settings.m_keogramFileName);
+    settingsUI()->keogramDirectionCombo->setCurrentIndex(static_cast<int>(m_settings.m_keogramDirection));
+    settingsUI()->keogramDayModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_keogramDayMode));
+    settingsUI()->keogramSamplePeriodSpin->setValue(m_settings.m_keogramSamplePeriodMinutes);
+    settingsUI()->keogramPreviewCheck->setChecked(m_settings.m_keogramShowPreview);
     settingsUI()->videoHwAccelerationCheck->setChecked(m_settings.m_videoHwAcceleration);
     settingsUI()->videoPreRecordBufferSpin->setValue(m_settings.m_videoPreRecordBufferSeconds);
     settingsUI()->imageRecordLimitSpin->setValue(m_settings.m_imageRecordLimit);
@@ -2182,6 +2198,13 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->saveVideoCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveVideoCheck_toggled);
     QObject::connect(settingsUI()->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
+    QObject::connect(ui->keogramButton, &QToolButton::toggled, this, &CameraGUI::on_keogramButton_toggled);
+    QObject::connect(settingsUI()->keogramPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_keogramPathEdit_editingFinished);
+    QObject::connect(settingsUI()->keogramPathButton, &QToolButton::clicked, this, &CameraGUI::on_keogramPathButton_clicked);
+    QObject::connect(settingsUI()->keogramDirectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_keogramDirectionCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->keogramDayModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_keogramDayModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->keogramSamplePeriodSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_keogramSamplePeriodSpin_valueChanged);
+    QObject::connect(settingsUI()->keogramPreviewCheck, &QCheckBox::toggled, this, &CameraGUI::on_keogramPreviewCheck_toggled);
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
     QObject::connect(settingsUI()->videoPreRecordBufferSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoPreRecordBufferSpin_valueChanged);
     QObject::connect(settingsUI()->imageRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_imageRecordLimitSpin_valueChanged);
@@ -3021,6 +3044,43 @@ void CameraGUI::updateCalculatedFov()
     if (m_doApplySettings) {
         applySetting("fov");
     }
+}
+
+void CameraGUI::updateKeogramPreview(const QImage& image, const QString& fileName, bool visible)
+{
+    if (!visible || image.isNull())
+    {
+        if (m_keogramPreviewDialog) {
+            m_keogramPreviewDialog->hide();
+        }
+        return;
+    }
+
+    if (!m_keogramPreviewDialog)
+    {
+        m_keogramPreviewDialog = new QDialog(this);
+        m_keogramPreviewDialog->setWindowTitle(tr("Keogram"));
+        m_keogramPreviewDialog->resize(640, 360);
+        QVBoxLayout *layout = new QVBoxLayout(m_keogramPreviewDialog);
+        m_keogramPreviewLabel = new QLabel(m_keogramPreviewDialog);
+        m_keogramPreviewLabel->setAlignment(Qt::AlignCenter);
+        m_keogramPreviewLabel->setMinimumSize(320, 180);
+        m_keogramPreviewLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        layout->addWidget(m_keogramPreviewLabel);
+    }
+
+    if (!fileName.isEmpty()) {
+        m_keogramPreviewDialog->setWindowTitle(tr("Keogram - %1").arg(QFileInfo(fileName).fileName()));
+    }
+
+    const QSize targetSize = m_keogramPreviewLabel->size().isValid()
+        ? m_keogramPreviewLabel->size()
+        : QSize(640, 360);
+    m_keogramPreviewLabel->setPixmap(QPixmap::fromImage(image).scaled(
+        targetSize,
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation));
+    m_keogramPreviewDialog->show();
 }
 
 void CameraGUI::syncFromMainSettings()
@@ -5569,6 +5629,58 @@ void CameraGUI::on_videoPathButton_clicked()
         settingsUI()->videoPathEdit->setText(fileName);
         applySetting("videoFileName");
         applyVideoToolTip();
+    }
+}
+
+void CameraGUI::on_keogramButton_toggled(bool checked)
+{
+    m_settings.m_keogramEnabled = checked;
+    applySetting("keogramEnabled");
+}
+
+void CameraGUI::on_keogramPathEdit_editingFinished()
+{
+    m_settings.m_keogramFileName = settingsUI()->keogramPathEdit->text();
+    applySetting("keogramFileName");
+}
+
+void CameraGUI::on_keogramPathButton_clicked()
+{
+    const QString fileName = QFileDialog::getSaveFileName(this, tr("Save keogram"), m_settings.m_keogramFileName, tr("Image (*.png *.jpg *.jpeg)"));
+
+    if (!fileName.isEmpty())
+    {
+        m_settings.m_keogramFileName = fileName;
+        settingsUI()->keogramPathEdit->setText(fileName);
+        applySetting("keogramFileName");
+    }
+}
+
+void CameraGUI::on_keogramDirectionCombo_currentIndexChanged(int index)
+{
+    m_settings.m_keogramDirection = static_cast<CameraSettings::KeogramDirection>(qBound(0, index, 1));
+    applySetting("keogramDirection");
+}
+
+void CameraGUI::on_keogramDayModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_keogramDayMode = static_cast<CameraSettings::KeogramDayMode>(qBound(0, index, 1));
+    applySetting("keogramDayMode");
+}
+
+void CameraGUI::on_keogramSamplePeriodSpin_valueChanged(int value)
+{
+    m_settings.m_keogramSamplePeriodMinutes = value;
+    applySetting("keogramSamplePeriodMinutes");
+}
+
+void CameraGUI::on_keogramPreviewCheck_toggled(bool checked)
+{
+    m_settings.m_keogramShowPreview = checked;
+    applySetting("keogramShowPreview");
+
+    if (!checked) {
+        updateKeogramPreview(QImage(), QString(), false);
     }
 }
 

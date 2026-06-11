@@ -5732,10 +5732,139 @@ li.checked::marker { content: &quot;\2612&quot;; }
                </widget>
               </item>
              </layout>
+       </widget>
+      </item>
+      <item alignment="Qt::AlignTop">
+       <widget class="QGroupBox" name="keogramGroup">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="title">
+         <string>Keogram</string>
+        </property>
+        <layout class="QFormLayout" name="keogramFormLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="keogramPathLabel">
+           <property name="text">
+            <string>File basename</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <layout class="QHBoxLayout" name="keogramPathLayout">
+           <item>
+            <widget class="QLineEdit" name="keogramPathEdit">
+             <property name="toolTip">
+              <string>File basename to use for saved keograms (.jpg or .png)</string>
+             </property>
             </widget>
            </item>
            <item>
-            <spacer name="verticalSpacer_8">
+            <widget class="QToolButton" name="keogramPathButton">
+             <property name="toolTip">
+              <string>Specify keogram file basename using file browser</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="icon">
+              <iconset resource="../../../sdrgui/resources/res.qrc">
+               <normaloff>:/load.png</normaloff>:/load.png</iconset>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="keogramDirectionLabel">
+           <property name="text">
+            <string>Direction</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QComboBox" name="keogramDirectionCombo">
+           <item>
+            <property name="text">
+             <string>Horizontal</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Vertical</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="keogramDayModeLabel">
+           <property name="text">
+            <string>24h window</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QComboBox" name="keogramDayModeCombo">
+           <item>
+            <property name="text">
+             <string>Midnight to midnight</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Midday to midday</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="keogramSamplePeriodLabel">
+           <property name="text">
+            <string>Sample period</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QSpinBox" name="keogramSamplePeriodSpin">
+           <property name="toolTip">
+            <string>Minutes between keogram samples</string>
+           </property>
+           <property name="suffix">
+            <string> min</string>
+           </property>
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>1440</number>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="keogramPreviewLabel">
+           <property name="text">
+            <string>Preview</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QCheckBox" name="keogramPreviewCheck">
+           <property name="toolTip">
+            <string>Show a live keogram preview window</string>
+           </property>
+           <property name="text">
+            <string>Show preview</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacer_8">
              <property name="orientation">
               <enum>Qt::Orientation::Vertical</enum>
              </property>

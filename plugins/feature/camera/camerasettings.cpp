@@ -187,6 +187,12 @@ void CameraSettings::resetToDefaults()
     m_recordRawFits = false;
     m_recordCalibratedMedia = true;
     m_recordPostProcessedMedia = false;
+    m_keogramEnabled = false;
+    m_keogramFileName = "keogram.png";
+    m_keogramDirection = KeogramVertical;
+    m_keogramDayMode = KeogramMidnightToMidnight;
+    m_keogramSamplePeriodMinutes = 5;
+    m_keogramShowPreview = false;
     m_videoLoop = false;
     m_videoPlaybackRate = 1.0;
     m_videoHwAcceleration = true;
@@ -620,6 +626,12 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(237, m_starCatalogDiskCacheSizeGb);
     s.writeBool(238, m_trackObjectTrails);
     s.writeBool(239, m_trackObjectHeatMap);
+    s.writeBool(240, m_keogramEnabled);
+    s.writeString(241, m_keogramFileName);
+    s.writeS32(242, static_cast<qint32>(m_keogramDirection));
+    s.writeS32(243, static_cast<qint32>(m_keogramDayMode));
+    s.writeS32(244, m_keogramSamplePeriodMinutes);
+    s.writeBool(245, m_keogramShowPreview);
 
     return s.final();
 }
@@ -945,6 +957,16 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(234, &m_recordRawFits, false);
         d.readBool(235, &m_recordCalibratedMedia, true);
         d.readBool(236, &m_recordPostProcessedMedia, false);
+        d.readBool(240, &m_keogramEnabled, false);
+        d.readString(241, &m_keogramFileName, "keogram.png");
+        qint32 keogramDirection = static_cast<qint32>(KeogramVertical);
+        qint32 keogramDayMode = static_cast<qint32>(KeogramMidnightToMidnight);
+        d.readS32(242, &keogramDirection, static_cast<qint32>(KeogramVertical));
+        d.readS32(243, &keogramDayMode, static_cast<qint32>(KeogramMidnightToMidnight));
+        m_keogramDirection = static_cast<KeogramDirection>(keogramDirection);
+        m_keogramDayMode = static_cast<KeogramDayMode>(keogramDayMode);
+        d.readS32(244, &m_keogramSamplePeriodMinutes, 5);
+        d.readBool(245, &m_keogramShowPreview, false);
         d.readDouble(207, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(211, &m_postProcessUseCuda, false);
@@ -1094,6 +1116,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
             exposureTimeMs = std::max(m_minExposureTimeMs, exposureTimeMs);
         }
         m_stackAlignmentMethod = qBound(StackAlignmentNone, m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
+        m_keogramDirection = static_cast<KeogramDirection>(qBound(0, static_cast<int>(m_keogramDirection), 1));
+        m_keogramDayMode = static_cast<KeogramDayMode>(qBound(0, static_cast<int>(m_keogramDayMode), 1));
+        m_keogramSamplePeriodMinutes = qBound(1, m_keogramSamplePeriodMinutes, 1440);
         m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
         m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
         m_altitude = qBound(m_minAltitude, m_altitude, m_maxAltitude);
@@ -1327,6 +1352,24 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoRecordLimitSeconds")) {
         m_videoRecordLimitSeconds = std::max(m_minNonNegative, settings.m_videoRecordLimitSeconds);
+    }
+    if (settingsKeys.contains("keogramEnabled")) {
+        m_keogramEnabled = settings.m_keogramEnabled;
+    }
+    if (settingsKeys.contains("keogramFileName")) {
+        m_keogramFileName = settings.m_keogramFileName;
+    }
+    if (settingsKeys.contains("keogramDirection")) {
+        m_keogramDirection = static_cast<KeogramDirection>(qBound(0, static_cast<int>(settings.m_keogramDirection), 1));
+    }
+    if (settingsKeys.contains("keogramDayMode")) {
+        m_keogramDayMode = static_cast<KeogramDayMode>(qBound(0, static_cast<int>(settings.m_keogramDayMode), 1));
+    }
+    if (settingsKeys.contains("keogramSamplePeriodMinutes")) {
+        m_keogramSamplePeriodMinutes = qBound(1, settings.m_keogramSamplePeriodMinutes, 1440);
+    }
+    if (settingsKeys.contains("keogramShowPreview")) {
+        m_keogramShowPreview = settings.m_keogramShowPreview;
     }
     if (settingsKeys.contains("stackEnabled")) {
         m_stackEnabled = settings.m_stackEnabled;
@@ -2036,6 +2079,24 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoRecordLimitSeconds") || force) {
         ostr << " m_videoRecordLimitSeconds: " << m_videoRecordLimitSeconds;
+    }
+    if (settingsKeys.contains("keogramEnabled") || force) {
+        ostr << " m_keogramEnabled: " << m_keogramEnabled;
+    }
+    if (settingsKeys.contains("keogramFileName") || force) {
+        ostr << " m_keogramFileName: " << m_keogramFileName.toStdString();
+    }
+    if (settingsKeys.contains("keogramDirection") || force) {
+        ostr << " m_keogramDirection: " << static_cast<int>(m_keogramDirection);
+    }
+    if (settingsKeys.contains("keogramDayMode") || force) {
+        ostr << " m_keogramDayMode: " << static_cast<int>(m_keogramDayMode);
+    }
+    if (settingsKeys.contains("keogramSamplePeriodMinutes") || force) {
+        ostr << " m_keogramSamplePeriodMinutes: " << m_keogramSamplePeriodMinutes;
+    }
+    if (settingsKeys.contains("keogramShowPreview") || force) {
+        ostr << " m_keogramShowPreview: " << m_keogramShowPreview;
     }
     if (settingsKeys.contains("stackEnabled") || force) {
         ostr << " m_stackEnabled: " << m_stackEnabled;

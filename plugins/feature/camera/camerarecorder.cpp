@@ -35,10 +35,12 @@
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgSetVideoRecordingEnabled, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportSaveVideoState, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportSaveImageState, Message)
+MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportKeogram, Message)
 
 namespace {
 
 constexpr qint64 kPreRecordBufferMaxBytes = 2LL * 1024LL * 1024LL * 1024LL;
+constexpr qint64 kKeogramWindowSeconds = 24LL * 60LL * 60LL;
 
 qint64 imageSizeBytes(const QImage& image)
 {
@@ -166,6 +168,7 @@ CameraRecorder::CameraRecorder() :
     m_captureActive(false),
     m_preRecordBufferFlushed(false),
     m_recordedImageFrames(0),
+    m_keogramLastSampleIndex(-1),
     m_processingFrames(false),
     m_droppedOutputFrames(0)
 {
@@ -252,6 +255,12 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
     const QString previousVideoFileName = m_settings.m_videoFileName;
     const bool previousRecordCalibratedMedia = m_settings.m_recordCalibratedMedia;
     const bool previousRecordPostProcessedMedia = m_settings.m_recordPostProcessedMedia;
+    const bool previousKeogramEnabled = m_settings.m_keogramEnabled;
+    const QString previousKeogramFileName = m_settings.m_keogramFileName;
+    const CameraSettings::KeogramDirection previousKeogramDirection = m_settings.m_keogramDirection;
+    const CameraSettings::KeogramDayMode previousKeogramDayMode = m_settings.m_keogramDayMode;
+    const int previousKeogramSamplePeriodMinutes = m_settings.m_keogramSamplePeriodMinutes;
+    const bool previousKeogramShowPreview = m_settings.m_keogramShowPreview;
 
     if (force) {
         m_settings = settings;
@@ -292,6 +301,32 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
         if (m_settings.m_saveImage) {
             m_recordedImageFrames = 0;
         }
+    }
+
+    if (force
+        || settingsKeys.contains("keogramEnabled")
+        || settingsKeys.contains("keogramFileName")
+        || settingsKeys.contains("keogramDirection")
+        || settingsKeys.contains("keogramDayMode")
+        || settingsKeys.contains("keogramSamplePeriodMinutes"))
+    {
+        if (force
+            || (previousKeogramEnabled != m_settings.m_keogramEnabled)
+            || (previousKeogramFileName != m_settings.m_keogramFileName)
+            || (previousKeogramDirection != m_settings.m_keogramDirection)
+            || (previousKeogramDayMode != m_settings.m_keogramDayMode)
+            || (previousKeogramSamplePeriodMinutes != m_settings.m_keogramSamplePeriodMinutes))
+        {
+            resetKeogram();
+        }
+    }
+
+    if ((force || settingsKeys.contains("keogramShowPreview") || settingsKeys.contains("keogramEnabled"))
+        && (previousKeogramShowPreview || previousKeogramEnabled)
+        && (!m_settings.m_keogramShowPreview || !m_settings.m_keogramEnabled)
+        && m_msgQueueToGUI)
+    {
+        m_msgQueueToGUI->push(MsgReportKeogram::create(QImage(), QString(), false));
     }
 }
 
@@ -369,6 +404,10 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
     const QImage& processedImage = frame->m_postProcessedImage.isNull() ? frame->m_image : frame->m_postProcessedImage;
     bool savedImageFrame = false;
     bool savedVideoFrame = false;
+
+    if (m_captureActive && m_settings.m_keogramEnabled) {
+        updateKeogram(calibratedImage, frame->m_captureDateTime);
+    }
 
     if (m_captureActive && (m_settings.m_saveImage || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
     {
@@ -493,6 +532,15 @@ void CameraRecorder::resetRecordingLimits()
 {
     m_recordedImageFrames = 0;
     m_videoRecordingStartDateTime = m_settings.m_saveVideo ? QDateTime::currentDateTimeUtc() : QDateTime();
+}
+
+void CameraRecorder::resetKeogram()
+{
+    m_keogramImage = QImage();
+    m_keogramWindowStartUtc = QDateTime();
+    m_keogramSourceSize = QSize();
+    m_keogramOutputFileName.clear();
+    m_keogramLastSampleIndex = -1;
 }
 
 void CameraRecorder::updateRecordingLimitsAfterFrame(bool savedImageFrame, bool savedVideoFrame)
@@ -699,6 +747,169 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentCalibratedImage, 
 
     m_preRecordVideoFrames.clear();
     m_preRecordBufferFlushed = true;
+}
+
+QDateTime CameraRecorder::keogramWindowStartUtc(const QDateTime& captureDateTime) const
+{
+    const QDateTime localCapture = captureDateTime.isValid()
+        ? captureDateTime.toLocalTime()
+        : QDateTime::currentDateTime();
+    const QTime boundaryTime = (m_settings.m_keogramDayMode == CameraSettings::KeogramMiddayToMidday)
+        ? QTime(12, 0, 0)
+        : QTime(0, 0, 0);
+
+    QDate boundaryDate = localCapture.date();
+    if (localCapture.time() < boundaryTime) {
+        boundaryDate = boundaryDate.addDays(-1);
+    }
+
+    return QDateTime(boundaryDate, boundaryTime, Qt::LocalTime).toUTC();
+}
+
+int CameraRecorder::keogramSampleCount() const
+{
+    return std::max(1, static_cast<int>(std::ceil(1440.0 / std::max(1, m_settings.m_keogramSamplePeriodMinutes))));
+}
+
+int CameraRecorder::keogramSampleIndex(const QDateTime& captureDateTime) const
+{
+    if (!m_keogramWindowStartUtc.isValid()) {
+        return -1;
+    }
+
+    const QDateTime captureUtc = captureDateTime.isValid()
+        ? captureDateTime.toUTC()
+        : QDateTime::currentDateTimeUtc();
+    const qint64 elapsedMs = m_keogramWindowStartUtc.msecsTo(captureUtc);
+    if ((elapsedMs < 0) || (elapsedMs >= (kKeogramWindowSeconds * 1000LL))) {
+        return -1;
+    }
+
+    const qint64 sampleMs = static_cast<qint64>(std::max(1, m_settings.m_keogramSamplePeriodMinutes)) * 60LL * 1000LL;
+    return qBound(0, static_cast<int>(elapsedMs / sampleMs), keogramSampleCount() - 1);
+}
+
+QString CameraRecorder::keogramOutputFileName(const QDateTime& windowStartUtc) const
+{
+    const QFileInfo fileInfo(m_settings.m_keogramFileName);
+    const QString suffix = fileInfo.suffix().compare(QStringLiteral("jpg"), Qt::CaseInsensitive) == 0
+        || fileInfo.suffix().compare(QStringLiteral("jpeg"), Qt::CaseInsensitive) == 0
+        || fileInfo.suffix().compare(QStringLiteral("png"), Qt::CaseInsensitive) == 0
+            ? fileInfo.suffix()
+            : QStringLiteral("png");
+    const QString baseName = fileInfo.completeBaseName().isEmpty() ? QStringLiteral("keogram") : fileInfo.completeBaseName();
+    const QString timestamp = windowStartUtc.toLocalTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm"));
+    return fileInfo.path() + QStringLiteral("/") + baseName + QStringLiteral(".") + timestamp + QStringLiteral(".") + suffix;
+}
+
+QImage CameraRecorder::rgbImageForKeogram(const QImage& image)
+{
+    if (image.isNull()) {
+        return QImage();
+    }
+    return image.convertToFormat(QImage::Format_RGB888);
+}
+
+void CameraRecorder::updateKeogram(const QImage& calibratedImage, const QDateTime& captureDateTime)
+{
+    if (calibratedImage.isNull() || m_settings.m_keogramFileName.isEmpty()) {
+        return;
+    }
+
+    const QImage rgb = rgbImageForKeogram(calibratedImage);
+    if (rgb.isNull()) {
+        return;
+    }
+
+    const QDateTime windowStartUtc = keogramWindowStartUtc(captureDateTime);
+    const bool vertical = m_settings.m_keogramDirection == CameraSettings::KeogramVertical;
+    const QSize outputSize = vertical
+        ? QSize(keogramSampleCount(), rgb.height())
+        : QSize(rgb.width(), keogramSampleCount());
+
+    if ((m_keogramWindowStartUtc != windowStartUtc)
+        || (m_keogramSourceSize != rgb.size())
+        || (m_keogramImage.size() != outputSize)
+        || (m_keogramImage.format() != QImage::Format_RGB888))
+    {
+        m_keogramWindowStartUtc = windowStartUtc;
+        m_keogramSourceSize = rgb.size();
+        m_keogramImage = QImage(outputSize, QImage::Format_RGB888);
+        m_keogramImage.fill(Qt::black);
+        m_keogramOutputFileName = keogramOutputFileName(windowStartUtc);
+        m_keogramLastSampleIndex = -1;
+    }
+
+    const int sampleIndex = keogramSampleIndex(captureDateTime);
+    if (sampleIndex < 0) {
+        return;
+    }
+    if (sampleIndex == m_keogramLastSampleIndex) {
+        return;
+    }
+
+    const int stripWidth = 3;
+    if (vertical)
+    {
+        const int x0 = qBound(0, (rgb.width() - stripWidth) / 2, rgb.width() - 1);
+        const int x1 = qMin(rgb.width() - 1, x0 + stripWidth - 1);
+        for (int y = 0; y < rgb.height(); ++y)
+        {
+            int r = 0;
+            int g = 0;
+            int b = 0;
+            int count = 0;
+            const uchar *src = rgb.constScanLine(y);
+            for (int x = x0; x <= x1; ++x)
+            {
+                r += src[x * 3];
+                g += src[x * 3 + 1];
+                b += src[x * 3 + 2];
+                ++count;
+            }
+            uchar *dst = m_keogramImage.scanLine(y) + sampleIndex * 3;
+            dst[0] = static_cast<uchar>(r / count);
+            dst[1] = static_cast<uchar>(g / count);
+            dst[2] = static_cast<uchar>(b / count);
+        }
+    }
+    else
+    {
+        const int y0 = qBound(0, (rgb.height() - stripWidth) / 2, rgb.height() - 1);
+        const int y1 = qMin(rgb.height() - 1, y0 + stripWidth - 1);
+        uchar *dst = m_keogramImage.scanLine(sampleIndex);
+        for (int x = 0; x < rgb.width(); ++x)
+        {
+            int r = 0;
+            int g = 0;
+            int b = 0;
+            int count = 0;
+            for (int y = y0; y <= y1; ++y)
+            {
+                const uchar *src = rgb.constScanLine(y) + x * 3;
+                r += src[0];
+                g += src[1];
+                b += src[2];
+                ++count;
+            }
+            dst[x * 3] = static_cast<uchar>(r / count);
+            dst[x * 3 + 1] = static_cast<uchar>(g / count);
+            dst[x * 3 + 2] = static_cast<uchar>(b / count);
+        }
+    }
+
+    if (!m_keogramOutputFileName.isEmpty() && !m_keogramImage.save(m_keogramOutputFileName))
+    {
+        qWarning() << "CameraRecorder: Failed to save keogram to" << m_keogramOutputFileName;
+        reportErrorToFeature(QStringLiteral("keogram-save"),
+                             tr("Camera keogram error"),
+                             tr("Failed to save keogram:\n%1").arg(m_keogramOutputFileName));
+    }
+
+    if (m_settings.m_keogramShowPreview && m_msgQueueToGUI) {
+        m_msgQueueToGUI->push(MsgReportKeogram::create(m_keogramImage, m_keogramOutputFileName, true));
+    }
+    m_keogramLastSampleIndex = sampleIndex;
 }
 
 bool CameraRecorder::ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant)

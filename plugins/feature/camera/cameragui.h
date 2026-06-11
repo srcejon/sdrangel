@@ -57,6 +57,8 @@ class CameraSettingsDialog;
 class CameraDetectionHistory;
 class CameraHistogramDialog;
 class Message;
+class QLabel;
+class QDialog;
 class QDoubleSpinBox;
 class QGraphicsRectItem;
 class QProgressDialog;
@@ -248,6 +250,8 @@ private:
     PreviewDrawMode m_previewDrawMode = PreviewDrawModeNone;
     bool m_previewDragging = false;
     QPoint m_previewDragStartImagePos;
+    QDialog *m_keogramPreviewDialog = nullptr;
+    QLabel *m_keogramPreviewLabel = nullptr;
 
     // Qt camera code appears to need to be on GUI thread. Would hang on clean up in the worker thread.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -305,6 +309,7 @@ private:
     void updatePositionControls();
     void updateFovControls();
     void updateCalculatedFov();
+    void updateKeogramPreview(const QImage& image, const QString& fileName, bool visible);
     void syncFromMainSettings();
     void syncFromSelectedGs232Controller();
     QPair<int, int> selectedGs232ControllerIndices() const;
@@ -476,6 +481,13 @@ private slots:
     void on_saveVideoCheck_toggled(bool checked);
     void on_videoPathEdit_editingFinished();
     void on_videoPathButton_clicked();
+    void on_keogramButton_toggled(bool checked);
+    void on_keogramPathEdit_editingFinished();
+    void on_keogramPathButton_clicked();
+    void on_keogramDirectionCombo_currentIndexChanged(int index);
+    void on_keogramDayModeCombo_currentIndexChanged(int index);
+    void on_keogramSamplePeriodSpin_valueChanged(int value);
+    void on_keogramPreviewCheck_toggled(bool checked);
     void on_videoHwAccelerationCheck_toggled(bool checked);
     void on_videoPreRecordBufferSpin_valueChanged(int value);
     void on_imageRecordLimitSpin_valueChanged(int value);

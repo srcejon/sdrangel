@@ -1468,10 +1468,10 @@ void CameraGUI::displaySettings()
     settingsUI()->keogramDayModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_keogramDayMode));
     settingsUI()->keogramSamplePeriodSpin->setValue(m_settings.m_keogramSamplePeriodMinutes);
     settingsUI()->keogramPreviewCheck->setChecked(m_settings.m_keogramShowPreview);
-    settingsUI()->youtubeStreamEnabledCheck->setChecked(m_settings.m_youtubeStreamEnabled);
+    ui->youtubeStreamButton->setChecked(m_settings.m_youtubeStreamEnabled);
     settingsUI()->youtubeStreamUrlEdit->setText(m_settings.m_youtubeStreamUrl);
     settingsUI()->youtubeStreamKeyEdit->setText(m_settings.m_youtubeStreamKey);
-    settingsUI()->youtubeStreamPostProcessedCheck->setChecked(m_settings.m_youtubeStreamPostProcessed);
+    settingsUI()->youtubeStreamSourceCombo->setCurrentIndex(m_settings.m_youtubeStreamPostProcessed ? 1 : 0);
     settingsUI()->youtubeStreamBitrateSpin->setValue(m_settings.m_youtubeStreamBitrateKbps);
     settingsUI()->youtubeStreamFpsSpin->setValue(m_settings.m_youtubeStreamFps);
     settingsUI()->youtubeStreamWidthSpin->setValue(m_settings.m_youtubeStreamWidth);
@@ -2213,10 +2213,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->keogramDayModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_keogramDayModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->keogramSamplePeriodSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_keogramSamplePeriodSpin_valueChanged);
     QObject::connect(settingsUI()->keogramPreviewCheck, &QCheckBox::toggled, this, &CameraGUI::on_keogramPreviewCheck_toggled);
-    QObject::connect(settingsUI()->youtubeStreamEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_youtubeStreamEnabledCheck_toggled);
+    QObject::connect(ui->youtubeStreamButton, &QToolButton::toggled, this, &CameraGUI::on_youtubeStreamButton_toggled);
     QObject::connect(settingsUI()->youtubeStreamUrlEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_youtubeStreamUrlEdit_editingFinished);
     QObject::connect(settingsUI()->youtubeStreamKeyEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_youtubeStreamKeyEdit_editingFinished);
-    QObject::connect(settingsUI()->youtubeStreamPostProcessedCheck, &QCheckBox::toggled, this, &CameraGUI::on_youtubeStreamPostProcessedCheck_toggled);
+    QObject::connect(settingsUI()->youtubeStreamSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_youtubeStreamSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->youtubeStreamBitrateSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamBitrateSpin_valueChanged);
     QObject::connect(settingsUI()->youtubeStreamFpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamFpsSpin_valueChanged);
     QObject::connect(settingsUI()->youtubeStreamWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamWidthSpin_valueChanged);
@@ -5701,7 +5701,7 @@ void CameraGUI::on_keogramPreviewCheck_toggled(bool checked)
     }
 }
 
-void CameraGUI::on_youtubeStreamEnabledCheck_toggled(bool checked)
+void CameraGUI::on_youtubeStreamButton_toggled(bool checked)
 {
     m_settings.m_youtubeStreamEnabled = checked;
     applySetting("youtubeStreamEnabled");
@@ -5719,9 +5719,9 @@ void CameraGUI::on_youtubeStreamKeyEdit_editingFinished()
     applySetting("youtubeStreamKey");
 }
 
-void CameraGUI::on_youtubeStreamPostProcessedCheck_toggled(bool checked)
+void CameraGUI::on_youtubeStreamSourceCombo_currentIndexChanged(int index)
 {
-    m_settings.m_youtubeStreamPostProcessed = checked;
+    m_settings.m_youtubeStreamPostProcessed = index == 1;
     applySetting("youtubeStreamPostProcessed");
 }
 

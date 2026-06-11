@@ -4199,44 +4199,27 @@ li.checked::marker { content: &quot;\2612&quot;; }
         </property>
         <layout class="QFormLayout" name="youtubeStreamFormLayout">
          <item row="0" column="0">
-          <widget class="QLabel" name="youtubeStreamEnabledLabel">
-           <property name="text">
-            <string>Stream</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="QCheckBox" name="youtubeStreamEnabledCheck">
-           <property name="toolTip">
-            <string>Stream captured video to YouTube Live using FFmpeg libraries</string>
-           </property>
-           <property name="text">
-            <string>Enable YouTube stream</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
           <widget class="QLabel" name="youtubeStreamUrlLabel">
            <property name="text">
             <string>URL</string>
            </property>
           </widget>
          </item>
-         <item row="1" column="1">
+         <item row="0" column="1">
           <widget class="QLineEdit" name="youtubeStreamUrlEdit">
            <property name="toolTip">
             <string>YouTube RTMP or RTMPS ingest URL</string>
            </property>
           </widget>
          </item>
-         <item row="2" column="0">
+         <item row="1" column="0">
           <widget class="QLabel" name="youtubeStreamKeyLabel">
            <property name="text">
             <string>Key</string>
            </property>
           </widget>
          </item>
-         <item row="2" column="1">
+         <item row="1" column="1">
           <widget class="QLineEdit" name="youtubeStreamKeyEdit">
            <property name="toolTip">
             <string>YouTube stream key</string>
@@ -4246,31 +4229,38 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </property>
           </widget>
          </item>
-         <item row="3" column="0">
+         <item row="2" column="0">
           <widget class="QLabel" name="youtubeStreamSourceLabel">
            <property name="text">
             <string>Source</string>
            </property>
           </widget>
          </item>
-         <item row="3" column="1">
-          <widget class="QCheckBox" name="youtubeStreamPostProcessedCheck">
+         <item row="2" column="1">
+          <widget class="QComboBox" name="youtubeStreamSourceCombo">
            <property name="toolTip">
-            <string>Stream post-processed video including overlays rather than calibrated video</string>
+            <string>Select whether YouTube receives calibrated frames or post-processed frames including overlays</string>
            </property>
-           <property name="text">
-            <string>Post-processed</string>
-           </property>
+           <item>
+            <property name="text">
+             <string>Calibrated</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Post-processed</string>
+            </property>
+           </item>
           </widget>
          </item>
-         <item row="4" column="0">
+         <item row="3" column="0">
           <widget class="QLabel" name="youtubeStreamBitrateLabel">
            <property name="text">
             <string>Bitrate</string>
            </property>
           </widget>
          </item>
-         <item row="4" column="1">
+         <item row="3" column="1">
           <widget class="QSpinBox" name="youtubeStreamBitrateSpin">
            <property name="toolTip">
             <string>YouTube stream video bitrate</string>
@@ -4286,14 +4276,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </property>
           </widget>
          </item>
-         <item row="5" column="0">
+         <item row="4" column="0">
           <widget class="QLabel" name="youtubeStreamFpsLabel">
            <property name="text">
             <string>FPS</string>
            </property>
           </widget>
          </item>
-         <item row="5" column="1">
+         <item row="4" column="1">
           <widget class="QSpinBox" name="youtubeStreamFpsSpin">
            <property name="toolTip">
             <string>YouTube stream frame rate</string>
@@ -4306,14 +4296,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </property>
           </widget>
          </item>
-         <item row="6" column="0">
+         <item row="5" column="0">
           <widget class="QLabel" name="youtubeStreamSizeLabel">
            <property name="text">
             <string>Size</string>
            </property>
           </widget>
          </item>
-         <item row="6" column="1">
+         <item row="5" column="1">
           <layout class="QHBoxLayout" name="youtubeStreamSizeLayout">
            <item>
             <widget class="QSpinBox" name="youtubeStreamWidthSpin">

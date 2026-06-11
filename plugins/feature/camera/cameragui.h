@@ -488,10 +488,10 @@ private slots:
     void on_keogramDayModeCombo_currentIndexChanged(int index);
     void on_keogramSamplePeriodSpin_valueChanged(int value);
     void on_keogramPreviewCheck_toggled(bool checked);
-    void on_youtubeStreamEnabledCheck_toggled(bool checked);
+    void on_youtubeStreamButton_toggled(bool checked);
     void on_youtubeStreamUrlEdit_editingFinished();
     void on_youtubeStreamKeyEdit_editingFinished();
-    void on_youtubeStreamPostProcessedCheck_toggled(bool checked);
+    void on_youtubeStreamSourceCombo_currentIndexChanged(int index);
     void on_youtubeStreamBitrateSpin_valueChanged(int value);
     void on_youtubeStreamFpsSpin_valueChanged(int value);
     void on_youtubeStreamWidthSpin_valueChanged(int value);

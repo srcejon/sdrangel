@@ -23,6 +23,7 @@
 #include <QByteArray>
 #include <QDebug>
 #include <QPainter>
+#include <QUrl>
 
 #ifdef CAMERA_FFMPEG_STREAMING
 extern "C" {
@@ -83,6 +84,25 @@ QString CameraYouTubeStreamer::streamTargetUrl(const Settings& settings)
     }
 
     return url;
+}
+
+QString CameraYouTubeStreamer::redactedStreamTargetUrl(const QString& targetUrl)
+{
+    QUrl url(targetUrl);
+
+    if (!url.isValid()) {
+        return QStringLiteral("<invalid>");
+    }
+
+    QString path = url.path();
+    const int slash = path.lastIndexOf('/');
+    if (slash >= 0) {
+        path = path.left(slash + 1) + QStringLiteral("redacted");
+    }
+    url.setPath(path);
+    url.setQuery(QString());
+    url.setFragment(QString());
+    return url.toString(QUrl::RemovePassword);
 }
 
 QSize CameraYouTubeStreamer::evenSize(const QSize& size)
@@ -285,11 +305,8 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
     m_audioFrameIndex = 0;
     m_lastFrameElapsedMs = -1;
     m_nextFrameElapsedMs = 0;
-    m_packetsWritten = 0;
-    m_bytesWritten = 0;
-    m_lastStatsElapsedMs = 0;
     m_streamTimer.restart();
-    qDebug() << "CameraYouTubeStreamer: opened stream" << targetUrl
+    qDebug() << "CameraYouTubeStreamer: opened stream" << redactedStreamTargetUrl(targetUrl)
              << streamSize << "fps" << fps << "bitrateKbps" << settings.m_bitrateKbps;
     return true;
 #endif
@@ -387,7 +404,6 @@ bool CameraYouTubeStreamer::writeEncodedPacket(AVPacket *packet, AVCodecContext 
     if (packet->duration <= 0) {
         packet->duration = av_rescale_q(1, codecContext->time_base, m_formatContext->streams[streamIndex]->time_base);
     }
-    const int packetSize = packet->size;
     const int ret = av_interleaved_write_frame(m_formatContext, packet);
     if ((ret >= 0) && m_formatContext->pb) {
         avio_flush(m_formatContext->pb);
@@ -397,20 +413,6 @@ bool CameraYouTubeStreamer::writeEncodedPacket(AVPacket *packet, AVCodecContext 
     {
         errorMessage = QStringLiteral("Cannot write YouTube stream packet: %1").arg(avErrorString(ret));
         return false;
-    }
-
-    ++m_packetsWritten;
-    m_bytesWritten += packetSize;
-
-    const qint64 elapsedMs = m_streamTimer.elapsed();
-    if ((elapsedMs - m_lastStatsElapsedMs) >= 5000)
-    {
-        qDebug() << "CameraYouTubeStreamer: wrote packets" << m_packetsWritten
-                 << "bytes" << m_bytesWritten
-                 << "videoFrames" << m_frameIndex
-                 << "audioFrames" << m_audioFrameIndex
-                 << "elapsedMs" << elapsedMs;
-        m_lastStatsElapsedMs = elapsedMs;
     }
 
     return true;
@@ -668,9 +670,6 @@ void CameraYouTubeStreamer::close()
     m_audioFrameIndex = 0;
     m_lastFrameElapsedMs = -1;
     m_nextFrameElapsedMs = 0;
-    m_packetsWritten = 0;
-    m_bytesWritten = 0;
-    m_lastStatsElapsedMs = 0;
     m_headerWritten = false;
     m_streamSize = QSize();
 }

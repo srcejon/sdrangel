@@ -197,7 +197,7 @@ void CameraSettings::resetToDefaults()
     m_youtubeStreamUrl = "rtmps://a.rtmps.youtube.com/live2";
     m_youtubeStreamKey.clear();
     m_youtubeStreamPostProcessed = true;
-    m_youtubeStreamBitrateKbps = 2500;
+    m_youtubeStreamBitrateKbps = 6800;
     m_youtubeStreamFps = 25;
     m_youtubeStreamWidth = 0;
     m_youtubeStreamHeight = 0;
@@ -987,7 +987,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(247, &m_youtubeStreamUrl, "rtmps://a.rtmps.youtube.com/live2");
         d.readString(248, &m_youtubeStreamKey, "");
         d.readBool(249, &m_youtubeStreamPostProcessed, true);
-        d.readS32(250, &m_youtubeStreamBitrateKbps, 2500);
+        d.readS32(250, &m_youtubeStreamBitrateKbps, 6800);
         d.readS32(251, &m_youtubeStreamFps, 25);
         d.readS32(252, &m_youtubeStreamWidth, 0);
         d.readS32(253, &m_youtubeStreamHeight, 0);

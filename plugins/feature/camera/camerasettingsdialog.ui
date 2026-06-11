@@ -4224,6 +4224,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
            <property name="toolTip">
             <string>YouTube stream key</string>
            </property>
+           <property name="echoMode">
+            <enum>QLineEdit::Password</enum>
+           </property>
           </widget>
          </item>
          <item row="2" column="0">

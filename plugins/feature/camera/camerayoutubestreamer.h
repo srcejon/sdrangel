@@ -37,7 +37,7 @@ public:
     {
         QString m_url;
         QString m_key;
-        int m_bitrateKbps = 2500;
+        int m_bitrateKbps = 6800;
         int m_fps = 25;
         QSize m_size;
     };
@@ -65,14 +65,12 @@ private:
     qint64 m_audioFrameIndex = 0;
     qint64 m_lastFrameElapsedMs = -1;
     qint64 m_nextFrameElapsedMs = 0;
-    qint64 m_packetsWritten = 0;
-    qint64 m_bytesWritten = 0;
-    qint64 m_lastStatsElapsedMs = 0;
     bool m_headerWritten = false;
     QElapsedTimer m_streamTimer;
 
     [[nodiscard]] static QString avErrorString(int errorCode);
     [[nodiscard]] static QString streamTargetUrl(const Settings& settings);
+    [[nodiscard]] static QString redactedStreamTargetUrl(const QString& targetUrl);
     [[nodiscard]] static QSize evenSize(const QSize& size);
     [[nodiscard]] static QImage prepareRgbImage(const QImage& image, const QSize& size);
     [[nodiscard]] bool openAudioStream(QString& errorMessage);

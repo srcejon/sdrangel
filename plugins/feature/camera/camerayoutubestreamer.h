@@ -60,6 +60,9 @@ private:
     qint64 m_frameIndex = 0;
     qint64 m_lastFrameElapsedMs = -1;
     qint64 m_nextFrameElapsedMs = 0;
+    qint64 m_packetsWritten = 0;
+    qint64 m_bytesWritten = 0;
+    qint64 m_lastStatsElapsedMs = 0;
     bool m_headerWritten = false;
     QElapsedTimer m_streamTimer;
 

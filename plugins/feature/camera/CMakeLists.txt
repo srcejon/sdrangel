@@ -16,8 +16,7 @@ set(camera_SOURCES
     cameraffmpegaudio.cpp
     camerarecorder.cpp
     cameravideowriter.cpp
-    cameravideofileaudiodecoder.cpp
-    cameravideofilevideodecoder.cpp
+    cameravideofiledecoder.cpp
     camerayoutubestreamer.cpp
     cameraplatesolver.cpp
     camerapostprocessor.cpp
@@ -47,8 +46,7 @@ set(camera_HEADERS
     cameraffmpegaudio.h
     camerarecorder.h
     cameravideowriter.h
-    cameravideofileaudiodecoder.h
-    cameravideofilevideodecoder.h
+    cameravideofiledecoder.h
     camerayoutubestreamer.h
     cameraplatesolver.h
     camerapipelineframe.h

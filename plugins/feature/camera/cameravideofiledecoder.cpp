@@ -1,0 +1,573 @@
+///////////////////////////////////////////////////////////////////////////////////
+// Copyright (C) 2026 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Some code by AI                                                               //
+//                                                                               //
+// This program is free software; you can redistribute it and/or modify          //
+// it under the terms of the GNU General Public License as published by          //
+// the Free Software Foundation as version 3 of the License, or                  //
+// (at your option) any later version.                                           //
+//                                                                               //
+// This program is distributed in the hope that it will be useful,               //
+// but WITHOUT ANY WARRANTY; without even the implied warranty of                //
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                  //
+// GNU General Public License V3 for more details.                               //
+//                                                                               //
+// You should have received a copy of the GNU General Public License             //
+// along with this program. If not, see <http://www.gnu.org/licenses/>.          //
+///////////////////////////////////////////////////////////////////////////////////
+
+#include "cameravideofiledecoder.h"
+
+#include <algorithm>
+
+#include "cameraffmpegaudio.h"
+
+#ifdef CAMERA_FFMPEG_STREAMING
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavutil/channel_layout.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
+#include <libavutil/samplefmt.h>
+#include <libswresample/swresample.h>
+#include <libswscale/swscale.h>
+}
+#endif
+
+CameraVideoFileDecoder::CameraVideoFileDecoder()
+{
+}
+
+CameraVideoFileDecoder::~CameraVideoFileDecoder()
+{
+    close();
+}
+
+bool CameraVideoFileDecoder::isOpen() const
+{
+    return m_formatContext && m_videoCodecContext && (m_videoStreamIndex >= 0);
+}
+
+bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(fileName)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    close();
+
+    const QByteArray fileNameUtf8 = fileName.toUtf8();
+    int ret = avformat_open_input(&m_formatContext, fileNameUtf8.constData(), nullptr, nullptr);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot open video file: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        close();
+        return false;
+    }
+
+    ret = avformat_find_stream_info(m_formatContext, nullptr);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot read video file stream info: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        close();
+        return false;
+    }
+
+    ret = av_find_best_stream(m_formatContext, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Video file has no video stream");
+        close();
+        return false;
+    }
+    m_videoStreamIndex = ret;
+
+    if (!openVideoDecoder(errorMessage))
+    {
+        close();
+        return false;
+    }
+
+    QString audioError;
+    if (!openAudioDecoder(audioError)) {
+        closeAudioDecoder();
+    }
+
+    m_videoFrame = av_frame_alloc();
+    m_audioFrame = av_frame_alloc();
+    m_packet = av_packet_alloc();
+    if (!m_videoFrame || !m_audioFrame || !m_packet)
+    {
+        errorMessage = QStringLiteral("Cannot allocate video file decode buffers");
+        close();
+        return false;
+    }
+
+    AVStream *stream = m_formatContext->streams[m_videoStreamIndex];
+    if (m_formatContext->duration > 0) {
+        m_durationMs = av_rescale_q(m_formatContext->duration, AVRational{1, AV_TIME_BASE}, AVRational{1, 1000});
+    } else if (stream->duration > 0) {
+        m_durationMs = av_rescale_q(stream->duration, stream->time_base, AVRational{1, 1000});
+    }
+
+    const AVRational rate = stream->avg_frame_rate.num > 0 ? stream->avg_frame_rate : stream->r_frame_rate;
+    if ((rate.num > 0) && (rate.den > 0)) {
+        m_frameRate = qBound(1.0, av_q2d(rate), 240.0);
+    }
+
+    m_eof = false;
+    m_videoDraining = false;
+    m_audioDraining = false;
+    return true;
+#endif
+}
+
+void CameraVideoFileDecoder::close()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (m_swsContext)
+    {
+        sws_freeContext(m_swsContext);
+        m_swsContext = nullptr;
+    }
+    closeAudioDecoder();
+    if (m_videoFrame) {
+        av_frame_free(&m_videoFrame);
+    }
+    if (m_audioFrame) {
+        av_frame_free(&m_audioFrame);
+    }
+    if (m_packet) {
+        av_packet_free(&m_packet);
+    }
+    if (m_videoCodecContext) {
+        avcodec_free_context(&m_videoCodecContext);
+    }
+    if (m_formatContext) {
+        avformat_close_input(&m_formatContext);
+    }
+#endif
+    m_videoStreamIndex = -1;
+    m_audioStreamIndex = -1;
+    m_durationMs = 0;
+    m_frameRate = 25.0;
+    m_eof = false;
+    m_videoDraining = false;
+    m_audioDraining = false;
+}
+
+void CameraVideoFileDecoder::seek(qint64 positionMs)
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (!isOpen()) {
+        return;
+    }
+
+    AVStream *stream = m_formatContext->streams[m_videoStreamIndex];
+    const qint64 timestamp = av_rescale_q(
+        std::max<qint64>(0, positionMs),
+        AVRational{1, 1000},
+        stream->time_base);
+    if (av_seek_frame(m_formatContext, m_videoStreamIndex, timestamp, AVSEEK_FLAG_BACKWARD) >= 0)
+    {
+        avcodec_flush_buffers(m_videoCodecContext);
+        if (m_audioCodecContext) {
+            avcodec_flush_buffers(m_audioCodecContext);
+        }
+    }
+    m_eof = false;
+    m_videoDraining = false;
+    m_audioDraining = false;
+#else
+    Q_UNUSED(positionMs)
+#endif
+}
+
+bool CameraVideoFileDecoder::readNextFrame(
+    QImage& image,
+    qint64& positionMs,
+    QByteArray& pcmS16Stereo,
+    int& audioSampleRate,
+    QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(image)
+    Q_UNUSED(positionMs)
+    Q_UNUSED(pcmS16Stereo)
+    Q_UNUSED(audioSampleRate)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    image = QImage();
+    positionMs = -1;
+    pcmS16Stereo.clear();
+    audioSampleRate = m_outputSampleRate;
+    if (!isOpen() || m_eof) {
+        return true;
+    }
+
+    for (;;)
+    {
+        if (receiveVideoFrame(image, positionMs, errorMessage)) {
+            return true;
+        }
+        if (!errorMessage.isEmpty()) {
+            return false;
+        }
+
+        int ret = av_read_frame(m_formatContext, m_packet);
+        if (ret < 0)
+        {
+            if (ret == AVERROR_EOF)
+            {
+                if (!m_videoDraining)
+                {
+                    avcodec_send_packet(m_videoCodecContext, nullptr);
+                    m_videoDraining = true;
+                }
+                if (m_audioCodecContext && !m_audioDraining)
+                {
+                    avcodec_send_packet(m_audioCodecContext, nullptr);
+                    m_audioDraining = true;
+                    if (!drainAudio(pcmS16Stereo, errorMessage)) {
+                        return false;
+                    }
+                }
+                if (receiveVideoFrame(image, positionMs, errorMessage)) {
+                    return true;
+                }
+                if (!errorMessage.isEmpty()) {
+                    return false;
+                }
+                m_eof = true;
+                return true;
+            }
+            errorMessage = QStringLiteral("Cannot read video file packet: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+            return false;
+        }
+
+        if (m_packet->stream_index == m_videoStreamIndex)
+        {
+            ret = avcodec_send_packet(m_videoCodecContext, m_packet);
+            av_packet_unref(m_packet);
+            if (ret < 0)
+            {
+                errorMessage = QStringLiteral("Cannot send video file packet to decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+                return false;
+            }
+        }
+        else if (m_audioCodecContext && (m_packet->stream_index == m_audioStreamIndex))
+        {
+            ret = avcodec_send_packet(m_audioCodecContext, m_packet);
+            av_packet_unref(m_packet);
+            if ((ret < 0) && (ret != AVERROR(EAGAIN)))
+            {
+                errorMessage = QStringLiteral("Cannot send video file audio packet to decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+                return false;
+            }
+            if (!drainAudio(pcmS16Stereo, errorMessage)) {
+                return false;
+            }
+        }
+        else
+        {
+            av_packet_unref(m_packet);
+        }
+    }
+#endif
+}
+
+bool CameraVideoFileDecoder::openVideoDecoder(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    AVStream *stream = m_formatContext->streams[m_videoStreamIndex];
+    const AVCodec *codec = avcodec_find_decoder(stream->codecpar->codec_id);
+    if (!codec)
+    {
+        errorMessage = QStringLiteral("No decoder is available for the video file stream");
+        return false;
+    }
+
+    m_videoCodecContext = avcodec_alloc_context3(codec);
+    if (!m_videoCodecContext)
+    {
+        errorMessage = QStringLiteral("Cannot allocate video file decoder context");
+        return false;
+    }
+
+    int ret = avcodec_parameters_to_context(m_videoCodecContext, stream->codecpar);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot copy video file decoder parameters: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+
+    ret = avcodec_open2(m_videoCodecContext, codec, nullptr);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot open video file decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+
+    return true;
+#endif
+}
+
+bool CameraVideoFileDecoder::openAudioDecoder(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    int ret = av_find_best_stream(m_formatContext, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Video file has no audio stream");
+        return false;
+    }
+    m_audioStreamIndex = ret;
+
+    AVStream *stream = m_formatContext->streams[m_audioStreamIndex];
+    const AVCodec *codec = avcodec_find_decoder(stream->codecpar->codec_id);
+    if (!codec)
+    {
+        errorMessage = QStringLiteral("No decoder is available for the video file audio stream");
+        return false;
+    }
+
+    m_audioCodecContext = avcodec_alloc_context3(codec);
+    if (!m_audioCodecContext)
+    {
+        errorMessage = QStringLiteral("Cannot allocate video file audio decoder context");
+        return false;
+    }
+
+    ret = avcodec_parameters_to_context(m_audioCodecContext, stream->codecpar);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot copy video file audio decoder parameters: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+
+    ret = avcodec_open2(m_audioCodecContext, codec, nullptr);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot open video file audio decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+
+    return openResampler(errorMessage);
+#endif
+}
+
+bool CameraVideoFileDecoder::openResampler(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    const int64_t inputChannelLayout = m_audioCodecContext->channel_layout != 0
+        ? m_audioCodecContext->channel_layout
+        : av_get_default_channel_layout(m_audioCodecContext->channels);
+    m_resampler = swr_alloc_set_opts(
+        nullptr,
+        AV_CH_LAYOUT_STEREO,
+        AV_SAMPLE_FMT_S16,
+        m_outputSampleRate,
+        inputChannelLayout,
+        m_audioCodecContext->sample_fmt,
+        m_audioCodecContext->sample_rate,
+        0,
+        nullptr);
+    if (!m_resampler)
+    {
+        errorMessage = QStringLiteral("Cannot allocate video file audio resampler");
+        return false;
+    }
+
+    const int ret = swr_init(m_resampler);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot initialise video file audio resampler: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+
+    return true;
+#endif
+}
+
+bool CameraVideoFileDecoder::receiveVideoFrame(QImage& image, qint64& positionMs, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(image)
+    Q_UNUSED(positionMs)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    const int ret = avcodec_receive_frame(m_videoCodecContext, m_videoFrame);
+    if (ret == 0)
+    {
+        const int64_t bestTimestamp = m_videoFrame->best_effort_timestamp;
+        if (bestTimestamp != AV_NOPTS_VALUE) {
+            positionMs = av_rescale_q(bestTimestamp, m_formatContext->streams[m_videoStreamIndex]->time_base, AVRational{1, 1000});
+        }
+        const bool ok = convertFrameToImage(m_videoFrame, image, errorMessage);
+        av_frame_unref(m_videoFrame);
+        return ok;
+    }
+    if (ret == AVERROR_EOF) {
+        return false;
+    }
+    if (ret != AVERROR(EAGAIN)) {
+        errorMessage = QStringLiteral("Cannot decode video file frame: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+    }
+    return false;
+#endif
+}
+
+bool CameraVideoFileDecoder::drainAudio(QByteArray& pcmS16Stereo, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(pcmS16Stereo)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    if (!m_audioCodecContext) {
+        return true;
+    }
+
+    for (;;)
+    {
+        const int ret = avcodec_receive_frame(m_audioCodecContext, m_audioFrame);
+        if (ret == 0)
+        {
+            const bool ok = appendFrameAudio(m_audioFrame, pcmS16Stereo, errorMessage);
+            av_frame_unref(m_audioFrame);
+            if (!ok) {
+                return false;
+            }
+            continue;
+        }
+        if ((ret == AVERROR(EAGAIN)) || (ret == AVERROR_EOF)) {
+            return true;
+        }
+        errorMessage = QStringLiteral("Cannot decode video file audio frame: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+#endif
+}
+
+bool CameraVideoFileDecoder::appendFrameAudio(const AVFrame *frame, QByteArray& pcmS16Stereo, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(frame)
+    Q_UNUSED(pcmS16Stereo)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    if (!frame || !m_resampler || (frame->nb_samples <= 0)) {
+        return true;
+    }
+
+    const int outputCapacityFrames = static_cast<int>(av_rescale_rnd(
+        swr_get_delay(m_resampler, m_audioCodecContext->sample_rate) + frame->nb_samples,
+        m_outputSampleRate,
+        m_audioCodecContext->sample_rate,
+        AV_ROUND_UP));
+    if (outputCapacityFrames <= 0) {
+        return true;
+    }
+
+    QByteArray output;
+    output.resize(outputCapacityFrames * 4);
+    uint8_t *outputData[1] = { reinterpret_cast<uint8_t*>(output.data()) };
+    const int convertedFrames = swr_convert(
+        m_resampler,
+        outputData,
+        outputCapacityFrames,
+        const_cast<const uint8_t**>(frame->extended_data),
+        frame->nb_samples);
+    if (convertedFrames < 0)
+    {
+        errorMessage = QStringLiteral("Cannot resample video file audio: %1").arg(CameraFFmpegAudio::avErrorString(convertedFrames));
+        return false;
+    }
+
+    output.resize(convertedFrames * 4);
+    pcmS16Stereo.append(output);
+    return true;
+#endif
+}
+
+bool CameraVideoFileDecoder::convertFrameToImage(const AVFrame *frame, QImage& image, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(frame)
+    Q_UNUSED(image)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    if (!frame || (frame->width <= 0) || (frame->height <= 0))
+    {
+        errorMessage = QStringLiteral("Decoded video file frame is empty");
+        return false;
+    }
+
+    if (!m_swsContext
+        || (m_videoCodecContext->width != frame->width)
+        || (m_videoCodecContext->height != frame->height)
+        || (m_videoCodecContext->pix_fmt != static_cast<AVPixelFormat>(frame->format)))
+    {
+        if (m_swsContext) {
+            sws_freeContext(m_swsContext);
+        }
+        m_swsContext = sws_getContext(
+            frame->width,
+            frame->height,
+            static_cast<AVPixelFormat>(frame->format),
+            frame->width,
+            frame->height,
+            AV_PIX_FMT_RGB24,
+            SWS_BILINEAR,
+            nullptr,
+            nullptr,
+            nullptr);
+        if (!m_swsContext)
+        {
+            errorMessage = QStringLiteral("Cannot create video file colour converter");
+            return false;
+        }
+    }
+
+    image = QImage(frame->width, frame->height, QImage::Format_RGB888);
+    if (image.isNull())
+    {
+        errorMessage = QStringLiteral("Cannot allocate decoded video file image");
+        return false;
+    }
+
+    uint8_t *dstData[1] = { image.bits() };
+    int dstLinesize[1] = { static_cast<int>(image.bytesPerLine()) };
+    sws_scale(m_swsContext, frame->data, frame->linesize, 0, frame->height, dstData, dstLinesize);
+    return true;
+#endif
+}
+
+void CameraVideoFileDecoder::closeAudioDecoder()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (m_resampler) {
+        swr_free(&m_resampler);
+    }
+    if (m_audioCodecContext) {
+        avcodec_free_context(&m_audioCodecContext);
+    }
+#endif
+    m_audioStreamIndex = -1;
+    m_audioDraining = false;
+}

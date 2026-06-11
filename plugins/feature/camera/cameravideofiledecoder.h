@@ -16,10 +16,11 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
-#ifndef INCLUDE_FEATURE_CAMERA_VIDEO_FILE_AUDIO_DECODER_H_
-#define INCLUDE_FEATURE_CAMERA_VIDEO_FILE_AUDIO_DECODER_H_
+#ifndef INCLUDE_FEATURE_CAMERA_VIDEO_FILE_DECODER_H_
+#define INCLUDE_FEATURE_CAMERA_VIDEO_FILE_DECODER_H_
 
 #include <QByteArray>
+#include <QImage>
 #include <QString>
 
 struct AVCodecContext;
@@ -27,34 +28,54 @@ struct AVFormatContext;
 struct AVFrame;
 struct AVPacket;
 struct SwrContext;
+struct SwsContext;
 
-class CameraVideoFileAudioDecoder
+class CameraVideoFileDecoder
 {
 public:
-    CameraVideoFileAudioDecoder();
-    ~CameraVideoFileAudioDecoder();
+    CameraVideoFileDecoder();
+    ~CameraVideoFileDecoder();
 
     [[nodiscard]] bool isOpen() const;
     [[nodiscard]] bool open(const QString& fileName, QString& errorMessage);
     void close();
     void seek(qint64 positionMs);
-    [[nodiscard]] bool readPcmTo(qint64 playbackPositionMs, QByteArray& pcmS16Stereo, int& sampleRate, QString& errorMessage);
+    [[nodiscard]] bool readNextFrame(
+        QImage& image,
+        qint64& positionMs,
+        QByteArray& pcmS16Stereo,
+        int& audioSampleRate,
+        QString& errorMessage);
+    [[nodiscard]] qint64 durationMs() const { return m_durationMs; }
+    [[nodiscard]] double frameRate() const { return m_frameRate; }
 
 private:
     static constexpr int m_outputSampleRate = 48000;
 
     AVFormatContext *m_formatContext = nullptr;
-    AVCodecContext *m_codecContext = nullptr;
-    AVFrame *m_frame = nullptr;
+    AVCodecContext *m_videoCodecContext = nullptr;
+    AVCodecContext *m_audioCodecContext = nullptr;
+    AVFrame *m_videoFrame = nullptr;
+    AVFrame *m_audioFrame = nullptr;
     AVPacket *m_packet = nullptr;
+    SwsContext *m_swsContext = nullptr;
     SwrContext *m_resampler = nullptr;
+    int m_videoStreamIndex = -1;
     int m_audioStreamIndex = -1;
-    qint64 m_outputPositionMs = 0;
+    qint64 m_durationMs = 0;
+    double m_frameRate = 25.0;
     bool m_eof = false;
+    bool m_videoDraining = false;
+    bool m_audioDraining = false;
 
+    [[nodiscard]] bool openVideoDecoder(QString& errorMessage);
+    [[nodiscard]] bool openAudioDecoder(QString& errorMessage);
     [[nodiscard]] bool openResampler(QString& errorMessage);
-    [[nodiscard]] bool decodeNextFrame(QByteArray& pcmS16Stereo, QString& errorMessage);
+    [[nodiscard]] bool receiveVideoFrame(QImage& image, qint64& positionMs, QString& errorMessage);
+    [[nodiscard]] bool drainAudio(QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool appendFrameAudio(const AVFrame *frame, QByteArray& pcmS16Stereo, QString& errorMessage);
+    [[nodiscard]] bool convertFrameToImage(const AVFrame *frame, QImage& image, QString& errorMessage);
+    void closeAudioDecoder();
 };
 
-#endif // INCLUDE_FEATURE_CAMERA_VIDEO_FILE_AUDIO_DECODER_H_
+#endif // INCLUDE_FEATURE_CAMERA_VIDEO_FILE_DECODER_H_

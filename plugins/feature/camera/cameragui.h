@@ -60,8 +60,7 @@ class Feature;
 class CameraSettingsDialog;
 class CameraDetectionHistory;
 class CameraHistogramDialog;
-class CameraVideoFileAudioDecoder;
-class CameraVideoFileVideoDecoder;
+class CameraVideoFileDecoder;
 class Message;
 class QLabel;
 class QDialog;
@@ -277,8 +276,7 @@ private:
     QAudioOutput *m_mediaAudioOutput = nullptr;
 #endif
     qint64 m_mediaPlayerDurationMs = 0;
-    std::unique_ptr<CameraVideoFileAudioDecoder> m_videoFileAudioDecoder;
-    std::unique_ptr<CameraVideoFileVideoDecoder> m_videoFileVideoDecoder;
+    std::unique_ptr<CameraVideoFileDecoder> m_videoFileDecoder;
     QTimer m_videoFileVideoTimer;
     qint64 m_videoFileVideoPositionMs = 0;
     AudioFifo m_videoFileAudioMonitorFifo;
@@ -378,10 +376,7 @@ private:
     int imageSequenceIntervalMs() const;
     qint64 imageSequenceDurationMs() const;
     void updatePlaybackPositionLabel(qint64 videoPositionMs = -1);
-    void openVideoFileAudioDecoder();
-    void closeVideoFileAudioDecoder();
-    void seekVideoFileAudioDecoder(qint64 positionMs);
-    void submitVideoFileAudio(qint64 playbackPositionMs);
+    void submitVideoFileAudio(const QByteArray& pcmS16Stereo, int sampleRate);
     void startVideoFileAudioMonitor();
     void stopVideoFileAudioMonitor();
     void writeVideoFileAudioMonitor(const QByteArray& pcmS16Stereo);

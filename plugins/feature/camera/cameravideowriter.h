@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERA_VIDEO_WRITER_H_
 
 #include <QImage>
+#include <QByteArray>
 #include <QSize>
 #include <QString>
 
@@ -40,6 +41,7 @@ public:
         CameraSettings::VideoCodec m_codec = CameraSettings::VideoCodecH264;
         double m_fps = 25.0;
         bool m_preferHardwareEncoding = true;
+        bool m_audioEnabled = true;
     };
 
     CameraVideoWriter();
@@ -52,6 +54,7 @@ public:
     [[nodiscard]] QString codecName() const;
     [[nodiscard]] bool open(const Settings& settings, const QImage& firstFrame, QString& errorMessage);
     [[nodiscard]] bool writeFrame(const QImage& image, QString& errorMessage);
+    [[nodiscard]] bool writePcmS16Stereo(const QByteArray& pcm, int sampleRate, QString& errorMessage);
     void close();
 
 private:
@@ -59,17 +62,27 @@ private:
     QSize m_videoSize;
     AVFormatContext *m_formatContext = nullptr;
     AVCodecContext *m_codecContext = nullptr;
+    AVCodecContext *m_audioCodecContext = nullptr;
     AVFrame *m_frame = nullptr;
+    AVFrame *m_audioFrame = nullptr;
     SwsContext *m_swsContext = nullptr;
     int m_streamIndex = -1;
+    int m_audioStreamIndex = -1;
     qint64 m_frameIndex = 0;
+    qint64 m_audioFrameIndex = 0;
     bool m_headerWritten = false;
+    QByteArray m_audioInputBuffer;
 
     [[nodiscard]] static QString avErrorString(int errorCode);
     [[nodiscard]] static QSize evenSize(const QSize& size);
     [[nodiscard]] static QImage prepareRgbImage(const QImage& image, const QSize& size);
-    [[nodiscard]] bool writeEncodedPacket(AVPacket *packet, QString& errorMessage);
-    void flushEncoder();
+    [[nodiscard]] bool openAudioStream(QString& warningMessage);
+    [[nodiscard]] bool writeEncodedPacket(AVPacket *packet, AVCodecContext *codecContext, int streamIndex, QString& errorMessage);
+    [[nodiscard]] bool fillAudioFrameFromS16Stereo(const char *pcm, int sampleFrames, QString& errorMessage);
+    [[nodiscard]] bool encodeAndWriteSilentAudioFrame(QString& errorMessage);
+    [[nodiscard]] bool encodeAndWriteAudioFrame(QString& errorMessage);
+    [[nodiscard]] bool writeSilentAudioUntilVideoFrame(QString& errorMessage);
+    void flushEncoder(AVCodecContext *codecContext, int streamIndex);
 };
 
 #endif // INCLUDE_FEATURE_CAMERA_VIDEO_WRITER_H_

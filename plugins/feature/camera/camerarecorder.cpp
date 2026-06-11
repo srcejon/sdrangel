@@ -35,10 +35,12 @@ MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgSetVideoRecordingEnabled, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportSaveVideoState, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportSaveImageState, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportKeogram, Message)
+MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgAudioSamples, Message)
 
 namespace {
 
 constexpr qint64 kPreRecordBufferMaxBytes = 2LL * 1024LL * 1024LL * 1024LL;
+constexpr qint64 kAudioBufferMaxBytes = 10LL * 48000LL * 4LL;
 constexpr qint64 kKeogramWindowSeconds = 24LL * 60LL * 60LL;
 
 qint64 imageSizeBytes(const QImage& image)
@@ -168,6 +170,7 @@ CameraRecorder::CameraRecorder() :
     m_preRecordBufferFlushed(false),
     m_recordedImageFrames(0),
     m_keogramLastSampleIndex(-1),
+    m_pendingAudioBytes(0),
     m_youtubeStreamer(new CameraYouTubeStreamer()),
     m_youtubeStreamErrorReported(false),
     m_processingFrames(false),
@@ -212,6 +215,12 @@ bool CameraRecorder::handleMessage(const Message& cmd)
         setVideoRecordingEnabled(videoMsg.getEnabled());
         return true;
     }
+    else if (MsgAudioSamples::match(cmd))
+    {
+        const MsgAudioSamples& audioMsg = (const MsgAudioSamples&) cmd;
+        appendAudioSamples(audioMsg.getPcmS16Stereo(), audioMsg.getSampleRate());
+        return true;
+    }
     else if (Camera::MsgCaptureActive::match(cmd))
     {
         const Camera::MsgCaptureActive& activeMsg = (const Camera::MsgCaptureActive&) cmd;
@@ -223,6 +232,8 @@ bool CameraRecorder::handleMessage(const Message& cmd)
         } else {
             closeYouTubeStream();
             closeVideoWriters();
+            m_pendingAudioChunks.clear();
+            m_pendingAudioBytes = 0;
         }
 
         QMutexLocker locker(&m_frameMutex);
@@ -511,16 +522,25 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         }
 
         if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, calibratedImage, QStringLiteral("calibrated"))) {
+            writePendingAudio(*m_calibratedVideoWriter, QStringLiteral("calibrated"));
             savedVideoFrame = writeVideoFrame(*m_calibratedVideoWriter, calibratedImage, QStringLiteral("calibrated")) || savedVideoFrame;
         }
 
         if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processedImage, QStringLiteral("post"))) {
+            writePendingAudio(*m_processedVideoWriter, QStringLiteral("post"));
             savedVideoFrame = writeVideoFrame(*m_processedVideoWriter, processedImage, QStringLiteral("post")) || savedVideoFrame;
         }
+        m_pendingAudioChunks.clear();
+        m_pendingAudioBytes = 0;
     }
     else if (m_captureActive && !m_settings.m_saveVideo)
     {
         appendPreRecordFrame(calibratedImage, processedImage);
+        if (m_settings.m_youtubeStreamEnabled)
+        {
+            m_pendingAudioChunks.clear();
+            m_pendingAudioBytes = 0;
+        }
     }
 
     updateRecordingLimitsAfterFrame(savedImageFrame, savedVideoFrame);
@@ -576,6 +596,56 @@ void CameraRecorder::resetRecordingLimits()
 {
     m_recordedImageFrames = 0;
     m_videoRecordingStartDateTime = m_settings.m_saveVideo ? QDateTime::currentDateTimeUtc() : QDateTime();
+}
+
+void CameraRecorder::appendAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate)
+{
+    if (pcmS16Stereo.isEmpty() || (sampleRate <= 0)) {
+        return;
+    }
+    if (!m_captureActive || (!m_settings.m_saveVideo && !m_settings.m_youtubeStreamEnabled))
+    {
+        m_pendingAudioChunks.clear();
+        m_pendingAudioBytes = 0;
+        return;
+    }
+
+    AudioChunk chunk;
+    chunk.m_pcmS16Stereo = pcmS16Stereo;
+    chunk.m_sampleRate = sampleRate;
+    m_pendingAudioBytes += chunk.m_pcmS16Stereo.size();
+    m_pendingAudioChunks.push_back(std::move(chunk));
+    trimPendingAudio();
+}
+
+bool CameraRecorder::writePendingAudio(CameraVideoWriter& writer, const QString& variant)
+{
+    bool ok = true;
+
+    for (const AudioChunk& chunk : m_pendingAudioChunks)
+    {
+        QString error;
+        if (!writer.writePcmS16Stereo(chunk.m_pcmS16Stereo, chunk.m_sampleRate, error))
+        {
+            ok = false;
+            qWarning() << "CameraRecorder failed to write audio samples:" << error;
+            reportErrorToFeature(QStringLiteral("video-writer-audio:%1").arg(variant),
+                                 tr("Camera video recording audio warning"),
+                                 tr("Failed to write %1 audio samples. Video recording will continue:\n%2").arg(variant, error));
+            break;
+        }
+    }
+
+    return ok;
+}
+
+void CameraRecorder::trimPendingAudio()
+{
+    while (!m_pendingAudioChunks.empty() && (m_pendingAudioBytes > kAudioBufferMaxBytes))
+    {
+        m_pendingAudioBytes -= m_pendingAudioChunks.front().m_pcmS16Stereo.size();
+        m_pendingAudioChunks.pop_front();
+    }
 }
 
 void CameraRecorder::resetKeogram()
@@ -734,6 +804,19 @@ void CameraRecorder::updateYouTubeStream(const QImage& calibratedImage, const QI
             m_youtubeStreamErrorReported = true;
             closeYouTubeStream();
             return;
+        }
+    }
+
+    for (const AudioChunk& chunk : m_pendingAudioChunks)
+    {
+        QString audioError;
+        if (!m_youtubeStreamer->writePcmS16Stereo(chunk.m_pcmS16Stereo, chunk.m_sampleRate, audioError))
+        {
+            qWarning() << "CameraRecorder: YouTube audio write failed:" << audioError;
+            reportErrorToFeature(QStringLiteral("youtube-stream-audio"),
+                                 tr("Camera YouTube stream audio warning"),
+                                 tr("Failed to write YouTube audio samples. Video streaming will continue:\n%1").arg(audioError));
+            break;
         }
     }
 

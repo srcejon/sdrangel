@@ -135,6 +135,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_worker->setMessageQueueToFeature(getInputMessageQueue());
     m_worker->setFramePreprocessor(getFramePreprocessor());
     m_worker->setPostProcessorInputMessageQueue(getPostProcessorInputMessageQueue());
+    m_worker->setRecorderInputMessageQueue(getRecorderInputMessageQueue());
     m_workerThread->start();
     m_worker->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 

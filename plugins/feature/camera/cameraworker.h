@@ -541,6 +541,7 @@ public:
     void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
     void setFramePreprocessor(CameraFramePreprocessor *framePreprocessor) { m_framePreprocessor = framePreprocessor; }
     void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
+    void setRecorderInputMessageQueue(MessageQueue *messageQueue) { m_qtAudio.setRecordingMessageQueue(messageQueue); }
 
 private:
     MessageQueue m_inputMessageQueue;

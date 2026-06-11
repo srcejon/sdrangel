@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERA_YOUTUBE_STREAMER_H_
 
 #include <QElapsedTimer>
+#include <QByteArray>
 #include <QImage>
 #include <QString>
 #include <QSize>
@@ -47,6 +48,7 @@ public:
 
     [[nodiscard]] bool isOpen() const;
     [[nodiscard]] bool open(const Settings& settings, const QImage& firstFrame, QString& errorMessage);
+    [[nodiscard]] bool writePcmS16Stereo(const QByteArray& pcm, int sampleRate, QString& errorMessage);
     [[nodiscard]] bool writeFrame(const QImage& image, QString& errorMessage);
     void close();
 
@@ -66,6 +68,7 @@ private:
     qint64 m_lastFrameElapsedMs = -1;
     qint64 m_nextFrameElapsedMs = 0;
     bool m_headerWritten = false;
+    QByteArray m_audioInputBuffer;
     QElapsedTimer m_streamTimer;
 
     [[nodiscard]] static QString avErrorString(int errorCode);
@@ -74,7 +77,9 @@ private:
     [[nodiscard]] static QSize evenSize(const QSize& size);
     [[nodiscard]] static QImage prepareRgbImage(const QImage& image, const QSize& size);
     [[nodiscard]] bool openAudioStream(QString& errorMessage);
+    [[nodiscard]] bool fillAudioFrameFromS16Stereo(const char *pcm, int sampleFrames, QString& errorMessage);
     [[nodiscard]] bool encodeAndWriteRgbFrame(const QImage& rgb, QString& errorMessage);
+    [[nodiscard]] bool encodeAndWriteAudioFrame(QString& errorMessage);
     [[nodiscard]] bool encodeAndWriteSilentAudioFrame(QString& errorMessage);
     [[nodiscard]] bool writeEncodedPacket(AVPacket *packet, AVCodecContext *codecContext, int streamIndex, QString& errorMessage);
     void flushEncoder(AVCodecContext *codecContext, int streamIndex);

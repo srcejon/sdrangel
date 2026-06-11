@@ -23,6 +23,7 @@
 #include <deque>
 #include <memory>
 
+#include <QByteArray>
 #include <QDateTime>
 #include <QImage>
 #include <QMutex>
@@ -130,6 +131,29 @@ public:
         { }
     };
 
+    class MsgAudioSamples : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QByteArray& getPcmS16Stereo() const { return m_pcmS16Stereo; }
+        int getSampleRate() const { return m_sampleRate; }
+
+        static MsgAudioSamples* create(const QByteArray& pcmS16Stereo, int sampleRate)
+        {
+            return new MsgAudioSamples(pcmS16Stereo, sampleRate);
+        }
+
+    private:
+        QByteArray m_pcmS16Stereo;
+        int m_sampleRate;
+
+        MsgAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate) :
+            Message(),
+            m_pcmS16Stereo(pcmS16Stereo),
+            m_sampleRate(sampleRate)
+        { }
+    };
+
     CameraRecorder();
     ~CameraRecorder();
 
@@ -146,6 +170,12 @@ private:
     {
         QImage m_calibratedImage;
         QImage m_processedImage;
+    };
+
+    struct AudioChunk
+    {
+        QByteArray m_pcmS16Stereo;
+        int m_sampleRate = 48000;
     };
 
     MessageQueue m_inputMessageQueue;
@@ -168,6 +198,8 @@ private:
     QSize m_keogramSourceSize;
     QString m_keogramOutputFileName;
     int m_keogramLastSampleIndex;
+    std::deque<AudioChunk> m_pendingAudioChunks;
+    qint64 m_pendingAudioBytes;
     std::unique_ptr<CameraYouTubeStreamer> m_youtubeStreamer;
     bool m_youtubeStreamErrorReported;
     QMutex m_frameMutex;
@@ -184,6 +216,9 @@ private:
     void setImageRecordingEnabled(bool enabled);
     void resetRecordingLimits();
     void updateRecordingLimitsAfterFrame(bool savedImageFrame, bool savedVideoFrame);
+    void appendAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate);
+    bool writePendingAudio(CameraVideoWriter& writer, const QString& variant);
+    void trimPendingAudio();
     [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, const QString& variant, const QString& suffixOverride = QString());
     [[nodiscard]] bool shouldSaveRawFits() const;
     [[nodiscard]] bool shouldSaveCalibratedMedia() const;

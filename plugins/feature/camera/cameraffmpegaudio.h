@@ -16,47 +16,21 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
-#ifndef INCLUDE_FEATURE_CAMERAQTAUDIOCONTROLLER_H_
-#define INCLUDE_FEATURE_CAMERAQTAUDIOCONTROLLER_H_
+#ifndef INCLUDE_FEATURE_CAMERA_FFMPEG_AUDIO_H_
+#define INCLUDE_FEATURE_CAMERA_FFMPEG_AUDIO_H_
 
-#include <QObject>
+#include <QByteArray>
 #include <QString>
-#include <QVector>
 
-#include "audio/audiofifo.h"
-#include "camerasettings.h"
-
-class AudioDeviceManager;
-class MessageQueue;
-
-class CameraQtAudioController : public QObject
+class CameraFFmpegAudio
 {
-    Q_OBJECT
 public:
-    explicit CameraQtAudioController(QObject *parent = nullptr);
-
-    bool isCapturing() const { return m_capturing; }
-    void setRecordingMessageQueue(MessageQueue *messageQueue) { m_recordingMessageQueue = messageQueue; }
-    void start(const CameraSettings& settings, MessageQueue *messageQueue);
-    void stop();
-    void setMuted(bool muted);
-
-private slots:
-    void onCaptureAudioDataReady();
-
-private:
-    static QString normalizeAudioMatchName(QString text);
-    static int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName);
-    static void alignInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex);
-    static int findInputIndex(const CameraSettings& settings);
-
-    bool m_capturing;
-    bool m_muted;
-    int m_sampleRate;
-    MessageQueue *m_recordingMessageQueue;
-    AudioFifo m_captureAudioFifo;
-    AudioFifo m_outputAudioFifo;
-    QVector<quint8> m_audioTransferBuffer;
+    [[nodiscard]] static QString avErrorString(int errorCode);
+    [[nodiscard]] static bool resamplePcmS16Stereo(const QByteArray& input,
+                                                   int inputSampleRate,
+                                                   int outputSampleRate,
+                                                   QByteArray& output,
+                                                   QString& errorMessage);
 };
 
-#endif // INCLUDE_FEATURE_CAMERAQTAUDIOCONTROLLER_H_
+#endif // INCLUDE_FEATURE_CAMERA_FFMPEG_AUDIO_H_

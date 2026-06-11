@@ -13,6 +13,7 @@ set(camera_SOURCES
     cameraframestacker.cpp
     cameraimageutils.cpp
     cameraimageprocessor.cpp
+    cameraffmpegaudio.cpp
     camerarecorder.cpp
     cameravideowriter.cpp
     camerayoutubestreamer.cpp
@@ -41,6 +42,7 @@ set(camera_HEADERS
     cameraframestacker.h
     cameraimageutils.h
     cameraimageprocessor.h
+    cameraffmpegaudio.h
     camerarecorder.h
     cameravideowriter.h
     camerayoutubestreamer.h
@@ -130,7 +132,7 @@ if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_F
     target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_OPENCV_CUDA_MOTION_DETECTION)
 endif()
 
-find_package(FFmpeg COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
+find_package(FFmpeg COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE SWRESAMPLE)
 if(FFMPEG_FOUND)
     message(STATUS "FFmpeg found for camera: ${FFMPEG_VERSION_STRING}")
     target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_FFMPEG_STREAMING)
@@ -213,6 +215,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     ${AVFORMAT_LIBRARIES}
     ${AVUTIL_LIBRARIES}
     ${SWSCALE_LIBRARIES}
+    ${SWRESAMPLE_LIBRARIES}
     sdrbase
     ${TARGET_LIB_GUI}
 )

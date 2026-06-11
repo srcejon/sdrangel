@@ -20,6 +20,7 @@
 
 #include <algorithm>
 
+#include <QByteArray>
 #include <QDebug>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -28,13 +29,16 @@
 #endif
 
 #include "audio/audiodevicemanager.h"
+#include "camerarecorder.h"
 #include "dsp/dspengine.h"
 #include "util/messagequeue.h"
 
 CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     QObject(parent),
     m_capturing(false),
-    m_muted(false)
+    m_muted(false),
+    m_sampleRate(AudioDeviceManager::m_defaultAudioSampleRate),
+    m_recordingMessageQueue(nullptr)
 {
     // Audio FIFO: stereo 16-bit PCM at 48 kHz; 4800 sample frames x 4 bytes each.
     static constexpr int audioFifoFrames = 4800 * 4;
@@ -50,6 +54,7 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
 
     AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
     const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(settings.m_audioDeviceName);
+    const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
     int inputDeviceIndex = -1;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     inputDeviceIndex = findInputIndex(settings);
@@ -61,6 +66,7 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
     QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraQtAudioController::onCaptureAudioDataReady);
     audioDeviceManager->addAudioSource(&m_captureAudioFifo, messageQueue, inputDeviceIndex);
     m_muted = settings.m_audioMute;
+    m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
     m_capturing = true;
 }
 
@@ -256,17 +262,22 @@ int CameraQtAudioController::findInputIndex(const CameraSettings& settings)
 
 void CameraQtAudioController::onCaptureAudioDataReady()
 {
-    if (m_muted)
-    {
-        m_captureAudioFifo.clear();
-        return;
-    }
-
     // Each audio sample frame is 4 bytes: stereo 16-bit PCM (2 channels x 2 bytes).
     static constexpr int bytesPerSampleFrame = 4;
     unsigned int nbRead;
 
-    while ((nbRead = m_captureAudioFifo.read(m_audioTransferBuffer.data(), m_audioTransferBuffer.size() / bytesPerSampleFrame)) != 0) {
-        m_outputAudioFifo.write(m_audioTransferBuffer.data(), nbRead);
+    while ((nbRead = m_captureAudioFifo.read(m_audioTransferBuffer.data(), m_audioTransferBuffer.size() / bytesPerSampleFrame)) != 0)
+    {
+        if (!m_muted) {
+            m_outputAudioFifo.write(m_audioTransferBuffer.data(), nbRead);
+        }
+
+        if (m_recordingMessageQueue)
+        {
+            const int byteCount = static_cast<int>(nbRead) * bytesPerSampleFrame;
+            m_recordingMessageQueue->push(CameraRecorder::MsgAudioSamples::create(
+                QByteArray(reinterpret_cast<const char*>(m_audioTransferBuffer.constData()), byteCount),
+                m_sampleRate));
+        }
     }
 }

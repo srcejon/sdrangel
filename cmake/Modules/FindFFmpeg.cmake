@@ -137,7 +137,7 @@ if (NOT FFMPEG_LIBRARIES)
 endif ()
 
 # Now set the noncached _FOUND vars for the components.
-foreach (_component AVCODEC AVDEVICE AVFORMAT AVUTIL POSTPROC SWSCALE)
+foreach (_component AVCODEC AVDEVICE AVFORMAT AVUTIL POSTPROC SWSCALE SWRESAMPLE)
   set_component_found(${_component})
 endforeach ()
 

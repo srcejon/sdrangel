@@ -65,7 +65,6 @@ private:
 
     [[nodiscard]] static QString avErrorString(int errorCode);
     [[nodiscard]] static QString streamTargetUrl(const Settings& settings);
-    [[nodiscard]] static QString redactedStreamTargetUrl(const QString& targetUrl);
     [[nodiscard]] static QSize evenSize(const QSize& size);
     [[nodiscard]] static QImage prepareRgbImage(const QImage& image, const QSize& size);
     [[nodiscard]] bool encodeAndWriteRgbFrame(const QImage& rgb, QString& errorMessage);

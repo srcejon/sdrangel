@@ -23,7 +23,6 @@
 #include <QByteArray>
 #include <QDebug>
 #include <QPainter>
-#include <QUrl>
 
 #ifdef CAMERA_FFMPEG_STREAMING
 extern "C" {
@@ -83,25 +82,6 @@ QString CameraYouTubeStreamer::streamTargetUrl(const Settings& settings)
     }
 
     return url;
-}
-
-QString CameraYouTubeStreamer::redactedStreamTargetUrl(const QString& targetUrl)
-{
-    QUrl url(targetUrl);
-
-    if (!url.isValid()) {
-        return QStringLiteral("<invalid>");
-    }
-
-    QString path = url.path();
-    const int slash = path.lastIndexOf('/');
-    if (slash >= 0) {
-        path = path.left(slash + 1) + QStringLiteral("<key>");
-    }
-    url.setPath(path);
-    url.setQuery(QString());
-    url.setFragment(QString());
-    return url.toString(QUrl::RemovePassword);
 }
 
 QSize CameraYouTubeStreamer::evenSize(const QSize& size)
@@ -296,7 +276,7 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
     m_lastFrameElapsedMs = -1;
     m_nextFrameElapsedMs = 0;
     m_streamTimer.restart();
-    qDebug() << "CameraYouTubeStreamer: opened stream" << redactedStreamTargetUrl(targetUrl)
+    qDebug() << "CameraYouTubeStreamer: opened stream" << targetUrl
              << streamSize << "fps" << fps << "bitrateKbps" << settings.m_bitrateKbps;
     return true;
 #endif

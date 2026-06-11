@@ -918,6 +918,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     m_camera = reinterpret_cast<Camera*>(feature);
     m_camera->setMessageQueueToGUI(&m_inputMessageQueue);
+    m_videoFileAudioMonitorFifo.setSize(48000);
+    m_videoFileAudioMonitorFifo.setLabel(QStringLiteral("Camera video file audio monitor"));
 
     connect(getInputMessageQueue(), SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
     connect(&m_videoFileVideoTimer, &QTimer::timeout, this, &CameraGUI::processFfmpegVideoFileFrame);
@@ -3482,6 +3484,7 @@ bool CameraGUI::ensureFfmpegVideoFilePlayer(bool startPlayback)
     updatePlaybackPositionLabel(0);
     updateVideoFileControls();
     openVideoFileAudioDecoder();
+    startVideoFileAudioMonitor();
 
     m_qtZoomSupported = false;
     m_qtManualExposureSupported = false;
@@ -3501,6 +3504,7 @@ bool CameraGUI::ensureFfmpegVideoFilePlayer(bool startPlayback)
 void CameraGUI::closeFfmpegVideoFilePlayer()
 {
     m_videoFileVideoTimer.stop();
+    stopVideoFileAudioMonitor();
     if (m_videoFileVideoDecoder) {
         m_videoFileVideoDecoder.reset();
     }
@@ -4655,7 +4659,43 @@ void CameraGUI::submitVideoFileAudio(qint64 playbackPositionMs)
         return;
     }
     if (!pcmS16Stereo.isEmpty()) {
+        writeVideoFileAudioMonitor(pcmS16Stereo);
         m_camera->submitRecorderAudioSamples(pcmS16Stereo, sampleRate);
+    }
+}
+
+void CameraGUI::startVideoFileAudioMonitor()
+{
+    if (m_videoFileAudioMonitorActive || !m_camera) {
+        return;
+    }
+
+    AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
+    const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(m_settings.m_audioDeviceName);
+    audioDeviceManager->addAudioSink(&m_videoFileAudioMonitorFifo, m_camera->getInputMessageQueue(), outputDeviceIndex);
+    m_videoFileAudioMonitorActive = true;
+}
+
+void CameraGUI::stopVideoFileAudioMonitor()
+{
+    if (!m_videoFileAudioMonitorActive) {
+        return;
+    }
+
+    DSPEngine::instance()->getAudioDeviceManager()->removeAudioSink(&m_videoFileAudioMonitorFifo);
+    m_videoFileAudioMonitorFifo.clear();
+    m_videoFileAudioMonitorActive = false;
+}
+
+void CameraGUI::writeVideoFileAudioMonitor(const QByteArray& pcmS16Stereo)
+{
+    if (!m_videoFileAudioMonitorActive || m_settings.m_audioMute || pcmS16Stereo.isEmpty()) {
+        return;
+    }
+
+    const int sampleFrames = pcmS16Stereo.size() / 4;
+    if (sampleFrames > 0) {
+        m_videoFileAudioMonitorFifo.write(reinterpret_cast<const quint8*>(pcmS16Stereo.constData()), sampleFrames);
     }
 }
 
@@ -8525,6 +8565,9 @@ void CameraGUI::on_fitInViewButton_clicked()
 void CameraGUI::on_audioMute_toggled(bool checked)
 {
     m_settings.m_audioMute = checked;
+    if (checked) {
+        m_videoFileAudioMonitorFifo.clear();
+    }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     if (m_mediaAudioOutput) {
         m_mediaAudioOutput->setMuted(checked);
@@ -8549,6 +8592,11 @@ void CameraGUI::audioSelect(const QPoint& p)
     {
         m_settings.m_audioDeviceName = audioSelect.m_audioDeviceName;
         applySetting("audioDeviceName");
+        if (m_videoFileAudioMonitorActive)
+        {
+            stopVideoFileAudioMonitor();
+            startVideoFileAudioMonitor();
+        }
     }
 }
 

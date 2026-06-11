@@ -43,6 +43,7 @@
 #endif
 
 #include "feature/featuregui.h"
+#include "audio/audiofifo.h"
 #include "util/messagequeue.h"
 #include "settings/rollupstate.h"
 #include "camerainfo.h"
@@ -280,6 +281,8 @@ private:
     std::unique_ptr<CameraVideoFileVideoDecoder> m_videoFileVideoDecoder;
     QTimer m_videoFileVideoTimer;
     qint64 m_videoFileVideoPositionMs = 0;
+    AudioFifo m_videoFileAudioMonitorFifo;
+    bool m_videoFileAudioMonitorActive = false;
     QTimer m_imageSequenceTimer;
     bool m_imageSequenceLoaded = false;
     int m_imageSequenceIndex = 0;
@@ -379,6 +382,9 @@ private:
     void closeVideoFileAudioDecoder();
     void seekVideoFileAudioDecoder(qint64 positionMs);
     void submitVideoFileAudio(qint64 playbackPositionMs);
+    void startVideoFileAudioMonitor();
+    void stopVideoFileAudioMonitor();
+    void writeVideoFileAudioMonitor(const QByteArray& pcmS16Stereo);
     bool loadImageSequenceFrame(int index, QImage& image) const;
     void showImageSequenceFrame(int index);
     void advanceImageSequenceFrame();

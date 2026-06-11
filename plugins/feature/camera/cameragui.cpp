@@ -1568,6 +1568,7 @@ void CameraGUI::displaySettings()
     settingsUI()->constellationOverlayCombo->setCurrentIndex(static_cast<int>(m_settings.m_constellationOverlay));
     ui->trackObjectsButton->setChecked(m_settings.m_trackObjects);
     settingsUI()->trackObjectTrailsCheck->setChecked(m_settings.m_trackObjectTrails);
+    settingsUI()->trackObjectHeatMapCheck->setChecked(m_settings.m_trackObjectHeatMap);
     settingsUI()->trackObjectMinElevationSpin->setValue(m_settings.m_trackObjectMinElevation);
     settingsUI()->trackObjectFontScaleSpin->setValue(m_settings.m_trackObjectFontScale);
     settingsUI()->gridLabelFontCombo->setCurrentText(m_settings.m_gridLabelFontFamily);
@@ -2301,6 +2302,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->constellationColorButton, &QToolButton::clicked, this, &CameraGUI::on_constellationColorButton_clicked);
     QObject::connect(ui->trackObjectsButton, &QToolButton::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectTrailsCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectTrailsCheck_toggled);
+    QObject::connect(settingsUI()->trackObjectHeatMapCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectHeatMapCheck_toggled);
     QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
     QObject::connect(settingsUI()->trackObjectColorButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectColorButton_clicked);
     QObject::connect(settingsUI()->trackObjectFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectFontScaleSpin_valueChanged);
@@ -6761,6 +6763,12 @@ void CameraGUI::on_trackObjectTrailsCheck_toggled(bool checked)
 {
     m_settings.m_trackObjectTrails = checked;
     applySetting("trackObjectTrails");
+}
+
+void CameraGUI::on_trackObjectHeatMapCheck_toggled(bool checked)
+{
+    m_settings.m_trackObjectHeatMap = checked;
+    applySetting("trackObjectHeatMap");
 }
 
 void CameraGUI::on_trackObjectMinElevationSpin_valueChanged(double value)

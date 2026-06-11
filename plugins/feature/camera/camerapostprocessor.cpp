@@ -25,6 +25,7 @@
 #include <QFontMetrics>
 #include <QPainter>
 #include <QPolygonF>
+#include <QRadialGradient>
 #include <QTextDocument>
 #include "SWGMapItem.h"
 #include "util/azel.h"
@@ -50,6 +51,7 @@ const QStringList kTrackedObjectPipeURIs = {
 static constexpr int kTrackedObjectMaxTrackPoints = 256;
 static constexpr double kTrackedObjectTrackMinDeltaDegrees = 1e-6;
 static constexpr double kTrackedObjectTrackMinDeltaAltitudeMetres = 0.5;
+static constexpr double kTrackedObjectHeatMapRadiusPixels = 18.0;
 
 struct EquatorialStar
 {
@@ -675,7 +677,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
         "constellation", "constellationColor", "constellationOverlay",
-        "trackObjects", "trackObjectTrails", "trackObjectMinElevation", "trackObjectColor", "trackObjectFontScale",
+        "trackObjects", "trackObjectTrails", "trackObjectHeatMap", "trackObjectMinElevation", "trackObjectColor", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
@@ -1540,6 +1542,61 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
     const QFontMetrics fontMetrics(font);
     painter.setPen(QPen(m_settings.m_trackObjectColor, 2.0));
 
+    auto projectTrackPoint = [this, &projector](const TrackedMapObject::TrackPoint& trackPoint, QPointF& imagePoint) -> bool {
+        AzEl trackAzEl;
+        trackAzEl.setLocation(m_settings.m_latitude, m_settings.m_longitude, m_settings.m_altitude);
+        trackAzEl.setTarget(trackPoint.m_latitude, trackPoint.m_longitude, trackPoint.m_altitude);
+        trackAzEl.calculate();
+        return std::isfinite(trackAzEl.getAzimuth())
+            && std::isfinite(trackAzEl.getElevation())
+            && (trackAzEl.getElevation() >= m_settings.m_trackObjectMinElevation)
+            && projector.projectAltAz(trackAzEl.getAzimuth(), trackAzEl.getElevation(), imagePoint);
+    };
+
+    if (m_settings.m_trackObjectHeatMap)
+    {
+        QImage heatMap(image.size(), QImage::Format_ARGB32_Premultiplied);
+        heatMap.fill(Qt::transparent);
+        QPainter heatPainter(&heatMap);
+        heatPainter.setRenderHint(QPainter::Antialiasing);
+        heatPainter.setPen(Qt::NoPen);
+        heatPainter.setCompositionMode(QPainter::CompositionMode_Plus);
+        const QRectF paddedImageRect = QRectF(image.rect()).adjusted(
+            -kTrackedObjectHeatMapRadiusPixels,
+            -kTrackedObjectHeatMapRadiusPixels,
+            kTrackedObjectHeatMapRadiusPixels,
+            kTrackedObjectHeatMapRadiusPixels);
+
+        for (auto it = m_trackedMapObjects.cbegin(); it != m_trackedMapObjects.cend(); ++it)
+        {
+            const TrackedMapObject& object = it.value();
+            if (object.m_availableUntil.isValid() && (object.m_availableUntil < currentDateTime)) {
+                continue;
+            }
+
+            for (const TrackedMapObject::TrackPoint& trackPoint : object.m_track)
+            {
+                QPointF heatPoint;
+                if (!projectTrackPoint(trackPoint, heatPoint) || !paddedImageRect.contains(heatPoint)) {
+                    continue;
+                }
+
+                QRadialGradient gradient(heatPoint, kTrackedObjectHeatMapRadiusPixels);
+                gradient.setColorAt(0.0, QColor(255, 64, 0, 85));
+                gradient.setColorAt(0.45, QColor(255, 210, 0, 42));
+                gradient.setColorAt(1.0, QColor(255, 210, 0, 0));
+                heatPainter.setBrush(gradient);
+                heatPainter.drawEllipse(
+                    heatPoint,
+                    kTrackedObjectHeatMapRadiusPixels,
+                    kTrackedObjectHeatMapRadiusPixels);
+            }
+        }
+        heatPainter.end();
+
+        painter.drawImage(0, 0, heatMap);
+    }
+
     for (auto it = m_trackedMapObjects.cbegin(); it != m_trackedMapObjects.cend(); ++it)
     {
         const TrackedMapObject& object = it.value();
@@ -1581,20 +1638,8 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
 
             for (const TrackedMapObject::TrackPoint& trackPoint : object.m_track)
             {
-                AzEl trackAzEl;
-                trackAzEl.setLocation(m_settings.m_latitude, m_settings.m_longitude, m_settings.m_altitude);
-                trackAzEl.setTarget(trackPoint.m_latitude, trackPoint.m_longitude, trackPoint.m_altitude);
-                trackAzEl.calculate();
-                if (!std::isfinite(trackAzEl.getAzimuth())
-                    || !std::isfinite(trackAzEl.getElevation())
-                    || (trackAzEl.getElevation() < m_settings.m_trackObjectMinElevation))
-                {
-                    flushProjectedTrack();
-                    continue;
-                }
-
                 QPointF trackImagePoint;
-                if (!projector.projectAltAz(trackAzEl.getAzimuth(), trackAzEl.getElevation(), trackImagePoint)) {
+                if (!projectTrackPoint(trackPoint, trackImagePoint)) {
                     flushProjectedTrack();
                     continue;
                 }

@@ -375,6 +375,14 @@ struct CameraSettings
     KeogramDayMode m_keogramDayMode; ///< Whether the 24-hour keogram window starts at midnight or midday
     int m_keogramSamplePeriodMinutes; ///< Keogram sample period in minutes
     bool m_keogramShowPreview;     ///< Show a live keogram preview dialog in the GUI
+    bool m_youtubeStreamEnabled;   ///< Stream captured video to YouTube
+    QString m_youtubeStreamUrl;    ///< YouTube RTMP/RTMPS ingest URL
+    QString m_youtubeStreamKey;    ///< YouTube stream key
+    bool m_youtubeStreamPostProcessed; ///< Stream post-processed frames rather than calibrated frames
+    int m_youtubeStreamBitrateKbps; ///< Video bitrate in kbit/s
+    int m_youtubeStreamFps;        ///< Stream frame rate
+    int m_youtubeStreamWidth;      ///< Output stream width; 0 = source width
+    int m_youtubeStreamHeight;     ///< Output stream height; 0 = source height
     bool m_videoLoop;
     double m_videoPlaybackRate;
     bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported

@@ -30,6 +30,7 @@
 #include "camera.h"
 #include "camerapostprocessor.h"
 #include "camerarecorder.h"
+#include "camerayoutubestreamer.h"
 #include "util/fits.h"
 
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgSetVideoRecordingEnabled, Message)
@@ -169,6 +170,8 @@ CameraRecorder::CameraRecorder() :
     m_preRecordBufferFlushed(false),
     m_recordedImageFrames(0),
     m_keogramLastSampleIndex(-1),
+    m_youtubeStreamer(new CameraYouTubeStreamer()),
+    m_youtubeStreamErrorReported(false),
     m_processingFrames(false),
     m_droppedOutputFrames(0)
 {
@@ -176,6 +179,7 @@ CameraRecorder::CameraRecorder() :
 
 CameraRecorder::~CameraRecorder()
 {
+    closeYouTubeStream();
     closeVideoWriters();
 }
 
@@ -219,6 +223,7 @@ bool CameraRecorder::handleMessage(const Message& cmd)
         if (m_captureActive) {
             resetRecordingLimits();
         } else {
+            closeYouTubeStream();
             closeVideoWriters();
         }
 
@@ -261,6 +266,14 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
     const CameraSettings::KeogramDayMode previousKeogramDayMode = m_settings.m_keogramDayMode;
     const int previousKeogramSamplePeriodMinutes = m_settings.m_keogramSamplePeriodMinutes;
     const bool previousKeogramShowPreview = m_settings.m_keogramShowPreview;
+    const bool previousYouTubeStreamEnabled = m_settings.m_youtubeStreamEnabled;
+    const QString previousYouTubeStreamUrl = m_settings.m_youtubeStreamUrl;
+    const QString previousYouTubeStreamKey = m_settings.m_youtubeStreamKey;
+    const bool previousYouTubeStreamPostProcessed = m_settings.m_youtubeStreamPostProcessed;
+    const int previousYouTubeStreamBitrateKbps = m_settings.m_youtubeStreamBitrateKbps;
+    const int previousYouTubeStreamFps = m_settings.m_youtubeStreamFps;
+    const int previousYouTubeStreamWidth = m_settings.m_youtubeStreamWidth;
+    const int previousYouTubeStreamHeight = m_settings.m_youtubeStreamHeight;
 
     if (force) {
         m_settings = settings;
@@ -293,6 +306,31 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
             m_videoRecordingStartDateTime = QDateTime::currentDateTimeUtc();
             m_preRecordBufferFlushed = false;
             m_reportedVideoWriterErrorKeys.clear();
+        }
+    }
+
+    if (force
+        || settingsKeys.contains("youtubeStreamEnabled")
+        || settingsKeys.contains("youtubeStreamUrl")
+        || settingsKeys.contains("youtubeStreamKey")
+        || settingsKeys.contains("youtubeStreamPostProcessed")
+        || settingsKeys.contains("youtubeStreamBitrateKbps")
+        || settingsKeys.contains("youtubeStreamFps")
+        || settingsKeys.contains("youtubeStreamWidth")
+        || settingsKeys.contains("youtubeStreamHeight"))
+    {
+        if (force
+            || (previousYouTubeStreamEnabled != m_settings.m_youtubeStreamEnabled)
+            || (previousYouTubeStreamUrl != m_settings.m_youtubeStreamUrl)
+            || (previousYouTubeStreamKey != m_settings.m_youtubeStreamKey)
+            || (previousYouTubeStreamPostProcessed != m_settings.m_youtubeStreamPostProcessed)
+            || (previousYouTubeStreamBitrateKbps != m_settings.m_youtubeStreamBitrateKbps)
+            || (previousYouTubeStreamFps != m_settings.m_youtubeStreamFps)
+            || (previousYouTubeStreamWidth != m_settings.m_youtubeStreamWidth)
+            || (previousYouTubeStreamHeight != m_settings.m_youtubeStreamHeight))
+        {
+            closeYouTubeStream();
+            m_youtubeStreamErrorReported = false;
         }
     }
 
@@ -407,6 +445,11 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
 
     if (m_captureActive && m_settings.m_keogramEnabled) {
         updateKeogram(calibratedImage, frame->m_captureDateTime);
+    }
+    if (m_captureActive && m_settings.m_youtubeStreamEnabled) {
+        updateYouTubeStream(calibratedImage, processedImage);
+    } else {
+        closeYouTubeStream();
     }
 
     if (m_captureActive && (m_settings.m_saveImage || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
@@ -651,6 +694,62 @@ void CameraRecorder::closeVideoWriters()
     m_calibratedVideoWriterSize = QSize();
     m_processedVideoWriterSize = QSize();
     m_reportedVideoWriterErrorKeys.clear();
+}
+
+void CameraRecorder::closeYouTubeStream()
+{
+    if (m_youtubeStreamer) {
+        m_youtubeStreamer->close();
+    }
+}
+
+void CameraRecorder::updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage)
+{
+    if (!m_youtubeStreamer || m_youtubeStreamErrorReported) {
+        return;
+    }
+
+    const QImage& streamImage = m_settings.m_youtubeStreamPostProcessed && !processedImage.isNull()
+        ? processedImage
+        : calibratedImage;
+    if (streamImage.isNull()) {
+        return;
+    }
+
+    if (!m_youtubeStreamer->isOpen())
+    {
+        CameraYouTubeStreamer::Settings streamSettings;
+        streamSettings.m_url = m_settings.m_youtubeStreamUrl;
+        streamSettings.m_key = m_settings.m_youtubeStreamKey;
+        streamSettings.m_bitrateKbps = m_settings.m_youtubeStreamBitrateKbps;
+        streamSettings.m_fps = m_settings.m_youtubeStreamFps;
+        if ((m_settings.m_youtubeStreamWidth > 0) && (m_settings.m_youtubeStreamHeight > 0)) {
+            streamSettings.m_size = QSize(m_settings.m_youtubeStreamWidth, m_settings.m_youtubeStreamHeight);
+        }
+
+        QString errorMessage;
+        if (!m_youtubeStreamer->open(streamSettings, streamImage, errorMessage))
+        {
+            qWarning() << "CameraRecorder: YouTube stream open failed:" << errorMessage;
+            reportErrorToFeature(QStringLiteral("youtube-stream-open"),
+                                 tr("Camera YouTube stream error"),
+                                 errorMessage);
+            m_youtubeStreamErrorReported = true;
+            closeYouTubeStream();
+            return;
+        }
+    }
+
+    QString errorMessage;
+    if (!m_youtubeStreamer->writeFrame(streamImage, errorMessage))
+    {
+        qWarning() << "CameraRecorder: YouTube stream write failed:" << errorMessage;
+        reportErrorToFeature(QStringLiteral("youtube-stream-write"),
+                             tr("Camera YouTube stream error"),
+                             errorMessage);
+        m_youtubeStreamErrorReported = true;
+        closeYouTubeStream();
+    }
 }
 
 int CameraRecorder::preRecordBufferFrameLimit() const

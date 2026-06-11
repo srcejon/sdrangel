@@ -5874,6 +5874,166 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </property>
           </widget>
          </item>
+       </layout>
+      </widget>
+     </item>
+      <item alignment="Qt::AlignTop">
+       <widget class="QGroupBox" name="youtubeStreamGroup">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="title">
+         <string>YouTube Live</string>
+        </property>
+        <layout class="QFormLayout" name="youtubeStreamFormLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="youtubeStreamEnabledLabel">
+           <property name="text">
+            <string>Stream</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QCheckBox" name="youtubeStreamEnabledCheck">
+           <property name="toolTip">
+            <string>Stream captured video to YouTube Live using FFmpeg libraries</string>
+           </property>
+           <property name="text">
+            <string>Enable YouTube stream</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="youtubeStreamUrlLabel">
+           <property name="text">
+            <string>URL</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="youtubeStreamUrlEdit">
+           <property name="toolTip">
+            <string>YouTube RTMP or RTMPS ingest URL</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="youtubeStreamKeyLabel">
+           <property name="text">
+            <string>Key</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLineEdit" name="youtubeStreamKeyEdit">
+           <property name="toolTip">
+            <string>YouTube stream key</string>
+           </property>
+           <property name="echoMode">
+            <enum>QLineEdit::Password</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="youtubeStreamSourceLabel">
+           <property name="text">
+            <string>Source</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QCheckBox" name="youtubeStreamPostProcessedCheck">
+           <property name="toolTip">
+            <string>Stream post-processed video including overlays rather than calibrated video</string>
+           </property>
+           <property name="text">
+            <string>Post-processed</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="youtubeStreamBitrateLabel">
+           <property name="text">
+            <string>Bitrate</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QSpinBox" name="youtubeStreamBitrateSpin">
+           <property name="toolTip">
+            <string>YouTube stream video bitrate</string>
+           </property>
+           <property name="suffix">
+            <string> kbps</string>
+           </property>
+           <property name="minimum">
+            <number>100</number>
+           </property>
+           <property name="maximum">
+            <number>50000</number>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="youtubeStreamFpsLabel">
+           <property name="text">
+            <string>FPS</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QSpinBox" name="youtubeStreamFpsSpin">
+           <property name="toolTip">
+            <string>YouTube stream frame rate</string>
+           </property>
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>120</number>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="0">
+          <widget class="QLabel" name="youtubeStreamSizeLabel">
+           <property name="text">
+            <string>Size</string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <layout class="QHBoxLayout" name="youtubeStreamSizeLayout">
+           <item>
+            <widget class="QSpinBox" name="youtubeStreamWidthSpin">
+             <property name="toolTip">
+              <string>Output width, or 0 for source width</string>
+             </property>
+             <property name="suffix">
+              <string> px</string>
+             </property>
+             <property name="maximum">
+              <number>16384</number>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="youtubeStreamHeightSpin">
+             <property name="toolTip">
+              <string>Output height, or 0 for source height</string>
+             </property>
+             <property name="suffix">
+              <string> px</string>
+             </property>
+             <property name="maximum">
+              <number>16384</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
         </layout>
        </widget>
       </item>

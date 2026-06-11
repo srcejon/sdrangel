@@ -14,6 +14,7 @@ set(camera_SOURCES
     cameraimageutils.cpp
     cameraimageprocessor.cpp
     camerarecorder.cpp
+    camerayoutubestreamer.cpp
     cameraplatesolver.cpp
     camerapostprocessor.cpp
     camerafinder.cpp
@@ -40,6 +41,7 @@ set(camera_HEADERS
     cameraimageutils.h
     cameraimageprocessor.h
     camerarecorder.h
+    camerayoutubestreamer.h
     cameraplatesolver.h
     camerapipelineframe.h
     camerapostprocessor.h
@@ -126,6 +128,14 @@ if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_F
     target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_OPENCV_CUDA_MOTION_DETECTION)
 endif()
 
+if(FFMPEG_FOUND)
+    target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_FFMPEG_STREAMING)
+    target_include_directories(${TARGET_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    if(DEFINED FFMPEG_DEPENDS)
+        add_dependencies(${TARGET_NAME} ${FFMPEG_DEPENDS})
+    endif()
+endif()
+
 if(ENABLE_CAMERA_TENSORRT)
     find_path(TENSORRT_INCLUDE_DIR NvInfer.h
         HINTS
@@ -193,6 +203,10 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     ${camera_OpenCV_LIBS}
     ${ASICAMERA_LIBRARIES}
     ${ZLIB_LIBRARIES}
+    ${AVCODEC_LIBRARIES}
+    ${AVFORMAT_LIBRARIES}
+    ${AVUTIL_LIBRARIES}
+    ${SWSCALE_LIBRARIES}
     sdrbase
     ${TARGET_LIB_GUI}
 )

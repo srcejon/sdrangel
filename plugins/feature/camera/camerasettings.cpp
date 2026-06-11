@@ -193,6 +193,14 @@ void CameraSettings::resetToDefaults()
     m_keogramDayMode = KeogramMidnightToMidnight;
     m_keogramSamplePeriodMinutes = 5;
     m_keogramShowPreview = false;
+    m_youtubeStreamEnabled = false;
+    m_youtubeStreamUrl = "rtmps://a.rtmps.youtube.com/live2";
+    m_youtubeStreamKey.clear();
+    m_youtubeStreamPostProcessed = true;
+    m_youtubeStreamBitrateKbps = 2500;
+    m_youtubeStreamFps = 25;
+    m_youtubeStreamWidth = 0;
+    m_youtubeStreamHeight = 0;
     m_videoLoop = false;
     m_videoPlaybackRate = 1.0;
     m_videoHwAcceleration = true;
@@ -632,6 +640,14 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(243, static_cast<qint32>(m_keogramDayMode));
     s.writeS32(244, m_keogramSamplePeriodMinutes);
     s.writeBool(245, m_keogramShowPreview);
+    s.writeBool(246, m_youtubeStreamEnabled);
+    s.writeString(247, m_youtubeStreamUrl);
+    s.writeString(248, m_youtubeStreamKey);
+    s.writeBool(249, m_youtubeStreamPostProcessed);
+    s.writeS32(250, m_youtubeStreamBitrateKbps);
+    s.writeS32(251, m_youtubeStreamFps);
+    s.writeS32(252, m_youtubeStreamWidth);
+    s.writeS32(253, m_youtubeStreamHeight);
 
     return s.final();
 }
@@ -967,6 +983,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_keogramDayMode = static_cast<KeogramDayMode>(keogramDayMode);
         d.readS32(244, &m_keogramSamplePeriodMinutes, 5);
         d.readBool(245, &m_keogramShowPreview, false);
+        d.readBool(246, &m_youtubeStreamEnabled, false);
+        d.readString(247, &m_youtubeStreamUrl, "rtmps://a.rtmps.youtube.com/live2");
+        d.readString(248, &m_youtubeStreamKey, "");
+        d.readBool(249, &m_youtubeStreamPostProcessed, true);
+        d.readS32(250, &m_youtubeStreamBitrateKbps, 2500);
+        d.readS32(251, &m_youtubeStreamFps, 25);
+        d.readS32(252, &m_youtubeStreamWidth, 0);
+        d.readS32(253, &m_youtubeStreamHeight, 0);
         d.readDouble(207, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(211, &m_postProcessUseCuda, false);
@@ -1119,6 +1143,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_keogramDirection = static_cast<KeogramDirection>(qBound(0, static_cast<int>(m_keogramDirection), 1));
         m_keogramDayMode = static_cast<KeogramDayMode>(qBound(0, static_cast<int>(m_keogramDayMode), 1));
         m_keogramSamplePeriodMinutes = qBound(1, m_keogramSamplePeriodMinutes, 1440);
+        m_youtubeStreamBitrateKbps = qBound(100, m_youtubeStreamBitrateKbps, 50000);
+        m_youtubeStreamFps = qBound(1, m_youtubeStreamFps, 120);
+        m_youtubeStreamWidth = qBound(0, m_youtubeStreamWidth, 16384);
+        m_youtubeStreamHeight = qBound(0, m_youtubeStreamHeight, 16384);
         m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
         m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
         m_altitude = qBound(m_minAltitude, m_altitude, m_maxAltitude);
@@ -1370,6 +1398,30 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("keogramShowPreview")) {
         m_keogramShowPreview = settings.m_keogramShowPreview;
+    }
+    if (settingsKeys.contains("youtubeStreamEnabled")) {
+        m_youtubeStreamEnabled = settings.m_youtubeStreamEnabled;
+    }
+    if (settingsKeys.contains("youtubeStreamUrl")) {
+        m_youtubeStreamUrl = settings.m_youtubeStreamUrl;
+    }
+    if (settingsKeys.contains("youtubeStreamKey")) {
+        m_youtubeStreamKey = settings.m_youtubeStreamKey;
+    }
+    if (settingsKeys.contains("youtubeStreamPostProcessed")) {
+        m_youtubeStreamPostProcessed = settings.m_youtubeStreamPostProcessed;
+    }
+    if (settingsKeys.contains("youtubeStreamBitrateKbps")) {
+        m_youtubeStreamBitrateKbps = qBound(100, settings.m_youtubeStreamBitrateKbps, 50000);
+    }
+    if (settingsKeys.contains("youtubeStreamFps")) {
+        m_youtubeStreamFps = qBound(1, settings.m_youtubeStreamFps, 120);
+    }
+    if (settingsKeys.contains("youtubeStreamWidth")) {
+        m_youtubeStreamWidth = qBound(0, settings.m_youtubeStreamWidth, 16384);
+    }
+    if (settingsKeys.contains("youtubeStreamHeight")) {
+        m_youtubeStreamHeight = qBound(0, settings.m_youtubeStreamHeight, 16384);
     }
     if (settingsKeys.contains("stackEnabled")) {
         m_stackEnabled = settings.m_stackEnabled;
@@ -2097,6 +2149,30 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("keogramShowPreview") || force) {
         ostr << " m_keogramShowPreview: " << m_keogramShowPreview;
+    }
+    if (settingsKeys.contains("youtubeStreamEnabled") || force) {
+        ostr << " m_youtubeStreamEnabled: " << m_youtubeStreamEnabled;
+    }
+    if (settingsKeys.contains("youtubeStreamUrl") || force) {
+        ostr << " m_youtubeStreamUrl: " << m_youtubeStreamUrl.toStdString();
+    }
+    if (settingsKeys.contains("youtubeStreamKey") || force) {
+        ostr << " m_youtubeStreamKeySet: " << !m_youtubeStreamKey.isEmpty();
+    }
+    if (settingsKeys.contains("youtubeStreamPostProcessed") || force) {
+        ostr << " m_youtubeStreamPostProcessed: " << m_youtubeStreamPostProcessed;
+    }
+    if (settingsKeys.contains("youtubeStreamBitrateKbps") || force) {
+        ostr << " m_youtubeStreamBitrateKbps: " << m_youtubeStreamBitrateKbps;
+    }
+    if (settingsKeys.contains("youtubeStreamFps") || force) {
+        ostr << " m_youtubeStreamFps: " << m_youtubeStreamFps;
+    }
+    if (settingsKeys.contains("youtubeStreamWidth") || force) {
+        ostr << " m_youtubeStreamWidth: " << m_youtubeStreamWidth;
+    }
+    if (settingsKeys.contains("youtubeStreamHeight") || force) {
+        ostr << " m_youtubeStreamHeight: " << m_youtubeStreamHeight;
     }
     if (settingsKeys.contains("stackEnabled") || force) {
         ostr << " m_stackEnabled: " << m_stackEnabled;

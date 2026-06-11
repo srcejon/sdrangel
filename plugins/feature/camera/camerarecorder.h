@@ -21,6 +21,7 @@
 
 #include <QObject>
 #include <deque>
+#include <memory>
 
 #include <QDateTime>
 #include <QImage>
@@ -36,6 +37,7 @@
 #include "camerasettings.h"
 
 class CameraPostProcessor;
+class CameraYouTubeStreamer;
 
 class CameraRecorder : public QObject
 {
@@ -167,6 +169,8 @@ private:
     QSize m_keogramSourceSize;
     QString m_keogramOutputFileName;
     int m_keogramLastSampleIndex;
+    std::unique_ptr<CameraYouTubeStreamer> m_youtubeStreamer;
+    bool m_youtubeStreamErrorReported;
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrames;
@@ -190,6 +194,8 @@ private:
                                    CameraPipelineFrame::BayerPattern bayerPattern,
                                    const CameraPipelineFrame& frame) const;
     void closeVideoWriters();
+    void closeYouTubeStream();
+    void updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage);
     bool ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant);
     void writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite);
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);

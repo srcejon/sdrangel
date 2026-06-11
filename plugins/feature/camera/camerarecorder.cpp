@@ -523,12 +523,12 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
 
         if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, calibratedImage, QStringLiteral("calibrated"))) {
             writePendingAudio(*m_calibratedVideoWriter, QStringLiteral("calibrated"));
-            savedVideoFrame = writeVideoFrame(*m_calibratedVideoWriter, calibratedImage, QStringLiteral("calibrated")) || savedVideoFrame;
+            savedVideoFrame = writeVideoFrame(*m_calibratedVideoWriter, calibratedImage, QStringLiteral("calibrated"), frame->m_playbackPositionMs) || savedVideoFrame;
         }
 
         if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processedImage, QStringLiteral("post"))) {
             writePendingAudio(*m_processedVideoWriter, QStringLiteral("post"));
-            savedVideoFrame = writeVideoFrame(*m_processedVideoWriter, processedImage, QStringLiteral("post")) || savedVideoFrame;
+            savedVideoFrame = writeVideoFrame(*m_processedVideoWriter, processedImage, QStringLiteral("post"), frame->m_playbackPositionMs) || savedVideoFrame;
         }
         m_pendingAudioChunks.clear();
         m_pendingAudioBytes = 0;
@@ -1157,10 +1157,10 @@ void CameraRecorder::reportErrorToFeature(const QString& errorKey, const QString
     m_msgQueueToFeature->push(Camera::MsgReportError::create(title, errorMessage));
 }
 
-bool CameraRecorder::writeVideoFrame(CameraVideoWriter& writer, const QImage& frameToWrite, const QString& variant)
+bool CameraRecorder::writeVideoFrame(CameraVideoWriter& writer, const QImage& frameToWrite, const QString& variant, qint64 timestampMs)
 {
     QString error;
-    if (writer.writeFrame(frameToWrite, error)) {
+    if (writer.writeFrame(frameToWrite, error, timestampMs)) {
         return true;
     }
 

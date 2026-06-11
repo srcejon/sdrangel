@@ -135,8 +135,9 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
     const double requestedFps = std::max(0.001, settings.m_fps);
     const int fpsDen = 1000;
     const int fpsNum = std::max(1, static_cast<int>(std::llround(requestedFps * fpsDen)));
-    const AVRational timeBase{fpsDen, fpsNum};
+    const AVRational timeBase{1, 1000};
     const AVRational frameRate{fpsNum, fpsDen};
+    const qint64 frameDurationPts = std::max<qint64>(1, static_cast<qint64>((1000.0 / requestedFps) + 0.5));
 
     const AVCodecID codecId = settings.m_codec == CameraSettings::VideoCodecH265
         ? AV_CODEC_ID_HEVC
@@ -242,6 +243,7 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
                 close();
                 return false;
             }
+            codec = softwareCodec;
         }
         else
         {
@@ -329,6 +331,9 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
     m_settings = settings;
     m_videoSize = videoSize;
     m_frameIndex = 0;
+    m_frameDurationPts = frameDurationPts;
+    m_firstFrameTimestampMs = -1;
+    m_lastVideoPts = -1;
     m_audioFrameIndex = 0;
 
     qDebug() << "CameraVideoWriter: opened" << fileName << codecName(settings.m_codec)
@@ -547,39 +552,6 @@ bool CameraVideoWriter::encodeAndWriteAudioFrame(QString& errorMessage)
 #endif
 }
 
-bool CameraVideoWriter::encodeAndWriteSilentAudioFrame(QString& errorMessage)
-{
-#ifndef CAMERA_FFMPEG_STREAMING
-    Q_UNUSED(errorMessage)
-    return false;
-#else
-    if (!m_audioCodecContext || !m_audioFrame || (m_audioStreamIndex < 0)) {
-        return true;
-    }
-
-    int ret = av_frame_make_writable(m_audioFrame);
-    if (ret < 0)
-    {
-        errorMessage = QStringLiteral("Cannot write to audio frame buffer: %1").arg(avErrorString(ret));
-        return false;
-    }
-
-    ret = av_samples_set_silence(
-        m_audioFrame->data,
-        0,
-        m_audioFrame->nb_samples,
-        m_audioCodecContext->channels,
-        m_audioCodecContext->sample_fmt);
-    if (ret < 0)
-    {
-        errorMessage = QStringLiteral("Cannot clear audio frame buffer: %1").arg(avErrorString(ret));
-        return false;
-    }
-
-    return encodeAndWriteAudioFrame(errorMessage);
-#endif
-}
-
 bool CameraVideoWriter::writePcmS16Stereo(const QByteArray& pcm, int sampleRate, QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
@@ -629,44 +601,7 @@ bool CameraVideoWriter::writePcmS16Stereo(const QByteArray& pcm, int sampleRate,
 #endif
 }
 
-bool CameraVideoWriter::writeSilentAudioUntilVideoFrame(QString& errorMessage)
-{
-#ifndef CAMERA_FFMPEG_STREAMING
-    Q_UNUSED(errorMessage)
-    return false;
-#else
-    if (!m_audioCodecContext || !m_audioFrame) {
-        return true;
-    }
-
-    const qint64 videoElapsedMs = av_rescale_q(
-        m_frameIndex,
-        m_codecContext->time_base,
-        AVRational{1, 1000});
-    qint64 audioElapsedMs = av_rescale_q(
-        m_audioFrameIndex,
-        m_audioCodecContext->time_base,
-        AVRational{1, 1000});
-    int framesWritten = 0;
-    const int maxFramesPerVideoFrame = std::max(1, m_audioCodecContext->sample_rate / std::max(1, m_audioFrame->nb_samples));
-
-    while ((audioElapsedMs < videoElapsedMs) && (framesWritten < maxFramesPerVideoFrame))
-    {
-        if (!encodeAndWriteSilentAudioFrame(errorMessage)) {
-            return false;
-        }
-        audioElapsedMs = av_rescale_q(
-            m_audioFrameIndex,
-            m_audioCodecContext->time_base,
-            AVRational{1, 1000});
-        ++framesWritten;
-    }
-
-    return true;
-#endif
-}
-
-bool CameraVideoWriter::writeFrame(const QImage& image, QString& errorMessage)
+bool CameraVideoWriter::writeFrame(const QImage& image, QString& errorMessage, qint64 timestampMs)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(image)
@@ -696,7 +631,25 @@ bool CameraVideoWriter::writeFrame(const QImage& image, QString& errorMessage)
     const uint8_t *srcData[1] = { rgb.constBits() };
     const int srcLineSize[1] = { static_cast<int>(rgb.bytesPerLine()) };
     sws_scale(m_swsContext, srcData, srcLineSize, 0, m_codecContext->height, m_frame->data, m_frame->linesize);
-    m_frame->pts = m_frameIndex++;
+
+    qint64 pts = m_frameIndex;
+    if (timestampMs >= 0)
+    {
+        if (m_firstFrameTimestampMs < 0) {
+            m_firstFrameTimestampMs = timestampMs;
+        }
+        pts = av_rescale_q(
+            std::max<qint64>(0, timestampMs - m_firstFrameTimestampMs),
+            AVRational{1, 1000},
+            m_codecContext->time_base);
+        if (pts <= m_lastVideoPts) {
+            pts = m_lastVideoPts + 1;
+        }
+    }
+
+    m_frame->pts = pts;
+    m_lastVideoPts = pts;
+    m_frameIndex = pts + m_frameDurationPts;
 
     ret = avcodec_send_frame(m_codecContext, m_frame);
     if (ret < 0)
@@ -729,9 +682,6 @@ bool CameraVideoWriter::writeFrame(const QImage& image, QString& errorMessage)
     }
 
     av_packet_free(&packet);
-    if (ok && !writeSilentAudioUntilVideoFrame(errorMessage)) {
-        ok = false;
-    }
     return ok;
 #endif
 }

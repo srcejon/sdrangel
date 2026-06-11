@@ -53,7 +53,7 @@ public:
     [[nodiscard]] static QString codecName(CameraSettings::VideoCodec codec);
     [[nodiscard]] QString codecName() const;
     [[nodiscard]] bool open(const Settings& settings, const QImage& firstFrame, QString& errorMessage);
-    [[nodiscard]] bool writeFrame(const QImage& image, QString& errorMessage);
+    [[nodiscard]] bool writeFrame(const QImage& image, QString& errorMessage, qint64 timestampMs = -1);
     [[nodiscard]] bool writePcmS16Stereo(const QByteArray& pcm, int sampleRate, QString& errorMessage);
     void close();
 
@@ -69,6 +69,9 @@ private:
     int m_streamIndex = -1;
     int m_audioStreamIndex = -1;
     qint64 m_frameIndex = 0;
+    qint64 m_frameDurationPts = 40;
+    qint64 m_firstFrameTimestampMs = -1;
+    qint64 m_lastVideoPts = -1;
     qint64 m_audioFrameIndex = 0;
     bool m_headerWritten = false;
     QByteArray m_audioInputBuffer;
@@ -79,9 +82,7 @@ private:
     [[nodiscard]] bool openAudioStream(QString& warningMessage);
     [[nodiscard]] bool writeEncodedPacket(AVPacket *packet, AVCodecContext *codecContext, int streamIndex, QString& errorMessage);
     [[nodiscard]] bool fillAudioFrameFromS16Stereo(const char *pcm, int sampleFrames, QString& errorMessage);
-    [[nodiscard]] bool encodeAndWriteSilentAudioFrame(QString& errorMessage);
     [[nodiscard]] bool encodeAndWriteAudioFrame(QString& errorMessage);
-    [[nodiscard]] bool writeSilentAudioUntilVideoFrame(QString& errorMessage);
     void flushEncoder(AVCodecContext *codecContext, int streamIndex);
 };
 

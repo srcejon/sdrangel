@@ -29,14 +29,13 @@
 #include <QSet>
 #include <QSize>
 
-#include <opencv2/videoio.hpp>
-
 #include "util/message.h"
 #include "util/messagequeue.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
 class CameraPostProcessor;
+class CameraVideoWriter;
 class CameraYouTubeStreamer;
 
 class CameraRecorder : public QObject
@@ -156,8 +155,8 @@ private:
     CameraSettings m_settings;
     bool m_captureActive;
     quint64 m_captureEpoch = 0;
-    cv::VideoWriter m_calibratedVideoWriter;
-    cv::VideoWriter m_processedVideoWriter;
+    std::unique_ptr<CameraVideoWriter> m_calibratedVideoWriter;
+    std::unique_ptr<CameraVideoWriter> m_processedVideoWriter;
     QSize m_calibratedVideoWriterSize;
     QSize m_processedVideoWriterSize;
     std::deque<BufferedVideoFrame> m_preRecordVideoFrames;
@@ -196,8 +195,8 @@ private:
     void closeVideoWriters();
     void closeYouTubeStream();
     void updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage);
-    bool ensureVideoWriter(cv::VideoWriter& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant);
-    void writeVideoFrame(cv::VideoWriter& writer, const QImage& frameToWrite);
+    bool ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant);
+    bool writeVideoFrame(CameraVideoWriter& writer, const QImage& frameToWrite, const QString& variant);
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     int preRecordBufferFrameLimit() const;
     int outputQueueFrameLimit() const;

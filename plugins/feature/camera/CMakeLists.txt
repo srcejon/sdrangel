@@ -14,6 +14,7 @@ set(camera_SOURCES
     cameraimageutils.cpp
     cameraimageprocessor.cpp
     camerarecorder.cpp
+    cameravideowriter.cpp
     camerayoutubestreamer.cpp
     cameraplatesolver.cpp
     camerapostprocessor.cpp
@@ -41,6 +42,7 @@ set(camera_HEADERS
     cameraimageutils.h
     cameraimageprocessor.h
     camerarecorder.h
+    cameravideowriter.h
     camerayoutubestreamer.h
     cameraplatesolver.h
     camerapipelineframe.h

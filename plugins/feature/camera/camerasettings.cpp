@@ -201,6 +201,7 @@ void CameraSettings::resetToDefaults()
     m_youtubeStreamFps = 25;
     m_youtubeStreamWidth = 0;
     m_youtubeStreamHeight = 0;
+    m_videoCodec = VideoCodecH264;
     m_videoLoop = false;
     m_videoPlaybackRate = 1.0;
     m_videoHwAcceleration = true;
@@ -648,6 +649,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(251, m_youtubeStreamFps);
     s.writeS32(252, m_youtubeStreamWidth);
     s.writeS32(253, m_youtubeStreamHeight);
+    s.writeS32(254, static_cast<qint32>(m_videoCodec));
 
     return s.final();
 }
@@ -991,6 +993,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(251, &m_youtubeStreamFps, 25);
         d.readS32(252, &m_youtubeStreamWidth, 0);
         d.readS32(253, &m_youtubeStreamHeight, 0);
+        qint32 videoCodec = static_cast<qint32>(VideoCodecH264);
+        d.readS32(254, &videoCodec, static_cast<qint32>(VideoCodecH264));
+        m_videoCodec = static_cast<VideoCodec>(videoCodec);
         d.readDouble(207, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(211, &m_postProcessUseCuda, false);
@@ -1147,6 +1152,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_youtubeStreamFps = qBound(1, m_youtubeStreamFps, 120);
         m_youtubeStreamWidth = qBound(0, m_youtubeStreamWidth, 16384);
         m_youtubeStreamHeight = qBound(0, m_youtubeStreamHeight, 16384);
+        m_videoCodec = static_cast<VideoCodec>(qBound(0, static_cast<int>(m_videoCodec), 1));
         m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
         m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
         m_altitude = qBound(m_minAltitude, m_altitude, m_maxAltitude);
@@ -1371,6 +1377,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoHwAcceleration")) {
         m_videoHwAcceleration = settings.m_videoHwAcceleration;
+    }
+    if (settingsKeys.contains("videoCodec")) {
+        m_videoCodec = static_cast<VideoCodec>(qBound(0, static_cast<int>(settings.m_videoCodec), 1));
     }
     if (settingsKeys.contains("videoPreRecordBufferSeconds")) {
         m_videoPreRecordBufferSeconds = qBound(0, settings.m_videoPreRecordBufferSeconds, 60);
@@ -2122,6 +2131,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoHwAcceleration") || force) {
         ostr << " m_videoHwAcceleration: " << m_videoHwAcceleration;
+    }
+    if (settingsKeys.contains("videoCodec") || force) {
+        ostr << " m_videoCodec: " << static_cast<int>(m_videoCodec);
     }
     if (settingsKeys.contains("videoPreRecordBufferSeconds") || force) {
         ostr << " m_videoPreRecordBufferSeconds: " << m_videoPreRecordBufferSeconds;

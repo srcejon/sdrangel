@@ -497,6 +497,7 @@ private slots:
     void on_youtubeStreamFpsSpin_valueChanged(int value);
     void on_youtubeStreamWidthSpin_valueChanged(int value);
     void on_youtubeStreamHeightSpin_valueChanged(int value);
+    void on_videoCodecCombo_currentIndexChanged(int index);
     void on_videoHwAccelerationCheck_toggled(bool checked);
     void on_videoPreRecordBufferSpin_valueChanged(int value);
     void on_imageRecordLimitSpin_valueChanged(int value);

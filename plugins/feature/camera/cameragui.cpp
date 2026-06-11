@@ -1477,6 +1477,7 @@ void CameraGUI::displaySettings()
     settingsUI()->youtubeStreamFpsSpin->setValue(m_settings.m_youtubeStreamFps);
     settingsUI()->youtubeStreamWidthSpin->setValue(m_settings.m_youtubeStreamWidth);
     settingsUI()->youtubeStreamHeightSpin->setValue(m_settings.m_youtubeStreamHeight);
+    settingsUI()->videoCodecCombo->setCurrentIndex(static_cast<int>(m_settings.m_videoCodec));
     settingsUI()->videoHwAccelerationCheck->setChecked(m_settings.m_videoHwAcceleration);
     settingsUI()->videoPreRecordBufferSpin->setValue(m_settings.m_videoPreRecordBufferSeconds);
     settingsUI()->imageRecordLimitSpin->setValue(m_settings.m_imageRecordLimit);
@@ -2231,6 +2232,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->youtubeStreamFpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamFpsSpin_valueChanged);
     QObject::connect(settingsUI()->youtubeStreamWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamWidthSpin_valueChanged);
     QObject::connect(settingsUI()->youtubeStreamHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamHeightSpin_valueChanged);
+    QObject::connect(settingsUI()->videoCodecCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_videoCodecCombo_currentIndexChanged);
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
     QObject::connect(settingsUI()->videoPreRecordBufferSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoPreRecordBufferSpin_valueChanged);
     QObject::connect(settingsUI()->imageRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_imageRecordLimitSpin_valueChanged);
@@ -5785,6 +5787,12 @@ void CameraGUI::on_youtubeStreamHeightSpin_valueChanged(int value)
 {
     m_settings.m_youtubeStreamHeight = value;
     applySetting("youtubeStreamHeight");
+}
+
+void CameraGUI::on_videoCodecCombo_currentIndexChanged(int index)
+{
+    m_settings.m_videoCodec = static_cast<CameraSettings::VideoCodec>(qBound(0, index, 1));
+    applySetting("videoCodec");
 }
 
 void CameraGUI::on_videoHwAccelerationCheck_toggled(bool checked)

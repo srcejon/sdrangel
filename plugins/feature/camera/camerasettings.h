@@ -103,6 +103,12 @@ struct CameraSettings
         KeogramMiddayToMidday
     };
 
+    enum VideoCodec
+    {
+        VideoCodecH264 = 0,
+        VideoCodecH265
+    };
+
     enum LensProjection
     {
         LensProjectionRectilinear = 0,
@@ -383,6 +389,7 @@ struct CameraSettings
     int m_youtubeStreamFps;        ///< Stream frame rate
     int m_youtubeStreamWidth;      ///< Output stream width; 0 = source width
     int m_youtubeStreamHeight;     ///< Output stream height; 0 = source height
+    VideoCodec m_videoCodec;       ///< Codec used for saved video recordings
     bool m_videoLoop;
     double m_videoPlaybackRate;
     bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported

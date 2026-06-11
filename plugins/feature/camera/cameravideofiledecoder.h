@@ -19,6 +19,8 @@
 #ifndef INCLUDE_FEATURE_CAMERA_VIDEO_FILE_DECODER_H_
 #define INCLUDE_FEATURE_CAMERA_VIDEO_FILE_DECODER_H_
 
+#include <deque>
+
 #include <QByteArray>
 #include <QImage>
 #include <QString>
@@ -55,6 +57,12 @@ public:
     [[nodiscard]] double frameRate() const { return m_frameRate; }
 
 private:
+    struct PendingVideoFrame
+    {
+        QImage m_image;
+        qint64 m_positionMs = -1;
+    };
+
     AVFormatContext *m_formatContext = nullptr;
     AVCodecContext *m_videoCodecContext = nullptr;
     AVCodecContext *m_audioCodecContext = nullptr;
@@ -71,11 +79,14 @@ private:
     bool m_eof = false;
     bool m_videoDraining = false;
     bool m_audioDraining = false;
+    std::deque<PendingVideoFrame> m_pendingVideoFrames;
 
     [[nodiscard]] bool openVideoDecoder(QString& errorMessage);
     [[nodiscard]] bool openAudioDecoder(QString& errorMessage);
     [[nodiscard]] bool openResampler(QString& errorMessage);
     [[nodiscard]] bool receiveVideoFrame(QImage& image, qint64& positionMs, QString& errorMessage);
+    [[nodiscard]] bool queueDecodedVideoFrames(QString& errorMessage);
+    [[nodiscard]] bool readAheadAudio(QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool drainAudio(QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool appendFrameAudio(const AVFrame *frame, QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool convertFrameToImage(const AVFrame *frame, QImage& image, QString& errorMessage);

@@ -55,6 +55,7 @@ private:
 
     bool m_capturing;
     bool m_muted;
+    bool m_captureSourceActive;
     int m_sampleRate;
     MessageQueue *m_recordingMessageQueue;
     AudioFifo m_captureAudioFifo;

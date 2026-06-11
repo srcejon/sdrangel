@@ -1285,15 +1285,17 @@ bool CameraWorker::openVideoFileDecoder()
         return false;
     }
 
+    const int audioOutputSampleRate = m_qtAudio.startFilePlayback(m_settings, getInputMessageQueue());
     m_videoFileDecoder.reset(new CameraVideoFileDecoder());
     QString errorMessage;
-    if (!m_videoFileDecoder->open(m_settings.m_videoFileCameraPath, errorMessage))
+    if (!m_videoFileDecoder->open(m_settings.m_videoFileCameraPath, errorMessage, audioOutputSampleRate))
     {
         reportErrorToFeature(
             QStringLiteral("videoFileOpen:%1").arg(m_settings.m_videoFileCameraPath),
             tr("Video file could not be opened"),
             errorMessage);
         m_videoFileDecoder.reset();
+        m_qtAudio.stop();
         reportVideoFilePlaybackToGUI();
         return false;
     }
@@ -1301,7 +1303,6 @@ bool CameraWorker::openVideoFileDecoder()
     m_videoFilePositionMs = 0;
     m_videoFileDurationMs = m_videoFileDecoder->durationMs();
     m_videoFilePlaying = false;
-    m_qtAudio.startFilePlayback(m_settings, getInputMessageQueue());
     reportVideoFilePlaybackToGUI();
     return true;
 }

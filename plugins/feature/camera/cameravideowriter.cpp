@@ -181,45 +181,74 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
     }
     m_streamIndex = stream->index;
 
-    m_codecContext = avcodec_alloc_context3(codec);
-    if (!m_codecContext)
+    const auto tryOpenEncoder = [&](const AVCodec *candidateCodec, QString& openError) -> bool
     {
-        errorMessage = QStringLiteral("Cannot allocate %1 encoder context").arg(codecName(settings.m_codec));
-        close();
-        return false;
-    }
-
-    m_codecContext->codec_id = codec->id;
-    m_codecContext->codec_type = AVMEDIA_TYPE_VIDEO;
-    m_codecContext->width = videoSize.width();
-    m_codecContext->height = videoSize.height();
-    m_codecContext->time_base = timeBase;
-    m_codecContext->framerate = frameRate;
-    m_codecContext->gop_size = std::max(1, static_cast<int>(std::llround(requestedFps * 2.0)));
-    m_codecContext->max_b_frames = 0;
-    m_codecContext->pix_fmt = AV_PIX_FMT_YUV420P;
-    m_codecContext->bit_rate = 10000000;
-
-    if (m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
-        m_codecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    }
-
-    const QString encoderName = QString::fromLatin1(codec->name);
-    const bool nvencEncoder = encoderName.contains(QStringLiteral("nvenc"), Qt::CaseInsensitive);
-    if (!nvencEncoder)
-    {
-        av_opt_set(m_codecContext->priv_data, "preset", "veryfast", 0);
-        if (settings.m_codec == CameraSettings::VideoCodecH264) {
-            av_opt_set(m_codecContext->priv_data, "tune", "zerolatency", 0);
+        m_codecContext = avcodec_alloc_context3(candidateCodec);
+        if (!m_codecContext)
+        {
+            openError = QStringLiteral("Cannot allocate %1 encoder context").arg(codecName(settings.m_codec));
+            return false;
         }
-    }
 
-    ret = avcodec_open2(m_codecContext, codec, nullptr);
-    if (ret < 0)
+        m_codecContext->codec_id = candidateCodec->id;
+        m_codecContext->codec_type = AVMEDIA_TYPE_VIDEO;
+        m_codecContext->width = videoSize.width();
+        m_codecContext->height = videoSize.height();
+        m_codecContext->time_base = timeBase;
+        m_codecContext->framerate = frameRate;
+        m_codecContext->gop_size = std::max(1, static_cast<int>(std::llround(requestedFps * 2.0)));
+        m_codecContext->max_b_frames = 0;
+        m_codecContext->pix_fmt = AV_PIX_FMT_YUV420P;
+        m_codecContext->bit_rate = 10000000;
+
+        if (m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
+            m_codecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+        }
+
+        const QString encoderName = QString::fromLatin1(candidateCodec->name);
+        const bool nvencEncoder = encoderName.contains(QStringLiteral("nvenc"), Qt::CaseInsensitive);
+        if (!nvencEncoder)
+        {
+            av_opt_set(m_codecContext->priv_data, "preset", "veryfast", 0);
+            if (settings.m_codec == CameraSettings::VideoCodecH264) {
+                av_opt_set(m_codecContext->priv_data, "tune", "zerolatency", 0);
+            }
+        }
+
+        const int openRet = avcodec_open2(m_codecContext, candidateCodec, nullptr);
+        if (openRet < 0)
+        {
+            openError = QStringLiteral("Cannot open %1 encoder %2: %3")
+                .arg(codecName(settings.m_codec), encoderName, avErrorString(openRet));
+            avcodec_free_context(&m_codecContext);
+            return false;
+        }
+
+        return true;
+    };
+
+    QString openError;
+    if (!tryOpenEncoder(codec, openError))
     {
-        errorMessage = QStringLiteral("Cannot open %1 encoder: %2").arg(codecName(settings.m_codec), avErrorString(ret));
-        close();
-        return false;
+        const QString failedEncoderName = QString::fromLatin1(codec->name);
+        const bool failedHardwareEncoder = failedEncoderName.contains(QStringLiteral("nvenc"), Qt::CaseInsensitive);
+        const AVCodec *softwareCodec = failedHardwareEncoder ? avcodec_find_encoder_by_name(softwareEncoderName) : nullptr;
+        if (softwareCodec && (softwareCodec != codec))
+        {
+            qWarning() << "CameraVideoWriter: hardware encoder failed, retrying software encoder:" << openError;
+            if (!tryOpenEncoder(softwareCodec, openError))
+            {
+                errorMessage = openError;
+                close();
+                return false;
+            }
+        }
+        else
+        {
+            errorMessage = openError;
+            close();
+            return false;
+        }
     }
 
     ret = avcodec_parameters_from_context(stream->codecpar, m_codecContext);

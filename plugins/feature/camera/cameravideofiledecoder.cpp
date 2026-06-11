@@ -49,14 +49,16 @@ bool CameraVideoFileDecoder::isOpen() const
     return m_formatContext && m_videoCodecContext && (m_videoStreamIndex >= 0);
 }
 
-bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage)
+bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage, int outputSampleRate)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(fileName)
+    Q_UNUSED(outputSampleRate)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
     close();
+    m_outputSampleRate = std::max(1000, outputSampleRate);
 
     const QByteArray fileNameUtf8 = fileName.toUtf8();
     int ret = avformat_open_input(&m_formatContext, fileNameUtf8.constData(), nullptr, nullptr);
@@ -153,6 +155,7 @@ void CameraVideoFileDecoder::close()
     m_audioStreamIndex = -1;
     m_durationMs = 0;
     m_frameRate = 25.0;
+    m_outputSampleRate = 48000;
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;

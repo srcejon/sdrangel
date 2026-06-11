@@ -70,7 +70,7 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
     m_capturing = true;
 }
 
-void CameraQtAudioController::startFilePlayback(const CameraSettings& settings, MessageQueue *messageQueue)
+int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, MessageQueue *messageQueue)
 {
     stop();
 
@@ -83,6 +83,7 @@ void CameraQtAudioController::startFilePlayback(const CameraSettings& settings, 
     m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
     m_outputAudioFifo.clear();
     m_capturing = true;
+    return m_sampleRate;
 }
 
 void CameraQtAudioController::stop()

@@ -38,7 +38,7 @@ public:
     bool isCapturing() const { return m_capturing; }
     void setRecordingMessageQueue(MessageQueue *messageQueue) { m_recordingMessageQueue = messageQueue; }
     void start(const CameraSettings& settings, MessageQueue *messageQueue);
-    void startFilePlayback(const CameraSettings& settings, MessageQueue *messageQueue);
+    int startFilePlayback(const CameraSettings& settings, MessageQueue *messageQueue);
     void stop();
     void setMuted(bool muted);
     void clearMonitorAudio();

@@ -37,7 +37,7 @@ public:
     ~CameraVideoFileDecoder();
 
     [[nodiscard]] bool isOpen() const;
-    [[nodiscard]] bool open(const QString& fileName, QString& errorMessage);
+    [[nodiscard]] bool open(const QString& fileName, QString& errorMessage, int outputSampleRate = 48000);
     void close();
     void seek(qint64 positionMs);
     [[nodiscard]] bool readNextFrame(
@@ -55,8 +55,6 @@ public:
     [[nodiscard]] double frameRate() const { return m_frameRate; }
 
 private:
-    static constexpr int m_outputSampleRate = 48000;
-
     AVFormatContext *m_formatContext = nullptr;
     AVCodecContext *m_videoCodecContext = nullptr;
     AVCodecContext *m_audioCodecContext = nullptr;
@@ -69,6 +67,7 @@ private:
     int m_audioStreamIndex = -1;
     qint64 m_durationMs = 0;
     double m_frameRate = 25.0;
+    int m_outputSampleRate = 48000;
     bool m_eof = false;
     bool m_videoDraining = false;
     bool m_audioDraining = false;

@@ -2326,6 +2326,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->trackObjectsButton, &QToolButton::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectTrailsCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectTrailsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectHeatMapCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectHeatMapCheck_toggled);
+    QObject::connect(settingsUI()->trackObjectClearHeatMapButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectClearHeatMapButton_clicked);
     QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
     QObject::connect(settingsUI()->trackObjectColorButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectColorButton_clicked);
     QObject::connect(settingsUI()->trackObjectFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectFontScaleSpin_valueChanged);
@@ -6881,6 +6882,13 @@ void CameraGUI::on_trackObjectHeatMapCheck_toggled(bool checked)
 {
     m_settings.m_trackObjectHeatMap = checked;
     applySetting("trackObjectHeatMap");
+}
+
+void CameraGUI::on_trackObjectClearHeatMapButton_clicked()
+{
+    if (m_camera) {
+        m_camera->getInputMessageQueue()->push(Camera::MsgClearTrackedObjectHeatMap::create());
+    }
 }
 
 void CameraGUI::on_trackObjectMinElevationSpin_valueChanged(double value)

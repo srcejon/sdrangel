@@ -589,6 +589,7 @@ private slots:
     void on_trackObjectsCheck_toggled(bool checked);
     void on_trackObjectTrailsCheck_toggled(bool checked);
     void on_trackObjectHeatMapCheck_toggled(bool checked);
+    void on_trackObjectClearHeatMapButton_clicked();
     void on_trackObjectMinElevationSpin_valueChanged(double value);
     void on_trackObjectColorButton_clicked();
     void on_trackObjectFontScaleSpin_valueChanged(double value);

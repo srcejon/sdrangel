@@ -45,6 +45,7 @@ MESSAGE_CLASS_DEFINITION(Camera::MsgCaptureActive, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgReportError, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgDeleteStackFrame, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgClearTrackedObjectHeatMap, Message)
 
 const char* const Camera::m_featureIdURI = "sdrangel.feature.camera";
 const char* const Camera::m_featureId = "Camera";
@@ -486,6 +487,13 @@ bool Camera::handleMessage(const Message& cmd)
         const MsgDeleteStackFrame& msg = (const MsgDeleteStackFrame&) cmd;
         if (m_frameStacker) {
             m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgDeleteStackFrame::create(msg.getFrameIndex()));
+        }
+        return true;
+    }
+    else if (MsgClearTrackedObjectHeatMap::match(cmd))
+    {
+        if (m_postProcessor) {
+            m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgClearTrackedObjectHeatMap::create());
         }
         return true;
     }

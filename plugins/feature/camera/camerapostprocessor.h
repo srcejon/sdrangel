@@ -185,6 +185,20 @@ public:
         { }
     };
 
+    class MsgClearTrackedObjectHeatMap : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgClearTrackedObjectHeatMap* create()
+        {
+            return new MsgClearTrackedObjectHeatMap();
+        }
+
+    private:
+        MsgClearTrackedObjectHeatMap() :
+            Message()
+        { }
+    };
 
     CameraPostProcessor();
     ~CameraPostProcessor();
@@ -233,6 +247,10 @@ private:
     float m_weatherWindSpeed = std::numeric_limits<float>::quiet_NaN();
     float m_weatherWindDirection = std::numeric_limits<float>::quiet_NaN();
     QHash<QString, TrackedMapObject> m_trackedMapObjects;
+    QImage m_trackedObjectHeatMap;
+    QSize m_trackedObjectHeatMapSize;
+    QHash<QString, QPointF> m_trackedObjectHeatMapLastPoints;
+    bool m_trackedObjectHeatMapSkipSeed = false;
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
     bool m_processingFrame;
@@ -253,7 +271,7 @@ private:
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     void applySkyGridOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyConstellationOverlay(QImage& image) const;
-    void applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr) const;
+    void applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
     void applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     [[nodiscard]] QString expandOverlayTextTemplate() const;

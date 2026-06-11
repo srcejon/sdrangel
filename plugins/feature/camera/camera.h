@@ -203,6 +203,21 @@ public:
         { }
     };
 
+    class MsgClearTrackedObjectHeatMap : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgClearTrackedObjectHeatMap* create()
+        {
+            return new MsgClearTrackedObjectHeatMap();
+        }
+
+    private:
+        MsgClearTrackedObjectHeatMap() :
+            Message()
+        { }
+    };
+
     Camera(WebAPIAdapterInterface *webAPIAdapterInterface);
     ~Camera() override;
     void destroy() override { delete this; }

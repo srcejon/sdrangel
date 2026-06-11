@@ -31,6 +31,7 @@ extern "C" {
 #include <libavutil/error.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
+#include <libavutil/samplefmt.h>
 #include <libswscale/swscale.h>
 }
 #endif
@@ -211,6 +212,12 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
     }
     stream->time_base = m_codecContext->time_base;
 
+    if (!openAudioStream(errorMessage))
+    {
+        close();
+        return false;
+    }
+
     AVDictionary *ioOptions = nullptr;
     av_dict_set(&ioOptions, "rtmp_live", "live", 0);
     ret = avio_open2(&m_formatContext->pb, targetUrlUtf8.constData(), AVIO_FLAG_WRITE, nullptr, &ioOptions);
@@ -275,6 +282,7 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
     m_settings = settings;
     m_streamSize = streamSize;
     m_frameIndex = 0;
+    m_audioFrameIndex = 0;
     m_lastFrameElapsedMs = -1;
     m_nextFrameElapsedMs = 0;
     m_packetsWritten = 0;
@@ -283,6 +291,128 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
     m_streamTimer.restart();
     qDebug() << "CameraYouTubeStreamer: opened stream" << targetUrl
              << streamSize << "fps" << fps << "bitrateKbps" << settings.m_bitrateKbps;
+    return true;
+#endif
+}
+
+bool CameraYouTubeStreamer::openAudioStream(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    const AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_AAC);
+    if (!codec)
+    {
+        errorMessage = QStringLiteral("No AAC encoder is available in FFmpeg");
+        return false;
+    }
+
+    AVStream *stream = avformat_new_stream(m_formatContext, nullptr);
+    if (!stream)
+    {
+        errorMessage = QStringLiteral("Cannot create YouTube audio stream");
+        return false;
+    }
+    m_audioStreamIndex = stream->index;
+
+    m_audioCodecContext = avcodec_alloc_context3(codec);
+    if (!m_audioCodecContext)
+    {
+        errorMessage = QStringLiteral("Cannot allocate AAC encoder context");
+        return false;
+    }
+
+    m_audioCodecContext->codec_id = codec->id;
+    m_audioCodecContext->codec_type = AVMEDIA_TYPE_AUDIO;
+    m_audioCodecContext->sample_rate = 44100;
+    m_audioCodecContext->sample_fmt = codec->sample_fmts ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
+    m_audioCodecContext->bit_rate = 128000;
+    m_audioCodecContext->channel_layout = AV_CH_LAYOUT_STEREO;
+    m_audioCodecContext->channels = 2;
+    m_audioCodecContext->time_base = AVRational{1, m_audioCodecContext->sample_rate};
+
+    if (m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
+        m_audioCodecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+
+    int ret = avcodec_open2(m_audioCodecContext, codec, nullptr);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot open AAC encoder: %1").arg(avErrorString(ret));
+        return false;
+    }
+
+    ret = avcodec_parameters_from_context(stream->codecpar, m_audioCodecContext);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot copy audio encoder parameters: %1").arg(avErrorString(ret));
+        return false;
+    }
+    stream->time_base = m_audioCodecContext->time_base;
+
+    m_audioFrame = av_frame_alloc();
+    if (!m_audioFrame)
+    {
+        errorMessage = QStringLiteral("Cannot allocate YouTube stream audio frame");
+        return false;
+    }
+    m_audioFrame->format = m_audioCodecContext->sample_fmt;
+    m_audioFrame->channel_layout = m_audioCodecContext->channel_layout;
+    m_audioFrame->sample_rate = m_audioCodecContext->sample_rate;
+    m_audioFrame->nb_samples = m_audioCodecContext->frame_size > 0 ? m_audioCodecContext->frame_size : 1024;
+
+    ret = av_frame_get_buffer(m_audioFrame, 0);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot allocate YouTube stream audio buffer: %1").arg(avErrorString(ret));
+        return false;
+    }
+
+    return true;
+#endif
+}
+
+bool CameraYouTubeStreamer::writeEncodedPacket(AVPacket *packet, AVCodecContext *codecContext, int streamIndex, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(packet)
+    Q_UNUSED(codecContext)
+    Q_UNUSED(streamIndex)
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    packet->stream_index = streamIndex;
+    av_packet_rescale_ts(packet, codecContext->time_base, m_formatContext->streams[streamIndex]->time_base);
+    if (packet->duration <= 0) {
+        packet->duration = av_rescale_q(1, codecContext->time_base, m_formatContext->streams[streamIndex]->time_base);
+    }
+    const int packetSize = packet->size;
+    const int ret = av_interleaved_write_frame(m_formatContext, packet);
+    if ((ret >= 0) && m_formatContext->pb) {
+        avio_flush(m_formatContext->pb);
+    }
+    av_packet_unref(packet);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot write YouTube stream packet: %1").arg(avErrorString(ret));
+        return false;
+    }
+
+    ++m_packetsWritten;
+    m_bytesWritten += packetSize;
+
+    const qint64 elapsedMs = m_streamTimer.elapsed();
+    if ((elapsedMs - m_lastStatsElapsedMs) >= 5000)
+    {
+        qDebug() << "CameraYouTubeStreamer: wrote packets" << m_packetsWritten
+                 << "bytes" << m_bytesWritten
+                 << "videoFrames" << m_frameIndex
+                 << "audioFrames" << m_audioFrameIndex
+                 << "elapsedMs" << elapsedMs;
+        m_lastStatsElapsedMs = elapsedMs;
+    }
+
     return true;
 #endif
 }
@@ -323,38 +453,79 @@ bool CameraYouTubeStreamer::encodeAndWriteRgbFrame(const QImage& rgb, QString& e
     bool ok = true;
     while ((ret = avcodec_receive_packet(m_codecContext, packet)) >= 0)
     {
-        packet->stream_index = m_streamIndex;
-        av_packet_rescale_ts(packet, m_codecContext->time_base, m_formatContext->streams[m_streamIndex]->time_base);
-        packet->duration = av_rescale_q(1, m_codecContext->time_base, m_formatContext->streams[m_streamIndex]->time_base);
-        const int packetSize = packet->size;
-        ret = av_interleaved_write_frame(m_formatContext, packet);
-        if ((ret >= 0) && m_formatContext->pb) {
-            avio_flush(m_formatContext->pb);
-        }
-        av_packet_unref(packet);
-        if (ret < 0)
+        if (!writeEncodedPacket(packet, m_codecContext, m_streamIndex, errorMessage))
         {
-            errorMessage = QStringLiteral("Cannot write YouTube stream packet: %1").arg(avErrorString(ret));
             ok = false;
             break;
-        }
-        ++m_packetsWritten;
-        m_bytesWritten += packetSize;
-
-        const qint64 elapsedMs = m_streamTimer.elapsed();
-        if ((elapsedMs - m_lastStatsElapsedMs) >= 5000)
-        {
-            qDebug() << "CameraYouTubeStreamer: wrote packets" << m_packetsWritten
-                     << "bytes" << m_bytesWritten
-                     << "frames" << m_frameIndex
-                     << "elapsedMs" << elapsedMs;
-            m_lastStatsElapsedMs = elapsedMs;
         }
     }
 
     if (ok && (ret != AVERROR(EAGAIN)) && (ret != AVERROR_EOF))
     {
         errorMessage = QStringLiteral("Cannot receive YouTube stream packet: %1").arg(avErrorString(ret));
+        ok = false;
+    }
+
+    av_packet_free(&packet);
+    return ok;
+#endif
+}
+
+bool CameraYouTubeStreamer::encodeAndWriteSilentAudioFrame(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    int ret = av_frame_make_writable(m_audioFrame);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot write to YouTube stream audio buffer: %1").arg(avErrorString(ret));
+        return false;
+    }
+
+    ret = av_samples_set_silence(
+        m_audioFrame->data,
+        0,
+        m_audioFrame->nb_samples,
+        m_audioCodecContext->channels,
+        m_audioCodecContext->sample_fmt);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot clear YouTube stream audio buffer: %1").arg(avErrorString(ret));
+        return false;
+    }
+
+    m_audioFrame->pts = m_audioFrameIndex;
+    m_audioFrameIndex += m_audioFrame->nb_samples;
+
+    ret = avcodec_send_frame(m_audioCodecContext, m_audioFrame);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot encode YouTube stream audio frame: %1").arg(avErrorString(ret));
+        return false;
+    }
+
+    AVPacket *packet = av_packet_alloc();
+    if (!packet)
+    {
+        errorMessage = QStringLiteral("Cannot allocate YouTube stream audio packet");
+        return false;
+    }
+
+    bool ok = true;
+    while ((ret = avcodec_receive_packet(m_audioCodecContext, packet)) >= 0)
+    {
+        if (!writeEncodedPacket(packet, m_audioCodecContext, m_audioStreamIndex, errorMessage))
+        {
+            ok = false;
+            break;
+        }
+    }
+
+    if (ok && (ret != AVERROR(EAGAIN)) && (ret != AVERROR_EOF))
+    {
+        errorMessage = QStringLiteral("Cannot receive YouTube stream audio packet: %1").arg(avErrorString(ret));
         ok = false;
     }
 
@@ -410,28 +581,56 @@ bool CameraYouTubeStreamer::writeFrame(const QImage& image, QString& errorMessag
         ++framesWritten;
     } while ((m_nextFrameElapsedMs <= elapsedMs) && (framesWritten < maxFramesPerInputFrame));
 
+    const qint64 audioAheadMs = av_rescale_q(
+        m_audioFrameIndex,
+        m_audioCodecContext->time_base,
+        AVRational{1, 1000});
+    qint64 currentAudioMs = audioAheadMs;
+    int audioFramesWritten = 0;
+
+    while ((currentAudioMs <= elapsedMs + framePeriodMs) && (audioFramesWritten < fps * 2))
+    {
+        if (!encodeAndWriteSilentAudioFrame(errorMessage)) {
+            return false;
+        }
+        currentAudioMs = av_rescale_q(
+            m_audioFrameIndex,
+            m_audioCodecContext->time_base,
+            AVRational{1, 1000});
+        ++audioFramesWritten;
+    }
+
     return true;
+#endif
+}
+
+void CameraYouTubeStreamer::flushEncoder(AVCodecContext *codecContext, int streamIndex)
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (!codecContext || !m_formatContext || (streamIndex < 0)) {
+        return;
+    }
+
+    avcodec_send_frame(codecContext, nullptr);
+    AVPacket *packet = av_packet_alloc();
+    if (packet)
+    {
+        QString ignoredError;
+        while (avcodec_receive_packet(codecContext, packet) >= 0) {
+            writeEncodedPacket(packet, codecContext, streamIndex, ignoredError);
+        }
+        av_packet_free(&packet);
+    }
 #endif
 }
 
 void CameraYouTubeStreamer::close()
 {
 #ifdef CAMERA_FFMPEG_STREAMING
-    if (m_headerWritten && m_codecContext && m_formatContext)
+    if (m_headerWritten && m_formatContext)
     {
-        avcodec_send_frame(m_codecContext, nullptr);
-        AVPacket *packet = av_packet_alloc();
-        if (packet)
-        {
-            while (avcodec_receive_packet(m_codecContext, packet) >= 0)
-            {
-                packet->stream_index = m_streamIndex;
-                av_packet_rescale_ts(packet, m_codecContext->time_base, m_formatContext->streams[m_streamIndex]->time_base);
-                av_interleaved_write_frame(m_formatContext, packet);
-                av_packet_unref(packet);
-            }
-            av_packet_free(&packet);
-        }
+        flushEncoder(m_codecContext, m_streamIndex);
+        flushEncoder(m_audioCodecContext, m_audioStreamIndex);
     }
 
     if (m_formatContext)
@@ -448,8 +647,14 @@ void CameraYouTubeStreamer::close()
     if (m_codecContext) {
         avcodec_free_context(&m_codecContext);
     }
+    if (m_audioCodecContext) {
+        avcodec_free_context(&m_audioCodecContext);
+    }
     if (m_frame) {
         av_frame_free(&m_frame);
+    }
+    if (m_audioFrame) {
+        av_frame_free(&m_audioFrame);
     }
     if (m_swsContext)
     {
@@ -458,7 +663,9 @@ void CameraYouTubeStreamer::close()
     }
 #endif
     m_streamIndex = -1;
+    m_audioStreamIndex = -1;
     m_frameIndex = 0;
+    m_audioFrameIndex = 0;
     m_lastFrameElapsedMs = -1;
     m_nextFrameElapsedMs = 0;
     m_packetsWritten = 0;

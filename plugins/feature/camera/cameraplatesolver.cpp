@@ -7347,6 +7347,23 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
                 radialError,
                 visibleStar.magnitude
             });
+            if (debugCatalogStarMatches(catalogContext, visibleStar.catalogIndex))
+            {
+                qDebug().noquote() << "CameraPlateSolver: ANCHOR candidate for" << catalogDisplayName(catalogContext.catalogStars[visibleStar.catalogIndex])
+                    << "detection #" << detectionIndex
+                    << "center" << detection.m_center
+                    << "score" << score
+                    << "rank" << detectionRank
+                    << "brightness" << cachedDetectionBrightnessMetric(starDetections, detectionIndex)
+                    << "reliability" << reliability
+                    << "shapeScore" << shapeScore
+                    << "radialError" << radialError
+                    << "flux" << detection.m_flux
+                    << "peak" << detection.m_peakValue
+                    << "saturated" << detection.m_saturated
+                    << "snr" << detection.m_snr
+                    << "fwhm" << detection.m_fwhm;
+            }
         }
 
         std::sort(perCatalogAnchors.begin(), perCatalogAnchors.end(), [](const AnchorCandidate& lhs, const AnchorCandidate& rhs) {
@@ -9163,6 +9180,37 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
 
                 const double ratioError = std::fabs(detectionRatios[0] - catalogRatios[0])
                     + std::fabs(detectionRatios[1] - catalogRatios[1]);
+                if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE"))
+                {
+                    const QByteArray tripleSpec = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE");
+                    const QStringList tripleNames = QString::fromUtf8(tripleSpec).split(QLatin1Char(','), Qt::SkipEmptyParts);
+                    const std::array<int, 3> debugCatalogIndices {{anchors[a].catalogIndex, anchors[b].catalogIndex, anchors[c].catalogIndex}};
+                    const std::array<int, 3> debugDetectionIndices {{anchors[a].detectionIndex, anchors[b].detectionIndex, anchors[c].detectionIndex}};
+                    int matchedNames = 0;
+                    for (const QString& name : tripleNames)
+                    {
+                        for (int catalogIndex : debugCatalogIndices)
+                        {
+                            if ((catalogIndex >= 0)
+                                && (catalogIndex < catalogContext.catalogStars.size())
+                                && catalogDisplayName(catalogContext.catalogStars[catalogIndex]).contains(name.trimmed(), Qt::CaseInsensitive))
+                            {
+                                ++matchedNames;
+                                break;
+                            }
+                        }
+                    }
+                    if (matchedNames >= tripleNames.size())
+                    {
+                        qDebug().noquote() << "CameraPlateSolver: TRIPLE candidate"
+                            << debugTriangleAnchorSummary(catalogContext, starDetections, debugDetectionIndices, debugCatalogIndices)
+                            << "detectionRatios" << detectionRatios[0] << detectionRatios[1] << detectionRatios[2]
+                            << "catalogRatios" << catalogRatios[0] << catalogRatios[1] << catalogRatios[2]
+                            << "ratioError" << ratioError
+                            << "ratioTolerance" << ratioTolerance
+                            << "passes" << (ratioError <= ratioTolerance);
+                    }
+                }
                 if (ratioError > ratioTolerance) {
                     continue;
                 }
@@ -9197,6 +9245,37 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
                 triangleCandidate.anchorIndices = {{a, b, c}};
                 triangleCandidate.score = anchors[a].score + anchors[b].score + anchors[c].score + ratioError * 140.0 + fovPenalty;
                 triangleCandidate.baseFov = baseFov;
+                if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE"))
+                {
+                    const QByteArray tripleSpec = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE");
+                    const QStringList tripleNames = QString::fromUtf8(tripleSpec).split(QLatin1Char(','), Qt::SkipEmptyParts);
+                    const std::array<int, 3> debugCatalogIndices2 {{anchors[a].catalogIndex, anchors[b].catalogIndex, anchors[c].catalogIndex}};
+                    const std::array<int, 3> debugDetectionIndices2 {{anchors[a].detectionIndex, anchors[b].detectionIndex, anchors[c].detectionIndex}};
+                    int matchedNames2 = 0;
+                    for (const QString& name : tripleNames)
+                    {
+                        for (int catalogIndex : debugCatalogIndices2)
+                        {
+                            if ((catalogIndex >= 0)
+                                && (catalogIndex < catalogContext.catalogStars.size())
+                                && catalogDisplayName(catalogContext.catalogStars[catalogIndex]).contains(name.trimmed(), Qt::CaseInsensitive))
+                            {
+                                ++matchedNames2;
+                                break;
+                            }
+                        }
+                    }
+                    if (matchedNames2 >= tripleNames.size())
+                    {
+                        qDebug().noquote() << "CameraPlateSolver: TRIPLE appended"
+                            << debugTriangleAnchorSummary(catalogContext, starDetections, debugDetectionIndices2, debugCatalogIndices2)
+                            << "score" << triangleCandidate.score
+                            << "baseFov" << baseFov
+                            << "centerDelta" << centerDelta
+                            << "fovPenalty" << fovPenalty
+                            << "anchorScores" << anchors[a].score << anchors[b].score << anchors[c].score;
+                    }
+                }
                 triangleCandidates.append(triangleCandidate);
             }
         }
@@ -16465,6 +16544,284 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
     return best;
 }
 
+// Bright-detection-anchored verifier rescue: a failure-path-only fallback for narrow
+// guided-direction solves about to be rejected. The normal anchor/triangle/quad seed
+// generators all require >=3 mutually-consistent matches to "verify" a seed before it is
+// refined - in a sparse or contaminated field the true bright-aligned pose can fail that
+// gate at every roll, so it is generated but never survives to the acceptance check
+// (narrow-7: triangleVerifiedSeeds=0, quadVerifiedSeeds=0, guidedAnchorTriangleVerifiedSeeds=0
+// even though the named anchor IS detected at its catalog position). This routine instead
+// pairs each plausible bright detection with each plausible bright catalog star directly -
+// bypassing seed verification entirely - sweeps roll, refines with the same LM step the
+// guided-anchor search uses, and ranks the results with poseFalseAlarmLogOdds (the
+// Poisson count-surprise + bright-rarity statistic already proven to separate true
+// alignments from coincidental ones, see poseFalseAlarmLogOdds). It returns only the
+// single best-ranked candidate; the caller re-validates it through the unchanged
+// acceptance gate, so this can only ever surface a pose that the existing, already-tuned
+// gate independently agrees is acceptable.
+FinalMatchPassEvaluation searchBrightAnchorVerifierRescue(const CameraSettings& settings,
+                                                           const PlateSolveCatalogContext& catalogContext,
+                                                           const QSize& imageSize,
+                                                           const QDateTime& captureDateTimeUtc,
+                                                           const QVector<CameraPipelineStarDetection>& starDetections,
+                                                           const QVector<int>& detectionIndices,
+                                                           double finalMatchRadius)
+{
+    FinalMatchPassEvaluation best;
+    if (starDetections.isEmpty() || catalogContext.visibleStars.isEmpty()) {
+        return best;
+    }
+
+    // Brightest plausible detections: prefer saturated, then by flux; skip hot-pixel
+    // suspects (the same disqualifier findGuidedAnchorPairs applies to anchor candidates).
+    QVector<int> brightDetectionIndices;
+    {
+        QVector<int> candidates;
+        candidates.reserve(starDetections.size());
+        for (int i = 0; i < starDetections.size(); ++i) {
+            if (!starDetections[i].m_hotPixelSuspect) {
+                candidates.append(i);
+            }
+        }
+        std::sort(candidates.begin(), candidates.end(), [&starDetections](int lhs, int rhs) {
+            const CameraPipelineStarDetection& lhsDetection = starDetections[lhs];
+            const CameraPipelineStarDetection& rhsDetection = starDetections[rhs];
+            if (lhsDetection.m_saturated != rhsDetection.m_saturated) {
+                return lhsDetection.m_saturated;
+            }
+            return lhsDetection.m_flux > rhsDetection.m_flux;
+        });
+        constexpr int kMaxRescueBrightDetections = 4;
+        for (int i = 0; (i < candidates.size()) && (brightDetectionIndices.size() < kMaxRescueBrightDetections); ++i) {
+            brightDetectionIndices.append(candidates[i]);
+        }
+    }
+    if (brightDetectionIndices.isEmpty()) {
+        return best;
+    }
+
+    const double localRadiusDegrees = std::max(
+        static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
+        static_cast<double>(settings.m_fov) * 4.0);
+    const QVector<VisibleCatalogStar> localVisibleStars = selectLocalVisibleStars(
+        catalogContext.visibleStars,
+        settings.m_azimuth,
+        settings.m_elevation,
+        localRadiusDegrees,
+        2048);
+    if (localVisibleStars.isEmpty()) {
+        return best;
+    }
+
+    QVector<VisibleCatalogStar> brightCatalogStars;
+    constexpr int kMaxRescueBrightCatalogStars = 10;
+    for (const VisibleCatalogStar& star : localVisibleStars)
+    {
+        if ((star.catalogIndex < 0)
+            || (star.catalogIndex >= catalogContext.catalogStars.size())
+            || (star.magnitude > kNarrowGuidedBrightCatalogMaxMagnitude))
+        {
+            continue;
+        }
+        brightCatalogStars.append(star);
+        if (brightCatalogStars.size() >= kMaxRescueBrightCatalogStars) {
+            break;
+        }
+    }
+    if (brightCatalogStars.isEmpty()) {
+        return best;
+    }
+
+    QVector<int> allowedCatalogIndices;
+    allowedCatalogIndices.reserve(localVisibleStars.size());
+    for (const VisibleCatalogStar& star : localVisibleStars) {
+        allowedCatalogIndices.append(star.catalogIndex);
+    }
+
+    const bool useStartLens = plateSolveStartUsesLens(settings);
+    const double seedFov = std::clamp(static_cast<double>(settings.m_fov),
+        static_cast<double>(CameraSettings::m_minFov),
+        static_cast<double>(CameraSettings::m_maxFov));
+    const double centerOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
+    const double centerOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
+    const double distortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
+    const double anchorMatchRadius = std::max(finalMatchRadius,
+        std::min(128.0, std::max(finalMatchRadius, static_cast<double>(settings.m_plateSolveMatchRadius)) * 4.0));
+
+    QVector<double> rollSweepDegrees;
+    rollSweepDegrees.reserve(36);
+    for (double roll = 0.0; roll < 360.0; roll += 10.0) {
+        rollSweepDegrees.append(roll);
+    }
+
+    // Pass 1 (cheap): sweep every (bright detection x bright catalog star x roll) seed -
+    // evaluateAnchoredPose/refineGuidedAnchorSeedWithLm only match against the small
+    // allowedCatalogIndices set, no full-catalog projection - and keep just a small,
+    // basin-deduplicated shortlist ranked by the cheap guidedAnchorSearchScore. This mirrors
+    // the existing guided-anchor search's own cheap-then-expensive structure: without it,
+    // the combinatorial sweep (up to 4 x 10 x 36 = 1440 seeds, on every one of the outer
+    // solve's retry attempts) would multiply into thousands of full catalog-projection
+    // passes per image and make the suite impractically slow.
+    struct RescueShortlistCandidate
+    {
+        Evaluation refined;
+        double cheapScore = -std::numeric_limits<double>::infinity();
+    };
+    constexpr int kMaxRescueShortlist = 5;
+    QVector<RescueShortlistCandidate> shortlist;
+
+    for (int detectionIndex : brightDetectionIndices)
+    {
+        const CameraPipelineStarDetection& detection = starDetections[detectionIndex];
+        QVector<int> anchoredDetectionIndices = detectionIndices;
+        if (!anchoredDetectionIndices.contains(detectionIndex)) {
+            anchoredDetectionIndices.append(detectionIndex);
+        }
+
+        for (const VisibleCatalogStar& catalogStar : brightCatalogStars)
+        {
+            GuidedAnchorPair anchor;
+            anchor.detectionIndex = detectionIndex;
+            anchor.catalogIndex = catalogStar.catalogIndex;
+            anchor.magnitude = catalogStar.magnitude;
+            anchor.detectionReliability = cachedDetectionReliabilityMetric(starDetections, detectionIndex);
+
+            for (double rollSeed : rollSweepDegrees)
+            {
+                double alignedAzimuth = settings.m_azimuth;
+                double alignedElevation = settings.m_elevation;
+                double alignedRoll = rollSeed;
+                // Rotate the seed pose so the catalog star's projected position lands
+                // exactly on the chosen detection - the same alignment primitive the
+                // guided-anchor search uses to turn a (detection, star, roll) triple into
+                // a coherent starting pose, just without requiring a verified seed first.
+                if (!anchorAlignedPoseFromPixel(
+                        settings,
+                        imageSize,
+                        detection.m_center,
+                        catalogStar.vector,
+                        settings.m_azimuth,
+                        settings.m_elevation,
+                        rollSeed,
+                        seedFov,
+                        centerOffsetX,
+                        centerOffsetY,
+                        distortionK1,
+                        alignedAzimuth,
+                        alignedElevation,
+                        alignedRoll))
+                {
+                    continue;
+                }
+
+                Evaluation seed = evaluateAnchoredPose(
+                    settings,
+                    catalogContext,
+                    imageSize,
+                    captureDateTimeUtc,
+                    starDetections,
+                    anchoredDetectionIndices,
+                    allowedCatalogIndices,
+                    anchor,
+                    alignedAzimuth,
+                    alignedElevation,
+                    alignedRoll,
+                    seedFov,
+                    centerOffsetX,
+                    centerOffsetY,
+                    distortionK1,
+                    anchorMatchRadius);
+                if (!seed.valid) {
+                    continue;
+                }
+
+                const Evaluation refined = refineGuidedAnchorSeedWithLm(
+                    settings,
+                    catalogContext,
+                    imageSize,
+                    captureDateTimeUtc,
+                    starDetections,
+                    anchoredDetectionIndices,
+                    allowedCatalogIndices,
+                    anchor,
+                    seed,
+                    centerOffsetX,
+                    centerOffsetY,
+                    distortionK1,
+                    anchorMatchRadius,
+                    !isNarrowField(settings));
+                if (!refined.valid) {
+                    continue;
+                }
+
+                const double cheapScore = guidedAnchorSearchScore(refined, anchor, anchorMatchRadius);
+                if (!std::isfinite(cheapScore)) {
+                    continue;
+                }
+
+                int basinIndex = -1;
+                for (int i = 0; i < shortlist.size(); ++i) {
+                    if (sameEvaluationBasin(shortlist[i].refined, refined)) {
+                        basinIndex = i;
+                        break;
+                    }
+                }
+                if (basinIndex >= 0)
+                {
+                    if (cheapScore > shortlist[basinIndex].cheapScore) {
+                        shortlist[basinIndex] = RescueShortlistCandidate{refined, cheapScore};
+                    }
+                }
+                else
+                {
+                    shortlist.append(RescueShortlistCandidate{refined, cheapScore});
+                }
+            }
+        }
+    }
+
+    std::sort(shortlist.begin(), shortlist.end(),
+              [](const RescueShortlistCandidate& lhs, const RescueShortlistCandidate& rhs) {
+                  return lhs.cheapScore > rhs.cheapScore;
+              });
+    if (shortlist.size() > kMaxRescueShortlist) {
+        shortlist.resize(kMaxRescueShortlist);
+    }
+
+    // Pass 2 (expensive): only the handful of cheap-ranked, basin-distinct survivors get
+    // the full catalog-projection pass - poseFalseAlarmLogOdds remains the selection
+    // criterion between them, per the chosen implementation track.
+    double bestFalseAlarmLogOdds = -std::numeric_limits<double>::infinity();
+    for (const RescueShortlistCandidate& candidate : shortlist)
+    {
+        FinalMatchPassEvaluation candidatePass = evaluateFinalMatchPass(
+            settings,
+            catalogContext,
+            imageSize,
+            starDetections,
+            detectionIndices,
+            candidate.refined,
+            finalMatchRadius);
+        if (!candidatePass.projectorValid) {
+            continue;
+        }
+
+        const double falseAlarmLogOdds = poseFalseAlarmLogOdds(
+            catalogContext,
+            candidatePass,
+            imageSize,
+            finalMatchRadius,
+            static_cast<int>(starDetections.size()));
+        if (falseAlarmLogOdds > bestFalseAlarmLogOdds)
+        {
+            bestFalseAlarmLogOdds = falseAlarmLogOdds;
+            best = candidatePass;
+        }
+    }
+
+    return best;
+}
+
 static bool sameEvaluationBasin(const Evaluation& lhs, const Evaluation& rhs)
 {
     if (lhs.anchored != rhs.anchored) {
@@ -20668,29 +21025,103 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
     // A tight, richly-matched fit is a true alignment even without bright anchors; let it
     // bypass the bright-support gates (but not the FoV / direction-seed quality gates).
-    const bool overwhelmingFaintSupport =
-        useStartDirection
-        && hasOverwhelmingFaintGuidedSupport(settings, selectedFinalPassForAcceptance);
-    const bool weakNarrowGuidedBrightSupport =
-        useStartDirection
-        && !sparseGuidedPairAccepted
-        && !overwhelmingFaintSupport
-        && !hasHighConfidenceSparseGuidedAnchors(settings, selectedFinalPassForAcceptance)
-        && hasWeakNarrowGuidedBrightSupport(settings, selectedFinalPassForAcceptance);
-    const bool narrowGuidedFovAccepted =
-        isAcceptableNarrowGuidedFov(settings, selectedFinalPassForAcceptance.pose.fovDegrees);
-    const bool directionSeedSolveAcceptable = !useStartDirection
-        || sparseGuidedPairAccepted
-        || (!weakNarrowGuidedBrightSupport
-            && narrowGuidedFovAccepted
-            && isAcceptableDirectionSeedSolve(
-                settings,
-                starDetections,
-                selectedFinalPassForAcceptance.finalMatches,
-                selectedFinalPassForAcceptance.rmsErrorPixels,
-                selectedFinalPassForAcceptance.maxErrorPixels)
-            && (overwhelmingFaintSupport
-                || hasAcceptableGuidedFinalBrightnessConsistency(settings, selectedFinalPassForAcceptance)));
+    // Factored into a lambda so the bright-anchor verifier rescue below can re-run the
+    // exact same, unchanged acceptance decision against a rescued candidate pose.
+    struct DirectionSeedAcceptance
+    {
+        bool acceptable = false;
+        bool weakBrightSupport = false;
+        bool fovAccepted = false;
+    };
+    auto directionSeedAcceptanceFor = [&](const FinalMatchPassEvaluation& pass) -> DirectionSeedAcceptance
+    {
+        DirectionSeedAcceptance acceptance;
+        const bool overwhelmingFaint = useStartDirection
+            && hasOverwhelmingFaintGuidedSupport(settings, pass);
+        const bool sparsePairAccepted = isAcceptableSparseGuidedPairFinalPass(
+            settings, catalogContext, starDetections, pass);
+        acceptance.weakBrightSupport = useStartDirection
+            && !sparsePairAccepted
+            && !overwhelmingFaint
+            && !hasHighConfidenceSparseGuidedAnchors(settings, pass)
+            && hasWeakNarrowGuidedBrightSupport(settings, pass);
+        acceptance.fovAccepted = isAcceptableNarrowGuidedFov(settings, pass.pose.fovDegrees);
+        acceptance.acceptable = !useStartDirection
+            || sparsePairAccepted
+            || (!acceptance.weakBrightSupport
+                && acceptance.fovAccepted
+                && isAcceptableDirectionSeedSolve(
+                    settings,
+                    starDetections,
+                    pass.finalMatches,
+                    pass.rmsErrorPixels,
+                    pass.maxErrorPixels)
+                && (overwhelmingFaint
+                    || hasAcceptableGuidedFinalBrightnessConsistency(settings, pass)));
+        return acceptance;
+    };
+
+    DirectionSeedAcceptance directionSeedAcceptance = directionSeedAcceptanceFor(selectedFinalPassForAcceptance);
+
+    // Bright-detection-anchored verifier rescue (failure path only): the seed-verification
+    // gate (>= 3 mutually-consistent matches) can reject every geometric seed in a sparse
+    // or contaminated narrow field even when the true bright-aligned pose is reachable, so
+    // it is generated but never survives to here (e.g. narrow-7's named anchor IS detected
+    // at its catalog position, yet triangleVerifiedSeeds=quadVerifiedSeeds=
+    // guidedAnchorTriangleVerifiedSeeds=0). searchBrightAnchorVerifierRescue builds
+    // candidates directly from (bright detection, bright catalog star, roll) triples - which
+    // bypasses that gate - and ranks them by poseFalseAlarmLogOdds. The result is adopted
+    // only if it independently clears this *same*, unchanged acceptance gate, so this can
+    // only ever surface a pose the existing, already-tuned gate agrees is acceptable - it
+    // can rescue a missed true alignment, but can never relax what counts as one.
+    if (!directionSeedAcceptance.acceptable
+        && useStartDirection
+        && isNarrowField(settings)
+        && !isCancellationRequested())
+    {
+        const FinalMatchPassEvaluation rescuePass = searchBrightAnchorVerifierRescue(
+            settings,
+            catalogContext,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            allDetectionIndices,
+            finalMatchRadius);
+        if (rescuePass.projectorValid)
+        {
+            const DirectionSeedAcceptance rescueAcceptance = directionSeedAcceptanceFor(rescuePass);
+            if (rescueAcceptance.acceptable
+                && hasGeometricallyConsistentMatches(starDetections, rescuePass.projectedStars, rescuePass.finalMatches, finalMatchRadius))
+            {
+                qDebug() << "CameraPlateSolver: bright-anchor verifier rescue adopted pose"
+                         << "matches=" << rescuePass.finalMatches.size()
+                         << "rms=" << rescuePass.rmsErrorPixels
+                         << "Az=" << rescuePass.pose.azimuthDegrees
+                         << "El=" << rescuePass.pose.elevationDegrees
+                         << "Roll=" << rescuePass.pose.rollDegrees
+                         << "FoV=" << rescuePass.pose.fovDegrees
+                         << "faLogOdds=" << poseFalseAlarmLogOdds(catalogContext, rescuePass, imageSize, finalMatchRadius, static_cast<int>(starDetections.size()));
+                selectedFinalPass = rescuePass;
+                selectedFinalPassForAcceptance = rescuePass;
+                directionSeedAcceptance = rescueAcceptance;
+                result.m_catalogCandidateStars = selectedFinalPass.projectedStars.size();
+                result.m_outlierStars = selectedFinalPass.outlierCount;
+                result.m_solverQualityScore = std::max(
+                    finalMatchPassScore(settings, selectedFinalPass),
+                    finalMatchPassEvidenceScore(settings, selectedFinalPass));
+                result.m_seedConsistencyScore = narrowGuidedSeedConsistencyScore(settings, selectedFinalPass);
+                result.m_namedBrightAnchorMatches = selectedFinalPass.namedBrightAnchorMatches;
+                result.m_namedBrightAnchorRmsErrorPixels = selectedFinalPass.namedBrightAnchorRmsErrorPixels;
+                result.m_seedRadialMagnitudeMatchFraction = selectedFinalPass.seedRadialMagnitudeMatchFraction;
+                result.m_prioritySeedProjectedChecks = selectedFinalPass.prioritySeedProjectedChecks;
+                result.m_prioritySeedProjectedErrorPixels = selectedFinalPass.prioritySeedProjectedErrorPixels;
+            }
+        }
+    }
+
+    const bool weakNarrowGuidedBrightSupport = directionSeedAcceptance.weakBrightSupport;
+    const bool narrowGuidedFovAccepted = directionSeedAcceptance.fovAccepted;
+    const bool directionSeedSolveAcceptable = directionSeedAcceptance.acceptable;
     if (!directionSeedSolveAcceptable)
     {
         const QString rejectionReason = !narrowGuidedFovAccepted
@@ -21377,6 +21808,11 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         && !isCancellationRequested()
         && (settings.m_plateSolveMaxMagnitude >= 12.0f))
     {
+        // The motivating synthetic wins (rand-007/008/027/045) all solve sub-pixel with
+        // ~100+ matches at the shallower catalog. A solved-but-loose result (e.g. m51@14:
+        // 10 matches, rms 14.26px) is a wrong-pose false positive, not a rescued true
+        // solve, so require a tight residual fit before adopting.
+        constexpr double kDepthEscapeMaxAcceptableRmsPixels = 3.0;
         const QVector<CameraPipelineStarDetection> detectionsBeforeDepthEscape = starDetections;
         const double requestedMag = static_cast<double>(settings.m_plateSolveMaxMagnitude);
         for (double escapeMagnitude : {requestedMag - 1.0, requestedMag - 2.0})
@@ -21390,10 +21826,17 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             qDebug() << "CameraPlateSolver: depth-escape retry at shallower catalog"
                      << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude;
             CameraPlateSolveResult escapeResult = runSolve(retrySettings, QStringLiteral("depth-escape"));
-            if (escapeResult.m_solved)
+            if (escapeResult.m_solved && (escapeResult.m_rmsErrorPixels <= kDepthEscapeMaxAcceptableRmsPixels))
             {
                 result = escapeResult;
                 break;
+            }
+            if (escapeResult.m_solved)
+            {
+                qDebug() << "CameraPlateSolver: depth-escape retry solved but fit too loose, rejecting"
+                         << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
+                         << "matches" << escapeResult.m_matchedStars
+                         << "rms" << escapeResult.m_rmsErrorPixels;
             }
             starDetections = detectionsBeforeDepthEscape;
         }

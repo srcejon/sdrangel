@@ -891,8 +891,6 @@ void CameraPostProcessor::submitFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    submitPlaybackMonitorAudio(frame);
-
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
@@ -993,17 +991,6 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     if (m_nextStageQueue) {
         m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
-}
-
-void CameraPostProcessor::submitPlaybackMonitorAudio(const CameraPipelineFramePtr& frame)
-{
-    if (!frame || !m_workerInputMessageQueue || frame->m_playbackAudioPcm.isEmpty() || (frame->m_playbackAudioSampleRate <= 0)) {
-        return;
-    }
-
-    m_workerInputMessageQueue->push(CameraWorker::MsgPlaybackAudioSamples::create(frame->m_playbackAudioPcm, frame->m_playbackAudioSampleRate));
-    frame->m_playbackAudioPcm.clear();
-    frame->m_playbackAudioSampleRate = 0;
 }
 
 void CameraPostProcessor::resetPlaybackLatencyStats()

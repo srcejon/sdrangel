@@ -164,29 +164,6 @@ public:
         { }
     };
 
-    class MsgPlaybackAudioSamples : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const QByteArray& getPcmS16Stereo() const { return m_pcmS16Stereo; }
-        int getSampleRate() const { return m_sampleRate; }
-
-        static MsgPlaybackAudioSamples* create(const QByteArray& pcmS16Stereo, int sampleRate)
-        {
-            return new MsgPlaybackAudioSamples(pcmS16Stereo, sampleRate);
-        }
-
-    private:
-        QByteArray m_pcmS16Stereo;
-        int m_sampleRate;
-
-        MsgPlaybackAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate) :
-            Message(),
-            m_pcmS16Stereo(pcmS16Stereo),
-            m_sampleRate(sampleRate)
-        { }
-    };
-
     class MsgReportVideoFilePlayback : public Message {
         MESSAGE_CLASS_DECLARATION
 

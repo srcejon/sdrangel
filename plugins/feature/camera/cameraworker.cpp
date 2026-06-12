@@ -42,7 +42,6 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartAutoFocus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgVideoFileControl, Message)
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgPlaybackAudioSamples, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportVideoFilePlayback, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaDeviceList, Message)
@@ -877,12 +876,6 @@ bool CameraWorker::handleMessage(const Message& cmd)
         }
         return true;
     }
-    else if (MsgPlaybackAudioSamples::match(cmd))
-    {
-        const MsgPlaybackAudioSamples& msg = (const MsgPlaybackAudioSamples&) cmd;
-        m_qtAudio.submitMonitorPcmSamples(msg.getPcmS16Stereo(), msg.getSampleRate());
-        return true;
-    }
     else if (MainCore::MsgImage::match(cmd))
     {
         MainCore::MsgImage& imgMsg = (MainCore::MsgImage&) cmd;
@@ -1418,7 +1411,9 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         m_videoFilePositionMs += videoFileFrameIntervalMs();
     }
 
-    if (submitAudio && !pcmS16Stereo.isEmpty()) {
+    if (submitAudio && !pcmS16Stereo.isEmpty())
+    {
+        m_qtAudio.submitMonitorPcmSamples(pcmS16Stereo, audioSampleRate);
         m_qtAudio.submitRecordingPcmSamples(pcmS16Stereo, audioSampleRate);
     }
 
@@ -1433,11 +1428,6 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         populateFrameExposureMetadata(*frame);
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackPositionMs = m_videoFilePositionMs;
-        if (submitAudio && !pcmS16Stereo.isEmpty())
-        {
-            frame->m_playbackAudioPcm = pcmS16Stereo;
-            frame->m_playbackAudioSampleRate = audioSampleRate;
-        }
         m_framePreprocessor->submitFrame(frame);
     }
 

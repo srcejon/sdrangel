@@ -265,7 +265,6 @@ private:
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
-    void submitPlaybackMonitorAudio(const CameraPipelineFramePtr& frame);
     void resetPlaybackLatencyStats();
     void updatePlaybackLatencyStats(const CameraPipelineFrame& frame, qint64 latencyMs);
     [[nodiscard]] QImage applyPostProcessing(

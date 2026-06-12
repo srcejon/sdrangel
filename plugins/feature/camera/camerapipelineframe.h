@@ -152,8 +152,6 @@ struct CameraPipelineFrame
     bool m_manualPreviewFrame = false;
     qint64 m_playbackPositionMs = -1;
     int m_playbackFrameNumber = -1;
-    QByteArray m_playbackAudioPcm;
-    int m_playbackAudioSampleRate = 0;
     double m_exposureTimeMs = 0.0;
     int m_hdrExposureIndex = -1;
     int m_hdrExposureCount = 0;

@@ -19,6 +19,8 @@
 #ifndef INCLUDE_FEATURE_CAMERAQTAUDIOCONTROLLER_H_
 #define INCLUDE_FEATURE_CAMERAQTAUDIOCONTROLLER_H_
 
+#include <atomic>
+
 #include <QObject>
 #include <QString>
 #include <QVector>
@@ -46,6 +48,7 @@ public:
     uint32_t monitorAudioFill() const { return m_outputAudioFifo.fill(); }
     uint32_t monitorAudioSize() const { return m_outputAudioFifo.size(); }
     quint64 monitorDroppedFrames() const { return m_monitorDroppedFrames; }
+    quint64 monitorUnderflows() const { return m_monitorUnderflows.load(); }
 
 private slots:
     void onCaptureAudioDataReady();
@@ -65,6 +68,7 @@ private:
     AudioFifo m_outputAudioFifo;
     QVector<quint8> m_audioTransferBuffer;
     quint64 m_monitorDroppedFrames;
+    std::atomic<quint64> m_monitorUnderflows;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAQTAUDIOCONTROLLER_H_

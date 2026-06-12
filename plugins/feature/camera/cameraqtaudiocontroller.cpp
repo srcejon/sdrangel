@@ -40,7 +40,8 @@ CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     m_captureSourceActive(false),
     m_sampleRate(AudioDeviceManager::m_defaultAudioSampleRate),
     m_recordingMessageQueue(nullptr),
-    m_monitorDroppedFrames(0)
+    m_monitorDroppedFrames(0),
+    m_monitorUnderflows(0)
 {
     // Audio FIFO: stereo 16-bit PCM at 48 kHz; keep enough decoded file audio to absorb timer jitter.
     static constexpr int audioFifoFrames = 48000 * 2;
@@ -48,6 +49,9 @@ CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     m_captureAudioFifo.setSize(audioFifoFrames);
     m_outputAudioFifo.setSize(audioFifoFrames);
     m_audioTransferBuffer.resize(audioFifoFrames * bytesPerSampleFrame);
+    QObject::connect(&m_outputAudioFifo, &AudioFifo::underflow, this, [this]() {
+        ++m_monitorUnderflows;
+    });
 }
 
 void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue *messageQueue)
@@ -65,6 +69,8 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
     qDebug() << "CameraQtAudioController: starting audio capture: outputDeviceIndex" << outputDeviceIndex
              << "inputDeviceIndex" << inputDeviceIndex;
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
+    m_monitorDroppedFrames = 0;
+    m_monitorUnderflows.store(0);
     QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraQtAudioController::onCaptureAudioDataReady);
     audioDeviceManager->addAudioSource(&m_captureAudioFifo, messageQueue, inputDeviceIndex);
     m_muted = settings.m_audioMute;
@@ -82,6 +88,8 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
     qDebug() << "CameraQtAudioController: starting file audio monitor: outputDeviceIndex" << outputDeviceIndex;
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
+    m_monitorDroppedFrames = 0;
+    m_monitorUnderflows.store(0);
     m_muted = settings.m_audioMute;
     m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
     m_captureSourceActive = false;

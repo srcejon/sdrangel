@@ -639,6 +639,7 @@ private:
     qint64 m_videoFileStatsLastPositionMs = -1;
     quint64 m_videoFileStatsAudioBytes = 0;
     quint64 m_videoFileStatsLastDroppedAudioFrames = 0;
+    quint64 m_videoFileStatsLastAudioUnderflows = 0;
     quint64 m_videoFileStatsLastDecoderReadAheadCalls = 0;
     quint64 m_videoFileStatsLastDecoderReadAheadPackets = 0;
     quint64 m_videoFileStatsLastDecoderReadAheadVideoPackets = 0;

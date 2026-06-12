@@ -1473,6 +1473,7 @@ void CameraWorker::resetVideoFilePlaybackStats()
     m_videoFileStatsLastPositionMs = -1;
     m_videoFileStatsAudioBytes = 0;
     m_videoFileStatsLastDroppedAudioFrames = m_qtAudio.monitorDroppedFrames();
+    m_videoFileStatsLastAudioUnderflows = m_qtAudio.monitorUnderflows();
 
     if (m_videoFileDecoder)
     {
@@ -1560,6 +1561,8 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         : 0.0;
     const quint64 droppedAudioFrames = m_qtAudio.monitorDroppedFrames();
     const quint64 droppedAudioDelta = droppedAudioFrames - m_videoFileStatsLastDroppedAudioFrames;
+    const quint64 audioUnderflows = m_qtAudio.monitorUnderflows();
+    const quint64 audioUnderflowDelta = audioUnderflows - m_videoFileStatsLastAudioUnderflows;
     const int pendingFrames = m_videoFileDecoder ? m_videoFileDecoder->pendingVideoFrameCount() : 0;
     const int pendingPackets = m_videoFileDecoder ? m_videoFileDecoder->pendingVideoPacketCount() : 0;
     const qint64 audioLeadMs = m_videoFileDecoder
@@ -1624,6 +1627,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "emptyAudioFrames" << m_videoFileStatsEmptyAudioFrames
              << "monitorFill" << m_qtAudio.monitorAudioFill() << "/" << m_qtAudio.monitorAudioSize()
              << "monitorDroppedFrames" << droppedAudioDelta
+             << "monitorUnderflows" << audioUnderflowDelta
              << "audioLeadMs" << audioLeadMs
              << "pendingAudioBytes" << pendingAudioBytes
              << "pendingVideoFrames" << pendingFrames
@@ -1648,6 +1652,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     m_videoFileStatsPositionDeltaMsMax = 0;
     m_videoFileStatsAudioBytes = 0;
     m_videoFileStatsLastDroppedAudioFrames = droppedAudioFrames;
+    m_videoFileStatsLastAudioUnderflows = audioUnderflows;
     m_videoFileStatsTimer.restart();
 }
 

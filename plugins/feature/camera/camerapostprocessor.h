@@ -200,6 +200,21 @@ public:
         { }
     };
 
+    class MsgSaveCurrentImage : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgSaveCurrentImage* create()
+        {
+            return new MsgSaveCurrentImage();
+        }
+
+    private:
+        MsgSaveCurrentImage() :
+            Message()
+        { }
+    };
+
     CameraPostProcessor();
     ~CameraPostProcessor();
 
@@ -264,6 +279,7 @@ private:
     qint64 m_playbackLatencyStatsLastPositionMs = -1;
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
+    void saveCurrentImage();
     void processNewFrame(const CameraPipelineFramePtr& frame);
     void resetPlaybackLatencyStats();
     void updatePlaybackLatencyStats(const CameraPipelineFrame& frame, qint64 latencyMs);

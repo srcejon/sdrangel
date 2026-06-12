@@ -469,7 +469,7 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         closeYouTubeStream();
     }
 
-    if (m_captureActive && (m_settings.m_saveImage || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
+    if (((m_captureActive && m_settings.m_saveImage) || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
     {
         if (shouldSaveRawFits())
         {

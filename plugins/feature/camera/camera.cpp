@@ -46,6 +46,7 @@ MESSAGE_CLASS_DEFINITION(Camera::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgReportError, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgDeleteStackFrame, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgClearTrackedObjectHeatMap, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgSaveCurrentImage, Message)
 
 const char* const Camera::m_featureIdURI = "sdrangel.feature.camera";
 const char* const Camera::m_featureId = "Camera";
@@ -506,6 +507,13 @@ bool Camera::handleMessage(const Message& cmd)
         }
         return true;
     }
+    else if (MsgSaveCurrentImage::match(cmd))
+    {
+        if (m_postProcessor) {
+            m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgSaveCurrentImage::create());
+        }
+        return true;
+    }
 
     return false;
 }
@@ -681,7 +689,7 @@ int Camera::webapiActionsPost(
 
             // Determine which fields the caller actually supplied. Without this gate, a
             // request like {"saveImage":{}} would clobber the user's saved recording
-            // output selection and imageRecordLimit with the SWG defaults (0).
+            // output selection with the SWG defaults (0).
             // asJsonObject() emits a key only when the corresponding *_isSet flag is true.
             std::unique_ptr<QJsonObject> saveImageJson(saveImage->asJsonObject());
             const bool hasRecordRawFits = saveImageJson && saveImageJson->contains("recordRawFits");
@@ -709,12 +717,16 @@ int Camera::webapiActionsPost(
             }
             if (hasImages)
             {
-                settings.m_imageRecordLimit = qMax(CameraSettings::m_minNonNegative, saveImage->getImages());
-                addSettingsKey("imageRecordLimit");
+                const int imageCount = qMax(CameraSettings::m_minNonNegative, saveImage->getImages());
+                if (imageCount != 1)
+                {
+                    settings.m_imageRecordLimit = imageCount > 1 ? imageCount - 1 : 0;
+                    addSettingsKey("imageRecordLimit");
+                    settings.m_saveImage = true;
+                    addSettingsKey("saveImage");
+                    startCamera = m_state == StIdle;
+                }
             }
-            settings.m_saveImage = true;
-            addSettingsKey("saveImage");
-            startCamera = m_state == StIdle;
             accepted = true;
         }
 
@@ -775,6 +787,12 @@ int Camera::webapiActionsPost(
                 MsgConfigureCamera *msgToGUI = MsgConfigureCamera::create(settings, settingsKeys, false);
                 m_guiMessageQueue->push(msgToGUI);
             }
+        }
+
+        if (featureActionsKeys.contains("saveImage"))
+        {
+            MsgSaveCurrentImage *msg = MsgSaveCurrentImage::create();
+            getInputMessageQueue()->push(msg);
         }
 
         if (startCamera && !featureActionsKeys.contains("run"))

@@ -219,6 +219,21 @@ public:
         { }
     };
 
+    class MsgSaveCurrentImage : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgSaveCurrentImage* create()
+        {
+            return new MsgSaveCurrentImage();
+        }
+
+    private:
+        MsgSaveCurrentImage() :
+            Message()
+        { }
+    };
+
     Camera(WebAPIAdapterInterface *webAPIAdapterInterface);
     ~Camera() override;
     void destroy() override { delete this; }

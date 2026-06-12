@@ -44,6 +44,7 @@
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgClearTrackedObjectHeatMap, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSaveCurrentImage, Message)
 
 namespace {
 
@@ -662,6 +663,11 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
 
         return true;
     }
+    else if (MsgSaveCurrentImage::match(cmd))
+    {
+        saveCurrentImage();
+        return true;
+    }
     else if (MainCore::MsgMapItem::match(cmd))
     {
         const MainCore::MsgMapItem& msgMapItem = (const MainCore::MsgMapItem&) cmd;
@@ -690,6 +696,26 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     }
 
     return false;
+}
+
+void CameraPostProcessor::saveCurrentImage()
+{
+    if (!m_nextStageQueue)
+    {
+        qWarning() << "CameraPostProcessor::saveCurrentImage: no recorder stage is available";
+        return;
+    }
+
+    if (!m_lastFrame.hasImageData())
+    {
+        qWarning() << "CameraPostProcessor::saveCurrentImage: no current image is available";
+        return;
+    }
+
+    CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastFrame));
+    frame->m_manualPreviewFrame = true;
+    frame->m_saveCurrentImage = true;
+    m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
 }
 
 void CameraPostProcessor::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)

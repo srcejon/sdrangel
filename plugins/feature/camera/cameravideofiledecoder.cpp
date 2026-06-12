@@ -481,8 +481,14 @@ bool CameraVideoFileDecoder::queueDecodedVideoFrames(QString& errorMessage)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
+    static constexpr size_t maxPendingVideoFrames = 3;
+
     for (;;)
     {
+        if (m_pendingVideoFrames.size() >= maxPendingVideoFrames) {
+            return true;
+        }
+
         QImage image;
         qint64 positionMs = -1;
         if (receiveVideoFrame(image, positionMs, errorMessage))
@@ -510,10 +516,10 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
     }
 
     static constexpr int bytesPerSampleFrame = 4;
-    const int targetAudioBytes = std::max(1, m_outputSampleRate / 2) * bytesPerSampleFrame;
+    const int targetAudioBytes = std::max(1, static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5)) * bytesPerSampleFrame;
     int packetsRead = 0;
 
-    while ((pcmS16Stereo.size() < targetAudioBytes) && !m_eof && (packetsRead < 256))
+    while ((pcmS16Stereo.size() < targetAudioBytes) && !m_eof && (packetsRead < 32))
     {
         int ret = av_read_frame(m_formatContext, m_packet);
         if (ret < 0)

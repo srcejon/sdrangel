@@ -29,6 +29,7 @@
 #include <QPolygonF>
 #include <QRadialGradient>
 #include <QTextDocument>
+#include <QDateTime>
 #include "SWGMapItem.h"
 #include "util/azel.h"
 #include "util/weather.h"
@@ -36,6 +37,7 @@
 #include "maincore.h"
 #include "cameraimageutils.h"
 #include "camera.h"
+#include "cameraworker.h"
 #include "camerapostprocessor.h"
 #include "camerarecorder.h"
 
@@ -677,6 +679,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         {
             m_lastFrame = CameraPipelineFrame();
         }
+        resetPlaybackLatencyStats();
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrame.reset();
         if (!m_captureActive) {
@@ -891,8 +894,12 @@ void CameraPostProcessor::submitFrame(const CameraPipelineFramePtr& frame)
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
-        if (m_pendingFrame) {
+        if (m_pendingFrame)
+        {
             qDebug() << "CameraPostProcessor: Dropping pending frame in favor of new frame";
+            if (m_pendingFrame->m_playbackPositionMs >= 0) {
+                ++m_playbackLatencyStatsDroppedFrames;
+            }
         }
         m_pendingFrame = frame;
         if (!m_processingFrame)
@@ -977,10 +984,58 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     reportFrameToGUI(preview, *frame, previewTextLabels, trackedObjects);
+    if (m_workerInputMessageQueue && !frame->m_playbackAudioPcm.isEmpty() && (frame->m_playbackAudioSampleRate > 0))
+    {
+        m_workerInputMessageQueue->push(CameraWorker::MsgPlaybackAudioSamples::create(frame->m_playbackAudioPcm, frame->m_playbackAudioSampleRate));
+        frame->m_playbackAudioPcm.clear();
+        frame->m_playbackAudioSampleRate = 0;
+    }
+    if ((frame->m_playbackPositionMs >= 0) && (frame->m_pipelineInputWallClockMs > 0)) {
+        updatePlaybackLatencyStats(*frame, QDateTime::currentMSecsSinceEpoch() - frame->m_pipelineInputWallClockMs);
+    }
 
     if (m_nextStageQueue) {
         m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
+}
+
+void CameraPostProcessor::resetPlaybackLatencyStats()
+{
+    m_playbackLatencyStatsStartMs = 0;
+    m_playbackLatencyStatsFrames = 0;
+    m_playbackLatencyStatsDroppedFrames = 0;
+    m_playbackLatencyStatsTotalMs = 0;
+    m_playbackLatencyStatsMaxMs = 0;
+    m_playbackLatencyStatsLastPositionMs = -1;
+}
+
+void CameraPostProcessor::updatePlaybackLatencyStats(const CameraPipelineFrame& frame, qint64 latencyMs)
+{
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (m_playbackLatencyStatsStartMs <= 0) {
+        m_playbackLatencyStatsStartMs = nowMs;
+    }
+
+    latencyMs = std::max<qint64>(0, latencyMs);
+    ++m_playbackLatencyStatsFrames;
+    m_playbackLatencyStatsTotalMs += latencyMs;
+    m_playbackLatencyStatsMaxMs = std::max(m_playbackLatencyStatsMaxMs, latencyMs);
+    m_playbackLatencyStatsLastPositionMs = frame.m_playbackPositionMs;
+
+    if ((nowMs - m_playbackLatencyStatsStartMs) < 2000) {
+        return;
+    }
+
+    const double frames = static_cast<double>(std::max<quint64>(1, m_playbackLatencyStatsFrames));
+    qDebug() << "CameraPostProcessor: playback latency stats"
+             << "frames" << m_playbackLatencyStatsFrames
+             << "droppedPendingFrames" << m_playbackLatencyStatsDroppedFrames
+             << "latencyAvgMs" << (static_cast<double>(m_playbackLatencyStatsTotalMs) / frames)
+             << "latencyMaxMs" << m_playbackLatencyStatsMaxMs
+             << "lastPlaybackPositionMs" << m_playbackLatencyStatsLastPositionMs;
+
+    resetPlaybackLatencyStats();
+    m_playbackLatencyStatsStartMs = nowMs;
 }
 
 void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels, const QVector<CameraPipelineTrackedObject>& trackedObjects)

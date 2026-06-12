@@ -42,6 +42,7 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartAutoFocus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgVideoFileControl, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgPlaybackAudioSamples, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportVideoFilePlayback, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaDeviceList, Message)
@@ -406,6 +407,7 @@ void CameraWorker::populateFrameExposureMetadata(CameraPipelineFrame& frame) con
 {
     frame.m_captureDateTime = QDateTime::currentDateTime();
     frame.m_captureEpoch = m_captureEpoch;
+    frame.m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
     frame.m_manualPreviewFrame = false;
     frame.m_exposureTimeMs = currentCaptureExposureTimeMs();
     frame.m_hdrExposureIndex = currentHdrExposureIndex();
@@ -873,6 +875,12 @@ bool CameraWorker::handleMessage(const Message& cmd)
             seekVideoFile(msg.getPositionMs(), true);
             break;
         }
+        return true;
+    }
+    else if (MsgPlaybackAudioSamples::match(cmd))
+    {
+        const MsgPlaybackAudioSamples& msg = (const MsgPlaybackAudioSamples&) cmd;
+        m_qtAudio.submitMonitorPcmSamples(msg.getPcmS16Stereo(), msg.getSampleRate());
         return true;
     }
     else if (MainCore::MsgImage::match(cmd))
@@ -1408,7 +1416,7 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     }
 
     if (submitAudio && !pcmS16Stereo.isEmpty()) {
-        m_qtAudio.submitPcmSamples(pcmS16Stereo, audioSampleRate);
+        m_qtAudio.submitRecordingPcmSamples(pcmS16Stereo, audioSampleRate);
     }
 
     if (minimumPositionMs < 0) {
@@ -1420,7 +1428,13 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
         populateFrameExposureMetadata(*frame);
+        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackPositionMs = m_videoFilePositionMs;
+        if (submitAudio && !pcmS16Stereo.isEmpty())
+        {
+            frame->m_playbackAudioPcm = pcmS16Stereo;
+            frame->m_playbackAudioSampleRate = audioSampleRate;
+        }
         m_framePreprocessor->submitFrame(frame);
     }
 

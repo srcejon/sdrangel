@@ -4127,6 +4127,7 @@ void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionM
     if (frameAligner) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
+        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         const QDateTime captureDateTime = m_settings.isImageFileSequenceCamera()
             ? captureDateTimeFromFileName(m_settings.m_imageFileCameraPaths.value(m_imageSequenceIndex))
             : QDateTime();

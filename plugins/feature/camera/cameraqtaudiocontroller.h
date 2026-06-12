@@ -58,9 +58,11 @@ public:
     void clearMonitorAudio();
     void prefillMonitorAudio(int milliseconds);
     static int filePlaybackMonitorPrefillMs() { return filePlaybackMonitorTargetFillMs(); }
-    static int filePlaybackMonitorTargetFillMs() { return 80; }
+    static int filePlaybackMonitorTargetFillMs() { return 35; }
     void resetMonitorDebugStats();
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
+    void submitMonitorPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
+    void submitRecordingPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     uint32_t monitorAudioFill() const { return m_outputAudioFifo.fill(); }
     uint32_t monitorAudioSize() const { return m_outputAudioFifo.size(); }
     quint64 monitorDroppedFrames() const { return m_monitorDroppedFrames; }

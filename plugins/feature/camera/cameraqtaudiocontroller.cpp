@@ -166,6 +166,12 @@ void CameraQtAudioController::resetMonitorDebugStats()
 
 void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate)
 {
+    submitMonitorPcmSamples(pcmS16Stereo, sampleRate);
+    submitRecordingPcmSamples(pcmS16Stereo, sampleRate);
+}
+
+void CameraQtAudioController::submitMonitorPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate)
+{
     static constexpr int bytesPerSampleFrame = 4;
     if (pcmS16Stereo.isEmpty() || (sampleRate <= 0)) {
         return;
@@ -229,7 +235,13 @@ void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, i
         }
         m_monitorDebugStats.m_maxFillAfter = std::max<quint64>(m_monitorDebugStats.m_maxFillAfter, fillAfter);
     }
+}
 
+void CameraQtAudioController::submitRecordingPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate)
+{
+    if (pcmS16Stereo.isEmpty() || (sampleRate <= 0)) {
+        return;
+    }
     if (m_recordingMessageQueue) {
         m_recordingMessageQueue->push(CameraRecorder::MsgAudioSamples::create(pcmS16Stereo, sampleRate));
     }

@@ -222,6 +222,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_postProcessorThread, &QThread::finished, m_postProcessorThread, &QThread::deleteLater);
     m_postProcessor->setMessageQueueToGUI(getMessageQueueToGUI());
     m_postProcessor->setNextStageInputMessageQueue(getRecorderInputMessageQueue());
+    m_postProcessor->setWorkerInputMessageQueue(m_worker->getInputMessageQueue());
     m_postProcessorThread->start();
     m_postProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 }

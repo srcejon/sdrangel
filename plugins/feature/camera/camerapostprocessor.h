@@ -209,6 +209,7 @@ public:
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
     void setNextStageInputMessageQueue(MessageQueue *messageQueue) { m_nextStageQueue = messageQueue; }
+    void setWorkerInputMessageQueue(MessageQueue *messageQueue) { m_workerInputMessageQueue = messageQueue; }
 
 private:
     struct TrackedMapObject
@@ -232,6 +233,7 @@ private:
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
     MessageQueue *m_nextStageQueue;
+    MessageQueue *m_workerInputMessageQueue = nullptr;
     AvailableChannelOrFeatureHandler m_availableChannelOrFeatureHandler;
     CameraSettings m_settings;
     CameraPipelineFrame m_lastFrame;
@@ -254,9 +256,17 @@ private:
     QMutex m_frameMutex;
     CameraPipelineFramePtr m_pendingFrame;
     bool m_processingFrame;
+    qint64 m_playbackLatencyStatsStartMs = 0;
+    quint64 m_playbackLatencyStatsFrames = 0;
+    quint64 m_playbackLatencyStatsDroppedFrames = 0;
+    qint64 m_playbackLatencyStatsTotalMs = 0;
+    qint64 m_playbackLatencyStatsMaxMs = 0;
+    qint64 m_playbackLatencyStatsLastPositionMs = -1;
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
+    void resetPlaybackLatencyStats();
+    void updatePlaybackLatencyStats(const CameraPipelineFrame& frame, qint64 latencyMs);
     [[nodiscard]] QImage applyPostProcessing(
         const CameraPipelineFrame& frame,
         bool drawPreviewText = true,

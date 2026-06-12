@@ -962,6 +962,8 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
+    submitPlaybackMonitorAudio(frame);
+
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     QVector<PreviewTextLabel> previewTextLabels;
     QVector<CameraPipelineTrackedObject> trackedObjects;
@@ -984,12 +986,6 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     reportFrameToGUI(preview, *frame, previewTextLabels, trackedObjects);
-    if (m_workerInputMessageQueue && !frame->m_playbackAudioPcm.isEmpty() && (frame->m_playbackAudioSampleRate > 0))
-    {
-        m_workerInputMessageQueue->push(CameraWorker::MsgPlaybackAudioSamples::create(frame->m_playbackAudioPcm, frame->m_playbackAudioSampleRate));
-        frame->m_playbackAudioPcm.clear();
-        frame->m_playbackAudioSampleRate = 0;
-    }
     if ((frame->m_playbackPositionMs >= 0) && (frame->m_pipelineInputWallClockMs > 0)) {
         updatePlaybackLatencyStats(*frame, QDateTime::currentMSecsSinceEpoch() - frame->m_pipelineInputWallClockMs);
     }
@@ -997,6 +993,17 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     if (m_nextStageQueue) {
         m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
+}
+
+void CameraPostProcessor::submitPlaybackMonitorAudio(const CameraPipelineFramePtr& frame)
+{
+    if (!frame || !m_workerInputMessageQueue || frame->m_playbackAudioPcm.isEmpty() || (frame->m_playbackAudioSampleRate <= 0)) {
+        return;
+    }
+
+    m_workerInputMessageQueue->push(CameraWorker::MsgPlaybackAudioSamples::create(frame->m_playbackAudioPcm, frame->m_playbackAudioSampleRate));
+    frame->m_playbackAudioPcm.clear();
+    frame->m_playbackAudioSampleRate = 0;
 }
 
 void CameraPostProcessor::resetPlaybackLatencyStats()

@@ -39,6 +39,7 @@ public:
     {
         QString m_fileName;
         CameraSettings::VideoCodec m_codec = CameraSettings::VideoCodecH264;
+        int m_bitrateKbps = 0;
         double m_fps = 25.0;
         bool m_preferHardwareEncoding = true;
         bool m_audioEnabled = true;
@@ -50,6 +51,7 @@ public:
     [[nodiscard]] bool isOpen() const;
     [[nodiscard]] QSize size() const { return m_videoSize; }
     [[nodiscard]] CameraSettings::VideoCodec codec() const { return m_settings.m_codec; }
+    [[nodiscard]] int bitrateKbps() const { return m_settings.m_bitrateKbps; }
     [[nodiscard]] static QString codecName(CameraSettings::VideoCodec codec);
     [[nodiscard]] QString codecName() const;
     [[nodiscard]] bool open(const Settings& settings, const QImage& firstFrame, QString& errorMessage);

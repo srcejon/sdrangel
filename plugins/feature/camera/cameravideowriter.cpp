@@ -226,7 +226,9 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
         m_codecContext->gop_size = std::max(1, static_cast<int>(std::llround(requestedFps * 2.0)));
         m_codecContext->max_b_frames = 0;
         m_codecContext->pix_fmt = AV_PIX_FMT_YUV420P;
-        m_codecContext->bit_rate = recordingBitrateBps(videoSize, requestedFps);
+        m_codecContext->bit_rate = settings.m_bitrateKbps > 0
+            ? static_cast<int64_t>(settings.m_bitrateKbps) * 1000
+            : recordingBitrateBps(videoSize, requestedFps);
 
         if (m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
             m_codecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -363,7 +365,8 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
     m_audioFrameIndex = 0;
 
     qDebug() << "CameraVideoWriter: opened" << fileName << codecName(settings.m_codec)
-             << videoSize << "fps" << requestedFps << "encoder" << codec->name;
+             << videoSize << "fps" << requestedFps << "bitrateKbps" << (m_codecContext->bit_rate / 1000)
+             << "encoder" << codec->name;
     return true;
 #endif
 }

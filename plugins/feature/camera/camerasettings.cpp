@@ -202,6 +202,7 @@ void CameraSettings::resetToDefaults()
     m_youtubeStreamWidth = 0;
     m_youtubeStreamHeight = 0;
     m_videoCodec = VideoCodecH264;
+    m_videoRecordBitrateKbps = 0;
     m_videoLoop = false;
     m_videoPlaybackRate = 1.0;
     m_videoPlaybackAudioOffsetMs = 0;
@@ -652,6 +653,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(253, m_youtubeStreamHeight);
     s.writeS32(254, static_cast<qint32>(m_videoCodec));
     s.writeS32(255, m_videoPlaybackAudioOffsetMs);
+    s.writeS32(256, m_videoRecordBitrateKbps);
 
     return s.final();
 }
@@ -999,6 +1001,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(254, &videoCodec, static_cast<qint32>(VideoCodecH264));
         m_videoCodec = static_cast<VideoCodec>(videoCodec);
         d.readS32(255, &m_videoPlaybackAudioOffsetMs, 0);
+        d.readS32(256, &m_videoRecordBitrateKbps, 0);
         d.readDouble(207, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(211, &m_postProcessUseCuda, false);
@@ -1156,6 +1159,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_youtubeStreamWidth = qBound(0, m_youtubeStreamWidth, 16384);
         m_youtubeStreamHeight = qBound(0, m_youtubeStreamHeight, 16384);
         m_videoCodec = static_cast<VideoCodec>(qBound(0, static_cast<int>(m_videoCodec), 1));
+        m_videoRecordBitrateKbps = qBound(0, m_videoRecordBitrateKbps, 240000);
         m_videoPlaybackAudioOffsetMs = qBound(
             m_minVideoPlaybackAudioOffsetMs,
             m_videoPlaybackAudioOffsetMs,
@@ -1393,6 +1397,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoCodec")) {
         m_videoCodec = static_cast<VideoCodec>(qBound(0, static_cast<int>(settings.m_videoCodec), 1));
+    }
+    if (settingsKeys.contains("videoRecordBitrateKbps")) {
+        m_videoRecordBitrateKbps = qBound(0, settings.m_videoRecordBitrateKbps, 240000);
     }
     if (settingsKeys.contains("videoPreRecordBufferSeconds")) {
         m_videoPreRecordBufferSeconds = qBound(0, settings.m_videoPreRecordBufferSeconds, 60);
@@ -2150,6 +2157,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoCodec") || force) {
         ostr << " m_videoCodec: " << static_cast<int>(m_videoCodec);
+    }
+    if (settingsKeys.contains("videoRecordBitrateKbps") || force) {
+        ostr << " m_videoRecordBitrateKbps: " << m_videoRecordBitrateKbps;
     }
     if (settingsKeys.contains("videoPreRecordBufferSeconds") || force) {
         ostr << " m_videoPreRecordBufferSeconds: " << m_videoPreRecordBufferSeconds;

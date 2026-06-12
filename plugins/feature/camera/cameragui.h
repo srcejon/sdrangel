@@ -306,6 +306,9 @@ private:
     void updateFovControls();
     void updateCalculatedFov();
     void updateKeogramPreview(const QImage& image, const QString& fileName, bool visible);
+    void initialiseVideoRecordBitrateCombo();
+    void updateVideoRecordBitrateCombo();
+    void applyVideoRecordBitrateComboText();
     void initialiseYouTubeBitrateCombo();
     void updateYouTubeBitrateCombo();
     void applyYouTubeBitrateComboText();
@@ -496,6 +499,8 @@ private slots:
     void on_youtubeStreamWidthSpin_valueChanged(int value);
     void on_youtubeStreamHeightSpin_valueChanged(int value);
     void on_videoCodecCombo_currentIndexChanged(int index);
+    void on_videoRecordBitrateCombo_activated(int index);
+    void on_videoRecordBitrateCombo_editingFinished();
     void on_videoHwAccelerationCheck_toggled(bool checked);
     void on_videoPreRecordBufferSpin_valueChanged(int value);
     void on_imageRecordLimitSpin_valueChanged(int value);

@@ -268,6 +268,7 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
     const bool wasSavingVideo = m_settings.m_saveVideo;
     const QString previousVideoFileName = m_settings.m_videoFileName;
     const CameraSettings::VideoCodec previousVideoCodec = m_settings.m_videoCodec;
+    const int previousVideoRecordBitrateKbps = m_settings.m_videoRecordBitrateKbps;
     const bool previousRecordCalibratedMedia = m_settings.m_recordCalibratedMedia;
     const bool previousRecordPostProcessedMedia = m_settings.m_recordPostProcessedMedia;
     const bool previousVideoHwAcceleration = m_settings.m_videoHwAcceleration;
@@ -295,12 +296,14 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
     if (force
         || settingsKeys.contains("videoFileName")
         || settingsKeys.contains("videoCodec")
+        || settingsKeys.contains("videoRecordBitrateKbps")
         || settingsKeys.contains("recordCalibratedMedia")
         || settingsKeys.contains("recordPostProcessedMedia")
         || settingsKeys.contains("videoHwAcceleration"))
     {
         if ((previousVideoFileName != m_settings.m_videoFileName)
             || (previousVideoCodec != m_settings.m_videoCodec)
+            || (previousVideoRecordBitrateKbps != m_settings.m_videoRecordBitrateKbps)
             || (previousRecordCalibratedMedia != m_settings.m_recordCalibratedMedia)
             || (previousRecordPostProcessedMedia != m_settings.m_recordPostProcessedMedia)
             || (previousVideoHwAcceleration != m_settings.m_videoHwAcceleration)
@@ -1100,7 +1103,11 @@ bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& write
         return false;
     }
 
-    if (writer && writer->isOpen() && (openedSize == requestedSize) && (writer->codec() == m_settings.m_videoCodec)) {
+    if (writer
+        && writer->isOpen()
+        && (openedSize == requestedSize)
+        && (writer->codec() == m_settings.m_videoCodec)
+        && (writer->bitrateKbps() == m_settings.m_videoRecordBitrateKbps)) {
         return true;
     }
     if (writer)
@@ -1113,6 +1120,7 @@ bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& write
     CameraVideoWriter::Settings writerSettings;
     writerSettings.m_fileName = filename;
     writerSettings.m_codec = m_settings.m_videoCodec;
+    writerSettings.m_bitrateKbps = m_settings.m_videoRecordBitrateKbps;
     writerSettings.m_fps = m_settings.getCaptureFrameRate();
     writerSettings.m_preferHardwareEncoding = m_settings.m_videoHwAcceleration;
 

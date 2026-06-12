@@ -197,6 +197,9 @@ CameraSettings:
     videoFileName:
       description: "File path for recorded video output"
       type: string
+    videoRecordBitrateKbps:
+      description: "Saved video bitrate in kbit/s; 0 selects automatic bitrate from frame size and frame rate"
+      type: integer
     recordRawFits:
       description: "Save uncalibrated raw input still images as FITS files (1 for yes, 0 for no)"
       type: integer

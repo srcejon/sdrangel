@@ -212,6 +212,38 @@ int parseYouTubeBitrateKbps(const QString& text, int fallbackKbps)
     return qBound(100, kbps, 240000);
 }
 
+void populateBitratePresetCombo(QComboBox *combo, bool clear = true)
+{
+    if (clear) {
+        combo->clear();
+    }
+
+    for (const YouTubeBitratePreset& preset : youtubeBitratePresets()) {
+        combo->addItem(QString::fromLatin1(preset.m_label), preset.m_kbps);
+    }
+
+    combo->addItem(QStringLiteral("480p standard - 2.5 Mbps"), 2500);
+    combo->addItem(QStringLiteral("480p high frame rate - 4 Mbps"), 4000);
+    combo->addItem(QStringLiteral("360p standard - 1 Mbps"), 1000);
+    combo->addItem(QStringLiteral("360p high frame rate - 1.5 Mbps"), 1500);
+    combo->setInsertPolicy(QComboBox::NoInsert);
+}
+
+QString videoRecordBitrateText(int kbps)
+{
+    return kbps > 0 ? youtubeBitrateText(kbps) : QStringLiteral("Auto");
+}
+
+int parseVideoRecordBitrateKbps(const QString& text, int fallbackKbps)
+{
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty() || (trimmed.compare(QStringLiteral("auto"), Qt::CaseInsensitive) == 0)) {
+        return 0;
+    }
+
+    return parseYouTubeBitrateKbps(trimmed, fallbackKbps > 0 ? fallbackKbps : 8000);
+}
+
 QDateTime captureDateTimeFromFileName(const QString& fileName)
 {
     static const QRegularExpression dateTimeRe(
@@ -1001,6 +1033,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     m_settingsDialog = new CameraSettingsDialog(this);
     new DialogPositioner(m_settingsDialog, false);
+    initialiseVideoRecordBitrateCombo();
     initialiseYouTubeBitrateCombo();
 
 #ifndef CAMERA_TENSORRT_YOLO
@@ -1558,6 +1591,7 @@ void CameraGUI::displaySettings()
     settingsUI()->youtubeStreamWidthSpin->setValue(m_settings.m_youtubeStreamWidth);
     settingsUI()->youtubeStreamHeightSpin->setValue(m_settings.m_youtubeStreamHeight);
     settingsUI()->videoCodecCombo->setCurrentIndex(static_cast<int>(m_settings.m_videoCodec));
+    updateVideoRecordBitrateCombo();
     settingsUI()->videoHwAccelerationCheck->setChecked(m_settings.m_videoHwAcceleration);
     settingsUI()->videoPreRecordBufferSpin->setValue(m_settings.m_videoPreRecordBufferSeconds);
     settingsUI()->imageRecordLimitSpin->setValue(m_settings.m_imageRecordLimit);
@@ -2318,6 +2352,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->youtubeStreamWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamWidthSpin_valueChanged);
     QObject::connect(settingsUI()->youtubeStreamHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_youtubeStreamHeightSpin_valueChanged);
     QObject::connect(settingsUI()->videoCodecCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_videoCodecCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->videoRecordBitrateCombo, QOverload<int>::of(&QComboBox::activated), this, &CameraGUI::on_videoRecordBitrateCombo_activated);
+    if (settingsUI()->videoRecordBitrateCombo->lineEdit()) {
+        QObject::connect(settingsUI()->videoRecordBitrateCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_videoRecordBitrateCombo_editingFinished);
+    }
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
     QObject::connect(settingsUI()->videoPreRecordBufferSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoPreRecordBufferSpin_valueChanged);
     QObject::connect(settingsUI()->imageRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_imageRecordLimitSpin_valueChanged);
@@ -3201,18 +3239,45 @@ void CameraGUI::updateKeogramPreview(const QImage& image, const QString& fileNam
 void CameraGUI::initialiseYouTubeBitrateCombo()
 {
     QComboBox *combo = settingsUI()->youtubeStreamBitrateCombo;
-    combo->clear();
+    populateBitratePresetCombo(combo);
+    updateYouTubeBitrateCombo();
+}
 
-    for (const YouTubeBitratePreset& preset : youtubeBitratePresets()) {
-        combo->addItem(QString::fromLatin1(preset.m_label), preset.m_kbps);
+void CameraGUI::initialiseVideoRecordBitrateCombo()
+{
+    QComboBox *combo = settingsUI()->videoRecordBitrateCombo;
+    combo->clear();
+    combo->addItem(QStringLiteral("Auto"), 0);
+    populateBitratePresetCombo(combo, false);
+    updateVideoRecordBitrateCombo();
+}
+
+void CameraGUI::updateVideoRecordBitrateCombo()
+{
+    QComboBox *combo = settingsUI()->videoRecordBitrateCombo;
+    QSignalBlocker blocker(combo);
+    const int index = combo->findData(m_settings.m_videoRecordBitrateKbps);
+    if (index >= 0) {
+        combo->setCurrentIndex(index);
+    } else {
+        combo->setCurrentText(videoRecordBitrateText(m_settings.m_videoRecordBitrateKbps));
+    }
+}
+
+void CameraGUI::applyVideoRecordBitrateComboText()
+{
+    const int bitrateKbps = parseVideoRecordBitrateKbps(
+        settingsUI()->videoRecordBitrateCombo->currentText(),
+        m_settings.m_videoRecordBitrateKbps);
+    if (bitrateKbps == m_settings.m_videoRecordBitrateKbps)
+    {
+        updateVideoRecordBitrateCombo();
+        return;
     }
 
-    combo->addItem(QStringLiteral("480p standard - 2.5 Mbps"), 2500);
-    combo->addItem(QStringLiteral("480p high frame rate - 4 Mbps"), 4000);
-    combo->addItem(QStringLiteral("360p standard - 1 Mbps"), 1000);
-    combo->addItem(QStringLiteral("360p high frame rate - 1.5 Mbps"), 1500);
-    combo->setInsertPolicy(QComboBox::NoInsert);
-    updateYouTubeBitrateCombo();
+    m_settings.m_videoRecordBitrateKbps = bitrateKbps;
+    updateVideoRecordBitrateCombo();
+    applySetting("videoRecordBitrateKbps");
 }
 
 void CameraGUI::updateYouTubeBitrateCombo()
@@ -5785,6 +5850,25 @@ void CameraGUI::on_videoCodecCombo_currentIndexChanged(int index)
 {
     m_settings.m_videoCodec = static_cast<CameraSettings::VideoCodec>(qBound(0, index, 1));
     applySetting("videoCodec");
+}
+
+void CameraGUI::on_videoRecordBitrateCombo_activated(int index)
+{
+    const QVariant bitrateData = settingsUI()->videoRecordBitrateCombo->itemData(index);
+    if (bitrateData.isValid()) {
+        m_settings.m_videoRecordBitrateKbps = qBound(0, bitrateData.toInt(), 240000);
+    } else {
+        m_settings.m_videoRecordBitrateKbps = parseVideoRecordBitrateKbps(
+            settingsUI()->videoRecordBitrateCombo->currentText(),
+            m_settings.m_videoRecordBitrateKbps);
+    }
+    updateVideoRecordBitrateCombo();
+    applySetting("videoRecordBitrateKbps");
+}
+
+void CameraGUI::on_videoRecordBitrateCombo_editingFinished()
+{
+    applyVideoRecordBitrateComboText();
 }
 
 void CameraGUI::on_videoHwAccelerationCheck_toggled(bool checked)

@@ -392,6 +392,7 @@ struct CameraSettings
     int m_youtubeStreamWidth;      ///< Output stream width; 0 = source width
     int m_youtubeStreamHeight;     ///< Output stream height; 0 = source height
     VideoCodec m_videoCodec;       ///< Codec used for saved video recordings
+    int m_videoRecordBitrateKbps;  ///< Saved video bitrate in kbit/s; 0 = automatic from frame size/rate
     bool m_videoLoop;
     double m_videoPlaybackRate;
     int m_videoPlaybackAudioOffsetMs; ///< Preview audio offset for video playback in ms; negative plays audio earlier

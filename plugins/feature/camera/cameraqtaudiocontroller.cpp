@@ -37,6 +37,7 @@ CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     QObject(parent),
     m_capturing(false),
     m_muted(false),
+    m_captureSourceActive(false),
     m_sampleRate(AudioDeviceManager::m_defaultAudioSampleRate),
     m_recordingMessageQueue(nullptr)
 {
@@ -67,6 +68,7 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
     audioDeviceManager->addAudioSource(&m_captureAudioFifo, messageQueue, inputDeviceIndex);
     m_muted = settings.m_audioMute;
     m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
+    m_captureSourceActive = true;
     m_capturing = true;
 }
 
@@ -81,6 +83,7 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
     m_muted = settings.m_audioMute;
     m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
+    m_captureSourceActive = false;
     m_outputAudioFifo.clear();
     m_capturing = true;
     return m_sampleRate;
@@ -93,12 +96,16 @@ void CameraQtAudioController::stop()
     }
 
     qDebug() << "CameraQtAudioController: stopping audio capture";
-    QObject::disconnect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraQtAudioController::onCaptureAudioDataReady);
     AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
-    audioDeviceManager->removeAudioSource(&m_captureAudioFifo);
+    if (m_captureSourceActive)
+    {
+        QObject::disconnect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraQtAudioController::onCaptureAudioDataReady);
+        audioDeviceManager->removeAudioSource(&m_captureAudioFifo);
+    }
     audioDeviceManager->removeAudioSink(&m_outputAudioFifo);
     m_captureAudioFifo.clear();
     m_outputAudioFifo.clear();
+    m_captureSourceActive = false;
     m_capturing = false;
 }
 

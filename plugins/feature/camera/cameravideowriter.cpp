@@ -108,6 +108,32 @@ QImage CameraVideoWriter::prepareRgbImage(const QImage& image, const QSize& size
     return scaled;
 }
 
+static qint64 recordingBitrateBps(const QSize& size, double fps)
+{
+    const int width = size.width();
+    const int height = size.height();
+    const bool highFrameRate = fps > 30.0;
+    int bitrateKbps;
+
+    if ((width >= 7680) || (height >= 4320)) {
+        bitrateKbps = highFrameRate ? 240000 : 160000;
+    } else if ((width >= 3840) || (height >= 2160)) {
+        bitrateKbps = highFrameRate ? 68000 : 45000;
+    } else if ((width >= 2560) || (height >= 1440)) {
+        bitrateKbps = highFrameRate ? 24000 : 16000;
+    } else if ((width >= 1920) || (height >= 1080)) {
+        bitrateKbps = highFrameRate ? 12000 : 8000;
+    } else if ((width >= 1280) || (height >= 720)) {
+        bitrateKbps = highFrameRate ? 7500 : 5000;
+    } else if ((width >= 854) || (height >= 480)) {
+        bitrateKbps = highFrameRate ? 4000 : 2500;
+    } else {
+        bitrateKbps = highFrameRate ? 1500 : 1000;
+    }
+
+    return static_cast<qint64>(bitrateKbps) * 1000;
+}
+
 bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame, QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
@@ -200,7 +226,7 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
         m_codecContext->gop_size = std::max(1, static_cast<int>(std::llround(requestedFps * 2.0)));
         m_codecContext->max_b_frames = 0;
         m_codecContext->pix_fmt = AV_PIX_FMT_YUV420P;
-        m_codecContext->bit_rate = 10000000;
+        m_codecContext->bit_rate = recordingBitrateBps(videoSize, requestedFps);
 
         if (m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
             m_codecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;

@@ -265,6 +265,14 @@ bool CameraVideoFileDecoder::readNextFrame(
         if (m_packet->stream_index == m_videoStreamIndex)
         {
             ret = avcodec_send_packet(m_videoCodecContext, m_packet);
+            if (ret == AVERROR(EAGAIN))
+            {
+                if (!queueOneDecodedVideoFrame(errorMessage)) {
+                    av_packet_unref(m_packet);
+                    return false;
+                }
+                ret = avcodec_send_packet(m_videoCodecContext, m_packet);
+            }
             av_packet_unref(m_packet);
             if (ret < 0)
             {
@@ -504,6 +512,26 @@ bool CameraVideoFileDecoder::queueDecodedVideoFrames(QString& errorMessage)
 #endif
 }
 
+bool CameraVideoFileDecoder::queueOneDecodedVideoFrame(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    QImage image;
+    qint64 positionMs = -1;
+    if (receiveVideoFrame(image, positionMs, errorMessage))
+    {
+        PendingVideoFrame pending;
+        pending.m_image = std::move(image);
+        pending.m_positionMs = positionMs;
+        m_pendingVideoFrames.push_back(std::move(pending));
+        return true;
+    }
+    return errorMessage.isEmpty();
+#endif
+}
+
 bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
@@ -562,6 +590,14 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
         else if (m_packet->stream_index == m_videoStreamIndex)
         {
             ret = avcodec_send_packet(m_videoCodecContext, m_packet);
+            if (ret == AVERROR(EAGAIN))
+            {
+                if (!queueOneDecodedVideoFrame(errorMessage)) {
+                    av_packet_unref(m_packet);
+                    return false;
+                }
+                ret = avcodec_send_packet(m_videoCodecContext, m_packet);
+            }
             av_packet_unref(m_packet);
             if (ret < 0)
             {

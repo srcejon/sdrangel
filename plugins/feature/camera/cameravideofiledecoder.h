@@ -64,6 +64,7 @@ public:
         quint64 m_readAheadVideoPackets = 0;
         quint64 m_sendVideoPacketEagain = 0;
         quint64 m_queuedVideoFrames = 0;
+        quint64 m_parkedVideoPackets = 0;
         quint64 m_audioBytes = 0;
     };
 
@@ -82,6 +83,7 @@ private:
     AVFrame *m_videoFrame = nullptr;
     AVFrame *m_audioFrame = nullptr;
     AVPacket *m_packet = nullptr;
+    AVPacket *m_pendingVideoPacket = nullptr;
     SwsContext *m_swsContext = nullptr;
     SwrContext *m_resampler = nullptr;
     int m_videoStreamIndex = -1;
@@ -92,6 +94,7 @@ private:
     bool m_eof = false;
     bool m_videoDraining = false;
     bool m_audioDraining = false;
+    bool m_hasPendingVideoPacket = false;
     std::deque<PendingVideoFrame> m_pendingVideoFrames;
     DebugStats m_debugStats;
 

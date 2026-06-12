@@ -96,14 +96,7 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
     m_captureSourceActive = false;
     m_outputAudioFifo.clear();
-    const uint32_t prefillFrames = std::min<uint32_t>(m_outputAudioFifo.size(), static_cast<uint32_t>(m_sampleRate / 10));
-    if (prefillFrames > 0)
-    {
-        QByteArray silence;
-        silence.resize(static_cast<qsizetype>(prefillFrames) * 4);
-        silence.fill(0);
-        m_outputAudioFifo.write(reinterpret_cast<const quint8*>(silence.constData()), prefillFrames);
-    }
+    prefillMonitorAudio(100);
     m_capturing = true;
     return m_sampleRate;
 }
@@ -142,6 +135,28 @@ void CameraQtAudioController::clearMonitorAudio()
     m_outputAudioFifo.clear();
 }
 
+void CameraQtAudioController::prefillMonitorAudio(int milliseconds)
+{
+    static constexpr int bytesPerSampleFrame = 4;
+    if ((milliseconds <= 0) || (m_sampleRate <= 0)) {
+        return;
+    }
+
+    const uint32_t fifoSize = m_outputAudioFifo.size();
+    const uint32_t prefillFrames = std::min<uint32_t>(
+        fifoSize - std::min(fifoSize, m_outputAudioFifo.fill()),
+        static_cast<uint32_t>((static_cast<qint64>(m_sampleRate) * milliseconds) / 1000));
+    if (prefillFrames <= 0) {
+        return;
+    }
+
+    QByteArray silence;
+    silence.resize(static_cast<qsizetype>(prefillFrames) * bytesPerSampleFrame);
+    silence.fill(0);
+    m_outputAudioFifo.write(reinterpret_cast<const quint8*>(silence.constData()), prefillFrames);
+    m_monitorDebugStats.m_silenceFrames += prefillFrames;
+}
+
 void CameraQtAudioController::resetMonitorDebugStats()
 {
     m_monitorDebugStats = MonitorDebugStats();
@@ -169,25 +184,11 @@ void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, i
         ++m_monitorDebugStats.m_submitCalls;
         m_monitorDebugStats.m_submittedFrames += static_cast<quint64>(monitorFrames);
 
-        const uint32_t minFillFrames = std::min<uint32_t>(fifoSize, static_cast<uint32_t>(m_sampleRate / 10));
         uint32_t fill = m_outputAudioFifo.fill();
         if ((m_monitorDebugStats.m_submitCalls == 1) || (fill < m_monitorDebugStats.m_minFillBefore)) {
             m_monitorDebugStats.m_minFillBefore = fill;
         }
         m_monitorDebugStats.m_maxFillBefore = std::max<quint64>(m_monitorDebugStats.m_maxFillBefore, fill);
-        if (fill < minFillFrames)
-        {
-            const uint32_t silenceFrames = std::min<uint32_t>(minFillFrames - fill, fifoSize - fill);
-            if (silenceFrames > 0)
-            {
-                QByteArray silence;
-                silence.resize(static_cast<qsizetype>(silenceFrames) * bytesPerSampleFrame);
-                silence.fill(0);
-                m_outputAudioFifo.write(reinterpret_cast<const quint8*>(silence.constData()), silenceFrames);
-                fill += silenceFrames;
-                m_monitorDebugStats.m_silenceFrames += silenceFrames;
-            }
-        }
 
         const quint8 *monitorData = reinterpret_cast<const quint8*>(pcmS16Stereo.constData())
             + static_cast<qsizetype>(skippedInputFrames) * bytesPerSampleFrame;

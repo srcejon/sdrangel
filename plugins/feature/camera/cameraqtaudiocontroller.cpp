@@ -87,7 +87,8 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
     const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(settings.m_audioDeviceName);
     const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
-    qDebug() << "CameraQtAudioController: starting file audio monitor: outputDeviceIndex" << outputDeviceIndex;
+    qDebug() << "CameraQtAudioController: starting file audio monitor: outputDeviceIndex" << outputDeviceIndex
+             << "prefillMs" << filePlaybackMonitorPrefillMs();
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
     m_monitorDroppedFrames = 0;
     m_monitorUnderflows.store(0);
@@ -96,7 +97,7 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
     m_captureSourceActive = false;
     m_outputAudioFifo.clear();
-    prefillMonitorAudio(100);
+    prefillMonitorAudio(filePlaybackMonitorPrefillMs());
     m_capturing = true;
     return m_sampleRate;
 }

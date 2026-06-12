@@ -57,6 +57,7 @@ public:
     void setMuted(bool muted);
     void clearMonitorAudio();
     void prefillMonitorAudio(int milliseconds);
+    static int filePlaybackMonitorPrefillMs() { return 35; }
     void resetMonitorDebugStats();
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     uint32_t monitorAudioFill() const { return m_outputAudioFifo.fill(); }

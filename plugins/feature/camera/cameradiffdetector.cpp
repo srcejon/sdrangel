@@ -31,6 +31,36 @@
 #include "cameradiffdetector.h"
 #include "camerapostprocessor.h"
 
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+namespace {
+void convertCudaGrayTo8Bit(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, cv::cuda::Stream& stream)
+{
+    if (src.depth() == CV_8U)
+    {
+        dst = src;
+        return;
+    }
+
+    double scale = 1.0;
+    switch (src.depth())
+    {
+    case CV_16U:
+        scale = 1.0 / 257.0;
+        break;
+    case CV_32F:
+    case CV_64F:
+        scale = 255.0;
+        break;
+    default:
+        scale = 1.0;
+        break;
+    }
+
+    src.convertTo(dst, CV_8U, scale, 0.0, stream);
+}
+}
+#endif
+
 CameraDiffDetector::CameraDiffDetector()
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     :
@@ -265,11 +295,21 @@ bool CameraDiffDetector::applyDiffMaskCuda(CameraPipelineFrame& frame, const cv:
         // only consumes the ROI.
         cv::cuda::cvtColor(bgrGpu(roi), grayGpu, cv::COLOR_BGR2GRAY, 0, m_cudaDetectionStream);
         cv::cuda::cvtColor(prevBgrGpu(roi), prevGrayGpu, cv::COLOR_BGR2GRAY, 0, m_cudaDetectionStream);
+        cv::cuda::GpuMat gray8Gpu;
+        cv::cuda::GpuMat prevGray8Gpu;
+        convertCudaGrayTo8Bit(grayGpu, gray8Gpu, m_cudaDetectionStream);
+        convertCudaGrayTo8Bit(prevGrayGpu, prevGray8Gpu, m_cudaDetectionStream);
 
         cv::cuda::GpuMat diffGpu;
         cv::cuda::GpuMat maskGpu;
-        cv::cuda::absdiff(grayGpu, prevGrayGpu, diffGpu, m_cudaDetectionStream);
+        cv::cuda::absdiff(gray8Gpu, prevGray8Gpu, diffGpu, m_cudaDetectionStream);
         cv::cuda::threshold(diffGpu, maskGpu, m_settings.m_diffThreshold, 255.0, cv::THRESH_BINARY, m_cudaDetectionStream);
+        if (maskGpu.type() != CV_8UC1)
+        {
+            cv::cuda::GpuMat mask8Gpu;
+            maskGpu.convertTo(mask8Gpu, CV_8U, 1.0, 0.0, m_cudaDetectionStream);
+            maskGpu = mask8Gpu;
+        }
 
         if (m_settings.m_diffMaskOpenSize > 0)
         {
@@ -315,7 +355,7 @@ bool CameraDiffDetector::applyDiffMaskCuda(CameraPipelineFrame& frame, const cv:
             combinedMaskGpu = closedGpu;
         }
 
-        cv::cuda::GpuMat fullMaskGpu(bgrGpu.size(), combinedMaskGpu.type());
+        cv::cuda::GpuMat fullMaskGpu(bgrGpu.size(), CV_8UC1);
         fullMaskGpu.setTo(cv::Scalar::all(0), m_cudaDetectionStream);
         combinedMaskGpu.copyTo(fullMaskGpu(roi), m_cudaDetectionStream);
 
@@ -410,6 +450,7 @@ const cv::cuda::GpuMat& CameraDiffDetector::cudaDiffExclusionMask(const cv::Rect
     if (m_cudaDiffExclusionMask.empty()
         || (m_cudaDiffExclusionRoi != roi)
         || (m_cudaDiffExclusionWorkSize != workSize)
+        || (m_cudaDiffExclusionMask.type() != CV_8UC1)
         || (m_cudaDiffExclusionRects != m_settings.m_motionExclusionRects))
     {
         const cv::Mat exclusionMask = buildExclusionMask(roi, workSize);

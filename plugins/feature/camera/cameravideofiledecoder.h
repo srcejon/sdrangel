@@ -84,6 +84,7 @@ private:
     [[nodiscard]] bool openVideoDecoder(QString& errorMessage);
     [[nodiscard]] bool openAudioDecoder(QString& errorMessage);
     [[nodiscard]] bool openResampler(QString& errorMessage);
+    [[nodiscard]] bool sendVideoPacket(AVPacket *packet, QString& errorMessage);
     [[nodiscard]] bool receiveVideoFrame(QImage& image, qint64& positionMs, QString& errorMessage);
     [[nodiscard]] bool queueOneDecodedVideoFrame(QString& errorMessage);
     [[nodiscard]] bool queueDecodedVideoFrames(QString& errorMessage);

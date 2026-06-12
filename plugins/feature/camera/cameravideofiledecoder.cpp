@@ -264,19 +264,9 @@ bool CameraVideoFileDecoder::readNextFrame(
 
         if (m_packet->stream_index == m_videoStreamIndex)
         {
-            ret = avcodec_send_packet(m_videoCodecContext, m_packet);
-            if (ret == AVERROR(EAGAIN))
-            {
-                if (!queueOneDecodedVideoFrame(errorMessage)) {
-                    av_packet_unref(m_packet);
-                    return false;
-                }
-                ret = avcodec_send_packet(m_videoCodecContext, m_packet);
-            }
+            const bool sent = sendVideoPacket(m_packet, errorMessage);
             av_packet_unref(m_packet);
-            if (ret < 0)
-            {
-                errorMessage = QStringLiteral("Cannot send video file packet to decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+            if (!sent) {
                 return false;
             }
         }
@@ -454,6 +444,38 @@ bool CameraVideoFileDecoder::openResampler(QString& errorMessage)
 #endif
 }
 
+bool CameraVideoFileDecoder::sendVideoPacket(AVPacket *packet, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(packet)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    static constexpr int maxDrainAttempts = 16;
+
+    for (int attempt = 0; attempt <= maxDrainAttempts; ++attempt)
+    {
+        const int ret = avcodec_send_packet(m_videoCodecContext, packet);
+        if (ret == 0) {
+            return true;
+        }
+
+        if (ret != AVERROR(EAGAIN))
+        {
+            errorMessage = QStringLiteral("Cannot send video file packet to decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+            return false;
+        }
+
+        if (!queueOneDecodedVideoFrame(errorMessage)) {
+            return false;
+        }
+    }
+
+    errorMessage = QStringLiteral("Cannot send video file packet to decoder: decoder output queue did not drain");
+    return false;
+#endif
+}
+
 bool CameraVideoFileDecoder::receiveVideoFrame(QImage& image, qint64& positionMs, QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
@@ -589,19 +611,9 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
         }
         else if (m_packet->stream_index == m_videoStreamIndex)
         {
-            ret = avcodec_send_packet(m_videoCodecContext, m_packet);
-            if (ret == AVERROR(EAGAIN))
-            {
-                if (!queueOneDecodedVideoFrame(errorMessage)) {
-                    av_packet_unref(m_packet);
-                    return false;
-                }
-                ret = avcodec_send_packet(m_videoCodecContext, m_packet);
-            }
+            const bool sent = sendVideoPacket(m_packet, errorMessage);
             av_packet_unref(m_packet);
-            if (ret < 0)
-            {
-                errorMessage = QStringLiteral("Cannot send video file packet to decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+            if (!sent) {
                 return false;
             }
             if (!queueDecodedVideoFrames(errorMessage)) {

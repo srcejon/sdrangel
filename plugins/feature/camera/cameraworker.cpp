@@ -1452,7 +1452,7 @@ void CameraWorker::stepVideoFile(int direction)
 int CameraWorker::videoFileFrameIntervalMs() const
 {
     const double decoderFps = m_videoFileDecoder ? m_videoFileDecoder->frameRate() : m_settings.m_framesPerSecond;
-    return qMax(1, static_cast<int>(1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings.m_videoPlaybackRate)) + 0.5));
+    return qMax(1, static_cast<int>(std::ceil(1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings.m_videoPlaybackRate)))));
 }
 
 void CameraWorker::resetVideoFilePlaybackStats()

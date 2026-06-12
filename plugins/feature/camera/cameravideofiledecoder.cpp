@@ -594,7 +594,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
     static constexpr int bytesPerSampleFrame = 4;
     const int targetAudioFrames = std::max(
         static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5),
-        m_outputSampleRate / 4);
+        m_outputSampleRate / 10);
     const int targetAudioBytes = targetAudioFrames * bytesPerSampleFrame;
     int packetsRead = 0;
 

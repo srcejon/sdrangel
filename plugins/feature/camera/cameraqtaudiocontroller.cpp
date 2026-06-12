@@ -136,6 +136,9 @@ void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, i
     {
         const uint32_t fifoSize = m_outputAudioFifo.size();
         const int monitorFrames = std::min(sampleFrames, static_cast<int>(fifoSize));
+        const uint32_t targetFillFrames = std::min<uint32_t>(
+            fifoSize,
+            static_cast<uint32_t>(std::max(m_sampleRate / 2, monitorFrames)));
         const int skippedInputFrames = sampleFrames - monitorFrames;
         if (skippedInputFrames > 0) {
             m_monitorDroppedFrames += static_cast<quint64>(skippedInputFrames);
@@ -144,8 +147,8 @@ void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, i
         const quint8 *monitorData = reinterpret_cast<const quint8*>(pcmS16Stereo.constData())
             + static_cast<qsizetype>(skippedInputFrames) * bytesPerSampleFrame;
         const uint32_t fill = m_outputAudioFifo.fill();
-        const uint32_t overflowFrames = fill + static_cast<uint32_t>(monitorFrames) > fifoSize
-            ? fill + static_cast<uint32_t>(monitorFrames) - fifoSize
+        const uint32_t overflowFrames = fill + static_cast<uint32_t>(monitorFrames) > targetFillFrames
+            ? fill + static_cast<uint32_t>(monitorFrames) - targetFillFrames
             : 0;
         if (overflowFrames > 0)
         {

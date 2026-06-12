@@ -88,7 +88,8 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(settings.m_audioDeviceName);
     const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
     qDebug() << "CameraQtAudioController: starting file audio monitor: outputDeviceIndex" << outputDeviceIndex
-             << "prefillMs" << filePlaybackMonitorPrefillMs();
+             << "prefillMs" << filePlaybackMonitorPrefillMs()
+             << "targetFillMs" << filePlaybackMonitorTargetFillMs();
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
     m_monitorDroppedFrames = 0;
     m_monitorUnderflows.store(0);
@@ -190,6 +191,23 @@ void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, i
             m_monitorDebugStats.m_minFillBefore = fill;
         }
         m_monitorDebugStats.m_maxFillBefore = std::max<quint64>(m_monitorDebugStats.m_maxFillBefore, fill);
+
+        if (!m_captureSourceActive)
+        {
+            const uint32_t targetFillFrames = std::min<uint32_t>(
+                fifoSize,
+                static_cast<uint32_t>((static_cast<qint64>(m_sampleRate) * filePlaybackMonitorTargetFillMs()) / 1000));
+            if (fill < targetFillFrames)
+            {
+                const uint32_t silenceFrames = targetFillFrames - fill;
+                QByteArray silence;
+                silence.resize(static_cast<qsizetype>(silenceFrames) * bytesPerSampleFrame);
+                silence.fill(0);
+                m_outputAudioFifo.write(reinterpret_cast<const quint8*>(silence.constData()), silenceFrames);
+                m_monitorDebugStats.m_silenceFrames += silenceFrames;
+                fill = m_outputAudioFifo.fill();
+            }
+        }
 
         const quint8 *monitorData = reinterpret_cast<const quint8*>(pcmS16Stereo.constData())
             + static_cast<qsizetype>(skippedInputFrames) * bytesPerSampleFrame;

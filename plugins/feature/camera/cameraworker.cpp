@@ -1443,7 +1443,7 @@ void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
     m_videoFilePositionMs = qBound<qint64>(0, positionMs, m_videoFileDurationMs > 0 ? m_videoFileDurationMs : std::numeric_limits<qint64>::max());
     m_videoFileDecoder->seek(m_videoFilePositionMs);
     m_qtAudio.clearMonitorAudio();
-    m_qtAudio.prefillMonitorAudio(CameraQtAudioController::filePlaybackMonitorPrefillMs());
+    m_qtAudio.prefillMonitorAudio(m_qtAudio.filePlaybackMonitorPrefillForOffsetMs());
     reportVideoFilePlaybackToGUI();
     if (displayFrame) {
         readVideoFileFrame(false, m_videoFilePositionMs);

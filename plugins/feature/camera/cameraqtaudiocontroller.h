@@ -58,6 +58,7 @@ public:
     void setFilePlaybackAudioOffsetMs(int offsetMs);
     void clearMonitorAudio();
     void prefillMonitorAudio(int milliseconds);
+    [[nodiscard]] int filePlaybackMonitorPrefillForOffsetMs() const;
     static int filePlaybackMonitorPrefillMs() { return 60; }
     static int filePlaybackMonitorTargetFillMs() { return 30; }
     void resetMonitorDebugStats();
@@ -79,6 +80,8 @@ private:
     static void alignInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex);
     static int findInputIndex(const CameraSettings& settings);
     void resetFilePlaybackAudioOffset();
+    [[nodiscard]] int filePlaybackMonitorTargetFillForOffsetMs() const;
+    [[nodiscard]] int filePlaybackMonitorJitterForOffsetMs() const;
     void applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate);
 
     bool m_capturing;

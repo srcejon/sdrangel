@@ -225,7 +225,7 @@
       <item>
        <widget class="QSpinBox" name="playbackAudioOffsetSpin">
         <property name="toolTip">
-         <string>Preview audio offset for video playback; negative plays audio earlier</string>
+         <string>Preview audio timing for video playback; negative reduces audio buffering, positive delays audio</string>
         </property>
         <property name="minimum">
          <number>-5000</number>

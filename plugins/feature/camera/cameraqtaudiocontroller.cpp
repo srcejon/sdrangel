@@ -90,8 +90,8 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(settings.m_audioDeviceName);
     const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
     qDebug() << "CameraQtAudioController: starting file audio monitor: outputDeviceIndex" << outputDeviceIndex
-             << "prefillMs" << filePlaybackMonitorPrefillMs()
-             << "targetFillMs" << filePlaybackMonitorTargetFillMs()
+             << "prefillMs" << filePlaybackMonitorPrefillForOffsetMs()
+             << "targetFillMs" << filePlaybackMonitorTargetFillForOffsetMs()
              << "audioOffsetMs" << settings.m_videoPlaybackAudioOffsetMs;
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
     m_monitorDroppedFrames = 0;
@@ -106,7 +106,7 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     resetFilePlaybackAudioOffset();
     m_captureSourceActive = false;
     m_outputAudioFifo.clear();
-    prefillMonitorAudio(filePlaybackMonitorPrefillMs());
+    prefillMonitorAudio(filePlaybackMonitorPrefillForOffsetMs());
     m_capturing = true;
     return m_sampleRate;
 }
@@ -234,10 +234,10 @@ void CameraQtAudioController::submitMonitorPcmSamples(const QByteArray& pcmS16St
         {
             const uint32_t targetFillFrames = std::min<uint32_t>(
                 fifoSize,
-                static_cast<uint32_t>((static_cast<qint64>(m_sampleRate) * filePlaybackMonitorTargetFillMs()) / 1000));
+                static_cast<uint32_t>((static_cast<qint64>(m_sampleRate) * filePlaybackMonitorTargetFillForOffsetMs()) / 1000));
             const uint32_t jitterFrames = std::min<uint32_t>(
                 fifoSize,
-                static_cast<uint32_t>((static_cast<qint64>(m_sampleRate) * 20) / 1000));
+                static_cast<uint32_t>((static_cast<qint64>(m_sampleRate) * filePlaybackMonitorJitterForOffsetMs()) / 1000));
             maxFillFrames = std::min<uint32_t>(
                 fifoSize,
                 targetFillFrames + static_cast<uint32_t>(monitorFrames) + jitterFrames);
@@ -272,8 +272,24 @@ void CameraQtAudioController::resetFilePlaybackAudioOffset()
         return;
     }
 
-    m_filePlaybackAudioOffsetRemainingFrames =
-        static_cast<int>((static_cast<qint64>(m_sampleRate) * m_filePlaybackAudioOffsetMs) / 1000);
+    m_filePlaybackAudioOffsetRemainingFrames = m_filePlaybackAudioOffsetMs > 0
+        ? static_cast<int>((static_cast<qint64>(m_sampleRate) * m_filePlaybackAudioOffsetMs) / 1000)
+        : 0;
+}
+
+int CameraQtAudioController::filePlaybackMonitorPrefillForOffsetMs() const
+{
+    return std::max(0, filePlaybackMonitorPrefillMs() + std::min(0, m_filePlaybackAudioOffsetMs));
+}
+
+int CameraQtAudioController::filePlaybackMonitorTargetFillForOffsetMs() const
+{
+    return std::max(0, filePlaybackMonitorTargetFillMs() + std::min(0, m_filePlaybackAudioOffsetMs));
+}
+
+int CameraQtAudioController::filePlaybackMonitorJitterForOffsetMs() const
+{
+    return m_filePlaybackAudioOffsetMs < 0 ? 0 : 20;
 }
 
 void CameraQtAudioController::applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate)
@@ -291,18 +307,6 @@ void CameraQtAudioController::applyFilePlaybackAudioOffset(QByteArray& pcmS16Ste
         pcmS16Stereo.prepend(silence);
         m_monitorDebugStats.m_silenceFrames += static_cast<quint64>(m_filePlaybackAudioOffsetRemainingFrames);
         m_filePlaybackAudioOffsetRemainingFrames = 0;
-    }
-    else
-    {
-        const int sampleFrames = pcmS16Stereo.size() / bytesPerSampleFrame;
-        const int skipFrames = std::min(sampleFrames, -m_filePlaybackAudioOffsetRemainingFrames);
-        if (skipFrames <= 0) {
-            return;
-        }
-
-        pcmS16Stereo.remove(0, static_cast<qsizetype>(skipFrames) * bytesPerSampleFrame);
-        m_monitorDroppedFrames += static_cast<quint64>(skipFrames);
-        m_filePlaybackAudioOffsetRemainingFrames += skipFrames;
     }
 }
 

@@ -11,7 +11,7 @@ The Camera plugin supports images and video from:
 * Qt5 Multimedia API (DirectShow on Windows, GStreamer/V4L2 on Linux)
 * ASCOM Alpaca API (including support for Filter Wheels and Focusers)
 * ASI cameras (ASICamera2 only currently included in Windows builds)
-* Video files such as MP4 (Qt6 only)
+* Video files such as MP4 (via FFMPEG)
 
 The Camera plugin also supports a variety of post-processing, detection and overlay features, such as:
 
@@ -26,9 +26,10 @@ The Camera plugin also supports a variety of post-processing, detection and over
 * Date/time and custom HTML overlay
 * Spectrum overlay from SDRangel's SDR devices
 * Azimuth/elevation and right ascension/declination sky grid overlays
+* Generation of 24-hour keograms
 * CUDA acceleration is supported for most operations and the processing runs in multiple threads.
 
-Raw and post-processed images can be saved as JPEG files, and video can be recorded in H264-encoded MP4 files.
+Raw and post-processed images can be saved as JPEG, PNG or FITS files, and video can be recorded in H264/H264 encoded MP4 files. Video can also be streamed to YouTube via RTMP.
 
 The Camera feature can send events to the Scheduler feature when motion or specific YOLO object classes are detected, allowing you to automate actions such as recording from SDR devices, sending notifications or running custom commands. 
 Recoding images and video can also be triggered via the Scheduler feature, allowing triggering based on time or RF events.

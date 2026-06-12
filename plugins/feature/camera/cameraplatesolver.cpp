@@ -16755,6 +16755,65 @@ FinalMatchPassEvaluation searchBrightAnchorVerifierRescue(const CameraSettings& 
         return best;
     }
 
+    // For narrow fields, the top-N brightest catalog stars *globally* within the wide
+    // localRadiusDegrees (multiple FOVs, used for catalog matching) are often well
+    // outside the actual frame, so the fixed-size "brightest" pool above can be entirely
+    // filled with stars that can never match a detection - while the star that's
+    // actually the brightest object *in the image* (e.g. ngc-2403's HIP 37078 at mag 8.2,
+    // vs a pool of out-of-frame mag 3-5 stars) never gets a chance as an anchor.
+    // Additively append the brightest few in-frame catalog stars not already in the pool.
+    // DENSE fields only (>= 512 detections): dense narrow solves face the strict
+    // bright-support acceptance gates, so a wrong-roll candidate seeded from a faint
+    // anchor cannot be adopted. Sparse/moderate fields are excluded deliberately - their
+    // lenient low-magnitude acceptance ladder let exactly such candidates through as
+    // wrong-roll false positives (synthetic corpus collapse, 2026-06-11: 99 -> 59/100).
+    if (isNarrowField(settings) && (starDetections.size() >= 512))
+    {
+        const auto appendInFrameAnchorStars = [&](double radiusDegrees, int budget) {
+            const QVector<VisibleCatalogStar> inFrameStars = selectLocalVisibleStars(
+                catalogContext.visibleStars,
+                settings.m_azimuth,
+                settings.m_elevation,
+                radiusDegrees,
+                2048);
+            int added = 0;
+            for (const VisibleCatalogStar& star : inFrameStars)
+            {
+                if (added >= budget) {
+                    break;
+                }
+                if ((star.catalogIndex < 0)
+                    || (star.catalogIndex >= catalogContext.catalogStars.size())
+                    || (star.magnitude > kNarrowGuidedBrightCatalogMaxMagnitude))
+                {
+                    continue;
+                }
+                const bool alreadyPresent = std::any_of(
+                    brightCatalogStars.constBegin(), brightCatalogStars.constEnd(),
+                    [&star](const VisibleCatalogStar& existing) {
+                        return existing.catalogIndex == star.catalogIndex;
+                    });
+                if (alreadyPresent) {
+                    continue;
+                }
+                brightCatalogStars.append(star);
+                ++added;
+            }
+        };
+        // Tier 1: stars inside the frame's inscribed circle are in the image at ANY roll
+        // (roll is unknown here), so each is certain to have a detection counterpart —
+        // these are the highest-value anchors (ngc-2403's HIP 37078 at 0.32 degrees from
+        // centre is otherwise crowded out by brighter stars that sit in the wider radius
+        // but outside the actual frame). Tier 2: the wider possibly-in-frame radius.
+        const double frameWidthDegrees = static_cast<double>(settings.m_fov);
+        const double inscribedRadiusDegrees = 0.5 * frameWidthDegrees * std::min(
+            1.0,
+            static_cast<double>(std::min(imageSize.width(), imageSize.height()))
+                / static_cast<double>(std::max(1, imageSize.width())));
+        appendInFrameAnchorStars(inscribedRadiusDegrees, 4);
+        appendInFrameAnchorStars(std::min(localRadiusDegrees, frameWidthDegrees), 4);
+    }
+
     // Diagnostic only (SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE): dump the anchor
     // candidate sets pass 1 will sweep, so it's possible to tell whether a particular
     // detection/catalog-star pairing was even considered as an anchor.
@@ -16816,7 +16875,14 @@ FinalMatchPassEvaluation searchBrightAnchorVerifierRescue(const CameraSettings& 
         Evaluation refined;
         double cheapScore = -std::numeric_limits<double>::infinity();
     };
-    constexpr int kMaxRescueShortlist = 5;
+    // Pass-2's cost scales with detections x catalog candidates, so the shortlist depth
+    // can scale inversely with field density: a 45-detection sparse field affords ~24
+    // verifier-ranked candidates for the same budget 5 cost on a 1178-detection dense
+    // one. Sparse fields need the depth — their cheap scores are nearly flat (true and
+    // wrong-roll basins within ~0.2 of each other on narrow-3), so a 5-slot global
+    // shortlist is routinely crowded out by contaminated basins before
+    // poseFalseAlarmLogOdds (which separates well) ever sees the true candidate.
+    const int kMaxRescueShortlist = std::clamp(2400 / std::max(1, static_cast<int>(starDetections.size())), 5, 24);
     QVector<RescueShortlistCandidate> shortlist;
 
     for (int detectionIndex : brightDetectionIndices)
@@ -21455,6 +21521,41 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 result.m_seedRadialMagnitudeMatchFraction = selectedFinalPass.seedRadialMagnitudeMatchFraction;
                 result.m_prioritySeedProjectedChecks = selectedFinalPass.prioritySeedProjectedChecks;
                 result.m_prioritySeedProjectedErrorPixels = selectedFinalPass.prioritySeedProjectedErrorPixels;
+                result.m_azimuthDegrees = selectedFinalPass.pose.azimuthDegrees;
+                result.m_elevationDegrees = selectedFinalPass.pose.elevationDegrees;
+                result.m_rollDegrees = selectedFinalPass.pose.rollDegrees;
+                result.m_fovDegrees = selectedFinalPass.pose.fovDegrees;
+                result.m_centerOffsetXPixels = selectedFinalPass.pose.centerOffsetXPixels;
+                result.m_centerOffsetYPixels = selectedFinalPass.pose.centerOffsetYPixels;
+                result.m_distortionK1 = selectedFinalPass.pose.distortionK1;
+
+                // finalMatches/projectedStars alias selectedFinalPass's members (now
+                // rescuePass), but the per-detection labelling and the match counters
+                // already ran against the pre-rescue pass — redo them so the result
+                // payload reflects the adopted pose (without this, the run reports
+                // solved=true with the *previous* selected pose's fields).
+                clearSolvedStars(starDetections);
+                QHash<int, QPointF> rescueProjectedPointsByCatalogIndex;
+                for (const ProjectedCatalogStar& projectedStar : projectedStars) {
+                    rescueProjectedPointsByCatalogIndex.insert(projectedStar.catalogIndex, projectedStar.point);
+                }
+                for (const Match& match : finalMatches)
+                {
+                    CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
+                    const CatalogStar& catalogStar = catalogContext.catalogStars[match.catalogIndex];
+                    detection.m_label = catalogDisplayName(catalogStar);
+                    detection.m_projectedCenter = rescueProjectedPointsByCatalogIndex.value(match.catalogIndex);
+                    detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
+                    detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
+                    detection.m_catalogRightAscensionDegrees = catalogStar.rightAscensionDegrees;
+                    detection.m_catalogDeclinationDegrees = catalogStar.declinationDegrees;
+                    detection.m_catalogSpectralType = catalogStar.spectralType;
+                    detection.m_solved = true;
+                }
+                result.m_matchedStars = finalMatches.size();
+                result.m_rmsErrorPixels = selectedFinalPass.rmsErrorPixels;
+                result.m_maxErrorPixels = selectedFinalPass.maxErrorPixels;
+                result.m_matchSummary = matchSummary(catalogContext, starDetections, finalMatches);
             }
         }
     }
@@ -21881,6 +21982,112 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         retryDenseNarrowDirectionWithBrightCatalog();
     }
 
+    // Deepen-escape retry: the mirror image of depth-escape. A detection-rich narrow
+    // direction-seeded image can fail purely because the *requested* catalog depth is too
+    // shallow for the field — only a handful of in-FoV catalog candidates face hundreds of
+    // detections, too few for an acceptable dense fit (m51@14: 509 detections vs 103
+    // candidates fails, while the identical image/seed solves at mag 15 with 149/165
+    // matched). Retry one then two magnitudes deeper and adopt any *solved* result: unlike
+    // depth-escape (which escapes INTO the lenient sparse-catalog acceptance regime and so
+    // needs its own tight-fit gate), deepening moves into the denser, stricter acceptance
+    // regime — an adopted result is exactly as trustworthy as the same solve requested at
+    // that depth directly. No rms gate here: correct galaxy-field solves carry rms 12-13px
+    // from fuzzy detections (m51@15: rms 13.17), which a depth-escape-style <=3px bar
+    // would wrongly reject. The catalog-starvation trigger (candidates <= detections/3,
+    // detections >= 128) keeps this off every other current failure path.
+    // Each deepen depth also sweeps a few coarse azimuth recenter offsets: the recenter
+    // ladder only runs at the *requested* depth, so a catalog-starved field whose seed is
+    // also ~1 degree off (m51@14: az seed 92.0 vs true 93.0) needs depth and recentering
+    // together — at the raw seed, mag 15 reaches only 46 matches while the identical
+    // image solves with 149 from the true centre. Budgeted to keep the failure path
+    // bounded; any solved result early-stops.
+    const auto attemptDeepenEscape = [&]() {
+        const bool catalogStarvedNarrowDirectionSolve =
+            solveUsesDirection && !solveUsesRoll && SolverContext::isNarrowField(settings)
+            && (starDetections.size() >= 128)
+            && (result.m_catalogCandidateStars > 0)
+            && (result.m_catalogCandidateStars <= (starDetections.size() / 3));
+        if (result.m_solved
+            || !catalogStarvedNarrowDirectionSolve
+            || isCancellationRequested())
+        {
+            return;
+        }
+        const QVector<CameraPipelineStarDetection> detectionsBeforeDeepenEscape = starDetections;
+        const double requestedMag = static_cast<double>(settings.m_plateSolveMaxMagnitude);
+        const double deepenFovDegrees = std::max(0.1, static_cast<double>(settings.m_fov));
+        const std::array<double, 5> deepenAzimuthOffsets = {{
+            0.0, deepenFovDegrees * 0.75, -deepenFovDegrees * 0.75, deepenFovDegrees, -deepenFovDegrees
+        }};
+        constexpr int kMaxDeepenEscapeRuns = 6;
+        int deepenEscapeRuns = 0;
+        bool deepenAliasContaminated = false;
+        for (double escapeMagnitude : {requestedMag + 1.0, requestedMag + 2.0})
+        {
+            if (result.m_solved
+                || deepenAliasContaminated
+                || (escapeMagnitude > 16.5)
+                || hasAttemptedDenseNarrowBrightCatalogMagnitude(escapeMagnitude))
+            {
+                continue;
+            }
+            markAttemptedDenseNarrowBrightCatalogMagnitude(escapeMagnitude);
+            for (double azimuthOffset : deepenAzimuthOffsets)
+            {
+                if (isCancellationRequested() || (deepenEscapeRuns >= kMaxDeepenEscapeRuns)) {
+                    break;
+                }
+                ++deepenEscapeRuns;
+                CameraSettings retrySettings(settings);
+                retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(escapeMagnitude);
+                retrySettings.m_azimuth = static_cast<float>(SolverContext::normalizeDegrees(
+                    static_cast<double>(settings.m_azimuth) + azimuthOffset));
+                qDebug() << "CameraPlateSolver: deepen-escape retry at deeper catalog"
+                         << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
+                         << "azimuthOffset" << azimuthOffset
+                         << "detections" << starDetections.size()
+                         << "candidates" << result.m_catalogCandidateStars;
+                CameraPlateSolveResult escapeResult = runSolve(retrySettings, QStringLiteral("deepen-escape"));
+                // Adopt only a solved result that matches most of the deeper catalog's
+                // in-FoV candidates: a correct catalog-starved solve is near-complete
+                // (m51@14 deepen: 150/165 = 0.91) while a wrong-roll alias that clears
+                // the gate from an offset seed is not (m101@15 deepen: 134/328 = 0.41,
+                // roll -25 vs true 87 — observed when this adoption was unconditional).
+                const bool escapeDominatesCandidates =
+                    escapeResult.m_solved
+                    && (escapeResult.m_matchedStars
+                        >= static_cast<int>(std::ceil(0.6 * std::max(1, escapeResult.m_catalogCandidateStars))));
+                if (escapeDominatesCandidates)
+                {
+                    result = escapeResult;
+                    break;
+                }
+                if (escapeResult.m_solved)
+                {
+                    // A solved-but-low-coverage result means the deeper catalog is
+                    // feeding acceptable-looking aliases for this field — further
+                    // offsets/depths can only find more of the same, so stop the whole
+                    // escape rather than spend (and risk) the remaining budget.
+                    qDebug() << "CameraPlateSolver: deepen-escape solved but matches too few of the deeper candidates, rejecting"
+                             << "matches" << escapeResult.m_matchedStars
+                             << "candidates" << escapeResult.m_catalogCandidateStars;
+                    deepenAliasContaminated = true;
+                    starDetections = detectionsBeforeDeepenEscape;
+                    break;
+                }
+                starDetections = detectionsBeforeDeepenEscape;
+            }
+            if (result.m_solved) {
+                break;
+            }
+        }
+    };
+    // A catalog-starved failure is recognisable from the very first attempt, and the
+    // recenter ladder below cannot help it (it re-tries the same starved depth up to 16
+    // more times — ~30s on m51@14 before the deepen that actually solves it). Try the
+    // deepen escape first; the ladder and the late fallback below only run if it fails.
+    attemptDeepenEscape();
+
     // NB: a "strong rejected anchor" guard used to suppress the recenter retry here, but
     // it mis-fired on wrong-roll aliases that coincidentally match a few named bright
     // anchors (e.g. m51 @16 from a ~1° offset seed locks onto a roll-58° alias with 3
@@ -22054,11 +22261,24 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             {
                 bestRecenterResult = retryResult;
                 bestRecenterDetections = starDetections;
+                // The absolute strong-match floor (>= 80) is unreachable on sparse fields
+                // whose whole in-FoV catalog is a few dozen stars, so a solved sparse
+                // result used to keep burning the remaining recenter budget for nothing
+                // (narrow-4: solved with 42/50 candidates at attempt 4, then ran 13 more
+                // attempts that never beat it). A solved result matching most of the
+                // available candidates is equally conclusive evidence.
+                const bool dominantSparseCoverage =
+                    bestRecenterResult.m_matchedStars >= std::max(
+                        settings.m_plateSolveMinMatches + 8,
+                        static_cast<int>(std::ceil(
+                            0.6 * std::max(1, bestRecenterResult.m_catalogCandidateStars))));
                 if (bestRecenterResult.m_solved
-                    && (bestRecenterResult.m_matchedStars >= strongRecenterMatchCount))
+                    && ((bestRecenterResult.m_matchedStars >= strongRecenterMatchCount)
+                        || dominantSparseCoverage))
                 {
                     qDebug() << "CameraPlateSolver: stopping dense narrow recenter retries after strong solved candidate"
                              << "matches" << bestRecenterResult.m_matchedStars
+                             << "candidates" << bestRecenterResult.m_catalogCandidateStars
                              << "score" << retryScore
                              << "azimuth" << bestRecenterResult.m_azimuthDegrees
                              << "elevation" << bestRecenterResult.m_elevationDegrees
@@ -22071,7 +22291,14 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         starDetections = bestRecenterDetections;
     }
 
-    retryDenseNarrowDirectionWithBrightCatalog();
+    // For an already-solved result with substantial match support, the bright-catalog
+    // re-run can only re-derive the same pose from a shallower catalog (cluster-m7: a
+    // 9.4s mag-13 re-run of a 1447-match solve adopted the identical pose with half the
+    // matches; nebula-c11: a 4.3s re-run was discarded) — its useful work is rescuing
+    // unsolved or weakly-supported results.
+    if (!result.m_solved || (result.m_matchedStars < 120)) {
+        retryDenseNarrowDirectionWithBrightCatalog();
+    }
 
     const auto wrappedAngularDistanceDegrees = [](double lhs, double rhs) {
         double delta = std::fabs(lhs - rhs);
@@ -22181,6 +22408,12 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             starDetections = detectionsBeforeDepthEscape;
         }
     }
+
+    // Late deepen-escape fallback: the early attempt before the recenter ladder covers
+    // the starvation signature visible after the initial run; this one catches it when
+    // the signature only emerges from the ladder/bright-catalog results (attempted
+    // magnitudes are deduped, so nothing reruns).
+    attemptDeepenEscape();
 
     appendOuterProfile();
     return result;

@@ -100,8 +100,7 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     m_videoFrame = av_frame_alloc();
     m_audioFrame = av_frame_alloc();
     m_packet = av_packet_alloc();
-    m_pendingVideoPacket = av_packet_alloc();
-    if (!m_videoFrame || !m_audioFrame || !m_packet || !m_pendingVideoPacket)
+    if (!m_videoFrame || !m_audioFrame || !m_packet)
     {
         errorMessage = QStringLiteral("Cannot allocate video file decode buffers");
         close();
@@ -145,9 +144,7 @@ void CameraVideoFileDecoder::close()
     if (m_packet) {
         av_packet_free(&m_packet);
     }
-    if (m_pendingVideoPacket) {
-        av_packet_free(&m_pendingVideoPacket);
-    }
+    clearPendingVideoPackets();
     if (m_videoCodecContext) {
         avcodec_free_context(&m_videoCodecContext);
     }
@@ -163,7 +160,6 @@ void CameraVideoFileDecoder::close()
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
-    m_hasPendingVideoPacket = false;
     m_pendingVideoFrames.clear();
     m_debugStats = DebugStats();
 }
@@ -187,13 +183,10 @@ void CameraVideoFileDecoder::seek(qint64 positionMs)
             avcodec_flush_buffers(m_audioCodecContext);
         }
     }
-    if (m_pendingVideoPacket) {
-        av_packet_unref(m_pendingVideoPacket);
-    }
+    clearPendingVideoPackets();
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
-    m_hasPendingVideoPacket = false;
     m_pendingVideoFrames.clear();
 #else
     Q_UNUSED(positionMs)
@@ -242,11 +235,12 @@ bool CameraVideoFileDecoder::readNextFrame(
         }
 
         int ret;
-        if (m_hasPendingVideoPacket)
+        if (!m_pendingVideoPackets.empty())
         {
-            const bool sent = sendVideoPacket(m_pendingVideoPacket, errorMessage);
-            av_packet_unref(m_pendingVideoPacket);
-            m_hasPendingVideoPacket = false;
+            AVPacket *packet = m_pendingVideoPackets.front();
+            m_pendingVideoPackets.pop_front();
+            const bool sent = sendVideoPacket(packet, errorMessage);
+            av_packet_free(&packet);
             if (!sent) {
                 return false;
             }
@@ -589,16 +583,17 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
     if (!m_audioCodecContext) {
         return true;
     }
-    if (m_hasPendingVideoPacket) {
-        return true;
-    }
 
     ++m_debugStats.m_readAheadCalls;
+    static constexpr size_t maxPendingVideoPackets = 12;
     static constexpr int bytesPerSampleFrame = 4;
     const int targetAudioBytes = std::max(1, static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5)) * bytesPerSampleFrame;
     int packetsRead = 0;
 
-    while ((pcmS16Stereo.size() < targetAudioBytes) && !m_eof && (packetsRead < 32))
+    while ((pcmS16Stereo.size() < targetAudioBytes)
+        && !m_eof
+        && (packetsRead < 32)
+        && (m_pendingVideoPackets.size() < maxPendingVideoPackets))
     {
         int ret = av_read_frame(m_formatContext, m_packet);
         if (ret < 0)
@@ -642,10 +637,15 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
         else if (m_packet->stream_index == m_videoStreamIndex)
         {
             ++m_debugStats.m_readAheadVideoPackets;
-            av_packet_move_ref(m_pendingVideoPacket, m_packet);
-            m_hasPendingVideoPacket = true;
+            AVPacket *parkedPacket = av_packet_clone(m_packet);
+            av_packet_unref(m_packet);
+            if (!parkedPacket)
+            {
+                errorMessage = QStringLiteral("Cannot allocate parked video file packet");
+                return false;
+            }
+            m_pendingVideoPackets.push_back(parkedPacket);
             ++m_debugStats.m_parkedVideoPackets;
-            return true;
         }
         else
         {
@@ -786,6 +786,16 @@ bool CameraVideoFileDecoder::convertFrameToImage(const AVFrame *frame, QImage& i
     sws_scale(m_swsContext, frame->data, frame->linesize, 0, frame->height, dstData, dstLinesize);
     return true;
 #endif
+}
+
+void CameraVideoFileDecoder::clearPendingVideoPackets()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    for (AVPacket *packet : m_pendingVideoPackets) {
+        av_packet_free(&packet);
+    }
+#endif
+    m_pendingVideoPackets.clear();
 }
 
 void CameraVideoFileDecoder::closeAudioDecoder()

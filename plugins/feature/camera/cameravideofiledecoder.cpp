@@ -100,7 +100,8 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     m_videoFrame = av_frame_alloc();
     m_audioFrame = av_frame_alloc();
     m_packet = av_packet_alloc();
-    if (!m_videoFrame || !m_audioFrame || !m_packet)
+    m_pendingVideoPacket = av_packet_alloc();
+    if (!m_videoFrame || !m_audioFrame || !m_packet || !m_pendingVideoPacket)
     {
         errorMessage = QStringLiteral("Cannot allocate video file decode buffers");
         close();
@@ -144,6 +145,9 @@ void CameraVideoFileDecoder::close()
     if (m_packet) {
         av_packet_free(&m_packet);
     }
+    if (m_pendingVideoPacket) {
+        av_packet_free(&m_pendingVideoPacket);
+    }
     if (m_videoCodecContext) {
         avcodec_free_context(&m_videoCodecContext);
     }
@@ -159,6 +163,7 @@ void CameraVideoFileDecoder::close()
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
+    m_hasPendingVideoPacket = false;
     m_pendingVideoFrames.clear();
     m_debugStats = DebugStats();
 }
@@ -182,9 +187,13 @@ void CameraVideoFileDecoder::seek(qint64 positionMs)
             avcodec_flush_buffers(m_audioCodecContext);
         }
     }
+    if (m_pendingVideoPacket) {
+        av_packet_unref(m_pendingVideoPacket);
+    }
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
+    m_hasPendingVideoPacket = false;
     m_pendingVideoFrames.clear();
 #else
     Q_UNUSED(positionMs)
@@ -232,7 +241,19 @@ bool CameraVideoFileDecoder::readNextFrame(
             return false;
         }
 
-        int ret = av_read_frame(m_formatContext, m_packet);
+        int ret;
+        if (m_hasPendingVideoPacket)
+        {
+            const bool sent = sendVideoPacket(m_pendingVideoPacket, errorMessage);
+            av_packet_unref(m_pendingVideoPacket);
+            m_hasPendingVideoPacket = false;
+            if (!sent) {
+                return false;
+            }
+            continue;
+        }
+
+        ret = av_read_frame(m_formatContext, m_packet);
         if (ret < 0)
         {
             if (ret == AVERROR_EOF)
@@ -568,6 +589,9 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
     if (!m_audioCodecContext) {
         return true;
     }
+    if (m_hasPendingVideoPacket) {
+        return true;
+    }
 
     ++m_debugStats.m_readAheadCalls;
     static constexpr int bytesPerSampleFrame = 4;
@@ -618,14 +642,10 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
         else if (m_packet->stream_index == m_videoStreamIndex)
         {
             ++m_debugStats.m_readAheadVideoPackets;
-            const bool sent = sendVideoPacket(m_packet, errorMessage);
-            av_packet_unref(m_packet);
-            if (!sent) {
-                return false;
-            }
-            if (!queueDecodedVideoFrames(errorMessage)) {
-                return false;
-            }
+            av_packet_move_ref(m_pendingVideoPacket, m_packet);
+            m_hasPendingVideoPacket = true;
+            ++m_debugStats.m_parkedVideoPackets;
+            return true;
         }
         else
         {

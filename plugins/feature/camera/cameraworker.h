@@ -644,6 +644,7 @@ private:
     quint64 m_videoFileStatsLastDecoderReadAheadVideoPackets = 0;
     quint64 m_videoFileStatsLastDecoderEagain = 0;
     quint64 m_videoFileStatsLastDecoderQueuedFrames = 0;
+    quint64 m_videoFileStatsLastDecoderParkedVideoPackets = 0;
     quint64 m_videoFileStatsLastDecoderAudioBytes = 0;
     QNetworkAccessManager *m_networkManager;
     CameraFinder *m_cameraFinder;

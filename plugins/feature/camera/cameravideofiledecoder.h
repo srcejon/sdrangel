@@ -56,6 +56,7 @@ public:
     [[nodiscard]] qint64 durationMs() const { return m_durationMs; }
     [[nodiscard]] double frameRate() const { return m_frameRate; }
     [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }
+    [[nodiscard]] int pendingVideoPacketCount() const { return static_cast<int>(m_pendingVideoPackets.size()); }
 
     struct DebugStats
     {
@@ -83,7 +84,6 @@ private:
     AVFrame *m_videoFrame = nullptr;
     AVFrame *m_audioFrame = nullptr;
     AVPacket *m_packet = nullptr;
-    AVPacket *m_pendingVideoPacket = nullptr;
     SwsContext *m_swsContext = nullptr;
     SwrContext *m_resampler = nullptr;
     int m_videoStreamIndex = -1;
@@ -94,7 +94,7 @@ private:
     bool m_eof = false;
     bool m_videoDraining = false;
     bool m_audioDraining = false;
-    bool m_hasPendingVideoPacket = false;
+    std::deque<AVPacket*> m_pendingVideoPackets;
     std::deque<PendingVideoFrame> m_pendingVideoFrames;
     DebugStats m_debugStats;
 
@@ -109,6 +109,7 @@ private:
     [[nodiscard]] bool drainAudio(QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool appendFrameAudio(const AVFrame *frame, QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool convertFrameToImage(const AVFrame *frame, QImage& image, QString& errorMessage);
+    void clearPendingVideoPackets();
     void closeAudioDecoder();
 };
 

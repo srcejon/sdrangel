@@ -1741,6 +1741,7 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
     ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
+    ui->playbackAudioOffsetSpin->setValue(m_settings.m_videoPlaybackAudioOffsetMs);
     updateMotionExclusionRectsTable();
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
@@ -2226,6 +2227,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->playPauseVideo, &ButtonSwitch::clicked, this, &CameraGUI::on_playPauseVideo_clicked);
     QObject::connect(ui->loopVideo, &ButtonSwitch::clicked, this, &CameraGUI::on_loopVideo_clicked);
     QObject::connect(ui->playbackRateSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_playbackRateSpin_valueChanged);
+    QObject::connect(ui->playbackAudioOffsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_playbackAudioOffsetSpin_valueChanged);
     QObject::connect(ui->playbackPositionSlider, &QSlider::sliderMoved, this, &CameraGUI::on_playbackPositionSlider_sliderMoved);
     QObject::connect(ui->playbackPositionSlider, &QSlider::sliderReleased, this, &CameraGUI::on_playbackPositionSlider_sliderReleased);
     QObject::connect(settingsUI()->resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_resolutionCombo_currentIndexChanged);
@@ -2805,6 +2807,7 @@ void CameraGUI::updateVideoFileControls()
     setVisibleEnabled(ui->playPauseVideo, fileCameraSelected, hasVideoFile);
     setVisibleEnabled(ui->loopVideo, fileCameraSelected, hasVideoFile);
     setVisibleEnabled(ui->playbackRateSpin, fileCameraSelected, hasVideoFile);
+    setVisibleEnabled(ui->playbackAudioOffsetSpin, fileCameraSelected && !imageSequenceSelected, hasVideoFile);
     setVisibleEnabled(ui->playbackPositionSlider, fileCameraSelected, hasPlaybackPosition);
     setVisibleEnabled(ui->playbackPositionLabel, fileCameraSelected, hasPlaybackPosition);
     ui->videoLine->setVisible(fileCameraSelected);
@@ -4967,6 +4970,12 @@ void CameraGUI::on_playbackRateSpin_valueChanged(double value)
         m_imageSequenceTimer.start(imageSequenceIntervalMs());
         updatePlaybackPositionLabel();
     }
+}
+
+void CameraGUI::on_playbackAudioOffsetSpin_valueChanged(int value)
+{
+    m_settings.m_videoPlaybackAudioOffsetMs = value;
+    applySetting("videoPlaybackAudioOffsetMs");
 }
 
 void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)

@@ -313,6 +313,8 @@ struct CameraSettings
     static constexpr double m_minZoomFactor = 1.0;
     static constexpr double m_minVideoPlaybackRate = 0.1;
     static constexpr double m_maxVideoPlaybackRate = 120.0;
+    static constexpr int m_minVideoPlaybackAudioOffsetMs = -1000;
+    static constexpr int m_maxVideoPlaybackAudioOffsetMs = 1000;
 
     QString m_title;
     quint32 m_rgbColor;
@@ -392,6 +394,7 @@ struct CameraSettings
     VideoCodec m_videoCodec;       ///< Codec used for saved video recordings
     bool m_videoLoop;
     double m_videoPlaybackRate;
+    int m_videoPlaybackAudioOffsetMs; ///< Preview audio offset for video playback in ms; negative plays audio earlier
     bool m_videoHwAcceleration; ///< Prefer hardware-accelerated video encoding when supported
     int m_videoPreRecordBufferSeconds; ///< Seconds of frames to prepend when recording starts
     int m_imageRecordLimit; ///< Number of image frames to save before disabling image recording; 0 = unlimited

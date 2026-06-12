@@ -55,6 +55,7 @@ public:
     int startFilePlayback(const CameraSettings& settings, MessageQueue *messageQueue);
     void stop();
     void setMuted(bool muted);
+    void setFilePlaybackAudioOffsetMs(int offsetMs);
     void clearMonitorAudio();
     void prefillMonitorAudio(int milliseconds);
     static int filePlaybackMonitorPrefillMs() { return 60; }
@@ -77,6 +78,8 @@ private:
     static int scoreAudioDeviceMatch(const QString& cameraName, const QString& audioName);
     static void alignInputRate(AudioDeviceManager *audioDeviceManager, int inputDeviceIndex, int outputDeviceIndex);
     static int findInputIndex(const CameraSettings& settings);
+    void resetFilePlaybackAudioOffset();
+    void applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate);
 
     bool m_capturing;
     bool m_muted;
@@ -86,6 +89,8 @@ private:
     AudioFifo m_captureAudioFifo;
     AudioFifo m_outputAudioFifo;
     QVector<quint8> m_audioTransferBuffer;
+    int m_filePlaybackAudioOffsetMs;
+    int m_filePlaybackAudioOffsetRemainingFrames;
     quint64 m_monitorDroppedFrames;
     std::atomic<quint64> m_monitorUnderflows;
     MonitorDebugStats m_monitorDebugStats;

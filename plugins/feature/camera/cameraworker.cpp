@@ -961,6 +961,9 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     if (force || settingsKeys.contains("audioMute")) {
         m_qtAudio.setMuted(m_settings.m_audioMute);
     }
+    if (force || settingsKeys.contains("videoPlaybackAudioOffsetMs")) {
+        m_qtAudio.setFilePlaybackAudioOffsetMs(m_settings.m_videoPlaybackAudioOffsetMs);
+    }
 
     if (hdrSettingsChanged) {
         resetHdrBracketState();

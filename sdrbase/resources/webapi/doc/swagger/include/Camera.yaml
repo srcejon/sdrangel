@@ -216,6 +216,9 @@ CameraSettings:
       description: "Playback rate multiplier for file-camera video input"
       type: number
       format: double
+    videoPlaybackAudioOffsetMs:
+      description: "Preview audio offset in milliseconds for video-camera playback; negative plays audio earlier"
+      type: integer
     videoPreRecordBufferSeconds:
       description: "Seconds of live frames to buffer and prepend when video recording starts"
       type: integer

@@ -204,6 +204,7 @@ void CameraSettings::resetToDefaults()
     m_videoCodec = VideoCodecH264;
     m_videoLoop = false;
     m_videoPlaybackRate = 1.0;
+    m_videoPlaybackAudioOffsetMs = 0;
     m_videoHwAcceleration = true;
     m_videoPreRecordBufferSeconds = 0;
     m_imageRecordLimit = 0;
@@ -650,6 +651,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(252, m_youtubeStreamWidth);
     s.writeS32(253, m_youtubeStreamHeight);
     s.writeS32(254, static_cast<qint32>(m_videoCodec));
+    s.writeS32(255, m_videoPlaybackAudioOffsetMs);
 
     return s.final();
 }
@@ -996,6 +998,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         qint32 videoCodec = static_cast<qint32>(VideoCodecH264);
         d.readS32(254, &videoCodec, static_cast<qint32>(VideoCodecH264));
         m_videoCodec = static_cast<VideoCodec>(videoCodec);
+        d.readS32(255, &m_videoPlaybackAudioOffsetMs, 0);
         d.readDouble(207, &m_postProcessWhiteBalanceHighlightProtection, 0.0);
         m_postProcessWhiteBalanceHighlightProtection = qBound(m_minNormalized, m_postProcessWhiteBalanceHighlightProtection, m_maxNormalized);
         d.readBool(211, &m_postProcessUseCuda, false);
@@ -1153,6 +1156,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_youtubeStreamWidth = qBound(0, m_youtubeStreamWidth, 16384);
         m_youtubeStreamHeight = qBound(0, m_youtubeStreamHeight, 16384);
         m_videoCodec = static_cast<VideoCodec>(qBound(0, static_cast<int>(m_videoCodec), 1));
+        m_videoPlaybackAudioOffsetMs = qBound(
+            m_minVideoPlaybackAudioOffsetMs,
+            m_videoPlaybackAudioOffsetMs,
+            m_maxVideoPlaybackAudioOffsetMs);
         m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
         m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
         m_altitude = qBound(m_minAltitude, m_altitude, m_maxAltitude);
@@ -1374,6 +1381,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoPlaybackRate")) {
         m_videoPlaybackRate = qBound(m_minVideoPlaybackRate, settings.m_videoPlaybackRate, m_maxVideoPlaybackRate);
+    }
+    if (settingsKeys.contains("videoPlaybackAudioOffsetMs")) {
+        m_videoPlaybackAudioOffsetMs = qBound(
+            m_minVideoPlaybackAudioOffsetMs,
+            settings.m_videoPlaybackAudioOffsetMs,
+            m_maxVideoPlaybackAudioOffsetMs);
     }
     if (settingsKeys.contains("videoHwAcceleration")) {
         m_videoHwAcceleration = settings.m_videoHwAcceleration;
@@ -2128,6 +2141,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoPlaybackRate") || force) {
         ostr << " m_videoPlaybackRate: " << m_videoPlaybackRate;
+    }
+    if (settingsKeys.contains("videoPlaybackAudioOffsetMs") || force) {
+        ostr << " m_videoPlaybackAudioOffsetMs: " << m_videoPlaybackAudioOffsetMs;
     }
     if (settingsKeys.contains("videoHwAcceleration") || force) {
         ostr << " m_videoHwAcceleration: " << m_videoHwAcceleration;

@@ -590,7 +590,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
     }
 
     ++m_debugStats.m_readAheadCalls;
-    static constexpr size_t maxPendingVideoPackets = 120;
+    static constexpr size_t maxPendingVideoPackets = 6;
     static constexpr int bytesPerSampleFrame = 4;
     const int targetAudioFrames = std::max(
         static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5),

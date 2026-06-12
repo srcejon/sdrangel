@@ -138,7 +138,7 @@ void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, i
         const int monitorFrames = std::min(sampleFrames, static_cast<int>(fifoSize));
         const uint32_t targetFillFrames = std::min<uint32_t>(
             fifoSize,
-            static_cast<uint32_t>(std::max(m_sampleRate / 2, monitorFrames)));
+            static_cast<uint32_t>(std::max(m_sampleRate / 8, monitorFrames)));
         const int skippedInputFrames = sampleFrames - monitorFrames;
         if (skippedInputFrames > 0) {
             m_monitorDroppedFrames += static_cast<quint64>(skippedInputFrames);

@@ -59,8 +59,8 @@ public:
     void clearMonitorAudio();
     void prefillMonitorAudio(int milliseconds);
     [[nodiscard]] int filePlaybackMonitorPrefillForOffsetMs() const;
-    static int filePlaybackMonitorPrefillMs() { return 60; }
-    static int filePlaybackMonitorTargetFillMs() { return 30; }
+    static int filePlaybackMonitorPrefillMs() { return 120; }
+    static int filePlaybackMonitorTargetFillMs() { return 80; }
     void resetMonitorDebugStats();
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     void submitMonitorPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);

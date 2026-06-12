@@ -131,8 +131,15 @@ void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, i
     }
 
     const int sampleFrames = pcmS16Stereo.size() / bytesPerSampleFrame;
-    if (!m_muted && m_capturing && (sampleFrames > 0)) {
-        m_outputAudioFifo.write(reinterpret_cast<const quint8*>(pcmS16Stereo.constData()), sampleFrames);
+    if (!m_muted && m_capturing && (sampleFrames > 0))
+    {
+        const uint32_t availableFrames = m_outputAudioFifo.size() > m_outputAudioFifo.fill()
+            ? m_outputAudioFifo.size() - m_outputAudioFifo.fill()
+            : 0;
+        const int monitorFrames = std::min(sampleFrames, static_cast<int>(availableFrames));
+        if (monitorFrames > 0) {
+            m_outputAudioFifo.write(reinterpret_cast<const quint8*>(pcmS16Stereo.constData()), monitorFrames);
+        }
     }
 
     if (m_recordingMessageQueue) {

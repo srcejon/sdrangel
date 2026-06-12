@@ -313,7 +313,7 @@ struct CameraSettings
     static constexpr double m_minZoomFactor = 1.0;
     static constexpr double m_minVideoPlaybackRate = 0.1;
     static constexpr double m_maxVideoPlaybackRate = 120.0;
-    static constexpr int m_minVideoPlaybackAudioOffsetMs = -5000;
+    static constexpr int m_minVideoPlaybackAudioOffsetMs = -2000;
     static constexpr int m_maxVideoPlaybackAudioOffsetMs = 5000;
 
     QString m_title;

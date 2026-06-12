@@ -279,17 +279,17 @@ void CameraQtAudioController::resetFilePlaybackAudioOffset()
 
 int CameraQtAudioController::filePlaybackMonitorPrefillForOffsetMs() const
 {
-    return std::max(0, filePlaybackMonitorPrefillMs() + std::min(0, m_filePlaybackAudioOffsetMs));
+    return filePlaybackMonitorPrefillMs();
 }
 
 int CameraQtAudioController::filePlaybackMonitorTargetFillForOffsetMs() const
 {
-    return std::max(0, filePlaybackMonitorTargetFillMs() + std::min(0, m_filePlaybackAudioOffsetMs));
+    return filePlaybackMonitorTargetFillMs();
 }
 
 int CameraQtAudioController::filePlaybackMonitorJitterForOffsetMs() const
 {
-    return m_filePlaybackAudioOffsetMs < 0 ? 0 : 20;
+    return 20;
 }
 
 void CameraQtAudioController::applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate)

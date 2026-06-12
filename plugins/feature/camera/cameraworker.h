@@ -628,6 +628,7 @@ private:
     bool m_videoFilePlaying;
     QElapsedTimer m_videoFilePlaybackClock;
     quint64 m_videoFilePlaybackTick = 0;
+    quint64 m_videoFileFrameSubmitGeneration = 0;
     QElapsedTimer m_videoFileStatsTimer;
     QElapsedTimer m_videoFileTickTimer;
     quint64 m_videoFileStatsFrames = 0;
@@ -720,6 +721,7 @@ private:
     bool openVideoFileDecoder();
     void closeVideoFileDecoder();
     void setVideoFilePlaying(bool playing);
+    void submitVideoFileFrame(const CameraPipelineFramePtr& frame, bool applyPlaybackOffset);
     void readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
     void seekVideoFile(qint64 positionMs, bool displayFrame);
     void stepVideoFile(int direction);

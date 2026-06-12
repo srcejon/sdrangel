@@ -1203,6 +1203,7 @@ void CameraWorker::startCapture()
     }
     else if (m_settings.isVideoFileCamera())
     {
+        ++m_videoFileFrameSubmitGeneration;
         if (openVideoFileDecoder())
         {
             readVideoFileFrame();
@@ -1218,6 +1219,7 @@ void CameraWorker::startCapture()
 void CameraWorker::stopCapture()
 {
     m_capturing = false;
+    ++m_videoFileFrameSubmitGeneration;
     cancelAutoFocus(tr("Auto focus cancelled"));
     m_captureTimer.stop();
     m_alpaca.m_captureTimer.invalidate();
@@ -1361,6 +1363,39 @@ void CameraWorker::setVideoFilePlaying(bool playing)
     reportVideoFilePlaybackToGUI();
 }
 
+void CameraWorker::submitVideoFileFrame(const CameraPipelineFramePtr& frame, bool applyPlaybackOffset)
+{
+    if (!frame || !m_framePreprocessor) {
+        return;
+    }
+
+    const int videoDelayMs = (applyPlaybackOffset && (m_settings.m_videoPlaybackAudioOffsetMs < 0))
+        ? qBound(0, -m_settings.m_videoPlaybackAudioOffsetMs, -CameraSettings::m_minVideoPlaybackAudioOffsetMs)
+        : 0;
+
+    if (videoDelayMs <= 0)
+    {
+        m_framePreprocessor->submitFrame(frame);
+        return;
+    }
+
+    const quint64 captureEpoch = frame->m_captureEpoch;
+    const quint64 submitGeneration = m_videoFileFrameSubmitGeneration;
+
+    QTimer::singleShot(videoDelayMs, this, [this, frame, captureEpoch, submitGeneration]() {
+        if (!m_capturing
+            || !m_settings.isVideoFileCamera()
+            || !m_videoFilePlaying
+            || !m_framePreprocessor
+            || (m_captureEpoch != captureEpoch)
+            || (m_videoFileFrameSubmitGeneration != submitGeneration)) {
+            return;
+        }
+
+        m_framePreprocessor->submitFrame(frame);
+    });
+}
+
 void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs)
 {
     if (!m_capturing || !m_settings.isVideoFileCamera() || !m_videoFileDecoder) {
@@ -1428,7 +1463,7 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         populateFrameExposureMetadata(*frame);
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackPositionMs = m_videoFilePositionMs;
-        m_framePreprocessor->submitFrame(frame);
+        submitVideoFileFrame(frame, submitAudio && (minimumPositionMs < 0));
     }
 
     reportVideoFilePlaybackToGUI();
@@ -1441,6 +1476,7 @@ void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
     }
 
     m_videoFilePositionMs = qBound<qint64>(0, positionMs, m_videoFileDurationMs > 0 ? m_videoFileDurationMs : std::numeric_limits<qint64>::max());
+    ++m_videoFileFrameSubmitGeneration;
     m_videoFileDecoder->seek(m_videoFilePositionMs);
     m_qtAudio.clearMonitorAudio();
     m_qtAudio.prefillMonitorAudio(m_qtAudio.filePlaybackMonitorPrefillForOffsetMs());
@@ -1453,6 +1489,7 @@ void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
 void CameraWorker::stepVideoFile(int direction)
 {
     setVideoFilePlaying(false);
+    ++m_videoFileFrameSubmitGeneration;
     if (direction >= 0)
     {
         readVideoFileFrame(false);

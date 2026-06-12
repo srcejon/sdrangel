@@ -12564,6 +12564,35 @@ static bool hasDenseFinalEvidenceOverridingSeedRadial(const CameraSettings& sett
                 16.0));
 }
 
+// Named-bright-anchor certificate: a pose that fits >= 2 named bright anchors at
+// <= 3 px rms, fits a dense match set at <= 3 px rms, and stays within the
+// pointing-error budget of the seed direction is geometrically verified far beyond what
+// a chance alignment can produce (contaminated candidates fit the same anchors at
+// >= 9 px and sit > 4 degrees from the seed). The per-branch bright-support heuristics
+// can falsely veto such a pose: the seed-reference-projector checks (seed-radial /
+// seed-projected) assume the recorded pointing is accurate to a few hundredths of a
+// degree with near-exact roll, when it is only trusted to ~1 degree (and roll is an
+// unused placeholder for start modes without it); and matchedBrightProjectedStars
+// undercounts in dense catalogs because a bright star's detection can be *assigned* to
+// a nearby fainter catalog star even when the bright star projects sub-2px onto it.
+bool hasNamedBrightAnchorCertifiedPose(const CameraSettings& settings,
+                                       const FinalMatchPassEvaluation& finalPass) const
+{
+    constexpr double kMaxSeedDirectionOffsetDegrees = 1.5;
+    constexpr double kMaxNamedAnchorRmsPixels = 3.0;
+    constexpr double kMaxOverallRmsPixels = 3.0;
+    return isNarrowField(settings)
+        && finalPass.projectorValid
+        && (finalPass.namedBrightAnchorMatches >= 2)
+        && std::isfinite(finalPass.namedBrightAnchorRmsErrorPixels)
+        && (finalPass.namedBrightAnchorRmsErrorPixels <= kMaxNamedAnchorRmsPixels)
+        && std::isfinite(finalPass.rmsErrorPixels)
+        && (finalPass.rmsErrorPixels <= kMaxOverallRmsPixels)
+        && (finalPass.finalMatches.size()
+            >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 50, 80)))
+        && (directionSeedAngularDistanceDegrees(finalPass.pose) <= kMaxSeedDirectionOffsetDegrees);
+}
+
 // ---------------------------------------------------------------------------------
 // Experimental robust verifier (SHADOW MODE -- computed and logged for corpus
 // comparison, not yet wired into the accept/reject decision).
@@ -12721,10 +12750,43 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
 
     const bool useSeedProjectedBrightGate = usesSeedProjectedBrightGate(settings);
     const bool debugSparse = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE");
+    // Diagnostic only (SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE): logs which specific
+    // sub-condition of this gate accepted/rejected a candidate, to make it possible to
+    // trace why a particular pose (e.g. a bright-anchor-rescue candidate) was judged to
+    // have weak/strong bright support.
+    const auto logBrightSupportDecision = [&](bool weak, const char* reason) {
+        if (!debugSparse) {
+            return;
+        }
+        qDebug() << "CameraPlateSolver: hasWeakNarrowGuidedBrightSupport"
+                 << (weak ? "REJECT" : "pass") << reason
+                 << finalPassBrightDiagnosticSummary(finalPass)
+                 << "Az" << finalPass.pose.azimuthDegrees
+                 << "El" << finalPass.pose.elevationDegrees
+                 << "Roll" << finalPass.pose.rollDegrees
+                 << "FoV" << finalPass.pose.fovDegrees
+                 << "useSeedProjectedBrightGate" << useSeedProjectedBrightGate
+                 << "isLowMagnitude" << isLowMagnitudeNarrowGuidedSolve(settings);
+    };
 
     if (hasHighConfidenceGuidedTriangleSupport(settings, finalPass)
         || hasStrongDenseNarrowGuidedFinalPass(settings, finalPass))
     {
+        logBrightSupportDecision(false, "high-confidence-triangle-or-strong-dense");
+        return false;
+    }
+    if (hasNamedBrightAnchorCertifiedPose(settings, finalPass))
+    {
+        if (debugSparse)
+        {
+            qDebug() << "CameraPlateSolver: named-bright-anchor certificate bypasses weak-bright-support checks"
+                     << "namedAnchors" << finalPass.namedBrightAnchorMatches
+                     << "namedRms" << finalPass.namedBrightAnchorRmsErrorPixels
+                     << "rms" << finalPass.rmsErrorPixels
+                     << "matches" << finalPass.finalMatches.size()
+                     << "seedOffsetDeg" << directionSeedAngularDistanceDegrees(finalPass.pose);
+        }
+        logBrightSupportDecision(false, "named-bright-anchor certified pose");
         return false;
     }
 
@@ -12748,27 +12810,21 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
         const bool projectedMagnitudeSupportGood =
             (finalPass.matchedProjectedMagnitudeSupport >= 12.0)
             && (finalPass.projectedMagnitudeMatchFraction >= 0.35);
-        if (debugSparse)
-        {
-            qDebug() << "CameraPlateSolver: narrow guided bright support"
-                     << finalPassBrightDiagnosticSummary(finalPass)
-                     << "Az" << finalPass.pose.azimuthDegrees
-                     << "El" << finalPass.pose.elevationDegrees
-                     << "Roll" << finalPass.pose.rollDegrees
-                     << "FoV" << finalPass.pose.fovDegrees;
-        }
         if ((finalPass.brightCatalogShapeChecks >= 1)
             && (finalPass.brightCatalogShapeMismatches > 0))
         {
+            logBrightSupportDecision(true, "low-mag: brightCatalogShapeMismatch");
             return true;
         }
         if (poorNoRollSeedRadialSupport && !denseFinalEvidenceOverridesSeedRadial) {
+            logBrightSupportDecision(true, "low-mag: poorNoRollSeedRadialSupport");
             return true;
         }
         if (useSeedProjectedBrightGate
             && (finalPass.seedProjectedBrightStars >= 2)
             && (finalPass.matchedSeedProjectedBrightStars < std::min(2, finalPass.seedProjectedBrightStars)))
         {
+            logBrightSupportDecision(true, "low-mag: seedProjectedBright<2(gated)");
             return true;
         }
         if (!useSeedProjectedBrightGate
@@ -12777,39 +12833,46 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
             && (finalPass.seedProjectedMagnitudeSupport >= 80.0)
             && (finalPass.seedProjectedMagnitudeMatchFraction < 0.08))
         {
+            logBrightSupportDecision(true, "low-mag: seedProjectedBright>=4 unmatched, weak magSupport");
             return true;
         }
         if ((finalPass.brightProjectedStars >= 4)
             && (finalPass.matchedBrightProjectedStars < 2))
         {
+            logBrightSupportDecision(true, "low-mag: brightProjected>=4, matched<2");
             return true;
         }
         if ((finalPass.brightProjectedStars >= 10)
             && (finalPass.matchedBrightProjectedStars < 5)
             && !projectedMagnitudeSupportGood)
         {
+            logBrightSupportDecision(true, "low-mag: brightProjected>=10, matched<5, weak magSupport");
             return true;
         }
         if ((finalPass.brightProjectedStars >= 6)
             && (finalPass.matchedBrightProjectedStars < 3))
         {
+            logBrightSupportDecision(true, "low-mag: brightProjected>=6, matched<3");
             return true;
         }
         if ((finalPass.brightDetections >= 12)
             && (finalPass.matchedBrightDetections < 3)
             && !projectedBrightSupportCanOverrideDetectedBright)
         {
+            logBrightSupportDecision(true, "low-mag: brightDetections>=12, matched<3");
             return true;
         }
         if (useSeedProjectedBrightGate
             && (finalPass.seedProjectedBrightStars >= 1)
             && (finalPass.matchedSeedProjectedBrightStars == 0))
         {
+            logBrightSupportDecision(true, "low-mag: seedProjectedBright>=1 unmatched(gated)");
             return true;
         }
         if ((finalPass.brightDetections >= 6)
             && (finalPass.brightDetectionMagnitudeError > 2.25))
         {
+            logBrightSupportDecision(true, "low-mag: brightDetectionMagnitudeError>2.25");
             return true;
         }
         if (!useSeedProjectedBrightGate
@@ -12822,8 +12885,10 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
                     300.0,
                     static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 8.0)))
         {
+            logBrightSupportDecision(true, "low-mag: seedRadialMagnitude weak + prioritySeedRadialError far");
             return true;
         }
+        logBrightSupportDecision(false, "low-mag: passed all low-magnitude checks");
     }
 
     if (useSeedProjectedBrightGate
@@ -12834,6 +12899,7 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
             8,
             std::max(3, finalPass.brightDetections / 3));
         if (finalPass.matchedBrightDetections < minimumBrightDetectionMatches) {
+            logBrightSupportDecision(true, "seedProjectedBright>=6 unmatched, brightDetections below floor(/3,min3)");
             return true;
         }
     }
@@ -12845,16 +12911,39 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
             8,
             std::max(4, finalPass.brightDetections / 3));
         if (finalPass.matchedBrightDetections < minimumBrightDetectionMatches) {
+            logBrightSupportDecision(true, "seedProjectedBright>=10 <=1 matched, brightDetections below floor(/3,min4)");
             return true;
         }
     }
 
-    return ((finalPass.brightDetections >= 6)
-            && (finalPass.matchedBrightDetections < 2)
-            && !projectedBrightSupportCanOverrideDetectedBright)
-        || (poorNoRollSeedRadialSupport && !denseFinalEvidenceOverridesSeedRadial)
-        || ((finalPass.brightProjectedStars >= 5) && (finalPass.matchedBrightProjectedStars < 2))
-        || ((finalPass.brightDetections >= 6) && (finalPass.brightDetectionMagnitudeError > 2.35));
+    const bool weakBrightDetections =
+        (finalPass.brightDetections >= 6)
+        && (finalPass.matchedBrightDetections < 2)
+        && !projectedBrightSupportCanOverrideDetectedBright;
+    const bool weakSeedRadial = poorNoRollSeedRadialSupport && !denseFinalEvidenceOverridesSeedRadial;
+    const bool weakBrightProjected =
+        (finalPass.brightProjectedStars >= 5) && (finalPass.matchedBrightProjectedStars < 2);
+    const bool weakBrightMagnitude =
+        (finalPass.brightDetections >= 6) && (finalPass.brightDetectionMagnitudeError > 2.35);
+    const bool weak = weakBrightDetections || weakSeedRadial || weakBrightProjected || weakBrightMagnitude;
+    if (debugSparse && weak)
+    {
+        qDebug() << "CameraPlateSolver: hasWeakNarrowGuidedBrightSupport REJECT final"
+                 << "weakBrightDetections" << weakBrightDetections
+                 << "weakSeedRadial" << weakSeedRadial
+                 << "weakBrightProjected" << weakBrightProjected
+                 << "weakBrightMagnitude" << weakBrightMagnitude
+                 << finalPassBrightDiagnosticSummary(finalPass)
+                 << "Az" << finalPass.pose.azimuthDegrees
+                 << "El" << finalPass.pose.elevationDegrees
+                 << "Roll" << finalPass.pose.rollDegrees
+                 << "FoV" << finalPass.pose.fovDegrees;
+    }
+    else
+    {
+        logBrightSupportDecision(false, "passed final compound check");
+    }
+    return weak;
 }
 
 bool isAcceptableSparseGuidedRankingFinalPass(const CameraSettings& settings,
@@ -13398,7 +13487,8 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
         const bool lowMagnitudeNarrowGuided = isLowMagnitudeNarrowGuidedSolve(settings);
         const bool useSeedProjectedBrightGate = usesSeedProjectedBrightGate(settings);
         const bool poorNoRollSeedRadialSupport =
-            hasPoorNoRollSeedRadialSupport(settings, evaluation, useSeedProjectedBrightGate);
+            hasPoorNoRollSeedRadialSupport(settings, evaluation, useSeedProjectedBrightGate)
+            && !hasNamedBrightAnchorCertifiedPose(settings, evaluation);
         const bool projectedBrightSupportCanOverrideDetectedBright =
             !useSeedProjectedBrightGate
             && !poorNoRollSeedRadialSupport
@@ -14535,6 +14625,39 @@ FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
             ++finalPass.brightProjectedStars;
             if (matchedCatalogIndices.contains(projectedStar.catalogIndex)) {
                 ++finalPass.matchedBrightProjectedStars;
+            }
+        }
+        if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_BRIGHTPROJ")
+            && useNarrowGuidedBrightProjectedPrior
+            && (finalPass.finalMatches.size() >= 150))
+        {
+            for (const ProjectedCatalogStar& projectedStar : brightProjectedStars)
+            {
+                const bool matched = matchedCatalogIndices.contains(projectedStar.catalogIndex);
+                double nearestDist = std::numeric_limits<double>::infinity();
+                int nearestDetection = -1;
+                for (int di = 0; di < starDetections.size(); ++di) {
+                    const double d = pointDistancePixels(starDetections[di].m_center, projectedStar.point);
+                    if (d < nearestDist) { nearestDist = d; nearestDetection = di; }
+                }
+                const QString name = ((projectedStar.catalogIndex >= 0)
+                    && (projectedStar.catalogIndex < catalogContext.catalogStars.size()))
+                    ? catalogDisplayName(catalogContext.catalogStars[projectedStar.catalogIndex])
+                    : QStringLiteral("?");
+                qDebug().noquote().nospace()
+                    << "BRIGHTPROJ"
+                    << " Az=" << candidate.azimuthDegrees
+                    << " El=" << candidate.elevationDegrees
+                    << " Roll=" << candidate.rollDegrees
+                    << " matches=" << finalPass.finalMatches.size()
+                    << " name=" << name
+                    << " mag=" << projectedStar.magnitude
+                    << " point=(" << projectedStar.point.x() << "," << projectedStar.point.y() << ")"
+                    << " matched=" << matched
+                    << " nearestDet=" << nearestDetection
+                    << " nearestDist=" << nearestDist
+                    << " nearestPeak=" << ((nearestDetection >= 0) ? starDetections[nearestDetection].m_peakValue : -1.0f)
+                    << " nearestSat=" << ((nearestDetection >= 0) ? starDetections[nearestDetection].m_saturated : false);
             }
         }
         finalPass.brightProjectedMatchFraction = (finalPass.brightProjectedStars > 0)
@@ -16632,6 +16755,32 @@ FinalMatchPassEvaluation searchBrightAnchorVerifierRescue(const CameraSettings& 
         return best;
     }
 
+    // Diagnostic only (SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE): dump the anchor
+    // candidate sets pass 1 will sweep, so it's possible to tell whether a particular
+    // detection/catalog-star pairing was even considered as an anchor.
+    const bool debugSparse = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE");
+    if (debugSparse)
+    {
+        for (int idx : brightDetectionIndices)
+        {
+            const CameraPipelineStarDetection& d = starDetections[idx];
+            qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue brightDetection" << idx
+                     << "x" << d.m_center.x() << "y" << d.m_center.y()
+                     << "flux" << d.m_flux << "saturated" << d.m_saturated
+                     << "hotPixel" << d.m_hotPixelSuspect;
+        }
+        for (const VisibleCatalogStar& star : brightCatalogStars)
+        {
+            const QString name = ((star.catalogIndex >= 0) && (star.catalogIndex < catalogContext.catalogStars.size()))
+                ? catalogContext.catalogStars[star.catalogIndex].name
+                : QString();
+            qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue brightCatalogStar"
+                     << "catalogIndex" << star.catalogIndex << "name" << name
+                     << "mag" << star.magnitude
+                     << "az" << star.azimuthDegrees << "el" << star.elevationDegrees;
+        }
+    }
+
     QVector<int> allowedCatalogIndices;
     allowedCatalogIndices.reserve(localVisibleStars.size());
     for (const VisibleCatalogStar& star : localVisibleStars) {
@@ -16788,6 +16937,27 @@ FinalMatchPassEvaluation searchBrightAnchorVerifierRescue(const CameraSettings& 
         shortlist.resize(kMaxRescueShortlist);
     }
 
+    // Diagnostic only (SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE): dump the cheap-ranked
+    // shortlist that pass 2 will choose between, so it's possible to tell whether a
+    // particular pose (e.g. the true Az/El) was even considered, and if so, why it lost.
+    if (debugSparse)
+    {
+        for (int i = 0; i < shortlist.size(); ++i)
+        {
+            const RescueShortlistCandidate& candidate = shortlist[i];
+            qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue shortlist" << i
+                     << "cheapScore" << candidate.cheapScore
+                     << "Az" << candidate.refined.azimuthDegrees
+                     << "El" << candidate.refined.elevationDegrees
+                     << "Roll" << candidate.refined.rollDegrees
+                     << "FoV" << candidate.refined.fovDegrees
+                     << "matches" << candidate.refined.matchCount
+                     << "rms" << candidate.refined.rmsErrorPixels
+                     << "anchorDet" << candidate.refined.anchorDetectionIndex
+                     << "anchorCat" << candidate.refined.anchorCatalogIndex;
+        }
+    }
+
     // Pass 2 (expensive): only the handful of cheap-ranked, basin-distinct survivors get
     // the full catalog-projection pass - poseFalseAlarmLogOdds remains the selection
     // criterion between them, per the chosen implementation track.
@@ -16803,6 +16973,12 @@ FinalMatchPassEvaluation searchBrightAnchorVerifierRescue(const CameraSettings& 
             candidate.refined,
             finalMatchRadius);
         if (!candidatePass.projectorValid) {
+            if (debugSparse) {
+                qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue pass2 invalid-projector"
+                         << "Az" << candidate.refined.azimuthDegrees
+                         << "El" << candidate.refined.elevationDegrees
+                         << "Roll" << candidate.refined.rollDegrees;
+            }
             continue;
         }
 
@@ -16812,11 +16988,34 @@ FinalMatchPassEvaluation searchBrightAnchorVerifierRescue(const CameraSettings& 
             imageSize,
             finalMatchRadius,
             static_cast<int>(starDetections.size()));
+        if (debugSparse)
+        {
+            qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue pass2"
+                     << "faLogOdds" << falseAlarmLogOdds
+                     << "Az" << candidatePass.pose.azimuthDegrees
+                     << "El" << candidatePass.pose.elevationDegrees
+                     << "Roll" << candidatePass.pose.rollDegrees
+                     << "FoV" << candidatePass.pose.fovDegrees
+                     << "matches" << candidatePass.finalMatches.size()
+                     << "rms" << candidatePass.rmsErrorPixels;
+        }
         if (falseAlarmLogOdds > bestFalseAlarmLogOdds)
         {
             bestFalseAlarmLogOdds = falseAlarmLogOdds;
             best = candidatePass;
         }
+    }
+
+    if (debugSparse && best.projectorValid)
+    {
+        qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue selected"
+                 << "faLogOdds" << bestFalseAlarmLogOdds
+                 << "Az" << best.pose.azimuthDegrees
+                 << "El" << best.pose.elevationDegrees
+                 << "Roll" << best.pose.rollDegrees
+                 << "FoV" << best.pose.fovDegrees
+                 << "matches" << best.finalMatches.size()
+                 << "rms" << best.rmsErrorPixels;
     }
 
     return best;
@@ -19059,7 +19258,8 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
                                  const QSize& imageSize,
                                  const QDateTime& captureDateTimeUtc,
                                  const QVector<CameraPipelineStarDetection>& starDetections,
-                                 const Evaluation& initialEvaluation)
+                                 const Evaluation& initialEvaluation,
+                                 bool forceFovRefine = false)
 {
     Q_UNUSED(captureDateTimeUtc)
 
@@ -19114,7 +19314,7 @@ Evaluation refinePoseFromMatches(const CameraSettings& settings,
         true,
         true,
         true,
-        !(useGuidedDirectionScoring && isNarrowField(settings)),
+        forceFovRefine || !(useGuidedDirectionScoring && isNarrowField(settings)),
         calibratePrincipalPoint,
         calibratePrincipalPoint,
         calibrateLens
@@ -21062,6 +21262,146 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     };
 
     DirectionSeedAcceptance directionSeedAcceptance = directionSeedAcceptanceFor(selectedFinalPassForAcceptance);
+
+    if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE")
+        && useStartDirection
+        && isNarrowField(settings))
+    {
+        qDebug() << "CameraPlateSolver: pre-polish acceptance"
+                 << "acceptable=" << directionSeedAcceptance.acceptable
+                 << "weakBrightSupport=" << directionSeedAcceptance.weakBrightSupport
+                 << "fovAccepted=" << directionSeedAcceptance.fovAccepted
+                 << "matches=" << selectedFinalPassForAcceptance.finalMatches.size()
+                 << "projectorValid=" << selectedFinalPassForAcceptance.projectorValid
+                 << "Az=" << selectedFinalPassForAcceptance.pose.azimuthDegrees
+                 << "El=" << selectedFinalPassForAcceptance.pose.elevationDegrees
+                 << "Roll=" << selectedFinalPassForAcceptance.pose.rollDegrees;
+    }
+
+    // Dense-match FoV/pose polish (failure path only): a richly-matched (>= minMatches+50)
+    // narrow direction-seeded candidate can converge to a pose whose RMS is dominated by a
+    // small, roughly-uniform FoV mismatch (FoV is deliberately left fixed for these solves -
+    // see refinePoseFromMatches's activeParameters), leaving many genuinely-aligned bright
+    // catalog stars a few px outside finalMatchRadius of their detections and so unmatched
+    // (hasWeakNarrowGuidedBrightSupport's matchedBrightProjectedStars/brightProjectedStars
+    // stays low even though the basin is correct). Re-running LM with FoV free, seeded from
+    // the candidate's own large match set (well-constrained, unlike the bright-anchor
+    // rescue's 1-2 anchor matches), can correct this. Adopted only if it independently
+    // clears the *same*, unchanged acceptance gate and retains >=90% of the original
+    // matches (mirroring tightenNarrowFinalPass's safety margin) - so this can only ever
+    // surface a pose the existing gate agrees is acceptable.
+    if (!directionSeedAcceptance.acceptable
+        && directionSeedAcceptance.weakBrightSupport
+        && useStartDirection
+        && isNarrowField(settings)
+        && selectedFinalPassForAcceptance.projectorValid
+        && (selectedFinalPassForAcceptance.finalMatches.size() >= settings.m_plateSolveMinMatches + 50))
+    {
+        Evaluation polishSeed = selectedFinalPassForAcceptance.pose;
+        polishSeed.valid = true;
+        polishSeed.matches = selectedFinalPassForAcceptance.finalMatches;
+        polishSeed.matchCount = static_cast<int>(selectedFinalPassForAcceptance.finalMatches.size());
+        const Evaluation polished = refinePoseFromMatches(
+            settings, catalogContext, imageSize, captureDateTimeUtc, starDetections, polishSeed,
+            /*forceFovRefine=*/true);
+        const bool debugSparse = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE");
+        if (polished.valid)
+        {
+            const FinalMatchPassEvaluation polishedPass = evaluateFinalMatchPass(
+                settings, catalogContext, imageSize, starDetections, allDetectionIndices, polished, finalMatchRadius);
+            const qsizetype minRetainedMatches = static_cast<qsizetype>(
+                std::floor(static_cast<double>(selectedFinalPassForAcceptance.finalMatches.size()) * 0.9));
+            if (debugSparse)
+            {
+                qDebug() << "CameraPlateSolver: dense-match FoV/pose polish candidate"
+                         << "matches=" << polishedPass.finalMatches.size()
+                         << "minRetained=" << minRetainedMatches
+                         << "rms=" << polishedPass.rmsErrorPixels
+                         << "Az=" << polishedPass.pose.azimuthDegrees
+                         << "El=" << polishedPass.pose.elevationDegrees
+                         << "Roll=" << polishedPass.pose.rollDegrees
+                         << "FoV=" << polishedPass.pose.fovDegrees
+                         << "projectorValid=" << polishedPass.projectorValid
+                         << "geomConsistent=" << hasGeometricallyConsistentMatches(starDetections, polishedPass.projectedStars, polishedPass.finalMatches, finalMatchRadius);
+            }
+            if (polishedPass.projectorValid
+                && (polishedPass.finalMatches.size() >= minRetainedMatches)
+                && hasGeometricallyConsistentMatches(starDetections, polishedPass.projectedStars, polishedPass.finalMatches, finalMatchRadius))
+            {
+                const DirectionSeedAcceptance polishedAcceptance = directionSeedAcceptanceFor(polishedPass);
+                if (debugSparse)
+                {
+                    qDebug() << "CameraPlateSolver: dense-match FoV/pose polish acceptance"
+                             << "acceptable=" << polishedAcceptance.acceptable
+                             << "weakBrightSupport=" << polishedAcceptance.weakBrightSupport
+                             << "fovAccepted=" << polishedAcceptance.fovAccepted;
+                }
+                if (polishedAcceptance.acceptable)
+                {
+                    qDebug() << "CameraPlateSolver: dense-match FoV/pose polish adopted pose"
+                             << "matches=" << polishedPass.finalMatches.size()
+                             << "rms=" << polishedPass.rmsErrorPixels
+                             << "Az=" << polishedPass.pose.azimuthDegrees
+                             << "El=" << polishedPass.pose.elevationDegrees
+                             << "Roll=" << polishedPass.pose.rollDegrees
+                             << "FoV=" << polishedPass.pose.fovDegrees;
+                    selectedFinalPass = polishedPass;
+                    selectedFinalPassForAcceptance = polishedPass;
+                    directionSeedAcceptance = polishedAcceptance;
+                    result.m_catalogCandidateStars = selectedFinalPass.projectedStars.size();
+                    result.m_outlierStars = selectedFinalPass.outlierCount;
+                    result.m_solverQualityScore = std::max(
+                        finalMatchPassScore(settings, selectedFinalPass),
+                        finalMatchPassEvidenceScore(settings, selectedFinalPass));
+                    result.m_seedConsistencyScore = narrowGuidedSeedConsistencyScore(settings, selectedFinalPass);
+                    result.m_namedBrightAnchorMatches = selectedFinalPass.namedBrightAnchorMatches;
+                    result.m_namedBrightAnchorRmsErrorPixels = selectedFinalPass.namedBrightAnchorRmsErrorPixels;
+                    result.m_seedRadialMagnitudeMatchFraction = selectedFinalPass.seedRadialMagnitudeMatchFraction;
+                    result.m_prioritySeedProjectedChecks = selectedFinalPass.prioritySeedProjectedChecks;
+                    result.m_prioritySeedProjectedErrorPixels = selectedFinalPass.prioritySeedProjectedErrorPixels;
+                    result.m_azimuthDegrees = selectedFinalPass.pose.azimuthDegrees;
+                    result.m_elevationDegrees = selectedFinalPass.pose.elevationDegrees;
+                    result.m_rollDegrees = selectedFinalPass.pose.rollDegrees;
+                    result.m_fovDegrees = selectedFinalPass.pose.fovDegrees;
+                    result.m_centerOffsetXPixels = selectedFinalPass.pose.centerOffsetXPixels;
+                    result.m_centerOffsetYPixels = selectedFinalPass.pose.centerOffsetYPixels;
+                    result.m_distortionK1 = selectedFinalPass.pose.distortionK1;
+
+                    // finalMatches/projectedStars alias selectedFinalPass's members (now
+                    // polishedPass), but the labelling loop and result match counters above
+                    // (lines ~21184-21202) already ran against the pre-polish pass - redo
+                    // them here so the per-detection labels and summary reflect the
+                    // adopted polished pose.
+                    clearSolvedStars(starDetections);
+                    QHash<int, QPointF> polishedProjectedPointsByCatalogIndex;
+                    for (const ProjectedCatalogStar& projectedStar : projectedStars) {
+                        polishedProjectedPointsByCatalogIndex.insert(projectedStar.catalogIndex, projectedStar.point);
+                    }
+                    for (const Match& match : finalMatches)
+                    {
+                        CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
+                        const CatalogStar& catalogStar = catalogContext.catalogStars[match.catalogIndex];
+                        detection.m_label = catalogDisplayName(catalogStar);
+                        detection.m_projectedCenter = polishedProjectedPointsByCatalogIndex.value(match.catalogIndex);
+                        detection.m_matchDistancePixels = static_cast<float>(match.distancePixels);
+                        detection.m_catalogMagnitude = static_cast<float>(catalogStar.magnitude);
+                        detection.m_catalogRightAscensionDegrees = catalogStar.rightAscensionDegrees;
+                        detection.m_catalogDeclinationDegrees = catalogStar.declinationDegrees;
+                        detection.m_catalogSpectralType = catalogStar.spectralType;
+                        detection.m_solved = true;
+                    }
+                    result.m_matchedStars = finalMatches.size();
+                    result.m_rmsErrorPixels = selectedFinalPass.rmsErrorPixels;
+                    result.m_maxErrorPixels = selectedFinalPass.maxErrorPixels;
+                    result.m_matchSummary = matchSummary(catalogContext, starDetections, finalMatches);
+                }
+            }
+        }
+        else if (debugSparse)
+        {
+            qDebug() << "CameraPlateSolver: dense-match FoV/pose polish refine invalid";
+        }
+    }
 
     // Bright-detection-anchored verifier rescue (failure path only): the seed-verification
     // gate (>= 3 mutually-consistent matches) can reject every geometric seed in a sparse

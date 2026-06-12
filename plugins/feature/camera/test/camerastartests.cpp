@@ -709,6 +709,11 @@ TestProjector createDiagnosticProjector(const StarTestCase& test,
         return projector;
     }
 
+    // Note: when the solve fails, this falls back to the recorded test.roll, but that value
+    // is only meaningful ground truth when test.plateSolveStartMode includes roll
+    // (FovAzElRoll/FovAzElRollLens). For lower start modes (e.g. FovAzEl=3, used by
+    // narrow-7), test.roll is an unused placeholder and the resulting projector's
+    // orientation should not be trusted for diagnostics.
     const double azimuth = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_azimuth : test.azimuth;
     const double elevation = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_elevation : test.elevation;
     const double roll = frame->m_plateSolve.m_solved ? frame->m_plateSolve.m_roll : test.roll;

@@ -56,6 +56,7 @@ public:
     [[nodiscard]] qint64 durationMs() const { return m_durationMs; }
     [[nodiscard]] double frameRate() const { return m_frameRate; }
     [[nodiscard]] qint64 audioDecodedPositionMs() const { return m_audioDecodedPositionMs; }
+    [[nodiscard]] int pendingAudioBytes() const { return m_pendingAudioPcm.size(); }
     [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }
     [[nodiscard]] int pendingVideoPacketCount() const { return static_cast<int>(m_pendingVideoPackets.size()); }
 
@@ -97,6 +98,7 @@ private:
     double m_frameRate = 25.0;
     int m_outputSampleRate = 48000;
     qint64 m_audioDecodedPositionMs = -1;
+    QByteArray m_pendingAudioPcm;
     bool m_eof = false;
     bool m_videoDraining = false;
     bool m_audioDraining = false;
@@ -111,10 +113,12 @@ private:
     [[nodiscard]] bool receiveVideoFrame(QImage& image, qint64& positionMs, QString& errorMessage);
     [[nodiscard]] bool queueOneDecodedVideoFrame(QString& errorMessage);
     [[nodiscard]] bool queueDecodedVideoFrames(QString& errorMessage);
+    [[nodiscard]] bool finishFrameAudio(QByteArray& decodedAudio, QByteArray& pcmS16Stereo, qint64 videoPositionMs, QString& errorMessage);
     [[nodiscard]] bool readAheadAudio(QByteArray& pcmS16Stereo, qint64 videoPositionMs, QString& errorMessage);
     [[nodiscard]] bool drainAudio(QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool appendFrameAudio(const AVFrame *frame, QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool convertFrameToImage(const AVFrame *frame, QImage& image, QString& errorMessage);
+    void takePacedAudio(QByteArray& pcmS16Stereo);
     void clearPendingVideoPackets();
     void closeAudioDecoder();
 };

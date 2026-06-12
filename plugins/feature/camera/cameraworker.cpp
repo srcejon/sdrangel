@@ -1563,6 +1563,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     const qint64 audioLeadMs = m_videoFileDecoder
         ? m_videoFileDecoder->audioDecodedPositionMs() - m_videoFilePositionMs
         : 0;
+    const int pendingAudioBytes = m_videoFileDecoder ? m_videoFileDecoder->pendingAudioBytes() : 0;
 
     quint64 readAheadCalls = 0;
     quint64 readAheadPackets = 0;
@@ -1622,6 +1623,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "monitorFill" << m_qtAudio.monitorAudioFill() << "/" << m_qtAudio.monitorAudioSize()
              << "monitorDroppedFrames" << droppedAudioDelta
              << "audioLeadMs" << audioLeadMs
+             << "pendingAudioBytes" << pendingAudioBytes
              << "pendingVideoFrames" << pendingFrames
              << "pendingVideoPackets" << pendingPackets
              << "readAheadCalls" << readAheadCalls

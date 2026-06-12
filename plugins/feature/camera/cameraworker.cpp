@@ -1245,6 +1245,9 @@ void CameraWorker::captureTick()
     if (m_settings.isVideoFileCamera())
     {
         readVideoFileFrame();
+        if (m_capturing && m_videoFilePlaying) {
+            scheduleNextVideoFileTick();
+        }
         return;
     }
 
@@ -1317,6 +1320,8 @@ void CameraWorker::closeVideoFileDecoder()
     m_videoFilePositionMs = 0;
     m_videoFileDurationMs = 0;
     m_videoFilePlaying = false;
+    m_videoFilePlaybackClock.invalidate();
+    m_videoFilePlaybackTick = 0;
     resetVideoFilePlaybackStats();
     if (m_settings.isVideoFileCamera()) {
         m_qtAudio.stop();
@@ -1339,12 +1344,15 @@ void CameraWorker::setVideoFilePlaying(bool playing)
         if (!m_videoFileStatsTimer.isValid()) {
             resetVideoFilePlaybackStats();
         }
-        m_videoFileTickTimer.restart();
-        m_captureTimer.start(videoFileFrameIntervalMs());
+        m_captureTimer.setSingleShot(true);
+        resetVideoFilePlaybackSchedule();
+        scheduleNextVideoFileTick();
     }
     else
     {
         m_captureTimer.stop();
+        m_videoFilePlaybackClock.invalidate();
+        m_videoFilePlaybackTick = 0;
     }
     reportVideoFilePlaybackToGUI();
 }
@@ -1385,7 +1393,6 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         {
             seekVideoFile(0, false);
             readVideoFileFrame();
-            setVideoFilePlaying(true);
         }
         else
         {
@@ -1456,8 +1463,48 @@ void CameraWorker::stepVideoFile(int direction)
 
 int CameraWorker::videoFileFrameIntervalMs() const
 {
+    return qMax(1, static_cast<int>(std::round(videoFileExactFrameIntervalMs())));
+}
+
+double CameraWorker::videoFileExactFrameIntervalMs() const
+{
     const double decoderFps = m_videoFileDecoder ? m_videoFileDecoder->frameRate() : m_settings.m_framesPerSecond;
-    return qMax(1, static_cast<int>(std::round(1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings.m_videoPlaybackRate)))));
+    return 1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings.m_videoPlaybackRate));
+}
+
+void CameraWorker::resetVideoFilePlaybackSchedule()
+{
+    m_videoFilePlaybackClock.restart();
+    m_videoFilePlaybackTick = 1;
+    m_videoFileTickTimer.restart();
+}
+
+void CameraWorker::scheduleNextVideoFileTick()
+{
+    if (!m_capturing || !m_videoFilePlaying || !m_settings.isVideoFileCamera() || !m_videoFileDecoder) {
+        return;
+    }
+
+    const double intervalMs = qMax(1.0, videoFileExactFrameIntervalMs());
+    if (!m_videoFilePlaybackClock.isValid()) {
+        resetVideoFilePlaybackSchedule();
+    }
+
+    quint64 tick = m_videoFilePlaybackTick > 0 ? m_videoFilePlaybackTick : 1;
+    const qint64 elapsedMs = m_videoFilePlaybackClock.elapsed();
+    qint64 targetMs = static_cast<qint64>(std::llround(static_cast<double>(tick) * intervalMs));
+
+    if (targetMs <= elapsedMs)
+    {
+        tick = static_cast<quint64>(std::floor(static_cast<double>(elapsedMs) / intervalMs)) + 1;
+        targetMs = static_cast<qint64>(std::llround(static_cast<double>(tick) * intervalMs));
+    }
+
+    const qint64 delayMs = qMax<qint64>(1, targetMs - elapsedMs);
+    const int timerDelayMs = static_cast<int>(qMin<qint64>(std::numeric_limits<int>::max(), delayMs));
+    m_videoFilePlaybackTick = tick + 1;
+    m_captureTimer.setSingleShot(true);
+    m_captureTimer.start(timerDelayMs);
 }
 
 void CameraWorker::resetVideoFilePlaybackStats()
@@ -1645,6 +1692,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     qDebug() << "CameraWorker: video playback stats"
              << "frames" << m_videoFileStatsFrames
              << "timerMs" << videoFileFrameIntervalMs()
+             << "timerExactMs" << videoFileExactFrameIntervalMs()
              << "fps" << (m_videoFileDecoder ? m_videoFileDecoder->frameRate() : 0.0)
              << "rate" << m_settings.m_videoPlaybackRate
              << "decodeAvgMs" << avgDecodeMs

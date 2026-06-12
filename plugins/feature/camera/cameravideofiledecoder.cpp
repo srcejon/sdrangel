@@ -19,6 +19,7 @@
 #include "cameravideofiledecoder.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <QElapsedTimer>
 
@@ -159,7 +160,8 @@ void CameraVideoFileDecoder::close()
     m_durationMs = 0;
     m_frameRate = 25.0;
     m_outputSampleRate = 48000;
-    m_audioPaceIntervalMs = 0;
+    m_audioPaceFrameRate = 0.0;
+    m_audioPaceRemainderFrames = 0.0;
     m_audioDecodedPositionMs = -1;
     m_pendingAudioPcm.clear();
     m_eof = false;
@@ -171,9 +173,13 @@ void CameraVideoFileDecoder::close()
     m_debugStats = DebugStats();
 }
 
-void CameraVideoFileDecoder::setAudioPaceIntervalMs(int intervalMs)
+void CameraVideoFileDecoder::setAudioPaceFrameRate(double frameRate)
 {
-    m_audioPaceIntervalMs = std::max(0, intervalMs);
+    const double clampedFrameRate = std::max(0.0, frameRate);
+    if (std::abs(m_audioPaceFrameRate - clampedFrameRate) > 0.001) {
+        m_audioPaceRemainderFrames = 0.0;
+    }
+    m_audioPaceFrameRate = clampedFrameRate;
 }
 
 void CameraVideoFileDecoder::seek(qint64 positionMs)
@@ -200,6 +206,7 @@ void CameraVideoFileDecoder::seek(qint64 positionMs)
     m_videoDraining = false;
     m_audioDraining = false;
     m_pendingAudioPcm.clear();
+    m_audioPaceRemainderFrames = 0.0;
     m_pendingVideoFrames.clear();
 #else
     Q_UNUSED(positionMs)
@@ -819,11 +826,11 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
         return;
     }
 
-    const int targetFrames = std::max(
-        1,
-        m_audioPaceIntervalMs > 0
-            ? static_cast<int>((static_cast<double>(m_outputSampleRate) * static_cast<double>(m_audioPaceIntervalMs) / 1000.0) + 0.5)
-            : static_cast<int>((static_cast<double>(m_outputSampleRate) / std::max(1.0, m_frameRate)) + 0.5));
+    const double paceFrameRate = m_audioPaceFrameRate > 0.0 ? m_audioPaceFrameRate : m_frameRate;
+    const double exactTargetFrames = static_cast<double>(m_outputSampleRate) / std::max(1.0, paceFrameRate);
+    const double availableTargetFrames = exactTargetFrames + m_audioPaceRemainderFrames;
+    const int targetFrames = std::max(1, static_cast<int>(availableTargetFrames));
+    m_audioPaceRemainderFrames = availableTargetFrames - static_cast<double>(targetFrames);
     const int targetBytes = targetFrames * bytesPerSampleFrame;
     const int byteCount = std::min(targetBytes, static_cast<int>(m_pendingAudioPcm.size()));
     pcmS16Stereo = m_pendingAudioPcm.left(byteCount);

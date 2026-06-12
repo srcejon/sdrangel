@@ -1354,7 +1354,8 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         return;
     }
 
-    m_videoFileDecoder->setAudioPaceIntervalMs(videoFileFrameIntervalMs());
+    m_videoFileDecoder->setAudioPaceFrameRate(
+        qMax(1.0, m_videoFileDecoder->frameRate()) * qMax(0.1, m_settings.m_videoPlaybackRate));
 
     QImage image;
     qint64 positionMs = -1;

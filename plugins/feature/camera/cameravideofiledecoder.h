@@ -42,7 +42,7 @@ public:
     [[nodiscard]] bool open(const QString& fileName, QString& errorMessage, int outputSampleRate = 48000);
     void close();
     void seek(qint64 positionMs);
-    void setAudioPaceIntervalMs(int intervalMs);
+    void setAudioPaceFrameRate(double frameRate);
     [[nodiscard]] bool readNextFrame(
         QImage& image,
         qint64& positionMs,
@@ -98,7 +98,8 @@ private:
     qint64 m_durationMs = 0;
     double m_frameRate = 25.0;
     int m_outputSampleRate = 48000;
-    int m_audioPaceIntervalMs = 0;
+    double m_audioPaceFrameRate = 0.0;
+    double m_audioPaceRemainderFrames = 0.0;
     qint64 m_audioDecodedPositionMs = -1;
     QByteArray m_pendingAudioPcm;
     bool m_eof = false;

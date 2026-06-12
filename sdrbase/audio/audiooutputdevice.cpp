@@ -357,7 +357,7 @@ qint64 AudioOutputDevice::readData(char* data, qint64 maxLen)
 //#endif
     // qDebug("AudioOutputDevice::readData: thread %p (%s)", (void *) QThread::currentThread(), qPrintable(m_deviceName));
 
-	unsigned int samplesPerBuffer = maxLen / 4;
+	const unsigned int samplesPerBuffer = maxLen / 4;
 
 	if (samplesPerBuffer == 0)
 	{
@@ -374,13 +374,6 @@ qint64 AudioOutputDevice::readData(char* data, qint64 maxLen)
 		}
 	}
 
-    // See how much data we have available
-    // If we have less than the requested amount, we only output what we have
-    // If we have no data, then we output some zeros to avoid underflow
-    // (bytesAvailable() returns this amount when none available)
-    unsigned int samplesAvailable = bytesAvailable() / 4;
-    samplesPerBuffer = std::min(samplesAvailable, samplesPerBuffer);
-
 	memset(&m_mixBuffer[0], 0x00, 2 * samplesPerBuffer * sizeof(m_mixBuffer[0])); // start with silence
 
 	// sum up a block from all fifos
@@ -394,7 +387,6 @@ qint64 AudioOutputDevice::readData(char* data, qint64 maxLen)
 
         if (samples != samplesPerBuffer)
         {
-            //qDebug("AudioOutputDevice::readData: read %d samples vs %d requested", samples, samplesPerBuffer);
             emit (*it)->underflow();
         }
 

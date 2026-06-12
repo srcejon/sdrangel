@@ -520,13 +520,13 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
 
     if (m_captureActive && m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
     {
-        if (!m_preRecordBufferFlushed) {
-            flushPreRecordFrames(calibratedImage, processedImage);
-        }
-
         const double videoFrameRate = frame->m_playbackFrameRate > 0.0
             ? frame->m_playbackFrameRate
             : m_settings.getCaptureFrameRate();
+
+        if (!m_preRecordBufferFlushed) {
+            flushPreRecordFrames(calibratedImage, processedImage, videoFrameRate);
+        }
 
         if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, calibratedImage, QStringLiteral("calibrated"), videoFrameRate)) {
             writePendingAudio(*m_calibratedVideoWriter, QStringLiteral("calibrated"));
@@ -903,7 +903,7 @@ void CameraRecorder::appendPreRecordFrame(const QImage& calibratedImage, const Q
     trimPreRecordBuffer();
 }
 
-void CameraRecorder::flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentProcessedImage)
+void CameraRecorder::flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentProcessedImage, double frameRate)
 {
     if (!m_settings.m_saveVideo || m_settings.m_videoFileName.isEmpty())
     {
@@ -911,7 +911,15 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentCalibratedImage, 
         return;
     }
 
-    if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, currentCalibratedImage, QStringLiteral("calibrated"), m_settings.getCaptureFrameRate()))
+    if (m_preRecordVideoFrames.empty())
+    {
+        m_preRecordBufferFlushed = true;
+        return;
+    }
+
+    const double videoFrameRate = std::max(0.001, frameRate);
+
+    if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, currentCalibratedImage, QStringLiteral("calibrated"), videoFrameRate))
     {
         for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
         {
@@ -921,7 +929,7 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentCalibratedImage, 
         }
     }
 
-    if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, currentProcessedImage, QStringLiteral("post"), m_settings.getCaptureFrameRate()))
+    if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, currentProcessedImage, QStringLiteral("post"), videoFrameRate))
     {
         for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
         {

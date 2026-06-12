@@ -237,7 +237,7 @@ private:
     int outputQueueFrameLimit() const;
     void trimPreRecordBuffer();
     void appendPreRecordFrame(const QImage& calibratedImage, const QImage& processedImage);
-    void flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentProcessedImage);
+    void flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentProcessedImage, double frameRate);
     void updateKeogram(const QImage& calibratedImage, const QDateTime& captureDateTime);
     void resetKeogram();
     [[nodiscard]] QDateTime keogramWindowStartUtc(const QDateTime& captureDateTime) const;

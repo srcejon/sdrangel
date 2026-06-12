@@ -748,6 +748,11 @@ void CameraVideoWriter::close()
     if (m_formatContext)
     {
         if (m_headerWritten) {
+            qDebug() << "CameraVideoWriter: closing" << m_settings.m_fileName
+                     << "frames" << (m_frameDurationPts > 0 ? m_frameIndex / m_frameDurationPts : m_frameIndex)
+                     << "durationMs" << (m_lastVideoPts >= 0 ? m_lastVideoPts + m_frameDurationPts : 0)
+                     << "fps" << m_settings.m_fps
+                     << "bitrateKbps" << m_settings.m_bitrateKbps;
             av_write_trailer(m_formatContext);
         }
         if (!(m_formatContext->oformat->flags & AVFMT_NOFILE) && m_formatContext->pb) {

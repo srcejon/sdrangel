@@ -1602,6 +1602,7 @@ void CameraGUI::displaySettings()
     settingsUI()->videoRecordLimitSpin->setValue(m_settings.m_videoRecordLimitSeconds);
     settingsUI()->recordRawFitsCheck->setChecked(m_settings.m_recordRawFits);
     settingsUI()->recordCalibratedMediaCheck->setChecked(m_settings.m_recordCalibratedMedia);
+    settingsUI()->recordFilteredMediaCheck->setChecked(m_settings.m_recordFilteredMedia);
     settingsUI()->recordPostProcessedMediaCheck->setChecked(m_settings.m_recordPostProcessedMedia);
     ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
@@ -2370,6 +2371,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoRecordLimitSpin_valueChanged);
     QObject::connect(settingsUI()->recordRawFitsCheck, &QCheckBox::toggled, this, &CameraGUI::on_recordRawFitsCheck_toggled);
     QObject::connect(settingsUI()->recordCalibratedMediaCheck, &QCheckBox::toggled, this, &CameraGUI::on_recordCalibratedMediaCheck_toggled);
+    QObject::connect(settingsUI()->recordFilteredMediaCheck, &QCheckBox::toggled, this, &CameraGUI::on_recordFilteredMediaCheck_toggled);
     QObject::connect(settingsUI()->recordPostProcessedMediaCheck, &QCheckBox::toggled, this, &CameraGUI::on_recordPostProcessedMediaCheck_toggled);
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
@@ -2874,6 +2876,7 @@ void CameraGUI::updateVideoPreRecordBufferMemoryLabel()
     const int height = m_lastImage.isNull() ? std::max(0, m_settings.m_resolutionHeight) : m_lastImage.height();
     const int seconds = std::max(0, m_settings.m_videoPreRecordBufferSeconds);
     const int streams = (m_settings.m_recordCalibratedMedia ? 1 : 0)
+        + (m_settings.m_recordFilteredMedia ? 1 : 0)
         + (m_settings.m_recordPostProcessedMedia ? 1 : 0);
     const double frameRate = std::max(0.0, m_settings.getCaptureFrameRate());
     const double bytes = static_cast<double>(width) * static_cast<double>(height) * 3.0
@@ -5921,6 +5924,15 @@ void CameraGUI::on_recordCalibratedMediaCheck_toggled(bool checked)
     applyVideoToolTip();
 }
 
+void CameraGUI::on_recordFilteredMediaCheck_toggled(bool checked)
+{
+    m_settings.m_recordFilteredMedia = checked;
+    updateVideoPreRecordBufferMemoryLabel();
+    applySetting("recordFilteredMedia");
+    applyImageToolTip();
+    applyVideoToolTip();
+}
+
 void CameraGUI::on_recordPostProcessedMediaCheck_toggled(bool checked)
 {
     m_settings.m_recordPostProcessedMedia = checked;
@@ -8425,6 +8437,9 @@ void CameraGUI::applyImageToolTip()
     if (m_settings.m_recordCalibratedMedia) {
         outputs.append(QStringLiteral("calibrated"));
     }
+    if (m_settings.m_recordFilteredMedia) {
+        outputs.append(QStringLiteral("filtered"));
+    }
     if (m_settings.m_recordPostProcessedMedia) {
         outputs.append(QStringLiteral("post-processed"));
     }
@@ -8440,6 +8455,9 @@ void CameraGUI::applyVideoToolTip()
     QStringList outputs;
     if (m_settings.m_recordCalibratedMedia) {
         outputs.append(QStringLiteral("calibrated"));
+    }
+    if (m_settings.m_recordFilteredMedia) {
+        outputs.append(QStringLiteral("filtered"));
     }
     if (m_settings.m_recordPostProcessedMedia) {
         outputs.append(QStringLiteral("post-processed"));

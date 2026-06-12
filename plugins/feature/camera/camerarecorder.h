@@ -169,6 +169,7 @@ private:
     struct BufferedVideoFrame
     {
         QImage m_calibratedImage;
+        QImage m_filteredImage;
         QImage m_processedImage;
     };
 
@@ -186,8 +187,10 @@ private:
     bool m_captureActive;
     quint64 m_captureEpoch = 0;
     std::unique_ptr<CameraVideoWriter> m_calibratedVideoWriter;
+    std::unique_ptr<CameraVideoWriter> m_filteredVideoWriter;
     std::unique_ptr<CameraVideoWriter> m_processedVideoWriter;
     QSize m_calibratedVideoWriterSize;
+    QSize m_filteredVideoWriterSize;
     QSize m_processedVideoWriterSize;
     std::deque<BufferedVideoFrame> m_preRecordVideoFrames;
     bool m_preRecordBufferFlushed;
@@ -222,6 +225,7 @@ private:
     [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, const QString& variant, const QString& suffixOverride = QString());
     [[nodiscard]] bool shouldSaveRawFits() const;
     [[nodiscard]] bool shouldSaveCalibratedMedia() const;
+    [[nodiscard]] bool shouldSaveFilteredMedia() const;
     [[nodiscard]] bool shouldSavePostProcessedMedia() const;
     [[nodiscard]] bool saveRawFits(const QString& fileName,
                                    const QImage& image,
@@ -236,8 +240,8 @@ private:
     int preRecordBufferFrameLimit() const;
     int outputQueueFrameLimit() const;
     void trimPreRecordBuffer();
-    void appendPreRecordFrame(const QImage& calibratedImage, const QImage& processedImage);
-    void flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentProcessedImage, double frameRate);
+    void appendPreRecordFrame(const QImage& calibratedImage, const QImage& filteredImage, const QImage& processedImage);
+    void flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentFilteredImage, const QImage& currentProcessedImage, double frameRate);
     void updateKeogram(const QImage& calibratedImage, const QDateTime& captureDateTime);
     void resetKeogram();
     [[nodiscard]] QDateTime keogramWindowStartUtc(const QDateTime& captureDateTime) const;

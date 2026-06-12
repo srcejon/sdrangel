@@ -507,6 +507,7 @@ private slots:
     void on_videoRecordLimitSpin_valueChanged(int value);
     void on_recordRawFitsCheck_toggled(bool checked);
     void on_recordCalibratedMediaCheck_toggled(bool checked);
+    void on_recordFilteredMediaCheck_toggled(bool checked);
     void on_recordPostProcessedMediaCheck_toggled(bool checked);
     void on_stackEnabledCheck_toggled(bool checked);
     void on_stackFrameCountSpin_valueChanged(int value);

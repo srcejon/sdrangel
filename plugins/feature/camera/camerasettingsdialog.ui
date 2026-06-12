@@ -3952,6 +3952,16 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </widget>
             </item>
             <item>
+             <widget class="QCheckBox" name="recordFilteredMediaCheck">
+              <property name="toolTip">
+               <string>Save filtered images and video after camera image processing, before overlays</string>
+              </property>
+              <property name="text">
+               <string>Filtered</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QCheckBox" name="recordPostProcessedMediaCheck">
               <property name="toolTip">
                <string>Save post-processed images and video with overlays</string>
@@ -6866,6 +6876,7 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>videoPathButton</tabstop>
   <tabstop>recordRawFitsCheck</tabstop>
   <tabstop>recordCalibratedMediaCheck</tabstop>
+  <tabstop>recordFilteredMediaCheck</tabstop>
   <tabstop>recordPostProcessedMediaCheck</tabstop>
   <tabstop>videoPreRecordBufferSpin</tabstop>
   <tabstop>imageRecordLimitSpin</tabstop>

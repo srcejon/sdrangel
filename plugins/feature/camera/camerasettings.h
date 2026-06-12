@@ -376,6 +376,7 @@ struct CameraSettings
     QString m_videoFileName;
     bool m_recordRawFits;          ///< Save uncalibrated Bayer still images as FITS
     bool m_recordCalibratedMedia;  ///< Save calibrated/debayered image/video media
+    bool m_recordFilteredMedia;    ///< Save camera image processor output image/video media
     bool m_recordPostProcessedMedia; ///< Save post-processed image/video media
     bool m_keogramEnabled;         ///< Build and save a 24-hour keogram from calibrated frames
     QString m_keogramFileName;     ///< File basename for saved keograms (.jpg/.png)

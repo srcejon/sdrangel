@@ -186,6 +186,7 @@ void CameraSettings::resetToDefaults()
     m_videoFileName = "camera.mp4";
     m_recordRawFits = false;
     m_recordCalibratedMedia = true;
+    m_recordFilteredMedia = false;
     m_recordPostProcessedMedia = false;
     m_keogramEnabled = false;
     m_keogramFileName = "keogram.png";
@@ -656,6 +657,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(255, m_videoPlaybackAudioOffsetMs);
     s.writeS32(256, m_videoRecordBitrateKbps);
     s.writeString(257, serializeStringList(m_yoloIgnoredClassNames));
+    s.writeBool(258, m_recordFilteredMedia);
 
     return s.final();
 }
@@ -981,6 +983,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(234, &m_recordRawFits, false);
         d.readBool(235, &m_recordCalibratedMedia, true);
         d.readBool(236, &m_recordPostProcessedMedia, false);
+        d.readBool(258, &m_recordFilteredMedia, false);
         d.readBool(240, &m_keogramEnabled, false);
         d.readString(241, &m_keogramFileName, "keogram.png");
         qint32 keogramDirection = static_cast<qint32>(KeogramVertical);
@@ -1833,6 +1836,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("recordCalibratedMedia")) {
         m_recordCalibratedMedia = settings.m_recordCalibratedMedia;
     }
+    if (settingsKeys.contains("recordFilteredMedia")) {
+        m_recordFilteredMedia = settings.m_recordFilteredMedia;
+    }
     if (settingsKeys.contains("recordPostProcessedMedia")) {
         m_recordPostProcessedMedia = settings.m_recordPostProcessedMedia;
     }
@@ -2570,6 +2576,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("recordCalibratedMedia") || force) {
         ostr << " m_recordCalibratedMedia: " << m_recordCalibratedMedia;
+    }
+    if (settingsKeys.contains("recordFilteredMedia") || force) {
+        ostr << " m_recordFilteredMedia: " << m_recordFilteredMedia;
     }
     if (settingsKeys.contains("recordPostProcessedMedia") || force) {
         ostr << " m_recordPostProcessedMedia: " << m_recordPostProcessedMedia;

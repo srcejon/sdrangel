@@ -1481,6 +1481,7 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderEagain = stats.m_sendVideoPacketEagain;
         m_videoFileStatsLastDecoderQueuedFrames = stats.m_queuedVideoFrames;
         m_videoFileStatsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
+        m_videoFileStatsLastDecoderPacketCapHits = stats.m_readAheadPacketCapHits;
         m_videoFileStatsLastDecoderAudioBytes = stats.m_audioBytes;
         m_videoFileStatsLastDecoderConvertFrames = stats.m_videoConvertFrames;
         m_videoFileStatsLastDecoderConvertMs = stats.m_videoConvertMs;
@@ -1493,6 +1494,7 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderEagain = 0;
         m_videoFileStatsLastDecoderQueuedFrames = 0;
         m_videoFileStatsLastDecoderParkedVideoPackets = 0;
+        m_videoFileStatsLastDecoderPacketCapHits = 0;
         m_videoFileStatsLastDecoderAudioBytes = 0;
         m_videoFileStatsLastDecoderConvertFrames = 0;
         m_videoFileStatsLastDecoderConvertMs = 0;
@@ -1565,6 +1567,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     quint64 decoderEagain = 0;
     quint64 queuedFrames = 0;
     quint64 parkedVideoPackets = 0;
+    quint64 packetCapHits = 0;
     quint64 decoderAudioBytes = 0;
     quint64 convertFrames = 0;
     quint64 convertMs = 0;
@@ -1578,6 +1581,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         decoderEagain = stats.m_sendVideoPacketEagain - m_videoFileStatsLastDecoderEagain;
         queuedFrames = stats.m_queuedVideoFrames - m_videoFileStatsLastDecoderQueuedFrames;
         parkedVideoPackets = stats.m_parkedVideoPackets - m_videoFileStatsLastDecoderParkedVideoPackets;
+        packetCapHits = stats.m_readAheadPacketCapHits - m_videoFileStatsLastDecoderPacketCapHits;
         decoderAudioBytes = stats.m_audioBytes - m_videoFileStatsLastDecoderAudioBytes;
         convertFrames = stats.m_videoConvertFrames - m_videoFileStatsLastDecoderConvertFrames;
         convertMs = stats.m_videoConvertMs - m_videoFileStatsLastDecoderConvertMs;
@@ -1588,6 +1592,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderEagain = stats.m_sendVideoPacketEagain;
         m_videoFileStatsLastDecoderQueuedFrames = stats.m_queuedVideoFrames;
         m_videoFileStatsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
+        m_videoFileStatsLastDecoderPacketCapHits = stats.m_readAheadPacketCapHits;
         m_videoFileStatsLastDecoderAudioBytes = stats.m_audioBytes;
         m_videoFileStatsLastDecoderConvertFrames = stats.m_videoConvertFrames;
         m_videoFileStatsLastDecoderConvertMs = stats.m_videoConvertMs;
@@ -1621,6 +1626,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "decoderEagain" << decoderEagain
              << "queuedVideoFrames" << queuedFrames
              << "parkedVideoPackets" << parkedVideoPackets
+             << "packetCapHits" << packetCapHits
              << "decoderAudioBytes" << decoderAudioBytes;
 
     m_videoFileStatsFrames = 0;

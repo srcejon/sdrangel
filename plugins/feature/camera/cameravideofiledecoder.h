@@ -66,6 +66,7 @@ public:
         quint64 m_sendVideoPacketEagain = 0;
         quint64 m_queuedVideoFrames = 0;
         quint64 m_parkedVideoPackets = 0;
+        quint64 m_readAheadPacketCapHits = 0;
         quint64 m_audioBytes = 0;
         quint64 m_videoConvertFrames = 0;
         quint64 m_videoConvertMs = 0;

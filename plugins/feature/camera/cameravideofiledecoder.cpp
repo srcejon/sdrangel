@@ -368,6 +368,9 @@ bool CameraVideoFileDecoder::openVideoDecoder(QString& errorMessage)
         return false;
     }
 
+    m_videoCodecContext->thread_count = 0;
+    m_videoCodecContext->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+
     ret = avcodec_open2(m_videoCodecContext, codec, nullptr);
     if (ret < 0)
     {
@@ -587,11 +590,11 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
     }
 
     ++m_debugStats.m_readAheadCalls;
-    static constexpr size_t maxPendingVideoPackets = 24;
+    static constexpr size_t maxPendingVideoPackets = 120;
     static constexpr int bytesPerSampleFrame = 4;
     const int targetAudioFrames = std::max(
         static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5),
-        m_outputSampleRate / 10);
+        m_outputSampleRate / 4);
     const int targetAudioBytes = targetAudioFrames * bytesPerSampleFrame;
     int packetsRead = 0;
 
@@ -660,6 +663,9 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
         ++packetsRead;
     }
 
+    if (m_pendingVideoPackets.size() >= maxPendingVideoPackets) {
+        ++m_debugStats.m_readAheadPacketCapHits;
+    }
     return true;
 #endif
 }

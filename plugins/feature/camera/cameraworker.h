@@ -645,6 +645,7 @@ private:
     quint64 m_videoFileStatsLastDecoderEagain = 0;
     quint64 m_videoFileStatsLastDecoderQueuedFrames = 0;
     quint64 m_videoFileStatsLastDecoderParkedVideoPackets = 0;
+    quint64 m_videoFileStatsLastDecoderPacketCapHits = 0;
     quint64 m_videoFileStatsLastDecoderAudioBytes = 0;
     quint64 m_videoFileStatsLastDecoderConvertFrames = 0;
     quint64 m_videoFileStatsLastDecoderConvertMs = 0;

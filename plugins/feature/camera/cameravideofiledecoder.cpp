@@ -160,6 +160,7 @@ void CameraVideoFileDecoder::close()
     m_videoDraining = false;
     m_audioDraining = false;
     m_pendingVideoFrames.clear();
+    m_debugStats = DebugStats();
 }
 
 void CameraVideoFileDecoder::seek(qint64 positionMs)
@@ -466,6 +467,7 @@ bool CameraVideoFileDecoder::sendVideoPacket(AVPacket *packet, QString& errorMes
             return false;
         }
 
+        ++m_debugStats.m_sendVideoPacketEagain;
         if (!queueOneDecodedVideoFrame(errorMessage)) {
             return false;
         }
@@ -527,6 +529,7 @@ bool CameraVideoFileDecoder::queueDecodedVideoFrames(QString& errorMessage)
             pending.m_image = std::move(image);
             pending.m_positionMs = positionMs;
             m_pendingVideoFrames.push_back(std::move(pending));
+            ++m_debugStats.m_queuedVideoFrames;
             continue;
         }
         return errorMessage.isEmpty();
@@ -548,6 +551,7 @@ bool CameraVideoFileDecoder::queueOneDecodedVideoFrame(QString& errorMessage)
         pending.m_image = std::move(image);
         pending.m_positionMs = positionMs;
         m_pendingVideoFrames.push_back(std::move(pending));
+        ++m_debugStats.m_queuedVideoFrames;
         return true;
     }
     return errorMessage.isEmpty();
@@ -565,6 +569,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
         return true;
     }
 
+    ++m_debugStats.m_readAheadCalls;
     static constexpr int bytesPerSampleFrame = 4;
     const int targetAudioBytes = std::max(1, static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5)) * bytesPerSampleFrame;
     int packetsRead = 0;
@@ -596,6 +601,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
             return false;
         }
 
+        ++m_debugStats.m_readAheadPackets;
         if (m_packet->stream_index == m_audioStreamIndex)
         {
             ret = avcodec_send_packet(m_audioCodecContext, m_packet);
@@ -611,6 +617,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
         }
         else if (m_packet->stream_index == m_videoStreamIndex)
         {
+            ++m_debugStats.m_readAheadVideoPackets;
             const bool sent = sendVideoPacket(m_packet, errorMessage);
             av_packet_unref(m_packet);
             if (!sent) {
@@ -702,6 +709,7 @@ bool CameraVideoFileDecoder::appendFrameAudio(const AVFrame *frame, QByteArray& 
 
     output.resize(convertedFrames * 4);
     pcmS16Stereo.append(output);
+    m_debugStats.m_audioBytes += static_cast<quint64>(output.size());
     return true;
 #endif
 }

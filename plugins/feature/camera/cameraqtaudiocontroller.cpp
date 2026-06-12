@@ -39,7 +39,8 @@ CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     m_muted(false),
     m_captureSourceActive(false),
     m_sampleRate(AudioDeviceManager::m_defaultAudioSampleRate),
-    m_recordingMessageQueue(nullptr)
+    m_recordingMessageQueue(nullptr),
+    m_monitorDroppedFrames(0)
 {
     // Audio FIFO: stereo 16-bit PCM at 48 kHz; keep enough decoded file audio to absorb timer jitter.
     static constexpr int audioFifoFrames = 48000 * 2;
@@ -133,12 +134,26 @@ void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, i
     const int sampleFrames = pcmS16Stereo.size() / bytesPerSampleFrame;
     if (!m_muted && m_capturing && (sampleFrames > 0))
     {
-        const uint32_t availableFrames = m_outputAudioFifo.size() > m_outputAudioFifo.fill()
-            ? m_outputAudioFifo.size() - m_outputAudioFifo.fill()
+        const uint32_t fifoSize = m_outputAudioFifo.size();
+        const int monitorFrames = std::min(sampleFrames, static_cast<int>(fifoSize));
+        const int skippedInputFrames = sampleFrames - monitorFrames;
+        if (skippedInputFrames > 0) {
+            m_monitorDroppedFrames += static_cast<quint64>(skippedInputFrames);
+        }
+
+        const quint8 *monitorData = reinterpret_cast<const quint8*>(pcmS16Stereo.constData())
+            + static_cast<qsizetype>(skippedInputFrames) * bytesPerSampleFrame;
+        const uint32_t fill = m_outputAudioFifo.fill();
+        const uint32_t overflowFrames = fill + static_cast<uint32_t>(monitorFrames) > fifoSize
+            ? fill + static_cast<uint32_t>(monitorFrames) - fifoSize
             : 0;
-        const int monitorFrames = std::min(sampleFrames, static_cast<int>(availableFrames));
+        if (overflowFrames > 0)
+        {
+            m_outputAudioFifo.drain(overflowFrames);
+            m_monitorDroppedFrames += overflowFrames;
+        }
         if (monitorFrames > 0) {
-            m_outputAudioFifo.write(reinterpret_cast<const quint8*>(pcmS16Stereo.constData()), monitorFrames);
+            m_outputAudioFifo.write(monitorData, static_cast<uint32_t>(monitorFrames));
         }
     }
 

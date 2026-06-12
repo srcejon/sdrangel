@@ -1354,6 +1354,8 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         return;
     }
 
+    m_videoFileDecoder->setAudioPaceIntervalMs(videoFileFrameIntervalMs());
+
     QImage image;
     qint64 positionMs = -1;
     QByteArray pcmS16Stereo;

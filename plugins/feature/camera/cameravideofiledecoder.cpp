@@ -159,6 +159,7 @@ void CameraVideoFileDecoder::close()
     m_durationMs = 0;
     m_frameRate = 25.0;
     m_outputSampleRate = 48000;
+    m_audioPaceIntervalMs = 0;
     m_audioDecodedPositionMs = -1;
     m_pendingAudioPcm.clear();
     m_eof = false;
@@ -168,6 +169,11 @@ void CameraVideoFileDecoder::close()
     m_pendingAudioPcm.clear();
     m_pendingVideoFrames.clear();
     m_debugStats = DebugStats();
+}
+
+void CameraVideoFileDecoder::setAudioPaceIntervalMs(int intervalMs)
+{
+    m_audioPaceIntervalMs = std::max(0, intervalMs);
 }
 
 void CameraVideoFileDecoder::seek(qint64 positionMs)
@@ -193,6 +199,7 @@ void CameraVideoFileDecoder::seek(qint64 positionMs)
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
+    m_pendingAudioPcm.clear();
     m_pendingVideoFrames.clear();
 #else
     Q_UNUSED(positionMs)
@@ -814,7 +821,9 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
 
     const int targetFrames = std::max(
         1,
-        static_cast<int>((static_cast<double>(m_outputSampleRate) / std::max(1.0, m_frameRate)) + 0.5));
+        m_audioPaceIntervalMs > 0
+            ? static_cast<int>((static_cast<double>(m_outputSampleRate) * static_cast<double>(m_audioPaceIntervalMs) / 1000.0) + 0.5)
+            : static_cast<int>((static_cast<double>(m_outputSampleRate) / std::max(1.0, m_frameRate)) + 0.5));
     const int targetBytes = targetFrames * bytesPerSampleFrame;
     const int byteCount = std::min(targetBytes, static_cast<int>(m_pendingAudioPcm.size()));
     pcmS16Stereo = m_pendingAudioPcm.left(byteCount);

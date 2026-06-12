@@ -1245,9 +1245,6 @@ void CameraWorker::captureTick()
     if (m_settings.isVideoFileCamera())
     {
         readVideoFileFrame();
-        if (m_videoFilePlaying) {
-            m_captureTimer.start(videoFileNextTimerIntervalMs());
-        }
         return;
     }
 
@@ -1320,7 +1317,6 @@ void CameraWorker::closeVideoFileDecoder()
     m_videoFilePositionMs = 0;
     m_videoFileDurationMs = 0;
     m_videoFilePlaying = false;
-    m_videoFileTimerRemainderMs = 0.0;
     resetVideoFilePlaybackStats();
     if (m_settings.isVideoFileCamera()) {
         m_qtAudio.stop();
@@ -1343,10 +1339,8 @@ void CameraWorker::setVideoFilePlaying(bool playing)
         if (!m_videoFileStatsTimer.isValid()) {
             resetVideoFilePlaybackStats();
         }
-        m_videoFileTimerRemainderMs = 0.0;
-        m_captureTimer.setSingleShot(true);
         m_videoFileTickTimer.restart();
-        m_captureTimer.start(videoFileNextTimerIntervalMs());
+        m_captureTimer.start(videoFileFrameIntervalMs());
     }
     else
     {
@@ -1434,7 +1428,6 @@ void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
 
     m_videoFilePositionMs = qBound<qint64>(0, positionMs, m_videoFileDurationMs > 0 ? m_videoFileDurationMs : std::numeric_limits<qint64>::max());
     m_videoFileDecoder->seek(m_videoFilePositionMs);
-    m_videoFileTimerRemainderMs = 0.0;
     m_qtAudio.clearMonitorAudio();
     m_qtAudio.prefillMonitorAudio(100);
     reportVideoFilePlaybackToGUI();
@@ -1465,16 +1458,6 @@ int CameraWorker::videoFileFrameIntervalMs() const
 {
     const double decoderFps = m_videoFileDecoder ? m_videoFileDecoder->frameRate() : m_settings.m_framesPerSecond;
     return qMax(1, static_cast<int>(std::round(1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings.m_videoPlaybackRate)))));
-}
-
-int CameraWorker::videoFileNextTimerIntervalMs()
-{
-    const double decoderFps = m_videoFileDecoder ? m_videoFileDecoder->frameRate() : m_settings.m_framesPerSecond;
-    const double exactIntervalMs = 1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings.m_videoPlaybackRate));
-    const double intervalWithRemainderMs = exactIntervalMs + m_videoFileTimerRemainderMs;
-    const int intervalMs = qMax(1, static_cast<int>(std::floor(intervalWithRemainderMs)));
-    m_videoFileTimerRemainderMs = intervalWithRemainderMs - static_cast<double>(intervalMs);
-    return intervalMs;
 }
 
 void CameraWorker::resetVideoFilePlaybackStats()

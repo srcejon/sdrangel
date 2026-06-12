@@ -625,7 +625,6 @@ private:
     qint64 m_videoFilePositionMs;
     qint64 m_videoFileDurationMs;
     bool m_videoFilePlaying;
-    double m_videoFileTimerRemainderMs = 0.0;
     QElapsedTimer m_videoFileStatsTimer;
     QElapsedTimer m_videoFileTickTimer;
     quint64 m_videoFileStatsFrames = 0;
@@ -722,7 +721,6 @@ private:
     void seekVideoFile(qint64 positionMs, bool displayFrame);
     void stepVideoFile(int direction);
     int videoFileFrameIntervalMs() const;
-    int videoFileNextTimerIntervalMs();
     void resetVideoFilePlaybackStats();
     void updateVideoFilePlaybackStats(qint64 decodeMs, qint64 positionMs, qsizetype audioBytes);
     void maybeReportVideoFilePlaybackStats();

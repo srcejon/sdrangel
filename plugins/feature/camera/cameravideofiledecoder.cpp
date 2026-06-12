@@ -159,9 +159,11 @@ void CameraVideoFileDecoder::close()
     m_durationMs = 0;
     m_frameRate = 25.0;
     m_outputSampleRate = 48000;
+    m_audioDecodedPositionMs = -1;
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
+    m_audioDecodedPositionMs = -1;
     m_pendingVideoFrames.clear();
     m_debugStats = DebugStats();
 }
@@ -224,13 +226,13 @@ bool CameraVideoFileDecoder::readNextFrame(
         m_pendingVideoFrames.pop_front();
         image = std::move(pending.m_image);
         positionMs = pending.m_positionMs;
-        return readAheadAudio(pcmS16Stereo, errorMessage);
+        return readAheadAudio(pcmS16Stereo, positionMs, errorMessage);
     }
 
     for (;;)
     {
         if (receiveVideoFrame(image, positionMs, errorMessage)) {
-            return readAheadAudio(pcmS16Stereo, errorMessage);
+            return readAheadAudio(pcmS16Stereo, positionMs, errorMessage);
         }
         if (!errorMessage.isEmpty()) {
             return false;
@@ -578,10 +580,11 @@ bool CameraVideoFileDecoder::queueOneDecodedVideoFrame(QString& errorMessage)
 #endif
 }
 
-bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& errorMessage)
+bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 videoPositionMs, QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(pcmS16Stereo)
+    Q_UNUSED(videoPositionMs)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
@@ -590,15 +593,26 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
     }
 
     ++m_debugStats.m_readAheadCalls;
-    static constexpr size_t maxPendingVideoPackets = 6;
+    static constexpr size_t maxPendingVideoPackets = 30;
+    static constexpr qint64 audioLeadMs = 200;
     static constexpr int bytesPerSampleFrame = 4;
     const int targetAudioFrames = std::max(
         static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5),
         m_outputSampleRate / 10);
     const int targetAudioBytes = targetAudioFrames * bytesPerSampleFrame;
+    const qint64 targetAudioPositionMs = videoPositionMs >= 0
+        ? videoPositionMs + audioLeadMs
+        : -1;
     int packetsRead = 0;
 
-    while ((pcmS16Stereo.size() < targetAudioBytes)
+    auto needsAudio = [&]() {
+        if ((targetAudioPositionMs >= 0) && (m_audioDecodedPositionMs >= targetAudioPositionMs)) {
+            return false;
+        }
+        return pcmS16Stereo.size() < targetAudioBytes;
+    };
+
+    while (needsAudio()
         && !m_eof
         && (packetsRead < 32)
         && (m_pendingVideoPackets.size() < maxPendingVideoPackets))
@@ -741,6 +755,22 @@ bool CameraVideoFileDecoder::appendFrameAudio(const AVFrame *frame, QByteArray& 
     output.resize(convertedFrames * 4);
     pcmS16Stereo.append(output);
     m_debugStats.m_audioBytes += static_cast<quint64>(output.size());
+
+    const qint64 audioDurationMs = static_cast<qint64>(
+        (static_cast<double>(convertedFrames) * 1000.0 / std::max(1, m_outputSampleRate)) + 0.5);
+    qint64 audioStartMs = -1;
+    if ((frame->best_effort_timestamp != AV_NOPTS_VALUE) && (m_audioStreamIndex >= 0))
+    {
+        audioStartMs = av_rescale_q(
+            frame->best_effort_timestamp,
+            m_formatContext->streams[m_audioStreamIndex]->time_base,
+            AVRational{1, 1000});
+    }
+    if (audioStartMs >= 0) {
+        m_audioDecodedPositionMs = audioStartMs + audioDurationMs;
+    } else if (m_audioDecodedPositionMs >= 0) {
+        m_audioDecodedPositionMs += audioDurationMs;
+    }
     return true;
 #endif
 }

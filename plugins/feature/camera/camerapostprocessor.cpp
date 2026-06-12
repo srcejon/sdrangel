@@ -891,6 +891,8 @@ void CameraPostProcessor::submitFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
+    submitPlaybackMonitorAudio(frame);
+
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
@@ -961,8 +963,6 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     if (!frame->ensureCpuImageFromCuda()) {
         return;
     }
-
-    submitPlaybackMonitorAudio(frame);
 
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     QVector<PreviewTextLabel> previewTextLabels;

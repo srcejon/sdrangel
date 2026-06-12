@@ -20,6 +20,8 @@
 
 #include <algorithm>
 
+#include <QElapsedTimer>
+
 #include "cameraffmpegaudio.h"
 
 #ifdef CAMERA_FFMPEG_STREAMING
@@ -585,9 +587,12 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, QString& e
     }
 
     ++m_debugStats.m_readAheadCalls;
-    static constexpr size_t maxPendingVideoPackets = 12;
+    static constexpr size_t maxPendingVideoPackets = 24;
     static constexpr int bytesPerSampleFrame = 4;
-    const int targetAudioBytes = std::max(1, static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5)) * bytesPerSampleFrame;
+    const int targetAudioFrames = std::max(
+        static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5),
+        m_outputSampleRate / 10);
+    const int targetAudioBytes = targetAudioFrames * bytesPerSampleFrame;
     int packetsRead = 0;
 
     while ((pcmS16Stereo.size() < targetAudioBytes)
@@ -763,10 +768,10 @@ bool CameraVideoFileDecoder::convertFrameToImage(const AVFrame *frame, QImage& i
             frame->width,
             frame->height,
             AV_PIX_FMT_RGB24,
-            SWS_BILINEAR,
-            nullptr,
-            nullptr,
-            nullptr);
+        SWS_FAST_BILINEAR,
+        nullptr,
+        nullptr,
+        nullptr);
         if (!m_swsContext)
         {
             errorMessage = QStringLiteral("Cannot create video file colour converter");
@@ -783,7 +788,13 @@ bool CameraVideoFileDecoder::convertFrameToImage(const AVFrame *frame, QImage& i
 
     uint8_t *dstData[1] = { image.bits() };
     int dstLinesize[1] = { static_cast<int>(image.bytesPerLine()) };
+    QElapsedTimer convertTimer;
+    convertTimer.start();
     sws_scale(m_swsContext, frame->data, frame->linesize, 0, frame->height, dstData, dstLinesize);
+    const qint64 convertMs = convertTimer.elapsed();
+    ++m_debugStats.m_videoConvertFrames;
+    m_debugStats.m_videoConvertMs += static_cast<quint64>(std::max<qint64>(0, convertMs));
+    m_debugStats.m_videoConvertMaxMs = std::max(m_debugStats.m_videoConvertMaxMs, convertMs);
     return true;
 #endif
 }

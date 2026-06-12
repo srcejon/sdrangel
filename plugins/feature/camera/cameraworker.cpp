@@ -1482,6 +1482,8 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderQueuedFrames = stats.m_queuedVideoFrames;
         m_videoFileStatsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
         m_videoFileStatsLastDecoderAudioBytes = stats.m_audioBytes;
+        m_videoFileStatsLastDecoderConvertFrames = stats.m_videoConvertFrames;
+        m_videoFileStatsLastDecoderConvertMs = stats.m_videoConvertMs;
     }
     else
     {
@@ -1492,6 +1494,8 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderQueuedFrames = 0;
         m_videoFileStatsLastDecoderParkedVideoPackets = 0;
         m_videoFileStatsLastDecoderAudioBytes = 0;
+        m_videoFileStatsLastDecoderConvertFrames = 0;
+        m_videoFileStatsLastDecoderConvertMs = 0;
     }
 }
 
@@ -1562,6 +1566,9 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     quint64 queuedFrames = 0;
     quint64 parkedVideoPackets = 0;
     quint64 decoderAudioBytes = 0;
+    quint64 convertFrames = 0;
+    quint64 convertMs = 0;
+    qint64 convertMaxMs = 0;
     if (m_videoFileDecoder)
     {
         const CameraVideoFileDecoder::DebugStats& stats = m_videoFileDecoder->debugStats();
@@ -1572,6 +1579,9 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         queuedFrames = stats.m_queuedVideoFrames - m_videoFileStatsLastDecoderQueuedFrames;
         parkedVideoPackets = stats.m_parkedVideoPackets - m_videoFileStatsLastDecoderParkedVideoPackets;
         decoderAudioBytes = stats.m_audioBytes - m_videoFileStatsLastDecoderAudioBytes;
+        convertFrames = stats.m_videoConvertFrames - m_videoFileStatsLastDecoderConvertFrames;
+        convertMs = stats.m_videoConvertMs - m_videoFileStatsLastDecoderConvertMs;
+        convertMaxMs = stats.m_videoConvertMaxMs;
         m_videoFileStatsLastDecoderReadAheadCalls = stats.m_readAheadCalls;
         m_videoFileStatsLastDecoderReadAheadPackets = stats.m_readAheadPackets;
         m_videoFileStatsLastDecoderReadAheadVideoPackets = stats.m_readAheadVideoPackets;
@@ -1579,7 +1589,12 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderQueuedFrames = stats.m_queuedVideoFrames;
         m_videoFileStatsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
         m_videoFileStatsLastDecoderAudioBytes = stats.m_audioBytes;
+        m_videoFileStatsLastDecoderConvertFrames = stats.m_videoConvertFrames;
+        m_videoFileStatsLastDecoderConvertMs = stats.m_videoConvertMs;
     }
+    const double convertAvgMs = convertFrames > 0
+        ? static_cast<double>(convertMs) / static_cast<double>(convertFrames)
+        : 0.0;
 
     qDebug() << "CameraWorker: video playback stats"
              << "frames" << m_videoFileStatsFrames
@@ -1588,6 +1603,8 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "rate" << m_settings.m_videoPlaybackRate
              << "decodeAvgMs" << avgDecodeMs
              << "decodeMaxMs" << m_videoFileStatsDecodeMsMax
+             << "convertAvgMs" << convertAvgMs
+             << "convertMaxMs" << convertMaxMs
              << "tickAvgMs" << avgTickDeltaMs
              << "tickMaxMs" << m_videoFileStatsTickDeltaMsMax
              << "posDeltaAvgMs" << avgPositionDeltaMs

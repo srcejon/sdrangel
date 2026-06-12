@@ -67,6 +67,9 @@ public:
         quint64 m_queuedVideoFrames = 0;
         quint64 m_parkedVideoPackets = 0;
         quint64 m_audioBytes = 0;
+        quint64 m_videoConvertFrames = 0;
+        quint64 m_videoConvertMs = 0;
+        qint64 m_videoConvertMaxMs = 0;
     };
 
     [[nodiscard]] const DebugStats& debugStats() const { return m_debugStats; }

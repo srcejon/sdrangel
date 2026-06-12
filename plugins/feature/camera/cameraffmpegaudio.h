@@ -22,9 +22,33 @@
 #include <QByteArray>
 #include <QString>
 
+struct SwrContext;
+
 class CameraFFmpegAudio
 {
 public:
+    class PcmS16StereoResampler
+    {
+    public:
+        PcmS16StereoResampler() = default;
+        ~PcmS16StereoResampler();
+        PcmS16StereoResampler(const PcmS16StereoResampler&) = delete;
+        PcmS16StereoResampler& operator=(const PcmS16StereoResampler&) = delete;
+
+        [[nodiscard]] bool resample(const QByteArray& input,
+                                    int inputSampleRate,
+                                    int outputSampleRate,
+                                    QByteArray& output,
+                                    QString& errorMessage);
+        [[nodiscard]] bool flush(QByteArray& output, QString& errorMessage);
+        void reset();
+
+    private:
+        SwrContext *m_context = nullptr;
+        int m_inputSampleRate = 0;
+        int m_outputSampleRate = 0;
+    };
+
     [[nodiscard]] static QString avErrorString(int errorCode);
     [[nodiscard]] static bool resamplePcmS16Stereo(const QByteArray& input,
                                                    int inputSampleRate,

@@ -27,23 +27,27 @@ extern "C" {
 }
 #endif
 
-QString CameraFFmpegAudio::avErrorString(int errorCode)
+CameraFFmpegAudio::PcmS16StereoResampler::~PcmS16StereoResampler()
 {
-#ifdef CAMERA_FFMPEG_STREAMING
-    char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
-    av_strerror(errorCode, buffer, sizeof(buffer));
-    return QString::fromLocal8Bit(buffer);
-#else
-    Q_UNUSED(errorCode)
-    return QStringLiteral("FFmpeg support is not available in this build");
-#endif
+    reset();
 }
 
-bool CameraFFmpegAudio::resamplePcmS16Stereo(const QByteArray& input,
-                                             int inputSampleRate,
-                                             int outputSampleRate,
-                                             QByteArray& output,
-                                             QString& errorMessage)
+void CameraFFmpegAudio::PcmS16StereoResampler::reset()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (m_context) {
+        swr_free(&m_context);
+    }
+#endif
+    m_inputSampleRate = 0;
+    m_outputSampleRate = 0;
+}
+
+bool CameraFFmpegAudio::PcmS16StereoResampler::resample(const QByteArray& input,
+                                                        int inputSampleRate,
+                                                        int outputSampleRate,
+                                                        QByteArray& output,
+                                                        QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(input)
@@ -73,56 +77,116 @@ bool CameraFFmpegAudio::resamplePcmS16Stereo(const QByteArray& input,
         return true;
     }
 
-    SwrContext *context = swr_alloc_set_opts(
-        nullptr,
-        AV_CH_LAYOUT_STEREO,
-        AV_SAMPLE_FMT_S16,
-        outputSampleRate,
-        AV_CH_LAYOUT_STEREO,
-        AV_SAMPLE_FMT_S16,
-        inputSampleRate,
-        0,
-        nullptr);
-    if (!context)
+    if (!m_context || (m_inputSampleRate != inputSampleRate) || (m_outputSampleRate != outputSampleRate))
     {
-        errorMessage = QStringLiteral("Cannot allocate audio resampler");
-        return false;
-    }
+        reset();
+        m_context = swr_alloc_set_opts(
+            nullptr,
+            AV_CH_LAYOUT_STEREO,
+            AV_SAMPLE_FMT_S16,
+            outputSampleRate,
+            AV_CH_LAYOUT_STEREO,
+            AV_SAMPLE_FMT_S16,
+            inputSampleRate,
+            0,
+            nullptr);
+        if (!m_context)
+        {
+            errorMessage = QStringLiteral("Cannot allocate audio resampler");
+            return false;
+        }
 
-    int ret = swr_init(context);
-    if (ret < 0)
-    {
-        errorMessage = QStringLiteral("Cannot initialise audio resampler: %1").arg(avErrorString(ret));
-        swr_free(&context);
-        return false;
+        const int ret = swr_init(m_context);
+        if (ret < 0)
+        {
+            errorMessage = QStringLiteral("Cannot initialise audio resampler: %1").arg(avErrorString(ret));
+            reset();
+            return false;
+        }
+        m_inputSampleRate = inputSampleRate;
+        m_outputSampleRate = outputSampleRate;
     }
 
     const int inputFrames = input.size() / 4;
     const int outputCapacityFrames = static_cast<int>(av_rescale_rnd(
-        swr_get_delay(context, inputSampleRate) + inputFrames,
+        swr_get_delay(m_context, inputSampleRate) + inputFrames,
         outputSampleRate,
         inputSampleRate,
         AV_ROUND_UP));
-    if (outputCapacityFrames <= 0)
-    {
-        swr_free(&context);
+    if (outputCapacityFrames <= 0) {
         return true;
     }
 
     output.resize(outputCapacityFrames * 4);
     const uint8_t *inputData[1] = { reinterpret_cast<const uint8_t*>(input.constData()) };
     uint8_t *outputData[1] = { reinterpret_cast<uint8_t*>(output.data()) };
-    ret = swr_convert(context, outputData, outputCapacityFrames, inputData, inputFrames);
-    if (ret < 0)
+    const int convertedFrames = swr_convert(m_context, outputData, outputCapacityFrames, inputData, inputFrames);
+    if (convertedFrames < 0)
     {
-        errorMessage = QStringLiteral("Cannot resample audio: %1").arg(avErrorString(ret));
-        swr_free(&context);
+        errorMessage = QStringLiteral("Cannot resample audio: %1").arg(avErrorString(convertedFrames));
         output.clear();
         return false;
     }
 
-    output.resize(ret * 4);
-    swr_free(&context);
+    output.resize(convertedFrames * 4);
     return true;
 #endif
+}
+
+bool CameraFFmpegAudio::PcmS16StereoResampler::flush(QByteArray& output, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(output)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    output.clear();
+    if (!m_context || (m_inputSampleRate <= 0) || (m_outputSampleRate <= 0)) {
+        return true;
+    }
+
+    const int outputCapacityFrames = static_cast<int>(av_rescale_rnd(
+        swr_get_delay(m_context, m_inputSampleRate),
+        m_outputSampleRate,
+        m_inputSampleRate,
+        AV_ROUND_UP));
+    if (outputCapacityFrames <= 0) {
+        return true;
+    }
+
+    output.resize(outputCapacityFrames * 4);
+    uint8_t *outputData[1] = { reinterpret_cast<uint8_t*>(output.data()) };
+    const int convertedFrames = swr_convert(m_context, outputData, outputCapacityFrames, nullptr, 0);
+    if (convertedFrames < 0)
+    {
+        errorMessage = QStringLiteral("Cannot flush audio resampler: %1").arg(avErrorString(convertedFrames));
+        output.clear();
+        return false;
+    }
+
+    output.resize(convertedFrames * 4);
+    return true;
+#endif
+}
+
+QString CameraFFmpegAudio::avErrorString(int errorCode)
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
+    av_strerror(errorCode, buffer, sizeof(buffer));
+    return QString::fromLocal8Bit(buffer);
+#else
+    Q_UNUSED(errorCode)
+    return QStringLiteral("FFmpeg support is not available in this build");
+#endif
+}
+
+bool CameraFFmpegAudio::resamplePcmS16Stereo(const QByteArray& input,
+                                             int inputSampleRate,
+                                             int outputSampleRate,
+                                             QByteArray& output,
+                                             QString& errorMessage)
+{
+    PcmS16StereoResampler resampler;
+    return resampler.resample(input, inputSampleRate, outputSampleRate, output, errorMessage);
 }

@@ -648,9 +648,22 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
         m_reportedErrorKeys.clear();
     }
 
+    if (force || settingsKeys.contains("yoloIgnoredClassNames"))
+    {
+        m_yoloIgnoredClassNames.clear();
+        for (const QString& className : m_settings.m_yoloIgnoredClassNames)
+        {
+            const QString normalizedClassName = className.trimmed().toCaseFolded();
+            if (!normalizedClassName.isEmpty()) {
+                m_yoloIgnoredClassNames.insert(normalizedClassName);
+            }
+        }
+    }
+
     if ((force && !m_settings.m_yoloEnabled)
         || settingsKeys.contains("yoloEnabled")
-        || settingsKeys.contains("yoloLabelsPath"))
+        || settingsKeys.contains("yoloLabelsPath")
+        || settingsKeys.contains("yoloIgnoredClassNames"))
     {
         clearObjectDetectionState();
     }
@@ -1038,6 +1051,10 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
             label = m_yoloLabels[classIds[idx]];
         } else {
             label = QStringLiteral("cls%1").arg(classIds[idx]);
+        }
+
+        if (m_yoloIgnoredClassNames.contains(label.trimmed().toCaseFolded())) {
+            continue;
         }
 
         CameraPipelineDetection detection;

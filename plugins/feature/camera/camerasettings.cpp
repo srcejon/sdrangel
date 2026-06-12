@@ -377,6 +377,7 @@ void CameraSettings::resetToDefaults()
     m_yoloBoxColor = Qt::green;
     m_yoloTileLargeImages = true;
     m_yoloTileOverlapPercent = 20;
+    m_yoloIgnoredClassNames.clear();
     m_yoloDnnTarget = CPU;
     m_audioMute = true;
     m_audioDeviceName.clear();
@@ -654,6 +655,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(254, static_cast<qint32>(m_videoCodec));
     s.writeS32(255, m_videoPlaybackAudioOffsetMs);
     s.writeS32(256, m_videoRecordBitrateKbps);
+    s.writeString(257, serializeStringList(m_yoloIgnoredClassNames));
 
     return s.final();
 }
@@ -1111,6 +1113,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(219, &m_yoloTileLargeImages, true);
         d.readS32(220, &m_yoloTileOverlapPercent, 20);
         m_yoloTileOverlapPercent = qBound(0, m_yoloTileOverlapPercent, 90);
+        QString yoloIgnoredClassNamesJson;
+        d.readString(257, &yoloIgnoredClassNamesJson, "");
+        m_yoloIgnoredClassNames = deserializeStringList(yoloIgnoredClassNamesJson);
         m_yoloDnnTarget = qBound(CPU, m_yoloDnnTarget, TensorRT_FP16);
         d.readS32(221, reinterpret_cast<qint32*>(&m_stackDisplayMode), static_cast<qint32>(StackDisplayStacked));
         d.readS32(222, &m_stackDisplayFrameIndex, 0);
@@ -1945,6 +1950,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("yoloTileOverlapPercent")) {
         m_yoloTileOverlapPercent = qBound(0, settings.m_yoloTileOverlapPercent, 90);
     }
+    if (settingsKeys.contains("yoloIgnoredClassNames")) {
+        m_yoloIgnoredClassNames = settings.m_yoloIgnoredClassNames;
+    }
     if (settingsKeys.contains("yoloDnnTarget")) {
         m_yoloDnnTarget = qBound(CPU, settings.m_yoloDnnTarget, TensorRT_FP16);
     }
@@ -2676,6 +2684,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("yoloTileOverlapPercent") || force) {
         ostr << " m_yoloTileOverlapPercent: " << m_yoloTileOverlapPercent;
+    }
+    if (settingsKeys.contains("yoloIgnoredClassNames") || force) {
+        ostr << " m_yoloIgnoredClassNames: [ " << m_yoloIgnoredClassNames.join(", ").toStdString() << " ]";
     }
     if (settingsKeys.contains("yoloDnnTarget") || force) {
         ostr << " m_yoloDnnTarget: " << m_yoloDnnTarget;

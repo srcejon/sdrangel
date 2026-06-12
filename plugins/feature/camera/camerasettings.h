@@ -560,6 +560,7 @@ struct CameraSettings
     QColor m_yoloBoxColor;       ///< Bounding-box colour when no per-class colour is available
     bool   m_yoloTileLargeImages; ///< Tile frames larger than the YOLO input size and batch infer the tiles
     int    m_yoloTileOverlapPercent; ///< Tile overlap percentage for large-image YOLO inference: 0..90
+    QStringList m_yoloIgnoredClassNames; ///< Object class labels to ignore after detection
     enum DNNTarget {
         CPU,
         CUDA,

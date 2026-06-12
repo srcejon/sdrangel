@@ -25,6 +25,8 @@
 #include <QString>
 #include <QSize>
 
+#include "cameraffmpegaudio.h"
+
 struct AVCodecContext;
 struct AVFormatContext;
 struct AVFrame;
@@ -61,6 +63,7 @@ private:
     AVFrame *m_frame = nullptr;
     AVFrame *m_audioFrame = nullptr;
     SwsContext *m_swsContext = nullptr;
+    CameraFFmpegAudio::PcmS16StereoResampler m_audioResampler;
     int m_streamIndex = -1;
     int m_audioStreamIndex = -1;
     qint64 m_frameIndex = 0;
@@ -81,6 +84,7 @@ private:
     [[nodiscard]] bool encodeAndWriteRgbFrame(const QImage& rgb, QString& errorMessage);
     [[nodiscard]] bool encodeAndWriteAudioFrame(QString& errorMessage);
     [[nodiscard]] bool encodeAndWriteSilentAudioFrame(QString& errorMessage);
+    [[nodiscard]] bool flushAudioInputBuffer(QString& errorMessage);
     [[nodiscard]] bool writeEncodedPacket(AVPacket *packet, AVCodecContext *codecContext, int streamIndex, QString& errorMessage);
     void flushEncoder(AVCodecContext *codecContext, int streamIndex);
 };

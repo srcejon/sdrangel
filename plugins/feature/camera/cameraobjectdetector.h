@@ -131,6 +131,7 @@ private:
     QSet<QString> m_reportedErrorKeys;
     QStringList m_yoloLabels;
     QString m_yoloLoadedLabelsPath;
+    QSet<QString> m_yoloIgnoredClassNames;
     QSet<QString> m_detectedObjectClasses;
     QHash<QString, PendingDisappearState> m_pendingDisappearStates;
     QHash<QString, CameraDetectionHistoryEntry> m_activeObjectDetectionHistory;

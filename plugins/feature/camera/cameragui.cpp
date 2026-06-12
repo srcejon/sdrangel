@@ -47,6 +47,7 @@
 #include <QNetworkReply>
 #include <QPainter>
 #include <QPixmap>
+#include <QPlainTextEdit>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QRegularExpression>
@@ -1831,6 +1832,10 @@ void CameraGUI::displaySettings()
     settingsUI()->yoloTileLargeImagesCheck->setChecked(m_settings.m_yoloTileLargeImages);
     settingsUI()->yoloTileOverlapSpin->setValue(m_settings.m_yoloTileOverlapPercent);
     settingsUI()->yoloTileOverlapSpin->setEnabled(m_settings.m_yoloTileLargeImages);
+    {
+        const QSignalBlocker ignoredClassesBlocker(settingsUI()->yoloIgnoredClassNamesEdit);
+        settingsUI()->yoloIgnoredClassNamesEdit->setPlainText(m_settings.m_yoloIgnoredClassNames.join(QStringLiteral("\n")));
+    }
     updateColorButton(settingsUI()->yoloBoxColorButton, m_settings.m_yoloBoxColor);
     ui->audioMute->setChecked(m_settings.m_audioMute);
 
@@ -2576,6 +2581,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
     QObject::connect(settingsUI()->yoloTileLargeImagesCheck, &QCheckBox::toggled, this, &CameraGUI::on_yoloTileLargeImagesCheck_toggled);
     QObject::connect(settingsUI()->yoloTileOverlapSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_yoloTileOverlapSpin_valueChanged);
+    QObject::connect(settingsUI()->yoloIgnoredClassNamesEdit, &QPlainTextEdit::textChanged, this, &CameraGUI::on_yoloIgnoredClassNamesEdit_textChanged);
     QObject::connect(settingsUI()->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
     QObject::connect(ui->zoomInButton, &QToolButton::clicked, this, &CameraGUI::on_zoomInButton_clicked);
     QObject::connect(ui->zoomOutButton, &QToolButton::clicked, this, &CameraGUI::on_zoomOutButton_clicked);
@@ -6965,7 +6971,7 @@ void CameraGUI::on_overlayDateTimeButton_toggled(bool checked)
 
 void CameraGUI::on_dateTimeColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_dateTimeColor, this, tr("Select date/time text colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_dateTimeColor, this, tr("Select date/time text colour"), QColorDialog::ShowAlphaChannel);
 
     if (color.isValid())
     {
@@ -7003,7 +7009,7 @@ void CameraGUI::on_equatorialGridCheck_toggled(bool checked)
 
 void CameraGUI::on_equatorialGridColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_equatorialGridColor, this, tr("Select equatorial grid colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_equatorialGridColor, this, tr("Select equatorial grid colour"), QColorDialog::ShowAlphaChannel);
 
     if (color.isValid())
     {
@@ -7021,7 +7027,7 @@ void CameraGUI::on_altAzGridCheck_toggled(bool checked)
 
 void CameraGUI::on_altAzGridColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_altAzGridColor, this, tr("Select alt-az grid colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_altAzGridColor, this, tr("Select alt-az grid colour"), QColorDialog::ShowAlphaChannel);
 
     if (color.isValid())
     {
@@ -7045,7 +7051,7 @@ void CameraGUI::on_constellationOverlayCombo_currentIndexChanged(int index)
 
 void CameraGUI::on_constellationColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_constellationColor, this, tr("Select constellation overlay colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_constellationColor, this, tr("Select constellation overlay colour"), QColorDialog::ShowAlphaChannel);
 
     if (color.isValid())
     {
@@ -7088,7 +7094,7 @@ void CameraGUI::on_trackObjectMinElevationSpin_valueChanged(double value)
 
 void CameraGUI::on_trackObjectColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_trackObjectColor, this, tr("Select tracked object colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_trackObjectColor, this, tr("Select tracked object colour"), QColorDialog::ShowAlphaChannel);
 
     if (color.isValid())
     {
@@ -7124,7 +7130,7 @@ void CameraGUI::on_overlayTextButton_toggled(bool checked)
 
 void CameraGUI::on_overlayTextColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_overlayTextColor, this, tr("Select overlay text colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_overlayTextColor, this, tr("Select overlay text colour"), QColorDialog::ShowAlphaChannel);
 
     if (color.isValid())
     {
@@ -7433,6 +7439,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_motionBoxColor = defaults.m_motionBoxColor;
     m_settings.m_minContourArea = defaults.m_minContourArea;
     m_settings.m_motionExclusionRects = defaults.m_motionExclusionRects;
+    m_settings.m_yoloIgnoredClassNames = defaults.m_yoloIgnoredClassNames;
 
     m_settings.m_starDetect = defaults.m_starDetect;
     m_settings.m_starThreshold = defaults.m_starThreshold;
@@ -7490,6 +7497,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "minContourArea",
         "showMotionExclusionRects",
         "motionExclusionRects",
+        "yoloIgnoredClassNames",
         "starDetect",
         "starThreshold",
         "starBackgroundBlur",
@@ -7600,7 +7608,7 @@ void CameraGUI::on_minContourAreaSpin_valueChanged(int value)
 
 void CameraGUI::on_motionBoxColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_motionBoxColor, this, tr("Select bounding box colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_motionBoxColor, this, tr("Select bounding box colour"), QColorDialog::ShowAlphaChannel);
 
     if (color.isValid())
     {
@@ -7661,7 +7669,7 @@ void CameraGUI::on_plateSolveLabelModeCombo_currentIndexChanged(int index)
 
 void CameraGUI::on_starColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_starColor, this, tr("Select star colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_starColor, this, tr("Select star colour"), QColorDialog::ShowAlphaChannel);
 
     if (color.isValid())
     {
@@ -8161,9 +8169,25 @@ void CameraGUI::on_yoloTileOverlapSpin_valueChanged(int value)
     applySetting("yoloTileOverlapPercent");
 }
 
+void CameraGUI::on_yoloIgnoredClassNamesEdit_textChanged()
+{
+    QStringList ignoredClassNames;
+
+    for (const QString& className : settingsUI()->yoloIgnoredClassNamesEdit->toPlainText().split(QRegularExpression("[\\r\\n]+"), Qt::SkipEmptyParts))
+    {
+        const QString trimmedClassName = className.trimmed();
+        if (!trimmedClassName.isEmpty() && !ignoredClassNames.contains(trimmedClassName, Qt::CaseInsensitive)) {
+            ignoredClassNames.append(trimmedClassName);
+        }
+    }
+
+    m_settings.m_yoloIgnoredClassNames = ignoredClassNames;
+    applySetting("yoloIgnoredClassNames");
+}
+
 void CameraGUI::on_yoloBoxColorButton_clicked()
 {
-    const QColor color = QColorDialog::getColor(m_settings.m_yoloBoxColor, this, tr("Select bounding box colour"));
+    const QColor color = QColorDialog::getColor(m_settings.m_yoloBoxColor, this, tr("Select bounding box colour"), QColorDialog::ShowAlphaChannel);
 
     if (color.isValid())
     {

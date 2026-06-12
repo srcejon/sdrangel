@@ -18,8 +18,6 @@
 
 #include "cameravideowriter.h"
 
-#include "cameraffmpegaudio.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -305,7 +303,14 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
     if (settings.m_audioEnabled)
     {
         QString audioWarning;
-        if (!openAudioStream(audioWarning)) {
+        if (!openAudioStream(audioWarning))
+        {
+            if (m_audioStreamIndex >= 0)
+            {
+                errorMessage = audioWarning;
+                close();
+                return false;
+            }
             qWarning() << "CameraVideoWriter: audio disabled:" << audioWarning;
         }
     }
@@ -395,14 +400,6 @@ bool CameraVideoWriter::openAudioStream(QString& warningMessage)
         return false;
     }
 
-    AVStream *stream = avformat_new_stream(m_formatContext, nullptr);
-    if (!stream)
-    {
-        warningMessage = QStringLiteral("Cannot create audio stream");
-        return false;
-    }
-    m_audioStreamIndex = stream->index;
-
     m_audioCodecContext = avcodec_alloc_context3(codec);
     if (!m_audioCodecContext)
     {
@@ -432,16 +429,6 @@ bool CameraVideoWriter::openAudioStream(QString& warningMessage)
         return false;
     }
 
-    ret = avcodec_parameters_from_context(stream->codecpar, m_audioCodecContext);
-    if (ret < 0)
-    {
-        warningMessage = QStringLiteral("Cannot copy audio encoder parameters: %1").arg(avErrorString(ret));
-        avcodec_free_context(&m_audioCodecContext);
-        m_audioStreamIndex = -1;
-        return false;
-    }
-    stream->time_base = m_audioCodecContext->time_base;
-
     m_audioFrame = av_frame_alloc();
     if (!m_audioFrame)
     {
@@ -464,6 +451,49 @@ bool CameraVideoWriter::openAudioStream(QString& warningMessage)
         m_audioStreamIndex = -1;
         return false;
     }
+
+    AVCodecParameters *audioParameters = avcodec_parameters_alloc();
+    if (!audioParameters)
+    {
+        warningMessage = QStringLiteral("Cannot allocate audio encoder parameters");
+        av_frame_free(&m_audioFrame);
+        avcodec_free_context(&m_audioCodecContext);
+        m_audioStreamIndex = -1;
+        return false;
+    }
+
+    ret = avcodec_parameters_from_context(audioParameters, m_audioCodecContext);
+    if (ret < 0)
+    {
+        warningMessage = QStringLiteral("Cannot copy audio encoder parameters: %1").arg(avErrorString(ret));
+        avcodec_parameters_free(&audioParameters);
+        av_frame_free(&m_audioFrame);
+        avcodec_free_context(&m_audioCodecContext);
+        m_audioStreamIndex = -1;
+        return false;
+    }
+
+    AVStream *stream = avformat_new_stream(m_formatContext, nullptr);
+    if (!stream)
+    {
+        warningMessage = QStringLiteral("Cannot create audio stream");
+        avcodec_parameters_free(&audioParameters);
+        av_frame_free(&m_audioFrame);
+        avcodec_free_context(&m_audioCodecContext);
+        m_audioStreamIndex = -1;
+        return false;
+    }
+    m_audioStreamIndex = stream->index;
+    ret = avcodec_parameters_copy(stream->codecpar, audioParameters);
+    avcodec_parameters_free(&audioParameters);
+    if (ret < 0)
+    {
+        warningMessage = QStringLiteral("Cannot copy audio stream parameters: %1").arg(avErrorString(ret));
+        av_frame_free(&m_audioFrame);
+        avcodec_free_context(&m_audioCodecContext);
+        return false;
+    }
+    stream->time_base = m_audioCodecContext->time_base;
 
     return true;
 #endif
@@ -607,12 +637,7 @@ bool CameraVideoWriter::writePcmS16Stereo(const QByteArray& pcm, int sampleRate,
     if (!pcm.isEmpty())
     {
         QByteArray writerPcm;
-        if (!CameraFFmpegAudio::resamplePcmS16Stereo(
-                pcm,
-                sampleRate,
-                m_audioCodecContext->sample_rate,
-                writerPcm,
-                errorMessage)) {
+        if (!m_audioResampler.resample(pcm, sampleRate, m_audioCodecContext->sample_rate, writerPcm, errorMessage)) {
             return false;
         }
         m_audioInputBuffer.append(writerPcm);
@@ -639,6 +664,38 @@ bool CameraVideoWriter::writePcmS16Stereo(const QByteArray& pcm, int sampleRate,
     }
 
     return true;
+#endif
+}
+
+bool CameraVideoWriter::flushAudioInputBuffer(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    if (!m_audioCodecContext || !m_audioFrame) {
+        return true;
+    }
+
+    QByteArray delayedPcm;
+    if (!m_audioResampler.flush(delayedPcm, errorMessage)) {
+        return false;
+    }
+    if (!delayedPcm.isEmpty()) {
+        m_audioInputBuffer.append(delayedPcm);
+    }
+    if (m_audioInputBuffer.isEmpty()) {
+        return true;
+    }
+
+    const int bytesPerSampleFrame = 4;
+    const int audioFrameBytes = m_audioFrame->nb_samples * bytesPerSampleFrame;
+    const int paddingBytes = audioFrameBytes - (m_audioInputBuffer.size() % audioFrameBytes);
+    if ((paddingBytes > 0) && (paddingBytes < audioFrameBytes)) {
+        m_audioInputBuffer.append(QByteArray(paddingBytes, 0));
+    }
+
+    return writePcmS16Stereo(QByteArray(), m_audioCodecContext->sample_rate, errorMessage);
 #endif
 }
 
@@ -752,6 +809,9 @@ void CameraVideoWriter::close()
 {
 #ifdef CAMERA_FFMPEG_STREAMING
     if (m_headerWritten && m_formatContext) {
+        QString ignoredAudioError;
+        const bool ignoredAudioOk = flushAudioInputBuffer(ignoredAudioError);
+        Q_UNUSED(ignoredAudioOk)
         flushEncoder(m_codecContext, m_streamIndex);
         flushEncoder(m_audioCodecContext, m_audioStreamIndex);
     }
@@ -792,6 +852,7 @@ void CameraVideoWriter::close()
         sws_freeContext(m_swsContext);
         m_swsContext = nullptr;
     }
+    m_audioResampler.reset();
 #endif
     m_streamIndex = -1;
     m_audioStreamIndex = -1;
@@ -799,4 +860,5 @@ void CameraVideoWriter::close()
     m_audioFrameIndex = 0;
     m_headerWritten = false;
     m_videoSize = QSize();
+    m_audioInputBuffer.clear();
 }

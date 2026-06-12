@@ -162,8 +162,6 @@ void CameraVideoFileDecoder::close()
     m_outputSampleRate = 48000;
     m_audioPaceFrameRate = 0.0;
     m_audioPaceRemainderFrames = 0.0;
-    m_audioDecodedPositionMs = -1;
-    m_pendingAudioPcm.clear();
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
@@ -281,9 +279,8 @@ bool CameraVideoFileDecoder::readNextFrame(
                 }
                 if (m_audioCodecContext && !m_audioDraining)
                 {
-                    avcodec_send_packet(m_audioCodecContext, nullptr);
                     m_audioDraining = true;
-                    if (!drainAudio(decodedAudio, errorMessage)) {
+                    if (!sendAudioPacket(nullptr, decodedAudio, errorMessage)) {
                         return false;
                     }
                 }
@@ -310,14 +307,9 @@ bool CameraVideoFileDecoder::readNextFrame(
         }
         else if (m_audioCodecContext && (m_packet->stream_index == m_audioStreamIndex))
         {
-            ret = avcodec_send_packet(m_audioCodecContext, m_packet);
+            const bool sent = sendAudioPacket(m_packet, decodedAudio, errorMessage);
             av_packet_unref(m_packet);
-            if ((ret < 0) && (ret != AVERROR(EAGAIN)))
-            {
-                errorMessage = QStringLiteral("Cannot send video file audio packet to decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
-                return false;
-            }
-            if (!drainAudio(decodedAudio, errorMessage)) {
+            if (!sent) {
                 return false;
             }
         }
@@ -353,7 +345,11 @@ bool CameraVideoFileDecoder::readNextFrameAtOrAfter(
         }
         discardedAudio.clear();
 
-        if (image.isNull() || (positionMs < 0) || (positionMs + toleranceMs >= targetPositionMs)) {
+        if (image.isNull() || (positionMs < 0) || (positionMs + toleranceMs >= targetPositionMs))
+        {
+            m_pendingAudioPcm.clear();
+            m_audioPaceRemainderFrames = 0.0;
+            m_audioDecodedPositionMs = -1;
             return true;
         }
     }
@@ -446,6 +442,39 @@ bool CameraVideoFileDecoder::openAudioDecoder(QString& errorMessage)
     }
 
     return openResampler(errorMessage);
+#endif
+}
+
+bool CameraVideoFileDecoder::sendAudioPacket(AVPacket *packet, QByteArray& pcmS16Stereo, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(packet)
+    Q_UNUSED(pcmS16Stereo)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    static constexpr int maxDrainAttempts = 16;
+
+    for (int attempt = 0; attempt <= maxDrainAttempts; ++attempt)
+    {
+        const int ret = avcodec_send_packet(m_audioCodecContext, packet);
+        if (ret == 0) {
+            return drainAudio(pcmS16Stereo, errorMessage);
+        }
+
+        if (ret != AVERROR(EAGAIN))
+        {
+            errorMessage = QStringLiteral("Cannot send video file audio packet to decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+            return false;
+        }
+
+        if (!drainAudio(pcmS16Stereo, errorMessage)) {
+            return false;
+        }
+    }
+
+    errorMessage = QStringLiteral("Cannot send video file audio packet to decoder: decoder output queue did not drain");
+    return false;
 #endif
 }
 
@@ -670,10 +699,12 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
                 }
                 if (!m_audioDraining)
                 {
-                    avcodec_send_packet(m_audioCodecContext, nullptr);
                     m_audioDraining = true;
+                    if (!sendAudioPacket(nullptr, pcmS16Stereo, errorMessage)) {
+                        return false;
+                    }
                 }
-                if (!drainAudio(pcmS16Stereo, errorMessage) || !queueDecodedVideoFrames(errorMessage)) {
+                if (!queueDecodedVideoFrames(errorMessage)) {
                     return false;
                 }
                 m_eof = m_pendingVideoFrames.empty();
@@ -686,14 +717,9 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         ++m_debugStats.m_readAheadPackets;
         if (m_packet->stream_index == m_audioStreamIndex)
         {
-            ret = avcodec_send_packet(m_audioCodecContext, m_packet);
+            const bool sent = sendAudioPacket(m_packet, pcmS16Stereo, errorMessage);
             av_packet_unref(m_packet);
-            if ((ret < 0) && (ret != AVERROR(EAGAIN)))
-            {
-                errorMessage = QStringLiteral("Cannot send video file audio packet to decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
-                return false;
-            }
-            if (!drainAudio(pcmS16Stereo, errorMessage)) {
+            if (!sent) {
                 return false;
             }
         }

@@ -965,6 +965,15 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_plateSolveMinMatches = 4;
     settings.m_plateSolveMatchRadius = 24.0;
     settings.m_plateSolveFinalMatchRadius = 24.0;
+    // Experiment only (SDRANGEL_CAMERA_STAR_TEST_FINAL_MATCH_RADIUS): override the final
+    // match radius to probe density-adaptive radius candidates; no-op when unset.
+    {
+        bool radiusOk = false;
+        const double overrideRadius = qEnvironmentVariable("SDRANGEL_CAMERA_STAR_TEST_FINAL_MATCH_RADIUS").toDouble(&radiusOk);
+        if (radiusOk && (overrideRadius > 0.0)) {
+            settings.m_plateSolveFinalMatchRadius = overrideRadius;
+        }
+    }
     settings.m_plateSolveSearchRadius = (test.fov > 30.0)
         ? 24.0
         : static_cast<float>(std::max(3.5, test.fov * 5.0));

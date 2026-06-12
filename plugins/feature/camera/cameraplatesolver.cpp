@@ -5238,6 +5238,49 @@ PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& set
                                                        double maxMagnitude,
                                                        double catalogLoadMaxMagnitude = -1.0)
 {
+    // The outer solve retries (recenter ladder, bright-catalog, escapes) rebuild this
+    // context for every run — each a multi-100k-star cache-file parse plus the alias and
+    // bright-star merge passes (~0.5 s) — and frequently with byte-identical inputs (the
+    // recenter ladder revisits offsets; bright/initial runs share the seed). Memoize on
+    // the exact inputs: a hit returns the same context the build would have produced.
+    // QVector's implicit sharing keeps cached copies cheap until a caller writes.
+    struct CatalogContextCacheEntry
+    {
+        QString key;
+        PlateSolveCatalogContext context;
+    };
+    static QMutex s_contextCacheMutex;
+    static QVector<CatalogContextCacheEntry> s_contextCache;
+    // Large regions run ~50 MB of catalog data each; keep the cache small — the wins
+    // come from immediate repeats within one outer solve (same-seed runs, revisited
+    // recenter offsets), not from long retention.
+    constexpr int kMaxCachedContexts = 3;
+    const QString cacheKey = QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11")
+        .arg(static_cast<int>(settings.m_plateSolveCatalogSource))
+        .arg(qRound64(static_cast<double>(settings.m_azimuth) * 1e4))
+        .arg(qRound64(static_cast<double>(settings.m_elevation) * 1e4))
+        .arg(qRound64(static_cast<double>(settings.m_fov) * 1e4))
+        .arg(qRound64(static_cast<double>(settings.m_plateSolveSearchRadius) * 1e4))
+        .arg(imageSize.width())
+        .arg(imageSize.height())
+        .arg(captureDateTimeUtc.toSecsSinceEpoch())
+        .arg(qRound64(maxMagnitude * 1e3))
+        .arg(qRound64(catalogLoadMaxMagnitude * 1e3))
+        .arg(settings.m_plateSolveMinMatches);
+    {
+        QMutexLocker locker(&s_contextCacheMutex);
+        for (int i = 0; i < s_contextCache.size(); ++i)
+        {
+            if (s_contextCache[i].key == cacheKey)
+            {
+                // Refresh LRU position.
+                CatalogContextCacheEntry entry = s_contextCache.takeAt(i);
+                s_contextCache.append(entry);
+                return entry.context;
+            }
+        }
+    }
+
     PlateSolveCatalogContext context;
     const double effectiveCatalogLoadMaxMagnitude = (catalogLoadMaxMagnitude > 0.0)
         ? std::max(maxMagnitude, catalogLoadMaxMagnitude)
@@ -5318,6 +5361,13 @@ PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& set
     }
 
     populateVisibleCatalogContext(context, settings, captureDateTimeUtc, maxMagnitude, true);
+    {
+        QMutexLocker locker(&s_contextCacheMutex);
+        s_contextCache.append(CatalogContextCacheEntry{cacheKey, context});
+        while (s_contextCache.size() > kMaxCachedContexts) {
+            s_contextCache.removeFirst();
+        }
+    }
     return context;
 }
 
@@ -7180,6 +7230,8 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
                                                          const QVector<int>& detectionIndices,
                                                          const QVector<VisibleCatalogStar>& visibleStars)
 {
+    QElapsedTimer anchorTriangleTimer;
+    anchorTriangleTimer.start();
     QVector<Evaluation> seeds;
     if (isCancellationRequested()
         || !plateSolveStartUsesDirection(settings)
@@ -8689,6 +8741,50 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
         static_cast<double>(settings.m_plateSolveMatchRadius) * 1.25,
         28.0);
 
+    // The catalog-triple magnitude ordering and triangle signature are invariant across
+    // the detection-triple loop below, which used to recompute them for every detection
+    // triple (~1500x each, ~3M sorts/signatures on rich fields). Precompute them once,
+    // in the exact (i,j,k) iteration order so candidate encounter order — and therefore
+    // the kept-768 cap behaviour — is unchanged.
+    struct PrecomputedCatalogTriple
+    {
+        std::array<int, 3> order{{-1, -1, -1}};
+        TriangleSignature signature;
+        bool usable = false;
+    };
+    QVector<PrecomputedCatalogTriple> precomputedCatalogTriples;
+    precomputedCatalogTriples.reserve(
+        (orderedCatalogLimit * (orderedCatalogLimit - 1) * (orderedCatalogLimit - 2)) / 6);
+    for (int i = 0; i < orderedCatalogLimit; ++i)
+    {
+        for (int j = i + 1; j < orderedCatalogLimit; ++j)
+        {
+            for (int k = j + 1; k < orderedCatalogLimit; ++k)
+            {
+                PrecomputedCatalogTriple triple;
+                std::array<int, 3> catalogOrder {{i, j, k}};
+                std::sort(catalogOrder.begin(), catalogOrder.end(), [&anchorCatalogStars](int lhs, int rhs) {
+                    const double lhsMagnitude = anchorCatalogStars[lhs].visibleStar.magnitude;
+                    const double rhsMagnitude = anchorCatalogStars[rhs].visibleStar.magnitude;
+                    if (!qFuzzyCompare(lhsMagnitude + 1.0, rhsMagnitude + 1.0)) {
+                        return lhsMagnitude < rhsMagnitude;
+                    }
+                    return anchorCatalogStars[lhs].visibleStar.catalogIndex
+                        < anchorCatalogStars[rhs].visibleStar.catalogIndex;
+                });
+                triple.order = catalogOrder;
+                const std::array<QPointF, 3> orderedCatalogProjectedPoints {{
+                    anchorCatalogStars[catalogOrder[0]].projectedPoint,
+                    anchorCatalogStars[catalogOrder[1]].projectedPoint,
+                    anchorCatalogStars[catalogOrder[2]].projectedPoint
+                }};
+                triple.signature = buildTriangleSignature(orderedCatalogProjectedPoints);
+                triple.usable = triple.signature.longestDistance >= 10.0;
+                precomputedCatalogTriples.append(triple);
+            }
+        }
+    }
+
     for (int a = 0; a < orderedDetectionLimit; ++a)
     {
         if (isCancellationRequested()) {
@@ -8722,33 +8818,16 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
                     continue;
                 }
 
-                for (int i = 0; i < orderedCatalogLimit; ++i)
+                for (const PrecomputedCatalogTriple& precomputedTriple : precomputedCatalogTriples)
                 {
-                    for (int j = i + 1; j < orderedCatalogLimit; ++j)
                     {
-                        for (int k = j + 1; k < orderedCatalogLimit; ++k)
                         {
                             ++orderedTriangleCandidateCount;
-                            std::array<int, 3> catalogOrder {{i, j, k}};
-                            std::sort(catalogOrder.begin(), catalogOrder.end(), [&anchorCatalogStars](int lhs, int rhs) {
-                                const double lhsMagnitude = anchorCatalogStars[lhs].visibleStar.magnitude;
-                                const double rhsMagnitude = anchorCatalogStars[rhs].visibleStar.magnitude;
-                                if (!qFuzzyCompare(lhsMagnitude + 1.0, rhsMagnitude + 1.0)) {
-                                    return lhsMagnitude < rhsMagnitude;
-                                }
-                                return anchorCatalogStars[lhs].visibleStar.catalogIndex
-                                    < anchorCatalogStars[rhs].visibleStar.catalogIndex;
-                            });
-
-                            const std::array<QPointF, 3> orderedCatalogProjectedPoints {{
-                                anchorCatalogStars[catalogOrder[0]].projectedPoint,
-                                anchorCatalogStars[catalogOrder[1]].projectedPoint,
-                                anchorCatalogStars[catalogOrder[2]].projectedPoint
-                            }};
-                            const TriangleSignature catalogSignature = buildTriangleSignature(orderedCatalogProjectedPoints);
-                            if (catalogSignature.longestDistance < 10.0) {
+                            if (!precomputedTriple.usable) {
                                 continue;
                             }
+                            const std::array<int, 3>& catalogOrder = precomputedTriple.order;
+                            const TriangleSignature& catalogSignature = precomputedTriple.signature;
 
                             const double ratioError = std::fabs(detectionSignature.ratioShortToLong - catalogSignature.ratioShortToLong)
                                 + std::fabs(detectionSignature.ratioMidToLong - catalogSignature.ratioMidToLong);
@@ -9130,6 +9209,34 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
     recordProfileMetric(QStringLiteral("search.guidedOrderedTriangleSeeds"), orderedTriangleSeeds);
     recordProfileMetric(QStringLiteral("search.guidedOrderedTriangleVerifiedSeeds"), orderedTriangleVerifiedSeeds);
 
+    // The triple loop below visits up to ~900k (a,b,c) combinations per run; anything
+    // per-iteration that can be hoisted or precomputed pays for itself many times over.
+    // Pairwise pixel distances and catalog angular separations are shared between all
+    // triples containing the pair, so compute the O(N^2) tables once instead of
+    // re-deriving them (sqrt/acos) inside the O(N^3) loop; the environment lookup for
+    // the TRIPLE debug aid was likewise being made per combination.
+    const bool debugTripleEnv = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE");
+    const int anchorCount = anchors.size();
+    QVector<double> pairDetectionDistance(anchorCount * anchorCount, 0.0);
+    QVector<double> pairCatalogAngularDistance(anchorCount * anchorCount, 0.0);
+    for (int a = 0; a < anchorCount; ++a)
+    {
+        const QPointF& da = starDetections[anchors[a].detectionIndex].m_center;
+        const SkyVector& va = anchors[a].catalogStar.vector;
+        for (int b = a + 1; b < anchorCount; ++b)
+        {
+            const QPointF& db = starDetections[anchors[b].detectionIndex].m_center;
+            const double dist = QLineF(da, db).length();
+            pairDetectionDistance[a * anchorCount + b] = dist;
+            pairDetectionDistance[b * anchorCount + a] = dist;
+            const double angular = std::acos(std::clamp(
+                dot(va, anchors[b].catalogStar.vector), -1.0, 1.0)) * 180.0 / kPi;
+            pairCatalogAngularDistance[a * anchorCount + b] = angular;
+            pairCatalogAngularDistance[b * anchorCount + a] = angular;
+        }
+    }
+    const SkyVector seedDirectionVector = vectorFromAltAz(settings.m_azimuth, settings.m_elevation);
+
     for (int a = 0; a < anchors.size(); ++a)
     {
         if (isCancellationRequested()) {
@@ -9153,13 +9260,10 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
                 }
                 ++ratioCandidates;
 
-                const QPointF& da = starDetections[anchors[a].detectionIndex].m_center;
-                const QPointF& db = starDetections[anchors[b].detectionIndex].m_center;
-                const QPointF& dc = starDetections[anchors[c].detectionIndex].m_center;
                 const std::array<double, 3> detectionRatios = sortedRatios({{
-                    QLineF(da, db).length(),
-                    QLineF(da, dc).length(),
-                    QLineF(db, dc).length()
+                    pairDetectionDistance[a * anchorCount + b],
+                    pairDetectionDistance[a * anchorCount + c],
+                    pairDetectionDistance[b * anchorCount + c]
                 }});
                 if (detectionRatios[2] < 20.0) {
                     continue;
@@ -9169,9 +9273,9 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
                 const SkyVector& vb = anchors[b].catalogStar.vector;
                 const SkyVector& vc = anchors[c].catalogStar.vector;
                 const std::array<double, 3> catalogAngularDistances {{
-                    std::acos(std::clamp(dot(va, vb), -1.0, 1.0)) * 180.0 / kPi,
-                    std::acos(std::clamp(dot(va, vc), -1.0, 1.0)) * 180.0 / kPi,
-                    std::acos(std::clamp(dot(vb, vc), -1.0, 1.0)) * 180.0 / kPi
+                    pairCatalogAngularDistance[a * anchorCount + b],
+                    pairCatalogAngularDistance[a * anchorCount + c],
+                    pairCatalogAngularDistance[b * anchorCount + c]
                 }};
                 const std::array<double, 3> catalogRatios = sortedRatios(catalogAngularDistances);
                 if (catalogRatios[2] <= 0.01) {
@@ -9180,7 +9284,7 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
 
                 const double ratioError = std::fabs(detectionRatios[0] - catalogRatios[0])
                     + std::fabs(detectionRatios[1] - catalogRatios[1]);
-                if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE"))
+                if (debugTripleEnv)
                 {
                     const QByteArray tripleSpec = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE");
                     const QStringList tripleNames = QString::fromUtf8(tripleSpec).split(QLatin1Char(','), Qt::SkipEmptyParts);
@@ -9233,7 +9337,7 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
                     continue;
                 }
                 const double centerDelta = std::acos(std::clamp(
-                    dot(triangleCenter, vectorFromAltAz(settings.m_azimuth, settings.m_elevation)), -1.0, 1.0)) * 180.0 / kPi;
+                    dot(triangleCenter, seedDirectionVector), -1.0, 1.0)) * 180.0 / kPi;
                 if (centerDelta > startDirectionMaxDelta) {
                     continue;
                 }
@@ -9245,7 +9349,7 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
                 triangleCandidate.anchorIndices = {{a, b, c}};
                 triangleCandidate.score = anchors[a].score + anchors[b].score + anchors[c].score + ratioError * 140.0 + fovPenalty;
                 triangleCandidate.baseFov = baseFov;
-                if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE"))
+                if (debugTripleEnv)
                 {
                     const QByteArray tripleSpec = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE");
                     const QStringList tripleNames = QString::fromUtf8(tripleSpec).split(QLatin1Char(','), Qt::SkipEmptyParts);
@@ -9297,6 +9401,8 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
     if (triangleCandidates.size() > 2048) {
         triangleCandidates.resize(2048);
     }
+    recordProfileTiming(QStringLiteral("search.guidedAnchorTriangleGen"), anchorTriangleTimer.elapsed());
+    const qint64 anchorTriangleEvalStartMs = anchorTriangleTimer.elapsed();
 
     const std::array<double, 3> seedFovScales = {{0.96, 1.0, 1.04}};
     qint64 seedEvaluations = 0;
@@ -9534,6 +9640,8 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
     recordProfileMetric(QStringLiteral("search.guidedAnchorTriangleCandidates"), triangleCandidates.size());
     recordProfileMetric(QStringLiteral("search.guidedAnchorTriangleSeedEvaluations"), seedEvaluations);
     recordProfileMetric(QStringLiteral("search.guidedAnchorTriangleVerifiedSeeds"), verifiedSeeds);
+    recordProfileTiming(QStringLiteral("search.guidedAnchorTriangleEval"),
+        anchorTriangleTimer.elapsed() - anchorTriangleEvalStartMs);
 
     std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
         return isBetterWeakModeEvaluation(lhs, rhs);
@@ -18082,6 +18190,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
                 starDetections,
                 detectionIndices,
                 *blindVisibleStars);
+            logSearchProfile("bright-anchor-triangle-seeds", seedStageStartMs);
+            const qint64 ratioStageStartMs = searchProfileTimer.elapsed();
             const bool haveAcceptableAnchorTriangle = std::any_of(
                 brightTriangleSeeds.cbegin(),
                 brightTriangleSeeds.cend(),
@@ -18101,6 +18211,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     *blindVisibleStars);
                 brightTriangleSeeds += ratioTriangleSeeds;
             }
+            logSearchProfile("bright-ratio-triangle-seeds", ratioStageStartMs);
         }
         logSearchProfile("bright-triangle-seeds", seedStageStartMs);
         consumeBlindSeeds(brightTriangleSeeds, "bright-triangle-seed");
@@ -21084,6 +21195,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         return result;
     }
     logSolveProfile("finalMatchPass", stageStartMs);
+    stageStartMs = solveProfileTimer.elapsed();
 
     // Tighten the pose on its inlier core (see tightenNarrowFinalPass). Adopted only
     // if it is a strict improvement, so it can sharpen edge-star associations and
@@ -21100,6 +21212,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             selectedFinalPassForAcceptance = selectedFinalPass;
         }
     }
+    logSolveProfile("tightenFinalPass", stageStartMs);
+    stageStartMs = solveProfileTimer.elapsed();
 
     const QVector<ProjectedCatalogStar>& projectedStars = selectedFinalPass.projectedStars;
     const QVector<Match>& finalMatches = selectedFinalPass.finalMatches;
@@ -21328,6 +21442,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     };
 
     DirectionSeedAcceptance directionSeedAcceptance = directionSeedAcceptanceFor(selectedFinalPassForAcceptance);
+    logSolveProfile("acceptance", stageStartMs);
+    stageStartMs = solveProfileTimer.elapsed();
 
     if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE")
         && useStartDirection
@@ -21468,6 +21584,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             qDebug() << "CameraPlateSolver: dense-match FoV/pose polish refine invalid";
         }
     }
+    logSolveProfile("densePolish", stageStartMs);
+    stageStartMs = solveProfileTimer.elapsed();
 
     // Bright-detection-anchored verifier rescue (failure path only): the seed-verification
     // gate (>= 3 mutually-consistent matches) can reject every geometric seed in a sparse
@@ -21559,6 +21677,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             }
         }
     }
+    logSolveProfile("brightAnchorRescue", stageStartMs);
 
     const bool weakNarrowGuidedBrightSupport = directionSeedAcceptance.weakBrightSupport;
     const bool narrowGuidedFovAccepted = directionSeedAcceptance.fovAccepted;

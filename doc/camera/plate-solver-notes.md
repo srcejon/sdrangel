@@ -893,6 +893,633 @@ above (`poseFalseAlarmLogOdds`) — both are instances of "replace a single hand
 constant with a statistic computed from the actual field," and both await the larger
 calibration corpus needed to do so without overfitting.
 
+## Fresh failure triage (2026-06-08) — narrow-3 & narrow-7 are search-side, ground truth verified
+
+Re-ran the full 42-case suite on a clean build: **36 pass / 6 fail** (matches the prior
+baseline). The 6 fails: narrow-3, narrow-7, wide-2 (×2 modes), m51@14, ngc-2403.
+
+Diagnosed the two "unclassified-tractable" candidates by isolating each case
+(`narrow3.csv`/`narrow7.csv`), running with `SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE=1`
+(plus `QT_LOGGING_RULES=*.debug=true` to surface the **unconditional** rejection-reason
+`qDebug` at cameraplatesolver.cpp:20714 — the key accept-gate diagnostic), and verifying
+ground truth against astropy (HIP → az/el at the capture time/location):
+
+- **narrow-3** (HIP 73199, Vmag 4.63): true az/el = **32.60 / 70.41**; seed = 32.0 / 70.0,
+  i.e. only ~0.7° off (~0.5·fov). The recenter **does** reach it (run5/9/14 land at
+  az≈32.55/el≈70.34, within 0.07° of truth) — yet only **4–7 of 45 detections match** there
+  (catalog mag-12 projects only ~36 candidates into the FOV). So narrow-3 is **NOT** a
+  seed-offset win like narrow-1; it is a sparse-field + roll search failure: at the correct
+  centre the matchable set is tiny and the roll isn't pinned. Genuinely hard.
+
+- **narrow-7** (HIP 11505/11254/11118, Vmag 7.78/8.80/8.85, dense Milky-Way field az 342
+  el 27): seed only ~0.15° off. Ground truth **verified correct** — the brightest named
+  star HIP 11505 is **detected at (150.4, 482.4)** (flux 5375, *saturated*, the 2nd-brightest
+  detection), exactly the CSV position (151,482). The solver finds populous poses (run10:
+  **196 matches, rms 11.07**, roll −5.08) that *look* strong, but every one is rejected with
+  `brightProjected=0/12 seedBright=0/13 namedAnchors=0` — **zero bright catalog stars and the
+  named anchor never match**; the 196 are faint coincidences at the ~r/2 (rms≈11) contamination
+  floor. The accept gate is doing its job (rejecting contaminated faint-coincidence poses); the
+  defect is that the **true bright-aligned roll is never generated/selected**. Same deep-field
+  ambiguous-roll / bright-anchored-seed class as the notes' ROOT CAUSE section.
+
+**Conclusion of the triage:** there is no small, safe accept-gate tweak left. The accept gate
+correctly rejects the contaminated poses it sees; relaxing it (e.g. accepting a high
+detection-match-fraction pose) would risk false positives on exactly the cases the margin
+protects (ngc-2403's 217-match/rms-16.8 wrong pose; m51@14's coincidence). All 6 remaining
+failures reduce to three large, deferred workstreams, in priority order:
+  1. **Bright-anchored, depth/roll-robust seed generation + verifier-driven candidate
+     selection** (`poseFalseAlarmLogOdds`, already shadow-logged and proven a perfect
+     discriminator). Targets narrow-3, narrow-7, m51@14-class, and the synthetic roll-aliases.
+     The true pose scores far higher on the verifier but is never produced as a candidate, so
+     the fix lives in seed generation/early-candidate survival, not the accept/select tail.
+     Needs the hundreds-case synthetic corpus to retune without overfitting the 36/42 balance.
+  2. **Density-/field-adaptive match radius** (ngc-2403): tighter radius where detection
+     density is unusually high, looser when sparse, chosen per-solve from field statistics
+     before the search commits. The single global 24-px constant cannot serve both regimes
+     (8 px globally = 19/42). Same corpus dependency.
+  3. **Blind quad-hash indexing** (wide-2, 165° fisheye): seedless astrometry.net-style
+     geometric hash; only this class genuinely needs it.
+
+m51@14 is the odd one out: catalog ~19k at mag14, only ~25 matchable → may have no strong
+pose at all (sparse-data limit, not a solver bug).
+
+## Implementation spec — bright-detection-anchored verifier rescue (track chosen 2026-06-08)
+
+Concrete, code-grounded scoping for the chosen "verifier-driven seeding" track, written
+after tracing the failure path. **Key new insight from the narrow-7 stage dump:** every
+geometric seed fails the ≥3-consistent-anchor verification gate (`triangleVerifiedSeeds=0`,
+`quadVerifiedSeeds=0`, `guidedAnchorTriangleVerifiedSeeds=0`) — so in a dense field the true
+bright-aligned pose is *generated but never survives*. The rescue must therefore **generate
+candidates that bypass the seed-verification gate** and rank them by the verifier, which is
+different from every prior reverted attempt (those swept roll at the seed direction without
+pinning a detection, or only re-ranked the already-gated pool).
+
+**Why it's safe by construction:** run it only when a narrow guided solve is *already going
+to be rejected*, and adopt its result via the existing `rollAdoptedAlias` mid-flow swap
+(cameraplatesolver.cpp ~20624) so the *unchanged* acceptance gate (~20679) re-validates it.
+A passing case never enters the rescue (it's accepted first); a wrong rescue pose is rejected
+by the same gate that rejects today → cannot regress passing cases, cannot false-positive.
+
+**Algorithm (inside `SolverContext::solve`, insert at ~20596, after the geometric-consistency
+check, before the roll-alias check):**
+1. Gate: `useStartDirection && isNarrowField(settings) && !isCancellationRequested()` and the
+   current `selectedFinalPass` is *not acceptable* — factor the 20679–20701 acceptance into a
+   lambda `directionAcceptanceFor(const FinalMatchPassEvaluation&)` and require it false for the
+   current pose. (Avoids running the sweep on cases that already pass; preserves no-regression.)
+2. Bright detections: sort `starDetections` by flux desc, take top K≈4, prefer `m_saturated`,
+   skip `m_hotPixelSuspect`.
+3. Bright catalog set: `selectLocalVisibleStars(catalogContext.visibleStars, …)` (5340) capped
+   to mag ≤ `kNarrowGuidedBrightCatalogMaxMagnitude` (12), take brightest N≈10; use `.vector`.
+4. For each (detection, catalog-star) × roll ∈ {0,10,…,350}: build a `GuidedAnchorPair`,
+   `evaluateAnchoredPose` (3810-style alignment is inside it) → `refineGuidedAnchorSeedWithLm`
+   (returns a refit `Evaluation`, not just the pinned seed — necessary, evaluateFinalMatchPass
+   alone does not refit). Reuse the exact block at 16346–16396.
+5. Convert each refined `Evaluation` → `evaluateFinalMatchPass(its pose)` → `poseFalseAlarmLogOdds`
+   (12519, the proven discriminator). Keep the best by log-odds.
+6. Adopt only if the best clears a *strong absolute* log-odds bar AND `directionAcceptanceFor`
+   is true for it; then `selectedFinalPass = selectedFinalPassForAcceptance = rescuePass`
+   (the rollAdoptedAlias pattern) and fall through to normal result population.
+
+**Perf:** K·N·36 ≈ 1440 anchored evaluations; cap K/N and reuse `evaluateRecoveryPosesParallel`
+(the existing strided-QThreadPool helper used by the recovery grids). Runs only on the
+failure path, so passing cases pay nothing.
+
+**Validation plan (do NOT skip — the suite is finely balanced):** (a) full 42-case real suite
+must stay ≥36/42 with zero regressions and zero new false positives; (b) regenerate the
+precession-corrected synthetic random corpus (`synthetic_testcases.py --random 100 --seed-from
+mount`, ~99/100 baseline) and confirm no regressions there too. Expected wins: narrow-7
+(brightest detection is a clean saturated anchor at (150,482)); possibly narrow-3 (sparse, may
+still lack enough matchable stars even at the true pose). If it proves inert on narrow-7 after
+generating the true-roll candidate, the bottleneck is the verifier *absolute bar* vs. the
+contaminated pool — instrument the best rescue candidate's log-odds vs. the contaminated
+winner's before tuning the bar.
+
+## Depth-escape false-positive fix + deepen-on-sparse experiment (2026-06-11)
+
+Following the harness re-verification on 2026-06-11 (suite still 36/42 after fixing two
+breaks from commit baacdbf75, see [[camera-star-tests-run-procedure]]), m51@14 was found to
+be a **false positive**: the depth-escape retry (`CameraPlateSolver::solve`, ~21806) adopted
+*any* `escapeResult.m_solved == true`, regardless of fit quality. At mag 13 it produced a
+wrong pose (10 matches, rms 14.26px, az 92.145 vs truth ~93.0, roll +4.64 vs truth ~-1.5..-2.8°)
+that the gate had no chance to re-check, since depth-escape bypasses
+`directionSeedAcceptanceFor` entirely.
+
+**Fix (landed):** added a tight-fit gate to both depth-escape retry attempts —
+`escapeResult.m_solved && escapeResult.m_rmsErrorPixels <= 3.0px` — chosen because the
+motivating synthetic wins (rand-007/008/027/045) all solve sub-pixel with ~100+ matches,
+cleanly separated from m51@14's rms-14.26 false positive. A solved-but-loose escape result is
+now logged and rejected, falling through to the (correct) `solved=false` outcome.
+**Result: suite stays 36/42, zero regressions; m51@14 is now an honest `solved=false`
+(matched=33) instead of a wrong-pose `solved=true`.**
+
+**Deepen-on-sparse (tried, reverted):** symmetric idea for narrow-3 — when a sparse
+(20–64 detection) narrow direction-seeded solve fails, retry one/two magnitudes *deeper*
+(more catalog stars), adopting only if solved with rms ≤ 3px. Implemented identically to
+depth-escape (additive, failure-path-only, tight-fit gated — provably can't regress or
+false-positive). **Empirical result: inert.** At mag 13/14 narrow-3's match count barely
+moved (6 → 7, rms ~11 → ~10.8, still unsolved) — confirms the existing diagnosis that
+narrow-3's bottleneck is the sparse-field roll search itself, not catalog coverage at the
+true centre. Reverted to avoid the extra ~6s/case runtime cost on an already-failing case
+with no payoff.
+
+**Status of the remaining 6 (unchanged from the 2026-06-08/11 triage):** narrow-3, narrow-7,
+wide-2 ×2, ngc-2403 still require the three large deferred workstreams above (verifier-driven
+seed generation / bright-support gate recalibration, density-adaptive match radius, blind
+quad-hash). m51@14 remains an honest non-solve (genuinely sparse at mag 14, ~25 matchable).
+For narrow-7 specifically: the bright-anchor rescue *does* find the correct pose
+(Az≈346°/El≈27°/Roll≈-118..-128°, faLogOdds 22-107, geomConsistent/fovAccepted=true) but
+`hasWeakNarrowGuidedBrightSupport` rejects it — the same gate that (correctly) rejects this
+image's other contaminated candidates. Fixing narrow-7 means recalibrating that gate, which
+risks the 36/42 balance and needs full real-suite + synthetic-corpus validation before
+attempting (not done in this pass).
+
+## Narrow-7 gate instrumentation (2026-06-11)
+
+Added per-branch debug logging to `hasWeakNarrowGuidedBrightSupport`
+(cameraplatesolver.cpp ~12700-12900), gated behind the existing
+`SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE` env var (no-op by default — every `return`
+site now has a preceding `logBrightSupportDecision(weak, "<reason>")` call that only
+`qDebug()`s when the flag is set). **Suite re-verified at 36/42, zero regressions** with
+the instrumentation in place (default env, no debug flags).
+
+Ran the instrumented build on an isolated narrow-7 CSV with
+`SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE=1` + `QT_FORCE_STDERR_LOGGING=1` +
+`QT_LOGGING_RULES=*.debug=true;*.warning=true`. **Finding: the high-faLogOdds rescue
+candidate (Az≈346.17°/El≈27.12°/Roll≈-128.1..-128.4°, 196 matches, rms=11.07,
+2 named anchors incl. the verified HIP 11505 at d=9.31px, namedRms=11.47) is rejected
+by the `poorNoRollSeedRadialSupport` branch specifically** — `prioritySeedRadialErrorPixels`
+≈ 4046-4940px against a ≈96px threshold, with `seedRadialMagnitudeMatchFraction` = 0.000
+(0/1004 and 0/373 across the two near-duplicate poses logged).
+
+**What this check actually measures** (cameraplatesolver.cpp ~14185-14342): it builds a
+*fixed reference projector* from `m_directionSeedReferenceAzimuthDegrees/...Elevation/
+...Roll/...Fov`, which are set (line ~19614-19618) from `settings.m_azimuth/m_elevation/
+m_roll/m_fov` — i.e. the camera's recorded/expected pointing (Az=342°/El=27°/Roll=0°/
+FoV=1.29° for narrow-7), independent of any candidate pose. For each catalog star the
+*candidate* matched to a detection, it compares the star's radius-from-centre under this
+fixed seed projector to the detection's actual radius-from-centre; a candidate whose
+matched stars are nowhere near where the seed-pointing would put them gets a huge
+`prioritySeedRadialErrorPixels`. Because radius-from-centre is roll-invariant, this is
+effectively an **"is this candidate's Az/El close to the recorded camera pointing?"**
+check, independent of the candidate's roll.
+
+**Why it fires for narrow-7's best candidate:** the candidate's Az≈346.17° is ~4.2° from
+the recorded Az=342° — over 3x the 1.29° FOV — so under the seed projector the candidate's
+matched catalog stars (including HIP 11505/HIP 11318) project to radii of thousands of
+pixels (effectively "off-frame" relative to the seed's narrow FOV), while their actual
+detection radii are within the few-hundred-px image. This is the *same* mechanism that
+correctly rejects this image's other contaminated 100+-match candidates (all clustered
+near Az≈341-346°/Roll spanning -128°..+2°, all `poorNoRollSeedRadialSupport`), so the gate
+is behaving consistently — it isn't a one-off special case for the "good" candidate.
+
+**Open question (not resolved, no further action taken this pass):** is the recorded
+Az=342°/El=27° in `star-tests.csv` for narrow-7 itself off by ~4° (making this check's
+reference wrong and the 196-match/2-named-anchor candidate at Az≈346° actually correct),
+or is the 196-match candidate a coincidentally-aligned near-miss (2 bright stars landing
+within an 11px tolerance by chance while the overall pose is ~4° off)? Resolving this
+needs an independent check of HIP 11505's and HIP 11318's true catalog Az/El against the
+image's recorded pointing — out of scope for this instrumentation pass. **narrow-7 remains
+unsolved (6/42 unchanged)**; the instrumentation is retained (it's a no-op by default) for
+use in that follow-up.
+
+### Open question resolved + rescue shortlist instrumentation (2026-06-11, follow-up)
+
+Jon confirmed the recorded Az=342° is correct to within ~1° — so the Az≈346°/Roll≈-128°
+candidate (196 matches, faLogOdds 22-107) is **not** the true pose, and
+`poorNoRollSeedRadialSupport` is correctly rejecting it. The question becomes: why does
+neither `searchGuidedAnchorPose` nor `searchBrightAnchorVerifierRescue` ever produce a
+high-scoring candidate near Az≈342° at all?
+
+A second ground-truth point was added to `star-tests.csv` for narrow-7
+(`HIP 11318:74:1601`, alongside the existing `HIP 11505:151:482`). Using the harness's
+`findProjectedDetectionForExpectedStarNearPosition` diagnostic (camerastartests.cpp
+~1225-1289, which projects each named star's catalog Az/El through a projector built from
+the *raw recorded* `azimuth/elevation/roll/fov` = 342°/27°/0°/1.29° — solve fails so this
+is the fallback path), HIP 11505 catalog-projects to (722.0, 651.8), 0.53px from detection
+**#118** (`peak=33 flux=143 snr=24.7 hotPixel=true`), and HIP 11318 projects to
+(748.9, 1752.6), 68.6px from **#14** (`peak=76 flux=912 snr=54.6`).
+
+This looked initially like the CSV ground truth might be mislabeled (#118 sitting almost
+exactly on the projection), but the photometry rules it out: #118 is a faint
+hot-pixel-flagged detection, completely implausible for HIP 11505 (mag 7.78), whereas the
+CSV's claimed match — detection **#157** (`peak=117 flux=5375 snr=153 saturated=true`) —
+is exactly the kind of bright/saturated detection a mag-7.78 star should produce. The
+0.53px "hit" on #118 is coincidental (hot pixel happens to land near where `roll=0`
+places HIP 11505); the true roll for narrow-7 is very likely **not** 0°, so the
+`roll=0` fallback projection used by this diagnostic doesn't reflect the true pose. The
+original premise (HIP 11505 = #157 at (150,482), saturated) stands.
+
+**Why `roll=0` is meaningless for narrow-7:** narrow-7's `plateSolveStartMode=3`
+(`PlateSolveStartFovAzEl` — FoV+Az+El only, no roll). **For any test case where
+`plateSolveStartMode` is below `PlateSolveStartFovAzElRoll` (4), the CSV's `roll` column
+is not valid ground truth — it's an unused placeholder, not a measured value.** This is
+the root cause of the "0.53px hot-pixel coincidence": `createDiagnosticProjector`
+(camerastartests.cpp ~704-718) falls back to `test.roll` when the solve fails, with no
+regard for `plateSolveStartMode`; for narrow-7 that fallback projector's orientation is
+simply wrong. Added a code comment at that fallback noting the caveat. **Any future
+diagnostic reasoning about narrow-7's "recorded pose" must treat roll as unknown** (Az≈342°
+and El≈27° are still confirmed good to ~1°, per Jon).
+
+**Rescue shortlist/pass-2 instrumentation added** to `searchBrightAnchorVerifierRescue`
+(after the basin-deduped shortlist sort+resize, and inside the pass-2 loop), gated behind
+`SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE`, logging each shortlist candidate's
+Az/El/Roll/FoV/matches/rms/anchor indices, each pass-2 candidate's faLogOdds, and the
+final `selected` pose. **Suite re-verified at 36/42, zero regressions** (with both this
+and the prior `hasWeakNarrowGuidedBrightSupport` instrumentation in place, plus the new
+HIP 11318 CSV row).
+
+Ran on the isolated narrow-7 case (14 rescue invocations across the outer solve's
+retries). **Every shortlist/pass-2/selected candidate across all 14 invocations clusters
+in Az≈346.17-346.42°/El≈26.90-27.54°** — the same wrong basin as before; not one
+candidate near the true Az≈342°/El≈27° appears anywhere in the rescue's pass-1 shortlist,
+let alone pass-2. `selected faLogOdds` ranges 22.7-107.7 (best: 107.652 at
+Az=346.176/El=27.2187/Roll=-118.062), all still rejected downstream by
+`hasWeakNarrowGuidedBrightSupport` → `poorNoRollSeedRadialSupport` as before.
+
+This sharpens the open question from a "did the rescue's shortlist crowd out the right
+candidate" framing to: **why does `searchBrightAnchorVerifierRescue`'s pass-1 cheap sweep
+(4 bright detections × 10 bright catalog stars × 36 rolls) never generate *any* seed near
+Az≈342°, when the #157↔HIP 11505 anchor pairing is exactly the kind of bright-detection ×
+bright-catalog-star pairing this rescue is supposed to try?** Per
+[[plate-solver-failure-state]], an earlier session found `searchGuidedAnchorPose` (a
+different search function) ranks the #157↔HIP 11505 pairing #1 (score 7.25) — so the
+anchor pairing itself is discoverable; the rescue's pass-1 sweep or its
+`guidedAnchorSearchScore`/`anchorAlignedPoseFromPixel` path may be excluding it (e.g. via
+its bright-detection or bright-catalog-star candidate lists, or the cheap score ranking
+it too low to survive `sameEvaluationBasin` dedup against the Az≈346° basin's higher
+cheap scores). Not yet investigated — narrow-7 remains unsolved (6/42 unchanged).
+
+## Dense-match FoV/pose polish experiment (2026-06-11, tried & reverted)
+
+Investigated whether the 196-match/rms=11.07/Az=342.457/El=26.9165/Roll=-5.08025/FoV=1.29
+candidate's `brightProjected=2/12` (the proximate cause of `hasWeakNarrowGuidedBrightSupport`
+rejecting it) is itself caused by a small systematic FoV error. Added a temporary
+`SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_BRIGHTPROJ` diagnostic (inside `evaluateFinalMatchPass`,
+after the `brightProjectedStars` loop) that, for narrow-guided candidates with
+`finalMatches.size() >= 150`, dumps each of the 12 brightest projected catalog stars: name,
+magnitude, projected point, matched flag, and the nearest actual detection's distance/peak/
+saturated flag. Result: **8 of the 10 unmatched bright stars (#3-10, mag 8.6-9.7) have a
+real nearby detection (peak=129-138, not noise) at 5.15-10.45px** — consistent with the
+candidate's overall rms=11.07px, i.e. a small near-uniform pose error (FoV is fixed for
+narrow direction-seeded refinement) is plausibly preventing these matches.
+
+Built a "dense-match FoV/pose polish": added an optional `forceFovRefine` parameter to
+`refinePoseFromMatches` (frees the FoV LM parameter even for narrow guided solves), and a
+new failure-path-only block (after `directionSeedAcceptanceFor` is first computed, before
+the bright-anchor rescue) that — only when `!acceptable && weakBrightSupport && matches >=
+minMatches+50` — reseeds LM from the candidate's own full match set with FoV free,
+re-evaluates via `evaluateFinalMatchPass`, and adopts only if the result independently
+re-passes `directionSeedAcceptanceFor` + `hasGeometricallyConsistentMatches` + retains
+>=90% of the original matches (same safety pattern as `tightenNarrowFinalPass`).
+
+**Result on narrow-7's 196-match candidate: the polish converged to FoV=1.27208/
+Roll=-5.20795 with rms=11.07->2.08px, namedRms=11.47->1.81px, matches=196->193 (98.5%
+retained) — a near-perfect fit.** But `brightProjected` only moved 2/12->3/12 and
+`seedRadialMagnitudeMatchFraction` only moved 0.036->0.044; `poorNoRollSeedRadialSupport`
+still rejected it (`weakBrightSupport` still true), so the polish never adopted for
+narrow-7 (or anywhere else: the only narrow case where the precondition fired across the
+suite was narrow-7 itself, with multiple per-outer-retry candidates all similarly
+unaffected).
+
+**Conclusion: pose/fit quality is not the narrow-7 blocker — even a sub-2px-rms,
+98.5%-match-retained refit barely moves `seedRadialMagnitudeMatchFraction`.** This
+strongly reinforces the 2026-06-11 finding in [[plate-solver-failure-state]] that
+`poorNoRollSeedRadialSupport` (the fixed-reference-projector radial-consistency check
+inside `hasWeakNarrowGuidedBrightSupport`) is the actual blocker, essentially independent
+of how good the candidate pose itself is. **Reverted** — besides being inert, the extra
+LM refit + final-match-pass re-evaluation on every qualifying narrow candidate measurably
+slowed narrow-7's already-slow 17-outer-retry solve (observed >2x slower for that one
+case in a full-suite run). Any further narrow-7 progress now points squarely at
+`poorNoRollSeedRadialSupport`'s formula/reference-projector itself (cameraplatesolver.cpp,
+inside `hasWeakNarrowGuidedBrightSupport` ~12700-12900) — recalibrating it is exactly the
+"don't tune the accept gate blindly" risk flagged in [[plate-solver-failure-state]], so it
+needs careful, narrowly-scoped changes validated against the full suite + synthetic corpus
+before attempting. **Suite re-verified at 36/42, zero regressions** after reverting (clean
+diff vs. session start). Confirmed via a full 42-case run on the reverted build: exactly
+36 PASS / 6 FAIL, the 6 failures being narrow-3, narrow-7, wide-2 (x2), galaxy-m51-1
+(m51@14), and ngc-2403 — identical to the established baseline.
+
+## narrow-7 SOLVED: dense-match polish + named-bright-anchor certificate (2026-06-11)
+
+Combining two changes makes narrow-7 PASS for the first time (matched=193, rms=2.08,
+poseAz=342.457/El=26.917/Roll=-5.20795/FoV=1.27208 — inside Jon's confirmed Az=342±1°/
+El=27° truth band, both named anchors HIP 11505 + HIP 11318 fit at namedRms=1.81px,
+timeMs≈33.4s, *faster* than the failing ~78s runs because solving ends the outer retries):
+
+1. **Dense-match FoV/pose polish re-applied** (same code as the reverted experiment —
+   failure-path-only block after `directionSeedAcceptanceFor`, fires only when
+   `!acceptable && weakBrightSupport && matches >= minMatches+50`, refits via
+   `refinePoseFromMatches` with FoV freed (`forceFovRefine`), adopts only on >=90% match
+   retention + geometric consistency + re-passing the acceptance gate). On narrow-7 it
+   turns the 196-match/rms=11.07 candidate into a 193-match/rms=2.08 near-perfect fit.
+
+2. **Named-bright-anchor certificate** (`hasNamedBrightAnchorCertifiedPose`, next to
+   `hasDenseFinalEvidenceOverridingSeedRadial`): >=2 named bright anchors at <=3px rms
+   + dense match set (>=max(minMatches+50,80)) at <=3px rms + candidate direction within
+   1.5° of the seed reference. Used as (a) a top-level bypass of
+   `hasWeakNarrowGuidedBrightSupport` (parallel to the high-confidence-triangle/
+   strong-dense bypasses) and (b) a waiver for `poorNoRollSeedRadialSupport` in
+   `hasAcceptableGuidedFinalBrightnessConsistency`. Margins vs the known-wrong Az≈346°
+   contaminated candidates: they fit the same anchors at >=9.3px (3x the 3px bar) and
+   sit >=4.2° from the seed (2.8x the 1.5° bar).
+
+Why the certificate is needed — the three gate layers that each falsely vetoed the
+correct polished pose (peeled via DEBUG_SPARSE on narrow7-only):
+- `poorNoRollSeedRadialSupport`: radial error 146.7px vs ~96px threshold. The ~96px
+  tolerance implicitly assumes the recorded pointing is good to a few hundredths of a
+  degree; it is only trusted to ~1°, and the true pose sits 0.205° from the seed
+  (= hundreds of px of radial discrepancy from pointing error alone).
+- `seedProjectedBright>=4 unmatched, weak magSupport`: seed-projected POSITIONS assume
+  the seed roll; narrow-7's start mode (3=FovAzEl) has no roll, the placeholder roll=0 is
+  ~5.2° from the true roll, so every seed-projected position is off by ~r*0.09px.
+- `brightProjected>=10, matched<5` (brightProjected=3/12): **assignment artifact, not a
+  pose problem** — BRIGHTPROJ dump under the polished pose shows 11/12 brightest catalog
+  stars have a real detection within 0.37-2.64px, but 8 of them are unmatched because in
+  the dense mag-15 catalog (662k stars) their detections were *assigned* to nearby
+  fainter catalog stars. `matchedBrightProjectedStars` measures assignment, not
+  positional coincidence, and undercounts exactly when the catalog is dense.
+
+Validation (complete):
+- narrow7-only: PASS.
+- Full 42-case real suite: **37/42, zero regressions** — narrow-7 now PASSES; the 5
+  remaining failures are exactly the established narrow-3, wide-2 (x2), m51@14,
+  ngc-2403.
+- Synthetic random corpus (`star-tests-synthetic-rand.csv`, 100 cases): fixed build and
+  a pre-change baseline build score **identically (59/100, same cases)** — the change
+  has zero effect there. The polish never adopted in the synthetic run (its
+  unconditional adoption log appears 0 times) and the certificate requires rms<=3 so it
+  cannot have accepted the rms-13..17 failures observed.
+
+**Separate finding (NOT caused by this change): the synthetic corpus has drifted from
+~99/100 (measured 2026-06-05, post-precession-fix) to 59/100**, with many wrong-pose
+`solved=true` false positives at rms 13-17 and ~10-50 matches — present identically in
+the pre-change baseline. Bisected and root-caused the same day, see the next section.
+
+## Synthetic corpus 99→59 collapse: bisected & fixed (2026-06-11/12)
+
+Two stacked causes, fully separated by bisection:
+
+**Cause 1 (the big one, 59 vs 82): an UNCOMMITTED leftover experiment in
+`searchBrightAnchorVerifierRescue`** — a non-debug-gated block that appended up to 4
+"in-frame" bright catalog stars (`kMaxRescueInFrameCatalogStars`) to the rescue's anchor
+pool (added alongside the debug-gated shortlist instrumentation in the 2026-06-11
+rescue-instrumentation session, but unlike the instrumentation it changes behaviour and
+was never validated against the synthetic corpus). Bisection method: swapped the
+test-target sources (all camera headers + the 6 test TUs) to each committed state in the
+build tree (backups in C:\tmp\bisect_backup), built, and ran a 10-known-failure subset
+(`synthrand-bisect.csv`): commits 49749e9b3 (06-08), 44cb8f741 (06-10), 86200e672
+(06-11/HEAD) all score 8/10; the working tree scored 0/10; removing JUST the in-frame
+block from the working tree → 8/10. Failure mechanism observed on synth-rand-013 (truth
+Az=77.83/El=64.72, random true roll): the solver finds an 82-match rms=0.16px true pose
+via bright-triangle seed, but with the in-frame block the final selection ends up a
+22-match rms=16.1 roll-alias (Az exact, Roll +25.3°) accepted as solved=true.
+**Fix: removed the block. Validation: real suite 37/42 zero regressions (narrow-7 still
+PASS), synthetic 59 → 82/100.**
+
+**Cause 2 (82 vs ~99): the on-disk `star-tests-synthetic-rand.csv`/`images-synthetic-rand`
+are STALE — generated 2026-06-05 09:40, BEFORE the generator's precession fix** (commit
+afeac3e56, 06-05 20:18). The 18 residual failures (022, 024, 030, 035, 038, 042, 048,
+052, 053, 054, 055, 066, 070, 075, 078, 094, 096, 099) are honest non-solves
+(recenter-marathon, every run solved=0 incl. depth-escape) and match the documented
+"precession-hard" class — 82/100 is *exactly* the documented pre-regeneration score.
+The ~99/100 was measured on a corrected-seed corpus. `star-tests-synthetic-rand2.csv`
+(150 cases, generated 06-05 19:29, during the precession-fix session) is the
+corrected-generation corpus — **validated: 146/150 (97.3%) PASS on the fixed build**
+(failures: rand-a-005, rand-a-023, rand-c-009, rand-c-023 — not investigated, presumed
+the corpus's own hard tail, analogous to rand-066).
+
+**Bottom line / going forward:** the solver is healthy — real suite 37/42, corrected
+synthetic corpus 97.3%. Use `star-tests-synthetic-rand2.csv` as the canonical synthetic
+corpus for validation; the 100-case `star-tests-synthetic-rand.csv` on disk is a stale
+pre-precession-fix generation whose ~18 recenter-marathon failures are a known test-data
+artifact, not solver weakness (regenerate it with the current `synthetic_testcases.py`
+if a 100-case corpus is wanted). When validating future changes, expect ≈82/100 on the
+stale corpus and ≈146/150 on rand2.
+
+## rand2 triage + m51@14 SOLVED via deepen-escape (2026-06-12)
+
+**rand2's 4 failures triaged:**
+- **c-023: GENERATOR BUG, fixed.** The solve was perfect (90 matches, rms=0.168, pose
+  exactly on truth) but ground-truth star HIP 92043 (110 Her, V=4.19) sits on *empty
+  sky* — `synthetic_testcases.py` picks named ground-truth stars from Hipparcos
+  (`I/239/hip_main`) but renders only Gaia DR3 stars, and Gaia lacks bright stars, so a
+  bright HIP pick may never be rendered (verified visually in the overlay crop). Fixed
+  `pick_named` to require a rendered Gaia counterpart within 2px; patched the existing
+  rand2 c-023 row to drop HIP 92043 (the 2 remaining ground-truth stars validate the
+  pose). c-023 now PASSES → rand2 baseline is **147/150**.
+- **a-023: genuine roll-alias FALSE POSITIVE** (solver-side, open): accepted pose has
+  direction exactly right (az 28.0477 vs truth 28.05) but wrong roll, 12 matches,
+  rms=16.85, and misses 2 of 3 ground-truth stars (incl. HIP 26358 at mag 8.51, which IS
+  rendered and in Gaia — so the pose is truly wrong). Next solver-side accept-gate
+  target.
+- **a-005 / c-009: honest sparse non-solves** (63/52 detections, best 5-11 matches;
+  a-005's best attempt drifts 1.27° in az) — same hard-tail class as rand-066.
+
+**m51@14 SOLVED — real suite now 38/42.** Mechanism (two stacked obstacles):
+the @14 row is catalog-starved (509 detections vs 103 in-FoV candidates) AND its seed is
+deliberately ~1° off (az 92.0 vs true 93.0). The outer recenter ladder runs only at the
+requested depth (starved), while a plain deeper retry inherits the raw off seed (mag 15
+from az 92.0 reaches only 46 matches vs 149 from the true centre). Fix: **deepen-escape
+retry** (after depth-escape in `CameraPlateSolver::solve`): when a narrow direction
+no-roll solve fails with `detections >= 128 && candidates <= detections/3`
+(catalog-starved trigger), retry at requestedMag+1/+2 (capped 16.5, deduped via the
+attempted-magnitude set), each depth sweeping coarse azimuth recenter offsets
+{0, ±0.75·fov, ±1.0·fov}, budget 6 runs total, adopting any *solved* result.
+**No rms gate, deliberately**: unlike depth-escape (which escapes INTO the lenient
+sparse-catalog acceptance regime and needs its own tight-fit bar), deepening moves into
+the denser, *stricter* acceptance regime — an adopted result is exactly as trustworthy
+as the same solve requested at that depth directly; and correct galaxy-field solves
+carry rms 12-13px from fuzzy detections (m51@15: rms 13.17), which a 3px bar would
+wrongly reject. m51@14 now solves with matched=150, rms=13.01,
+poseAz=93.0067/El=72.764/Roll=-1.546 (the known-true pose).
+
+**Validation:** real suite **38/42, zero regressions** (remaining: narrow-3, wide-2 ×2,
+ngc-2403; narrow-7 still PASS); rand2 **147/150, zero regressions** (a-005, a-023,
+c-009). The deepen trigger fired only on m51@14 across both suites (verified by log
+grep), as designed — ngc-2403 (1178 detections, 424 candidates) correctly misses the
+starvation trigger.
+
+## ngc-2403 SOLVED + a-023 false positive fixed (2026-06-12) — suite 39/42, rand2 148/150
+
+The long-standing "density-adaptive match radius" hypothesis was tested and **disproven**:
+sweeping the final match radius 24/12/8/6 px (via a temporary
+`SDRANGEL_CAMERA_STAR_TEST_FINAL_MATCH_RADIUS` override in the harness, kept for future
+experiments) showed pure chance scaling (matched 217→84→42→30, rms tracking the radius)
+with no true pose emerging — the true pose was never in the candidate set. ngc-2403 was a
+SEARCH-side gap, not a selection problem. Two stacked root causes, both fixed:
+
+1. **Rescue anchor-pool gap.** `searchBrightAnchorVerifierRescue`'s catalog anchor pool
+   (top-10 brightest within the multi-FoV localRadius) was entirely mag 3.1-5.3 stars
+   OUTSIDE the 1.27° frame (Muscida, π² UMa, ...); the brightest star actually in the
+   image — HIP 37078 at mag 8.2, detection #703 (flux 8371, saturated, ground-truth
+   anchor) — could never be paired. Fix: dense-gated (>= 512 detections, narrow) in-frame
+   anchor tiers appended to the pool — tier 1 takes the brightest 4 within the frame's
+   *inscribed circle* (in-frame at ANY roll, which matters since roll is unknown; without
+   this tier, HIP 37078 at 0.32° from centre is crowded out by mag-5.6-6.5 stars in the
+   wider radius that sit outside the actual frame), tier 2 the brightest 4 within the
+   possibly-in-frame radius. The >= 512-detection gate deliberately excludes the
+   sparse/moderate lenient-acceptance regime whose wrong-roll adoptions caused the
+   2026-06-11 synthetic-corpus collapse when an ungated version of this idea was tried;
+   no synthetic case and no other real case reaches 512 detections on the failure path
+   (pollux at 792 solves directly, so its rescue never runs).
+
+2. **LATENT result-sync bug in the rescue adoption block** (present since the rescue
+   landed 2026-06-08, never triggered because no adoption had ever actually fired): on
+   adoption it updated `selectedFinalPass`/acceptance/scores but NOT
+   `result.m_azimuthDegrees`/elevation/roll/fov/center/k1, `m_matchedStars`,
+   `m_rmsErrorPixels`, `m_maxErrorPixels`, `m_matchSummary`, or the per-detection labels —
+   so the run reported solved=true carrying the *previous* (junk) selected pose. With the
+   in-frame anchors, ngc-2403's rescue found and adopted the true pose
+   (faLogOdds=365 vs ~90 for every contaminated candidate — the verifier separation is
+   dramatic) yet the result still showed the old 191-match/rms-15.9 junk. Fixed by
+   mirroring the dense-match-polish block's full result sync.
+
+ngc-2403 now solves: **matched=389, rms=5.22, Az=318.434/El=60.045/Roll=-32.834**,
+ground-truth HIP 37078 position check satisfied. **Bonus: rand2's a-023 wrong-roll false
+positive disappeared with the sync fix** (its solved=true-with-wrong-pose was the same
+latent bug surfacing through a rescue adoption) → rand2 is now **148/150** (only the
+honest sparse a-005/c-009 remain).
+
+Validation: real suite **39/42, zero regressions** (remaining: narrow-3, wide-2 ×2;
+narrow-7 + m51@14 still PASS, pollux/m51-2/cluster canaries unchanged); rand2 **148/150,
+zero regressions**.
+
+## narrow-3 SOLVED via density-scaled rescue shortlist (2026-06-12) — suite 40/42
+
+One-line root cause: the rescue's 5-slot global shortlist was crowded out by
+contaminated basins before pass-2's verifier ranking ever saw the true candidate — the
+hypothesis recorded in the narrow-7-era notes, now confirmed and fixed.
+
+Diagnosis with the certificate-era tooling: the old "only ~7 of 45 detections match at
+the true centre" finding was **stale** — the true pose actually matches 30/37 in-FoV
+candidates. The rescue's pools were fine all along: ground-truth star HIP 73199 is
+mag 3.17 (bright!), in the catalog anchor pool, and its detection #26 (flux 7003, at the
+ground-truth pixel) is the top bright detection. But on this sparse field (45 detections,
+37 candidates at mag 12) the pass-1 cheap scores are FLAT — true and wrong-roll basins
+all land within 7.4-7.6 — so the global top-5 cut dropped the true basin; the selected
+junk candidate scored faLogOdds 4.6 (vs ngc-2403's true-pose 365: the verifier separates
+fine when it gets to see the candidate).
+
+Fix: `kMaxRescueShortlist` is now density-scaled —
+`clamp(2400 / detections, 5, 24)` — pass-2's per-candidate cost scales with
+detections × candidates, so a 45-detection field affords 24 verifier-ranked candidates
+for the same budget 5 costs on a 1178-detection one. Dense-field behavior is unchanged
+(>=480 detections still gets 5), preserving the 24x-slowdown lesson that motivated the
+original cap.
+
+narrow-3 now solves: matched=30, ground-truth HIP 73199 position check satisfied.
+Validation: real suite **40/42, zero regressions** (narrow-7, m51@14, ngc-2403 all still
+PASS; remaining failures are only the two stars-wide-2 fisheye rows, which need the
+blind quad-hash workstream); rand2 **148/150, zero regressions** (a-005/c-009 honest
+sparse hard tail).
+
+## Performance pass (2026-06-12) — suite solve time -28.8% (385.5s → 274.6s)
+
+Profiled with the built-in stage/run profiling already embedded in every result line
+(`timeMs`, `solve.runN.reason/ms/solved/matches`, `stages=`) — no external profiler
+needed. Findings: ~38% of total suite time was `recenter-no-roll-recovery` retries and
+~34% `bright-catalog` re-runs, much of it provably wasted (narrow-4 solved at recenter
+attempt 4 then burned 13 more; cluster-m7 re-ran a 9.4s bright-catalog pass after already
+solving with 1447 matches, and adopted the same pose with half the matches).
+
+Four outer-retry-ladder fixes (all in `CameraPlateSolver::solve`):
+1. **Density-aware recenter early-stop**: the strong-solve early-stop bar (>= 80 matches)
+   is unreachable on sparse fields whose whole in-FoV catalog is a few dozen stars; a
+   solved result matching >= max(minMatches+8, 60% of candidates) now also stops the
+   ladder.
+2. **Deepen-escape hoisted before the recenter ladder** (as `attemptDeepenEscape`, late
+   call kept as fallback): the catalog-starvation signature is visible right after the
+   initial run, and the ladder cannot help that class (m51@14 burned ~30s of ladder
+   before the deepen that solves it).
+3. **Deepen adoption gated on dominant candidate coverage** (matches >= 60% of the
+   deeper catalog's in-FoV candidates): the hoist exposed a LATENT false-positive path —
+   m101@15's deepen-to-16 from an offset seed produced a gate-passing wrong-roll alias
+   (134/328 = 0.41 coverage, roll -25 vs true 87) where m51@14's correct adoption is
+   150/165 = 0.91. The gate also protects the original late-call path, which had the
+   same latent risk.
+4. **Alias-contamination bail-out**: a solved-but-low-coverage deepen result means the
+   deeper catalog feeds acceptable-looking aliases for this field — the whole escape
+   stops at the first such result instead of spending the remaining offset/depth budget.
+   Plus: **post-recenter bright-catalog retry skipped when already solved with >= 120
+   matches** (its useful work is rescuing unsolved/weak results; for solved ones it only
+   re-derived the same pose from a shallower catalog).
+
+Validation: real suite 40/42 and rand2 148/150, identical failure sets (wide-2 ×2;
+a-005/c-009). Per-case highlights (suite-run timings): m51@14 49.3→10.1s, narrow-4
+34.6→12.3s, cluster-m7 20.3→10.0s (and now keeps the better 1447-match result),
+narrow-9 15.6→5.5s, narrow-1 17.8→10.5s, narrow-3 19.2→12.7s, narrow-5 11.2→5.0s.
+Costs accepted: m101@15 +4.2s (pays one rejected deepen probe before its ladder solve),
+narrow-7 +5.9s (run variance / wider sparse shortlist).
+
+## Performance pass, round 2 (2026-06-12) — 274.6s → 250.0s (cumulative -35% from 385.5s)
+
+Round 1 left 59% of solve time dark (the stage keys in the result line cover only the
+final run, and several hot blocks had no timers at all). Round-2 instrumentation
+(permanent `logSolveProfile` timers around `acceptance`, `tightenFinalPass`,
+`densePolish`, `brightAnchorRescue`; run the suite with
+`SDRANGEL_CAMERA_PLATE_SOLVER_PROFILE=1` and aggregate the
+`CameraPlateSolverProfile solve.<stage> elapsedMs=` lines) closed the gap. Suite-wide
+stage costs (profiled run):
+
+| stage | calls | total |
+|---|---|---|
+| searchBestPose | 90 | 138.8s (~60%) |
+| acceptance (post-final-pass scoring/gates) | 75 | 16.7s |
+| rollRecoveryFinalPass | 21 | 14.5s |
+| catalog (context build) | 91 | 11.9s |
+| refineCandidates | 79 | 11.7s |
+| brightAnchorRescue | 75 | 9.4s |
+| tightenFinalPass | 90 | 7.0s |
+
+Changes landed this round:
+- **Catalog-context memo** (`buildPlateSolveCatalogContext`): exact-input-key LRU-3 of
+  the parsed+aliased+merged context — the outer ladder rebuilds it per run (~0.5s each,
+  multi-100k-star parse + alias pass) and revisits identical inputs (repeated recenter
+  offsets, same-seed runs). ~10 of 91 builds hit in the suite; behaviour-identical on
+  hits (QVector COW keeps cached copies cheap).
+- The permanent stage timers above (negligible cost, big diagnostic value).
+
+Validation: real suite 40/42, rand2 148/150, identical failure sets; clean-run solve
+total 250.0s.
+
+**Where the remaining time is — and why round 3 needs a decision:** ~60% of solve time
+is inside `searchBestPose`, dominated by triangle-seed *evaluations* (~4000/run × 90
+runs; the signature construction itself is minor). The options are (a) cross-run
+evaluation reuse (structural, medium risk), (b) lowering the evaluation caps
+(4000/2048/768 — directly risks losing solves; would need full real+synthetic
+revalidation per step), or (c) hot-loop micro-optimisation of the seed evaluators
+(lowest behavioural risk, grindy). All three touch the core search that the 40/42
+balance rests on — deliberately NOT attempted without an explicit go-ahead.
+
+## Performance pass, round 3 (2026-06-12) — 250.0s → 141.9s quiet-run (cumulative -63% from 385.5s)
+
+Targeted the `searchBestPose` interior (60% of solve time) after a gen-vs-eval split
+timer showed candidate GENERATION dominates the bright-anchor-triangle stage ~2:1 over
+seed evaluation. Three provably-behaviour-preserving fixes in
+`buildBrightGuidedAnchorTriangleSeeds`:
+
+1. **Environment lookup hoisted out of the triple loop**: the
+   `SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_TRIPLE` `qEnvironmentVariableIsSet` call was made
+   per (a,b,c) combination — up to ~900k getenv calls per run.
+2. **Pairwise tables instead of in-loop recompute**: detection pixel distances
+   (sqrt) and catalog angular separations (acos·dot) were recomputed per triple; now
+   computed once into O(N²) tables (N ≤ 192) and read by the O(N³) loop. The seed
+   direction vector was likewise rebuilt per ratio match.
+3. **Catalog-triple work hoisted out of the detection-triple loop** (the ordered-triangle
+   search): the magnitude sort and triangle signature of each of the ≤2024 catalog
+   triples were recomputed for every one of the ≤1540 detection triples (~3M sorts +
+   signature builds per run on rich fields). Precomputed once, in the exact (i,j,k)
+   iteration order so the candidate encounter order — and the kept-768 cap behaviour —
+   is unchanged.
+
+The hot-subset spot check produced bit-identical match counts on all 8 cases, and the
+full validation held 40/42 / 148/150 with identical failure sets. Per-case quiet-run
+wins: narrow-7 43.1→28.5s, m101@15 24.5→11.4s, narrow-4 9.6→3.6s, m51@14 9.6→4.2s,
+ngc-2403 9.1→3.8s, narrow-3 9.4→4.7s. Caveat: suite wall time varies ±10-15% with
+machine load (a contended run measured 278.9s with the same binary — per-case analysis,
+not totals, is the reliable signal; the optimized-path cases improved even in the
+contended run).
+
 ## Structural note (not started)
 
 `CameraPlateSolver::SolverContext` is one ~18.5k-line inline class body (lines ~63 to

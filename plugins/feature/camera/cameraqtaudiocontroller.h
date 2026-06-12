@@ -43,6 +43,9 @@ public:
     void setMuted(bool muted);
     void clearMonitorAudio();
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
+    uint32_t monitorAudioFill() const { return m_outputAudioFifo.fill(); }
+    uint32_t monitorAudioSize() const { return m_outputAudioFifo.size(); }
+    quint64 monitorDroppedFrames() const { return m_monitorDroppedFrames; }
 
 private slots:
     void onCaptureAudioDataReady();
@@ -61,6 +64,7 @@ private:
     AudioFifo m_captureAudioFifo;
     AudioFifo m_outputAudioFifo;
     QVector<quint8> m_audioTransferBuffer;
+    quint64 m_monitorDroppedFrames;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAQTAUDIOCONTROLLER_H_

@@ -55,6 +55,19 @@ public:
         QString& errorMessage);
     [[nodiscard]] qint64 durationMs() const { return m_durationMs; }
     [[nodiscard]] double frameRate() const { return m_frameRate; }
+    [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }
+
+    struct DebugStats
+    {
+        quint64 m_readAheadCalls = 0;
+        quint64 m_readAheadPackets = 0;
+        quint64 m_readAheadVideoPackets = 0;
+        quint64 m_sendVideoPacketEagain = 0;
+        quint64 m_queuedVideoFrames = 0;
+        quint64 m_audioBytes = 0;
+    };
+
+    [[nodiscard]] const DebugStats& debugStats() const { return m_debugStats; }
 
 private:
     struct PendingVideoFrame
@@ -80,6 +93,7 @@ private:
     bool m_videoDraining = false;
     bool m_audioDraining = false;
     std::deque<PendingVideoFrame> m_pendingVideoFrames;
+    DebugStats m_debugStats;
 
     [[nodiscard]] bool openVideoDecoder(QString& errorMessage);
     [[nodiscard]] bool openAudioDecoder(QString& errorMessage);

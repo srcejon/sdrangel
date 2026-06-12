@@ -35,6 +35,18 @@ class CameraQtAudioController : public QObject
 {
     Q_OBJECT
 public:
+    struct MonitorDebugStats
+    {
+        quint64 m_submitCalls = 0;
+        quint64 m_submittedFrames = 0;
+        quint64 m_silenceFrames = 0;
+        quint64 m_overflowDrainFrames = 0;
+        quint64 m_minFillBefore = 0;
+        quint64 m_maxFillBefore = 0;
+        quint64 m_minFillAfter = 0;
+        quint64 m_maxFillAfter = 0;
+    };
+
     explicit CameraQtAudioController(QObject *parent = nullptr);
 
     bool isCapturing() const { return m_capturing; }
@@ -44,11 +56,13 @@ public:
     void stop();
     void setMuted(bool muted);
     void clearMonitorAudio();
+    void resetMonitorDebugStats();
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     uint32_t monitorAudioFill() const { return m_outputAudioFifo.fill(); }
     uint32_t monitorAudioSize() const { return m_outputAudioFifo.size(); }
     quint64 monitorDroppedFrames() const { return m_monitorDroppedFrames; }
     quint64 monitorUnderflows() const { return m_monitorUnderflows.load(); }
+    const MonitorDebugStats& monitorDebugStats() const { return m_monitorDebugStats; }
 
 private slots:
     void onCaptureAudioDataReady();
@@ -69,6 +83,7 @@ private:
     QVector<quint8> m_audioTransferBuffer;
     quint64 m_monitorDroppedFrames;
     std::atomic<quint64> m_monitorUnderflows;
+    MonitorDebugStats m_monitorDebugStats;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAQTAUDIOCONTROLLER_H_

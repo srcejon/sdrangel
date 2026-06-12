@@ -71,6 +71,12 @@ public:
         quint64 m_parkedVideoPackets = 0;
         quint64 m_readAheadPacketCapHits = 0;
         quint64 m_audioBytes = 0;
+        quint64 m_pacedAudioCalls = 0;
+        quint64 m_pacedAudioTargetFrames = 0;
+        quint64 m_pacedAudioOutputFrames = 0;
+        quint64 m_pacedAudioShortCalls = 0;
+        quint64 m_audioTimestampJumps = 0;
+        qint64 m_audioTimestampJumpMaxAbsMs = 0;
         quint64 m_videoConvertFrames = 0;
         quint64 m_videoConvertMs = 0;
         qint64 m_videoConvertMaxMs = 0;

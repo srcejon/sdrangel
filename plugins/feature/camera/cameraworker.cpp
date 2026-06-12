@@ -1487,6 +1487,11 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
         m_videoFileStatsLastDecoderPacketCapHits = stats.m_readAheadPacketCapHits;
         m_videoFileStatsLastDecoderAudioBytes = stats.m_audioBytes;
+        m_videoFileStatsLastDecoderPacedAudioCalls = stats.m_pacedAudioCalls;
+        m_videoFileStatsLastDecoderPacedAudioTargetFrames = stats.m_pacedAudioTargetFrames;
+        m_videoFileStatsLastDecoderPacedAudioOutputFrames = stats.m_pacedAudioOutputFrames;
+        m_videoFileStatsLastDecoderPacedAudioShortCalls = stats.m_pacedAudioShortCalls;
+        m_videoFileStatsLastDecoderAudioTimestampJumps = stats.m_audioTimestampJumps;
         m_videoFileStatsLastDecoderConvertFrames = stats.m_videoConvertFrames;
         m_videoFileStatsLastDecoderConvertMs = stats.m_videoConvertMs;
     }
@@ -1500,9 +1505,15 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderParkedVideoPackets = 0;
         m_videoFileStatsLastDecoderPacketCapHits = 0;
         m_videoFileStatsLastDecoderAudioBytes = 0;
+        m_videoFileStatsLastDecoderPacedAudioCalls = 0;
+        m_videoFileStatsLastDecoderPacedAudioTargetFrames = 0;
+        m_videoFileStatsLastDecoderPacedAudioOutputFrames = 0;
+        m_videoFileStatsLastDecoderPacedAudioShortCalls = 0;
+        m_videoFileStatsLastDecoderAudioTimestampJumps = 0;
         m_videoFileStatsLastDecoderConvertFrames = 0;
         m_videoFileStatsLastDecoderConvertMs = 0;
     }
+    m_qtAudio.resetMonitorDebugStats();
 }
 
 void CameraWorker::updateVideoFilePlaybackStats(qint64 decodeMs, qint64 positionMs, qsizetype audioBytes)
@@ -1579,6 +1590,12 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     quint64 parkedVideoPackets = 0;
     quint64 packetCapHits = 0;
     quint64 decoderAudioBytes = 0;
+    quint64 pacedAudioCalls = 0;
+    quint64 pacedAudioTargetFrames = 0;
+    quint64 pacedAudioOutputFrames = 0;
+    quint64 pacedAudioShortCalls = 0;
+    quint64 audioTimestampJumps = 0;
+    qint64 audioTimestampJumpMaxAbsMs = 0;
     quint64 convertFrames = 0;
     quint64 convertMs = 0;
     qint64 convertMaxMs = 0;
@@ -1593,6 +1610,12 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         parkedVideoPackets = stats.m_parkedVideoPackets - m_videoFileStatsLastDecoderParkedVideoPackets;
         packetCapHits = stats.m_readAheadPacketCapHits - m_videoFileStatsLastDecoderPacketCapHits;
         decoderAudioBytes = stats.m_audioBytes - m_videoFileStatsLastDecoderAudioBytes;
+        pacedAudioCalls = stats.m_pacedAudioCalls - m_videoFileStatsLastDecoderPacedAudioCalls;
+        pacedAudioTargetFrames = stats.m_pacedAudioTargetFrames - m_videoFileStatsLastDecoderPacedAudioTargetFrames;
+        pacedAudioOutputFrames = stats.m_pacedAudioOutputFrames - m_videoFileStatsLastDecoderPacedAudioOutputFrames;
+        pacedAudioShortCalls = stats.m_pacedAudioShortCalls - m_videoFileStatsLastDecoderPacedAudioShortCalls;
+        audioTimestampJumps = stats.m_audioTimestampJumps - m_videoFileStatsLastDecoderAudioTimestampJumps;
+        audioTimestampJumpMaxAbsMs = audioTimestampJumps > 0 ? stats.m_audioTimestampJumpMaxAbsMs : 0;
         convertFrames = stats.m_videoConvertFrames - m_videoFileStatsLastDecoderConvertFrames;
         convertMs = stats.m_videoConvertMs - m_videoFileStatsLastDecoderConvertMs;
         convertMaxMs = stats.m_videoConvertMaxMs;
@@ -1604,9 +1627,15 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
         m_videoFileStatsLastDecoderPacketCapHits = stats.m_readAheadPacketCapHits;
         m_videoFileStatsLastDecoderAudioBytes = stats.m_audioBytes;
+        m_videoFileStatsLastDecoderPacedAudioCalls = stats.m_pacedAudioCalls;
+        m_videoFileStatsLastDecoderPacedAudioTargetFrames = stats.m_pacedAudioTargetFrames;
+        m_videoFileStatsLastDecoderPacedAudioOutputFrames = stats.m_pacedAudioOutputFrames;
+        m_videoFileStatsLastDecoderPacedAudioShortCalls = stats.m_pacedAudioShortCalls;
+        m_videoFileStatsLastDecoderAudioTimestampJumps = stats.m_audioTimestampJumps;
         m_videoFileStatsLastDecoderConvertFrames = stats.m_videoConvertFrames;
         m_videoFileStatsLastDecoderConvertMs = stats.m_videoConvertMs;
     }
+    const CameraQtAudioController::MonitorDebugStats& monitorStats = m_qtAudio.monitorDebugStats();
     const double convertAvgMs = convertFrames > 0
         ? static_cast<double>(convertMs) / static_cast<double>(convertFrames)
         : 0.0;
@@ -1629,8 +1658,20 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "monitorFill" << m_qtAudio.monitorAudioFill() << "/" << m_qtAudio.monitorAudioSize()
              << "monitorDroppedFrames" << droppedAudioDelta
              << "monitorUnderflows" << audioUnderflowDelta
+             << "monitorSubmitCalls" << monitorStats.m_submitCalls
+             << "monitorSubmittedFrames" << monitorStats.m_submittedFrames
+             << "monitorSilenceFrames" << monitorStats.m_silenceFrames
+             << "monitorOverflowDrainFrames" << monitorStats.m_overflowDrainFrames
+             << "monitorFillBeforeMinMax" << monitorStats.m_minFillBefore << monitorStats.m_maxFillBefore
+             << "monitorFillAfterMinMax" << monitorStats.m_minFillAfter << monitorStats.m_maxFillAfter
              << "audioLeadMs" << audioLeadMs
              << "pendingAudioBytes" << pendingAudioBytes
+             << "pacedAudioCalls" << pacedAudioCalls
+             << "pacedAudioTargetFrames" << pacedAudioTargetFrames
+             << "pacedAudioOutputFrames" << pacedAudioOutputFrames
+             << "pacedAudioShortCalls" << pacedAudioShortCalls
+             << "audioTimestampJumps" << audioTimestampJumps
+             << "audioTimestampJumpMaxAbsMs" << audioTimestampJumpMaxAbsMs
              << "pendingVideoFrames" << pendingFrames
              << "pendingVideoPackets" << pendingPackets
              << "readAheadCalls" << readAheadCalls
@@ -1654,6 +1695,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     m_videoFileStatsAudioBytes = 0;
     m_videoFileStatsLastDroppedAudioFrames = droppedAudioFrames;
     m_videoFileStatsLastAudioUnderflows = audioUnderflows;
+    m_qtAudio.resetMonitorDebugStats();
     m_videoFileStatsTimer.restart();
 }
 

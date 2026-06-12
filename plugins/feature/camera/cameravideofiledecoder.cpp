@@ -808,6 +808,18 @@ bool CameraVideoFileDecoder::appendFrameAudio(const AVFrame *frame, QByteArray& 
             m_formatContext->streams[m_audioStreamIndex]->time_base,
             AVRational{1, 1000});
     }
+    if ((audioStartMs >= 0) && (m_audioDecodedPositionMs >= 0))
+    {
+        const qint64 audioTimestampGapMs = audioStartMs - m_audioDecodedPositionMs;
+        if (std::abs(audioTimestampGapMs) > 2)
+        {
+            ++m_debugStats.m_audioTimestampJumps;
+            m_debugStats.m_audioTimestampJumpMaxAbsMs = std::max(
+                m_debugStats.m_audioTimestampJumpMaxAbsMs,
+                static_cast<qint64>(std::abs(audioTimestampGapMs)));
+        }
+    }
+
     if (audioStartMs >= 0) {
         m_audioDecodedPositionMs = audioStartMs + audioDurationMs;
     } else if (m_audioDecodedPositionMs >= 0) {
@@ -833,6 +845,12 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
     m_audioPaceRemainderFrames = availableTargetFrames - static_cast<double>(targetFrames);
     const int targetBytes = targetFrames * bytesPerSampleFrame;
     const int byteCount = std::min(targetBytes, static_cast<int>(m_pendingAudioPcm.size()));
+    ++m_debugStats.m_pacedAudioCalls;
+    m_debugStats.m_pacedAudioTargetFrames += static_cast<quint64>(targetFrames);
+    m_debugStats.m_pacedAudioOutputFrames += static_cast<quint64>(byteCount / bytesPerSampleFrame);
+    if (byteCount < targetBytes) {
+        ++m_debugStats.m_pacedAudioShortCalls;
+    }
     pcmS16Stereo = m_pendingAudioPcm.left(byteCount);
     m_pendingAudioPcm.remove(0, byteCount);
 #endif

@@ -161,9 +161,9 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
     const double requestedFps = std::max(0.001, settings.m_fps);
     const int fpsDen = 1000;
     const int fpsNum = std::max(1, static_cast<int>(std::llround(requestedFps * fpsDen)));
-    const AVRational timeBase{1, 1000};
+    const AVRational timeBase{fpsDen, fpsNum};
     const AVRational frameRate{fpsNum, fpsDen};
-    const qint64 frameDurationPts = std::max<qint64>(1, static_cast<qint64>((1000.0 / requestedFps) + 0.5));
+    const qint64 frameDurationPts = 1;
 
     const AVCodecID codecId = settings.m_codec == CameraSettings::VideoCodecH265
         ? AV_CODEC_ID_HEVC
@@ -229,6 +229,17 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
         m_codecContext->bit_rate = settings.m_bitrateKbps > 0
             ? static_cast<int64_t>(settings.m_bitrateKbps) * 1000
             : recordingBitrateBps(videoSize, requestedFps);
+        if (settings.m_bitrateKbps > 0)
+        {
+            m_codecContext->rc_min_rate = m_codecContext->bit_rate;
+            m_codecContext->rc_max_rate = m_codecContext->bit_rate;
+            m_codecContext->rc_buffer_size = static_cast<int>(std::min<int64_t>(
+                std::numeric_limits<int>::max(),
+                std::max<int64_t>(m_codecContext->bit_rate, m_codecContext->bit_rate * 2)));
+            m_codecContext->bit_rate_tolerance = static_cast<int>(std::min<int64_t>(
+                std::numeric_limits<int>::max(),
+                std::max<int64_t>(1, m_codecContext->bit_rate / 20)));
+        }
 
         if (m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
             m_codecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -239,8 +250,8 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
         if (!nvencEncoder)
         {
             av_opt_set(m_codecContext->priv_data, "preset", "veryfast", 0);
-            if (settings.m_codec == CameraSettings::VideoCodecH264) {
-                av_opt_set(m_codecContext->priv_data, "tune", "zerolatency", 0);
+            if (settings.m_bitrateKbps > 0) {
+                av_opt_set(m_codecContext->priv_data, "nal-hrd", "vbr", 0);
             }
         }
 
@@ -748,9 +759,12 @@ void CameraVideoWriter::close()
     if (m_formatContext)
     {
         if (m_headerWritten) {
+            const qint64 durationMs = m_codecContext && (m_lastVideoPts >= 0)
+                ? av_rescale_q(m_lastVideoPts + m_frameDurationPts, m_codecContext->time_base, AVRational{1, 1000})
+                : 0;
             qDebug() << "CameraVideoWriter: closing" << m_settings.m_fileName
                      << "frames" << (m_frameDurationPts > 0 ? m_frameIndex / m_frameDurationPts : m_frameIndex)
-                     << "durationMs" << (m_lastVideoPts >= 0 ? m_lastVideoPts + m_frameDurationPts : 0)
+                     << "durationMs" << durationMs
                      << "fps" << m_settings.m_fps
                      << "bitrateKbps" << m_settings.m_bitrateKbps;
             av_write_trailer(m_formatContext);

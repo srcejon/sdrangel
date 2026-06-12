@@ -470,7 +470,8 @@ bool CameraVideoWriter::writeEncodedPacket(AVPacket *packet, AVCodecContext *cod
     packet->stream_index = streamIndex;
     av_packet_rescale_ts(packet, codecContext->time_base, m_formatContext->streams[streamIndex]->time_base);
     if (packet->duration <= 0) {
-        packet->duration = av_rescale_q(1, codecContext->time_base, m_formatContext->streams[streamIndex]->time_base);
+        const qint64 duration = codecContext == m_codecContext ? m_frameDurationPts : 1;
+        packet->duration = av_rescale_q(duration, codecContext->time_base, m_formatContext->streams[streamIndex]->time_base);
     }
     const int ret = av_interleaved_write_frame(m_formatContext, packet);
     av_packet_unref(packet);

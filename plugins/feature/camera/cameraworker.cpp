@@ -1463,6 +1463,9 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         populateFrameExposureMetadata(*frame);
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackPositionMs = m_videoFilePositionMs;
+        frame->m_playbackFrameRate = m_videoFileDecoder
+            ? qMax(1.0, m_videoFileDecoder->frameRate()) * qMax(0.1, m_settings.m_videoPlaybackRate)
+            : 0.0;
         submitVideoFileFrame(frame, submitAudio && (minimumPositionMs < 0));
     }
 

@@ -230,7 +230,7 @@ private:
     void closeVideoWriters();
     void closeYouTubeStream();
     void updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage);
-    bool ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant);
+    bool ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant, double frameRate);
     bool writeVideoFrame(CameraVideoWriter& writer, const QImage& frameToWrite, const QString& variant, qint64 timestampMs = -1);
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     int preRecordBufferFrameLimit() const;

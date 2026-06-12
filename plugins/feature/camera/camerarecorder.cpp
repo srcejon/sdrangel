@@ -524,12 +524,16 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
             flushPreRecordFrames(calibratedImage, processedImage);
         }
 
-        if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, calibratedImage, QStringLiteral("calibrated"))) {
+        const double videoFrameRate = frame->m_playbackFrameRate > 0.0
+            ? frame->m_playbackFrameRate
+            : m_settings.getCaptureFrameRate();
+
+        if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, calibratedImage, QStringLiteral("calibrated"), videoFrameRate)) {
             writePendingAudio(*m_calibratedVideoWriter, QStringLiteral("calibrated"));
             savedVideoFrame = writeVideoFrame(*m_calibratedVideoWriter, calibratedImage, QStringLiteral("calibrated"), frame->m_playbackPositionMs) || savedVideoFrame;
         }
 
-        if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processedImage, QStringLiteral("post"))) {
+        if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processedImage, QStringLiteral("post"), videoFrameRate)) {
             writePendingAudio(*m_processedVideoWriter, QStringLiteral("post"));
             savedVideoFrame = writeVideoFrame(*m_processedVideoWriter, processedImage, QStringLiteral("post"), frame->m_playbackPositionMs) || savedVideoFrame;
         }
@@ -907,7 +911,7 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentCalibratedImage, 
         return;
     }
 
-    if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, currentCalibratedImage, QStringLiteral("calibrated")))
+    if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, currentCalibratedImage, QStringLiteral("calibrated"), m_settings.getCaptureFrameRate()))
     {
         for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
         {
@@ -917,7 +921,7 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentCalibratedImage, 
         }
     }
 
-    if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, currentProcessedImage, QStringLiteral("post")))
+    if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, currentProcessedImage, QStringLiteral("post"), m_settings.getCaptureFrameRate()))
     {
         for (const BufferedVideoFrame& bufferedFrame : m_preRecordVideoFrames)
         {
@@ -1094,10 +1098,11 @@ void CameraRecorder::updateKeogram(const QImage& calibratedImage, const QDateTim
     m_keogramLastSampleIndex = sampleIndex;
 }
 
-bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant)
+bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant, double frameRate)
 {
     QSize& openedSize = (variant == QLatin1String("calibrated")) ? m_calibratedVideoWriterSize : m_processedVideoWriterSize;
     const QSize requestedSize = frameForSize.size();
+    const double requestedFrameRate = std::max(0.001, frameRate);
 
     if (frameForSize.isNull()) {
         return false;
@@ -1107,7 +1112,8 @@ bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& write
         && writer->isOpen()
         && (openedSize == requestedSize)
         && (writer->codec() == m_settings.m_videoCodec)
-        && (writer->bitrateKbps() == m_settings.m_videoRecordBitrateKbps)) {
+        && (writer->bitrateKbps() == m_settings.m_videoRecordBitrateKbps)
+        && (std::abs(writer->fps() - requestedFrameRate) <= 0.001)) {
         return true;
     }
     if (writer)
@@ -1121,7 +1127,7 @@ bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& write
     writerSettings.m_fileName = filename;
     writerSettings.m_codec = m_settings.m_videoCodec;
     writerSettings.m_bitrateKbps = m_settings.m_videoRecordBitrateKbps;
-    writerSettings.m_fps = m_settings.getCaptureFrameRate();
+    writerSettings.m_fps = requestedFrameRate;
     writerSettings.m_preferHardwareEncoding = m_settings.m_videoHwAcceleration;
 
     writer.reset(new CameraVideoWriter());
@@ -1140,7 +1146,7 @@ bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& write
                  CameraVideoWriter::codecName(m_settings.m_videoCodec))
             .arg(requestedSize.width())
             .arg(requestedSize.height())
-            .arg(QString::number(m_settings.getCaptureFrameRate(), 'f', 3),
+            .arg(QString::number(requestedFrameRate, 'f', 3),
                  error);
         qWarning() << "CameraRecorder failed to open:" << filename << error;
         reportErrorToFeature(QStringLiteral("video-writer:%1:%2:%3x%4")

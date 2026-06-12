@@ -193,7 +193,10 @@ QString youtubeBitrateText(int kbps)
 int parseYouTubeBitrateKbps(const QString& text, int fallbackKbps)
 {
     const QString trimmed = text.trimmed();
-    const QRegularExpressionMatch match = QRegularExpression(QStringLiteral("([0-9]+(?:[\\.,][0-9]+)?)")).match(trimmed);
+    const QString bitrateText = trimmed.contains(QLatin1Char('-'))
+        ? trimmed.mid(trimmed.lastIndexOf(QLatin1Char('-')) + 1).trimmed()
+        : trimmed;
+    const QRegularExpressionMatch match = QRegularExpression(QStringLiteral("([0-9]+(?:[\\.,][0-9]+)?)")).match(bitrateText);
     if (!match.hasMatch()) {
         return fallbackKbps;
     }
@@ -204,7 +207,7 @@ int parseYouTubeBitrateKbps(const QString& text, int fallbackKbps)
         return fallbackKbps;
     }
 
-    const QString lower = trimmed.toLower();
+    const QString lower = bitrateText.toLower();
     const bool explicitKbps = lower.contains(QStringLiteral("kbps")) || lower.contains(QStringLiteral("kbit"));
     const bool explicitMbps = lower.contains(QStringLiteral("mbps")) || lower.contains(QStringLiteral("mbit"));
     const bool assumeMbps = !explicitKbps && !explicitMbps && (value < 1000.0);

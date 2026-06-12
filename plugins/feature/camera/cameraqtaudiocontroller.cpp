@@ -205,7 +205,7 @@ void CameraQtAudioController::submitMonitorPcmSamples(const QByteArray& pcmS16St
                 static_cast<uint32_t>((static_cast<qint64>(m_sampleRate) * filePlaybackMonitorTargetFillMs()) / 1000));
             const uint32_t jitterFrames = std::min<uint32_t>(
                 fifoSize,
-                static_cast<uint32_t>((static_cast<qint64>(m_sampleRate) * 10) / 1000));
+                static_cast<uint32_t>((static_cast<qint64>(m_sampleRate) * 20) / 1000));
             maxFillFrames = std::min<uint32_t>(
                 fifoSize,
                 targetFillFrames + static_cast<uint32_t>(monitorFrames) + jitterFrames);

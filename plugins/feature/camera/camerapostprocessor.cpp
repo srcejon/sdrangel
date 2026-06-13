@@ -1083,7 +1083,7 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
     }
 }
 
-void CameraPostProcessor::applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes) const
+void CameraPostProcessor::applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes, bool drawBoxes, QVector<PreviewRectItem> *previewRectItems) const
 {
     PROFILER_START();
 
@@ -1091,15 +1091,30 @@ void CameraPostProcessor::applyMotionOverlay(QImage& image, const QVector<QRect>
         return;
     }
 
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    QPen pen(m_settings.m_motionBoxColor);
-    pen.setWidth(2);
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
+    if (drawBoxes)
+    {
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QPen pen(m_settings.m_motionBoxColor);
+        pen.setWidth(2);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
 
-    for (const QRect& box : motionBoxes) {
-        painter.drawRect(box);
+        for (const QRect& box : motionBoxes) {
+            painter.drawRect(box);
+        }
+    }
+    else if (previewRectItems)
+    {
+        previewRectItems->reserve(previewRectItems->size() + motionBoxes.size());
+        for (const QRect& box : motionBoxes)
+        {
+            PreviewRectItem item;
+            item.m_rect = QRectF(box);
+            item.m_color = m_settings.m_motionBoxColor;
+            item.m_lineWidth = 2.0;
+            previewRectItems->append(item);
+        }
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1969,7 +1984,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     }
 
     QImage result = input.convertToFormat(QImage::Format_RGB32);
-    if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(result, frame.m_motionBoxes); }
+    if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(result, frame.m_motionBoxes, drawPreviewText, previewRectItems); }
     if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(result, frame.m_detections, drawPreviewText, previewTextLabels, previewRectItems); }
     if (needsSpectrumOverlay) { applySpectrumOverlay(result); }
     if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); }

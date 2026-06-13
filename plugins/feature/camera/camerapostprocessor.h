@@ -302,7 +302,7 @@ private:
         QVector<PreviewTextLabel> *previewTextLabels = nullptr,
         QVector<PreviewRectItem> *previewRectItems = nullptr,
         QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
-    void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes) const;
+    void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes, bool drawBoxes, QVector<PreviewRectItem> *previewRectItems) const;
     void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const;
     void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyPreviewRectItems(QImage& image, const QVector<PreviewRectItem>& items) const;

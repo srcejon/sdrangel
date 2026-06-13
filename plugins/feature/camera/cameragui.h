@@ -205,6 +205,7 @@ private:
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
     QVector<CameraPipelineStarDetection> m_lastStarDetections;
     QVector<CameraPostProcessor::PreviewTextLabel> m_lastPreviewTextLabels;
+    QVector<CameraPostProcessor::PreviewRectItem> m_lastPreviewRectItems;
     QList<CameraDetectionHistoryEntry> m_detectionHistory;
     int m_lastStackCount = 1;
     int m_lastStackQueuedCount = 0;
@@ -238,7 +239,7 @@ private:
     QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
-    QList<QGraphicsItem *> m_starLabelItems;
+    QList<QGraphicsItem *> m_previewOverlayItems;
     QList<QGraphicsRectItem *> m_motionExclusionRectItems;
     QGraphicsRectItem *m_detectionRoiRectItem = nullptr;
     QGraphicsRectItem *m_previewDrawRectItem = nullptr;
@@ -322,8 +323,8 @@ private:
     void updateCameraSubframeControls();
     void updateImageWidget();
     void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime);
-    void updateStarLabelPreview();
-    void clearStarLabelPreview();
+    void updatePreviewOverlayItems();
+    void clearPreviewOverlayItems();
     void updateCaptureModeControls();
     void updateCaptureIntervalWarning();
     void updateExposureControls();

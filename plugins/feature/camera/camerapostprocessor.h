@@ -59,6 +59,13 @@ public:
         bool m_background = false;
     };
 
+    struct PreviewRectItem
+    {
+        QRectF m_rect;
+        QColor m_color;
+        double m_lineWidth = 2.0;
+    };
+
     class MsgSpectrumFrame : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -108,6 +115,7 @@ public:
         float getPlateSolveDistortionK1() const { return m_plateSolve.m_distortionK1; }
         const QString& getPlateSolveCatalogSource() const { return m_plateSolve.m_catalogSource; }
         const QVector<PreviewTextLabel>& getPreviewTextLabels() const { return m_previewTextLabels; }
+        const QVector<PreviewRectItem>& getPreviewRectItems() const { return m_previewRectItems; }
         const QVector<QRect>& getMotionBoxes() const { return m_motionBoxes; }
         const QVector<CameraPipelineDetection>& getDetections() const { return m_detections; }
         const QVector<CameraPipelineTrackedObject>& getTrackedObjects() const { return m_trackedObjects; }
@@ -126,7 +134,8 @@ public:
                                       const QDateTime& captureDateTime,
                                       quint64 captureEpoch,
                                       bool manualPreviewFrame,
-                                      const QVector<PreviewTextLabel>& previewTextLabels)
+                                      const QVector<PreviewTextLabel>& previewTextLabels,
+                                      const QVector<PreviewRectItem>& previewRectItems)
         {
             return new MsgReportFrame(
                 image,
@@ -140,7 +149,8 @@ public:
                 captureDateTime,
                 captureEpoch,
                 manualPreviewFrame,
-                previewTextLabels);
+                previewTextLabels,
+                previewRectItems);
         }
 
     private:
@@ -156,6 +166,7 @@ public:
         quint64 m_captureEpoch;
         bool m_manualPreviewFrame;
         QVector<PreviewTextLabel> m_previewTextLabels;
+        QVector<PreviewRectItem> m_previewRectItems;
 
         MsgReportFrame(const QImage& image,
                        const CameraHistogramData& histogramData,
@@ -168,7 +179,8 @@ public:
                        const QDateTime& captureDateTime,
                        quint64 captureEpoch,
                        bool manualPreviewFrame,
-                       const QVector<PreviewTextLabel>& previewTextLabels) :
+                       const QVector<PreviewTextLabel>& previewTextLabels,
+                       const QVector<PreviewRectItem>& previewRectItems) :
             Message(),
             m_image(image),
             m_histogramData(histogramData),
@@ -181,7 +193,8 @@ public:
             m_captureDateTime(captureDateTime),
             m_captureEpoch(captureEpoch),
             m_manualPreviewFrame(manualPreviewFrame),
-            m_previewTextLabels(previewTextLabels)
+            m_previewTextLabels(previewTextLabels),
+            m_previewRectItems(previewRectItems)
         { }
     };
 
@@ -287,10 +300,12 @@ private:
         const CameraPipelineFrame& frame,
         bool drawPreviewText = true,
         QVector<PreviewTextLabel> *previewTextLabels = nullptr,
+        QVector<PreviewRectItem> *previewRectItems = nullptr,
         QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
     void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes) const;
-    void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
+    void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const;
     void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
+    void applyPreviewRectItems(QImage& image, const QVector<PreviewRectItem>& items) const;
     void applyPreviewTextLabels(QImage& image, const QVector<PreviewTextLabel>& labels) const;
     void applySpectrumOverlay(QImage& image) const;
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
@@ -303,7 +318,7 @@ private:
     [[nodiscard]] QString expandOverlayTextTemplate() const;
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void restartWeatherUpdates();
-    void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels = {}, const QVector<CameraPipelineTrackedObject>& trackedObjects = {});
+    void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels = {}, const QVector<PreviewRectItem>& previewRectItems = {}, const QVector<CameraPipelineTrackedObject>& trackedObjects = {});
 private slots:
     void handleInputMessages();
     void handlePipeMessageQueue(MessageQueue* messageQueue);

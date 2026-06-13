@@ -645,6 +645,7 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastHistogramData = report.getHistogramData();
         m_lastStarDetections = report.getStarDetections();
         m_lastPreviewTextLabels = report.getPreviewTextLabels();
+        m_lastPreviewRectItems = report.getPreviewRectItems();
         m_lastStackCount = report.getStackCount();
         m_lastStackQueuedCount = report.getStackQueuedCount();
         m_lastStackDroppedCount = report.getStackDroppedCount();
@@ -1023,6 +1024,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     ui->imageView->setScene(m_imageScene);
     ui->imageView->setDragMode(QGraphicsView::ScrollHandDrag);
     ui->imageView->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+    ui->imageView->setRenderHint(QPainter::Antialiasing, true);
     ui->imageView->setRenderHint(QPainter::SmoothPixmapTransform, true);
     ui->imageView->setBackgroundBrush(QBrush(Qt::black));
     ui->imageView->viewport()->installEventFilter(this);
@@ -1357,6 +1359,9 @@ void CameraGUI::resetCameraStatus()
     m_lastPlateSolveDistortionK1 = 0.0;
     m_lastPlateSolveCatalogSource.clear();
     m_lastStarDetections.clear();
+    m_lastPreviewTextLabels.clear();
+    m_lastPreviewRectItems.clear();
+    clearPreviewOverlayItems();
     settingsUI()->pipelineFpsLabel->setText("-");
     settingsUI()->plateSolveStatusLabel->setText("-");
     settingsUI()->plateSolveMatchesLabel->setText("-");
@@ -1986,14 +1991,14 @@ void CameraGUI::updateImageWidget()
 {
     if (m_lastImage.isNull() || !m_imagePixmapItem)
     {
-        clearStarLabelPreview();
+        clearPreviewOverlayItems();
         return;
     }
 
     const QPixmap pixmap = QPixmap::fromImage(m_lastImage);
     m_imagePixmapItem->setPixmap(pixmap);
     m_imageScene->setSceneRect(pixmap.rect());
-    updateStarLabelPreview();
+    updatePreviewOverlayItems();
 
     // Fit the image in the view (preserving aspect ratio) only when no zoom has been applied
     if (ui->imageView->transform().isIdentity()) {
@@ -2156,30 +2161,44 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
     }
 }
 
-void CameraGUI::clearStarLabelPreview()
+void CameraGUI::clearPreviewOverlayItems()
 {
     if (!m_imageScene) {
-        m_starLabelItems.clear();
+        m_previewOverlayItems.clear();
         return;
     }
 
-    for (QGraphicsItem *item : m_starLabelItems)
+    for (QGraphicsItem *item : m_previewOverlayItems)
     {
         m_imageScene->removeItem(item);
         delete item;
     }
-    m_starLabelItems.clear();
+    m_previewOverlayItems.clear();
 }
 
-void CameraGUI::updateStarLabelPreview()
+void CameraGUI::updatePreviewOverlayItems()
 {
-    clearStarLabelPreview();
+    clearPreviewOverlayItems();
 
-    if (!m_imageScene || m_lastImage.isNull() || m_lastPreviewTextLabels.isEmpty()) {
+    if (!m_imageScene || m_lastImage.isNull() || (m_lastPreviewTextLabels.isEmpty() && m_lastPreviewRectItems.isEmpty())) {
         return;
     }
 
     const QRect imageRect(QPoint(0, 0), m_lastImage.size());
+
+    for (const CameraPostProcessor::PreviewRectItem& previewRect : m_lastPreviewRectItems)
+    {
+        const QRectF clipped = previewRect.m_rect.intersected(QRectF(imageRect));
+        if (clipped.isEmpty()) {
+            continue;
+        }
+
+        QPen pen(previewRect.m_color);
+        pen.setWidthF(std::max(1.0, previewRect.m_lineWidth));
+        QGraphicsRectItem *rectItem = m_imageScene->addRect(clipped, pen, QBrush(Qt::NoBrush));
+        rectItem->setZValue(1.4);
+        m_previewOverlayItems.append(rectItem);
+    }
 
     for (const CameraPostProcessor::PreviewTextLabel& previewLabel : m_lastPreviewTextLabels)
     {
@@ -2238,7 +2257,7 @@ void CameraGUI::updateStarLabelPreview()
                 QPen(Qt::NoPen),
                 QBrush(Qt::black));
             backgroundItem->setZValue(1.45);
-            m_starLabelItems.append(backgroundItem);
+            m_previewOverlayItems.append(backgroundItem);
         }
         else
         {
@@ -2246,14 +2265,14 @@ void CameraGUI::updateStarLabelPreview()
             shadowItem->setPos(textPos + QPointF(1.0, 1.0));
             shadowItem->setBrush(QBrush(Qt::black));
             shadowItem->setZValue(1.5);
-            m_starLabelItems.append(shadowItem);
+            m_previewOverlayItems.append(shadowItem);
         }
 
         QGraphicsSimpleTextItem *item = m_imageScene->addSimpleText(previewLabel.m_text, font);
         item->setPos(textPos);
         item->setBrush(QBrush(previewLabel.m_color));
         item->setZValue(1.6);
-        m_starLabelItems.append(item);
+        m_previewOverlayItems.append(item);
     }
 }
 

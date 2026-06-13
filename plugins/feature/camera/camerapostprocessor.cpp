@@ -656,9 +656,10 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         {
             m_lastFrame.m_manualPreviewFrame = true;
             QVector<PreviewTextLabel> previewTextLabels;
+            QVector<PreviewRectItem> previewRectItems;
             QVector<CameraPipelineTrackedObject> trackedObjects;
-            const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &trackedObjects);
-            reportFrameToGUI(preview, m_lastFrame, previewTextLabels, trackedObjects);
+            const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
+            reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
         }
 
         return true;
@@ -803,9 +804,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
         m_lastFrame.m_manualPreviewFrame = true;
         QVector<PreviewTextLabel> previewTextLabels;
+        QVector<PreviewRectItem> previewRectItems;
         QVector<CameraPipelineTrackedObject> trackedObjects;
-        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &trackedObjects);
-        reportFrameToGUI(preview, m_lastFrame, previewTextLabels, trackedObjects);
+        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
+        reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
     }
 }
 
@@ -845,9 +847,10 @@ void CameraPostProcessor::weatherUpdated(float temperature, float pressure, floa
     if (!m_lastFrame.m_image.isNull())
     {
         QVector<PreviewTextLabel> previewTextLabels;
+        QVector<PreviewRectItem> previewRectItems;
         QVector<CameraPipelineTrackedObject> trackedObjects;
-        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &trackedObjects);
-        reportFrameToGUI(preview, m_lastFrame, previewTextLabels, trackedObjects);
+        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
+        reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
     }
 }
 
@@ -990,11 +993,13 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     QVector<PreviewTextLabel> previewTextLabels;
+    QVector<PreviewRectItem> previewRectItems;
     QVector<CameraPipelineTrackedObject> trackedObjects;
-    const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels, &trackedObjects);
-    if (!previewTextLabels.isEmpty())
+    const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
+    if (!previewTextLabels.isEmpty() || !previewRectItems.isEmpty())
     {
         QImage processed = preview.copy();
+        applyPreviewRectItems(processed, previewRectItems);
         applyPreviewTextLabels(processed, previewTextLabels);
         frame->m_postProcessedImage = processed;
     }
@@ -1009,7 +1014,7 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    reportFrameToGUI(preview, *frame, previewTextLabels, trackedObjects);
+    reportFrameToGUI(preview, *frame, previewTextLabels, previewRectItems, trackedObjects);
     if ((frame->m_playbackPositionMs >= 0) && (frame->m_pipelineInputWallClockMs > 0)) {
         updatePlaybackLatencyStats(*frame, QDateTime::currentMSecsSinceEpoch() - frame->m_pipelineInputWallClockMs);
     }
@@ -1058,7 +1063,7 @@ void CameraPostProcessor::updatePlaybackLatencyStats(const CameraPipelineFrame& 
     m_playbackLatencyStatsStartMs = nowMs;
 }
 
-void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels, const QVector<CameraPipelineTrackedObject>& trackedObjects)
+void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels, const QVector<PreviewRectItem>& previewRectItems, const QVector<CameraPipelineTrackedObject>& trackedObjects)
 {
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportFrame::create(
@@ -1073,7 +1078,8 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_captureDateTime,
             frame.m_captureEpoch,
             frame.m_manualPreviewFrame,
-            previewTextLabels));
+            previewTextLabels,
+            previewRectItems));
     }
 }
 
@@ -1099,7 +1105,7 @@ void CameraPostProcessor::applyMotionOverlay(QImage& image, const QVector<QRect>
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
+void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const
 {
     PROFILER_START();
 
@@ -1120,9 +1126,20 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
     for (const CameraPipelineDetection& detection : detections)
     {
         const QRect box = detection.m_box;
-        painter.setPen(pen);
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(box);
+        if (drawLabels)
+        {
+            painter.setPen(pen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRect(box);
+        }
+        else if (previewRectItems)
+        {
+            PreviewRectItem item;
+            item.m_rect = QRectF(box);
+            item.m_color = m_settings.m_yoloBoxColor;
+            item.m_lineWidth = 2.0;
+            previewRectItems->append(item);
+        }
 
         const QString label = detection.m_label + QStringLiteral(" %1%").arg(static_cast<int>(detection.m_score * 100.0f + 0.5f));
         const QSize textSize = fontMetrics.size(Qt::TextSingleLine, label);
@@ -1218,6 +1235,31 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
                 font.family(),
                 font.pointSizeF());
         }
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraPostProcessor::applyPreviewRectItems(QImage& image, const QVector<PreviewRectItem>& items) const
+{
+    PROFILER_START();
+
+    if (items.isEmpty())
+    {
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setBrush(Qt::NoBrush);
+
+    for (const PreviewRectItem& item : items)
+    {
+        QPen pen(item.m_color);
+        pen.setWidthF(std::max(1.0, item.m_lineWidth));
+        painter.setPen(pen);
+        painter.drawRect(item.m_rect);
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1889,7 +1931,7 @@ void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlay
     PROFILER_STOP(__FUNCTION__);
 }
 
-QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame, bool drawPreviewText, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects)
+QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame, bool drawPreviewText, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems, QVector<CameraPipelineTrackedObject> *trackedObjects)
 {
     PROFILER_START();
 
@@ -1928,7 +1970,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     QImage result = input.convertToFormat(QImage::Format_RGB32);
     if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(result, frame.m_motionBoxes); }
-    if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(result, frame.m_detections, drawPreviewText, previewTextLabels); }
+    if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(result, frame.m_detections, drawPreviewText, previewTextLabels, previewRectItems); }
     if (needsSpectrumOverlay) { applySpectrumOverlay(result); }
     if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result, drawPreviewText, previewTextLabels); }

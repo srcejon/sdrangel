@@ -287,7 +287,7 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
         if (!m_cudaHdrLaplacianFilter) {
             m_cudaHdrLaplacianFilter = cv::cuda::createLaplacianFilter(CV_32FC1, CV_32FC1, 1);
         }
-        int weightBlurKernelSize = std::max(15, std::min(151, std::max(frameSize.width, frameSize.height) / 48));
+        int weightBlurKernelSize = std::max(15, std::min(31, std::max(frameSize.width, frameSize.height) / 96));
         if ((weightBlurKernelSize % 2) == 0) {
             ++weightBlurKernelSize;
         }

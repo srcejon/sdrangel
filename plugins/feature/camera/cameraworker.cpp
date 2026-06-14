@@ -542,10 +542,12 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     const double saturationLowLimit = target >= 0.95 ? 0.08 : 0.02;
     if (m_autoExposure.m_saturatedFraction > saturationHighLimit) {
         ++m_autoExposure.m_saturatedFrames;
-    } else if (m_autoExposure.m_saturatedFraction < saturationLowLimit) {
+    } else if ((m_autoExposure.m_saturatedFraction < saturationLowLimit) || (error > 0.0)) {
         m_autoExposure.m_saturatedFrames = 0;
+    } else if (m_autoExposure.m_saturatedFrames > 0) {
+        --m_autoExposure.m_saturatedFrames;
     }
-    const bool saturated = m_autoExposure.m_saturatedFrames >= 3;
+    const bool saturated = (m_autoExposure.m_saturatedFraction > saturationHighLimit) && (m_autoExposure.m_saturatedFrames >= 3);
     const double deadband = error > 0.0 ? 0.03 : 0.08;
 
     auto modeName = [&]() -> const char*

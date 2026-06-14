@@ -659,7 +659,8 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     int newGain = currentGain;
 
     auto adjustExposure = [&]() {
-        if (std::abs(std::log(factor)) < 0.02) {
+        static constexpr double minExposureLogChange = 0.005;
+        if (std::abs(std::log(factor)) < minExposureLogChange) {
             return false;
         }
         const double proposed = qBound(exposureMinMs, newExposureMs * factor, exposureMaxMs);

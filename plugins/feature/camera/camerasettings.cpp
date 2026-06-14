@@ -2742,7 +2742,7 @@ bool CameraSettings::isQtCamera() const
 
 bool CameraSettings::isFileCamera() const
 {
-    return isVideoFileCamera() || isImageFileSequenceCamera();
+    return isVideoFileCamera() || isImageFileSequenceCamera() || isStreamCamera();
 }
 
 bool CameraSettings::isVideoFileCamera() const
@@ -2755,9 +2755,19 @@ bool CameraSettings::isImageFileSequenceCamera() const
     return m_cameraProtocol == CameraProtocol::images();
 }
 
+bool CameraSettings::isStreamCamera() const
+{
+    return m_cameraProtocol == CameraProtocol::stream();
+}
+
+bool CameraSettings::isFfmpegMediaSource() const
+{
+    return isVideoFileCamera() || isStreamCamera();
+}
+
 bool CameraSettings::hasFileCameraSource() const
 {
-    return (isVideoFileCamera() && !m_videoFileCameraPath.isEmpty())
+    return (isFfmpegMediaSource() && !m_videoFileCameraPath.isEmpty())
         || (isImageFileSequenceCamera() && !m_imageFileCameraPaths.isEmpty());
 }
 
@@ -2797,8 +2807,8 @@ QString CameraSettings::cameraDisplayName() const
         return CameraProtocol::playbackDisplayText(CameraProtocol::images(), description);
     }
 
-    if (isVideoFileCamera()) {
-        return CameraProtocol::playbackDisplayText(CameraProtocol::video(), m_cameraDescription);
+    if (isFfmpegMediaSource()) {
+        return CameraProtocol::playbackDisplayText(m_cameraProtocol, m_cameraDescription);
     }
 
     if (!m_cameraProtocol.isEmpty() && !m_cameraDescription.isEmpty()) {

@@ -22,6 +22,7 @@
 #include <cmath>
 
 #include <QElapsedTimer>
+#include <QUrl>
 
 #include "cameraffmpegaudio.h"
 
@@ -64,10 +65,21 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     m_outputSampleRate = std::max(1000, outputSampleRate);
 
     const QByteArray fileNameUtf8 = fileName.toUtf8();
-    int ret = avformat_open_input(&m_formatContext, fileNameUtf8.constData(), nullptr, nullptr);
+    avformat_network_init();
+
+    AVDictionary *options = nullptr;
+    const QString scheme = QUrl(fileName).scheme().toLower();
+    if (scheme == QLatin1String("rtsp"))
+    {
+        av_dict_set(&options, "rtsp_transport", "tcp", 0);
+        av_dict_set(&options, "stimeout", "5000000", 0);
+    }
+
+    int ret = avformat_open_input(&m_formatContext, fileNameUtf8.constData(), nullptr, &options);
+    av_dict_free(&options);
     if (ret < 0)
     {
-        errorMessage = QStringLiteral("Cannot open video file: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        errorMessage = QStringLiteral("Cannot open media source: %1").arg(CameraFFmpegAudio::avErrorString(ret));
         close();
         return false;
     }
@@ -75,7 +87,7 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     ret = avformat_find_stream_info(m_formatContext, nullptr);
     if (ret < 0)
     {
-        errorMessage = QStringLiteral("Cannot read video file stream info: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        errorMessage = QStringLiteral("Cannot read media stream info: %1").arg(CameraFFmpegAudio::avErrorString(ret));
         close();
         return false;
     }
@@ -83,7 +95,7 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     ret = av_find_best_stream(m_formatContext, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
     if (ret < 0)
     {
-        errorMessage = QStringLiteral("Video file has no video stream");
+        errorMessage = QStringLiteral("Media source has no video stream");
         close();
         return false;
     }
@@ -105,7 +117,7 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     m_packet = av_packet_alloc();
     if (!m_videoFrame || !m_audioFrame || !m_packet)
     {
-        errorMessage = QStringLiteral("Cannot allocate video file decode buffers");
+        errorMessage = QStringLiteral("Cannot allocate media decode buffers");
         close();
         return false;
     }

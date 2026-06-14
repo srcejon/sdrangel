@@ -29,10 +29,11 @@ namespace CameraProtocol
     inline QString alpaca() { return QStringLiteral("alpaca"); }
     inline QString video() { return QStringLiteral("video"); }
     inline QString images() { return QStringLiteral("images"); }
+    inline QString stream() { return QStringLiteral("stream"); }
 
     inline bool isPlaybackSource(const QString& protocol)
     {
-        return (protocol == video()) || (protocol == images());
+        return (protocol == video()) || (protocol == images()) || (protocol == stream());
     }
 
     inline QString playbackDisplayText(const QString& protocol, const QString& description)
@@ -43,13 +44,16 @@ namespace CameraProtocol
         if (protocol == images()) {
             return description.isEmpty() ? QStringLiteral("images:") : QStringLiteral("images:%1").arg(description);
         }
+        if (protocol == stream()) {
+            return description.isEmpty() ? QStringLiteral("stream:") : QStringLiteral("stream:%1").arg(description);
+        }
         return QString();
     }
 }
 
 struct CameraInfo
 {
-    QString m_protocol;     // "qt", "asi", "alpaca", "video" or "images"
+    QString m_protocol;     // "qt", "asi", "alpaca", "video", "images" or "stream"
     QString m_id;
     QString m_description;
     QString m_host;         // alpaca only

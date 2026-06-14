@@ -393,6 +393,10 @@ private:
                                       const QString& previousCameraId = QString(),
                                       const QString& previousAlpacaHost = QString(),
                                       quint16 previousAlpacaPort = 0);
+    bool chooseStreamUrl(int comboIndex, const QString& previousCameraProtocol = QString(),
+                         const QString& previousCameraId = QString(),
+                         const QString& previousAlpacaHost = QString(),
+                         quint16 previousAlpacaPort = 0);
     static CameraGUI::FrameRateOptions makeFrameRateOptions(const QSet<int>& fpsValues);
     static QString resolutionKey(const QSize& size);
     static QString resolutionKey(int width, int height);

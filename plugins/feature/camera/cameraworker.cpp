@@ -674,7 +674,7 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
         }
         const int gainRange = gainMax - gainMin;
         int delta = static_cast<int>(std::lround((factor - 1.0) * static_cast<double>(gainRange) * 0.25));
-        if ((delta == 0) || ((std::abs(error) < 0.14) && !saturated)) {
+        if ((delta == 0) || ((std::abs(correctionError) < 0.01) && !saturated)) {
             return false;
         }
         const int proposed = qBound(gainMin, newGain + delta, gainMax);

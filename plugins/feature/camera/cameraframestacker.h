@@ -107,8 +107,6 @@ private:
     cv::Ptr<cv::cuda::Filter> m_cudaQualityLaplacianFilter;
     int m_cudaQualityLaplacianFilterType;
     cv::Ptr<cv::cuda::Filter> m_cudaHdrLaplacianFilter;
-    cv::Ptr<cv::cuda::Filter> m_cudaHdrWeightBlurFilter;
-    int m_cudaHdrWeightBlurKernelSize = 0;
 #endif
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;

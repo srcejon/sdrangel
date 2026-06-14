@@ -106,6 +106,7 @@ private:
     int m_cudaStackAccumulatorInputType;
     cv::Ptr<cv::cuda::Filter> m_cudaQualityLaplacianFilter;
     int m_cudaQualityLaplacianFilterType;
+    cv::Ptr<cv::cuda::Filter> m_cudaHdrLaplacianFilter;
 #endif
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
@@ -128,6 +129,7 @@ private:
     void subtractFromCudaAccumulator(const cv::Mat& frameMat);
     bool rebuildCudaAverageAccumulator();
     [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* frameGpu, cv::cuda::GpuMat& outputRgbGpu);
+    [[nodiscard]] bool applyMertensFusionCuda(const std::vector<const HdrFrameSample *>& sortedSamples, cv::Mat& tonemappedRgb);
 #endif
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);

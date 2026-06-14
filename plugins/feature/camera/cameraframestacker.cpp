@@ -287,6 +287,19 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
         if (!m_cudaHdrLaplacianFilter) {
             m_cudaHdrLaplacianFilter = cv::cuda::createLaplacianFilter(CV_32FC1, CV_32FC1, 1);
         }
+        int weightBlurKernelSize = std::max(15, std::min(151, std::max(frameSize.width, frameSize.height) / 48));
+        if ((weightBlurKernelSize % 2) == 0) {
+            ++weightBlurKernelSize;
+        }
+        if (!m_cudaHdrWeightBlurFilter || (m_cudaHdrWeightBlurKernelSize != weightBlurKernelSize))
+        {
+            m_cudaHdrWeightBlurFilter = cv::cuda::createGaussianFilter(
+                CV_32FC1,
+                CV_32FC1,
+                cv::Size(weightBlurKernelSize, weightBlurKernelSize),
+                0.0);
+            m_cudaHdrWeightBlurKernelSize = weightBlurKernelSize;
+        }
 
         for (const HdrFrameSample *sample : sortedSamples)
         {
@@ -340,20 +353,10 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
             cv::cuda::sqrt(saturationGpu, saturationGpu, m_cudaStackingStream);
             cv::cuda::add(saturationGpu, cv::Scalar::all(1.0e-6), saturationGpu, cv::noArray(), -1, m_cudaStackingStream);
 
-            cv::cuda::GpuMat exposednessGpu(frameSize, CV_32FC1, cv::Scalar::all(1.0));
-            for (const cv::cuda::GpuMat& channel : channels)
-            {
-                cv::cuda::subtract(channel, cv::Scalar::all(0.5), tempGpu, cv::noArray(), -1, m_cudaStackingStream);
-                cv::cuda::multiply(tempGpu, tempGpu, tempGpu, -12.5, -1, m_cudaStackingStream);
-                cv::cuda::exp(tempGpu, tempGpu, m_cudaStackingStream);
-                cv::cuda::multiply(exposednessGpu, tempGpu, exposednessGpu, 1.0, -1, m_cudaStackingStream);
-            }
-            cv::cuda::add(exposednessGpu, cv::Scalar::all(1.0e-6), exposednessGpu, cv::noArray(), -1, m_cudaStackingStream);
-
             cv::cuda::GpuMat weight;
             cv::cuda::multiply(contrastGpu, saturationGpu, weight, 1.0, -1, m_cudaStackingStream);
-            cv::cuda::multiply(weight, exposednessGpu, weight, 1.0, -1, m_cudaStackingStream);
-            cv::cuda::add(weight, cv::Scalar::all(1.0e-12), weight, cv::noArray(), -1, m_cudaStackingStream);
+            m_cudaHdrWeightBlurFilter->apply(weight, weight, m_cudaStackingStream);
+            cv::cuda::add(weight, cv::Scalar::all(1.0e-3), weight, cv::noArray(), -1, m_cudaStackingStream);
             cv::cuda::add(weightSum, weight, weightSum, cv::noArray(), -1, m_cudaStackingStream);
 
             frameFloatGpu.push_back(floatGpu);

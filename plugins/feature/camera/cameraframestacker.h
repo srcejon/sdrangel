@@ -120,6 +120,7 @@ private:
     void processNewFrame(const CameraPipelineFramePtr& frame);
     bool preserveFrameOrder() const;
     int pendingFrameLimit() const;
+    int dropOldestPendingFramesForOverflow();
     void resetFrameHistoryState();
     void trimFrameHistoryToCurrentLimit();
 #ifdef CAMERA_OPENCV_CUDA_STACKING

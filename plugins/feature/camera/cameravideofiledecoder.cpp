@@ -22,6 +22,7 @@
 #include <cmath>
 
 #include <QElapsedTimer>
+#include <QStringList>
 #include <QUrl>
 
 #include "cameraffmpegaudio.h"
@@ -67,32 +68,63 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     const QByteArray fileNameUtf8 = fileName.toUtf8();
     avformat_network_init();
 
-    AVDictionary *options = nullptr;
     const QString scheme = QUrl(fileName).scheme().toLower();
-    if (scheme == QLatin1String("rtsp"))
+    const bool rtspSource = scheme == QLatin1String("rtsp");
+    QStringList openErrors;
+
+    const auto openInput = [&](const char *rtspTransport) -> bool
     {
-        av_dict_set(&options, "rtsp_transport", "tcp", 0);
-        av_dict_set(&options, "stimeout", "5000000", 0);
+        AVDictionary *options = nullptr;
+        if (rtspSource)
+        {
+            av_dict_set(&options, "timeout", "5000000", 0);
+            av_dict_set(&options, "stimeout", "5000000", 0);
+            if (rtspTransport && rtspTransport[0] != '\0') {
+                av_dict_set(&options, "rtsp_transport", rtspTransport, 0);
+            }
+        }
+
+        int ret = avformat_open_input(&m_formatContext, fileNameUtf8.constData(), nullptr, &options);
+        av_dict_free(&options);
+        if (ret < 0)
+        {
+            openErrors.append(QStringLiteral("%1: %2")
+                .arg(rtspTransport && rtspTransport[0] != '\0' ? QString::fromLatin1(rtspTransport) : QStringLiteral("auto"),
+                    CameraFFmpegAudio::avErrorString(ret)));
+            return false;
+        }
+
+        ret = avformat_find_stream_info(m_formatContext, nullptr);
+        if (ret < 0)
+        {
+            openErrors.append(QStringLiteral("%1 stream info: %2")
+                .arg(rtspTransport && rtspTransport[0] != '\0' ? QString::fromLatin1(rtspTransport) : QStringLiteral("auto"),
+                    CameraFFmpegAudio::avErrorString(ret)));
+            avformat_close_input(&m_formatContext);
+            return false;
+        }
+
+        return true;
+    };
+
+    bool opened = false;
+    if (rtspSource)
+    {
+        opened = openInput("tcp") || openInput("udp") || openInput("");
+    }
+    else
+    {
+        opened = openInput("");
     }
 
-    int ret = avformat_open_input(&m_formatContext, fileNameUtf8.constData(), nullptr, &options);
-    av_dict_free(&options);
-    if (ret < 0)
+    if (!opened)
     {
-        errorMessage = QStringLiteral("Cannot open media source: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        errorMessage = QStringLiteral("Cannot open media source: %1").arg(openErrors.join(QStringLiteral("; ")));
         close();
         return false;
     }
 
-    ret = avformat_find_stream_info(m_formatContext, nullptr);
-    if (ret < 0)
-    {
-        errorMessage = QStringLiteral("Cannot read media stream info: %1").arg(CameraFFmpegAudio::avErrorString(ret));
-        close();
-        return false;
-    }
-
-    ret = av_find_best_stream(m_formatContext, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    int ret = av_find_best_stream(m_formatContext, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
     if (ret < 0)
     {
         errorMessage = QStringLiteral("Media source has no video stream");

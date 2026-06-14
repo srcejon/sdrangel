@@ -40,6 +40,7 @@
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
 #include <QGraphicsRectItem>
+#include <QInputDialog>
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
@@ -1230,6 +1231,9 @@ void CameraGUI::setSelectedCamera(const QString& protocol, const QString& camera
     if (protocol == CameraProtocol::video()) {
         m_settings.m_videoFileCameraPath = cameraId;
     }
+    else if (protocol == CameraProtocol::stream()) {
+        m_settings.m_videoFileCameraPath = cameraId;
+    }
     else if (protocol == CameraProtocol::images()) {
         m_settings.m_cameraId = CameraProtocol::images();
     }
@@ -1298,7 +1302,7 @@ QStringList CameraGUI::cameraSelectionSettingsKeys(const CameraInfo& cameraInfo)
 {
     QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
 
-    if (cameraInfo.m_protocol == CameraProtocol::video()) {
+    if ((cameraInfo.m_protocol == CameraProtocol::video()) || (cameraInfo.m_protocol == CameraProtocol::stream())) {
         settingsKeys.append("videoFileCameraPath");
     }
     else if (cameraInfo.m_protocol == CameraProtocol::images()) {
@@ -1449,6 +1453,35 @@ bool CameraGUI::chooseImageFileSequenceFiles(int comboIndex, const QString& prev
     ui->cameraCombo->setItemData(comboIndex, CameraProtocol::images(), CameraIdRole);
     ui->cameraCombo->setItemData(comboIndex, description, CameraDescriptionRole);
     ui->cameraCombo->setItemText(comboIndex, CameraProtocol::playbackDisplayText(CameraProtocol::images(), description));
+    return true;
+}
+
+bool CameraGUI::chooseStreamUrl(int comboIndex, const QString& previousCameraProtocol,
+    const QString& previousCameraId,
+    const QString& previousAlpacaHost, quint16 previousAlpacaPort)
+{
+    bool ok = false;
+    const QString url = QInputDialog::getText(
+        this,
+        tr("Open Stream"),
+        tr("Stream URL"),
+        QLineEdit::Normal,
+        m_settings.isStreamCamera() ? m_settings.m_videoFileCameraPath : QStringLiteral("rtsp://"),
+        &ok).trimmed();
+
+    if (!ok || url.isEmpty())
+    {
+        restorePreviousCameraSelection(
+            previousCameraProtocol,
+            previousCameraId,
+            previousAlpacaHost,
+            previousAlpacaPort);
+        return false;
+    }
+
+    ui->cameraCombo->setItemData(comboIndex, url, CameraIdRole);
+    ui->cameraCombo->setItemData(comboIndex, url, CameraDescriptionRole);
+    ui->cameraCombo->setItemText(comboIndex, CameraProtocol::playbackDisplayText(CameraProtocol::stream(), url));
     return true;
 }
 
@@ -2849,9 +2882,11 @@ void CameraGUI::updateVideoFileControls()
     const bool fileCameraSelected = m_settings.isFileCamera() || comboFileCameraSelected;
     const bool imageSequenceSelected =
         (comboProtocol == CameraProtocol::images()) || m_settings.isImageFileSequenceCamera();
+    const bool streamSelected =
+        (comboProtocol == CameraProtocol::stream()) || m_settings.isStreamCamera();
     const bool hasVideoFile = fileCameraSelected && m_settings.hasFileCameraSource();
     const qint64 playbackDurationMs = imageSequenceSelected ? imageSequenceDurationMs() : m_playbackDurationMs;
-    const bool hasPlaybackPosition = hasVideoFile && (playbackDurationMs > 0);
+    const bool hasPlaybackPosition = hasVideoFile && !streamSelected && (playbackDurationMs > 0);
 
     if (fileCameraSelected)
     {
@@ -2862,18 +2897,18 @@ void CameraGUI::updateVideoFileControls()
         ui->playbackRateSpin->setSuffix(imageSequenceSelected ? tr(" fps") : QString());
         ui->playbackRateSpin->setToolTip(imageSequenceSelected
             ? tr("Image sequence playback frames per second")
-            : tr("Video playback rate"));
+            : (streamSelected ? tr("Stream playback rate") : tr("Video playback rate")));
     }
     ui->browseVideoFileButton->setToolTip(imageSequenceSelected
         ? tr("Edit image sequence files")
-        : tr("Select video file"));
+        : (streamSelected ? tr("Edit stream URL") : tr("Select video file")));
 
     setVisibleEnabled(ui->browseVideoFileButton, fileCameraSelected, fileCameraSelected);
-    setVisibleEnabled(ui->restartVideo, fileCameraSelected, hasVideoFile);
-    setVisibleEnabled(ui->stepBackVideo, fileCameraSelected, hasVideoFile);
-    setVisibleEnabled(ui->stepForwardVideo, fileCameraSelected, hasVideoFile);
+    setVisibleEnabled(ui->restartVideo, fileCameraSelected && !streamSelected, hasVideoFile);
+    setVisibleEnabled(ui->stepBackVideo, fileCameraSelected && !streamSelected, hasVideoFile);
+    setVisibleEnabled(ui->stepForwardVideo, fileCameraSelected && !streamSelected, hasVideoFile);
     setVisibleEnabled(ui->playPauseVideo, fileCameraSelected, hasVideoFile);
-    setVisibleEnabled(ui->loopVideo, fileCameraSelected, hasVideoFile);
+    setVisibleEnabled(ui->loopVideo, fileCameraSelected && !streamSelected, hasVideoFile);
     setVisibleEnabled(ui->playbackRateSpin, fileCameraSelected, hasVideoFile);
     setVisibleEnabled(ui->playbackAudioOffsetSpin, fileCameraSelected && !imageSequenceSelected, hasVideoFile);
     setVisibleEnabled(ui->playbackPositionSlider, fileCameraSelected, hasPlaybackPosition);
@@ -3596,7 +3631,7 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 
 bool CameraGUI::ensureVideoFilePlayer(bool startPlayback)
 {
-    if (!m_settings.isVideoFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
+    if (!m_settings.isFfmpegMediaSource() || m_settings.m_videoFileCameraPath.isEmpty()) {
         return false;
     }
 
@@ -3831,7 +3866,7 @@ void CameraGUI::setupQtCapture()
 
 #else // Qt 5
 
-    if (m_settings.isVideoFileCamera())
+    if (m_settings.isFfmpegMediaSource())
     {
         ensureVideoFilePlayer(true);
         return;
@@ -4395,7 +4430,7 @@ void CameraGUI::updateCameraSettingsVisibility()
 
     settingsUI()->tabWidget->setTabEnabled(0, !fileCamera);
     settingsUI()->tabWidget->setTabEnabled(1, sharedHardwareCamera);
-    ui->audioMute->setVisible(qtCamera || m_settings.isVideoFileCamera());
+    ui->audioMute->setVisible(qtCamera || m_settings.isFfmpegMediaSource());
 
     // Qt-camera-only controls
     settingsUI()->exposureLabel->setVisible(!fileCamera);
@@ -4921,19 +4956,34 @@ void CameraGUI::on_browseVideoFileButton_clicked()
         return;
     }
 
-    const bool updated = m_settings.isImageFileSequenceCamera()
-        ? chooseImageFileSequenceFiles(
-            index,
-            m_settings.m_cameraProtocol,
-            m_settings.m_cameraId,
-            m_settings.m_alpacaHost,
-            m_settings.m_alpacaPort)
-        : chooseVideoFileCameraFile(
+    bool updated = false;
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        updated = chooseImageFileSequenceFiles(
             index,
             m_settings.m_cameraProtocol,
             m_settings.m_cameraId,
             m_settings.m_alpacaHost,
             m_settings.m_alpacaPort);
+    }
+    else if (m_settings.isStreamCamera())
+    {
+        updated = chooseStreamUrl(
+            index,
+            m_settings.m_cameraProtocol,
+            m_settings.m_cameraId,
+            m_settings.m_alpacaHost,
+            m_settings.m_alpacaPort);
+    }
+    else
+    {
+        updated = chooseVideoFileCameraFile(
+            index,
+            m_settings.m_cameraProtocol,
+            m_settings.m_cameraId,
+            m_settings.m_alpacaHost,
+            m_settings.m_alpacaPort);
+    }
     if (!updated)
     {
         return;
@@ -4941,7 +4991,7 @@ void CameraGUI::on_browseVideoFileButton_clicked()
 
     m_settings.m_cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
     m_settings.m_cameraDescription = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
-    if (m_settings.isVideoFileCamera()) {
+    if (m_settings.isFfmpegMediaSource()) {
         m_settings.m_videoFileCameraPath = m_settings.m_cameraId;
     }
     updateVideoFileControls();
@@ -4969,7 +5019,7 @@ void CameraGUI::on_restartVideo_clicked()
         return;
     }
 
-    if (m_settings.isVideoFileCamera())
+    if (m_settings.isFfmpegMediaSource())
     {
         sendVideoFileControl(CameraWorker::MsgVideoFileControl::Restart);
         return;
@@ -5045,7 +5095,7 @@ void CameraGUI::on_playPauseVideo_clicked(bool checked)
         return;
     }
 
-    if (m_settings.isVideoFileCamera())
+    if (m_settings.isFfmpegMediaSource())
     {
         sendVideoFileControl(checked ? CameraWorker::MsgVideoFileControl::Play : CameraWorker::MsgVideoFileControl::Pause);
     }
@@ -5127,6 +5177,19 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     if ((selectedCamera.m_protocol == CameraProtocol::video()) && selectedCamera.m_id.isEmpty())
     {
         if (!chooseVideoFileCameraFile(index,
+                previousCamera.m_protocol,
+                previousCamera.m_id,
+                previousCamera.m_host,
+                previousCamera.m_port))
+        {
+            return;
+        }
+
+        selectedCamera = comboCameraInfo(index);
+    }
+    else if ((selectedCamera.m_protocol == CameraProtocol::stream()) && selectedCamera.m_id.isEmpty())
+    {
+        if (!chooseStreamUrl(index,
                 previousCamera.m_protocol,
                 previousCamera.m_id,
                 previousCamera.m_host,

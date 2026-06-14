@@ -945,17 +945,35 @@ bool CameraWorker::handleMessage(const Message& cmd)
             setVideoFilePlaying(false);
             break;
         case MsgVideoFileControl::Restart:
-            seekVideoFile(0, true);
-            setVideoFilePlaying(true);
+            if (m_settings.isStreamCamera())
+            {
+                closeVideoFileDecoder();
+                if (m_capturing && openVideoFileDecoder())
+                {
+                    readVideoFileFrame();
+                    setVideoFilePlaying(true);
+                }
+            }
+            else
+            {
+                seekVideoFile(0, true);
+                setVideoFilePlaying(true);
+            }
             break;
         case MsgVideoFileControl::StepBack:
-            stepVideoFile(-1);
+            if (!m_settings.isStreamCamera()) {
+                stepVideoFile(-1);
+            }
             break;
         case MsgVideoFileControl::StepForward:
-            stepVideoFile(1);
+            if (!m_settings.isStreamCamera()) {
+                stepVideoFile(1);
+            }
             break;
         case MsgVideoFileControl::Seek:
-            seekVideoFile(msg.getPositionMs(), true);
+            if (!m_settings.isStreamCamera()) {
+                seekVideoFile(msg.getPositionMs(), true);
+            }
             break;
         }
         return true;
@@ -1001,7 +1019,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     const bool recapture = m_capturing && (
         cameraSourceChanged
         || (m_settings.isQtCamera() && (force || settingsKeys.contains("audioDeviceName")))
-        || (m_settings.isVideoFileCamera() && (force
+        || (m_settings.isFfmpegMediaSource() && (force
             || settingsKeys.contains("videoFileCameraPath")
             || settingsKeys.contains("audioDeviceName")))
         || (m_settings.isAsiCamera() && captureModeChanged));
@@ -1081,7 +1099,7 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         m_cameraFinder->reportCameraList(m_settings);
     }
 
-    if (!recapture && m_capturing && m_settings.isVideoFileCamera()
+    if (!recapture && m_capturing && m_settings.isFfmpegMediaSource()
         && (captureCadenceChanged || settingsKeys.contains("videoPlaybackRate")))
     {
         if (m_videoFilePlaying) {
@@ -1285,7 +1303,7 @@ void CameraWorker::startCapture()
         // Qt camera capture is mainly managed by CameraGUI on the main thread. The worker only bridges audio.
         m_qtAudio.start(m_settings, getInputMessageQueue());
     }
-    else if (m_settings.isVideoFileCamera())
+    else if (m_settings.isFfmpegMediaSource())
     {
         ++m_videoFileFrameSubmitGeneration;
         if (openVideoFileDecoder())
@@ -1332,7 +1350,7 @@ void CameraWorker::captureTick()
         return;
     }
 
-    if (m_settings.isVideoFileCamera())
+    if (m_settings.isFfmpegMediaSource())
     {
         readVideoFileFrame();
         if (m_capturing && m_videoFilePlaying) {
@@ -1376,7 +1394,7 @@ bool CameraWorker::openVideoFileDecoder()
 {
     closeVideoFileDecoder();
 
-    if (!m_settings.isVideoFileCamera() || m_settings.m_videoFileCameraPath.isEmpty()) {
+    if (!m_settings.isFfmpegMediaSource() || m_settings.m_videoFileCameraPath.isEmpty()) {
         return false;
     }
 
@@ -1387,7 +1405,7 @@ bool CameraWorker::openVideoFileDecoder()
     {
         reportErrorToFeature(
             QStringLiteral("videoFileOpen:%1").arg(m_settings.m_videoFileCameraPath),
-            tr("Video file could not be opened"),
+            m_settings.isStreamCamera() ? tr("Stream could not be opened") : tr("Video file could not be opened"),
             errorMessage);
         m_videoFileDecoder.reset();
         m_qtAudio.stop();
@@ -1413,7 +1431,7 @@ void CameraWorker::closeVideoFileDecoder()
     m_videoFilePlaybackClock.invalidate();
     m_videoFilePlaybackTick = 0;
     resetVideoFilePlaybackStats();
-    if (m_settings.isVideoFileCamera()) {
+    if (m_settings.isFfmpegMediaSource()) {
         m_qtAudio.stop();
     }
     reportVideoFilePlaybackToGUI();
@@ -1421,7 +1439,7 @@ void CameraWorker::closeVideoFileDecoder()
 
 void CameraWorker::setVideoFilePlaying(bool playing)
 {
-    if (!m_capturing || !m_settings.isVideoFileCamera() || !m_videoFileDecoder)
+    if (!m_capturing || !m_settings.isFfmpegMediaSource() || !m_videoFileDecoder)
     {
         m_videoFilePlaying = false;
         reportVideoFilePlaybackToGUI();
@@ -1468,7 +1486,7 @@ void CameraWorker::submitVideoFileFrame(const CameraPipelineFramePtr& frame, boo
 
     QTimer::singleShot(videoDelayMs, this, [this, frame, captureEpoch, submitGeneration]() {
         if (!m_capturing
-            || !m_settings.isVideoFileCamera()
+            || !m_settings.isFfmpegMediaSource()
             || !m_videoFilePlaying
             || !m_framePreprocessor
             || (m_captureEpoch != captureEpoch)
@@ -1482,7 +1500,7 @@ void CameraWorker::submitVideoFileFrame(const CameraPipelineFramePtr& frame, boo
 
 void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs)
 {
-    if (!m_capturing || !m_settings.isVideoFileCamera() || !m_videoFileDecoder) {
+    if (!m_capturing || !m_settings.isFfmpegMediaSource() || !m_videoFileDecoder) {
         return;
     }
 
@@ -1504,7 +1522,7 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     {
         reportErrorToFeature(
             QStringLiteral("videoFileDecode:%1").arg(m_settings.m_videoFileCameraPath),
-            tr("Video file decode failed"),
+            m_settings.isStreamCamera() ? tr("Stream decode failed") : tr("Video file decode failed"),
             errorMessage);
         setVideoFilePlaying(false);
         return;
@@ -1612,7 +1630,7 @@ void CameraWorker::resetVideoFilePlaybackSchedule()
 
 void CameraWorker::scheduleNextVideoFileTick()
 {
-    if (!m_capturing || !m_videoFilePlaying || !m_settings.isVideoFileCamera() || !m_videoFileDecoder) {
+    if (!m_capturing || !m_videoFilePlaying || !m_settings.isFfmpegMediaSource() || !m_videoFileDecoder) {
         return;
     }
 

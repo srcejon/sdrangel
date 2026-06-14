@@ -251,6 +251,15 @@ void CameraFinder::finalizeCameraList(int requestId)
         {},
         0
         });
+    m_currentCameras.append({
+        CameraProtocol::stream(),
+        m_settings.isStreamCamera() ? m_settings.m_videoFileCameraPath : QString(),
+        (m_settings.isStreamCamera() && !m_settings.m_videoFileCameraPath.isEmpty())
+            ? m_settings.m_videoFileCameraPath
+            : QString(),
+        {},
+        0
+        });
 
     m_msgQueueToGUI->push(CameraWorker::MsgReportCameraList::create(m_currentCameras));
     m_msgQueueToGUI->push(CameraWorker::MsgReportAlpacaDeviceList::create(m_currentFocusers, m_currentFilterWheels));

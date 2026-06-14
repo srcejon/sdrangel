@@ -603,6 +603,8 @@ struct CameraSettings
     bool isFileCamera() const;
     bool isVideoFileCamera() const;
     bool isImageFileSequenceCamera() const;
+    bool isStreamCamera() const;
+    bool isFfmpegMediaSource() const;
     bool hasFileCameraSource() const;
     int cameraIdInt() const;
     QString cameraIdString() const;

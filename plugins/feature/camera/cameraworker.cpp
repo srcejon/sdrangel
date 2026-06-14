@@ -497,10 +497,24 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
         return;
     }
 
+    ++m_autoExposure.m_debugFrameCounter;
+    const bool debugThisFrame = (m_autoExposure.m_debugFrameCounter <= 5)
+        || ((m_autoExposure.m_debugFrameCounter % 10) == 0);
+
     if (m_autoExposure.m_settleFramesRemaining > 0)
     {
         --m_autoExposure.m_settleFramesRemaining;
         m_autoExposure.m_valid = false;
+        if (debugThisFrame)
+        {
+            qDebug() << "CameraWorker::autoExposureGain"
+                     << "decision" << "settle"
+                     << "rawBrightness" << measuredBrightness
+                     << "rawSaturated" << saturatedFraction
+                     << "remaining" << m_autoExposure.m_settleFramesRemaining
+                     << "exposureMs" << m_settings.m_exposureTimeMs
+                     << "gain" << m_settings.m_cameraGain;
+        }
         reportAutoExposureGainToGUI(measuredBrightness, saturatedFraction);
         return;
     }
@@ -528,10 +542,54 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     const bool saturated = m_autoExposure.m_saturatedFraction > saturationLimit;
     const double deadband = error > 0.0 ? 0.03 : 0.08;
 
+    auto modeName = [&]() -> const char*
+    {
+        switch (m_settings.m_autoExposureGainMode)
+        {
+        case CameraSettings::AutoExposureGainGainFirst:
+            return "gain-first";
+        case CameraSettings::AutoExposureGainExposureOnly:
+            return "exposure-only";
+        case CameraSettings::AutoExposureGainGainOnly:
+            return "gain-only";
+        case CameraSettings::AutoExposureGainExposureFirst:
+        default:
+            return "exposure-first";
+        }
+    };
+
+    auto logAutoExposure = [&](const char *decision, double factor, double newExposureMs, int newGain)
+    {
+        qDebug() << "CameraWorker::autoExposureGain"
+                 << "decision" << decision
+                 << "mode" << modeName()
+                 << "rawBrightness" << measuredBrightness
+                 << "smoothBrightness" << m_autoExposure.m_brightness
+                 << "requestedTarget" << requestedTarget
+                 << "mappedTarget" << target
+                 << "rawSaturated" << saturatedFraction
+                 << "smoothSaturated" << m_autoExposure.m_saturatedFraction
+                 << "saturationLimit" << saturationLimit
+                 << "saturated" << saturated
+                 << "error" << error
+                 << "deadband" << deadband
+                 << "direction" << m_autoExposure.m_adjustDirection
+                 << "directionFrames" << m_autoExposure.m_adjustDirectionFrames
+                 << "factor" << factor
+                 << "exposureMs" << m_settings.m_exposureTimeMs
+                 << "newExposureMs" << newExposureMs
+                 << "gain" << m_settings.m_cameraGain
+                 << "newGain" << newGain
+                 << "maxChange" << maxChange;
+    };
+
     if (!saturated && (std::abs(error) < deadband))
     {
         m_autoExposure.m_adjustDirection = 0;
         m_autoExposure.m_adjustDirectionFrames = 0;
+        if (debugThisFrame) {
+            logAutoExposure("deadband", 1.0, m_settings.m_exposureTimeMs, m_settings.m_cameraGain);
+        }
         reportAutoExposureGainToGUI(m_autoExposure.m_brightness, m_autoExposure.m_saturatedFraction);
         return;
     }
@@ -547,6 +605,9 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     const int requiredDirectionFrames = error > 0.0 ? 3 : 5;
     if (!saturated && (std::abs(error) < 0.18) && (m_autoExposure.m_adjustDirectionFrames < requiredDirectionFrames))
     {
+        if (debugThisFrame) {
+            logAutoExposure("waiting-direction-confirm", 1.0, m_settings.m_exposureTimeMs, m_settings.m_cameraGain);
+        }
         reportAutoExposureGainToGUI(m_autoExposure.m_brightness, m_autoExposure.m_saturatedFraction);
         return;
     }
@@ -630,6 +691,7 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
 
     if (exposureChanged || gainChanged)
     {
+        logAutoExposure("adjust", factor, newExposureMs, newGain);
         m_settings.m_exposureTimeMs = newExposureMs;
         m_settings.m_cameraGain = newGain;
         m_autoExposure.m_settleFramesRemaining = 2;
@@ -638,6 +700,10 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
             invalidateAsiSettings();
         }
 #endif
+    }
+    else if (debugThisFrame)
+    {
+        logAutoExposure("no-change", factor, newExposureMs, newGain);
     }
 
     reportAutoExposureGainToGUI(m_autoExposure.m_brightness, m_autoExposure.m_saturatedFraction);

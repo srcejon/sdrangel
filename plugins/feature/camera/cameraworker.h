@@ -670,6 +670,7 @@ private:
         int m_settleFramesRemaining = 0;
         int m_adjustDirection = 0;
         int m_adjustDirectionFrames = 0;
+        quint64 m_debugFrameCounter = 0;
     } m_autoExposure;
     struct AutoFocusState {
         bool m_active = false;

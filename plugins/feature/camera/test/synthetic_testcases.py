@@ -77,6 +77,27 @@ def radec_to_azel(ra_deg, dec_deg, lat, lon, jd):
     az = a if math.sin(hr)<0.0 else 360.0-a
     return az, math.degrees(el)
 
+def radec_to_azel_arr(ra_deg, dec_deg, lat, lon, jd):
+    """Vectorised radec_to_azel (numpy arrays for ra_deg/dec_deg); used for wide/fisheye
+    fields where thousands of catalog stars need az/el at once."""
+    ha = ((lst_deg(jd,lon)-ra_deg + 180.0) % 360.0) - 180.0
+    dr,lr,hr = np.radians(dec_deg),np.radians(lat),np.radians(ha)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        el = np.arcsin(np.sin(dr)*np.sin(lr)+np.cos(dr)*np.cos(lr)*np.cos(hr))
+        ca = (np.sin(dr)-np.sin(el)*np.sin(lr))/(np.cos(el)*np.cos(lr))
+        a = np.degrees(np.arccos(np.clip(ca,-1.0,1.0)))
+    az = np.where(np.sin(hr)<0.0, a, 360.0-a)
+    return az, np.degrees(el)
+
+def precess_j2000_to_date_arr(ra_deg, dec_deg, jd):
+    """Vectorised precess_j2000_to_date (numpy arrays for ra_deg/dec_deg)."""
+    yrs = (jd - JD2000) / 365.25
+    m, n_ra, n_dec = 3.07496, 1.33621, 20.0431   # sec/yr, sec/yr, arcsec/yr
+    rr, dr = np.radians(ra_deg), np.radians(dec_deg)
+    ra_out = (ra_deg + (m + n_ra*np.sin(rr)*np.tan(dr))*yrs * 15.0/3600.0) % 360.0
+    dec_out = dec_deg + (n_dec*np.cos(rr))*yrs / 3600.0
+    return ra_out, dec_out
+
 def precess_j2000_to_date(ra_deg, dec_deg, jd):
     """Low-precision (Meeus) general precession of mean J2000 RA/Dec to the epoch of `jd`.
     The Vizier catalogues return J2000 (_RAJ2000/_DEJ2000), but the SDRangel solver works at
@@ -131,6 +152,55 @@ def mag_to_peak(mag, bright_mag, faint_mag, min_peak=16.0):
     frac=(faint_mag-mag)/max(1e-6,(faint_mag-bright_mag))   # 1 bright, 0 faint
     return float(np.clip(min_peak + frac*(255.0-min_peak), 0.0, 255.0))
 
+# --- wide/fisheye camera projection (mirrors CameraPlateSolver::createProjector /
+# projectVector for a square image, aspect=1, no lens distortion / centre offset) -------
+def vec_from_altaz_arr(az_deg, el_deg):
+    az, el = np.radians(az_deg), np.radians(el_deg)
+    ce = np.cos(el)
+    return np.stack([ce*np.sin(az), ce*np.cos(az), np.sin(el)], axis=-1)
+
+def make_sky_projector(az_deg, el_deg, roll_deg, fov_deg, lens):
+    """Camera basis + projection model for a square image (aspect=1), matching
+    cameraplatesolver.cpp's createProjector/projectVector. `lens` is one of
+    "rectilinear", "equidistant", "equisolid"."""
+    az = math.radians(az_deg)
+    center = vec_from_altaz_arr(az_deg, el_deg)
+    center = center/np.linalg.norm(center)
+    right = np.array([math.cos(az), -math.sin(az), 0.0])
+    right = right/np.linalg.norm(right)
+    up = np.cross(right, center)
+    up = up/np.linalg.norm(up)
+    roll = math.radians(roll_deg)
+    if abs(roll) > 1e-9:
+        def rot(v, axis, angle):
+            return (v*math.cos(angle) + np.cross(axis, v)*math.sin(angle)
+                    + axis*np.dot(axis, v)*(1.0-math.cos(angle)))
+        right = rot(right, center, roll); right /= np.linalg.norm(right)
+        up = rot(up, center, roll); up /= np.linalg.norm(up)
+    return dict(center=center, right=right, up=up,
+                 half_fov=math.radians(fov_deg)*0.5, lens=lens)
+
+def project_points(proj, vecs, W, H):
+    """vecs: (N,3) unit vectors. Returns (N,2) pixel coords; NaN rows are behind the camera."""
+    depth = vecs @ proj['center']
+    planeX = vecs @ proj['right']
+    planeY = vecs @ proj['up']
+    theta = np.arccos(np.clip(depth, -1.0, 1.0))
+    phi = np.arctan2(planeY, planeX)
+    lens = proj['lens']
+    if lens == "equidistant":
+        r = theta/proj['half_fov']
+    elif lens == "equisolid":
+        r = np.sin(theta*0.5)/np.sin(proj['half_fov']*0.5)
+    else:
+        r = np.tan(theta)/np.tan(proj['half_fov'])
+    px, py = np.cos(phi)*r, np.sin(phi)*r
+    x = W*0.5 + px*0.5*W
+    y = H*0.5 - py*0.5*H
+    out = np.column_stack([x, y])
+    out[depth <= 0.0] = np.nan
+    return out
+
 def render_field(xy_peak, W, H, sigma=1.15, background=6.0, read_noise=2.0, seed=0):
     rng=np.random.default_rng(seed)
     img=np.full((H,W), background, np.float64)
@@ -184,6 +254,25 @@ def main():
     ap.add_argument("--expand", default="", help="baseline CSV to expand into a seed-jitter sweep")
     ap.add_argument("--jitter-sweep", default="0.5,1.0,1.5", help="offset magnitudes (deg)")
     ap.add_argument("--jitter-dirs", default="az,el", help="offset directions: az,el,diag")
+    # Synthetic fisheye/wide corpus (Phase 0b of the quad-hash plan, see
+    # doc/camera/plate-solver-notes.md): random equidistant/equisolid fisheye scenes with
+    # az/el/roll/fov as the camera pose (no WCS/RA-Dec rendering geometry -- the field is
+    # projected directly with make_sky_projector/project_points, matching
+    # CameraPlateSolver::createProjector/projectVector). Emits both plateSolveStartMode 0
+    # (Blind) and 1 (Fov) rows per scene with the SAME true pose (only m_fov is used by
+    # mode 1; mode 0 ignores the seed pose entirely).
+    ap.add_argument("--fisheye", type=int, default=0, help="generate N random fisheye scenes")
+    ap.add_argument("--fisheye-seed", type=int, default=20260612, help="RNG seed (reproducible)")
+    ap.add_argument("--fisheye-fov-min", type=float, default=100.0)
+    ap.add_argument("--fisheye-fov-max", type=float, default=170.0)
+    ap.add_argument("--fisheye-size", type=int, default=1600, help="square image side (px)")
+    ap.add_argument("--fisheye-mag", type=float, default=7.0,
+                    help="render depth and plateSolveMaxMagnitude for fisheye scenes")
+    ap.add_argument("--fisheye-el-min", type=float, default=30.0, help="min bore-sight elevation")
+    ap.add_argument("--fisheye-projection", default="mixed",
+                    help="equidistant, equisolid or mixed (random per scene)")
+    ap.add_argument("--fisheye-min-stars", type=int, default=30,
+                    help="reject fisheye scenes with fewer rendered stars")
     args=ap.parse_args()
 
     if args.expand:
@@ -259,6 +348,10 @@ def main():
 
         # named HIP stars (solver-recognised labels), exact positions. Skip the very
         # brightest (saturated, hard to label); relax the window if the field is sparse.
+        # A picked star must have a rendered Gaia counterpart: the frame is rendered from
+        # Gaia DR3, which is missing/unreliable for bright stars (G <~ 6), so a HIP pick
+        # without a nearby rendered star would put ground truth on empty sky that no
+        # solver can ever label (seen with HIP 92043 / 110 Her, V=4.19, in rand2 c-023).
         def pick_named(vmin, vmax):
             cat=query_catalog(ra,dec, radius_deg=args.fov*0.55, cat="I/239/hip_main",
                               cols=["HIP","Vmag","_RAJ2000","_DEJ2000"], magcol="Vmag",
@@ -270,6 +363,9 @@ def main():
                     hx,hy=wcs.world_to_pixel(SkyCoord(float(r["_RAJ2000"]),float(r["_DEJ2000"]),unit="deg"))
                     X,Y=float(hx),float(hy)
                     if X<25 or Y<25 or X>=args.width-25 or Y>=args.height-25: continue
+                    if not any(abs(x-X)<=2.0 and abs(y-Y)<=2.0 for x,y,_ in xy_peak):
+                        print(f"  skipping HIP {int(r['HIP'])} (V={float(r['Vmag']):.2f}): no rendered Gaia counterpart at ({X:.0f},{Y:.0f})")
+                        continue
                     picked.append((int(r["HIP"]),X,Y))
                     if len(picked)>=args.n_stars: break
             return picked
@@ -297,6 +393,82 @@ def main():
             srows.append(f'"{img_dir_name}/{label}.jpg",{args.time},{args.lat:.6f},'
                          f'{args.lon:.6f},0.0,{az_s:.2f},{el_s:.2f},0.0,{args.fov:.3f},'
                          f'"rectilinear",0.0,0.0,0.0,"{names}",{mag:g},3,0,0,0,0,,,"{spos}"')
+        return srows
+
+    # Render + ground-truth one fisheye/wide scene (az/el/roll/fov IS the camera pose,
+    # projected directly via make_sky_projector/project_points -- no WCS/TAN involved).
+    # Returns CSV rows for plateSolveStartMode 0 (Blind) and 1 (Fov), or None if rejected.
+    def process_fisheye_scene(label, az, el, roll, fov_deg, lens, size, max_mag, min_stars):
+        ra_d, dec_d, _ha = azel_to_radec(az, el, args.lat, args.lon, jd)
+        print(f"\n=== {label}  az/el={az:.1f}/{el:.1f}  roll={roll:.1f}  fov={fov_deg:.1f} ({lens})")
+
+        radius = min(fov_deg*0.5*math.sqrt(2.0)+2.0, 90.0)
+        gcat=query_catalog(ra_d,dec_d, radius_deg=radius, cat="I/355/gaiadr3",
+                           cols=["_RAJ2000","_DEJ2000","Gmag"], magcol="Gmag",
+                           magmax=max_mag, limit=20000)
+        if gcat is None or len(gcat)==0:
+            print("  no Gaia stars; skipping"); return None
+
+        ra_j=np.asarray(gcat["_RAJ2000"],float); dec_j=np.asarray(gcat["_DEJ2000"],float)
+        gmag=np.asarray(gcat["Gmag"],float)
+        ra_dt,dec_dt=precess_j2000_to_date_arr(ra_j,dec_j,jd)
+        saz,sel=radec_to_azel_arr(ra_dt,dec_dt,args.lat,args.lon,jd)
+        vecs=vec_from_altaz_arr(saz,sel)
+
+        proj=make_sky_projector(az,el,roll,fov_deg,lens)
+        pix=project_points(proj,vecs,size,size)
+        gx,gy=pix[:,0],pix[:,1]
+
+        valid=np.isfinite(gx)&np.isfinite(gy)&np.isfinite(gmag)&(gx>=-5)&(gx<size+5)&(gy>=-5)&(gy<size+5)
+        xy_peak=[(float(x),float(y),mag_to_peak(m,0.0,max_mag))
+                 for x,y,m in zip(gx[valid],gy[valid],gmag[valid])]
+        if len(xy_peak) < min_stars:
+            print(f"  only {len(xy_peak)} in-frame stars (< {min_stars}); skipping"); return None
+
+        # named HIP stars: brightest, with a rendered Gaia counterpart, away from the frame
+        # edge (the equidistant/equisolid model is undefined past the FOV circle).
+        radius_named=min(fov_deg*0.5*math.sqrt(2.0), 90.0)
+        def pick_named(vmax, limit):
+            cat=query_catalog(ra_d,dec_d, radius_deg=radius_named, cat="I/239/hip_main",
+                              cols=["HIP","Vmag","_RAJ2000","_DEJ2000"], magcol="Vmag",
+                              magmax=vmax, limit=limit)
+            picked=[]
+            if cat is not None and len(cat)>0:
+                ra_h=np.asarray(cat["_RAJ2000"],float); dec_h=np.asarray(cat["_DEJ2000"],float)
+                ra_hd,dec_hd=precess_j2000_to_date_arr(ra_h,dec_h,jd)
+                haz,hel=radec_to_azel_arr(ra_hd,dec_hd,args.lat,args.lon,jd)
+                hvecs=vec_from_altaz_arr(haz,hel)
+                hpix=project_points(proj,hvecs,size,size)
+                vmags=np.asarray(cat["Vmag"],float)
+                for i in np.argsort(vmags):
+                    X,Y=float(hpix[i,0]),float(hpix[i,1])
+                    if not (np.isfinite(X) and np.isfinite(Y)): continue
+                    if X<25 or Y<25 or X>=size-25 or Y>=size-25: continue
+                    if not any(abs(x-X)<=2.0 and abs(y-Y)<=2.0 for x,y,_ in xy_peak):
+                        continue
+                    picked.append((int(cat["HIP"][i]),X,Y))
+                    if len(picked)>=args.n_stars: break
+            return picked
+        chosen=pick_named(max_mag,3000) or pick_named(12.0,8000)
+        if not chosen:
+            print("  no in-frame named HIP star; skipping"); return None
+
+        img=render_field(xy_peak,size,size,seed=int(rng.integers(1e9)))
+        jpg=outimg/f"{label}.jpg"
+        cv2.imwrite(str(jpg),img,[int(cv2.IMWRITE_JPEG_QUALITY),95])
+        print(f"  rendered {len(xy_peak)} Gaia stars (<=mag {max_mag}) -> {jpg.name}")
+
+        names=",".join(f"HIP {h}" for h,_,_ in chosen)
+        spos=",".join(f"HIP {h}:{int(round(X))}:{int(round(Y))}" for h,X,Y in chosen)
+        print(f"  named: {spos}")
+
+        proj_name="equidistant fisheye" if lens=="equidistant" else "equisolid fisheye"
+        img_dir_name=Path(args.out_images).name
+        srows=[]
+        for mode in (0,1):
+            srows.append(f'"{img_dir_name}/{label}.jpg",{args.time},{args.lat:.6f},'
+                         f'{args.lon:.6f},0.0,{az:.2f},{el:.2f},{roll:.2f},{fov_deg:.3f},'
+                         f'"{proj_name}",0.0,0.0,0.0,"{names}",{max_mag:g},{mode},0,0,0,0,,,"{spos}"')
         return srows
 
     rows=[]
@@ -336,6 +508,26 @@ def main():
                                 require_named=False, min_stars=1)
             if srows:
                 rows.extend(srows)
+
+    if args.fisheye > 0:
+        frng=np.random.default_rng(args.fisheye_seed)
+        accepted=0; attempts=0; maxatt=args.fisheye*40
+        while accepted < args.fisheye and attempts < maxatt:
+            attempts+=1
+            az=float(frng.uniform(0.0,360.0))
+            el=float(frng.uniform(args.fisheye_el_min,89.0))
+            roll=float(frng.uniform(0.0,360.0))
+            fov=float(frng.uniform(args.fisheye_fov_min,args.fisheye_fov_max))
+            if args.fisheye_projection=="mixed":
+                lens="equidistant" if frng.integers(0,2)==0 else "equisolid"
+            else:
+                lens=args.fisheye_projection
+            srows=process_fisheye_scene(f"synth-fisheye-{accepted+1:03d}", az, el, roll, fov,
+                                        lens, args.fisheye_size, args.fisheye_mag,
+                                        args.fisheye_min_stars)
+            if srows:
+                rows.extend(srows); accepted+=1
+        print(f"\nAccepted {accepted}/{args.fisheye} fisheye scenes in {attempts} attempts")
 
     header=("image,time,latitude,longitude,altitude,azimuth,elevation,roll,fov,projection,"
             "cx,cy,k1,stars,plateSolveMaxMagnitude,plateSolveStartMode,roiX,roiY,roiW,roiH,"

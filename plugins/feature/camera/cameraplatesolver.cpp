@@ -3237,7 +3237,8 @@ static bool projectVector(const SkyProjector& projector, const SkyVector& vector
     if (std::fabs(projector.distortionK1) > 1e-9)
     {
         const double radiusSquared = projectedX * projectedX + projectedY * projectedY;
-        const double distortionScale = 1.0 + projector.distortionK1 * radiusSquared;
+        const double distortionScale = 1.0
+            + projector.distortionK1 * radiusSquared;
         // A non-positive scale means the distortion model has folded this direction
         // back past the lens singularity — no valid image point exists.
         if (distortionScale <= 0.0) return false;
@@ -3283,7 +3284,8 @@ static bool unprojectPixelToVector(const SkyProjector& projector, const QPointF&
         for (int iteration = 0; iteration < 8; ++iteration)
         {
             const double radiusSquared = undistortedX * undistortedX + undistortedY * undistortedY;
-            const double distortionScale = 1.0 + projector.distortionK1 * radiusSquared;
+            const double distortionScale = 1.0
+                + projector.distortionK1 * radiusSquared;
             // Non-positive scale means the pixel lies in the folded region of the
             // distortion model — it cannot be mapped back to a sky direction.
             if (distortionScale <= 0.0) { undistortOk = false; break; }
@@ -3797,6 +3799,371 @@ static bool poseFromThreeVectorPairs(const SkyProjector& baseProjector,
         *maxAngularErrorDegrees = bestMaxAngularErrorDegrees;
     }
     return true;
+}
+
+// N-vector (N>=2) generalizations of vectorPairRotationError / wahbaRotationFromVectorPairs /
+// poseFromThreeVectorPairs, used by the quad-hash blind seed engine where each hypothesis
+// supplies 4 ray<->sky correspondences. Kept as separate overloads (not refactored in terms
+// of the 3-vector versions) to avoid any risk to the existing triangle-seed callers.
+static bool vectorPairRotationErrorN(const std::array<std::array<double, 3>, 3>& rotation,
+                                     const QVector<SkyVector>& sourceVectors,
+                                     const QVector<SkyVector>& targetVectors,
+                                     double& rmsAngularErrorDegrees,
+                                     double& maxAngularErrorDegrees)
+{
+    const int count = sourceVectors.size();
+    if ((count < 1) || (targetVectors.size() != count)) {
+        return false;
+    }
+
+    double squaredAngularError = 0.0;
+    maxAngularErrorDegrees = 0.0;
+    for (int index = 0; index < count; ++index)
+    {
+        const SkyVector rotatedSource = normalize(rotateVectorByMatrix(rotation, sourceVectors[index]));
+        if (length(rotatedSource) <= 0.0) {
+            return false;
+        }
+        const double angularErrorDegrees = std::acos(std::clamp(
+            dot(rotatedSource, targetVectors[index]),
+            -1.0,
+            1.0)) * 180.0 / kPi;
+        squaredAngularError += angularErrorDegrees * angularErrorDegrees;
+        maxAngularErrorDegrees = std::max(maxAngularErrorDegrees, angularErrorDegrees);
+    }
+    rmsAngularErrorDegrees = std::sqrt(squaredAngularError / count);
+    return std::isfinite(rmsAngularErrorDegrees) && std::isfinite(maxAngularErrorDegrees);
+}
+
+static bool wahbaRotationFromVectorPairsN(const QVector<SkyVector>& sourceVectors,
+                                          const QVector<SkyVector>& targetVectors,
+                                          bool transposeCorrelation,
+                                          std::array<std::array<double, 3>, 3>& rotation,
+                                          double& rmsAngularErrorDegrees,
+                                          double& maxAngularErrorDegrees)
+{
+    const int count = sourceVectors.size();
+    if ((count < 2) || (targetVectors.size() != count)) {
+        return false;
+    }
+
+    std::array<std::array<double, 3>, 3> correlation {{
+        {{0.0, 0.0, 0.0}},
+        {{0.0, 0.0, 0.0}},
+        {{0.0, 0.0, 0.0}}
+    }};
+
+    for (int index = 0; index < count; ++index)
+    {
+        const std::array<double, 3> source {{sourceVectors[index].x, sourceVectors[index].y, sourceVectors[index].z}};
+        const std::array<double, 3> target {{targetVectors[index].x, targetVectors[index].y, targetVectors[index].z}};
+        for (int row = 0; row < 3; ++row)
+        {
+            for (int col = 0; col < 3; ++col)
+            {
+                correlation[row][col] += transposeCorrelation
+                    ? source[row] * target[col]
+                    : target[row] * source[col];
+            }
+        }
+    }
+
+    const double sigma = correlation[0][0] + correlation[1][1] + correlation[2][2];
+    const std::array<double, 3> zVector {{
+        correlation[1][2] - correlation[2][1],
+        correlation[2][0] - correlation[0][2],
+        correlation[0][1] - correlation[1][0]
+    }};
+    const std::array<std::array<double, 3>, 3> symmetric {{
+        {{
+            2.0 * correlation[0][0] - sigma,
+            correlation[0][1] + correlation[1][0],
+            correlation[0][2] + correlation[2][0]
+        }},
+        {{
+            correlation[1][0] + correlation[0][1],
+            2.0 * correlation[1][1] - sigma,
+            correlation[1][2] + correlation[2][1]
+        }},
+        {{
+            correlation[2][0] + correlation[0][2],
+            correlation[2][1] + correlation[1][2],
+            2.0 * correlation[2][2] - sigma
+        }}
+    }};
+
+    const std::array<std::array<double, 4>, 4> davenport {{
+        {{sigma, zVector[0], zVector[1], zVector[2]}},
+        {{zVector[0], symmetric[0][0], symmetric[0][1], symmetric[0][2]}},
+        {{zVector[1], symmetric[1][0], symmetric[1][1], symmetric[1][2]}},
+        {{zVector[2], symmetric[2][0], symmetric[2][1], symmetric[2][2]}}
+    }};
+
+    std::array<double, 4> quaternion = largestSymmetric4Eigenvector(davenport);
+    if (!normalizeQuaternion(quaternion)) {
+        return false;
+    }
+
+    std::array<std::array<double, 3>, 3> rotationCandidate = rotationMatrixFromQuaternion(quaternion);
+    double rmsAngularError = std::numeric_limits<double>::infinity();
+    double maxAngularError = std::numeric_limits<double>::infinity();
+    bool haveRotation = vectorPairRotationErrorN(
+        rotationCandidate,
+        sourceVectors,
+        targetVectors,
+        rmsAngularError,
+        maxAngularError);
+
+    const std::array<std::array<double, 3>, 3> transposedRotationCandidate =
+        transposeRotationMatrix(rotationCandidate);
+    double transposedRmsAngularError = std::numeric_limits<double>::infinity();
+    double transposedMaxAngularError = std::numeric_limits<double>::infinity();
+    const bool haveTransposedRotation = vectorPairRotationErrorN(
+        transposedRotationCandidate,
+        sourceVectors,
+        targetVectors,
+        transposedRmsAngularError,
+        transposedMaxAngularError);
+
+    if (haveTransposedRotation
+        && (!haveRotation || (transposedRmsAngularError < rmsAngularError)))
+    {
+        rotationCandidate = transposedRotationCandidate;
+        rmsAngularError = transposedRmsAngularError;
+        maxAngularError = transposedMaxAngularError;
+        haveRotation = true;
+    }
+
+    if (!haveRotation) {
+        return false;
+    }
+
+    rotation = rotationCandidate;
+    rmsAngularErrorDegrees = rmsAngularError;
+    maxAngularErrorDegrees = maxAngularError;
+    return true;
+}
+
+// Recovers az/el/roll of `baseProjector` rotated so that each sourceVectors[i] (camera-frame
+// rays, e.g. from unprojectPixelToVector) maps onto targetVectors[i] (sky vectors, e.g. from
+// the visible catalog context). Requires N>=2 correspondences; N>=3 recommended for a
+// well-conditioned rotation (a quad gives N=4).
+static bool poseFromVectorPairsN(const SkyProjector& baseProjector,
+                                 const QVector<SkyVector>& sourceVectors,
+                                 const QVector<SkyVector>& targetVectors,
+                                 double& azimuthDegrees,
+                                 double& elevationDegrees,
+                                 double& rollDegrees,
+                                 double* rmsAngularErrorDegrees = nullptr,
+                                 double* maxAngularErrorDegrees = nullptr)
+{
+    std::array<std::array<double, 3>, 3> bestRotation;
+    double bestRmsAngularErrorDegrees = std::numeric_limits<double>::infinity();
+    double bestMaxAngularErrorDegrees = std::numeric_limits<double>::infinity();
+    bool haveRotation = false;
+
+    for (bool transposeCorrelation : {false, true})
+    {
+        std::array<std::array<double, 3>, 3> rotation;
+        double rmsAngularErrorDegreesCandidate = std::numeric_limits<double>::infinity();
+        double maxAngularErrorDegreesCandidate = std::numeric_limits<double>::infinity();
+        if (!wahbaRotationFromVectorPairsN(
+                sourceVectors,
+                targetVectors,
+                transposeCorrelation,
+                rotation,
+                rmsAngularErrorDegreesCandidate,
+                maxAngularErrorDegreesCandidate))
+        {
+            continue;
+        }
+
+        if (rmsAngularErrorDegreesCandidate < bestRmsAngularErrorDegrees)
+        {
+            bestRotation = rotation;
+            bestRmsAngularErrorDegrees = rmsAngularErrorDegreesCandidate;
+            bestMaxAngularErrorDegrees = maxAngularErrorDegreesCandidate;
+            haveRotation = true;
+        }
+    }
+
+    if (!haveRotation) {
+        return false;
+    }
+
+    const SkyVector mappedCenter = normalize(rotateVectorByMatrix(bestRotation, baseProjector.center));
+    const SkyVector mappedRight = normalize(rotateVectorByMatrix(bestRotation, baseProjector.right));
+    if ((length(mappedCenter) <= 0.0)
+        || (length(mappedRight) <= 0.0)
+        || !projectorPoseFromBasis(mappedCenter, mappedRight, azimuthDegrees, elevationDegrees, rollDegrees))
+    {
+        return false;
+    }
+
+    if (rmsAngularErrorDegrees) {
+        *rmsAngularErrorDegrees = bestRmsAngularErrorDegrees;
+    }
+    if (maxAngularErrorDegrees) {
+        *maxAngularErrorDegrees = bestMaxAngularErrorDegrees;
+    }
+    return true;
+}
+
+// Continuous vector-space "quad code" (astrometry.net-style), used by the blind quad-hash
+// engine for both detection rays (camera frame, post-unprojection) and catalog sky vectors.
+// Operates purely on 4 unit vectors so the same code function applies to either frame; the
+// resulting (xC, yC, xD, yD) code is invariant under any proper rotation of the 4 vectors,
+// which is what lets a detection-ray code be looked up directly against a catalog code index.
+struct QuadVectorCode
+{
+    bool valid = false;
+    double xC = 0.0;
+    double yC = 0.0;
+    double xD = 0.0;
+    double yD = 0.0;
+    // Great-circle angle between the most-separated pair (A, B), in radians. Only meaningful
+    // for scale-aware (mode 1, fov-known) matching; ignored for mode 0.
+    double angleABRadians = 0.0;
+    // Indices into the input array corresponding to A, B, C, D after canonicalization.
+    std::array<int, 4> order = {0, 1, 2, 3};
+    // True if the canonical A/B swap (1-x, 1-y flip) was applied.
+    bool abSwapped = false;
+};
+
+static QuadVectorCode buildVectorQuadCode(const std::array<SkyVector, 4>& vectors)
+{
+    QuadVectorCode code;
+
+    // Step 1: most-separated pair (A, B) = the pair with the smallest dot product
+    // (largest angular separation) among the 6 pairs.
+    int indexA = 0;
+    int indexB = 1;
+    double minDot = std::numeric_limits<double>::infinity();
+    for (int i = 0; i < 4; i++) {
+        for (int j = i + 1; j < 4; j++) {
+            const double dotProduct = dot(vectors[i], vectors[j]);
+            if (dotProduct < minDot) {
+                minDot = dotProduct;
+                indexA = i;
+                indexB = j;
+            }
+        }
+    }
+
+    std::array<int, 2> remaining;
+    int remainingCount = 0;
+    for (int i = 0; i < 4; i++) {
+        if ((i != indexA) && (i != indexB)) {
+            remaining[remainingCount++] = i;
+        }
+    }
+    const int indexC = remaining[0];
+    const int indexD = remaining[1];
+
+    // Step 2: gnomonic-project all 4 unit vectors onto the tangent plane at their centroid.
+    SkyVector centroid = normalize({
+        vectors[0].x + vectors[1].x + vectors[2].x + vectors[3].x,
+        vectors[0].y + vectors[1].y + vectors[2].y + vectors[3].y,
+        vectors[0].z + vectors[1].z + vectors[2].z + vectors[3].z
+    });
+    if (length(centroid) <= 0.0) {
+        return code;
+    }
+
+    // Orthonormal basis (axisU, axisV) spanning the tangent plane at the centroid. Any valid
+    // basis works: rotating all 4 input vectors by a proper rotation rotates the centroid and
+    // this basis the same way, so the resulting code is unchanged.
+    const SkyVector referenceAxis = (std::abs(centroid.z) < 0.9)
+        ? SkyVector{0.0, 0.0, 1.0}
+        : SkyVector{1.0, 0.0, 0.0};
+    SkyVector axisU = cross(referenceAxis, centroid);
+    if (length(axisU) <= 0.0) {
+        return code;
+    }
+    axisU = normalize(axisU);
+    const SkyVector axisV = normalize(cross(centroid, axisU));
+
+    std::array<QPointF, 4> planePoints;
+    for (int i = 0; i < 4; i++) {
+        const double centerDot = dot(vectors[i], centroid);
+        if (centerDot <= 1e-6) {
+            // Vector is on or behind the tangent plane; code undefined for this quad.
+            return code;
+        }
+        const SkyVector scaled = {
+            vectors[i].x / centerDot,
+            vectors[i].y / centerDot,
+            vectors[i].z / centerDot
+        };
+        const SkyVector offset = {
+            scaled.x - centroid.x,
+            scaled.y - centroid.y,
+            scaled.z - centroid.z
+        };
+        planePoints[i] = QPointF(dot(offset, axisU), dot(offset, axisV));
+    }
+
+    // Step 3: affine-map A -> (0, 0), B -> (1, 1) using orthogonal equal-length basis vectors
+    // e_x' = (d + perp(d)) / 2, e_y' = (d - perp(d)) / 2, where d = B - A and
+    // perp(d) = (-d.y, d.x). These sum to d (so B maps to (1,1)) and are orthogonal with
+    // length |d| / sqrt(2).
+    const QPointF pointA = planePoints[indexA];
+    const QPointF pointB = planePoints[indexB];
+    const QPointF d = pointB - pointA;
+    const double dLengthSquared = d.x() * d.x() + d.y() * d.y();
+    if (dLengthSquared <= 0.0) {
+        return code;
+    }
+
+    const QPointF perpD(-d.y(), d.x());
+    const QPointF basisX((d.x() + perpD.x()) / 2.0, (d.y() + perpD.y()) / 2.0);
+    const QPointF basisY((d.x() - perpD.x()) / 2.0, (d.y() - perpD.y()) / 2.0);
+
+    auto codeCoordinates = [&](const QPointF& point) -> QPointF {
+        const QPointF relative = point - pointA;
+        const double u = (relative.x() * basisX.x() + relative.y() * basisX.y()) * 2.0 / dLengthSquared;
+        const double v = (relative.x() * basisY.x() + relative.y() * basisY.y()) * 2.0 / dLengthSquared;
+        return QPointF(u, v);
+    };
+
+    QPointF codeC = codeCoordinates(planePoints[indexC]);
+    QPointF codeD = codeCoordinates(planePoints[indexD]);
+
+    // Step 4: canonicalize. First, swap C/D so xC <= xD.
+    int orderA = indexA;
+    int orderB = indexB;
+    int orderC = indexC;
+    int orderD = indexD;
+    if (codeC.x() > codeD.x()) {
+        std::swap(codeC, codeD);
+        std::swap(orderC, orderD);
+    }
+
+    // Then, swap A/B (equivalent to mapping (x, y) -> (1 - x, 1 - y)) so xC + xD <= 1. This
+    // flip reverses the x-ordering of C and D, so re-swap them afterwards.
+    bool abSwapped = false;
+    if ((codeC.x() + codeD.x()) > 1.0) {
+        codeC = QPointF(1.0 - codeC.x(), 1.0 - codeC.y());
+        codeD = QPointF(1.0 - codeD.x(), 1.0 - codeD.y());
+        std::swap(codeC, codeD);
+        std::swap(orderC, orderD);
+        std::swap(orderA, orderB);
+        abSwapped = true;
+    }
+
+    code.valid = true;
+    code.xC = codeC.x();
+    code.yC = codeC.y();
+    code.xD = codeD.x();
+    code.yD = codeD.y();
+    code.order = {orderA, orderB, orderC, orderD};
+    code.abSwapped = abSwapped;
+
+    // Step 5: AB great-circle angle, for optional scale-aware (mode 1) matching.
+    const double abDot = std::clamp(dot(vectors[indexA], vectors[indexB]), -1.0, 1.0);
+    code.angleABRadians = std::acos(abDot);
+
+    return code;
 }
 
 static bool anchorAlignedPoseFromPixel(const CameraSettings& settings,
@@ -4843,12 +5210,13 @@ static void buildProjectedCatalogInto(const PlateSolveCatalogContext& catalogCon
         : 0.0;
     const double halfDiagonalFovRadians = projector.halfHorizontalFov * maxNormalizedRadius;
     const double coneHalfAngleRadians = halfDiagonalFovRadians * 2.0 + degToRad(1.0);
-    // projectVector() applies radial distortion (scale = 1 + k1*r^2) AFTER projection. With
-    // barrel distortion (k1 < 0, scale < 1) a star at a larger undistorted angle is pulled
+    // projectVector() applies radial distortion (scale = 1 + k1*r^2 + k2*r^4) AFTER projection.
+    // With barrel distortion (scale < 1) a star at a larger undistorted angle is pulled
     // radially inward and can still land in bounds, so an undistorted-angle cone would wrongly
     // reject it. The solver sweeps negative k1 (distortion sweep + LM refinement), so the cone is
-    // only a guaranteed superset of the in-bounds set when k1 >= 0 (positive/pincushion distortion
-    // pushes stars outward, shrinking the in-bounds angular region). Disable the cull otherwise.
+    // only a guaranteed superset of the in-bounds set when k1 >= 0 (positive/pincushion
+    // distortion pushes stars outward, shrinking the in-bounds angular region).
+    // Disable the cull otherwise.
     const bool useConeCull = (coneHalfAngleRadians < degToRad(15.0))
         && (projector.distortionK1 >= 0.0);
     const double coneCosThreshold = useConeCull ? std::cos(coneHalfAngleRadians) : -2.0;
@@ -5255,6 +5623,7 @@ PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& set
     // come from immediate repeats within one outer solve (same-seed runs, revisited
     // recenter offsets), not from long retention.
     constexpr int kMaxCachedContexts = 3;
+
     const QString cacheKey = QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11")
         .arg(static_cast<int>(settings.m_plateSolveCatalogSource))
         .arg(qRound64(static_cast<double>(settings.m_azimuth) * 1e4))
@@ -6520,6 +6889,276 @@ QVector<QuadSignature> buildDetectionQuadSignatures(const QVector<CameraPipeline
         return lhsScore > rhsScore;
     });
     return signatures;
+}
+
+// Unprojects detection pixel centers into unit vectors in a fixed reference camera frame
+// (az=0/el=90/roll=0), for use by the vector-space quad-hash blind seed engine. This mirrors
+// the brightDetectionVectors pattern used by the bright-pair seeder: the reference frame is
+// arbitrary but fixed, so poseFromVectorPairsN can later recover the true az/el/roll by
+// rotating this baseProjector's center/right vectors into the catalog (sky) frame.
+// detectionRayVectors and detectionRayVectorValid are parallel to detectionIndices.
+static SkyProjector buildDetectionRayVectors(const CameraSettings& settings,
+                                             const QSize& imageSize,
+                                             double referenceFovDegrees,
+                                             double centerOffsetXPixels,
+                                             double centerOffsetYPixels,
+                                             double distortionK1,
+                                             const QVector<CameraPipelineStarDetection>& starDetections,
+                                             const QVector<int>& detectionIndices,
+                                             QVector<SkyVector>& detectionRayVectors,
+                                             QVector<quint8>& detectionRayVectorValid)
+{
+    const SkyProjector referenceProjector = createProjector(
+        settings,
+        imageSize,
+        0.0,
+        90.0,
+        0.0,
+        referenceFovDegrees,
+        centerOffsetXPixels,
+        centerOffsetYPixels,
+        distortionK1);
+
+    detectionRayVectors.assign(detectionIndices.size(), SkyVector{0.0, 0.0, 0.0});
+    detectionRayVectorValid.assign(detectionIndices.size(), 0);
+    if (!referenceProjector.valid) {
+        return referenceProjector;
+    }
+
+    for (int i = 0; i < detectionIndices.size(); ++i)
+    {
+        const int detectionIndex = detectionIndices[i];
+        if ((detectionIndex >= 0)
+            && (detectionIndex < starDetections.size())
+            && unprojectPixelToVector(referenceProjector, starDetections[detectionIndex].m_center, detectionRayVectors[i]))
+        {
+            detectionRayVectorValid[i] = 1;
+        }
+    }
+    return referenceProjector;
+}
+
+// A single quad in the catalog quad-code index: its vector code (buildVectorQuadCode output,
+// optionally extended with the AB great-circle angle for scale-aware mode-1 matching) plus
+// the visibleStars indices of its four corner stars in canonical (A,B,C,D) order.
+struct CatalogQuadCodeEntry
+{
+    double code[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
+    std::array<int, 4> visibleStarIndices = {{-1, -1, -1, -1}};
+};
+
+// Uniform-grid spatial index over CatalogQuadCodeEntry::code, supporting epsilon-ball range
+// queries. This plays the role of the "small in-house 4D/5D k-d tree" from the design notes:
+// a fixed-size grid hash gives the same epsilon-ball lookup with much less code than a
+// balanced tree, and follows the same QHash bucketing pattern already used by
+// buildQuadSignatureBuckets for the legacy 2D quad matcher.
+struct CatalogQuadCodeIndex
+{
+    QVector<CatalogQuadCodeEntry> entries;
+    QHash<quint64, QVector<int>> buckets; // grid cell key -> indices into entries
+    double cellSize = 0.02;
+    int dimensions = 4; // 4 (mode 0, fov unknown) or 5 (mode 1, includes AB angle)
+
+    quint64 cellKey(const std::array<qint64, 5>& cell) const
+    {
+        quint64 key = 0;
+        for (int d = 0; d < dimensions; ++d) {
+            // Pack each dimension into 12 bits (range +/-2048 cells); with cellSize=0.02
+            // that covers code values out to +/-40, well beyond any valid quad code.
+            key = (key << 12) | (static_cast<quint64>(cell[d] + 2048) & 0xFFFu);
+        }
+        return key;
+    }
+
+    std::array<qint64, 5> cellOf(const double* code) const
+    {
+        std::array<qint64, 5> cell{};
+        for (int d = 0; d < dimensions; ++d) {
+            cell[d] = static_cast<qint64>(std::floor(code[d] / cellSize));
+        }
+        return cell;
+    }
+
+    void addEntry(const CatalogQuadCodeEntry& entry)
+    {
+        const int entryIndex = entries.size();
+        entries.append(entry);
+        buckets[cellKey(cellOf(entry.code))].append(entryIndex);
+    }
+
+    // Calls visitor(entryIndex) for every entry whose code lies within epsilon (L-infinity)
+    // of target across all dimensions.
+    template <typename Visitor>
+    void queryEpsilonBall(const double* target, double epsilon, Visitor&& visitor) const
+    {
+        const qint64 cellSpan = std::max<qint64>(1, static_cast<qint64>(std::ceil(epsilon / cellSize)));
+        const qint64 span = 2 * cellSpan + 1;
+        std::array<qint64, 5> baseCell{};
+        for (int d = 0; d < dimensions; ++d) {
+            baseCell[d] = static_cast<qint64>(std::floor(target[d] / cellSize)) - cellSpan;
+        }
+        qint64 totalCells = 1;
+        for (int d = 0; d < dimensions; ++d) {
+            totalCells *= span;
+        }
+
+        for (qint64 linear = 0; linear < totalCells; ++linear)
+        {
+            qint64 remainder = linear;
+            std::array<qint64, 5> cell{};
+            for (int d = 0; d < dimensions; ++d) {
+                cell[d] = baseCell[d] + (remainder % span);
+                remainder /= span;
+            }
+            const auto it = buckets.find(cellKey(cell));
+            if (it == buckets.end()) {
+                continue;
+            }
+            for (int entryIndex : it.value())
+            {
+                bool withinEpsilon = true;
+                for (int d = 0; d < dimensions; ++d) {
+                    if (std::fabs(entries[entryIndex].code[d] - target[d]) > epsilon) {
+                        withinEpsilon = false;
+                        break;
+                    }
+                }
+                if (withinEpsilon) {
+                    visitor(entryIndex);
+                }
+            }
+        }
+    }
+};
+
+// Builds the vector-space quad-code index over the visible catalog for the blind quad-hash
+// engine (design notes item 3). Stars are bucketed into ~10deg az/el cells and the brightest
+// few per cell are kept as quad anchors; each anchor is combined with 3-of-k of its
+// angularly-nearest neighbours (restricted to the ~2-70deg scale band) to form quads, capped
+// per-anchor and overall so the index stays bounded (~50k quads) for large catalogs.
+static CatalogQuadCodeIndex buildCatalogQuadCodeIndex(const QVector<VisibleCatalogStar>& visibleStars,
+                                                       bool includeScaleDimension)
+{
+    CatalogQuadCodeIndex index;
+    index.dimensions = includeScaleDimension ? 5 : 4;
+    if (visibleStars.size() < 4) {
+        return index;
+    }
+
+    constexpr double cellSizeDegrees = 10.0;
+    constexpr int maxStarsPerCell = 6;
+    constexpr int neighborCount = 6;
+    constexpr int maxQuadsPerAnchor = 8;
+    constexpr int maxTotalQuads = 50000;
+    constexpr double minNeighborSeparationDegrees = 2.0;
+    constexpr double maxNeighborSeparationDegrees = 70.0;
+
+    QHash<quint64, QVector<int>> cellStars; // az/el cell key -> visibleStars indices
+    for (int i = 0; i < visibleStars.size(); ++i)
+    {
+        const qint64 azCell = static_cast<qint64>(std::floor(visibleStars[i].azimuthDegrees / cellSizeDegrees));
+        const qint64 elCell = static_cast<qint64>(std::floor((visibleStars[i].elevationDegrees + 90.0) / cellSizeDegrees));
+        const quint64 key = (static_cast<quint64>(azCell + 64) << 16) | static_cast<quint64>(elCell + 64);
+        cellStars[key].append(i);
+    }
+
+    QVector<int> anchorIndices;
+    for (auto it = cellStars.begin(); it != cellStars.end(); ++it)
+    {
+        QVector<int>& starsInCell = it.value();
+        std::sort(starsInCell.begin(), starsInCell.end(), [&](int lhs, int rhs) {
+            return visibleStars[lhs].magnitude < visibleStars[rhs].magnitude;
+        });
+        const int keepCount = std::min<int>(maxStarsPerCell, starsInCell.size());
+        for (int j = 0; j < keepCount; ++j) {
+            anchorIndices.append(starsInCell[j]);
+        }
+    }
+
+    const double minNeighborDot = std::cos(degToRad(maxNeighborSeparationDegrees));
+    const double maxNeighborDot = std::cos(degToRad(minNeighborSeparationDegrees));
+
+    for (int anchor : anchorIndices)
+    {
+        if (index.entries.size() >= maxTotalQuads) {
+            break;
+        }
+
+        QVector<std::pair<double, int>> neighborDistances;
+        neighborDistances.reserve(visibleStars.size());
+        for (int j = 0; j < visibleStars.size(); ++j)
+        {
+            if (j == anchor) {
+                continue;
+            }
+            const double angleDot = std::clamp(dot(visibleStars[anchor].vector, visibleStars[j].vector), -1.0, 1.0);
+            // Restrict neighbours to the design's scale band: too-close stars don't add
+            // distinguishing geometry, too-far stars rarely co-occur within one detection FoV.
+            if ((angleDot < minNeighborDot) || (angleDot > maxNeighborDot)) {
+                continue;
+            }
+            neighborDistances.append({std::acos(angleDot), j});
+        }
+
+        const int kCount = std::min<int>(neighborCount, static_cast<int>(neighborDistances.size()));
+        if (kCount < 3) {
+            continue;
+        }
+        std::partial_sort(neighborDistances.begin(), neighborDistances.begin() + kCount, neighborDistances.end(),
+            [](const std::pair<double, int>& lhs, const std::pair<double, int>& rhs) {
+                return lhs.first < rhs.first;
+            });
+
+        int quadsForAnchor = 0;
+        for (int a = 0; (a < kCount) && (quadsForAnchor < maxQuadsPerAnchor); ++a)
+        {
+            for (int b = a + 1; (b < kCount) && (quadsForAnchor < maxQuadsPerAnchor); ++b)
+            {
+                for (int c = b + 1; (c < kCount) && (quadsForAnchor < maxQuadsPerAnchor); ++c)
+                {
+                    const std::array<int, 4> starIndices = {{
+                        anchor,
+                        neighborDistances[a].second,
+                        neighborDistances[b].second,
+                        neighborDistances[c].second
+                    }};
+                    const std::array<SkyVector, 4> vectors = {{
+                        visibleStars[starIndices[0]].vector,
+                        visibleStars[starIndices[1]].vector,
+                        visibleStars[starIndices[2]].vector,
+                        visibleStars[starIndices[3]].vector
+                    }};
+                    const QuadVectorCode quadCode = buildVectorQuadCode(vectors);
+                    if (!quadCode.valid) {
+                        continue;
+                    }
+
+                    CatalogQuadCodeEntry entry;
+                    entry.code[0] = quadCode.xC;
+                    entry.code[1] = quadCode.yC;
+                    entry.code[2] = quadCode.xD;
+                    entry.code[3] = quadCode.yD;
+                    entry.code[4] = quadCode.angleABRadians;
+                    for (int k = 0; k < 4; ++k) {
+                        entry.visibleStarIndices[k] = starIndices[quadCode.order[k]];
+                    }
+                    index.addEntry(entry);
+                    ++quadsForAnchor;
+                    if (index.entries.size() >= maxTotalQuads) {
+                        break;
+                    }
+                }
+                if (index.entries.size() >= maxTotalQuads) {
+                    break;
+                }
+            }
+            if (index.entries.size() >= maxTotalQuads) {
+                break;
+            }
+        }
+    }
+
+    return index;
 }
 
 QVector<QuadSignature> buildCatalogQuadSignatures(const CameraSettings& settings,
@@ -11112,6 +11751,328 @@ QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
     });
     const int seedLimit = isWideFisheyeLens ? 64 : 12;
     return selectConsensusSeedRepresentatives(settings, seeds, seedLimit, "quad");
+}
+
+// Vector-space quad-hash blind seed engine (design notes "Blind quad-hash geometric
+// indexing" plan, items 1-6). Mode 1 only (FoV known/trusted): unprojects detection pixels
+// into camera-frame rays at the known FoV, builds vector quad codes for groups of 4
+// detections, looks them up in a catalog quad-code index built from the visible sky, and
+// recovers az/el/roll for each code match via the N-vector Wahba solver. Runs alongside
+// buildBlindQuadSeeds (which remains the fallback for mode 0 / unknown FoV).
+QVector<Evaluation> buildVectorQuadBlindSeeds(const CameraSettings& settings,
+                                              const PlateSolveCatalogContext& catalogContext,
+                                              const QSize& imageSize,
+                                              const QDateTime& captureDateTimeUtc,
+                                              const QVector<CameraPipelineStarDetection>& starDetections,
+                                              const QVector<int>& detectionIndices,
+                                              const QVector<VisibleCatalogStar>& visibleStars)
+{
+    QVector<Evaluation> seeds;
+    if (isCancellationRequested() || (visibleStars.size() < settings.m_plateSolveMinMatches)) {
+        return seeds;
+    }
+
+    // Mode 0 (blind FoV) is not yet supported by this engine - the legacy
+    // buildBlindQuadSeeds path remains the fallback for that case.
+    if (!plateSolveStartUsesFov(settings)) {
+        return seeds;
+    }
+
+    const bool isWideFisheyeLens = isWidePlateSolveContext(settings);
+    const QVector<int> signatureDetectionIndices = isWideFisheyeLens
+        ? selectDetectionIndicesForBlindSignatures(starDetections, detectionIndices, 10, 10, 16)
+        : detectionIndices;
+
+    const bool useStartLens = plateSolveStartUsesLens(settings);
+    const double fixedCenterOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
+    const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
+    const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
+    const double seedFov = static_cast<double>(settings.m_fov);
+
+    QVector<SkyVector> detectionRayVectors;
+    QVector<quint8> detectionRayVectorValid;
+    const SkyProjector referenceProjector = buildDetectionRayVectors(
+        settings,
+        imageSize,
+        seedFov,
+        fixedCenterOffsetX,
+        fixedCenterOffsetY,
+        fixedDistortionK1,
+        starDetections,
+        signatureDetectionIndices,
+        detectionRayVectors,
+        detectionRayVectorValid);
+    if (!referenceProjector.valid || isCancellationRequested()) {
+        return seeds;
+    }
+
+    const CatalogQuadCodeIndex catalogIndex = buildCatalogQuadCodeIndex(visibleStars, true);
+    if (isCancellationRequested() || catalogIndex.entries.isEmpty()) {
+        return seeds;
+    }
+    recordProfileMetric(QStringLiteral("search.vectorQuadCatalogEntries"), catalogIndex.entries.size());
+
+    const int maxDetectionCount = std::min<int>(
+        isWideFisheyeLens ? 16 : 14,
+        static_cast<int>(detectionRayVectors.size()));
+    constexpr double codeEpsilon = 0.02;
+    constexpr int maxVerified = 50;
+
+    const int minBlindSeedMatches = std::max(
+        settings.m_plateSolveMinMatches + 1,
+        std::min(6, static_cast<int>(detectionIndices.size())));
+
+    struct QuadHypothesis
+    {
+        double score = std::numeric_limits<double>::infinity();
+        std::array<int, 4> detectionIndicesIdx {{-1, -1, -1, -1}}; // indices into detectionRayVectors, canonical A,B,C,D
+        std::array<int, 4> catalogVisibleIndices {{-1, -1, -1, -1}}; // indices into visibleStars, canonical A,B,C,D
+    };
+    QVector<QuadHypothesis> hypotheses;
+
+    qint64 detectionQuadsConsidered = 0;
+    qint64 codeMatches = 0;
+
+    // Detection quads are generated anchor-centric (each detection + 3-of-its-
+    // angularly-nearest neighbours), mirroring buildCatalogQuadCodeIndex's
+    // anchor+neighbour structure with the same band/counts. Catalog quads are
+    // NOT an unstructured C(k,4) over all visible stars - they're restricted
+    // to "anchor + 3-of-its-6-nearest-catalog-neighbours within [2,70] deg".
+    // Generating detection quads as an unstructured C(maxDetectionCount,4) gave
+    // near-zero code matches because true correspondences were almost never
+    // representable in the catalog index's combinatorial subset. Using the
+    // same anchor+neighbour recipe on both sides aligns their supports.
+    constexpr int detectionNeighborCount = 6;
+    constexpr int maxQuadsPerDetectionAnchor = 8;
+    constexpr double minDetectionNeighborSeparationDegrees = 2.0;
+    constexpr double maxDetectionNeighborSeparationDegrees = 70.0;
+    const double minDetectionNeighborDot = std::cos(degToRad(maxDetectionNeighborSeparationDegrees));
+    const double maxDetectionNeighborDot = std::cos(degToRad(minDetectionNeighborSeparationDegrees));
+
+    for (int anchor = 0; (anchor < maxDetectionCount) && !isCancellationRequested(); ++anchor)
+    {
+        if (!detectionRayVectorValid[anchor]) continue;
+
+        QVector<std::pair<double, int>> neighborDistances;
+        neighborDistances.reserve(maxDetectionCount);
+        for (int j = 0; j < maxDetectionCount; ++j)
+        {
+            if ((j == anchor) || !detectionRayVectorValid[j]) continue;
+            const double angleDot = std::clamp(dot(detectionRayVectors[anchor], detectionRayVectors[j]), -1.0, 1.0);
+            if ((angleDot < minDetectionNeighborDot) || (angleDot > maxDetectionNeighborDot)) {
+                continue;
+            }
+            neighborDistances.append({std::acos(angleDot), j});
+        }
+
+        const int kCount = std::min<int>(detectionNeighborCount, static_cast<int>(neighborDistances.size()));
+        if (kCount < 3) continue;
+        std::partial_sort(neighborDistances.begin(), neighborDistances.begin() + kCount, neighborDistances.end(),
+            [](const std::pair<double, int>& lhs, const std::pair<double, int>& rhs) {
+                return lhs.first < rhs.first;
+            });
+
+        int quadsForAnchor = 0;
+        for (int a = 0; (a < kCount) && (quadsForAnchor < maxQuadsPerDetectionAnchor); ++a)
+        {
+            for (int b = a + 1; (b < kCount) && (quadsForAnchor < maxQuadsPerDetectionAnchor); ++b)
+            {
+                for (int c = b + 1; (c < kCount) && (quadsForAnchor < maxQuadsPerDetectionAnchor); ++c)
+                {
+                    const std::array<int, 4> idx {{
+                        anchor,
+                        neighborDistances[a].second,
+                        neighborDistances[b].second,
+                        neighborDistances[c].second
+                    }};
+                    const std::array<SkyVector, 4> vectors {{
+                        detectionRayVectors[idx[0]],
+                        detectionRayVectors[idx[1]],
+                        detectionRayVectors[idx[2]],
+                        detectionRayVectors[idx[3]]
+                    }};
+                    const QuadVectorCode detectionCode = buildVectorQuadCode(vectors);
+                    if (!detectionCode.valid) {
+                        continue;
+                    }
+                    ++detectionQuadsConsidered;
+                    ++quadsForAnchor;
+
+                    const double target[5] = {
+                        detectionCode.xC,
+                        detectionCode.yC,
+                        detectionCode.xD,
+                        detectionCode.yD,
+                        detectionCode.angleABRadians
+                    };
+                    catalogIndex.queryEpsilonBall(target, codeEpsilon, [&](int entryIndex) {
+                        ++codeMatches;
+                        const CatalogQuadCodeEntry& entry = catalogIndex.entries[entryIndex];
+                        double codeDistanceSquared = 0.0;
+                        for (int d = 0; d < catalogIndex.dimensions; ++d) {
+                            const double diff = entry.code[d] - target[d];
+                            codeDistanceSquared += diff * diff;
+                        }
+                        double brightnessSum = 0.0;
+                        for (int corner = 0; corner < 4; ++corner) {
+                            brightnessSum += visibleStars[entry.visibleStarIndices[corner]].magnitude;
+                        }
+
+                        QuadHypothesis hypothesis;
+                        hypothesis.score = codeDistanceSquared + brightnessSum * 0.01;
+                        for (int corner = 0; corner < 4; ++corner) {
+                            hypothesis.detectionIndicesIdx[corner] = idx[detectionCode.order[corner]];
+                            hypothesis.catalogVisibleIndices[corner] = entry.visibleStarIndices[corner];
+                        }
+                        hypotheses.append(hypothesis);
+                    });
+                }
+            }
+        }
+    }
+    recordProfileMetric(QStringLiteral("search.vectorQuadDetectionQuads"), detectionQuadsConsidered);
+    recordProfileMetric(QStringLiteral("search.vectorQuadCodeMatches"), codeMatches);
+    if (isCancellationRequested() || hypotheses.isEmpty()) {
+        return seeds;
+    }
+
+    std::sort(hypotheses.begin(), hypotheses.end(), [](const QuadHypothesis& lhs, const QuadHypothesis& rhs) {
+        return lhs.score < rhs.score;
+    });
+
+    bool earlyExit = false;
+    qint64 verifiedSeeds = 0;
+    const int verifyLimit = std::min<int>(maxVerified, static_cast<int>(hypotheses.size()));
+    for (int h = 0; h < verifyLimit; ++h)
+    {
+        if (earlyExit || isCancellationRequested()) break;
+        const QuadHypothesis& hypothesis = hypotheses[h];
+
+        QVector<SkyVector> sourceVectors(4);
+        QVector<SkyVector> targetVectors(4);
+        QVector<int> allowedCatalogIndices;
+        allowedCatalogIndices.reserve(4);
+        for (int corner = 0; corner < 4; ++corner) {
+            sourceVectors[corner] = detectionRayVectors[hypothesis.detectionIndicesIdx[corner]];
+            targetVectors[corner] = visibleStars[hypothesis.catalogVisibleIndices[corner]].vector;
+            allowedCatalogIndices.append(visibleStars[hypothesis.catalogVisibleIndices[corner]].catalogIndex);
+        }
+
+        double azimuthDegrees = 0.0;
+        double elevationDegrees = 0.0;
+        double rollDegrees = 0.0;
+        if (!poseFromVectorPairsN(referenceProjector, sourceVectors, targetVectors, azimuthDegrees, elevationDegrees, rollDegrees)) {
+            continue;
+        }
+
+        const Evaluation seededCandidate = evaluatePose(
+            settings,
+            catalogContext,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices,
+            azimuthDegrees,
+            elevationDegrees,
+            rollDegrees,
+            seedFov,
+            &allowedCatalogIndices,
+            fixedCenterOffsetX,
+            fixedCenterOffsetY,
+            fixedDistortionK1);
+        ++verifiedSeeds;
+        const bool debugSparseQuad = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE");
+        if (!seededCandidate.valid) {
+            if (debugSparseQuad) {
+                qDebug().noquote().nospace()
+                    << "CameraPlateSolver[vector-quad-hyp] h=" << h
+                    << " score=" << hypothesis.score
+                    << " poseAz=" << azimuthDegrees << " poseEl=" << elevationDegrees << " poseRoll=" << rollDegrees
+                    << " seededCandidate.valid=false";
+            }
+            continue;
+        }
+
+        const Evaluation candidate = evaluatePose(
+            settings,
+            catalogContext,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices,
+            seededCandidate.azimuthDegrees,
+            seededCandidate.elevationDegrees,
+            seededCandidate.rollDegrees,
+            seededCandidate.fovDegrees,
+            nullptr,
+            fixedCenterOffsetX,
+            fixedCenterOffsetY,
+            fixedDistortionK1);
+
+        const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
+            settings,
+            catalogContext,
+            imageSize,
+            captureDateTimeUtc,
+            starDetections,
+            detectionIndices,
+            candidate);
+        if (debugSparseQuad) {
+            // Note: keep each qDebug() statement to <=9 QString::arg() placeholders -
+            // 10+ placeholders (i.e. reaching %10/%11) truncates the output on this toolchain.
+            qDebug().noquote() << QStringLiteral("CameraPlateSolver[vector-quad-hyp] h=%1 seeded.matches=%2 seeded.rms=%3")
+                .arg(h).arg(seededCandidate.matchCount).arg(seededCandidate.rmsErrorPixels);
+            qDebug().noquote() << QStringLiteral("CameraPlateSolver[vector-quad-hyp] h=%1 candidate.matches=%2 candidate.rms=%3 candidate.valid=%4 verified.valid=%5")
+                .arg(h).arg(candidate.matchCount).arg(candidate.rmsErrorPixels).arg(candidate.valid).arg(verifiedCandidate.valid);
+        }
+        if (verifiedCandidate.valid) {
+            seeds.append(verifiedCandidate);
+            if (debugSparseQuad)
+            {
+                qDebug().noquote().nospace()
+                    << "CameraPlateSolver[vector-quad-seed] h=" << h
+                    << " score=" << hypothesis.score
+                    << " Az=" << verifiedCandidate.azimuthDegrees
+                    << " El=" << verifiedCandidate.elevationDegrees
+                    << " Roll=" << verifiedCandidate.rollDegrees
+                    << " FoV=" << verifiedCandidate.fovDegrees
+                    << " matches=" << verifiedCandidate.matchCount
+                    << " RMS=" << verifiedCandidate.rmsErrorPixels;
+            }
+            if (verifiedCandidate.matchCount >= minBlindSeedMatches + 3
+                && verifiedCandidate.rmsErrorPixels < kBlindSeedMaxRmsPixels * 0.5)
+            {
+                earlyExit = true;
+            }
+        } else {
+            // The full re-evaluation from a quad-derived pose often lands with many
+            // matches but a coarser RMS than verifyBlindSeedCandidate's tight gate
+            // (tuned for already-refined poses). Accept it directly with the same
+            // relaxed cap used for guided-triangle seeds, so the final solver gets
+            // a chance to refine it further.
+            const double relaxedSeedRmsCap = std::min(
+                std::max(18.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.75),
+                static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.90);
+            if (candidate.valid
+                && (candidate.matchCount >= minBlindSeedMatches)
+                && (candidate.rmsErrorPixels <= relaxedSeedRmsCap)
+                && hasAcceptableBrightnessConsistency(candidate))
+            {
+                seeds.append(candidate);
+                if (debugSparseQuad) {
+                    qDebug().noquote() << QStringLiteral("CameraPlateSolver[vector-quad-seed-relaxed] h=%1 matches=%2 rms=%3")
+                        .arg(h).arg(candidate.matchCount).arg(candidate.rmsErrorPixels);
+                }
+            }
+        }
+    }
+    recordProfileMetric(QStringLiteral("search.vectorQuadVerifiedSeeds"), verifiedSeeds);
+
+    std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
+        return isBetterWeakModeEvaluation(lhs, rhs);
+    });
+    const int seedLimit = isWideFisheyeLens ? 64 : 12;
+    return selectConsensusSeedRepresentatives(settings, seeds, seedLimit, "vector-quad");
 }
 
 static quint64 spatialCellKey(int x, int y)
@@ -17372,7 +18333,8 @@ Evaluation rescoreWeakModeCandidateWithDistortionSweep(const CameraSettings& set
             nullptr,
             baseCenterOffsetX,
             baseCenterOffsetY,
-            distortionK1);
+            distortionK1,
+            -1.0);
         rescored.anchored = candidate.anchored;
         rescored.sparseGuidedPair = candidate.sparseGuidedPair;
         rescored.guidedTriangle = candidate.guidedTriangle;
@@ -18240,6 +19202,33 @@ Evaluation searchBestPose(const CameraSettings& settings,
             consumeBlindSeeds(brightPairSeeds, "bright-pair-seed");
         }
 
+        // For mode-1 (FoV known) wide/weak-mode images, run the vector-quad engine
+        // here, before the bright-pair "good enough" gate below can short-circuit
+        // the rest of the seed pipeline. brightPairSeeds alone routinely satisfies
+        // hasGoodWideBlindSeed() for wide/fisheye images even when the resulting
+        // seed doesn't lead to a successful solve (e.g. stars-wide-2.jpg), which
+        // made this engine dead code when reached only via the fallback chain below.
+        bool vectorQuadSeedsRunEarly = false;
+        if (wideWeakMode && plateSolveStartUsesFov(settings)
+            && !qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_QUAD_INDEX"))
+        {
+            seedStageStartMs = searchProfileTimer.elapsed();
+            if (isCancellationRequested()) {
+                return best;
+            }
+            const QVector<Evaluation> vectorQuadSeeds = buildVectorQuadBlindSeeds(
+                settings,
+                catalogContext,
+                imageSize,
+                captureDateTimeUtc,
+                starDetections,
+                detectionIndices,
+                *blindVisibleStars);
+            logSearchProfile("vector-quad-seeds", seedStageStartMs);
+            consumeBlindSeeds(vectorQuadSeeds, "vector-quad-seed");
+            vectorQuadSeedsRunEarly = true;
+        }
+
         const bool brightPairSeedAlreadyAcceptable = useStartDirection
             && !wideWeakMode
             && isAcceptableDirectionSeedSolve(settings, minMatchCount, best)
@@ -18284,16 +19273,47 @@ Evaluation searchBestPose(const CameraSettings& settings,
                 if (isCancellationRequested()) {
                     return best;
                 }
-                const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
-                    settings,
-                    catalogContext,
-                    imageSize,
-                    captureDateTimeUtc,
-                    starDetections,
-                    detectionIndices,
-                    *blindVisibleStars);
-                logSearchProfile("blind-quad-seeds", seedStageStartMs);
-                consumeBlindSeeds(blindQuadSeeds, "blind-quad-seed");
+                // Vector quad-hash engine (mode 1, FoV known) runs first; the legacy
+                // ratio-based quad matcher below remains as the fallback for mode 0
+                // (blind FoV) and for any cases the new engine doesn't resolve. For
+                // wideWeakMode mode-1 images this already ran earlier (above), before
+                // the bright-pair short-circuit - don't run it twice.
+                if (!vectorQuadSeedsRunEarly && !qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_QUAD_INDEX"))
+                {
+                    const QVector<Evaluation> vectorQuadSeeds = buildVectorQuadBlindSeeds(
+                        settings,
+                        catalogContext,
+                        imageSize,
+                        captureDateTimeUtc,
+                        starDetections,
+                        detectionIndices,
+                        *blindVisibleStars);
+                    logSearchProfile("vector-quad-seeds", seedStageStartMs);
+                    consumeBlindSeeds(vectorQuadSeeds, "vector-quad-seed");
+                }
+
+                if (hasGoodWideBlindSeed())
+                {
+                    recordProfileMetric(QStringLiteral("search.blindQuadSkipped"), 1);
+                    logSearchProfile("blind-quad-seeds", searchProfileTimer.elapsed());
+                }
+                else
+                {
+                    seedStageStartMs = searchProfileTimer.elapsed();
+                    if (isCancellationRequested()) {
+                        return best;
+                    }
+                    const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
+                        settings,
+                        catalogContext,
+                        imageSize,
+                        captureDateTimeUtc,
+                        starDetections,
+                        detectionIndices,
+                        *blindVisibleStars);
+                    logSearchProfile("blind-quad-seeds", seedStageStartMs);
+                    consumeBlindSeeds(blindQuadSeeds, "blind-quad-seed");
+                }
             }
         }
         logSearchProfile("blind-seeds", stageStartMs);
@@ -19633,7 +20653,6 @@ FinalMatchPassEvaluation tightenNarrowFinalPass(const CameraSettings& settings,
 {
     const int minMatches = std::max(4, settings.m_plateSolveMinMatches);
     if (!original.projectorValid
-        || !isNarrowField(settings)
         || (original.finalMatches.size() < minMatches))
     {
         return original;
@@ -19661,11 +20680,20 @@ FinalMatchPassEvaluation tightenNarrowFinalPass(const CameraSettings& settings,
 
     const FinalMatchPassEvaluation tightened = evaluateFinalMatchPass(
         settings, catalogContext, imageSize, starDetections, detectionIndices, pose, finalMatchRadius);
+    // Guard against the tightened fit drifting to a different FOV that happens to
+    // have a slightly lower RMS on its own (smaller) inlier set but is a worse pose
+    // overall -- only trust the tightened result if its FOV stayed close to the
+    // pose it was sharpening.
+    const bool fovDriftAcceptable = !std::isfinite(original.pose.fovDegrees)
+        || (original.pose.fovDegrees <= 0.0)
+        || (std::abs(tightened.pose.fovDegrees - original.pose.fovDegrees)
+            <= std::max(5.0, original.pose.fovDegrees * 0.05));
     if (tightened.projectorValid
         && std::isfinite(tightened.rmsErrorPixels)
         && (tightened.finalMatches.size()
             >= static_cast<qsizetype>(std::floor(static_cast<double>(original.finalMatches.size()) * 0.9)))
-        && (tightened.rmsErrorPixels <= original.rmsErrorPixels))
+        && (tightened.rmsErrorPixels <= original.rmsErrorPixels)
+        && fovDriftAcceptable)
     {
         return tightened;
     }
@@ -21326,7 +22354,8 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
 
     QString rollAmbiguityReason;
     FinalMatchPassEvaluation rollAdoptedAlias;
-    if (hasCompetitiveRollAlias(
+    const qint64 rollAliasStartMs = solveProfileTimer.elapsed();
+    const bool competitiveRollAlias = hasCompetitiveRollAlias(
             settings,
             catalogContext,
             imageSize,
@@ -21335,7 +22364,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             selectedFinalPass,
             finalMatchRadius,
             &rollAmbiguityReason,
-            &rollAdoptedAlias))
+            &rollAdoptedAlias);
+    logSolveProfile("rollAliasCheck", rollAliasStartMs);
+    if (competitiveRollAlias)
     {
         result.m_matchedStars = finalMatches.size();
         result.m_rmsErrorPixels = selectedFinalPass.rmsErrorPixels;

@@ -1520,6 +1520,410 @@ machine load (a contended run measured 278.9s with the same binary — per-case 
 not totals, is the reliable signal; the optimized-path cases improved even in the
 contended run).
 
+## Performance pass, round 4 (2026-06-12) — negative result, safe tier exhausted
+
+**Tried and reverted: catalog-query-centre quantization.** Snapping the catalog region
+query centre to a 2° grid would have let every recenter/escape retry share one memoized
+context (the region radius ~14° dwarfs the ≤1.3° recenter offsets, and
+`buildVisibleCatalog` is direction-agnostic, so this looked behaviour-preserving). It is
+not: the spot check changed solver results (narrow-7 matched 193→176; m101@15 145→122
+and slower). **Lesson: the loaded region's exact content is implicitly part of solver
+behaviour** — candidate/signature selection ranks stars over the whole region, so a
+1-2° shift in region centre changes which stars enter the pools even though none of
+them are near the image. Any region-changing optimization is therefore in the
+behaviour-affecting class, not the provably-safe class. Reverted; revert verified
+bit-identical (193/1542/145 restored).
+
+Also added a `solve.rollAliasCheck` stage timer (the `hasCompetitiveRollAlias`
+correctness gate evaluates alternate-roll hypotheses inside the acceptance span — now
+measurable separately).
+
+**State of play after four rounds:** quiet-run suite total ~142-150s (from 385.5s,
+≈ -62%), 40/42 + rand2 148/150 throughout. The remaining time is concentrated in
+behaviour-coupled components: `hasCompetitiveRollAlias`, the rescue's pass-1 sweep, the
+roll-recovery grid (already parallel), and core-search seed evaluation already
+hoisted/optimized in round 3. Further gains require behaviour-affecting changes
+(evaluation-cap tuning, retry-ladder restructuring) with full dual-corpus revalidation
+per step — diminishing returns; recommended stopping point.
+
+## Blind quad-hash geometric indexing — implementation plan (2026-06-12, not started)
+
+**Goal:** solve the last two real-suite failures — `stars-wide-2.jpg` row 15
+(startMode=1 Fov: 165° equidistant fisheye, fov known, direction/roll unknown) and
+row 16 (startMode=0 Blind: fov placeholder 9.0, lens model known from settings) —
+and structurally strengthen all blind/fov-only solving with a rotation-invariant,
+distortion-free quad index. Guided-path adoption and prebuilt deep indexes are
+explicitly out of scope (future go/no-go items at the end).
+
+### What exists today (and why it fails on wide-2)
+
+The blind seed pipeline (`searchBestPose`, ~:18230-18300) already runs
+bright-pair seeds → `buildBlindTriangleSeeds` → `buildBlindQuadSeeds` (:10798) →
+wide-fallback grid (72az × 7el × 13roll × 8fov, roll-sweep cached via
+`BlindGridCachedStar`). The quad stage has four structural limits:
+
+1. **Frame mismatch (the core defect).** Detection quads are built in *raw
+   distorted pixel space* (`buildDetectionQuadSignatures`, detection `m_center`),
+   while catalog quads are projected through *synthetic ~rectilinear local
+   projectors* (`buildCatalogQuadSignatures`, `syntheticFov` clamped 20-160°). At
+   165° equidistant fisheye the same 4 stars produce different shapes; the
+   band-aids (`ratioTolerance=0.06`, `ignoreOrientationHandedness` for fisheye)
+   only mask it for compact quads and inflate false matches.
+2. **Coverage starvation.** Catalog quads use only the top-24 brightest visible
+   stars (C(24,4)=10,626 mostly hemisphere-spanning quads = maximal distortion
+   mismatch); detection quads use the top 14-16 detections.
+3. **Quantized bucket hashing** (`buildQuadSignatureBuckets`, qint64 keys) has
+   bucket-boundary misses vs a continuous ε-search.
+4. The fallback grid is too coarse to recover what the quads miss (5° az steps).
+
+### Design — vector-space quad codes over the loaded catalog context
+
+Adapted from astrometry.net, with one deliberate departure: we index the
+*per-solve loaded catalog context* (visible hemisphere at mag≤7-8 ≈ a few
+thousand `VisibleCatalogStar`s, vectors already computed for capture
+time/location, refraction included) instead of prebuilt all-sky files. That is
+fast enough to build in-process and obeys the round-4 lesson (region content is
+behavioural → derive everything deterministically from the existing context,
+cache exact-key only).
+
+1. **Detection rays.** Unproject every detection to a camera-frame unit vector
+   via a reference projector at az=0/el=0/roll=0 with the known
+   fov/projection/k1 (`unprojectPixelToVector` :3264 already exists). This
+   removes ALL lens distortion *before* any geometry — the fix for defect #1.
+   With proper rays, handedness is consistent again, so the
+   `ignoreOrientationHandedness` concession can be dropped on this path (extra
+   discrimination for free).
+2. **Continuous quad code** (identical function for catalog vectors and
+   detection rays — no synthetic projectors anywhere): pick the quad's
+   most-separated pair (A,B); gnomonic-project all 4 stars onto the tangent
+   plane at the quad centroid; affine-map A→(0,0), B→(1,1); code =
+   (xC, yC, xD, yD), canonicalized (swap C/D so xC≤xD, swap A/B so xC+xD≤1,
+   parity bit instead of mirroring). Rotation/translation/scale-invariant.
+   When fov is known (mode 1), append a 5th dimension = normalized AB
+   great-circle angle — scale awareness cuts false matches ~an order of
+   magnitude.
+3. **Uniformized catalog quad generation.** Partition the hemisphere into az/el
+   cells sized to the scale band; keep the N brightest per cell; build quads
+   from each star + 3 of its k nearest neighbours within the band; two bands
+   for wide work (~10-30° and ~30-70°); cap quads/star (~8) and total (~50k).
+   Bounded O(N·k³), estimated tens of ms.
+4. **Index.** Small in-house 4D/5D k-d tree over codes with ε-ball query
+   (ε ≈ 0.01-0.02 code units, tuned on the synthetic fisheye corpus). Replaces
+   the quantized buckets (defect #3) — no boundary misses.
+5. **Hypothesis → pose.** Each code hit gives 4 ray↔sky correspondences →
+   N-vector overload of the existing quaternion Wahba solver
+   (`wahbaRotationFromVectorPairs` :3637 — the correlation-matrix accumulation
+   generalizes trivially) → rotation → az/el/roll (+ fov known or recovered) →
+   `Evaluation` seed → existing `consumeBlindSeeds` →
+   `evaluateFinalMatchPass` + **unchanged acceptance gates**.
+6. **Verification budget.** Rank hypotheses by code distance + quad brightness;
+   verify top K (~50) through the existing final-match pass; early-exit on
+   `hasGoodWideBlindSeed()` exactly as the current stages do.
+
+**Mode 0 (fov unknown):** unprojection needs fov, so run a coarse fov ladder
+*for ray generation only* — {60, 100, 130, 165, 180}° (reuse the
+`wideBlindFovs` constants) × the mode-1 engine, stop at first accepted pose.
+Matching + Wahba + the existing LM/fov refine (`forceFovRefine`) should
+tolerate ~±15% fov error in the rays; phase 0 measures the actual tolerance to
+set ladder spacing. Lens *model* is known even in mode 0 (settings carry the
+projection type); truly-unknown lens is out of scope.
+
+### Integration & gating
+
+- New engine inside/alongside `buildBlindQuadSeeds` (:10798), invoked from the
+  blind-seed stage (:18288). **New path runs first; the legacy quad path stays
+  as fallback** when no hypothesis passes the gates — protects wide-1/3/4,
+  which currently pass through the legacy machinery.
+- Gated to blind/fov-only solves (`!solveUsesDirection`) — the 39 guided
+  passing cases never enter the new code, so guided regression risk is zero by
+  construction.
+- Env kill-switch `SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_QUAD_INDEX` for A/B.
+- The built index is cached with the catalog context in the existing exact-key
+  LRU-3 memo so the up-to-17 outer retries don't rebuild it.
+
+### Phases
+
+- **Phase 0 — design validation before engine code (~½ day). DONE
+  (2026-06-12), design VALIDATED.** One-off Python calculation (astropy for
+  star alt/az at the row-15 capture time/location/pose: az=90°/el=70°/roll=100°,
+  165° equidistant fisheye, 3552×3552 — confirmed against the CSV's
+  Arcturus/Dubhe/Vega pixel positions to ~60-85px / ~2% of frame, consistent
+  with the recorded pose's documented ~1° precision). For all C(7,4)=35 quads
+  of the 7 named stars (max pairwise separation 37-72°, representative of
+  real bright-star quads at this fov):
+    - **CURRENT scheme** (raw equidistant-fisheye pixels vs synthetic
+      rectilinear-projected catalog, edge-ratio signature): mean mismatch
+      0.0555, max 0.1347 — **12/35 (34%) exceed the 0.06 bucket tolerance
+      entirely**, i.e. the true catalog quad would never even be hash-bucketed
+      together with its true detection quad, independent of detection noise.
+      This is the quantitative confirmation of the "frame mismatch" defect.
+    - **NEW scheme** (detections unprojected via a fixed az=0/el=0/roll=0
+      reference projector to camera-frame rays, both sides gnomonic-projected
+      and compared by the same edge-ratio signature): mismatch is **0 to
+      machine precision (4e-15)** for all 35 quads, exactly as the rotation-
+      invariance argument predicts (camera-frame rays and sky vectors differ
+      only by the camera's pose rotation, which both quad-signature
+      construction and edge-ratio comparison are invariant to). With added
+      1.5px-rms synthetic centroid noise, mismatch stays tiny: mean 0.0023,
+      max 0.0069 — **~8-20x tighter than the current 0.06 tolerance**, so a
+      much smaller ε (~0.01) is usable for the k-d tree, dramatically cutting
+      false-bucket collisions vs the current scheme.
+  **Conclusion: proceed.** The new scheme doesn't just fix the 34% miss rate —
+  it makes true-quad matching near-exact, which is the property the whole
+  index/ε-ball design depends on. Script: `/tmp/phase0_quad.py` (not
+  committed — one-off; reproducible from this section + astropy).
+  Ray-error-vs-fov-error measurement for the mode-0 ladder spacing was not yet
+  done; fold into phase 1/2.
+- **Phase 0b — synthetic fisheye corpus.** DONE (2026-06-13). Added
+  `vec_from_altaz_arr`/`make_sky_projector`/`project_points` (ported from the
+  validated Phase-0 script, square aspect=1) plus `process_fisheye_scene` and
+  vectorised `radec_to_azel_arr`/`precess_j2000_to_date_arr` helpers to
+  `synthetic_testcases.py`. New `--fisheye N` CLI mode generates random
+  az/el/roll/fov scenes (fov 100-170°, equidistant/equisolid mixed, mag≤7,
+  el≥30°), querying Gaia DR3 + HIP directly in alt/az (no WCS/TAN — the
+  pose IS the projector, matching `createProjector`/`projectVector`).
+  - **Fisheye corpus**: 50/50 scenes accepted (70 attempts, ~71% hit rate) →
+    `star-tests-synthetic-fisheye.csv` (100 rows: modes 0+1 per scene),
+    images in `images-synthetic-fisheye/` (1600x1600 jpg). Spot-checked
+    `synth-fisheye-001.jpg`: renders as a plausible Milky-Way-band field
+    (~695 stars at G≤7, named HIP stars land inside the rendered cluster as
+    expected).
+  - **Rectilinear-wide corpus**: reused existing `--random` (TAN-based)
+    mode at fov 30/45/60° → `star-tests-synthetic-wide.csv` (36 rows from
+    12 scenes). Acceptance rate degrades sharply with fov: 30°→6/17≈35%,
+    45°→6/17≈35%, 60°→0/7. **Known limitation**: the single-CD-matrix TAN
+    WCS used by `process_scene`/`build_wcs` becomes unusable above ~fov 50°
+    (catalog stars project far outside the frame), so it cannot produce
+    rectilinear-wide cases beyond ~45°. Not blocking Phase 1/2 (which target
+    the fisheye corpus); revisit only if a rectilinear-wide quad-hash case
+    is specifically needed later (would require a per-axis CD scale or a
+    `make_sky_projector(lens="rectilinear")`-based generator instead of TAN).
+- **Phase 1 — vector quad engine, mode 1 (2-3 days).** Items 1-6 above.
+  Exit: wide-2 row 15 PASS; synthetic fisheye mode-1 ≥90%.
+  - **Items 1-5 (Wahba/N-pair, vector quad code, ray unprojection, catalog
+    quad index, hypothesis generation) and item 6 (integration with gating)
+    DONE and build-verified** (`featurecamera_star_tests`, 26/26 link steps).
+    No regressions: real 42-case suite still 40/42, identical failure set to
+    baseline (only wide-2 rows 15/16, mode1/mode0).
+  - **Exit criteria NOT met** (2026-06-13 validation run):
+    - wide-2 row 15 (mode1) still FAILS (matched=14/541, rms=14.35,
+      solved=false) — `search.vector-quad-seeds` never ran for this case.
+    - Synthetic fisheye mode-1 corpus (`star-tests-synthetic-fisheye-mode1.csv`,
+      50 cases): **15/50 = 30%**, far below the ≥90% target.
+  - **Critical Finding #1 — gating makes the new engine dead code for almost
+    all target cases.** The outer skip condition at ~19119
+    (`brightTriangleSeedAlreadyAcceptable || brightPairSeedAlreadyAcceptable
+    || wideBrightPairSeedAlreadyAcceptable`) is already true after the legacy
+    bright-pair-seed stage for wide-2 row 15 and for 45/50 synthetic fisheye
+    mode-1 cases, so `buildVectorQuadBlindSeeds` is skipped entirely
+    (`blindQuadSkipped=1`). The new engine only ran in 5/50 synthetic cases
+    (009, 019, 021, 035, 049).
+  - **Critical Finding #2 — even when it runs, code-match yield is near zero.**
+    In the 5 cases where the engine did run: `vectorQuadCatalogEntries=6496`
+    (identical across all 5) and `vectorQuadDetectionQuads=1820` (=C(16,4),
+    all valid), but `vectorQuadCodeMatches` was only 0, 6, 0, 19, 6
+    respectively (epsilon=0.02). Where matches existed, none were strong
+    enough to satisfy `hasGoodWideBlindSeed()`, so legacy
+    `buildBlindQuadSeeds` ran anyway as fallback in all 50 cases.
+  - **Root cause of #2 — combinatorial structure mismatch between catalog and
+    detection quads, confirmed by reading `buildCatalogQuadCodeIndex`
+    (:6938-7157).** Catalog quads are *anchor-centric*: for each of a small
+    set of per-cell "anchor" stars (brightest `maxStarsPerCell=6` per 10°x10°
+    az/el cell), quads are built from that anchor plus 3-of-its-6
+    angularly-nearest neighbours (`neighborCount=6`,
+    `maxQuadsPerAnchor=8` ⇒ ≤C(6,3)=20 capped to 8), giving 6496 total
+    entries. Detection quads, by contrast, are *unstructured*: all
+    C(16,4)=1820 combinations of the 16 brightest detections. A true
+    4-star correspondence is therefore only representable in the catalog
+    index if one of the 4 stars happens to be a kept anchor AND the other 3
+    are among that anchor's top-6 nearest catalog neighbours AND that
+    specific 3-subset is among the (≤8 of ≤20) kept per-anchor combos —
+    multiple independent caps that compound multiplicatively. Most genuine
+    detection quads simply have no matching catalog entry at all, regardless
+    of epsilon.
+  - **Implication / open design decision (not yet actioned):** fixing this
+    needs an architectural change to one or both of: (a) where the new engine
+    sits in the gating order (e.g. run it *before* the bright-pair/triangle
+    stages, or run it unconditionally and let `hasGoodWideBlindSeed()` pick
+    the best result across all seed sources), and (b) how catalog vs.
+    detection quads are generated so their combinatorial supports overlap —
+    either make catalog quads unstructured-anchor-free (all C(k,4) among a
+    modest top-k per region, mirroring the detection side) or make detection
+    quads anchor-centric (per-detection k-nearest-neighbour 3-subsets,
+    mirroring the catalog side). Either direction is a non-trivial rework of
+    items 4/5 and re-validation of Phase 1 exit criteria; flagged for
+    go/no-go before continuing.
+  - **Direction 1c implemented (2026-06-13, approved by Jon):** (a) detection-quad
+    generation reworked to be anchor-centric (mirroring
+    `buildCatalogQuadCodeIndex`: per detection-anchor, 6 nearest neighbours in
+    `[2°,70°]`, ≤8 of the 3-of-6 combos ⇒ 128 detection quads total, down from
+    1820); (b) `buildVectorQuadBlindSeeds` now runs *early* for
+    `wideWeakMode && plateSolveStartUsesFov(settings)`, before the outer
+    `brightTriangleSeedAlreadyAcceptable || ...` skip check, with a
+    `vectorQuadSeedsRunEarly` flag guarding the original late call site so it
+    doesn't run twice.
+  - **Result of 1c: build-verified, zero regressions, but still NOT exit-criteria-met.**
+    Real 42-case suite still 40/42, byte-identical failure set/values
+    (wide-2 rows 15/16 unchanged: row15 matched=14/541 rms=14.3469,
+    `vectorQuadCodeMatches=0`). Synthetic fisheye mode-1 corpus initially
+    **unchanged at 15/50=30%**, bit-identical per-case PASS/FAIL and pose
+    values to the pre-1c baseline — despite the engine now running broadly
+    (`vectorQuadCodeMatches` non-zero, typically 4-15, in nearly all 50 cases
+    vs only 5/50 before).
+  - **New finding — code matches exist but all hypotheses fail
+    `verifyBlindSeedCandidate`'s tight RMS gate.** Debugged `synth-fisheye-013`
+    (codeMatches=15, all 15 hypotheses reach `evaluatePose`): every hypothesis
+    converges to one of 3-4 nearby poses with `candidate.matchCount`=14-24 and
+    `candidate.rmsErrorPixels`≈15.9-17.8 — i.e. the quad-derived pose is
+    basically *correct* (lots of catalog matches) but ~2-4px too coarse for
+    `isStrongBlindSeedEvaluation`'s `maxRmsError = min(seedRadius*0.60, 18.0)`
+    = 14.4px (seedRadius=24 in the test harness). `verifyBlindSeedCandidate`
+    gates on this *before* its own internal outlier-rejection/refine step ever
+    runs, so a pose that refinement would likely tighten below 14.4px is
+    discarded outright.
+  - **Fix landed: relaxed direct-accept fallback, mirroring the guided-triangle
+    seed pattern (cameraplatesolver.cpp ~12046-12068).** When
+    `verifyBlindSeedCandidate` rejects `candidate`, but `candidate.valid` with
+    `matchCount >= minBlindSeedMatches` and `rmsErrorPixels <=
+    min(max(18, finalMatchRadius*0.75), finalMatchRadius*0.90)` (18px here) and
+    `hasAcceptableBrightnessConsistency`, append `candidate` to `seeds` directly
+    (not anchored/guidedTriangle — plain blind seed, so no scoring bonus).
+    `synth-fisheye-013` now contributes 6 such seeds and PASSes — **but it was
+    already PASSing pre-fix** (via `bright-pair-seeds`), so this is a
+    no-op for the corpus total: still 15/50 PASS, **identical pass/fail set**
+    (verified via full diff of per-case PASS/FAIL labels). Real suite
+    re-confirmed 40/42, same 2 failures (wide-2 rows 15/16), after this change.
+  - **Debugging gotcha discovered (recorded in
+    [[camera-star-tests-run-procedure]]): `QString::arg()` chains with ≥10
+    placeholders (i.e. reaching `%10`/`%11`) silently truncate the printed
+    output on this MSVC/Qt toolchain** — `qDebug() << QStringLiteral("...%10
+    ...%11").arg(...)×11` printed nothing past the text immediately before
+    `%7`. Splitting into multiple statements of ≤9 placeholders each fixed it.
+    Cost ~5 build/run cycles to isolate; not a `rmsErrorPixels`-is-NaN issue as
+    first suspected (it wasn't NaN).
+  - **New failure-mode taxonomy for the remaining 35/50 synthetic FAILs**
+    (sampled `synth-fisheye-003`): these are NOT "no seed found" cases.
+    `synth-fisheye-003` reports `solved=true, matched=23, rms=14.6` — internally
+    self-consistent — but the accepted pose (Az=150.06,El=63.60,Roll=-71.92) is
+    wildly wrong vs. truth (Az=40.82,El=32.67,Roll=173.25, same FoV=148.94).
+    I.e. a **false-positive lock**: a wrong orientation that nonetheless finds
+    ~23 plausible catalog matches at acceptable RMS (degenerate/aliased
+    alignment, plausibly a roll/mirror or regional-pattern ambiguity in a dense
+    fisheye field). This is a *different* problem from Critical Finding #1/#2
+    (which were about the engine not contributing a seed at all) and 1c does
+    not address it. wide-2 row15 (the other open exit-criterion item) is still
+    blocked by Critical Finding #2 proper: `vectorQuadCodeMatches=0` for that
+    image even after the 1c rework (its detection quads apparently still don't
+    land within `codeEpsilon=0.02` of any of the 6496 catalog entries for that
+    field/scale).
+  - **Status (2026-06-13, end of session): 1c is real, validated, non-regressing
+    progress (it does change behaviour broadly — codeMatches went from 5/50 to
+    ~45/50 cases non-zero, and the relaxed-accept fallback now lets those
+    contribute seeds), but it has not yet moved either headline metric.
+    Both remaining exit-criteria gaps (wide-2 row15's codeMatches=0, and the
+    false-positive-lock failure mode in the synthetic corpus) look like
+    separate, deeper problems from what 1c targeted. Flagged for go/no-go with
+    Jon before further investment in Phase 1.**
+  - **Baseline correction (2026-06-14): synthetic corpus is 16/50=32%, not
+    15/50=30%.** `grep -aE "^(PASS|FAIL)"` on a `-Encoding utf8` (UTF-8-with-BOM)
+    log undercounts by 1 — the BOM prefixes `PASS`/`FAIL` on line 1 (case 001,
+    actually PASS) so the regex anchor misses it. Open files with
+    `encoding="utf-8-sig"` in Python (or strip the BOM) to get the correct
+    count. This affects only the headline percentage, not any pass/fail-set
+    diff (both old and new logs were undercounted identically).
+  - **False-positive-lock pattern re-characterized: it's "missing labelled
+    anchor star", driven by pose-refinement imprecision, not orientation
+    lock.** Of the 34 corpus FAILs, 22 are `solved=true` ("FP" — plausible
+    matchCount/rms but FAIL) and 12 are honest `solved=false`. Per-case CSV
+    `azimuth/elevation/roll` columns are **not** in the same reference frame as
+    `poseAz/El/Roll` (PASS cases also show 50-90° deltas), so they cannot be
+    used as a pose-correctness oracle. The real, per-case rejection reason
+    (printed under each PASS/FAIL line) is always:
+    `missing: hip NNNNN` / `position mismatches: hip NNNNN missing labelled
+    match near x=... y=...` — i.e. one of the CSV's 2-3 ground-truth anchor
+    stars has no solved detection within the 24px position tolerance.
+    Drilled into 3 FP cases (003, 004, 048) with
+    `SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE=1` per-detection dumps: in 3/4
+    sampled instances the "missing" anchor star **is** detected almost exactly
+    at its expected pixel (0.16-0.5px off, bright: flux 700-900, comparable to
+    successfully-matched neighbours) but is `solved=false` and **absent from
+    `m_matchSummary` entirely** — i.e. under the accepted pose, no catalog
+    entry projects within match radius of it at all, even though that same
+    pose is self-consistent for its own 20-40 matched stars at rms 14-17px
+    (close to the "~r/2 floor" described in `tightenNarrowFinalPass`'s comment,
+    r=24). Conclusion: **final pose-refinement convergence precision**, not
+    seed selection — codeEpsilon/vector-quad-threshold tuning is upstream of
+    this and would not help. (4th sample, case 048's 2nd missing star, showed
+    no strong nearby detection at all — a separate, lower-priority
+    detection-pipeline issue.)
+  - **Fix landed (2026-06-14): enable `tightenNarrowFinalPass` for wide-field/
+    fisheye, with an added FOV-drift guard.** `tightenNarrowFinalPass`
+    (cameraplatesolver.cpp ~20642) re-fits the pose on progressively tighter
+    inlier cores (0.5x, 0.33x of `finalMatchRadius`) to escape the full-radius
+    "coincidental association" RMS floor, but was gated to
+    `isNarrowField(settings)` only — never ran for our ~166° fisheye cases
+    (`solve.tightenFinalPass=0` always). Removed that gate. The existing
+    accept-if-strictly-better check (≥90% match retention + rms not worse) was
+    too permissive on its own: case 006 regressed PASS→FAIL because a small
+    rms win (16.66→14.89) came with the FOV drifting 165.43°→179.99° (near the
+    180° ceiling). Added a guard requiring
+    `|tightened.fov - original.fov| <= max(5°, 5% of original.fov)`
+    (skipped if `original.fov` is non-finite/≤0, e.g. no prior pose to compare
+    against), rejecting drifted-but-locally-better fits.
+    - **Results:** real 42-case suite **unchanged at 40/42** (same 2 failures,
+      wide-2 rows 15/16, byte-identical). Synthetic fisheye mode-1 corpus
+      **18/50 = 36%**, up from 16/50 = 32% (BOM-corrected baseline). Case 044
+      flipped from a complete non-solve (`solved=false`) to a correct solve
+      (rms=15.89, matched=24); case 040 improved its pose (rms 16.38→13.54);
+      case 006 — which regressed without the FOV guard — is back to PASS with
+      its original 165.43° FOV preserved. Net +2/50, zero regressions,
+      build-verified (26/26 link).
+    - Still 32/50 short of the ≥90% Phase 1 exit criterion: 14 honest
+      `solved=false` failures plus ~20 remaining FP-pattern (`missing labelled
+      match`) cases. The pose-refinement-precision direction looks more
+      promising than further seed-selection tuning, but is a bigger
+      investment — flagged for go/no-go with Jon on next steps.
+- **Phase 2 — fov ladder, mode 0 (1 day).** Exit: wide-2 row 16 PASS;
+  synthetic mode-0 ≥85%.
+- **Phase 3 — perf & caching (½-1 day).** Index build ≤100ms/context, cached;
+  suite total within noise of ~150s.
+- **Phase 4 — full validation (½ day).** Real suite target 42/42 (hard floor:
+  ≥40/42, zero regressions, every wide-1/3/4 row re-checked); rand2 148/150
+  with guided cases bit-identical (inert by construction — verify anyway);
+  synthetic-corpus FP audit comparing solved az/el/roll to truth, not just
+  PASS. Update notes + memory.
+
+Total ≈ 5-7 working days.
+
+### Risks
+
+- **Zenith/pole:** all geometry in `SkyVector` space (no az/el trig inside
+  codes); the mode-1 row's el=90 placeholder must never be used as a cone
+  centre — confirm the blind context loads the full hemisphere
+  (`useWideBlindSeedRadius` path).
+- **Horizon refraction at 165°:** already handled in catalog az/el (wide-1/3/4
+  pass), but quads reaching <10° elevation compress — keep scale bands moderate
+  and rely on LM refine.
+- **False positives:** the wide weak-mode acceptance gates were tuned for the
+  old seed flux. Gates stay unchanged, verify-K stays small, faLogOdds ranking
+  is reused, and the phase-4 FP audit checks pose truth, not just PASS.
+- **Fisheye-edge centroids:** PSF distortion biases detection centres near the
+  edge; prefer inner-image detection quads via the existing region-stratified
+  `selectDetectionIndicesForBlindSignatures` (:10812 pattern).
+- **Ordering:** legacy blind path remains primary for currently-passing wide
+  rows until phase 4 proves the new path superior; any ordering swap is its own
+  validated change.
+
+### Future follow-ons (each its own go/no-go)
+
+- **Guided-path adoption:** the quad index as a roll-invariant generator
+  replacing the anchor-pair × 36-roll sweep and triangle search — large speed
+  win and structurally retires the wrong-roll-alias class, but
+  behaviour-affecting on all 40 passing cases.
+- **Prebuilt deep index** (healpix-tiled, ra/dec frame, mag 12-15, on-disk) for
+  blind *narrow*-field solving — the full astrometry.net equivalent; only
+  worthwhile if blind narrow solving becomes a product goal.
+
 ## Structural note (not started)
 
 `CameraPlateSolver::SolverContext` is one ~18.5k-line inline class body (lines ~63 to

@@ -549,6 +549,9 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     }
     const bool saturated = (m_autoExposure.m_saturatedFraction > saturationHighLimit) && (m_autoExposure.m_saturatedFrames >= 3);
     const double deadband = error > 0.0 ? 0.03 : 0.08;
+    const double correctionError = saturated
+        ? error
+        : std::copysign(std::max(0.0, std::abs(error) - deadband), error);
 
     auto modeName = [&]() -> const char*
     {
@@ -582,6 +585,7 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
                  << "saturationFrames" << m_autoExposure.m_saturatedFrames
                  << "saturated" << saturated
                  << "error" << error
+                 << "correctionError" << correctionError
                  << "deadband" << deadband
                  << "direction" << m_autoExposure.m_adjustDirection
                  << "directionFrames" << m_autoExposure.m_adjustDirectionFrames
@@ -622,7 +626,7 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
         return;
     }
 
-    double factor = std::exp(qBound(-maxLogChange, error * 0.35, maxLogChange));
+    double factor = std::exp(qBound(-maxLogChange, correctionError * 0.35, maxLogChange));
 
     if (saturated)
     {

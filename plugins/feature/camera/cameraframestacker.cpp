@@ -1298,12 +1298,8 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 
             cv::cvtColor(tonemapped, tonemapped, cv::COLOR_BGR2RGB);
 
-            cv::Mat clampedTonemapped;
-            cv::max(tonemapped, cv::Scalar::all(0.0f), clampedTonemapped);
-            cv::min(clampedTonemapped, cv::Scalar::all(1.0f), clampedTonemapped);
-
             cv::Mat ldr8u;
-            clampedTonemapped.convertTo(ldr8u, CV_8UC3, 255.0);
+            tonemapped.convertTo(ldr8u, CV_8UC3, 255.0);
             outputImage = workingMatToImage(ldr8u);
             hdrOutputMs = elapsedSince(previousHdrMs);
 

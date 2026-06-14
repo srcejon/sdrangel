@@ -2921,8 +2921,8 @@ void CameraGUI::updateHdrExposureControls()
 
     for (int exposureIndex = 0; exposureIndex < CameraSettings::m_maxHdrExposureCount; ++exposureIndex)
     {
-        const double value = qBound(minimum, m_settings.getHdrExposureTimeMs(exposureIndex), maximum);
-        m_settings.m_stackHdrExposureTimesMs[static_cast<size_t>(exposureIndex)] = value;
+        const double value = std::max(minimum, m_settings.getHdrExposureTimeMs(exposureIndex));
+        const double controlMaximum = std::max(maximum, value);
 
         labels[exposureIndex]->setText(tr("Exposure %1").arg(exposureIndex + 1));
 
@@ -2931,7 +2931,7 @@ void CameraGUI::updateHdrExposureControls()
             spins[exposureIndex]->setDecimals(decimals);
             spins[exposureIndex]->setSingleStep(singleStep);
             spins[exposureIndex]->setMinimum(minimum);
-            spins[exposureIndex]->setMaximum(maximum);
+            spins[exposureIndex]->setMaximum(controlMaximum);
             spins[exposureIndex]->setValue(value);
         }
 
@@ -3106,7 +3106,7 @@ void CameraGUI::handleHdrExposureSpinChanged(int exposureIndex, double value)
 {
     const auto spins = hdrExposureSpins(settingsUI());
     const auto sliders = hdrExposureSliders(settingsUI());
-    const double exposureTimeMs = qBound(m_exposureMinimumMs, value, m_exposureMaximumMs);
+    const double exposureTimeMs = qBound(m_exposureMinimumMs, value, spins[exposureIndex]->maximum());
 
     {
         QSignalBlocker blocker(sliders[exposureIndex]);

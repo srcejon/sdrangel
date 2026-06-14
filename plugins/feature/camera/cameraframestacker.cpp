@@ -41,6 +41,23 @@
 
 MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgDeleteStackFrame, Message)
 
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+static cv::cuda::GpuMat sizeMatchedPyramidExpansion(const cv::cuda::GpuMat& expandedGpu, const cv::Size& targetSize, cv::cuda::Stream& stream)
+{
+    if (expandedGpu.size() == targetSize) {
+        return expandedGpu;
+    }
+
+    if ((expandedGpu.cols >= targetSize.width) && (expandedGpu.rows >= targetSize.height)) {
+        return expandedGpu(cv::Rect(0, 0, targetSize.width, targetSize.height));
+    }
+
+    cv::cuda::GpuMat resizedGpu;
+    cv::cuda::resize(expandedGpu, resizedGpu, targetSize, 0.0, 0.0, cv::INTER_LINEAR, stream);
+    return resizedGpu;
+}
+#endif
+
 CameraFrameStacker::CameraFrameStacker() :
     m_nextStage(nullptr),
     m_captureActive(false),
@@ -371,13 +388,9 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
 
             for (int level = 1; level < pyramidLevels; ++level)
             {
-                cv::cuda::resize(
+                cv::cuda::pyrDown(
                     weightPyramids[sampleIndex][level - 1],
                     weightPyramids[sampleIndex][level],
-                    pyramidSizes[static_cast<size_t>(level)],
-                    0.0,
-                    0.0,
-                    cv::INTER_LINEAR,
                     m_cudaStackingStream);
                 cv::cuda::add(weightSumPyramids[static_cast<size_t>(level)], weightPyramids[sampleIndex][level],
                     weightSumPyramids[static_cast<size_t>(level)], cv::noArray(), -1, m_cudaStackingStream);
@@ -396,13 +409,9 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
             imageGaussianPyramid[0] = frameFloatGpu[frameIndex];
             for (int level = 1; level < pyramidLevels; ++level)
             {
-                cv::cuda::resize(
+                cv::cuda::pyrDown(
                     imageGaussianPyramid[static_cast<size_t>(level - 1)],
                     imageGaussianPyramid[static_cast<size_t>(level)],
-                    pyramidSizes[static_cast<size_t>(level)],
-                    0.0,
-                    0.0,
-                    cv::INTER_LINEAR,
                     m_cudaStackingStream);
             }
 
@@ -416,14 +425,11 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
                 else
                 {
                     cv::cuda::GpuMat expandedGpu;
-                    cv::cuda::resize(
+                    cv::cuda::pyrUp(
                         imageGaussianPyramid[static_cast<size_t>(level + 1)],
                         expandedGpu,
-                        pyramidSizes[static_cast<size_t>(level)],
-                        0.0,
-                        0.0,
-                        cv::INTER_LINEAR,
                         m_cudaStackingStream);
+                    expandedGpu = sizeMatchedPyramidExpansion(expandedGpu, pyramidSizes[static_cast<size_t>(level)], m_cudaStackingStream);
                     cv::cuda::subtract(imageGaussianPyramid[static_cast<size_t>(level)], expandedGpu, laplacianGpu, cv::noArray(), -1, m_cudaStackingStream);
                 }
 
@@ -451,7 +457,9 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
         cv::cuda::GpuMat outputGpu = fusedPyramid.back();
         for (int level = pyramidLevels - 2; level >= 0; --level)
         {
-            cv::cuda::resize(outputGpu, outputGpu, pyramidSizes[static_cast<size_t>(level)], 0.0, 0.0, cv::INTER_LINEAR, m_cudaStackingStream);
+            cv::cuda::GpuMat expandedGpu;
+            cv::cuda::pyrUp(outputGpu, expandedGpu, m_cudaStackingStream);
+            outputGpu = sizeMatchedPyramidExpansion(expandedGpu, pyramidSizes[static_cast<size_t>(level)], m_cudaStackingStream);
             cv::cuda::add(outputGpu, fusedPyramid[static_cast<size_t>(level)], outputGpu, cv::noArray(), -1, m_cudaStackingStream);
         }
 

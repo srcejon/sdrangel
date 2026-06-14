@@ -1401,8 +1401,14 @@ bool CameraWorker::openVideoFileDecoder()
     const int audioOutputSampleRate = m_qtAudio.startFilePlayback(m_settings, getInputMessageQueue());
     m_videoFileDecoder.reset(new CameraVideoFileDecoder());
     QString errorMessage;
+    qDebug() << "CameraWorker: opening FFmpeg media source"
+             << (m_settings.isStreamCamera() ? QStringLiteral("stream") : QStringLiteral("video"))
+             << m_settings.m_videoFileCameraPath;
     if (!m_videoFileDecoder->open(m_settings.m_videoFileCameraPath, errorMessage, audioOutputSampleRate))
     {
+        qWarning() << "CameraWorker: FFmpeg media source open failed"
+                   << m_settings.m_videoFileCameraPath
+                   << errorMessage;
         reportErrorToFeature(
             QStringLiteral("videoFileOpen:%1").arg(m_settings.m_videoFileCameraPath),
             m_settings.isStreamCamera() ? tr("Stream could not be opened") : tr("Video file could not be opened"),
@@ -1418,6 +1424,10 @@ bool CameraWorker::openVideoFileDecoder()
     m_videoFilePlaying = false;
     resetVideoFilePlaybackStats();
     reportVideoFilePlaybackToGUI();
+    qDebug() << "CameraWorker: FFmpeg media source opened"
+             << m_settings.m_videoFileCameraPath
+             << "durationMs" << m_videoFileDurationMs
+             << "fps" << m_videoFileDecoder->frameRate();
     return true;
 }
 

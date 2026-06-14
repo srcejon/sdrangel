@@ -22,6 +22,7 @@
 #include <cmath>
 
 #include <QElapsedTimer>
+#include <QDebug>
 #include <QStringList>
 #include <QUrl>
 
@@ -74,6 +75,12 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
 
     const auto openInput = [&](const char *rtspTransport) -> bool
     {
+        QElapsedTimer openTimer;
+        openTimer.start();
+        const QString transportName = rtspTransport && rtspTransport[0] != '\0'
+            ? QString::fromLatin1(rtspTransport)
+            : QStringLiteral("auto");
+
         AVDictionary *options = nullptr;
         if (rtspSource)
         {
@@ -84,26 +91,47 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
             }
         }
 
+        qDebug() << "CameraVideoFileDecoder: opening media source" << fileName
+                 << "scheme" << scheme
+                 << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"));
         int ret = avformat_open_input(&m_formatContext, fileNameUtf8.constData(), nullptr, &options);
         av_dict_free(&options);
         if (ret < 0)
         {
-            openErrors.append(QStringLiteral("%1: %2")
-                .arg(rtspTransport && rtspTransport[0] != '\0' ? QString::fromLatin1(rtspTransport) : QStringLiteral("auto"),
-                    CameraFFmpegAudio::avErrorString(ret)));
+            const QString error = CameraFFmpegAudio::avErrorString(ret);
+            qWarning() << "CameraVideoFileDecoder: open media source failed"
+                       << fileName
+                       << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"))
+                       << "elapsedMs" << openTimer.elapsed()
+                       << error;
+            openErrors.append(QStringLiteral("%1: %2").arg(transportName, error));
             return false;
         }
 
+        qDebug() << "CameraVideoFileDecoder: media source opened"
+                 << fileName
+                 << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"))
+                 << "elapsedMs" << openTimer.elapsed();
+        QElapsedTimer streamInfoTimer;
+        streamInfoTimer.start();
         ret = avformat_find_stream_info(m_formatContext, nullptr);
         if (ret < 0)
         {
-            openErrors.append(QStringLiteral("%1 stream info: %2")
-                .arg(rtspTransport && rtspTransport[0] != '\0' ? QString::fromLatin1(rtspTransport) : QStringLiteral("auto"),
-                    CameraFFmpegAudio::avErrorString(ret)));
+            const QString error = CameraFFmpegAudio::avErrorString(ret);
+            qWarning() << "CameraVideoFileDecoder: read media stream info failed"
+                       << fileName
+                       << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"))
+                       << "elapsedMs" << streamInfoTimer.elapsed()
+                       << error;
+            openErrors.append(QStringLiteral("%1 stream info: %2").arg(transportName, error));
             avformat_close_input(&m_formatContext);
             return false;
         }
 
+        qDebug() << "CameraVideoFileDecoder: media stream info ready"
+                 << fileName
+                 << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"))
+                 << "elapsedMs" << streamInfoTimer.elapsed();
         return true;
     };
 
@@ -120,6 +148,7 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     if (!opened)
     {
         errorMessage = QStringLiteral("Cannot open media source: %1").arg(openErrors.join(QStringLiteral("; ")));
+        qWarning() << "CameraVideoFileDecoder:" << errorMessage;
         close();
         return false;
     }

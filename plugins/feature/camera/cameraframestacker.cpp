@@ -21,6 +21,7 @@
 #include <cstring>
 
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QPainter>
 #include <QTimer>
 
@@ -91,6 +92,9 @@ int CameraFrameStacker::pendingFrameLimit() const
     const int stackFrameCount = m_settings.isHdrStackingEnabled()
         ? m_settings.getHdrExposureCount()
         : m_settings.m_stackFrameCount;
+    if (m_settings.isHdrStackingEnabled()) {
+        return qBound(8, stackFrameCount * 8, 512);
+    }
     return qBound(2, stackFrameCount * 2, 512);
 }
 
@@ -660,6 +664,7 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
 
     if (sourceChanged)
     {
+        Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrames.clear();
         m_droppedFrameCount = 0;
@@ -1089,6 +1094,24 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 
         try
         {
+            QElapsedTimer hdrTimer;
+            hdrTimer.start();
+            qint64 hdrSortMs = 0;
+            qint64 hdrPrepareMs = 0;
+            qint64 hdrMergeMs = 0;
+            qint64 hdrTonemapMs = 0;
+            qint64 hdrValidateMs = 0;
+            qint64 hdrFallbackMs = 0;
+            qint64 hdrOutputMs = 0;
+            const char *hdrFallback = "none";
+            auto elapsedSince = [&hdrTimer](qint64& previousMs) {
+                const qint64 nowMs = hdrTimer.elapsed();
+                const qint64 deltaMs = nowMs - previousMs;
+                previousMs = nowMs;
+                return deltaMs;
+            };
+            qint64 previousHdrMs = 0;
+
             auto sanitizeFloatImage = [](cv::Mat& floatFrame, bool clampUpper)
             {
                 for (int y = 0; y < floatFrame.rows; ++y)
@@ -1139,6 +1162,7 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
                 {
                     return left->m_exposureTimeMs < right->m_exposureTimeMs;
                 });
+            hdrSortMs = elapsedSince(previousHdrMs);
 
             std::vector<cv::Mat> ldrFrames;
             std::vector<float> exposureTimesSeconds;
@@ -1168,6 +1192,7 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
             }
 
             cv::Mat timesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, exposureTimesSeconds.data());
+            hdrPrepareMs = elapsedSince(previousHdrMs);
 
             cv::Mat tonemapped;
 
@@ -1175,6 +1200,7 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
             {
                 cv::Ptr<cv::MergeMertens> mergeMertens = cv::createMergeMertens();
                 mergeMertens->process(ldrFrames, tonemapped);
+                hdrMergeMs = elapsedSince(previousHdrMs);
             }
             else
             {
@@ -1200,37 +1226,45 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
                     hdrRadiance.convertTo(hdrRadiance, CV_32FC3);
                 }
                 sanitizeFloatImage(hdrRadiance, false);
+                hdrMergeMs = elapsedSince(previousHdrMs);
 
                 cv::Ptr<cv::TonemapReinhard> tonemap = cv::createTonemapReinhard(2.2f, 0.0f, 1.0f, 0.0f);
                 tonemap->process(hdrRadiance, tonemapped);
+                hdrTonemapMs = elapsedSince(previousHdrMs);
             }
 
             if (tonemapped.depth() != CV_32F) {
                 tonemapped.convertTo(tonemapped, CV_32FC3);
             }
             sanitizeFloatImage(tonemapped, true);
+            hdrValidateMs = elapsedSince(previousHdrMs);
             if (!isUsefulFloatImage(tonemapped))
             {
                 if (m_settings.m_stackHdrAlgorithm == CameraSettings::StackHdrAlgorithmMertens)
                 {
                     qWarning() << "CameraFrameStacker: HDR exposure fusion produced an unusable image; falling back to middle exposure";
                     useMiddleExposureFrame(ldrFrames, tonemapped);
+                    hdrFallback = "middle";
                 }
                 else
                 {
                     qWarning() << "CameraFrameStacker: HDR merge produced an unusable image; falling back to exposure fusion";
                     cv::Ptr<cv::MergeMertens> mergeMertens = cv::createMergeMertens();
                     mergeMertens->process(ldrFrames, tonemapped);
+                    hdrFallback = "mertens";
                     if (tonemapped.depth() != CV_32F) {
                         tonemapped.convertTo(tonemapped, CV_32FC3);
                     }
                     sanitizeFloatImage(tonemapped, true);
 
-                    if (!isUsefulFloatImage(tonemapped)) {
+                    if (!isUsefulFloatImage(tonemapped))
+                    {
                         useMiddleExposureFrame(ldrFrames, tonemapped);
+                        hdrFallback = "middle";
                     }
                 }
             }
+            hdrFallbackMs = elapsedSince(previousHdrMs);
 
             cv::cvtColor(tonemapped, tonemapped, cv::COLOR_BGR2RGB);
 
@@ -1241,6 +1275,24 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
             cv::Mat ldr8u;
             clampedTonemapped.convertTo(ldr8u, CV_8UC3, 255.0);
             outputImage = workingMatToImage(ldr8u);
+            hdrOutputMs = elapsedSince(previousHdrMs);
+
+            qDebug() << "CameraFrameStacker: HDR processing timing"
+                     << "algorithm" << m_settings.m_stackHdrAlgorithm
+                     << "frames" << static_cast<int>(ldrFrames.size())
+                     << "size" << frameMat.cols << "x" << frameMat.rows
+                     << "inputDepth" << frameMat.depth()
+                     << "cudaAvailable" << useCudaStacking
+                     << "cudaUsed" << false
+                     << "sortMs" << hdrSortMs
+                     << "prepareMs" << hdrPrepareMs
+                     << "mergeMs" << hdrMergeMs
+                     << "tonemapMs" << hdrTonemapMs
+                     << "validateMs" << hdrValidateMs
+                     << "fallbackMs" << hdrFallbackMs
+                     << "outputMs" << hdrOutputMs
+                     << "totalMs" << hdrTimer.elapsed()
+                     << "fallback" << hdrFallback;
         }
         catch (const cv::Exception& error)
         {

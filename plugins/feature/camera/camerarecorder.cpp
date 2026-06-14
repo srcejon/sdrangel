@@ -1069,11 +1069,37 @@ void CameraRecorder::updateKeogram(const QImage& calibratedImage, const QDateTim
         || (m_keogramImage.size() != outputSize)
         || (m_keogramImage.format() != QImage::Format_RGB888))
     {
+        const QString outputFileName = keogramOutputFileName(windowStartUtc);
+        QImage loadedKeogram;
+        if (QFileInfo::exists(outputFileName))
+        {
+            QImage existingKeogram(outputFileName);
+            if (!existingKeogram.isNull() && (existingKeogram.size() == outputSize))
+            {
+                loadedKeogram = existingKeogram.convertToFormat(QImage::Format_RGB888);
+                qDebug() << "CameraRecorder: Loaded existing keogram" << outputFileName << outputSize;
+            }
+            else
+            {
+                qDebug() << "CameraRecorder: Existing keogram is incompatible, starting new"
+                         << outputFileName
+                         << "existing" << existingKeogram.size()
+                         << "expected" << outputSize;
+            }
+        }
+
         m_keogramWindowStartUtc = windowStartUtc;
         m_keogramSourceSize = rgb.size();
-        m_keogramImage = QImage(outputSize, QImage::Format_RGB888);
-        m_keogramImage.fill(Qt::black);
-        m_keogramOutputFileName = keogramOutputFileName(windowStartUtc);
+        if (loadedKeogram.isNull())
+        {
+            m_keogramImage = QImage(outputSize, QImage::Format_RGB888);
+            m_keogramImage.fill(Qt::black);
+        }
+        else
+        {
+            m_keogramImage = loadedKeogram;
+        }
+        m_keogramOutputFileName = outputFileName;
         m_keogramLastSampleIndex = -1;
     }
 

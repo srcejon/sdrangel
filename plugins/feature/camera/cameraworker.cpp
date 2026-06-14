@@ -533,13 +533,19 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     }
 
     const double requestedTarget = qBound(0.01, m_settings.m_autoExposureTargetBrightness / 100.0, 0.995);
-    const double target = qBound(0.01, 1.0 - std::pow(1.0 - requestedTarget, 1.35), 0.995);
+    const double target = requestedTarget;
     const double measured = qBound(0.001, m_autoExposure.m_brightness, 1.0);
     const double maxChange = qBound(0.01, m_settings.m_autoExposureMaxChangePercent / 100.0, 1.0);
     const double maxLogChange = std::log(1.0 + maxChange);
     const double error = std::log(target / measured);
-    const double saturationLimit = target >= 0.95 ? 0.10 : 0.03;
-    const bool saturated = m_autoExposure.m_saturatedFraction > saturationLimit;
+    const double saturationHighLimit = target >= 0.95 ? 0.12 : 0.04;
+    const double saturationLowLimit = target >= 0.95 ? 0.08 : 0.02;
+    if (m_autoExposure.m_saturatedFraction > saturationHighLimit) {
+        ++m_autoExposure.m_saturatedFrames;
+    } else if (m_autoExposure.m_saturatedFraction < saturationLowLimit) {
+        m_autoExposure.m_saturatedFrames = 0;
+    }
+    const bool saturated = m_autoExposure.m_saturatedFrames >= 3;
     const double deadband = error > 0.0 ? 0.03 : 0.08;
 
     auto modeName = [&]() -> const char*
@@ -566,10 +572,12 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
                  << "rawBrightness" << measuredBrightness
                  << "smoothBrightness" << m_autoExposure.m_brightness
                  << "requestedTarget" << requestedTarget
-                 << "mappedTarget" << target
+                 << "target" << target
                  << "rawSaturated" << saturatedFraction
                  << "smoothSaturated" << m_autoExposure.m_saturatedFraction
-                 << "saturationLimit" << saturationLimit
+                 << "saturationLowLimit" << saturationLowLimit
+                 << "saturationHighLimit" << saturationHighLimit
+                 << "saturationFrames" << m_autoExposure.m_saturatedFrames
                  << "saturated" << saturated
                  << "error" << error
                  << "deadband" << deadband
@@ -614,8 +622,11 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
 
     double factor = std::exp(qBound(-maxLogChange, error * 0.35, maxLogChange));
 
-    if (saturated) {
-        factor = std::min(factor, std::exp(-maxLogChange * 0.5));
+    if (saturated)
+    {
+        const double excess = std::max(0.0, m_autoExposure.m_saturatedFraction - saturationHighLimit);
+        const double severity = qBound(0.15, excess / std::max(0.001, saturationHighLimit), 0.6);
+        factor = std::min(factor, std::exp(-maxLogChange * severity));
     }
 
     double exposureMinMs = std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_autoExposureMinMs);

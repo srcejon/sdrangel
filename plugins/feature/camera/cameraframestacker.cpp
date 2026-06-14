@@ -98,6 +98,34 @@ int CameraFrameStacker::pendingFrameLimit() const
     return qBound(2, stackFrameCount * 2, 512);
 }
 
+int CameraFrameStacker::dropOldestPendingFramesForOverflow()
+{
+    if (m_pendingFrames.empty()) {
+        return 0;
+    }
+
+    int dropped = 0;
+
+    if (m_settings.isHdrStackingEnabled())
+    {
+        do
+        {
+            m_pendingFrames.pop_front();
+            ++dropped;
+        }
+        while (!m_pendingFrames.empty()
+            && m_pendingFrames.front()
+            && (m_pendingFrames.front()->m_hdrExposureIndex != 0));
+    }
+    else
+    {
+        m_pendingFrames.pop_front();
+        dropped = 1;
+    }
+
+    return dropped;
+}
+
 void CameraFrameStacker::trimFrameHistoryToCurrentLimit()
 {
     const int maxFrames = qBound(1, m_settings.m_stackFrameCount, 256);
@@ -699,9 +727,11 @@ void CameraFrameStacker::submitFrame(const CameraPipelineFramePtr& frame)
             const int frameLimit = pendingFrameLimit();
             if (static_cast<int>(m_pendingFrames.size()) >= frameLimit)
             {
-                qDebug() << "CameraFrameStacker: Dropping oldest queued stacking frame";
-                m_pendingFrames.pop_front();
-                ++m_droppedFrameCount;
+                const int dropped = dropOldestPendingFramesForOverflow();
+                qDebug() << "CameraFrameStacker: Dropping oldest queued stacking"
+                    << (m_settings.isHdrStackingEnabled() ? "HDR bracket frames" : "frame")
+                    << dropped;
+                m_droppedFrameCount += dropped;
             }
             m_pendingFrames.push_back(frame);
         }

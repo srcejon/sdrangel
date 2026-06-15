@@ -630,6 +630,7 @@ private:
     quint64 m_videoFilePlaybackTick = 0;
     qint64 m_videoFilePlaybackBasePositionMs = -1;
     qint64 m_videoFileLastFramePtsMs = -1;
+    qint64 m_videoFileLastDecodeMs = 0;
     quint64 m_videoFileFrameSubmitGeneration = 0;
     struct DelayedVideoFileFrame
     {

@@ -293,7 +293,7 @@ int CameraQtAudioController::filePlaybackMonitorTargetFillForOffsetMs() const
 
 int CameraQtAudioController::filePlaybackMonitorJitterForOffsetMs() const
 {
-    return m_filePlaybackStreamSource ? streamPlaybackMonitorJitterMs() : 40;
+    return m_filePlaybackStreamSource ? streamPlaybackMonitorJitterMs() : filePlaybackMonitorJitterMs();
 }
 
 int CameraQtAudioController::monitorTargetFillFrames(int sampleRate) const

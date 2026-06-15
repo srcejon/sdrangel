@@ -1450,6 +1450,7 @@ void CameraWorker::closeVideoFileDecoder()
     m_videoFilePlaybackTick = 0;
     m_videoFilePlaybackBasePositionMs = -1;
     m_videoFileLastFramePtsMs = -1;
+    m_videoFileLastDecodeMs = 0;
     resetVideoFilePlaybackStats();
     if (m_settings.isFfmpegMediaSource()) {
         m_qtAudio.stop();
@@ -1484,6 +1485,7 @@ void CameraWorker::setVideoFilePlaying(bool playing)
         m_videoFilePlaybackTick = 0;
         m_videoFilePlaybackBasePositionMs = -1;
         m_videoFileLastFramePtsMs = -1;
+        m_videoFileLastDecodeMs = 0;
     }
     reportVideoFilePlaybackToGUI();
 }
@@ -1680,6 +1682,7 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     } else {
         m_videoFilePositionMs += videoFileFrameIntervalMs();
     }
+    m_videoFileLastDecodeMs = decodeMs;
     m_videoFileLastFramePtsMs = m_videoFilePositionMs;
     if (m_videoFilePlaybackBasePositionMs < 0)
     {
@@ -1803,6 +1806,7 @@ void CameraWorker::resetVideoFilePlaybackSchedule()
     m_videoFilePlaybackTick = 1;
     m_videoFilePlaybackBasePositionMs = -1;
     m_videoFileLastFramePtsMs = -1;
+    m_videoFileLastDecodeMs = 0;
     m_videoFileTickTimer.restart();
 }
 
@@ -1845,7 +1849,7 @@ void CameraWorker::scheduleNextVideoFileTick()
     if ((m_videoFilePlaybackBasePositionMs >= 0) && (m_videoFileLastFramePtsMs >= 0))
     {
         const qint64 nextFramePtsMs = m_videoFileLastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
-        delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
+        delayMs = nextFramePtsMs - videoFilePlaybackClockMs() - m_videoFileLastDecodeMs;
         if (m_settings.isStreamCamera()) {
             delayMs = qBound<qint64>(1, delayMs, static_cast<qint64>(std::llround(intervalMs)));
         } else {

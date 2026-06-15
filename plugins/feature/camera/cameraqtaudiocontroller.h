@@ -60,7 +60,7 @@ public:
     void prefillMonitorAudio(int milliseconds);
     [[nodiscard]] int filePlaybackMonitorPrefillForOffsetMs() const;
     static int filePlaybackMonitorPrefillMs() { return 120; }
-    static int filePlaybackMonitorTargetFillMs() { return 80; }
+    static int filePlaybackMonitorTargetFillMs() { return 250; }
     [[nodiscard]] int monitorTargetFillFrames(int sampleRate) const;
     void resetMonitorDebugStats();
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
@@ -86,6 +86,7 @@ private:
     [[nodiscard]] int filePlaybackMonitorJitterForOffsetMs() const;
     static int streamPlaybackMonitorTargetFillMs() { return 850; }
     static int streamPlaybackMonitorJitterMs() { return 150; }
+    static int filePlaybackMonitorJitterMs() { return 80; }
     void applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate);
 
     bool m_capturing;

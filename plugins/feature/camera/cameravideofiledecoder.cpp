@@ -430,7 +430,7 @@ bool CameraVideoFileDecoder::readNextFrame(
         else if (m_urlSource && isAudioStream(m_packet->stream_index))
         {
             QString audioSwitchError;
-            if (isCompatibleAudioStream(m_packet->stream_index) || switchAudioStream(m_packet->stream_index, audioSwitchError))
+            if (isCompatibleAudioStream(m_packet->stream_index) || switchAudioStream(m_packet->stream_index, audioSwitchError, &decodedAudio))
             {
                 ++m_debugStats.m_inputAudioPackets;
                 const bool sent = sendAudioPacket(m_packet, decodedAudio, errorMessage);
@@ -617,10 +617,11 @@ bool CameraVideoFileDecoder::openAudioDecoderForStream(int streamIndex, QString&
 #endif
 }
 
-bool CameraVideoFileDecoder::switchAudioStream(int streamIndex, QString& errorMessage)
+bool CameraVideoFileDecoder::switchAudioStream(int streamIndex, QString& errorMessage, QByteArray *decodedAudio)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(streamIndex)
+    Q_UNUSED(decodedAudio)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
@@ -629,10 +630,18 @@ bool CameraVideoFileDecoder::switchAudioStream(int streamIndex, QString& errorMe
     }
 
     const int previousAudioStreamIndex = m_audioStreamIndex;
+    if (decodedAudio && m_audioCodecContext)
+    {
+        QString drainError;
+        if (!sendAudioPacket(nullptr, *decodedAudio, drainError)) {
+            qWarning() << "CameraVideoFileDecoder: cannot drain old stream audio"
+                       << previousAudioStreamIndex << drainError;
+        }
+    }
+
+    const qint64 previousAudioDecodedPositionMs = m_audioDecodedPositionMs;
     closeAudioDecoder();
-    m_pendingAudioPcm.clear();
-    m_audioPaceRemainderFrames = 0.0;
-    m_audioDecodedPositionMs = -1;
+    m_audioDecodedPositionMs = previousAudioDecodedPositionMs;
 
     if (!openAudioDecoderForStream(streamIndex, errorMessage))
     {
@@ -974,7 +983,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         else if (m_urlSource && isAudioStream(m_packet->stream_index))
         {
             QString audioSwitchError;
-            if (isCompatibleAudioStream(m_packet->stream_index) || switchAudioStream(m_packet->stream_index, audioSwitchError))
+            if (isCompatibleAudioStream(m_packet->stream_index) || switchAudioStream(m_packet->stream_index, audioSwitchError, &pcmS16Stereo))
             {
                 ++m_debugStats.m_inputAudioPackets;
                 ++m_debugStats.m_readAheadAudioPackets;

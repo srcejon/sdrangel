@@ -809,6 +809,30 @@ bool CameraVideoFileDecoder::queueDecodedVideoFrames(QString& errorMessage)
 #endif
 }
 
+bool CameraVideoFileDecoder::discardOneDecodedVideoFrame(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    const int ret = avcodec_receive_frame(m_videoCodecContext, m_videoFrame);
+    if (ret == 0)
+    {
+        av_frame_unref(m_videoFrame);
+        return true;
+    }
+    if (ret == AVERROR_EOF) {
+        return true;
+    }
+    if (ret != AVERROR(EAGAIN))
+    {
+        errorMessage = QStringLiteral("Cannot decode video file frame: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+    return true;
+#endif
+}
+
 bool CameraVideoFileDecoder::queueOneDecodedVideoFrame(QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
@@ -816,7 +840,11 @@ bool CameraVideoFileDecoder::queueOneDecodedVideoFrame(QString& errorMessage)
     return false;
 #else
     const size_t maxPendingFrames = m_urlSource ? m_maxPendingStreamVideoFrames : m_maxPendingVideoFrames;
-    if (m_pendingVideoFrames.size() >= maxPendingFrames) {
+    if (m_pendingVideoFrames.size() >= maxPendingFrames)
+    {
+        if (m_urlSource) {
+            return discardOneDecodedVideoFrame(errorMessage);
+        }
         return true;
     }
 
@@ -902,7 +930,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         && !m_eof
         && (packetsRead < maxPacketsRead)
         && (m_urlSource
-            ? (m_pendingVideoFrames.size() < m_maxPendingStreamVideoFrames)
+            ? true
             : (m_pendingVideoPackets.size() < maxPendingVideoPackets)))
     {
         int ret = av_read_frame(m_formatContext, m_packet);

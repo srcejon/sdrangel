@@ -5759,7 +5759,11 @@ void CameraGUI::on_asiColorImageTypeCombo_currentIndexChanged(int index)
 
 void CameraGUI::on_saveImageButton_clicked()
 {
-    const QString fileName = QFileDialog::getSaveFileName(this, tr("Save JPEG"), m_settings.m_imageFileName, tr("JPEG image (*.jpg *.jpeg)"));
+    const QString fileName = QFileDialog::getSaveFileName(
+        this,
+        tr("Save image"),
+        m_settings.m_imageFileName,
+        tr("Image (*.png *.jpg *.jpeg);;PNG image (*.png);;JPEG image (*.jpg *.jpeg)"));
 
     if (!fileName.isEmpty())
     {
@@ -5789,7 +5793,11 @@ void CameraGUI::on_imagePathEdit_editingFinished()
 
 void CameraGUI::on_imagePathButton_clicked()
 {
-    const QString fileName = QFileDialog::getSaveFileName(this, tr("Save JPEG"), m_settings.m_imageFileName, tr("JPEG image (*.jpg *.jpeg)"));
+    const QString fileName = QFileDialog::getSaveFileName(
+        this,
+        tr("Save image"),
+        m_settings.m_imageFileName,
+        tr("Image (*.png *.jpg *.jpeg);;PNG image (*.png);;JPEG image (*.jpg *.jpeg)"));
 
     if (!fileName.isEmpty())
     {

@@ -12004,16 +12004,19 @@ QVector<Evaluation> buildVectorQuadBlindSeeds(const CameraSettings& settings,
                                               const QDateTime& captureDateTimeUtc,
                                               const QVector<CameraPipelineStarDetection>& starDetections,
                                               const QVector<int>& detectionIndices,
-                                              const QVector<VisibleCatalogStar>& visibleStars)
+                                              const QVector<VisibleCatalogStar>& visibleStars,
+                                              double seedFovOverride = -1.0)
 {
     QVector<Evaluation> seeds;
     if (isCancellationRequested() || (visibleStars.size() < settings.m_plateSolveMinMatches)) {
         return seeds;
     }
 
-    // Mode 0 (blind FoV) is not yet supported by this engine - the legacy
-    // buildBlindQuadSeeds path remains the fallback for that case.
-    if (!plateSolveStartUsesFov(settings)) {
+    // Mode 0 (blind FoV) is supported via an explicit seedFovOverride: the caller
+    // sweeps a set of candidate FoVs, calling this once per FoV. Without an
+    // override, mode 0 stays on the legacy buildBlindQuadSeeds fallback (the
+    // engine needs an assumed FoV to unproject pixels to camera-frame rays).
+    if (!plateSolveStartUsesFov(settings) && (seedFovOverride <= 0.0)) {
         return seeds;
     }
 
@@ -12026,7 +12029,9 @@ QVector<Evaluation> buildVectorQuadBlindSeeds(const CameraSettings& settings,
     const double fixedCenterOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
     const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
     const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
-    const double seedFov = static_cast<double>(settings.m_fov);
+    const double seedFov = (seedFovOverride > 0.0)
+        ? seedFovOverride
+        : static_cast<double>(settings.m_fov);
 
     QVector<SkyVector> detectionRayVectors;
     QVector<quint8> detectionRayVectorValid;
@@ -19557,6 +19562,43 @@ Evaluation searchBestPose(const CameraSettings& settings,
                 *blindVisibleStars);
             logSearchProfile("vector-quad-seeds", seedStageStartMs);
             consumeBlindSeeds(vectorQuadSeeds, "vector-quad-seed");
+            vectorQuadSeedsRunEarly = true;
+        }
+        else if (wideWeakMode && !plateSolveStartUsesFov(settings)
+            && !qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_QUAD_INDEX"))
+        {
+            // Mode 0 (fully blind, FoV unknown) on a wide fisheye lens: the
+            // vector-quad engine needs an assumed FoV to unproject pixels to rays,
+            // so sweep a coarse fisheye-biased set of candidate FoVs and run the
+            // bright-pool quad matcher for each. The correct FoV yields matching
+            // quad codes (the 5-D code's scale dimension rejects wrong FoVs); a
+            // wide fisheye at zenith captures almost the whole visible hemisphere,
+            // so the brightest whole-sky catalog stars are essentially all in frame
+            // and the bright-pool catalog index covers them. Stop early once a
+            // strong seed is found. This is purely additive - the legacy
+            // buildBlindQuadSeeds / wide-fallback-grid stages still run below.
+            seedStageStartMs = searchProfileTimer.elapsed();
+            static const double kBlindQuadFovSweepDegrees[] = {180.0, 160.0, 140.0, 120.0, 95.0, 70.0, 45.0};
+            for (double candidateFov : kBlindQuadFovSweepDegrees)
+            {
+                if (isCancellationRequested()) {
+                    return best;
+                }
+                const QVector<Evaluation> vectorQuadSeeds = buildVectorQuadBlindSeeds(
+                    settings,
+                    catalogContext,
+                    imageSize,
+                    captureDateTimeUtc,
+                    starDetections,
+                    detectionIndices,
+                    *blindVisibleStars,
+                    candidateFov);
+                consumeBlindSeeds(vectorQuadSeeds, "vector-quad-seed");
+                if (hasGoodWideBlindSeed()) {
+                    break;
+                }
+            }
+            logSearchProfile("vector-quad-seeds", seedStageStartMs);
             vectorQuadSeedsRunEarly = true;
         }
 

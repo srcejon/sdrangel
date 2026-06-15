@@ -429,8 +429,7 @@ bool CameraVideoFileDecoder::readNextFrame(
         }
         else if (m_urlSource && isAudioStream(m_packet->stream_index))
         {
-            QString audioSwitchError;
-            if (isCompatibleAudioStream(m_packet->stream_index) || switchAudioStream(m_packet->stream_index, audioSwitchError, &decodedAudio))
+            if (isCompatibleAudioStream(m_packet->stream_index))
             {
                 ++m_debugStats.m_inputAudioPackets;
                 const bool sent = sendAudioPacket(m_packet, decodedAudio, errorMessage);
@@ -441,8 +440,7 @@ bool CameraVideoFileDecoder::readNextFrame(
             }
             else
             {
-                qWarning() << "CameraVideoFileDecoder: cannot switch to stream audio"
-                           << m_packet->stream_index << audioSwitchError;
+                ++m_debugStats.m_inputOtherPackets;
                 av_packet_unref(m_packet);
             }
         }
@@ -613,48 +611,6 @@ bool CameraVideoFileDecoder::openAudioDecoderForStream(int streamIndex, QString&
         m_audioStreamIndex = -1;
         return false;
     }
-    return true;
-#endif
-}
-
-bool CameraVideoFileDecoder::switchAudioStream(int streamIndex, QString& errorMessage, QByteArray *decodedAudio)
-{
-#ifndef CAMERA_FFMPEG_STREAMING
-    Q_UNUSED(streamIndex)
-    Q_UNUSED(decodedAudio)
-    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
-    return false;
-#else
-    if (streamIndex == m_audioStreamIndex) {
-        return true;
-    }
-
-    const int previousAudioStreamIndex = m_audioStreamIndex;
-    if (decodedAudio && m_audioCodecContext)
-    {
-        QString drainError;
-        if (!sendAudioPacket(nullptr, *decodedAudio, drainError)) {
-            qWarning() << "CameraVideoFileDecoder: cannot drain old stream audio"
-                       << previousAudioStreamIndex << drainError;
-        }
-    }
-
-    const qint64 previousAudioDecodedPositionMs = m_audioDecodedPositionMs;
-    closeAudioDecoder();
-    m_audioDecodedPositionMs = previousAudioDecodedPositionMs;
-
-    if (!openAudioDecoderForStream(streamIndex, errorMessage))
-    {
-        qWarning() << "CameraVideoFileDecoder: audio stream switch failed"
-                   << "from" << previousAudioStreamIndex
-                   << "to" << streamIndex
-                   << errorMessage;
-        return false;
-    }
-
-    qDebug() << "CameraVideoFileDecoder: switched audio stream"
-             << "from" << previousAudioStreamIndex
-             << "to" << streamIndex;
     return true;
 #endif
 }
@@ -982,8 +938,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         }
         else if (m_urlSource && isAudioStream(m_packet->stream_index))
         {
-            QString audioSwitchError;
-            if (isCompatibleAudioStream(m_packet->stream_index) || switchAudioStream(m_packet->stream_index, audioSwitchError, &pcmS16Stereo))
+            if (isCompatibleAudioStream(m_packet->stream_index))
             {
                 ++m_debugStats.m_inputAudioPackets;
                 ++m_debugStats.m_readAheadAudioPackets;
@@ -995,8 +950,6 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
             }
             else
             {
-                qWarning() << "CameraVideoFileDecoder: cannot switch to read-ahead stream audio"
-                           << m_packet->stream_index << audioSwitchError;
                 ++m_debugStats.m_inputOtherPackets;
                 ++m_debugStats.m_readAheadOtherPackets;
                 av_packet_unref(m_packet);

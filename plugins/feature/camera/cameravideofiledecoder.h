@@ -128,7 +128,6 @@ private:
     [[nodiscard]] bool openVideoDecoder(QString& errorMessage);
     [[nodiscard]] bool openAudioDecoder(QString& errorMessage);
     [[nodiscard]] bool openAudioDecoderForStream(int streamIndex, QString& errorMessage);
-    [[nodiscard]] bool switchAudioStream(int streamIndex, QString& errorMessage, QByteArray *decodedAudio = nullptr);
     [[nodiscard]] bool isAudioStream(int streamIndex) const;
     [[nodiscard]] bool isCompatibleAudioStream(int streamIndex) const;
     [[nodiscard]] bool openResampler(QString& errorMessage);

@@ -111,6 +111,7 @@ private:
     bool m_eof = false;
     bool m_videoDraining = false;
     bool m_audioDraining = false;
+    bool m_urlSource = false;
     std::deque<AVPacket*> m_pendingVideoPackets;
     std::deque<PendingVideoFrame> m_pendingVideoFrames;
     DebugStats m_debugStats;

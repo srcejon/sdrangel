@@ -182,6 +182,7 @@ void CameraSettings::resetToDefaults()
     m_imageFileName = "camera.jpg";
     m_saveVideo = false;
     m_videoFileCameraPath.clear();
+    m_streamUrl.clear();
     m_imageFileCameraPaths.clear();
     m_streamUrlHistory.clear();
     m_videoFileName = "camera.mp4";
@@ -660,6 +661,7 @@ QByteArray CameraSettings::serialize() const
     s.writeString(257, serializeStringList(m_yoloIgnoredClassNames));
     s.writeBool(258, m_recordFilteredMedia);
     s.writeString(259, serializeStringList(m_streamUrlHistory));
+    s.writeString(260, m_streamUrl);
 
     return s.final();
 }
@@ -1124,6 +1126,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         QString streamUrlHistoryJson;
         d.readString(259, &streamUrlHistoryJson, "");
         m_streamUrlHistory = deserializeStringList(streamUrlHistoryJson);
+        d.readString(260, &m_streamUrl, "");
+        if (isStreamCamera() && m_streamUrl.isEmpty()) {
+            m_streamUrl = m_videoFileCameraPath;
+        }
         m_yoloDnnTarget = qBound(CPU, m_yoloDnnTarget, TensorRT_FP16);
         d.readS32(221, reinterpret_cast<qint32*>(&m_stackDisplayMode), static_cast<qint32>(StackDisplayStacked));
         d.readS32(222, &m_stackDisplayFrameIndex, 0);
@@ -1389,6 +1395,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoFileCameraPath")) {
         m_videoFileCameraPath = settings.m_videoFileCameraPath;
+    }
+    if (settingsKeys.contains("streamUrl")) {
+        m_streamUrl = settings.m_streamUrl;
     }
     if (settingsKeys.contains("imageFileCameraPaths")) {
         m_imageFileCameraPaths = settings.m_imageFileCameraPaths;
@@ -2162,6 +2171,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("videoFileCameraPath") || force) {
         ostr << " m_videoFileCameraPath: " << m_videoFileCameraPath.toStdString();
     }
+    if (settingsKeys.contains("streamUrl") || force) {
+        ostr << " m_streamUrl: " << m_streamUrl.toStdString();
+    }
     if (settingsKeys.contains("imageFileCameraPaths") || force) {
         ostr << " m_imageFileCameraPaths: " << m_imageFileCameraPaths.join('|').toStdString();
     }
@@ -2778,8 +2790,13 @@ bool CameraSettings::isFfmpegMediaSource() const
 
 bool CameraSettings::hasFileCameraSource() const
 {
-    return (isFfmpegMediaSource() && !m_videoFileCameraPath.isEmpty())
+    return (isFfmpegMediaSource() && !ffmpegMediaSourcePath().isEmpty())
         || (isImageFileSequenceCamera() && !m_imageFileCameraPaths.isEmpty());
+}
+
+QString CameraSettings::ffmpegMediaSourcePath() const
+{
+    return isStreamCamera() ? m_streamUrl : m_videoFileCameraPath;
 }
 
 int CameraSettings::cameraIdInt() const

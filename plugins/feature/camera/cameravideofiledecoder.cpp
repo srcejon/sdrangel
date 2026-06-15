@@ -760,7 +760,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     static constexpr size_t maxPendingVideoPackets = 30;
     static constexpr qint64 audioLeadMs = 50;
     static constexpr int bytesPerSampleFrame = 4;
-    const int maxPacketsRead = m_urlSource ? 128 : 32;
+    const int maxPacketsRead = m_urlSource ? 16 : 32;
     const int frameAudioFrames = static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5);
     const int targetAudioFrames = std::max(frameAudioFrames, m_outputSampleRate / 50);
     const int targetAudioBytes = targetAudioFrames * bytesPerSampleFrame;
@@ -779,6 +779,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     while (needsAudio()
         && !m_eof
         && (packetsRead < maxPacketsRead)
+        && (!m_urlSource || (m_pendingVideoFrames.size() < m_maxPendingVideoFrames))
         && (m_urlSource || (m_pendingVideoPackets.size() < maxPendingVideoPackets)))
     {
         int ret = av_read_frame(m_formatContext, m_packet);
@@ -822,14 +823,6 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
             ++m_debugStats.m_readAheadVideoPackets;
             if (m_urlSource)
             {
-                if (m_pendingVideoFrames.size() >= m_maxPendingVideoFrames)
-                {
-                    av_packet_unref(m_packet);
-                    ++m_debugStats.m_readAheadPacketCapHits;
-                    ++packetsRead;
-                    continue;
-                }
-
                 const bool sent = sendVideoPacket(m_packet, errorMessage);
                 av_packet_unref(m_packet);
                 if (!sent) {
@@ -837,6 +830,9 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
                 }
                 if (!queueDecodedVideoFrames(errorMessage)) {
                     return false;
+                }
+                if (m_pendingVideoFrames.size() >= m_maxPendingVideoFrames) {
+                    break;
                 }
             }
             else

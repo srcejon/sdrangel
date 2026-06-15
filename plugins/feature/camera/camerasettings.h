@@ -372,6 +372,7 @@ struct CameraSettings
     QString m_imageFileName;
     bool m_saveVideo;
     QString m_videoFileCameraPath;
+    QString m_streamUrl;
     QStringList m_imageFileCameraPaths;
     QStringList m_streamUrlHistory;
     QString m_videoFileName;
@@ -607,6 +608,7 @@ struct CameraSettings
     bool isStreamCamera() const;
     bool isFfmpegMediaSource() const;
     bool hasFileCameraSource() const;
+    QString ffmpegMediaSourcePath() const;
     int cameraIdInt() const;
     QString cameraIdString() const;
     QString cameraDescription() const;

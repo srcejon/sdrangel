@@ -1232,7 +1232,7 @@ void CameraGUI::setSelectedCamera(const QString& protocol, const QString& camera
         m_settings.m_videoFileCameraPath = cameraId;
     }
     else if (protocol == CameraProtocol::stream()) {
-        m_settings.m_videoFileCameraPath = cameraId;
+        m_settings.m_streamUrl = cameraId;
     }
     else if (protocol == CameraProtocol::images()) {
         m_settings.m_cameraId = CameraProtocol::images();
@@ -1302,11 +1302,12 @@ QStringList CameraGUI::cameraSelectionSettingsKeys(const CameraInfo& cameraInfo)
 {
     QStringList settingsKeys {"cameraProtocol", "cameraId", "cameraDescription"};
 
-    if ((cameraInfo.m_protocol == CameraProtocol::video()) || (cameraInfo.m_protocol == CameraProtocol::stream())) {
+    if (cameraInfo.m_protocol == CameraProtocol::video()) {
         settingsKeys.append("videoFileCameraPath");
-        if (cameraInfo.m_protocol == CameraProtocol::stream()) {
-            settingsKeys.append("streamUrlHistory");
-        }
+    }
+    else if (cameraInfo.m_protocol == CameraProtocol::stream()) {
+        settingsKeys.append("streamUrl");
+        settingsKeys.append("streamUrlHistory");
     }
     else if (cameraInfo.m_protocol == CameraProtocol::images()) {
         settingsKeys.append("imageFileCameraPaths");
@@ -1465,7 +1466,7 @@ bool CameraGUI::chooseStreamUrl(int comboIndex, const QString& previousCameraPro
 {
     bool ok = false;
     QStringList history = m_settings.m_streamUrlHistory;
-    const QString currentUrl = m_settings.isStreamCamera() ? m_settings.m_videoFileCameraPath : QString();
+    const QString currentUrl = m_settings.isStreamCamera() ? m_settings.m_streamUrl : QString();
     if (!currentUrl.isEmpty()) {
         history.removeAll(currentUrl);
         history.prepend(currentUrl);
@@ -3651,7 +3652,7 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 
 bool CameraGUI::ensureVideoFilePlayer(bool startPlayback)
 {
-    if (!m_settings.isFfmpegMediaSource() || m_settings.m_videoFileCameraPath.isEmpty()) {
+    if (!m_settings.isFfmpegMediaSource() || m_settings.ffmpegMediaSourcePath().isEmpty()) {
         return false;
     }
 
@@ -4142,6 +4143,7 @@ void CameraGUI::applyQtCameraSettings(const QList<QString>& settingsKeys, bool f
         || settingsKeys.contains("cameraProtocol")
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("videoFileCameraPath")
+        || settingsKeys.contains("streamUrl")
         || settingsKeys.contains("imageFileCameraPaths")
         || settingsKeys.contains("resolutionWidth")
         || settingsKeys.contains("resolutionHeight")
@@ -5011,14 +5013,17 @@ void CameraGUI::on_browseVideoFileButton_clicked()
 
     m_settings.m_cameraId = ui->cameraCombo->itemData(index, CameraIdRole).toString();
     m_settings.m_cameraDescription = ui->cameraCombo->itemData(index, CameraDescriptionRole).toString();
-    if (m_settings.isFfmpegMediaSource()) {
+    if (m_settings.isVideoFileCamera()) {
         m_settings.m_videoFileCameraPath = m_settings.m_cameraId;
+    }
+    else if (m_settings.isStreamCamera()) {
+        m_settings.m_streamUrl = m_settings.m_cameraId;
     }
     updateVideoFileControls();
     applySettings(m_settings.isImageFileSequenceCamera()
         ? QStringList({"cameraId", "cameraDescription", "imageFileCameraPaths"})
         : (m_settings.isStreamCamera()
-            ? QStringList({"cameraId", "cameraDescription", "videoFileCameraPath", "streamUrlHistory"})
+            ? QStringList({"cameraId", "cameraDescription", "streamUrl", "streamUrlHistory"})
             : QStringList({"cameraId", "cameraDescription", "videoFileCameraPath"})));
 }
 

@@ -253,9 +253,9 @@ void CameraFinder::finalizeCameraList(int requestId)
         });
     m_currentCameras.append({
         CameraProtocol::stream(),
-        m_settings.isStreamCamera() ? m_settings.m_videoFileCameraPath : QString(),
-        (m_settings.isStreamCamera() && !m_settings.m_videoFileCameraPath.isEmpty())
-            ? m_settings.m_videoFileCameraPath
+        m_settings.m_streamUrl,
+        !m_settings.m_streamUrl.isEmpty()
+            ? m_settings.m_streamUrl
             : QString(),
         {},
         0

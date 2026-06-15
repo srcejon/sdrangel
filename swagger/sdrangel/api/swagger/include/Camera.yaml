@@ -189,6 +189,9 @@ CameraSettings:
     videoFileCameraPath:
       description: "File path for file-based camera video source"
       type: string
+    streamUrl:
+      description: "URL for stream: camera source"
+      type: string
     imageFileCameraPaths:
       description: "Ordered image file list for images: image sequence camera source"
       type: array

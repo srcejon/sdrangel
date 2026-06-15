@@ -91,6 +91,8 @@ private:
         qint64 m_positionMs = -1;
     };
 
+    static constexpr size_t m_maxPendingVideoFrames = 3;
+
     AVFormatContext *m_formatContext = nullptr;
     AVCodecContext *m_videoCodecContext = nullptr;
     AVCodecContext *m_audioCodecContext = nullptr;

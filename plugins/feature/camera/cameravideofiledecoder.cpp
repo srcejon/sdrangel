@@ -673,11 +673,9 @@ bool CameraVideoFileDecoder::queueDecodedVideoFrames(QString& errorMessage)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
-    static constexpr size_t maxPendingVideoFrames = 3;
-
     for (;;)
     {
-        if (m_pendingVideoFrames.size() >= maxPendingVideoFrames) {
+        if (m_pendingVideoFrames.size() >= m_maxPendingVideoFrames) {
             return true;
         }
 
@@ -703,6 +701,10 @@ bool CameraVideoFileDecoder::queueOneDecodedVideoFrame(QString& errorMessage)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
+    if (m_pendingVideoFrames.size() >= m_maxPendingVideoFrames) {
+        return true;
+    }
+
     QImage image;
     qint64 positionMs = -1;
     if (receiveVideoFrame(image, positionMs, errorMessage))
@@ -820,6 +822,14 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
             ++m_debugStats.m_readAheadVideoPackets;
             if (m_urlSource)
             {
+                if (m_pendingVideoFrames.size() >= m_maxPendingVideoFrames)
+                {
+                    av_packet_unref(m_packet);
+                    ++m_debugStats.m_readAheadPacketCapHits;
+                    ++packetsRead;
+                    continue;
+                }
+
                 const bool sent = sendVideoPacket(m_packet, errorMessage);
                 av_packet_unref(m_packet);
                 if (!sent) {

@@ -1614,7 +1614,8 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     qint64 decodeMs = 0;
     qint64 videoLateMs = 0;
     int droppedLateFrames = 0;
-    static constexpr int maxLateDropFrames = 12;
+    static constexpr int maxLateDropFrames = 4;
+    static constexpr qint64 maxLateDropDecodeMs = 80;
     static constexpr qint64 liveFrameLateThresholdMs = 250;
     for (;;)
     {
@@ -1643,7 +1644,11 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         }
 
         videoLateMs = videoFilePlaybackClockMs() - framePtsMs;
-        if (!m_settings.isStreamCamera() || (videoLateMs <= liveFrameLateThresholdMs) || (droppedLateFrames >= maxLateDropFrames)) {
+        if (!m_settings.isStreamCamera()
+            || (videoLateMs <= liveFrameLateThresholdMs)
+            || (droppedLateFrames >= maxLateDropFrames)
+            || (decodeMs >= maxLateDropDecodeMs))
+        {
             break;
         }
 
@@ -1729,7 +1734,7 @@ void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audi
     }
 
     QByteArray monitorAudio = pcmS16Stereo;
-    if (m_settings.isStreamCamera() && m_videoFileDecoder)
+    if (m_videoFileDecoder)
     {
         const uint32_t currentFill = m_qtAudio.monitorAudioFill();
         const int targetFillFrames = m_qtAudio.monitorTargetFillFrames(audioSampleRate);

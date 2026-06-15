@@ -137,7 +137,6 @@ private:
     [[nodiscard]] bool sendAudioPacket(AVPacket *packet, QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool sendVideoPacket(AVPacket *packet, QString& errorMessage);
     [[nodiscard]] bool receiveVideoFrame(QImage& image, qint64& positionMs, QString& errorMessage);
-    [[nodiscard]] bool discardOneDecodedVideoFrame(QString& errorMessage);
     [[nodiscard]] bool queueOneDecodedVideoFrame(QString& errorMessage);
     [[nodiscard]] bool queueDecodedVideoFrames(QString& errorMessage);
     [[nodiscard]] bool finishFrameAudio(QByteArray& decodedAudio, QByteArray& pcmS16Stereo, qint64 videoPositionMs, QString& errorMessage);

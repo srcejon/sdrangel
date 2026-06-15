@@ -1677,7 +1677,7 @@ void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audi
         if (currentFill < static_cast<uint32_t>(targetFillFrames))
         {
             const int neededFrames = targetFillFrames - static_cast<int>(currentFill);
-            const int maxExtraFrames = audioSampleRate / 4;
+            const int maxExtraFrames = audioSampleRate / 2;
             QByteArray extraAudio;
             const int extraFrames = m_videoFileDecoder->takePendingAudio(extraAudio, std::min(neededFrames, maxExtraFrames));
             if (extraFrames > 0)

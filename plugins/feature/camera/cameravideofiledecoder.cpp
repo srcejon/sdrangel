@@ -82,6 +82,11 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
             : QStringLiteral("auto");
 
         AVDictionary *options = nullptr;
+        if (!scheme.isEmpty())
+        {
+            av_dict_set(&options, "analyzeduration", "10000000", 0);
+            av_dict_set(&options, "probesize", "5000000", 0);
+        }
         if (rtspSource)
         {
             av_dict_set(&options, "timeout", "5000000", 0);
@@ -191,8 +196,19 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     }
 
     const AVRational rate = stream->avg_frame_rate.num > 0 ? stream->avg_frame_rate : stream->r_frame_rate;
-    if ((rate.num > 0) && (rate.den > 0)) {
-        m_frameRate = qBound(1.0, av_q2d(rate), 240.0);
+    if ((rate.num > 0) && (rate.den > 0))
+    {
+        const double reportedFrameRate = av_q2d(rate);
+        if (!scheme.isEmpty() && ((reportedFrameRate <= 0.0) || (reportedFrameRate > 120.0)))
+        {
+            qWarning() << "CameraVideoFileDecoder: ignoring implausible stream frame rate"
+                       << reportedFrameRate << "for" << fileName;
+            m_frameRate = 25.0;
+        }
+        else
+        {
+            m_frameRate = qBound(1.0, reportedFrameRate, 240.0);
+        }
     }
 
     m_eof = false;
@@ -965,6 +981,9 @@ bool CameraVideoFileDecoder::convertFrameToImage(const AVFrame *frame, QImage& i
     if (!frame || (frame->width <= 0) || (frame->height <= 0))
     {
         errorMessage = QStringLiteral("Decoded video file frame is empty");
+        qWarning() << "CameraVideoFileDecoder:" << errorMessage
+                   << "codecSize" << (m_videoCodecContext ? m_videoCodecContext->width : 0)
+                   << "x" << (m_videoCodecContext ? m_videoCodecContext->height : 0);
         return false;
     }
 

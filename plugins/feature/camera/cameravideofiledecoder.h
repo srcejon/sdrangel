@@ -127,6 +127,9 @@ private:
 
     [[nodiscard]] bool openVideoDecoder(QString& errorMessage);
     [[nodiscard]] bool openAudioDecoder(QString& errorMessage);
+    [[nodiscard]] bool openAudioDecoderForStream(int streamIndex, QString& errorMessage);
+    [[nodiscard]] bool switchAudioStream(int streamIndex, QString& errorMessage);
+    [[nodiscard]] bool isAudioStream(int streamIndex) const;
     [[nodiscard]] bool openResampler(QString& errorMessage);
     [[nodiscard]] bool sendAudioPacket(AVPacket *packet, QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool sendVideoPacket(AVPacket *packet, QString& errorMessage);

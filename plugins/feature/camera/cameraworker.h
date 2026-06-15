@@ -629,6 +629,16 @@ private:
     QElapsedTimer m_videoFilePlaybackClock;
     quint64 m_videoFilePlaybackTick = 0;
     quint64 m_videoFileFrameSubmitGeneration = 0;
+    struct DelayedVideoFileFrame
+    {
+        CameraPipelineFramePtr m_frame;
+        qint64 m_dueMs = 0;
+        quint64 m_captureEpoch = 0;
+        quint64 m_generation = 0;
+    };
+    QTimer m_videoFileDelayedSubmitTimer;
+    QElapsedTimer m_videoFileDelayedSubmitClock;
+    QVector<DelayedVideoFileFrame> m_delayedVideoFileFrames;
     QElapsedTimer m_videoFileStatsTimer;
     QElapsedTimer m_videoFileTickTimer;
     quint64 m_videoFileStatsFrames = 0;
@@ -732,6 +742,9 @@ private:
     void closeVideoFileDecoder();
     void setVideoFilePlaying(bool playing);
     void submitVideoFileFrame(const CameraPipelineFramePtr& frame, bool applyPlaybackOffset);
+    void clearDelayedVideoFileFrames();
+    void scheduleDelayedVideoFileFrameSubmit();
+    void releaseDelayedVideoFileFrames();
     void readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
     void seekVideoFile(qint64 positionMs, bool displayFrame);
     void stepVideoFile(int direction);

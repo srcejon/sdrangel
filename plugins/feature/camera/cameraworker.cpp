@@ -65,6 +65,7 @@ CameraWorker::CameraWorker() :
     m_videoFilePositionMs(0),
     m_videoFileDurationMs(0),
     m_videoFilePlaying(false),
+    m_videoFileDelayedSubmitTimer(this),
     m_networkManager(nullptr),
     m_cameraFinder(new CameraFinder(this)),
     m_stackFrameIndex(0),
@@ -115,6 +116,7 @@ void CameraWorker::startWork()
 {
     QObject::connect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraWorker::handleInputMessages);
     QObject::connect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
+    QObject::connect(&m_videoFileDelayedSubmitTimer, &QTimer::timeout, this, &CameraWorker::releaseDelayedVideoFileFrames);
     QObject::connect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
 
     if (!m_networkManager) {
@@ -143,6 +145,7 @@ void CameraWorker::stopWork()
 {
     QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraWorker::handleInputMessages);
     QObject::disconnect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
+    QObject::disconnect(&m_videoFileDelayedSubmitTimer, &QTimer::timeout, this, &CameraWorker::releaseDelayedVideoFileFrames);
     QObject::disconnect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
     stopCapture();
 
@@ -1059,6 +1062,8 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     }
     if (force || settingsKeys.contains("videoPlaybackAudioOffsetMs")) {
         m_qtAudio.setFilePlaybackAudioOffsetMs(m_settings.m_videoPlaybackAudioOffsetMs);
+        ++m_videoFileFrameSubmitGeneration;
+        clearDelayedVideoFileFrames();
     }
 
     if (hdrSettingsChanged) {
@@ -1436,6 +1441,7 @@ bool CameraWorker::openVideoFileDecoder()
 void CameraWorker::closeVideoFileDecoder()
 {
     m_captureTimer.stop();
+    clearDelayedVideoFileFrames();
     m_videoFileDecoder.reset();
     m_videoFilePositionMs = 0;
     m_videoFileDurationMs = 0;
@@ -1471,6 +1477,7 @@ void CameraWorker::setVideoFilePlaying(bool playing)
     else
     {
         m_captureTimer.stop();
+        clearDelayedVideoFileFrames();
         m_videoFilePlaybackClock.invalidate();
         m_videoFilePlaybackTick = 0;
     }
@@ -1489,25 +1496,96 @@ void CameraWorker::submitVideoFileFrame(const CameraPipelineFramePtr& frame, boo
 
     if (videoDelayMs <= 0)
     {
+        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         m_framePreprocessor->submitFrame(frame);
         return;
     }
 
-    const quint64 captureEpoch = frame->m_captureEpoch;
-    const quint64 submitGeneration = m_videoFileFrameSubmitGeneration;
+    if (!m_videoFileDelayedSubmitClock.isValid()) {
+        m_videoFileDelayedSubmitClock.start();
+    }
 
-    QTimer::singleShot(videoDelayMs, this, [this, frame, captureEpoch, submitGeneration]() {
-        if (!m_capturing
-            || !m_settings.isFfmpegMediaSource()
-            || !m_videoFilePlaying
-            || !m_framePreprocessor
-            || (m_captureEpoch != captureEpoch)
-            || (m_videoFileFrameSubmitGeneration != submitGeneration)) {
-            return;
-        }
+    DelayedVideoFileFrame delayedFrame;
+    delayedFrame.m_frame = frame;
+    delayedFrame.m_dueMs = m_videoFileDelayedSubmitClock.elapsed() + videoDelayMs;
+    delayedFrame.m_captureEpoch = frame->m_captureEpoch;
+    delayedFrame.m_generation = m_videoFileFrameSubmitGeneration;
+    m_delayedVideoFileFrames.append(delayedFrame);
 
-        m_framePreprocessor->submitFrame(frame);
-    });
+    static constexpr int maxDelayedFrameCount = 64;
+    if (m_delayedVideoFileFrames.size() > maxDelayedFrameCount) {
+        m_delayedVideoFileFrames.remove(0, m_delayedVideoFileFrames.size() - maxDelayedFrameCount);
+    }
+
+    scheduleDelayedVideoFileFrameSubmit();
+}
+
+void CameraWorker::clearDelayedVideoFileFrames()
+{
+    m_videoFileDelayedSubmitTimer.stop();
+    m_delayedVideoFileFrames.clear();
+    m_videoFileDelayedSubmitClock.invalidate();
+}
+
+void CameraWorker::scheduleDelayedVideoFileFrameSubmit()
+{
+    if (m_delayedVideoFileFrames.isEmpty()) {
+        clearDelayedVideoFileFrames();
+        return;
+    }
+
+    if (!m_videoFileDelayedSubmitClock.isValid()) {
+        m_videoFileDelayedSubmitClock.start();
+    }
+
+    qint64 nextDueMs = m_delayedVideoFileFrames.constFirst().m_dueMs;
+    for (const DelayedVideoFileFrame& delayedFrame : m_delayedVideoFileFrames) {
+        nextDueMs = std::min(nextDueMs, delayedFrame.m_dueMs);
+    }
+
+    const int delayMs = static_cast<int>(qBound(
+        qint64(1),
+        nextDueMs - m_videoFileDelayedSubmitClock.elapsed(),
+        qint64(1000)));
+    m_videoFileDelayedSubmitTimer.setSingleShot(true);
+    m_videoFileDelayedSubmitTimer.start(delayMs);
+}
+
+void CameraWorker::releaseDelayedVideoFileFrames()
+{
+    if (!m_videoFileDelayedSubmitClock.isValid() || m_delayedVideoFileFrames.isEmpty()) {
+        clearDelayedVideoFileFrames();
+        return;
+    }
+
+    const qint64 nowMs = m_videoFileDelayedSubmitClock.elapsed();
+    int dueCount = 0;
+    while ((dueCount < m_delayedVideoFileFrames.size()) && (m_delayedVideoFileFrames[dueCount].m_dueMs <= nowMs)) {
+        ++dueCount;
+    }
+
+    if (dueCount <= 0)
+    {
+        scheduleDelayedVideoFileFrameSubmit();
+        return;
+    }
+
+    const DelayedVideoFileFrame delayedFrame = m_delayedVideoFileFrames[dueCount - 1];
+    m_delayedVideoFileFrames.remove(0, dueCount);
+
+    if (m_capturing
+        && m_settings.isFfmpegMediaSource()
+        && m_videoFilePlaying
+        && m_framePreprocessor
+        && (m_captureEpoch == delayedFrame.m_captureEpoch)
+        && (m_videoFileFrameSubmitGeneration == delayedFrame.m_generation)
+        && delayedFrame.m_frame)
+    {
+        delayedFrame.m_frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
+        m_framePreprocessor->submitFrame(delayedFrame.m_frame);
+    }
+
+    scheduleDelayedVideoFileFrameSubmit();
 }
 
 void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs)
@@ -1594,6 +1672,7 @@ void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
 
     m_videoFilePositionMs = qBound<qint64>(0, positionMs, m_videoFileDurationMs > 0 ? m_videoFileDurationMs : std::numeric_limits<qint64>::max());
     ++m_videoFileFrameSubmitGeneration;
+    clearDelayedVideoFileFrames();
     m_videoFileDecoder->seek(m_videoFilePositionMs);
     m_qtAudio.clearMonitorAudio();
     m_qtAudio.prefillMonitorAudio(m_qtAudio.filePlaybackMonitorPrefillForOffsetMs());

@@ -1304,6 +1304,9 @@ QStringList CameraGUI::cameraSelectionSettingsKeys(const CameraInfo& cameraInfo)
 
     if ((cameraInfo.m_protocol == CameraProtocol::video()) || (cameraInfo.m_protocol == CameraProtocol::stream())) {
         settingsKeys.append("videoFileCameraPath");
+        if (cameraInfo.m_protocol == CameraProtocol::stream()) {
+            settingsKeys.append("streamUrlHistory");
+        }
     }
     else if (cameraInfo.m_protocol == CameraProtocol::images()) {
         settingsKeys.append("imageFileCameraPaths");
@@ -1461,12 +1464,23 @@ bool CameraGUI::chooseStreamUrl(int comboIndex, const QString& previousCameraPro
     const QString& previousAlpacaHost, quint16 previousAlpacaPort)
 {
     bool ok = false;
-    const QString url = QInputDialog::getText(
+    QStringList history = m_settings.m_streamUrlHistory;
+    const QString currentUrl = m_settings.isStreamCamera() ? m_settings.m_videoFileCameraPath : QString();
+    if (!currentUrl.isEmpty()) {
+        history.removeAll(currentUrl);
+        history.prepend(currentUrl);
+    }
+    if (history.isEmpty()) {
+        history.append(QStringLiteral("rtsp://"));
+    }
+
+    const QString url = QInputDialog::getItem(
         this,
         tr("Open Stream"),
         tr("Stream URL"),
-        QLineEdit::Normal,
-        m_settings.isStreamCamera() ? m_settings.m_videoFileCameraPath : QStringLiteral("rtsp://"),
+        history,
+        0,
+        true,
         &ok).trimmed();
 
     if (!ok || url.isEmpty())
@@ -1477,6 +1491,12 @@ bool CameraGUI::chooseStreamUrl(int comboIndex, const QString& previousCameraPro
             previousAlpacaHost,
             previousAlpacaPort);
         return false;
+    }
+
+    m_settings.m_streamUrlHistory.removeAll(url);
+    m_settings.m_streamUrlHistory.prepend(url);
+    while (m_settings.m_streamUrlHistory.size() > 20) {
+        m_settings.m_streamUrlHistory.removeLast();
     }
 
     ui->cameraCombo->setItemData(comboIndex, url, CameraIdRole);
@@ -4997,7 +5017,9 @@ void CameraGUI::on_browseVideoFileButton_clicked()
     updateVideoFileControls();
     applySettings(m_settings.isImageFileSequenceCamera()
         ? QStringList({"cameraId", "cameraDescription", "imageFileCameraPaths"})
-        : QStringList({"cameraId", "cameraDescription", "videoFileCameraPath"}));
+        : (m_settings.isStreamCamera()
+            ? QStringList({"cameraId", "cameraDescription", "videoFileCameraPath", "streamUrlHistory"})
+            : QStringList({"cameraId", "cameraDescription", "videoFileCameraPath"})));
 }
 
 void CameraGUI::on_restartVideo_clicked()

@@ -183,6 +183,7 @@ void CameraSettings::resetToDefaults()
     m_saveVideo = false;
     m_videoFileCameraPath.clear();
     m_imageFileCameraPaths.clear();
+    m_streamUrlHistory.clear();
     m_videoFileName = "camera.mp4";
     m_recordRawFits = false;
     m_recordCalibratedMedia = true;
@@ -658,6 +659,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(256, m_videoRecordBitrateKbps);
     s.writeString(257, serializeStringList(m_yoloIgnoredClassNames));
     s.writeBool(258, m_recordFilteredMedia);
+    s.writeString(259, serializeStringList(m_streamUrlHistory));
 
     return s.final();
 }
@@ -1119,6 +1121,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         QString yoloIgnoredClassNamesJson;
         d.readString(257, &yoloIgnoredClassNamesJson, "");
         m_yoloIgnoredClassNames = deserializeStringList(yoloIgnoredClassNamesJson);
+        QString streamUrlHistoryJson;
+        d.readString(259, &streamUrlHistoryJson, "");
+        m_streamUrlHistory = deserializeStringList(streamUrlHistoryJson);
         m_yoloDnnTarget = qBound(CPU, m_yoloDnnTarget, TensorRT_FP16);
         d.readS32(221, reinterpret_cast<qint32*>(&m_stackDisplayMode), static_cast<qint32>(StackDisplayStacked));
         d.readS32(222, &m_stackDisplayFrameIndex, 0);
@@ -1387,6 +1392,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("imageFileCameraPaths")) {
         m_imageFileCameraPaths = settings.m_imageFileCameraPaths;
+    }
+    if (settingsKeys.contains("streamUrlHistory")) {
+        m_streamUrlHistory = settings.m_streamUrlHistory;
     }
     if (settingsKeys.contains("videoLoop")) {
         m_videoLoop = settings.m_videoLoop;
@@ -2156,6 +2164,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("imageFileCameraPaths") || force) {
         ostr << " m_imageFileCameraPaths: " << m_imageFileCameraPaths.join('|').toStdString();
+    }
+    if (settingsKeys.contains("streamUrlHistory") || force) {
+        ostr << " m_streamUrlHistory: " << m_streamUrlHistory.join('|').toStdString();
     }
     if (settingsKeys.contains("videoLoop") || force) {
         ostr << " m_videoLoop: " << m_videoLoop;

@@ -430,7 +430,7 @@ bool CameraVideoFileDecoder::readNextFrame(
         else if (m_urlSource && isAudioStream(m_packet->stream_index))
         {
             QString audioSwitchError;
-            if (switchAudioStream(m_packet->stream_index, audioSwitchError))
+            if (isCompatibleAudioStream(m_packet->stream_index) || switchAudioStream(m_packet->stream_index, audioSwitchError))
             {
                 ++m_debugStats.m_inputAudioPackets;
                 const bool sent = sendAudioPacket(m_packet, decodedAudio, errorMessage);
@@ -661,6 +661,26 @@ bool CameraVideoFileDecoder::isAudioStream(int streamIndex) const
     }
     const AVStream *stream = m_formatContext->streams[streamIndex];
     return stream && stream->codecpar && (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO);
+#endif
+}
+
+bool CameraVideoFileDecoder::isCompatibleAudioStream(int streamIndex) const
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(streamIndex)
+    return false;
+#else
+    if (!m_audioCodecContext || !isAudioStream(streamIndex)) {
+        return false;
+    }
+
+    const AVCodecParameters *codecParameters = m_formatContext->streams[streamIndex]->codecpar;
+    return (codecParameters->codec_id == m_audioCodecContext->codec_id)
+        && (codecParameters->sample_rate == m_audioCodecContext->sample_rate)
+        && (codecParameters->channels == m_audioCodecContext->channels)
+        && ((codecParameters->channel_layout == 0)
+            || (m_audioCodecContext->channel_layout == 0)
+            || (codecParameters->channel_layout == m_audioCodecContext->channel_layout));
 #endif
 }
 
@@ -954,7 +974,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         else if (m_urlSource && isAudioStream(m_packet->stream_index))
         {
             QString audioSwitchError;
-            if (switchAudioStream(m_packet->stream_index, audioSwitchError))
+            if (isCompatibleAudioStream(m_packet->stream_index) || switchAudioStream(m_packet->stream_index, audioSwitchError))
             {
                 ++m_debugStats.m_inputAudioPackets;
                 ++m_debugStats.m_readAheadAudioPackets;

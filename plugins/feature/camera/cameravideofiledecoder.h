@@ -81,6 +81,8 @@ public:
         quint64 m_pacedAudioTargetFrames = 0;
         quint64 m_pacedAudioOutputFrames = 0;
         quint64 m_pacedAudioShortCalls = 0;
+        quint64 m_droppedPendingAudioBytes = 0;
+        quint64 m_droppedPendingAudioFrames = 0;
         quint64 m_audioTimestampJumps = 0;
         qint64 m_audioTimestampJumpMaxAbsMs = 0;
         quint64 m_videoConvertFrames = 0;
@@ -141,6 +143,7 @@ private:
     [[nodiscard]] bool drainAudio(QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool appendFrameAudio(const AVFrame *frame, QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool convertFrameToImage(const AVFrame *frame, QImage& image, QString& errorMessage);
+    void trimLivePendingAudio();
     void takePacedAudio(QByteArray& pcmS16Stereo);
     void clearPendingVideoPackets();
     void closeAudioDecoder();

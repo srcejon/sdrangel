@@ -662,6 +662,8 @@ private:
     quint64 m_videoFileStatsLastDecoderPacedAudioTargetFrames = 0;
     quint64 m_videoFileStatsLastDecoderPacedAudioOutputFrames = 0;
     quint64 m_videoFileStatsLastDecoderPacedAudioShortCalls = 0;
+    quint64 m_videoFileStatsLastDecoderDroppedPendingAudioBytes = 0;
+    quint64 m_videoFileStatsLastDecoderDroppedPendingAudioFrames = 0;
     quint64 m_videoFileStatsLastDecoderAudioTimestampJumps = 0;
     quint64 m_videoFileStatsLastDecoderConvertFrames = 0;
     quint64 m_videoFileStatsLastDecoderConvertMs = 0;

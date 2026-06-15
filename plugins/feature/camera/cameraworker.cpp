@@ -1707,6 +1707,8 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderPacedAudioTargetFrames = stats.m_pacedAudioTargetFrames;
         m_videoFileStatsLastDecoderPacedAudioOutputFrames = stats.m_pacedAudioOutputFrames;
         m_videoFileStatsLastDecoderPacedAudioShortCalls = stats.m_pacedAudioShortCalls;
+        m_videoFileStatsLastDecoderDroppedPendingAudioBytes = stats.m_droppedPendingAudioBytes;
+        m_videoFileStatsLastDecoderDroppedPendingAudioFrames = stats.m_droppedPendingAudioFrames;
         m_videoFileStatsLastDecoderAudioTimestampJumps = stats.m_audioTimestampJumps;
         m_videoFileStatsLastDecoderConvertFrames = stats.m_videoConvertFrames;
         m_videoFileStatsLastDecoderConvertMs = stats.m_videoConvertMs;
@@ -1731,6 +1733,8 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderPacedAudioTargetFrames = 0;
         m_videoFileStatsLastDecoderPacedAudioOutputFrames = 0;
         m_videoFileStatsLastDecoderPacedAudioShortCalls = 0;
+        m_videoFileStatsLastDecoderDroppedPendingAudioBytes = 0;
+        m_videoFileStatsLastDecoderDroppedPendingAudioFrames = 0;
         m_videoFileStatsLastDecoderAudioTimestampJumps = 0;
         m_videoFileStatsLastDecoderConvertFrames = 0;
         m_videoFileStatsLastDecoderConvertMs = 0;
@@ -1822,6 +1826,8 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     quint64 pacedAudioTargetFrames = 0;
     quint64 pacedAudioOutputFrames = 0;
     quint64 pacedAudioShortCalls = 0;
+    quint64 droppedPendingAudioBytes = 0;
+    quint64 droppedPendingAudioFrames = 0;
     quint64 audioTimestampJumps = 0;
     qint64 audioTimestampJumpMaxAbsMs = 0;
     quint64 convertFrames = 0;
@@ -1848,6 +1854,8 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         pacedAudioTargetFrames = stats.m_pacedAudioTargetFrames - m_videoFileStatsLastDecoderPacedAudioTargetFrames;
         pacedAudioOutputFrames = stats.m_pacedAudioOutputFrames - m_videoFileStatsLastDecoderPacedAudioOutputFrames;
         pacedAudioShortCalls = stats.m_pacedAudioShortCalls - m_videoFileStatsLastDecoderPacedAudioShortCalls;
+        droppedPendingAudioBytes = stats.m_droppedPendingAudioBytes - m_videoFileStatsLastDecoderDroppedPendingAudioBytes;
+        droppedPendingAudioFrames = stats.m_droppedPendingAudioFrames - m_videoFileStatsLastDecoderDroppedPendingAudioFrames;
         audioTimestampJumps = stats.m_audioTimestampJumps - m_videoFileStatsLastDecoderAudioTimestampJumps;
         audioTimestampJumpMaxAbsMs = audioTimestampJumps > 0 ? stats.m_audioTimestampJumpMaxAbsMs : 0;
         convertFrames = stats.m_videoConvertFrames - m_videoFileStatsLastDecoderConvertFrames;
@@ -1871,6 +1879,8 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderPacedAudioTargetFrames = stats.m_pacedAudioTargetFrames;
         m_videoFileStatsLastDecoderPacedAudioOutputFrames = stats.m_pacedAudioOutputFrames;
         m_videoFileStatsLastDecoderPacedAudioShortCalls = stats.m_pacedAudioShortCalls;
+        m_videoFileStatsLastDecoderDroppedPendingAudioBytes = stats.m_droppedPendingAudioBytes;
+        m_videoFileStatsLastDecoderDroppedPendingAudioFrames = stats.m_droppedPendingAudioFrames;
         m_videoFileStatsLastDecoderAudioTimestampJumps = stats.m_audioTimestampJumps;
         m_videoFileStatsLastDecoderConvertFrames = stats.m_videoConvertFrames;
         m_videoFileStatsLastDecoderConvertMs = stats.m_videoConvertMs;
@@ -1911,6 +1921,8 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "pacedAudioTargetFrames" << pacedAudioTargetFrames
              << "pacedAudioOutputFrames" << pacedAudioOutputFrames
              << "pacedAudioShortCalls" << pacedAudioShortCalls
+             << "droppedPendingAudioBytes" << droppedPendingAudioBytes
+             << "droppedPendingAudioFrames" << droppedPendingAudioFrames
              << "audioTimestampJumps" << audioTimestampJumps
              << "audioTimestampJumpMaxAbsMs" << audioTimestampJumpMaxAbsMs
              << "pendingVideoFrames" << pendingFrames

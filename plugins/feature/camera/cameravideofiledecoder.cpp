@@ -855,6 +855,7 @@ bool CameraVideoFileDecoder::finishFrameAudio(
         m_pendingAudioPcm.append(decodedAudio);
     }
     takePacedAudio(pcmS16Stereo);
+    trimLivePendingAudio();
     return true;
 #endif
 }
@@ -1104,6 +1105,35 @@ bool CameraVideoFileDecoder::appendFrameAudio(const AVFrame *frame, QByteArray& 
         m_audioDecodedPositionMs += audioDurationMs;
     }
     return true;
+#endif
+}
+
+void CameraVideoFileDecoder::trimLivePendingAudio()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    static constexpr int bytesPerSampleFrame = 4;
+    static constexpr int maxLivePendingAudioMs = 750;
+
+    if (!m_urlSource || (m_outputSampleRate <= 0) || m_pendingAudioPcm.isEmpty()) {
+        return;
+    }
+
+    const int maxBytes = std::max(
+        bytesPerSampleFrame,
+        static_cast<int>((static_cast<qint64>(m_outputSampleRate) * maxLivePendingAudioMs * bytesPerSampleFrame) / 1000));
+
+    if (m_pendingAudioPcm.size() <= maxBytes) {
+        return;
+    }
+
+    const int dropBytes = ((m_pendingAudioPcm.size() - maxBytes) / bytesPerSampleFrame) * bytesPerSampleFrame;
+    if (dropBytes <= 0) {
+        return;
+    }
+
+    m_pendingAudioPcm.remove(0, dropBytes);
+    m_debugStats.m_droppedPendingAudioBytes += static_cast<quint64>(dropBytes);
+    m_debugStats.m_droppedPendingAudioFrames += static_cast<quint64>(dropBytes / bytesPerSampleFrame);
 #endif
 }
 

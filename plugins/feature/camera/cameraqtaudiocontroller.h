@@ -83,8 +83,8 @@ private:
     void resetFilePlaybackAudioOffset();
     [[nodiscard]] int filePlaybackMonitorTargetFillForOffsetMs() const;
     [[nodiscard]] int filePlaybackMonitorJitterForOffsetMs() const;
-    static int streamPlaybackMonitorTargetFillMs() { return 600; }
-    static int streamPlaybackMonitorJitterMs() { return 120; }
+    static int streamPlaybackMonitorTargetFillMs() { return 850; }
+    static int streamPlaybackMonitorJitterMs() { return 150; }
     void applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate);
 
     bool m_capturing;

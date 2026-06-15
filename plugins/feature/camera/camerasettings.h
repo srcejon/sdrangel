@@ -373,6 +373,7 @@ struct CameraSettings
     bool m_saveVideo;
     QString m_videoFileCameraPath;
     QStringList m_imageFileCameraPaths;
+    QStringList m_streamUrlHistory;
     QString m_videoFileName;
     bool m_recordRawFits;          ///< Save uncalibrated Bayer still images as FITS
     bool m_recordCalibratedMedia;  ///< Save calibrated/debayered image/video media

@@ -3090,6 +3090,200 @@ static QString matchSummary(const PlateSolveCatalogContext& catalogContext,
     return parts.join(QStringLiteral("; "));
 }
 
+// Post-match collision repair: for each unmatched detection that is (a) closer to a
+// matched catalog star than the current match and (b) substantially brighter (SNR ratio),
+// replace the matched detection with the closer brighter one.  This corrects "brightness-
+// rank collisions" where the sort formula assigns a dimmer detection to a catalog star
+// because it happens to have a better brightness-rank match, while the true bright-star
+// detection ends up unmatched despite being geometrically closer.
+//
+// Safety properties:
+//   - Condition (a) alone is safe when the correct detection is already matched (passing
+//     cases): in those cases the correct detection IS the closest match, so no unmatched
+//     detection satisfies condition (a) for its catalog star.
+//   - Condition (b) guards against swapping in accidental close artifacts (hot pixels,
+//     noise spikes) that are dimmer than the legitimate matched detection.
+static void repairFinalMatchCollisions(
+    const QVector<CameraPipelineStarDetection>& starDetections,
+    const QVector<ProjectedCatalogStar>& projectedStars,
+    double matchRadius,
+    QVector<Match>& matches)
+{
+    constexpr double kMinSnrForRepair = 50.0;
+    // Strict condition: unmatched detection is CLOSER than current match, same-or-brighter.
+    constexpr double kSnrRatioStrict = 1.0;
+    // Relaxed condition: unmatched detection is within 1.5x current-match distance and 2x brighter.
+    // Handles cases where a bright star loses to a dimmer one due to BRE scoring, even when
+    // the bright star is slightly farther from the projected catalog position.
+    constexpr double kDistRatioRelaxed = 1.5;
+    constexpr double kSnrRatioRelaxed = 2.0;
+    constexpr double kMinAbsoluteSnrRelaxed = 150.0;
+    const double matchRadiusSq = matchRadius * matchRadius;
+
+    QSet<int> matchedDetections;
+    QHash<int, int> catalogToMatchIdx;
+    matchedDetections.reserve(matches.size());
+    catalogToMatchIdx.reserve(matches.size());
+    for (int i = 0; i < matches.size(); ++i) {
+        matchedDetections.insert(matches[i].detectionIndex);
+        catalogToMatchIdx.insert(matches[i].catalogIndex, i);
+    }
+
+    struct SwapCandidate {
+        // Strict candidates sort before relaxed; within each tier, lower distanceRatio wins.
+        bool relaxed;
+        double distanceRatio;   // newDist / currentDist
+        int detectionIndex;
+        int catalogIndex;
+        double newDistance;
+    };
+    QVector<SwapCandidate> candidates;
+
+    for (int detIdx = 0; detIdx < starDetections.size(); ++detIdx) {
+        if (matchedDetections.contains(detIdx)) continue;
+        const CameraPipelineStarDetection& det = starDetections[detIdx];
+        if (det.m_snr < kMinSnrForRepair || det.m_hotPixelSuspect) continue;
+
+        double nearestDist = std::numeric_limits<double>::infinity();
+        int nearestCatalogIdx = -1;
+        for (const ProjectedCatalogStar& proj : projectedStars) {
+            const double dx = det.m_center.x() - proj.point.x();
+            const double dy = det.m_center.y() - proj.point.y();
+            const double distSq = dx*dx + dy*dy;
+            if (distSq > matchRadiusSq) continue;
+            const double dist = std::sqrt(distSq);
+            if (dist < nearestDist) { nearestDist = dist; nearestCatalogIdx = proj.catalogIndex; }
+        }
+        if (nearestCatalogIdx < 0) continue;
+
+        const auto it = catalogToMatchIdx.constFind(nearestCatalogIdx);
+        if (it == catalogToMatchIdx.constEnd()) continue;
+
+        const Match& current = matches[it.value()];
+        const double distRatio = nearestDist / current.distancePixels;
+        const double snrRatio = det.m_snr / starDetections[current.detectionIndex].m_snr;
+
+        if (distRatio < 1.0 && snrRatio >= kSnrRatioStrict) {
+            candidates.append({false, distRatio, detIdx, nearestCatalogIdx, nearestDist});
+        } else if (distRatio <= kDistRatioRelaxed
+                   && snrRatio >= kSnrRatioRelaxed
+                   && det.m_snr >= kMinAbsoluteSnrRelaxed) {
+            candidates.append({true, distRatio, detIdx, nearestCatalogIdx, nearestDist});
+        }
+    }
+
+    if (candidates.isEmpty()) return;
+
+    std::sort(candidates.begin(), candidates.end(),
+              [](const SwapCandidate& a, const SwapCandidate& b) {
+                  if (a.relaxed != b.relaxed) return !a.relaxed;  // strict first
+                  return a.distanceRatio < b.distanceRatio;
+              });
+
+    QSet<int> usedDetections;
+    for (const SwapCandidate& cand : candidates) {
+        if (usedDetections.contains(cand.detectionIndex)) continue;
+        const int matchIdx = catalogToMatchIdx.value(cand.catalogIndex, -1);
+        if (matchIdx < 0) continue;
+        matches[matchIdx].detectionIndex = cand.detectionIndex;
+        matches[matchIdx].distancePixels = cand.newDistance;
+        usedDetections.insert(cand.detectionIndex);
+    }
+}
+
+// Diagnostic-only (SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_UNMATCHED=1): for each strong
+// detection that the final match pass left unmatched, report the nearest projected
+// catalog star under the accepted pose -- whether it falls within finalMatchRadius,
+// and whether it was instead claimed by a different detection. This distinguishes
+// "no catalog star nearby" (candidate-pool/coverage gap) from "the right catalog
+// star is there but lost the assignment to another detection" (match collision).
+static void debugDumpUnmatchedDetections(const PlateSolveCatalogContext& catalogContext,
+                                         const QVector<CameraPipelineStarDetection>& starDetections,
+                                         const QVector<ProjectedCatalogStar>& projectedStars,
+                                         const QVector<Match>& finalMatches,
+                                         double finalMatchRadius)
+{
+    if (qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_UNMATCHED").isEmpty()) {
+        return;
+    }
+
+    QSet<int> matchedDetections;
+    QSet<int> matchedCatalogIndices;
+    for (const Match& match : finalMatches)
+    {
+        matchedDetections.insert(match.detectionIndex);
+        matchedCatalogIndices.insert(match.catalogIndex);
+    }
+
+    constexpr double kMinSnrForDump = 50.0;
+    for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex)
+    {
+        if (matchedDetections.contains(detectionIndex)) {
+            continue;
+        }
+        const CameraPipelineStarDetection& detection = starDetections[detectionIndex];
+        if (detection.m_snr < kMinSnrForDump) {
+            continue;
+        }
+
+        double nearestDistance = std::numeric_limits<double>::infinity();
+        int nearestCatalogIndex = -1;
+        QPointF nearestPoint;
+        double nearestMagnitude = 0.0;
+        for (const ProjectedCatalogStar& projected : projectedStars)
+        {
+            const double dx = detection.m_center.x() - projected.point.x();
+            const double dy = detection.m_center.y() - projected.point.y();
+            const double distance = std::hypot(dx, dy);
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                nearestCatalogIndex = projected.catalogIndex;
+                nearestPoint = projected.point;
+                nearestMagnitude = projected.magnitude;
+            }
+        }
+
+        if (nearestCatalogIndex < 0)
+        {
+            qDebug() << "CameraPlateSolver[unmatched-detection]"
+                     << "detection" << detectionIndex
+                     << "x" << detection.m_center.x()
+                     << "y" << detection.m_center.y()
+                     << "snr" << detection.m_snr
+                     << "nearestCatalog" << "<none, projectedStars empty>";
+            continue;
+        }
+
+        int claimedByDetection = -1;
+        if (matchedCatalogIndices.contains(nearestCatalogIndex))
+        {
+            for (const Match& match : finalMatches)
+            {
+                if (match.catalogIndex == nearestCatalogIndex)
+                {
+                    claimedByDetection = match.detectionIndex;
+                    break;
+                }
+            }
+        }
+
+        qDebug() << "CameraPlateSolver[unmatched-detection]"
+                 << "detection" << detectionIndex
+                 << "x" << detection.m_center.x()
+                 << "y" << detection.m_center.y()
+                 << "snr" << detection.m_snr
+                 << "nearestCatalog" << catalogDisplayName(catalogContext.catalogStars[nearestCatalogIndex])
+                 << "catalogIndex" << nearestCatalogIndex
+                 << "mag" << nearestMagnitude
+                 << "projX" << nearestPoint.x()
+                 << "projY" << nearestPoint.y()
+                 << "distance" << nearestDistance
+                 << "withinFinalMatchRadius" << (nearestDistance <= finalMatchRadius)
+                 << "claimedByDetection" << claimedByDetection;
+    }
+}
+
 static bool debugCatalogStarMatches(const PlateSolveCatalogContext& catalogContext,
                                     int catalogIndex)
 {
@@ -7037,11 +7231,56 @@ struct CatalogQuadCodeIndex
 // angularly-nearest neighbours (restricted to the ~2-70deg scale band) to form quads, capped
 // per-anchor and overall so the index stays bounded (~50k quads) for large catalogs.
 static CatalogQuadCodeIndex buildCatalogQuadCodeIndex(const QVector<VisibleCatalogStar>& visibleStars,
-                                                       bool includeScaleDimension)
+                                                       bool includeScaleDimension,
+                                                       int brightPoolLimit = 0)
 {
     CatalogQuadCodeIndex index;
     index.dimensions = includeScaleDimension ? 5 : 4;
     if (visibleStars.size() < 4) {
+        return index;
+    }
+
+    // Bright-pool mode: build an unstructured C(k,4) index over the brightest
+    // brightPoolLimit catalog stars (visibleStars is magnitude-sorted, brightest
+    // first), mirroring the proven legacy buildCatalogQuadSignatures support.
+    // This aligns the catalog quad support with the detection side (which forms
+    // quads from the brightest ~16 detections): the anchor+6-nearest-neighbour
+    // structure below draws neighbours from ALL visible stars, so a bright
+    // anchor's nearest catalog neighbours are faint nearby stars that differ
+    // from its nearest *detected* neighbours - giving 0 code matches on wide
+    // fisheye mode-1 images (e.g. stars-wide-2.jpg). A shared C(k,4)-over-bright
+    // pool guarantees any 4 detected bright stars have their quad in the index.
+    if (brightPoolLimit > 0) {
+        const int poolSize = std::min<int>(brightPoolLimit, visibleStars.size());
+        for (int a = 0; a < poolSize; ++a) {
+            for (int b = a + 1; b < poolSize; ++b) {
+                for (int c = b + 1; c < poolSize; ++c) {
+                    for (int d = c + 1; d < poolSize; ++d) {
+                        const std::array<int, 4> starIndices = {{a, b, c, d}};
+                        const std::array<SkyVector, 4> vectors = {{
+                            visibleStars[a].vector,
+                            visibleStars[b].vector,
+                            visibleStars[c].vector,
+                            visibleStars[d].vector
+                        }};
+                        const QuadVectorCode quadCode = buildVectorQuadCode(vectors);
+                        if (!quadCode.valid) {
+                            continue;
+                        }
+                        CatalogQuadCodeEntry entry;
+                        entry.code[0] = quadCode.xC;
+                        entry.code[1] = quadCode.yC;
+                        entry.code[2] = quadCode.xD;
+                        entry.code[3] = quadCode.yD;
+                        entry.code[4] = quadCode.angleABRadians;
+                        for (int k = 0; k < 4; ++k) {
+                            entry.visibleStarIndices[k] = starIndices[quadCode.order[k]];
+                        }
+                        index.addEntry(entry);
+                    }
+                }
+            }
+        }
         return index;
     }
 
@@ -11806,7 +12045,23 @@ QVector<Evaluation> buildVectorQuadBlindSeeds(const CameraSettings& settings,
         return seeds;
     }
 
-    const CatalogQuadCodeIndex catalogIndex = buildCatalogQuadCodeIndex(visibleStars, true);
+    // Bright-pool quad support (default): both the catalog index and the detection
+    // quads are full C(k,4) over the brightest stars (catalog 24, detection ~16),
+    // mirroring the proven legacy buildCatalogQuadSignatures support. The older
+    // anchor+nearest-neighbour structure produced 0 code matches on wide fisheye
+    // mode-1 images (e.g. stars-wide-2.jpg row 15) because the catalog drew
+    // neighbours from all visible stars while detections drew from only the
+    // brightest ~16, so a bright star's nearest catalog neighbours (faint nearby
+    // stars) never matched its nearest detected neighbours. The bright-pool fix
+    // takes stars-wide-2.jpg row 15 from solved=false to a clean solve and leaves
+    // the synthetic fisheye mode-1 corpus unchanged. The old path is kept behind
+    // an env var for A/B comparison.
+    const bool useBrightPoolQuads = !qEnvironmentVariableIsSet(
+        "SDRANGEL_CAMERA_PLATE_SOLVER_QUAD_ANCHOR_NEIGHBOUR_POOL");
+    constexpr int catalogBrightPoolLimit = 24;
+
+    const CatalogQuadCodeIndex catalogIndex = buildCatalogQuadCodeIndex(
+        visibleStars, true, useBrightPoolQuads ? catalogBrightPoolLimit : 0);
     if (isCancellationRequested() || catalogIndex.entries.isEmpty()) {
         return seeds;
     }
@@ -11833,99 +12088,128 @@ QVector<Evaluation> buildVectorQuadBlindSeeds(const CameraSettings& settings,
     qint64 detectionQuadsConsidered = 0;
     qint64 codeMatches = 0;
 
-    // Detection quads are generated anchor-centric (each detection + 3-of-its-
-    // angularly-nearest neighbours), mirroring buildCatalogQuadCodeIndex's
-    // anchor+neighbour structure with the same band/counts. Catalog quads are
-    // NOT an unstructured C(k,4) over all visible stars - they're restricted
-    // to "anchor + 3-of-its-6-nearest-catalog-neighbours within [2,70] deg".
-    // Generating detection quads as an unstructured C(maxDetectionCount,4) gave
-    // near-zero code matches because true correspondences were almost never
-    // representable in the catalog index's combinatorial subset. Using the
-    // same anchor+neighbour recipe on both sides aligns their supports.
-    constexpr int detectionNeighborCount = 6;
-    constexpr int maxQuadsPerDetectionAnchor = 8;
-    constexpr double minDetectionNeighborSeparationDegrees = 2.0;
-    constexpr double maxDetectionNeighborSeparationDegrees = 70.0;
-    const double minDetectionNeighborDot = std::cos(degToRad(maxDetectionNeighborSeparationDegrees));
-    const double maxDetectionNeighborDot = std::cos(degToRad(minDetectionNeighborSeparationDegrees));
-
-    for (int anchor = 0; (anchor < maxDetectionCount) && !isCancellationRequested(); ++anchor)
-    {
-        if (!detectionRayVectorValid[anchor]) continue;
-
-        QVector<std::pair<double, int>> neighborDistances;
-        neighborDistances.reserve(maxDetectionCount);
-        for (int j = 0; j < maxDetectionCount; ++j)
-        {
-            if ((j == anchor) || !detectionRayVectorValid[j]) continue;
-            const double angleDot = std::clamp(dot(detectionRayVectors[anchor], detectionRayVectors[j]), -1.0, 1.0);
-            if ((angleDot < minDetectionNeighborDot) || (angleDot > maxDetectionNeighborDot)) {
-                continue;
-            }
-            neighborDistances.append({std::acos(angleDot), j});
+    // Process one detection quad (4 indices into detectionRayVectors): compute its
+    // vector code, query the catalog index epsilon-ball, and append a hypothesis per
+    // catalog match. Returns true if the quad produced a valid code (was considered).
+    const auto processDetectionQuad = [&](const std::array<int, 4>& idx) -> bool {
+        const std::array<SkyVector, 4> vectors {{
+            detectionRayVectors[idx[0]],
+            detectionRayVectors[idx[1]],
+            detectionRayVectors[idx[2]],
+            detectionRayVectors[idx[3]]
+        }};
+        const QuadVectorCode detectionCode = buildVectorQuadCode(vectors);
+        if (!detectionCode.valid) {
+            return false;
         }
+        ++detectionQuadsConsidered;
 
-        const int kCount = std::min<int>(detectionNeighborCount, static_cast<int>(neighborDistances.size()));
-        if (kCount < 3) continue;
-        std::partial_sort(neighborDistances.begin(), neighborDistances.begin() + kCount, neighborDistances.end(),
-            [](const std::pair<double, int>& lhs, const std::pair<double, int>& rhs) {
-                return lhs.first < rhs.first;
-            });
+        const double target[5] = {
+            detectionCode.xC,
+            detectionCode.yC,
+            detectionCode.xD,
+            detectionCode.yD,
+            detectionCode.angleABRadians
+        };
+        catalogIndex.queryEpsilonBall(target, codeEpsilon, [&](int entryIndex) {
+            ++codeMatches;
+            const CatalogQuadCodeEntry& entry = catalogIndex.entries[entryIndex];
+            double codeDistanceSquared = 0.0;
+            for (int d = 0; d < catalogIndex.dimensions; ++d) {
+                const double diff = entry.code[d] - target[d];
+                codeDistanceSquared += diff * diff;
+            }
+            double brightnessSum = 0.0;
+            for (int corner = 0; corner < 4; ++corner) {
+                brightnessSum += visibleStars[entry.visibleStarIndices[corner]].magnitude;
+            }
 
-        int quadsForAnchor = 0;
-        for (int a = 0; (a < kCount) && (quadsForAnchor < maxQuadsPerDetectionAnchor); ++a)
+            QuadHypothesis hypothesis;
+            hypothesis.score = codeDistanceSquared + brightnessSum * 0.01;
+            for (int corner = 0; corner < 4; ++corner) {
+                hypothesis.detectionIndicesIdx[corner] = idx[detectionCode.order[corner]];
+                hypothesis.catalogVisibleIndices[corner] = entry.visibleStarIndices[corner];
+            }
+            hypotheses.append(hypothesis);
+        });
+        return true;
+    };
+
+    if (useBrightPoolQuads)
+    {
+        // Detection quads: unstructured C(k,4) over the brightest maxDetectionCount
+        // detections, mirroring the bright-pool catalog index support so any 4
+        // detected bright stars have their quad represented on both sides.
+        for (int a = 0; (a < maxDetectionCount) && !isCancellationRequested(); ++a)
         {
-            for (int b = a + 1; (b < kCount) && (quadsForAnchor < maxQuadsPerDetectionAnchor); ++b)
+            if (!detectionRayVectorValid[a]) continue;
+            for (int b = a + 1; b < maxDetectionCount; ++b)
             {
-                for (int c = b + 1; (c < kCount) && (quadsForAnchor < maxQuadsPerDetectionAnchor); ++c)
+                if (!detectionRayVectorValid[b]) continue;
+                for (int c = b + 1; c < maxDetectionCount; ++c)
                 {
-                    const std::array<int, 4> idx {{
-                        anchor,
-                        neighborDistances[a].second,
-                        neighborDistances[b].second,
-                        neighborDistances[c].second
-                    }};
-                    const std::array<SkyVector, 4> vectors {{
-                        detectionRayVectors[idx[0]],
-                        detectionRayVectors[idx[1]],
-                        detectionRayVectors[idx[2]],
-                        detectionRayVectors[idx[3]]
-                    }};
-                    const QuadVectorCode detectionCode = buildVectorQuadCode(vectors);
-                    if (!detectionCode.valid) {
-                        continue;
+                    if (!detectionRayVectorValid[c]) continue;
+                    for (int d = c + 1; d < maxDetectionCount; ++d)
+                    {
+                        if (!detectionRayVectorValid[d]) continue;
+                        processDetectionQuad(std::array<int, 4>{{a, b, c, d}});
                     }
-                    ++detectionQuadsConsidered;
-                    ++quadsForAnchor;
+                }
+            }
+        }
+    }
+    else
+    {
+        // Detection quads are generated anchor-centric (each detection + 3-of-its-
+        // angularly-nearest neighbours), mirroring buildCatalogQuadCodeIndex's
+        // anchor+neighbour structure with the same band/counts.
+        constexpr int detectionNeighborCount = 6;
+        constexpr int maxQuadsPerDetectionAnchor = 8;
+        constexpr double minDetectionNeighborSeparationDegrees = 2.0;
+        constexpr double maxDetectionNeighborSeparationDegrees = 70.0;
+        const double minDetectionNeighborDot = std::cos(degToRad(maxDetectionNeighborSeparationDegrees));
+        const double maxDetectionNeighborDot = std::cos(degToRad(minDetectionNeighborSeparationDegrees));
 
-                    const double target[5] = {
-                        detectionCode.xC,
-                        detectionCode.yC,
-                        detectionCode.xD,
-                        detectionCode.yD,
-                        detectionCode.angleABRadians
-                    };
-                    catalogIndex.queryEpsilonBall(target, codeEpsilon, [&](int entryIndex) {
-                        ++codeMatches;
-                        const CatalogQuadCodeEntry& entry = catalogIndex.entries[entryIndex];
-                        double codeDistanceSquared = 0.0;
-                        for (int d = 0; d < catalogIndex.dimensions; ++d) {
-                            const double diff = entry.code[d] - target[d];
-                            codeDistanceSquared += diff * diff;
-                        }
-                        double brightnessSum = 0.0;
-                        for (int corner = 0; corner < 4; ++corner) {
-                            brightnessSum += visibleStars[entry.visibleStarIndices[corner]].magnitude;
-                        }
+        for (int anchor = 0; (anchor < maxDetectionCount) && !isCancellationRequested(); ++anchor)
+        {
+            if (!detectionRayVectorValid[anchor]) continue;
 
-                        QuadHypothesis hypothesis;
-                        hypothesis.score = codeDistanceSquared + brightnessSum * 0.01;
-                        for (int corner = 0; corner < 4; ++corner) {
-                            hypothesis.detectionIndicesIdx[corner] = idx[detectionCode.order[corner]];
-                            hypothesis.catalogVisibleIndices[corner] = entry.visibleStarIndices[corner];
+            QVector<std::pair<double, int>> neighborDistances;
+            neighborDistances.reserve(maxDetectionCount);
+            for (int j = 0; j < maxDetectionCount; ++j)
+            {
+                if ((j == anchor) || !detectionRayVectorValid[j]) continue;
+                const double angleDot = std::clamp(dot(detectionRayVectors[anchor], detectionRayVectors[j]), -1.0, 1.0);
+                if ((angleDot < minDetectionNeighborDot) || (angleDot > maxDetectionNeighborDot)) {
+                    continue;
+                }
+                neighborDistances.append({std::acos(angleDot), j});
+            }
+
+            const int kCount = std::min<int>(detectionNeighborCount, static_cast<int>(neighborDistances.size()));
+            if (kCount < 3) continue;
+            std::partial_sort(neighborDistances.begin(), neighborDistances.begin() + kCount, neighborDistances.end(),
+                [](const std::pair<double, int>& lhs, const std::pair<double, int>& rhs) {
+                    return lhs.first < rhs.first;
+                });
+
+            int quadsForAnchor = 0;
+            for (int a = 0; (a < kCount) && (quadsForAnchor < maxQuadsPerDetectionAnchor); ++a)
+            {
+                for (int b = a + 1; (b < kCount) && (quadsForAnchor < maxQuadsPerDetectionAnchor); ++b)
+                {
+                    for (int c = b + 1; (c < kCount) && (quadsForAnchor < maxQuadsPerDetectionAnchor); ++c)
+                    {
+                        const std::array<int, 4> idx {{
+                            anchor,
+                            neighborDistances[a].second,
+                            neighborDistances[b].second,
+                            neighborDistances[c].second
+                        }};
+                        if (processDetectionQuad(idx)) {
+                            ++quadsForAnchor;
                         }
-                        hypotheses.append(hypothesis);
-                    });
+                    }
                 }
             }
         }
@@ -12551,23 +12835,26 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
         }
     }
 
-    std::sort(candidatePairs.begin(), candidatePairs.end(), [&catalogStars, &starDetections, matchRadiusPixels](const CandidatePair& lhs, const CandidatePair& rhs) {
+    const double brightnessRankWeight = 1.25;
+    const double brightnessCostWeight = 0.75;
+    std::sort(candidatePairs.begin(), candidatePairs.end(), [&catalogStars, &starDetections, matchRadiusPixels,
+              brightnessRankWeight, brightnessCostWeight](const CandidatePair& lhs, const CandidatePair& rhs) {
         const double lhsSupportScore = static_cast<double>(lhs.geometricSupport)
-            - 1.25 * lhs.brightnessRankError
+            - brightnessRankWeight * lhs.brightnessRankError
             - lhs.catalogAssignmentPenalty
             + 0.20 * lhs.detectionReliabilityLog;
         const double rhsSupportScore = static_cast<double>(rhs.geometricSupport)
-            - 1.25 * rhs.brightnessRankError
+            - brightnessRankWeight * rhs.brightnessRankError
             - rhs.catalogAssignmentPenalty
             + 0.20 * rhs.detectionReliabilityLog;
         if (std::fabs(lhsSupportScore - rhsSupportScore) > 0.20) {
             return lhsSupportScore > rhsSupportScore;
         }
         const double lhsCost = lhs.distancePixels
-            + matchRadiusPixels * (0.75 * lhs.brightnessRankError + lhs.catalogAssignmentPenalty)
+            + matchRadiusPixels * (brightnessCostWeight * lhs.brightnessRankError + lhs.catalogAssignmentPenalty)
             - std::min(matchRadiusPixels * 0.25, lhs.detectionReliabilityLog);
         const double rhsCost = rhs.distancePixels
-            + matchRadiusPixels * (0.75 * rhs.brightnessRankError + rhs.catalogAssignmentPenalty)
+            + matchRadiusPixels * (brightnessCostWeight * rhs.brightnessRankError + rhs.catalogAssignmentPenalty)
             - std::min(matchRadiusPixels * 0.25, rhs.detectionReliabilityLog);
         if (!qFuzzyCompare(lhsCost + 1.0, rhsCost + 1.0)) {
             return lhsCost < rhsCost;
@@ -16479,10 +16766,54 @@ bool isBetterWeakModeFinalMatchPass(const CameraSettings& settings,
 
     if (isWidePlateSolveContext(settings))
     {
+        // A very tight named anchor match (< 30% of matchRadius) is the strongest
+        // evidence of correct pose — check it BEFORE the broad bright-anchor gate so a
+        // precise anchor match cannot be blocked by brightness-consistency heuristics.
+        const double tightNamedAnchorRmsCap =
+            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.00;
+        const bool candidateHasTightNamedAnchor =
+            (candidate.namedBrightAnchorMatches >= 1)
+            && std::isfinite(candidate.namedBrightAnchorRmsErrorPixels)
+            && (candidate.namedBrightAnchorRmsErrorPixels <= tightNamedAnchorRmsCap);
+        const bool bestHasTightNamedAnchor =
+            (best.namedBrightAnchorMatches >= 1)
+            && std::isfinite(best.namedBrightAnchorRmsErrorPixels)
+            && (best.namedBrightAnchorRmsErrorPixels <= tightNamedAnchorRmsCap);
+        if (candidateHasTightNamedAnchor != bestHasTightNamedAnchor) {
+            return candidateHasTightNamedAnchor;
+        }
+        if (candidateHasTightNamedAnchor && bestHasTightNamedAnchor
+            && std::fabs(candidate.namedBrightAnchorRmsErrorPixels
+                         - best.namedBrightAnchorRmsErrorPixels) >= 1.0) {
+            return candidate.namedBrightAnchorRmsErrorPixels
+                   < best.namedBrightAnchorRmsErrorPixels;
+        }
         const bool candidateBrightAnchorAccepted =
             hasAcceptableWideBrightAnchorSupport(settings, starDetections, candidate);
         const bool bestBrightAnchorAccepted =
             hasAcceptableWideBrightAnchorSupport(settings, starDetections, best);
+        if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_SOLVER_DEBUG_COMPARE")) {
+            qDebug().noquote().nospace()
+                << "COMPARE"
+                << " cAz=" << candidate.pose.azimuthDegrees
+                << " cM=" << candidate.finalMatches.size()
+                << " cRms=" << candidate.rmsErrorPixels
+                << " cBD=" << candidate.brightDetections
+                << " cMBD=" << candidate.matchedBrightDetections
+                << " cBME=" << candidate.brightDetectionMagnitudeError
+                << " cAnch=" << candidate.namedBrightAnchorMatches
+                << " cAnchRms=" << candidate.namedBrightAnchorRmsErrorPixels
+                << " cBrightOk=" << candidateBrightAnchorAccepted
+                << " | bAz=" << best.pose.azimuthDegrees
+                << " bM=" << best.finalMatches.size()
+                << " bRms=" << best.rmsErrorPixels
+                << " bBD=" << best.brightDetections
+                << " bMBD=" << best.matchedBrightDetections
+                << " bBME=" << best.brightDetectionMagnitudeError
+                << " bAnch=" << best.namedBrightAnchorMatches
+                << " bAnchRms=" << best.namedBrightAnchorRmsErrorPixels
+                << " bBrightOk=" << bestBrightAnchorAccepted;
+        }
         if (candidateBrightAnchorAccepted != bestBrightAnchorAccepted) {
             return candidateBrightAnchorAccepted;
         }
@@ -21034,6 +21365,14 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     const bool useBrightFirstPassCatalog = (solveMaxMagnitude < settings.m_plateSolveMaxMagnitude)
         && useStartDirection
         && (isNarrowField(settings));
+    // For FoV-seeded wide-field solves the bright-first-pass catalog (mag 5) is too sparse:
+    // the true pose may match fewer bright stars than a false-positive candidate, so the
+    // full-magnitude catalog is preloaded (but kept invisible until the guided-anchor rebuild)
+    // to avoid re-reading the catalog file from disk later.
+    const bool useWideFovFullCatalogLoad = !useCurrentSettingsOnly
+        && !useStartDirection
+        && isWidePlateSolveContext(settings)
+        && (solveMaxMagnitude < static_cast<double>(settings.m_plateSolveMaxMagnitude));
     if (useBrightFirstPassCatalog)
     {
         qDebug() << "CameraPlateSolver: guided narrow-field solve using bright first-pass catalog"
@@ -21047,7 +21386,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         imageSize,
         captureDateTimeUtc,
         solveMaxMagnitude,
-        useBrightFirstPassCatalog ? fullSearchMaxMagnitude : solveMaxMagnitude);
+        useBrightFirstPassCatalog ? fullSearchMaxMagnitude
+        : useWideFovFullCatalogLoad ? static_cast<double>(settings.m_plateSolveMaxMagnitude)
+        : solveMaxMagnitude);
     logSolveProfile("catalog", stageStartMs);
     if (isCancellationRequested()) {
         return finishCancelled();
@@ -21303,6 +21644,24 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 captureDateTimeUtc,
                 fullSearchMaxMagnitude);
             logSolveProfile("catalog.rebuild.guidedAnchor", rebuildStartMs);
+            if (!guidedAnchorCatalogContext.catalogStars.isEmpty()) {
+                guidedAnchorCatalogContextPtr = &guidedAnchorCatalogContext;
+            }
+        }
+        else if (useWideWeakAnchorSearch
+                 && (solveMaxMagnitude < static_cast<double>(settings.m_plateSolveMaxMagnitude)))
+        {
+            // Wide FoV blind search used a bright (mag 5) catalog; for the guided-anchor
+            // pass rebuild to the full magnitude so the true pose is not outscored by
+            // coincidental bright-star matches at a false-positive location.
+            guidedAnchorCatalogContext = catalogContext;
+            const qint64 rebuildStartMs = solveProfileTimer.elapsed();
+            rebuildVisibleCatalogContext(
+                guidedAnchorCatalogContext,
+                settings,
+                captureDateTimeUtc,
+                settings.m_plateSolveMaxMagnitude);
+            logSolveProfile("catalog.rebuild.wideFovGuidedAnchor", rebuildStartMs);
             if (!guidedAnchorCatalogContext.catalogStars.isEmpty()) {
                 guidedAnchorCatalogContextPtr = &guidedAnchorCatalogContext;
             }
@@ -21992,6 +22351,115 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 bestFovPinnedFinalPass = fovPinnedFinalPass;
             }
         }
+        // For FoV-seeded wide-field solves the detectionIndices subset was chosen for the
+        // blind-search 'best' direction, so isBetterWeakModeFinalMatchPass is biased:
+        // brightProjectedMatchFraction is low for true-pose candidates in other sky regions
+        // because their bright catalog stars are not in the 96-star subset. Also the
+        // fisheye k1 is unknown (useStartLens=false), making brightProjectedMatchFraction
+        // unreliable regardless.
+        //
+        // Strategy:
+        //   1. Re-evaluate the current regular best with allDetectionIndices to get an
+        //      unbiased bright-anchor result.
+        //   2. Evaluate every viable coarseCandidate with allDetectionIndices.
+        //   3. Among accepted wide-FoV candidates, pick by magnitudeWeightedSupport.
+        //   4. Override the regular best only when it fails the acceptance gate (re-evaluated
+        //      with allDetections) and a wide-FoV candidate passes — so passing cases are
+        //      not disturbed.
+        // The rescue block is relevant whenever the guided-anchor coarseCandidates pool was
+        // built from the full-magnitude catalog — either via a rebuild (usingFullCatalogForGuidedAnchor)
+        // or because the original catalog was already at full magnitude (solveMaxMagnitude already
+        // equals the requested maxMagnitude, so no rebuild was triggered but the pool is full).
+        const bool guidedAnchorUsedFullMagnitudeCatalog =
+            usingFullCatalogForGuidedAnchor
+            || (solveMaxMagnitude >= static_cast<double>(settings.m_plateSolveMaxMagnitude));
+        if (useWideWeakAnchorSearch && guidedAnchorUsedFullMagnitudeCatalog) {
+            // Compute whether the fovPinnedFinalPass result already passes the acceptance gate.
+            // Used to log the rescue decision; the rescue still runs regardless to find the
+            // best wide-FoV candidate, but replacement only happens when it strictly beats
+            // bestFovPinnedFinalPass by magnitudeWeightedSupport.
+            // Compute BrightMagErr for the fovPinnedFinalPass best (used to detect
+            // false-positive fovPinnedFinalPass results: genuine accepted poses from the
+            // fovPinnedFinalPass 3×3×3 grid have BrightMagErr well below the 1.50 gate
+            // because the refined grid finds the true pose; false positives that coincidentally
+            // pass the gate tend to have BrightMagErr > 0.70).
+            const double fovPinnedBrightMagErr =
+                bestFovPinnedFinalPass.projectorValid
+                ? bestFovPinnedFinalPass.brightDetectionMagnitudeError
+                : std::numeric_limits<double>::max();
+            // The regular fovPinnedFinalPass result is considered "strongly accepted" when it
+            // also has a low BrightMagErr — this tighter gate prevents false positives that
+            // happen to pass hasAcceptableWideBrightAnchorSupport from blocking the rescue.
+            // 0.80 sits in the gap between genuine accepted poses (case 044: BrightMagErr=0.718)
+            // and confirmed false positives (case 034: BrightMagErr=0.94).
+            static constexpr double kRegularBestStrongAcceptanceMagErrThreshold = 0.80;
+            const bool regularBestAccepted =
+                bestFovPinnedFinalPass.projectorValid
+                && (fovPinnedBrightMagErr <= kRegularBestStrongAcceptanceMagErrThreshold)
+                && hasAcceptableWideBrightAnchorSupport(
+                    settings, starDetections, bestFovPinnedFinalPass);
+
+            const int wideCandMinMatches = std::max(3, settings.m_plateSolveMinMatches - 1);
+            QVector<Evaluation> wideFovCandidatePoses;
+            for (const Evaluation& cand : coarseCandidates) {
+                if (!cand.valid || (cand.matchCount < wideCandMinMatches)) {
+                    continue;
+                }
+                for (double kSeed : distortionSeeds) {
+                    Evaluation pinned = cand;
+                    pinned.fovDegrees = settings.m_fov;
+                    pinned.distortionK1 = kSeed;
+                    // Clear the anchor: guided-anchor candidates store anchorCatalogIndex
+                    // relative to guidedAnchorCatalogContext; evaluating with catalogContext
+                    // fails the forced-anchor lookup and returns an empty result.
+                    pinned.anchored = false;
+                    wideFovCandidatePoses.append(pinned);
+                }
+            }
+            const QVector<FinalMatchPassEvaluation> wideFovCandidateResults =
+                evaluateRecoveryPosesParallel(
+                    static_cast<int>(wideFovCandidatePoses.size()),
+                    [&](SolverContext& workerContext, int i) {
+                        return workerContext.evaluateFinalMatchPass(
+                            settings,
+                            catalogContext,
+                            imageSize,
+                            starDetections,
+                            allDetectionIndices,
+                            wideFovCandidatePoses[i],
+                            finalMatchRadius,
+                            true);
+                    });
+
+            // When the fovPinnedFinalPass best fails strong acceptance, pick the coarse
+            // candidate with the highest magnitudeWeightedSupport that passes the acceptance
+            // gate. Near-true-direction and correct-pose candidates consistently score higher
+            // on this metric than false positives in unrelated sky regions.
+            Evaluation bestWideCandEval;
+            FinalMatchPassEvaluation bestWideCandPass;
+            for (int i = 0; i < wideFovCandidatePoses.size(); ++i) {
+                const FinalMatchPassEvaluation& fp = wideFovCandidateResults[i];
+                logFinalMatchPassEvaluation("final-match-pass-fov-pinned-wide", fp);
+                if (!fp.projectorValid
+                    || !hasAcceptableWideBrightAnchorSupport(settings, starDetections, fp)) {
+                    continue;
+                }
+                if (!regularBestAccepted) {
+                    if (!bestWideCandPass.projectorValid
+                        || (fp.magnitudeWeightedSupport > bestWideCandPass.magnitudeWeightedSupport)) {
+                        bestWideCandEval = wideFovCandidatePoses[i];
+                        bestWideCandPass = fp;
+                    }
+                }
+            }
+            if (bestWideCandPass.projectorValid
+                && (!bestFovPinnedFinalPass.projectorValid
+                    || bestWideCandPass.magnitudeWeightedSupport
+                       > bestFovPinnedFinalPass.magnitudeWeightedSupport)) {
+                bestFovPinnedEvaluation = bestWideCandEval;
+                bestFovPinnedFinalPass = bestWideCandPass;
+            }
+        }
         if (bestFovPinnedFinalPass.projectorValid
             && hasAcceptableWideBrightAnchorSupport(settings, starDetections, bestFovPinnedFinalPass))
         {
@@ -22244,7 +22712,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     stageStartMs = solveProfileTimer.elapsed();
 
     const QVector<ProjectedCatalogStar>& projectedStars = selectedFinalPass.projectedStars;
+    repairFinalMatchCollisions(starDetections, projectedStars, finalMatchRadius, selectedFinalPass.finalMatches);
     const QVector<Match>& finalMatches = selectedFinalPass.finalMatches;
+    debugDumpUnmatchedDetections(catalogContext, starDetections, projectedStars, finalMatches, finalMatchRadius);
     result.m_catalogCandidateStars = projectedStars.size();
     result.m_outlierStars = selectedFinalPass.outlierCount;
     result.m_solverQualityScore = std::max(

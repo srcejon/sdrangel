@@ -273,6 +273,10 @@ def main():
                     help="equidistant, equisolid or mixed (random per scene)")
     ap.add_argument("--fisheye-min-stars", type=int, default=30,
                     help="reject fisheye scenes with fewer rendered stars")
+    ap.add_argument("--refresh-fisheye-anchors", default=None,
+                    help="re-derive the named-star validation anchors of an existing fisheye "
+                         "CSV (spread+bright selection) WITHOUT re-rendering images; writes the "
+                         "updated CSV to --out-csv. Keeps poses and images byte-identical.")
     args=ap.parse_args()
 
     if args.expand:
@@ -398,7 +402,8 @@ def main():
     # Render + ground-truth one fisheye/wide scene (az/el/roll/fov IS the camera pose,
     # projected directly via make_sky_projector/project_points -- no WCS/TAN involved).
     # Returns CSV rows for plateSolveStartMode 0 (Blind) and 1 (Fov), or None if rejected.
-    def process_fisheye_scene(label, az, el, roll, fov_deg, lens, size, max_mag, min_stars):
+    def process_fisheye_scene(label, az, el, roll, fov_deg, lens, size, max_mag, min_stars,
+                              render=True):
         ra_d, dec_d, _ha = azel_to_radec(az, el, args.lat, args.lon, jd)
         print(f"\n=== {label}  az/el={az:.1f}/{el:.1f}  roll={roll:.1f}  fov={fov_deg:.1f} ({lens})")
 
@@ -432,7 +437,11 @@ def main():
             cat=query_catalog(ra_d,dec_d, radius_deg=radius_named, cat="I/239/hip_main",
                               cols=["HIP","Vmag","_RAJ2000","_DEJ2000"], magcol="Vmag",
                               magmax=vmax, limit=limit)
-            picked=[]
+            # Collect ALL qualifying named-star candidates (bright, in-frame, away from
+            # the image edge, with a rendered Gaia counterpart), brightest-first. The
+            # qualifying test is unchanged from the original so scene acceptance - and
+            # therefore the rendered images/poses driven by the RNG - stay identical.
+            candidates=[]   # (vmag, HIP, X, Y)
             if cat is not None and len(cat)>0:
                 ra_h=np.asarray(cat["_RAJ2000"],float); dec_h=np.asarray(cat["_DEJ2000"],float)
                 ra_hd,dec_hd=precess_j2000_to_date_arr(ra_h,dec_h,jd)
@@ -446,17 +455,41 @@ def main():
                     if X<25 or Y<25 or X>=size-25 or Y>=size-25: continue
                     if not any(abs(x-X)<=2.0 and abs(y-Y)<=2.0 for x,y,_ in xy_peak):
                         continue
-                    picked.append((int(cat["HIP"][i]),X,Y))
-                    if len(picked)>=args.n_stars: break
-            return picked
+                    candidates.append((float(vmags[i]),int(cat["HIP"][i]),X,Y))
+            if not candidates:
+                return []
+            # Select n_stars anchors that are BRIGHT *and* spatially SPREAD, via
+            # farthest-point sampling within a bright candidate pool, preferring the
+            # reliable interior. Tightly-clustered anchors make a weak validation
+            # oracle: a wrong pose can satisfy 3 stars grouped within ~150px (this is
+            # exactly what let synth-fisheye-027/039/042 "pass" at wrong poses). Spread
+            # anchors pin the pose. Selection only re-ranks the qualifying candidates,
+            # so it never changes acceptance.
+            cx=cy=size/2.0
+            interior_r=0.45*size
+            pool=candidates[:max(args.n_stars*5, 15)]
+            interior=[c for c in pool if math.hypot(c[2]-cx, c[3]-cy) <= interior_r]
+            source=interior if len(interior) >= args.n_stars else pool
+            chosen_c=[source[0]]   # brightest in the preferred set
+            while len(chosen_c) < args.n_stars and len(chosen_c) < len(source):
+                best=None; best_d=-1.0
+                for c in source:
+                    if c in chosen_c: continue
+                    d=min((c[2]-p[2])**2+(c[3]-p[3])**2 for p in chosen_c)
+                    if d > best_d: best_d=d; best=c
+                chosen_c.append(best)
+            return [(h,X,Y) for _v,h,X,Y in chosen_c]
         chosen=pick_named(max_mag,3000) or pick_named(12.0,8000)
         if not chosen:
             print("  no in-frame named HIP star; skipping"); return None
 
-        img=render_field(xy_peak,size,size,seed=int(rng.integers(1e9)))
-        jpg=outimg/f"{label}.jpg"
-        cv2.imwrite(str(jpg),img,[int(cv2.IMWRITE_JPEG_QUALITY),95])
-        print(f"  rendered {len(xy_peak)} Gaia stars (<=mag {max_mag}) -> {jpg.name}")
+        if render:
+            img=render_field(xy_peak,size,size,seed=int(rng.integers(1e9)))
+            jpg=outimg/f"{label}.jpg"
+            cv2.imwrite(str(jpg),img,[int(cv2.IMWRITE_JPEG_QUALITY),95])
+            print(f"  rendered {len(xy_peak)} Gaia stars (<=mag {max_mag}) -> {jpg.name}")
+        else:
+            print(f"  anchor-refresh: {len(xy_peak)} in-frame Gaia stars (image kept)")
 
         names=",".join(f"HIP {h}" for h,_,_ in chosen)
         spos=",".join(f"HIP {h}:{int(round(X))}:{int(round(Y))}" for h,X,Y in chosen)
@@ -470,6 +503,67 @@ def main():
                          f'{args.lon:.6f},0.0,{az:.2f},{el:.2f},{roll:.2f},{fov_deg:.3f},'
                          f'"{proj_name}",0.0,0.0,0.0,"{names}",{max_mag:g},{mode},0,0,0,0,,,"{spos}"')
         return srows
+
+    if args.refresh_fisheye_anchors:
+        # Re-derive only the named-star validation anchors (spread+bright) of an existing
+        # fisheye CSV, re-using its poses and leaving the rendered images untouched. Each
+        # raw line is preserved byte-for-byte except its stars (col 13) and starPositions
+        # (col 22) fields, which are replaced with the freshly-selected anchors.
+        #
+        # Resumable + per-scene resilient: the heavy Vizier queries (one wide near-full-sky
+        # Gaia cone per scene) are flaky over a 50-scene batch and can exceed a single run's
+        # wall-clock budget, so each scene's result is checkpointed to a JSON cache as soon
+        # as it is computed. Re-run the same command to resume; a scene whose query fails is
+        # left for a later run (its original anchors are kept until then).
+        import csv as _csv, json
+        src=Path(args.refresh_fisheye_anchors)
+        raw_lines=src.read_text().splitlines()
+        parsed=list(_csv.reader(raw_lines))
+        cache_path=Path(args.out_csv+".anchorcache.json")
+        cache=json.loads(cache_path.read_text()) if cache_path.exists() else {}
+
+        labels=[]; seen=set(); pose={}; orig={}
+        for idx in range(1,len(raw_lines)):
+            if not raw_lines[idx].strip():
+                continue
+            row=parsed[idx]; lab=Path(row[0]).stem
+            orig.setdefault(lab,(row[13],row[22]))
+            if lab not in seen:
+                seen.add(lab); labels.append(lab)
+                pose[lab]=(float(row[5]),float(row[6]),float(row[7]),float(row[8]),
+                           "equidistant" if "equidistant" in row[9] else "equisolid",
+                           float(row[14]))
+        for lab in labels:
+            if lab in cache:
+                continue
+            az,el,roll,fov,lens,mmag=pose[lab]
+            try:
+                srows=process_fisheye_scene(lab,az,el,roll,fov,lens,
+                                            args.fisheye_size,mmag,args.fisheye_min_stars,
+                                            render=False)
+            except Exception as e:
+                print(f"  ERROR {lab}: {e}"); srows=None
+            if srows:
+                nrow=next(_csv.reader([srows[0]]))
+                cache[lab]=[nrow[13],nrow[22]]
+                cache_path.write_text(json.dumps(cache))   # checkpoint after each scene
+            else:
+                print(f"  WARNING: {lab} produced no anchors this run; will retry on re-run")
+
+        out=[raw_lines[0]]
+        for idx in range(1,len(raw_lines)):
+            if not raw_lines[idx].strip():
+                continue
+            row=parsed[idx]; lab=Path(row[0]).stem
+            os_,op_=orig[lab]
+            if lab in cache:
+                nn,ns=cache[lab]
+                out.append(raw_lines[idx].replace(f'"{os_}"',f'"{nn}"').replace(f'"{op_}"',f'"{ns}"'))
+            else:
+                out.append(raw_lines[idx])
+        Path(args.out_csv).write_text("\n".join(out)+"\n")
+        print(f"\nRefreshed {len(cache)}/{len(labels)} scenes -> {args.out_csv}")
+        return
 
     rows=[]
     if args.random > 0:

@@ -42,6 +42,7 @@ CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     m_recordingMessageQueue(nullptr),
     m_filePlaybackAudioOffsetMs(0),
     m_filePlaybackAudioOffsetRemainingFrames(0),
+    m_filePlaybackStreamSource(false),
     m_monitorDroppedFrames(0),
     m_monitorUnderflows(0)
 {
@@ -98,6 +99,7 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
         CameraSettings::m_minVideoPlaybackAudioOffsetMs,
         settings.m_videoPlaybackAudioOffsetMs,
         CameraSettings::m_maxVideoPlaybackAudioOffsetMs);
+    m_filePlaybackStreamSource = settings.isStreamCamera();
     resetFilePlaybackAudioOffset();
     m_captureSourceActive = false;
     m_outputAudioFifo.clear();
@@ -105,6 +107,7 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     qDebug() << "CameraQtAudioController: starting file audio monitor: outputDeviceIndex" << outputDeviceIndex
              << "prefillMs" << filePlaybackMonitorPrefillForOffsetMs()
              << "targetFillMs" << filePlaybackMonitorTargetFillForOffsetMs()
+             << "stream" << m_filePlaybackStreamSource
              << "audioOffsetMs" << m_filePlaybackAudioOffsetMs;
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
     m_capturing = true;
@@ -128,6 +131,7 @@ void CameraQtAudioController::stop()
     m_captureAudioFifo.clear();
     m_outputAudioFifo.clear();
     m_captureSourceActive = false;
+    m_filePlaybackStreamSource = false;
     m_capturing = false;
 }
 
@@ -284,12 +288,22 @@ int CameraQtAudioController::filePlaybackMonitorPrefillForOffsetMs() const
 
 int CameraQtAudioController::filePlaybackMonitorTargetFillForOffsetMs() const
 {
-    return filePlaybackMonitorTargetFillMs();
+    return m_filePlaybackStreamSource ? streamPlaybackMonitorTargetFillMs() : filePlaybackMonitorTargetFillMs();
 }
 
 int CameraQtAudioController::filePlaybackMonitorJitterForOffsetMs() const
 {
-    return 40;
+    return m_filePlaybackStreamSource ? streamPlaybackMonitorJitterMs() : 40;
+}
+
+int CameraQtAudioController::monitorTargetFillFrames(int sampleRate) const
+{
+    if (sampleRate <= 0) {
+        return 0;
+    }
+
+    return static_cast<int>(
+        (static_cast<qint64>(sampleRate) * filePlaybackMonitorTargetFillForOffsetMs()) / 1000);
 }
 
 void CameraQtAudioController::applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate)

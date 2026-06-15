@@ -61,6 +61,7 @@ public:
     [[nodiscard]] int filePlaybackMonitorPrefillForOffsetMs() const;
     static int filePlaybackMonitorPrefillMs() { return 120; }
     static int filePlaybackMonitorTargetFillMs() { return 80; }
+    [[nodiscard]] int monitorTargetFillFrames(int sampleRate) const;
     void resetMonitorDebugStats();
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     void submitMonitorPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
@@ -82,6 +83,8 @@ private:
     void resetFilePlaybackAudioOffset();
     [[nodiscard]] int filePlaybackMonitorTargetFillForOffsetMs() const;
     [[nodiscard]] int filePlaybackMonitorJitterForOffsetMs() const;
+    static int streamPlaybackMonitorTargetFillMs() { return 360; }
+    static int streamPlaybackMonitorJitterMs() { return 80; }
     void applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate);
 
     bool m_capturing;
@@ -94,6 +97,7 @@ private:
     QVector<quint8> m_audioTransferBuffer;
     int m_filePlaybackAudioOffsetMs;
     int m_filePlaybackAudioOffsetRemainingFrames;
+    bool m_filePlaybackStreamSource = false;
     quint64 m_monitorDroppedFrames;
     std::atomic<quint64> m_monitorUnderflows;
     MonitorDebugStats m_monitorDebugStats;

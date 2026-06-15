@@ -647,11 +647,17 @@ private:
     quint64 m_videoFileStatsLastDecoderReadAheadCalls = 0;
     quint64 m_videoFileStatsLastDecoderReadAheadPackets = 0;
     quint64 m_videoFileStatsLastDecoderReadAheadVideoPackets = 0;
+    quint64 m_videoFileStatsLastDecoderReadAheadAudioPackets = 0;
+    quint64 m_videoFileStatsLastDecoderReadAheadOtherPackets = 0;
+    quint64 m_videoFileStatsLastDecoderInputVideoPackets = 0;
+    quint64 m_videoFileStatsLastDecoderInputAudioPackets = 0;
+    quint64 m_videoFileStatsLastDecoderInputOtherPackets = 0;
     quint64 m_videoFileStatsLastDecoderEagain = 0;
     quint64 m_videoFileStatsLastDecoderQueuedFrames = 0;
     quint64 m_videoFileStatsLastDecoderParkedVideoPackets = 0;
     quint64 m_videoFileStatsLastDecoderPacketCapHits = 0;
     quint64 m_videoFileStatsLastDecoderAudioBytes = 0;
+    quint64 m_videoFileStatsLastDecoderAudioFrames = 0;
     quint64 m_videoFileStatsLastDecoderPacedAudioCalls = 0;
     quint64 m_videoFileStatsLastDecoderPacedAudioTargetFrames = 0;
     quint64 m_videoFileStatsLastDecoderPacedAudioOutputFrames = 0;

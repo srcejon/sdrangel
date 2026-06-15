@@ -33,6 +33,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/avutil.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
 #include <libavutil/samplefmt.h>
@@ -138,6 +139,26 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
                  << fileName
                  << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"))
                  << "elapsedMs" << streamInfoTimer.elapsed();
+        for (unsigned int streamIndex = 0; streamIndex < m_formatContext->nb_streams; ++streamIndex)
+        {
+            const AVStream *stream = m_formatContext->streams[streamIndex];
+            const AVCodecParameters *codecParameters = stream ? stream->codecpar : nullptr;
+            const AVMediaType mediaType = codecParameters ? codecParameters->codec_type : AVMEDIA_TYPE_UNKNOWN;
+            const char *mediaTypeName = av_get_media_type_string(mediaType);
+            const AVCodecDescriptor *codecDescriptor = codecParameters
+                ? avcodec_descriptor_get(codecParameters->codec_id)
+                : nullptr;
+            qDebug() << "CameraVideoFileDecoder: stream"
+                     << static_cast<int>(streamIndex)
+                     << (mediaTypeName ? QString::fromLatin1(mediaTypeName) : QStringLiteral("unknown"))
+                     << "codec" << (codecDescriptor && codecDescriptor->name
+                         ? QString::fromLatin1(codecDescriptor->name)
+                         : QString::number(codecParameters ? codecParameters->codec_id : AV_CODEC_ID_NONE))
+                     << "timeBase" << (stream ? stream->time_base.num : 0) << "/" << (stream ? stream->time_base.den : 0)
+                     << "sampleRate" << (codecParameters ? codecParameters->sample_rate : 0)
+                     << "channels" << (codecParameters ? codecParameters->channels : 0)
+                     << "size" << (codecParameters ? codecParameters->width : 0) << "x" << (codecParameters ? codecParameters->height : 0);
+        }
         return true;
     };
 
@@ -390,6 +411,7 @@ bool CameraVideoFileDecoder::readNextFrame(
 
         if (m_packet->stream_index == m_videoStreamIndex)
         {
+            ++m_debugStats.m_inputVideoPackets;
             const bool sent = sendVideoPacket(m_packet, errorMessage);
             av_packet_unref(m_packet);
             if (!sent) {
@@ -398,6 +420,7 @@ bool CameraVideoFileDecoder::readNextFrame(
         }
         else if (m_audioCodecContext && (m_packet->stream_index == m_audioStreamIndex))
         {
+            ++m_debugStats.m_inputAudioPackets;
             const bool sent = sendAudioPacket(m_packet, decodedAudio, errorMessage);
             av_packet_unref(m_packet);
             if (!sent) {
@@ -406,6 +429,7 @@ bool CameraVideoFileDecoder::readNextFrame(
         }
         else
         {
+            ++m_debugStats.m_inputOtherPackets;
             av_packet_unref(m_packet);
         }
     }
@@ -531,6 +555,14 @@ bool CameraVideoFileDecoder::openAudioDecoder(QString& errorMessage)
         errorMessage = QStringLiteral("Cannot open video file audio decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
         return false;
     }
+
+    qDebug() << "CameraVideoFileDecoder: opened audio stream"
+             << m_audioStreamIndex
+             << "codec" << (codec && codec->name ? QString::fromLatin1(codec->name) : QString())
+             << "sampleRate" << m_audioCodecContext->sample_rate
+             << "channels" << m_audioCodecContext->channels
+             << "sampleFormat" << av_get_sample_fmt_name(m_audioCodecContext->sample_fmt)
+             << "timeBase" << stream->time_base.num << "/" << stream->time_base.den;
 
     return openResampler(errorMessage);
 #endif
@@ -675,7 +707,8 @@ bool CameraVideoFileDecoder::queueDecodedVideoFrames(QString& errorMessage)
 #else
     for (;;)
     {
-        if (m_pendingVideoFrames.size() >= m_maxPendingVideoFrames) {
+        const size_t maxPendingFrames = m_urlSource ? m_maxPendingStreamVideoFrames : m_maxPendingVideoFrames;
+        if (m_pendingVideoFrames.size() >= maxPendingFrames) {
             return true;
         }
 
@@ -701,7 +734,8 @@ bool CameraVideoFileDecoder::queueOneDecodedVideoFrame(QString& errorMessage)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
-    if (m_pendingVideoFrames.size() >= m_maxPendingVideoFrames) {
+    const size_t maxPendingFrames = m_urlSource ? m_maxPendingStreamVideoFrames : m_maxPendingVideoFrames;
+    if (m_pendingVideoFrames.size() >= maxPendingFrames) {
         return true;
     }
 
@@ -760,7 +794,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     static constexpr size_t maxPendingVideoPackets = 30;
     static constexpr qint64 audioLeadMs = 50;
     static constexpr int bytesPerSampleFrame = 4;
-    const int maxPacketsRead = m_urlSource ? 24 : 32;
+    const int maxPacketsRead = m_urlSource ? 96 : 32;
     const int frameAudioFrames = static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5);
     const int targetAudioFrames = std::max(frameAudioFrames, m_outputSampleRate / 50);
     const int targetAudioBytes = targetAudioFrames * bytesPerSampleFrame;
@@ -780,7 +814,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         && !m_eof
         && (packetsRead < maxPacketsRead)
         && (m_urlSource
-            ? (m_pendingVideoFrames.size() < m_maxPendingVideoFrames)
+            ? (m_pendingVideoFrames.size() < m_maxPendingStreamVideoFrames)
             : (m_pendingVideoPackets.size() < maxPendingVideoPackets)))
     {
         int ret = av_read_frame(m_formatContext, m_packet);
@@ -813,6 +847,8 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         ++m_debugStats.m_readAheadPackets;
         if (m_packet->stream_index == m_audioStreamIndex)
         {
+            ++m_debugStats.m_inputAudioPackets;
+            ++m_debugStats.m_readAheadAudioPackets;
             const bool sent = sendAudioPacket(m_packet, pcmS16Stereo, errorMessage);
             av_packet_unref(m_packet);
             if (!sent) {
@@ -821,6 +857,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         }
         else if (m_packet->stream_index == m_videoStreamIndex)
         {
+            ++m_debugStats.m_inputVideoPackets;
             ++m_debugStats.m_readAheadVideoPackets;
             if (m_urlSource)
             {
@@ -848,6 +885,8 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         }
         else
         {
+            ++m_debugStats.m_inputOtherPackets;
+            ++m_debugStats.m_readAheadOtherPackets;
             av_packet_unref(m_packet);
         }
 
@@ -855,6 +894,9 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     }
 
     if (!m_urlSource && (m_pendingVideoPackets.size() >= maxPendingVideoPackets)) {
+        ++m_debugStats.m_readAheadPacketCapHits;
+    }
+    if (m_urlSource && (m_pendingVideoFrames.size() >= m_maxPendingStreamVideoFrames)) {
         ++m_debugStats.m_readAheadPacketCapHits;
     }
     return true;
@@ -932,6 +974,7 @@ bool CameraVideoFileDecoder::appendFrameAudio(const AVFrame *frame, QByteArray& 
     output.resize(convertedFrames * 4);
     pcmS16Stereo.append(output);
     m_debugStats.m_audioBytes += static_cast<quint64>(output.size());
+    ++m_debugStats.m_audioFrames;
 
     const qint64 audioDurationMs = static_cast<qint64>(
         (static_cast<double>(convertedFrames) * 1000.0 / std::max(1, m_outputSampleRate)) + 0.5);

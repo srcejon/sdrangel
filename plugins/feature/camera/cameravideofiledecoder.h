@@ -66,11 +66,17 @@ public:
         quint64 m_readAheadCalls = 0;
         quint64 m_readAheadPackets = 0;
         quint64 m_readAheadVideoPackets = 0;
+        quint64 m_readAheadAudioPackets = 0;
+        quint64 m_readAheadOtherPackets = 0;
+        quint64 m_inputVideoPackets = 0;
+        quint64 m_inputAudioPackets = 0;
+        quint64 m_inputOtherPackets = 0;
         quint64 m_sendVideoPacketEagain = 0;
         quint64 m_queuedVideoFrames = 0;
         quint64 m_parkedVideoPackets = 0;
         quint64 m_readAheadPacketCapHits = 0;
         quint64 m_audioBytes = 0;
+        quint64 m_audioFrames = 0;
         quint64 m_pacedAudioCalls = 0;
         quint64 m_pacedAudioTargetFrames = 0;
         quint64 m_pacedAudioOutputFrames = 0;
@@ -92,6 +98,7 @@ private:
     };
 
     static constexpr size_t m_maxPendingVideoFrames = 3;
+    static constexpr size_t m_maxPendingStreamVideoFrames = 12;
 
     AVFormatContext *m_formatContext = nullptr;
     AVCodecContext *m_videoCodecContext = nullptr;

@@ -1692,11 +1692,17 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderReadAheadCalls = stats.m_readAheadCalls;
         m_videoFileStatsLastDecoderReadAheadPackets = stats.m_readAheadPackets;
         m_videoFileStatsLastDecoderReadAheadVideoPackets = stats.m_readAheadVideoPackets;
+        m_videoFileStatsLastDecoderReadAheadAudioPackets = stats.m_readAheadAudioPackets;
+        m_videoFileStatsLastDecoderReadAheadOtherPackets = stats.m_readAheadOtherPackets;
+        m_videoFileStatsLastDecoderInputVideoPackets = stats.m_inputVideoPackets;
+        m_videoFileStatsLastDecoderInputAudioPackets = stats.m_inputAudioPackets;
+        m_videoFileStatsLastDecoderInputOtherPackets = stats.m_inputOtherPackets;
         m_videoFileStatsLastDecoderEagain = stats.m_sendVideoPacketEagain;
         m_videoFileStatsLastDecoderQueuedFrames = stats.m_queuedVideoFrames;
         m_videoFileStatsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
         m_videoFileStatsLastDecoderPacketCapHits = stats.m_readAheadPacketCapHits;
         m_videoFileStatsLastDecoderAudioBytes = stats.m_audioBytes;
+        m_videoFileStatsLastDecoderAudioFrames = stats.m_audioFrames;
         m_videoFileStatsLastDecoderPacedAudioCalls = stats.m_pacedAudioCalls;
         m_videoFileStatsLastDecoderPacedAudioTargetFrames = stats.m_pacedAudioTargetFrames;
         m_videoFileStatsLastDecoderPacedAudioOutputFrames = stats.m_pacedAudioOutputFrames;
@@ -1710,11 +1716,17 @@ void CameraWorker::resetVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderReadAheadCalls = 0;
         m_videoFileStatsLastDecoderReadAheadPackets = 0;
         m_videoFileStatsLastDecoderReadAheadVideoPackets = 0;
+        m_videoFileStatsLastDecoderReadAheadAudioPackets = 0;
+        m_videoFileStatsLastDecoderReadAheadOtherPackets = 0;
+        m_videoFileStatsLastDecoderInputVideoPackets = 0;
+        m_videoFileStatsLastDecoderInputAudioPackets = 0;
+        m_videoFileStatsLastDecoderInputOtherPackets = 0;
         m_videoFileStatsLastDecoderEagain = 0;
         m_videoFileStatsLastDecoderQueuedFrames = 0;
         m_videoFileStatsLastDecoderParkedVideoPackets = 0;
         m_videoFileStatsLastDecoderPacketCapHits = 0;
         m_videoFileStatsLastDecoderAudioBytes = 0;
+        m_videoFileStatsLastDecoderAudioFrames = 0;
         m_videoFileStatsLastDecoderPacedAudioCalls = 0;
         m_videoFileStatsLastDecoderPacedAudioTargetFrames = 0;
         m_videoFileStatsLastDecoderPacedAudioOutputFrames = 0;
@@ -1795,11 +1807,17 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     quint64 readAheadCalls = 0;
     quint64 readAheadPackets = 0;
     quint64 readAheadVideoPackets = 0;
+    quint64 readAheadAudioPackets = 0;
+    quint64 readAheadOtherPackets = 0;
+    quint64 inputVideoPackets = 0;
+    quint64 inputAudioPackets = 0;
+    quint64 inputOtherPackets = 0;
     quint64 decoderEagain = 0;
     quint64 queuedFrames = 0;
     quint64 parkedVideoPackets = 0;
     quint64 packetCapHits = 0;
     quint64 decoderAudioBytes = 0;
+    quint64 decoderAudioFrames = 0;
     quint64 pacedAudioCalls = 0;
     quint64 pacedAudioTargetFrames = 0;
     quint64 pacedAudioOutputFrames = 0;
@@ -1815,11 +1833,17 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         readAheadCalls = stats.m_readAheadCalls - m_videoFileStatsLastDecoderReadAheadCalls;
         readAheadPackets = stats.m_readAheadPackets - m_videoFileStatsLastDecoderReadAheadPackets;
         readAheadVideoPackets = stats.m_readAheadVideoPackets - m_videoFileStatsLastDecoderReadAheadVideoPackets;
+        readAheadAudioPackets = stats.m_readAheadAudioPackets - m_videoFileStatsLastDecoderReadAheadAudioPackets;
+        readAheadOtherPackets = stats.m_readAheadOtherPackets - m_videoFileStatsLastDecoderReadAheadOtherPackets;
+        inputVideoPackets = stats.m_inputVideoPackets - m_videoFileStatsLastDecoderInputVideoPackets;
+        inputAudioPackets = stats.m_inputAudioPackets - m_videoFileStatsLastDecoderInputAudioPackets;
+        inputOtherPackets = stats.m_inputOtherPackets - m_videoFileStatsLastDecoderInputOtherPackets;
         decoderEagain = stats.m_sendVideoPacketEagain - m_videoFileStatsLastDecoderEagain;
         queuedFrames = stats.m_queuedVideoFrames - m_videoFileStatsLastDecoderQueuedFrames;
         parkedVideoPackets = stats.m_parkedVideoPackets - m_videoFileStatsLastDecoderParkedVideoPackets;
         packetCapHits = stats.m_readAheadPacketCapHits - m_videoFileStatsLastDecoderPacketCapHits;
         decoderAudioBytes = stats.m_audioBytes - m_videoFileStatsLastDecoderAudioBytes;
+        decoderAudioFrames = stats.m_audioFrames - m_videoFileStatsLastDecoderAudioFrames;
         pacedAudioCalls = stats.m_pacedAudioCalls - m_videoFileStatsLastDecoderPacedAudioCalls;
         pacedAudioTargetFrames = stats.m_pacedAudioTargetFrames - m_videoFileStatsLastDecoderPacedAudioTargetFrames;
         pacedAudioOutputFrames = stats.m_pacedAudioOutputFrames - m_videoFileStatsLastDecoderPacedAudioOutputFrames;
@@ -1832,11 +1856,17 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
         m_videoFileStatsLastDecoderReadAheadCalls = stats.m_readAheadCalls;
         m_videoFileStatsLastDecoderReadAheadPackets = stats.m_readAheadPackets;
         m_videoFileStatsLastDecoderReadAheadVideoPackets = stats.m_readAheadVideoPackets;
+        m_videoFileStatsLastDecoderReadAheadAudioPackets = stats.m_readAheadAudioPackets;
+        m_videoFileStatsLastDecoderReadAheadOtherPackets = stats.m_readAheadOtherPackets;
+        m_videoFileStatsLastDecoderInputVideoPackets = stats.m_inputVideoPackets;
+        m_videoFileStatsLastDecoderInputAudioPackets = stats.m_inputAudioPackets;
+        m_videoFileStatsLastDecoderInputOtherPackets = stats.m_inputOtherPackets;
         m_videoFileStatsLastDecoderEagain = stats.m_sendVideoPacketEagain;
         m_videoFileStatsLastDecoderQueuedFrames = stats.m_queuedVideoFrames;
         m_videoFileStatsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
         m_videoFileStatsLastDecoderPacketCapHits = stats.m_readAheadPacketCapHits;
         m_videoFileStatsLastDecoderAudioBytes = stats.m_audioBytes;
+        m_videoFileStatsLastDecoderAudioFrames = stats.m_audioFrames;
         m_videoFileStatsLastDecoderPacedAudioCalls = stats.m_pacedAudioCalls;
         m_videoFileStatsLastDecoderPacedAudioTargetFrames = stats.m_pacedAudioTargetFrames;
         m_videoFileStatsLastDecoderPacedAudioOutputFrames = stats.m_pacedAudioOutputFrames;
@@ -1888,11 +1918,17 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "readAheadCalls" << readAheadCalls
              << "readAheadPackets" << readAheadPackets
              << "readAheadVideoPackets" << readAheadVideoPackets
+             << "readAheadAudioPackets" << readAheadAudioPackets
+             << "readAheadOtherPackets" << readAheadOtherPackets
+             << "inputVideoPackets" << inputVideoPackets
+             << "inputAudioPackets" << inputAudioPackets
+             << "inputOtherPackets" << inputOtherPackets
              << "decoderEagain" << decoderEagain
              << "queuedVideoFrames" << queuedFrames
              << "parkedVideoPackets" << parkedVideoPackets
              << "packetCapHits" << packetCapHits
-             << "decoderAudioBytes" << decoderAudioBytes;
+             << "decoderAudioBytes" << decoderAudioBytes
+             << "decoderAudioFrames" << decoderAudioFrames;
 
     m_videoFileStatsFrames = 0;
     m_videoFileStatsEmptyAudioFrames = 0;

@@ -1137,6 +1137,31 @@ void CameraVideoFileDecoder::trimLivePendingAudio()
 #endif
 }
 
+int CameraVideoFileDecoder::takePendingAudio(QByteArray& pcmS16Stereo, int maxSampleFrames)
+{
+    static constexpr int bytesPerSampleFrame = 4;
+    pcmS16Stereo.clear();
+#ifdef CAMERA_FFMPEG_STREAMING
+    if ((maxSampleFrames <= 0) || m_pendingAudioPcm.isEmpty()) {
+        return 0;
+    }
+
+    const int maxBytes = maxSampleFrames * bytesPerSampleFrame;
+    const int byteCount = std::min(maxBytes, static_cast<int>(m_pendingAudioPcm.size()));
+    const int alignedByteCount = (byteCount / bytesPerSampleFrame) * bytesPerSampleFrame;
+    if (alignedByteCount <= 0) {
+        return 0;
+    }
+
+    pcmS16Stereo = m_pendingAudioPcm.left(alignedByteCount);
+    m_pendingAudioPcm.remove(0, alignedByteCount);
+    return alignedByteCount / bytesPerSampleFrame;
+#else
+    Q_UNUSED(maxSampleFrames)
+    return 0;
+#endif
+}
+
 void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
 {
     pcmS16Stereo.clear();

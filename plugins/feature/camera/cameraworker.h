@@ -643,6 +643,7 @@ private:
     QElapsedTimer m_videoFileTickTimer;
     quint64 m_videoFileStatsFrames = 0;
     quint64 m_videoFileStatsEmptyAudioFrames = 0;
+    quint64 m_videoFileStatsMonitorExtraAudioFrames = 0;
     qint64 m_videoFileStatsDecodeMsTotal = 0;
     qint64 m_videoFileStatsDecodeMsMax = 0;
     qint64 m_videoFileStatsTickDeltaMsTotal = 0;
@@ -745,6 +746,7 @@ private:
     void clearDelayedVideoFileFrames();
     void scheduleDelayedVideoFileFrameSubmit();
     void releaseDelayedVideoFileFrames();
+    void submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
     void readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
     void seekVideoFile(qint64 positionMs, bool displayFrame);
     void stepVideoFile(int direction);

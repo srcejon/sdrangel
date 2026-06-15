@@ -58,6 +58,7 @@ public:
     [[nodiscard]] double frameRate() const { return m_frameRate; }
     [[nodiscard]] qint64 audioDecodedPositionMs() const { return m_audioDecodedPositionMs; }
     [[nodiscard]] int pendingAudioBytes() const { return m_pendingAudioPcm.size(); }
+    int takePendingAudio(QByteArray& pcmS16Stereo, int maxSampleFrames);
     [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }
     [[nodiscard]] int pendingVideoPacketCount() const { return static_cast<int>(m_pendingVideoPackets.size()); }
 

@@ -1638,10 +1638,8 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         m_videoFilePositionMs += videoFileFrameIntervalMs();
     }
 
-    if (submitAudio && !pcmS16Stereo.isEmpty())
-    {
-        m_qtAudio.submitMonitorPcmSamples(pcmS16Stereo, audioSampleRate);
-        m_qtAudio.submitRecordingPcmSamples(pcmS16Stereo, audioSampleRate);
+    if (submitAudio && !pcmS16Stereo.isEmpty()) {
+        submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
     }
 
     if (minimumPositionMs < 0) {
@@ -1662,6 +1660,36 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     }
 
     reportVideoFilePlaybackToGUI();
+}
+
+void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate)
+{
+    static constexpr int bytesPerSampleFrame = 4;
+    if (pcmS16Stereo.isEmpty() || (audioSampleRate <= 0)) {
+        return;
+    }
+
+    QByteArray monitorAudio = pcmS16Stereo;
+    if (m_settings.isStreamCamera() && m_videoFileDecoder)
+    {
+        const uint32_t currentFill = m_qtAudio.monitorAudioFill();
+        const int targetFillFrames = audioSampleRate / 8;
+        if (currentFill < static_cast<uint32_t>(targetFillFrames))
+        {
+            const int neededFrames = targetFillFrames - static_cast<int>(currentFill);
+            const int maxExtraFrames = audioSampleRate / 10;
+            QByteArray extraAudio;
+            const int extraFrames = m_videoFileDecoder->takePendingAudio(extraAudio, std::min(neededFrames, maxExtraFrames));
+            if (extraFrames > 0)
+            {
+                monitorAudio.append(extraAudio);
+                m_videoFileStatsMonitorExtraAudioFrames += static_cast<quint64>(extraFrames);
+            }
+        }
+    }
+
+    m_qtAudio.submitMonitorPcmSamples(monitorAudio, audioSampleRate);
+    m_qtAudio.submitRecordingPcmSamples(pcmS16Stereo.left((pcmS16Stereo.size() / bytesPerSampleFrame) * bytesPerSampleFrame), audioSampleRate);
 }
 
 void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
@@ -1753,6 +1781,7 @@ void CameraWorker::resetVideoFilePlaybackStats()
     m_videoFileTickTimer.invalidate();
     m_videoFileStatsFrames = 0;
     m_videoFileStatsEmptyAudioFrames = 0;
+    m_videoFileStatsMonitorExtraAudioFrames = 0;
     m_videoFileStatsDecodeMsTotal = 0;
     m_videoFileStatsDecodeMsMax = 0;
     m_videoFileStatsTickDeltaMsTotal = 0;
@@ -1985,6 +2014,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "posDeltaMinMaxMs" << m_videoFileStatsPositionDeltaMsMin << m_videoFileStatsPositionDeltaMsMax
              << "audioBytes" << m_videoFileStatsAudioBytes
              << "emptyAudioFrames" << m_videoFileStatsEmptyAudioFrames
+             << "monitorExtraAudioFrames" << m_videoFileStatsMonitorExtraAudioFrames
              << "monitorFill" << m_qtAudio.monitorAudioFill() << "/" << m_qtAudio.monitorAudioSize()
              << "monitorDroppedFrames" << droppedAudioDelta
              << "monitorUnderflows" << audioUnderflowDelta
@@ -2023,6 +2053,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
 
     m_videoFileStatsFrames = 0;
     m_videoFileStatsEmptyAudioFrames = 0;
+    m_videoFileStatsMonitorExtraAudioFrames = 0;
     m_videoFileStatsDecodeMsTotal = 0;
     m_videoFileStatsDecodeMsMax = 0;
     m_videoFileStatsTickDeltaMsTotal = 0;

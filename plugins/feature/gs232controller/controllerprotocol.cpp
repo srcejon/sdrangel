@@ -92,14 +92,14 @@ void ControllerProtocol::getPosition(float& latitude, float& longitude)
     else
     {
         // When tracking, get position from Star Tracker / Sat Tracker
-        QRegularExpression re("([FTR])(\\d+):(\\d+)");
+        QRegularExpression re("^(?:F(?:(\\d+))?:(\\d+)|([TR])(\\d+):(\\d+))(?:\\s.*)?$");
         QRegularExpressionMatch match = re.match(m_settings.m_source);
         if (match.hasMatch())
         {
-            QString kind = match.captured(1);
-            int setIndex = match.captured(2).toInt();
-            int index = match.captured(3).toInt();
-            if (kind == 'F')
+            QString kind = match.captured(3).isEmpty() ? "F" : match.captured(3);
+            int setIndex = kind == "F" ? match.captured(1).toInt() : match.captured(4).toInt();
+            int index = kind == "F" ? match.captured(2).toInt() : match.captured(5).toInt();
+            if (kind == "F")
             {
                 double lat, lon;
                 bool latOk = ChannelWebAPIUtils::getFeatureSetting(setIndex, index, "latitude", lat);
@@ -161,4 +161,3 @@ ControllerProtocol *ControllerProtocol::create(GS232ControllerSettings::Protocol
         return nullptr;
     }
 }
-

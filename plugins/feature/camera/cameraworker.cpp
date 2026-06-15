@@ -1614,9 +1614,9 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     qint64 decodeMs = 0;
     qint64 videoLateMs = 0;
     int droppedLateFrames = 0;
-    static constexpr int maxLateDropFrames = 4;
+    static constexpr int maxLateDropFrames = 1;
     static constexpr qint64 maxLateDropDecodeMs = 80;
-    static constexpr qint64 liveFrameLateThresholdMs = 250;
+    static constexpr qint64 liveFrameLateThresholdMs = 1000;
     for (;;)
     {
         image = QImage();

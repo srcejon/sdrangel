@@ -1448,6 +1448,8 @@ void CameraWorker::closeVideoFileDecoder()
     m_videoFilePlaying = false;
     m_videoFilePlaybackClock.invalidate();
     m_videoFilePlaybackTick = 0;
+    m_videoFilePlaybackBasePositionMs = -1;
+    m_videoFileLastFramePtsMs = -1;
     resetVideoFilePlaybackStats();
     if (m_settings.isFfmpegMediaSource()) {
         m_qtAudio.stop();
@@ -1480,6 +1482,8 @@ void CameraWorker::setVideoFilePlaying(bool playing)
         clearDelayedVideoFileFrames();
         m_videoFilePlaybackClock.invalidate();
         m_videoFilePlaybackTick = 0;
+        m_videoFilePlaybackBasePositionMs = -1;
+        m_videoFileLastFramePtsMs = -1;
     }
     reportVideoFilePlaybackToGUI();
 }
@@ -1604,10 +1608,49 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     QString errorMessage;
     QElapsedTimer decodeTimer;
     decodeTimer.start();
-    const bool readOk = minimumPositionMs >= 0
-        ? m_videoFileDecoder->readNextFrameAtOrAfter(minimumPositionMs, image, positionMs, errorMessage)
-        : m_videoFileDecoder->readNextFrame(image, positionMs, pcmS16Stereo, audioSampleRate, errorMessage);
-    const qint64 decodeMs = decodeTimer.elapsed();
+    bool readOk = false;
+    qint64 decodeMs = 0;
+    qint64 videoLateMs = 0;
+    int droppedLateFrames = 0;
+    static constexpr int maxLateDropFrames = 12;
+    static constexpr qint64 liveFrameLateThresholdMs = 250;
+    for (;;)
+    {
+        image = QImage();
+        positionMs = -1;
+        pcmS16Stereo.clear();
+        audioSampleRate = 0;
+        errorMessage.clear();
+        readOk = minimumPositionMs >= 0
+            ? m_videoFileDecoder->readNextFrameAtOrAfter(minimumPositionMs, image, positionMs, errorMessage)
+            : m_videoFileDecoder->readNextFrame(image, positionMs, pcmS16Stereo, audioSampleRate, errorMessage);
+        decodeMs = decodeTimer.elapsed();
+        if (!readOk || image.isNull() || (minimumPositionMs >= 0)) {
+            break;
+        }
+
+        const qint64 framePtsMs = positionMs >= 0 ? positionMs : (m_videoFileLastFramePtsMs + videoFileFrameIntervalMs());
+        if (m_videoFilePlaybackBasePositionMs < 0)
+        {
+            m_videoFilePlaybackBasePositionMs = framePtsMs;
+            if (!m_videoFilePlaybackClock.isValid()) {
+                m_videoFilePlaybackClock.start();
+            } else {
+                m_videoFilePlaybackClock.restart();
+            }
+        }
+
+        videoLateMs = videoFilePlaybackClockMs() - framePtsMs;
+        if (!m_settings.isStreamCamera() || (videoLateMs <= liveFrameLateThresholdMs) || (droppedLateFrames >= maxLateDropFrames)) {
+            break;
+        }
+
+        if (submitAudio && !pcmS16Stereo.isEmpty()) {
+            submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
+        }
+        ++droppedLateFrames;
+        ++m_videoFileStatsDroppedLateFrames;
+    }
     if (!readOk)
     {
         reportErrorToFeature(
@@ -1637,6 +1680,19 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     } else {
         m_videoFilePositionMs += videoFileFrameIntervalMs();
     }
+    m_videoFileLastFramePtsMs = m_videoFilePositionMs;
+    if (m_videoFilePlaybackBasePositionMs < 0)
+    {
+        m_videoFilePlaybackBasePositionMs = m_videoFilePositionMs;
+        if (!m_videoFilePlaybackClock.isValid()) {
+            m_videoFilePlaybackClock.start();
+        } else {
+            m_videoFilePlaybackClock.restart();
+        }
+    }
+    videoLateMs = videoFilePlaybackClockMs() - m_videoFilePositionMs;
+    m_videoFileStatsVideoLateMsTotal += videoLateMs;
+    m_videoFileStatsVideoLateMsMax = std::max(m_videoFileStatsVideoLateMsMax, videoLateMs);
 
     if (submitAudio && !pcmS16Stereo.isEmpty()) {
         submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
@@ -1704,6 +1760,7 @@ void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
     m_videoFileDecoder->seek(m_videoFilePositionMs);
     m_qtAudio.clearMonitorAudio();
     m_qtAudio.prefillMonitorAudio(m_qtAudio.filePlaybackMonitorPrefillForOffsetMs());
+    resetVideoFilePlaybackSchedule();
     reportVideoFilePlaybackToGUI();
     if (displayFrame) {
         readVideoFileFrame(false, m_videoFilePositionMs);
@@ -1744,7 +1801,33 @@ void CameraWorker::resetVideoFilePlaybackSchedule()
 {
     m_videoFilePlaybackClock.restart();
     m_videoFilePlaybackTick = 1;
+    m_videoFilePlaybackBasePositionMs = -1;
+    m_videoFileLastFramePtsMs = -1;
     m_videoFileTickTimer.restart();
+}
+
+qint64 CameraWorker::videoFilePlaybackClockMs() const
+{
+    static constexpr int bytesPerSampleFrame = 4;
+    if (m_videoFileDecoder
+        && (m_videoFileDecoder->audioDecodedPositionMs() >= 0)
+        && (m_qtAudio.monitorSampleRate() > 0))
+    {
+        const qint64 queuedAudioFrames =
+            static_cast<qint64>(m_videoFileDecoder->pendingAudioBytes() / bytesPerSampleFrame)
+            + static_cast<qint64>(m_qtAudio.monitorAudioFill());
+        const qint64 queuedAudioMs = static_cast<qint64>(
+            (static_cast<double>(queuedAudioFrames) * 1000.0 / static_cast<double>(m_qtAudio.monitorSampleRate())) + 0.5);
+        return m_videoFileDecoder->audioDecodedPositionMs() - queuedAudioMs;
+    }
+
+    if (!m_videoFilePlaybackClock.isValid() || (m_videoFilePlaybackBasePositionMs < 0)) {
+        return m_videoFilePositionMs;
+    }
+
+    const double rate = qMax(0.1, m_settings.m_videoPlaybackRate);
+    return m_videoFilePlaybackBasePositionMs
+        + static_cast<qint64>(std::llround(static_cast<double>(m_videoFilePlaybackClock.elapsed()) * rate));
 }
 
 void CameraWorker::scheduleNextVideoFileTick()
@@ -1758,19 +1841,33 @@ void CameraWorker::scheduleNextVideoFileTick()
         resetVideoFilePlaybackSchedule();
     }
 
-    quint64 tick = m_videoFilePlaybackTick > 0 ? m_videoFilePlaybackTick : 1;
-    const qint64 elapsedMs = m_videoFilePlaybackClock.elapsed();
-    qint64 targetMs = static_cast<qint64>(std::llround(static_cast<double>(tick) * intervalMs));
-
-    if (targetMs <= elapsedMs)
+    qint64 delayMs = static_cast<qint64>(std::llround(intervalMs));
+    if ((m_videoFilePlaybackBasePositionMs >= 0) && (m_videoFileLastFramePtsMs >= 0))
     {
-        tick = static_cast<quint64>(std::floor(static_cast<double>(elapsedMs) / intervalMs)) + 1;
-        targetMs = static_cast<qint64>(std::llround(static_cast<double>(tick) * intervalMs));
+        const qint64 nextFramePtsMs = m_videoFileLastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
+        delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
+        if (m_settings.isStreamCamera()) {
+            delayMs = qBound<qint64>(1, delayMs, static_cast<qint64>(std::llround(intervalMs)));
+        } else {
+            delayMs = qMax<qint64>(1, delayMs);
+        }
     }
+    else
+    {
+        quint64 tick = m_videoFilePlaybackTick > 0 ? m_videoFilePlaybackTick : 1;
+        const qint64 elapsedMs = m_videoFilePlaybackClock.elapsed();
+        qint64 targetMs = static_cast<qint64>(std::llround(static_cast<double>(tick) * intervalMs));
 
-    const qint64 delayMs = qMax<qint64>(1, targetMs - elapsedMs);
+        if (targetMs <= elapsedMs)
+        {
+            tick = static_cast<quint64>(std::floor(static_cast<double>(elapsedMs) / intervalMs)) + 1;
+            targetMs = static_cast<qint64>(std::llround(static_cast<double>(tick) * intervalMs));
+        }
+
+        delayMs = qMax<qint64>(1, targetMs - elapsedMs);
+        m_videoFilePlaybackTick = tick + 1;
+    }
     const int timerDelayMs = static_cast<int>(qMin<qint64>(std::numeric_limits<int>::max(), delayMs));
-    m_videoFilePlaybackTick = tick + 1;
     m_captureTimer.setSingleShot(true);
     m_captureTimer.start(timerDelayMs);
 }
@@ -1791,6 +1888,9 @@ void CameraWorker::resetVideoFilePlaybackStats()
     m_videoFileStatsPositionDeltaMsMax = 0;
     m_videoFileStatsLastPositionMs = -1;
     m_videoFileStatsAudioBytes = 0;
+    m_videoFileStatsDroppedLateFrames = 0;
+    m_videoFileStatsVideoLateMsTotal = 0;
+    m_videoFileStatsVideoLateMsMax = 0;
     m_videoFileStatsLastDroppedAudioFrames = m_qtAudio.monitorDroppedFrames();
     m_videoFileStatsLastAudioUnderflows = m_qtAudio.monitorUnderflows();
 
@@ -1905,6 +2005,9 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     const double avgPositionDeltaMs = m_videoFileStatsFrames > 1
         ? static_cast<double>(m_videoFileStatsPositionDeltaMsTotal) / static_cast<double>(m_videoFileStatsFrames - 1)
         : 0.0;
+    const double avgVideoLateMs = m_videoFileStatsFrames > 0
+        ? static_cast<double>(m_videoFileStatsVideoLateMsTotal) / static_cast<double>(m_videoFileStatsFrames)
+        : 0.0;
     const quint64 droppedAudioFrames = m_qtAudio.monitorDroppedFrames();
     const quint64 droppedAudioDelta = droppedAudioFrames - m_videoFileStatsLastDroppedAudioFrames;
     const quint64 audioUnderflows = m_qtAudio.monitorUnderflows();
@@ -1914,6 +2017,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     const qint64 audioLeadMs = m_videoFileDecoder
         ? m_videoFileDecoder->audioDecodedPositionMs() - m_videoFilePositionMs
         : 0;
+    const qint64 playbackClockMs = videoFilePlaybackClockMs();
     const int pendingAudioBytes = m_videoFileDecoder ? m_videoFileDecoder->pendingAudioBytes() : 0;
 
     quint64 readAheadCalls = 0;
@@ -2012,6 +2116,10 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "tickMaxMs" << m_videoFileStatsTickDeltaMsMax
              << "posDeltaAvgMs" << avgPositionDeltaMs
              << "posDeltaMinMaxMs" << m_videoFileStatsPositionDeltaMsMin << m_videoFileStatsPositionDeltaMsMax
+             << "videoLateAvgMs" << avgVideoLateMs
+             << "videoLateMaxMs" << m_videoFileStatsVideoLateMsMax
+             << "droppedLateVideoFrames" << m_videoFileStatsDroppedLateFrames
+             << "playbackClockMs" << playbackClockMs
              << "audioBytes" << m_videoFileStatsAudioBytes
              << "emptyAudioFrames" << m_videoFileStatsEmptyAudioFrames
              << "monitorExtraAudioFrames" << m_videoFileStatsMonitorExtraAudioFrames
@@ -2062,6 +2170,9 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     m_videoFileStatsPositionDeltaMsMin = 0;
     m_videoFileStatsPositionDeltaMsMax = 0;
     m_videoFileStatsAudioBytes = 0;
+    m_videoFileStatsDroppedLateFrames = 0;
+    m_videoFileStatsVideoLateMsTotal = 0;
+    m_videoFileStatsVideoLateMsMax = 0;
     m_videoFileStatsLastDroppedAudioFrames = droppedAudioFrames;
     m_videoFileStatsLastAudioUnderflows = audioUnderflows;
     m_qtAudio.resetMonitorDebugStats();

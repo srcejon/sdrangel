@@ -628,6 +628,8 @@ private:
     bool m_videoFilePlaying;
     QElapsedTimer m_videoFilePlaybackClock;
     quint64 m_videoFilePlaybackTick = 0;
+    qint64 m_videoFilePlaybackBasePositionMs = -1;
+    qint64 m_videoFileLastFramePtsMs = -1;
     quint64 m_videoFileFrameSubmitGeneration = 0;
     struct DelayedVideoFileFrame
     {
@@ -653,6 +655,9 @@ private:
     qint64 m_videoFileStatsPositionDeltaMsMax = 0;
     qint64 m_videoFileStatsLastPositionMs = -1;
     quint64 m_videoFileStatsAudioBytes = 0;
+    quint64 m_videoFileStatsDroppedLateFrames = 0;
+    qint64 m_videoFileStatsVideoLateMsTotal = 0;
+    qint64 m_videoFileStatsVideoLateMsMax = 0;
     quint64 m_videoFileStatsLastDroppedAudioFrames = 0;
     quint64 m_videoFileStatsLastAudioUnderflows = 0;
     quint64 m_videoFileStatsLastDecoderReadAheadCalls = 0;
@@ -753,6 +758,7 @@ private:
     double videoFileExactFrameIntervalMs() const;
     int videoFileFrameIntervalMs() const;
     void resetVideoFilePlaybackSchedule();
+    qint64 videoFilePlaybackClockMs() const;
     void scheduleNextVideoFileTick();
     void resetVideoFilePlaybackStats();
     void updateVideoFilePlaybackStats(qint64 decodeMs, qint64 positionMs, qsizetype audioBytes);

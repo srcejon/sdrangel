@@ -873,7 +873,6 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     }
 
     ++m_debugStats.m_readAheadCalls;
-    static constexpr size_t maxPendingVideoPackets = 30;
     static constexpr qint64 audioLeadMs = 50;
     static constexpr int bytesPerSampleFrame = 4;
     static constexpr int streamTargetAudioMs = 900;
@@ -898,12 +897,11 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         return (m_pendingAudioPcm.size() + pcmS16Stereo.size()) < targetAudioBytes;
     };
 
+    const size_t maxPendingVideoPackets = m_urlSource ? m_maxPendingStreamVideoPackets : m_maxPendingVideoPackets;
     while (needsAudio()
         && !m_eof
         && (packetsRead < maxPacketsRead)
-        && (m_urlSource
-            ? (m_pendingVideoFrames.size() < m_maxPendingStreamVideoFrames)
-            : (m_pendingVideoPackets.size() < maxPendingVideoPackets)))
+        && (m_pendingVideoPackets.size() < maxPendingVideoPackets))
     {
         int ret = av_read_frame(m_formatContext, m_packet);
         if (ret < 0)
@@ -966,29 +964,15 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         {
             ++m_debugStats.m_inputVideoPackets;
             ++m_debugStats.m_readAheadVideoPackets;
-            if (m_urlSource)
+            AVPacket *parkedPacket = av_packet_clone(m_packet);
+            av_packet_unref(m_packet);
+            if (!parkedPacket)
             {
-                const bool sent = sendVideoPacket(m_packet, errorMessage);
-                av_packet_unref(m_packet);
-                if (!sent) {
-                    return false;
-                }
-                if (!queueDecodedVideoFrames(errorMessage)) {
-                    return false;
-                }
+                errorMessage = QStringLiteral("Cannot allocate parked video file packet");
+                return false;
             }
-            else
-            {
-                AVPacket *parkedPacket = av_packet_clone(m_packet);
-                av_packet_unref(m_packet);
-                if (!parkedPacket)
-                {
-                    errorMessage = QStringLiteral("Cannot allocate parked video file packet");
-                    return false;
-                }
-                m_pendingVideoPackets.push_back(parkedPacket);
-                ++m_debugStats.m_parkedVideoPackets;
-            }
+            m_pendingVideoPackets.push_back(parkedPacket);
+            ++m_debugStats.m_parkedVideoPackets;
         }
         else
         {
@@ -1000,10 +984,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         ++packetsRead;
     }
 
-    if (!m_urlSource && (m_pendingVideoPackets.size() >= maxPendingVideoPackets)) {
-        ++m_debugStats.m_readAheadPacketCapHits;
-    }
-    if (m_urlSource && (m_pendingVideoFrames.size() >= m_maxPendingStreamVideoFrames)) {
+    if (m_pendingVideoPackets.size() >= maxPendingVideoPackets) {
         ++m_debugStats.m_readAheadPacketCapHits;
     }
     return true;

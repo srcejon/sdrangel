@@ -1695,9 +1695,20 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         return;
     }
 
-    if (positionMs >= 0) {
+    if (positionMs >= 0)
+    {
+        if (m_settings.isStreamCamera() && (m_videoFileLastFramePtsMs >= 0))
+        {
+            const qint64 frameIntervalMs = videoFileFrameIntervalMs();
+            const qint64 positionDeltaMs = positionMs - m_videoFileLastFramePtsMs;
+            if ((positionDeltaMs <= 0) || (positionDeltaMs > frameIntervalMs * 3)) {
+                positionMs = m_videoFileLastFramePtsMs + frameIntervalMs;
+            }
+        }
         m_videoFilePositionMs = positionMs;
-    } else {
+    }
+    else
+    {
         m_videoFilePositionMs += videoFileFrameIntervalMs();
     }
     m_videoFileLastDecodeMs = decodeMs;

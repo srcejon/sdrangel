@@ -1837,7 +1837,7 @@ qint64 CameraWorker::videoFilePlaybackClockMs() const
     {
         const qint64 queuedAudioFrames =
             static_cast<qint64>(m_videoFileDecoder->pendingAudioBytes() / bytesPerSampleFrame)
-            + static_cast<qint64>(m_qtAudio.monitorAudioFill());
+            + static_cast<qint64>(m_qtAudio.monitorPlaybackClockFill());
         const qint64 queuedAudioMs = static_cast<qint64>(
             (static_cast<double>(queuedAudioFrames) * 1000.0 / static_cast<double>(m_qtAudio.monitorSampleRate())) + 0.5);
         return m_videoFileDecoder->audioDecodedPositionMs() - queuedAudioMs;

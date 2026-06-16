@@ -306,6 +306,20 @@ int CameraQtAudioController::monitorTargetFillFrames(int sampleRate) const
         (static_cast<qint64>(sampleRate) * filePlaybackMonitorTargetFillForOffsetMs()) / 1000);
 }
 
+uint32_t CameraQtAudioController::monitorPlaybackClockFill() const
+{
+    const uint32_t fill = m_outputAudioFifo.fill();
+    if (m_captureSourceActive || !m_filePlaybackStreamSource || (m_sampleRate <= 0)) {
+        return fill;
+    }
+
+    const int targetFrames = monitorTargetFillFrames(m_sampleRate);
+    const int jitterFrames = static_cast<int>(
+        (static_cast<qint64>(m_sampleRate) * filePlaybackMonitorJitterForOffsetMs()) / 1000);
+    const uint32_t floorFrames = static_cast<uint32_t>(std::max(0, targetFrames - jitterFrames));
+    return std::max(fill, floorFrames);
+}
+
 void CameraQtAudioController::applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate)
 {
     static constexpr int bytesPerSampleFrame = 4;

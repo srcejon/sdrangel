@@ -68,6 +68,7 @@ public:
     void submitRecordingPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     int monitorSampleRate() const { return m_sampleRate; }
     uint32_t monitorAudioFill() const { return m_outputAudioFifo.fill(); }
+    uint32_t monitorPlaybackClockFill() const;
     uint32_t monitorAudioSize() const { return m_outputAudioFifo.size(); }
     quint64 monitorDroppedFrames() const { return m_monitorDroppedFrames; }
     quint64 monitorUnderflows() const { return m_monitorUnderflows.load(); }

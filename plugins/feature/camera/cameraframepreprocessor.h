@@ -47,6 +47,7 @@ public:
     void startWork();
     void stopWork();
     void submitFrame(const CameraPipelineFramePtr& frame);
+    bool wouldReplacePendingFrame();
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setNextStage(CameraFrameAligner *nextStage) { m_nextStage = nextStage; }
 

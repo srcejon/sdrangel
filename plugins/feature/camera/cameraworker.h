@@ -657,6 +657,7 @@ private:
     qint64 m_videoFileStatsLastPositionMs = -1;
     quint64 m_videoFileStatsAudioBytes = 0;
     quint64 m_videoFileStatsDroppedLateFrames = 0;
+    quint64 m_videoFileStatsDroppedPipelineFrames = 0;
     qint64 m_videoFileStatsVideoLateMsTotal = 0;
     qint64 m_videoFileStatsVideoLateMsMax = 0;
     quint64 m_videoFileStatsLastDroppedAudioFrames = 0;

@@ -498,7 +498,10 @@ def main():
         proj_name="equidistant fisheye" if lens=="equidistant" else "equisolid fisheye"
         img_dir_name=Path(args.out_images).name
         srows=[]
-        for mode in (0,1):
+        # mode 0 = blind, 1 = FoV-seeded, 4 = FovAzElRoll (guided). The guided row exercises
+        # the direction-seeded acceptance path, which the blind/FoV-seeded rows do not - it is
+        # the only coverage for the wide-fisheye guided bright-support gates.
+        for mode in (0,1,4):
             srows.append(f'"{img_dir_name}/{label}.jpg",{args.time},{args.lat:.6f},'
                          f'{args.lon:.6f},0.0,{az:.2f},{el:.2f},{roll:.2f},{fov_deg:.3f},'
                          f'"{proj_name}",0.0,0.0,0.0,"{names}",{max_mag:g},{mode},0,0,0,0,,,"{spos}"')

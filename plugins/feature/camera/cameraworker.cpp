@@ -1502,6 +1502,11 @@ void CameraWorker::submitVideoFileFrame(const CameraPipelineFramePtr& frame, boo
 
     if (videoDelayMs <= 0)
     {
+        if (m_settings.isStreamCamera() && m_framePreprocessor->wouldReplacePendingFrame())
+        {
+            ++m_videoFileStatsDroppedPipelineFrames;
+            return;
+        }
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         m_framePreprocessor->submitFrame(frame);
         return;
@@ -1587,6 +1592,12 @@ void CameraWorker::releaseDelayedVideoFileFrames()
         && (m_videoFileFrameSubmitGeneration == delayedFrame.m_generation)
         && delayedFrame.m_frame)
     {
+        if (m_settings.isStreamCamera() && m_framePreprocessor->wouldReplacePendingFrame())
+        {
+            ++m_videoFileStatsDroppedPipelineFrames;
+            scheduleDelayedVideoFileFrameSubmit();
+            return;
+        }
         delayedFrame.m_frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         m_framePreprocessor->submitFrame(delayedFrame.m_frame);
     }
@@ -1898,6 +1909,7 @@ void CameraWorker::resetVideoFilePlaybackStats()
     m_videoFileStatsLastPositionMs = -1;
     m_videoFileStatsAudioBytes = 0;
     m_videoFileStatsDroppedLateFrames = 0;
+    m_videoFileStatsDroppedPipelineFrames = 0;
     m_videoFileStatsVideoLateMsTotal = 0;
     m_videoFileStatsVideoLateMsMax = 0;
     m_videoFileStatsLastDroppedAudioFrames = m_qtAudio.monitorDroppedFrames();
@@ -2128,6 +2140,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "videoLateAvgMs" << avgVideoLateMs
              << "videoLateMaxMs" << m_videoFileStatsVideoLateMsMax
              << "droppedLateVideoFrames" << m_videoFileStatsDroppedLateFrames
+             << "droppedPipelineVideoFrames" << m_videoFileStatsDroppedPipelineFrames
              << "playbackClockMs" << playbackClockMs
              << "audioBytes" << m_videoFileStatsAudioBytes
              << "emptyAudioFrames" << m_videoFileStatsEmptyAudioFrames
@@ -2180,6 +2193,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     m_videoFileStatsPositionDeltaMsMax = 0;
     m_videoFileStatsAudioBytes = 0;
     m_videoFileStatsDroppedLateFrames = 0;
+    m_videoFileStatsDroppedPipelineFrames = 0;
     m_videoFileStatsVideoLateMsTotal = 0;
     m_videoFileStatsVideoLateMsMax = 0;
     m_videoFileStatsLastDroppedAudioFrames = droppedAudioFrames;

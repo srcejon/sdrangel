@@ -164,6 +164,12 @@ int CameraFramePreprocessor::pendingFrameLimit() const
     return qBound(2, stackFrameCount * 2, 512);
 }
 
+bool CameraFramePreprocessor::wouldReplacePendingFrame()
+{
+    QMutexLocker locker(&m_frameMutex);
+    return !preserveFrameOrder() && !m_pendingFrames.empty();
+}
+
 void CameraFramePreprocessor::submitFrame(const CameraPipelineFramePtr& frame)
 {
     if (!frame) {

@@ -88,11 +88,10 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
         {
             av_dict_set(&options, "analyzeduration", "10000000", 0);
             av_dict_set(&options, "probesize", "5000000", 0);
-            av_dict_set(&options, "fflags", "nobuffer+discardcorrupt", 0);
-            av_dict_set(&options, "flags", "low_delay", 0);
-            av_dict_set(&options, "flush_packets", "1", 0);
-            av_dict_set(&options, "max_delay", "500000", 0);
             av_dict_set(&options, "rw_timeout", "5000000", 0);
+            if ((scheme == QLatin1String("http")) || (scheme == QLatin1String("https"))) {
+                av_dict_set(&options, "flv_ignore_prevtag", "1", 0);
+            }
         }
         if (rtspSource)
         {
@@ -522,10 +521,7 @@ bool CameraVideoFileDecoder::openVideoDecoder(QString& errorMessage)
     }
 
     m_videoCodecContext->thread_count = 0;
-    m_videoCodecContext->thread_type = m_urlSource ? FF_THREAD_SLICE : (FF_THREAD_FRAME | FF_THREAD_SLICE);
-    if (m_urlSource) {
-        m_videoCodecContext->flags |= AV_CODEC_FLAG_LOW_DELAY;
-    }
+    m_videoCodecContext->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
 
     ret = avcodec_open2(m_videoCodecContext, codec, nullptr);
     if (ret < 0)

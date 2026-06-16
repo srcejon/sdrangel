@@ -875,7 +875,10 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     ++m_debugStats.m_readAheadCalls;
     static constexpr qint64 audioLeadMs = 50;
     static constexpr int bytesPerSampleFrame = 4;
-    static constexpr int streamTargetAudioMs = 900;
+    // The audio monitor FIFO is already the live-stream jitter buffer; keep
+    // decoder-side audio prefetch small so the audio clock does not run far
+    // ahead of the video PTS.
+    static constexpr int streamTargetAudioMs = 200;
     const int maxPacketsRead = m_urlSource ? 96 : 32;
     const int frameAudioFrames = static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5);
     const int targetAudioFrames = m_urlSource

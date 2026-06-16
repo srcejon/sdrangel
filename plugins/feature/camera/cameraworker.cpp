@@ -1712,6 +1712,17 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         }
     }
     videoLateMs = videoFilePlaybackClockMs() - m_videoFilePositionMs;
+    if (m_settings.isStreamCamera() && (std::abs(videoLateMs) > 150))
+    {
+        m_videoFilePlaybackBasePositionMs = m_videoFilePositionMs;
+        if (!m_videoFilePlaybackClock.isValid()) {
+            m_videoFilePlaybackClock.start();
+        } else {
+            m_videoFilePlaybackClock.restart();
+        }
+        m_videoFilePlaybackTick = 1;
+        videoLateMs = 0;
+    }
     m_videoFileStatsVideoLateMsTotal += videoLateMs;
     m_videoFileStatsVideoLateMsMax = std::max(m_videoFileStatsVideoLateMsMax, videoLateMs);
 

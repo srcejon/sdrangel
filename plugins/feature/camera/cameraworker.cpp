@@ -1831,7 +1831,8 @@ void CameraWorker::resetVideoFilePlaybackSchedule()
 qint64 CameraWorker::videoFilePlaybackClockMs() const
 {
     static constexpr int bytesPerSampleFrame = 4;
-    if (m_videoFileDecoder
+    if (!m_settings.isStreamCamera()
+        && m_videoFileDecoder
         && (m_videoFileDecoder->audioDecodedPositionMs() >= 0)
         && (m_qtAudio.monitorSampleRate() > 0))
     {

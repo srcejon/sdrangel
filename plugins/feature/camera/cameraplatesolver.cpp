@@ -14282,8 +14282,22 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
         && (finalPass.matchedBrightDetections < 2)
         && !projectedBrightSupportCanOverrideDetectedBright;
     const bool weakSeedRadial = poorNoRollSeedRadialSupport && !denseFinalEvidenceOverridesSeedRadial;
+    // In a wide fisheye the brightest catalogue stars in the queried region routinely
+    // project beyond the image circle / to the heavily-distorted rim and so are never
+    // detected, leaving brightProjected unmatched even for a pixel-perfect pose (e.g.
+    // synth-fisheye-027/047 guided solves: brightDetections 8/8, magSupport ~100-155,
+    // rms 1-3 px, yet brightProjected 0/8). When the matched bright *detections* are
+    // numerous and photometrically consistent the pose is corroborated independently of
+    // the projected-bright stars, so don't treat unmatched bright-projected as "weak".
+    // Gated to wide fisheye, so narrow guided solves are unaffected.
+    const bool strongBrightDetectionSupportWideFisheye =
+        isWidePlateSolveContext(settings)
+        && (finalPass.matchedBrightDetections >= 6)
+        && (finalPass.brightDetectionMagnitudeError <= 1.5);
     const bool weakBrightProjected =
-        (finalPass.brightProjectedStars >= 5) && (finalPass.matchedBrightProjectedStars < 2);
+        (finalPass.brightProjectedStars >= 5)
+        && (finalPass.matchedBrightProjectedStars < 2)
+        && !strongBrightDetectionSupportWideFisheye;
     const bool weakBrightMagnitude =
         (finalPass.brightDetections >= 6) && (finalPass.brightDetectionMagnitudeError > 2.35);
     const bool weak = weakBrightDetections || weakSeedRadial || weakBrightProjected || weakBrightMagnitude;
@@ -14940,7 +14954,20 @@ bool hasAcceptableGuidedFinalBrightnessConsistency(const CameraSettings& setting
         && (evaluation.brightDetections >= 5)
         && (evaluation.brightDetectionMagnitudeError > 0.85))
     {
-        return false;
+        // A dense, low-RMS geometric fit corroborates the pose independently of
+        // photometric rank consistency, which is noisier in wide fisheye (rendered/real
+        // brightness vs catalogue magnitude scatter, plus the brightest catalogue stars
+        // often falling beyond the image circle). Don't reject a clearly-correct guided
+        // solve (many matches at sub-radius RMS) on magnitude error alone - e.g. the
+        // synth-fisheye-027/047 guided solves sit at magErr ~0.9-1.1 with rms 1-3 px.
+        const bool strongGeometricFit =
+            (evaluation.finalMatches.size() >= 20)
+            && std::isfinite(evaluation.rmsErrorPixels)
+            && (evaluation.rmsErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 0.40, 8.0))
+            && (evaluation.brightDetectionMagnitudeError <= 1.50);
+        if (!strongGeometricFit) {
+            return false;
+        }
     }
 
     return true;

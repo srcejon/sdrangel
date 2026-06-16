@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -1428,21 +1429,28 @@ bool CameraWorker::openVideoFileDecoder()
 
     m_videoFilePositionMs = 0;
     m_videoFileDurationMs = m_videoFileDecoder->durationMs();
+    m_videoFileFrameRate = m_videoFileDecoder->frameRate();
     m_videoFilePlaying = false;
     resetVideoFilePlaybackStats();
+    if (m_settings.isStreamCamera()) {
+        m_videoFileDecoder->setAudioPaceFrameRate(qMax(1.0, m_videoFileFrameRate) * qMax(0.1, m_settings.m_videoPlaybackRate));
+        startVideoFileDecodeThread();
+    }
     reportVideoFilePlaybackToGUI();
     qDebug() << "CameraWorker: FFmpeg media source opened"
              << mediaSourcePath
              << "durationMs" << m_videoFileDurationMs
-             << "fps" << m_videoFileDecoder->frameRate();
+             << "fps" << m_videoFileFrameRate;
     return true;
 }
 
 void CameraWorker::closeVideoFileDecoder()
 {
     m_captureTimer.stop();
+    stopVideoFileDecodeThread();
     clearDelayedVideoFileFrames();
     m_videoFileDecoder.reset();
+    m_videoFileFrameRate = 25.0;
     m_videoFilePositionMs = 0;
     m_videoFileDurationMs = 0;
     m_videoFilePlaying = false;
@@ -1523,7 +1531,18 @@ void CameraWorker::submitVideoFileFrame(const CameraPipelineFramePtr& frame, boo
     delayedFrame.m_generation = m_videoFileFrameSubmitGeneration;
     m_delayedVideoFileFrames.append(delayedFrame);
 
-    static constexpr int maxDelayedFrameCount = 64;
+    static constexpr qint64 maxDelayedFrameBytes = 512LL * 1024LL * 1024LL;
+    static constexpr int hardMaxDelayedFrameCount = 64;
+    const qint64 frameBytes = frame->m_image.isNull()
+        ? qint64(0)
+        : qMax<qint64>(
+            1,
+            static_cast<qint64>(frame->m_image.bytesPerLine()) * static_cast<qint64>(frame->m_image.height()));
+    const int maxFramesByMemory = frameBytes > 0
+        ? static_cast<int>(qMax<qint64>(1, maxDelayedFrameBytes / frameBytes))
+        : hardMaxDelayedFrameCount;
+    const int maxFramesByDelay = qMax(1, static_cast<int>(std::ceil(static_cast<double>(videoDelayMs) / videoFileExactFrameIntervalMs())) + 2);
+    const int maxDelayedFrameCount = qBound(1, std::min({hardMaxDelayedFrameCount, maxFramesByMemory, maxFramesByDelay}), hardMaxDelayedFrameCount);
     if (m_delayedVideoFileFrames.size() > maxDelayedFrameCount) {
         m_delayedVideoFileFrames.remove(0, m_delayedVideoFileFrames.size() - maxDelayedFrameCount);
     }
@@ -1605,9 +1624,245 @@ void CameraWorker::releaseDelayedVideoFileFrames()
     scheduleDelayedVideoFileFrameSubmit();
 }
 
+void CameraWorker::startVideoFileDecodeThread()
+{
+    stopVideoFileDecodeThread();
+    clearDecodedVideoFileFrames();
+
+    if (!m_videoFileDecoder || !m_settings.isStreamCamera()) {
+        return;
+    }
+
+    m_videoFileDecodeThreadStop.store(false);
+    m_videoFileDecodeThread = std::thread([this]()
+    {
+        int consecutiveReadErrors = 0;
+        static constexpr int maxConsecutiveReadErrors = 25;
+        while (!m_videoFileDecodeThreadStop.load())
+        {
+            DecodedVideoFileFrame decodedFrame;
+            QString errorMessage;
+            QElapsedTimer decodeTimer;
+            decodeTimer.start();
+            const bool readOk = m_videoFileDecoder->readNextFrame(
+                decodedFrame.m_image,
+                decodedFrame.m_positionMs,
+                decodedFrame.m_pcmS16Stereo,
+                decodedFrame.m_audioSampleRate,
+                errorMessage);
+            decodedFrame.m_decodeMs = decodeTimer.elapsed();
+
+            {
+                QMutexLocker locker(&m_videoFileDecodeStatsMutex);
+                m_videoFileDecodeStatsSnapshot = m_videoFileDecoder->debugStats();
+                m_videoFileDecodeAudioPositionMs = m_videoFileDecoder->audioDecodedPositionMs();
+                m_videoFileDecodePendingAudioBytes = m_videoFileDecoder->pendingAudioBytes();
+                m_videoFileDecodePendingVideoFrames = m_videoFileDecoder->pendingVideoFrameCount();
+                m_videoFileDecodePendingVideoPackets = m_videoFileDecoder->pendingVideoPacketCount();
+            }
+
+            if (!readOk)
+            {
+                if (consecutiveReadErrors < maxConsecutiveReadErrors)
+                {
+                    ++consecutiveReadErrors;
+                    if ((consecutiveReadErrors == 1) || ((consecutiveReadErrors % 10) == 0)) {
+                        qWarning() << "CameraWorker: stream decode read failed; retrying"
+                                   << consecutiveReadErrors
+                                   << errorMessage;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                    continue;
+                }
+                decodedFrame.m_errorMessage = errorMessage;
+                queueDecodedVideoFileFrame(std::move(decodedFrame));
+                break;
+            }
+            consecutiveReadErrors = 0;
+
+            if (decodedFrame.m_image.isNull())
+            {
+                decodedFrame.m_eof = true;
+                queueDecodedVideoFileFrame(std::move(decodedFrame));
+                break;
+            }
+
+            queueDecodedVideoFileFrame(std::move(decodedFrame));
+        }
+    });
+}
+
+void CameraWorker::stopVideoFileDecodeThread()
+{
+    m_videoFileDecodeThreadStop.store(true);
+    m_videoFileDecodedFramesNotFull.wakeAll();
+    m_videoFileDecodedFramesAvailable.wakeAll();
+    if (m_videoFileDecodeThread.joinable()) {
+        m_videoFileDecodeThread.join();
+    }
+    m_videoFileDecodeThreadStop.store(false);
+    clearDecodedVideoFileFrames();
+
+    QMutexLocker locker(&m_videoFileDecodeStatsMutex);
+    m_videoFileDecodeStatsSnapshot = CameraVideoFileDecoder::DebugStats();
+    m_videoFileDecodeAudioPositionMs = -1;
+    m_videoFileDecodePendingAudioBytes = 0;
+    m_videoFileDecodePendingVideoFrames = 0;
+    m_videoFileDecodePendingVideoPackets = 0;
+}
+
+void CameraWorker::clearDecodedVideoFileFrames()
+{
+    QMutexLocker locker(&m_videoFileDecodedFramesMutex);
+    m_videoFileDecodedFrames.clear();
+    m_videoFileDecodedFramesNotFull.wakeAll();
+}
+
+void CameraWorker::queueDecodedVideoFileFrame(DecodedVideoFileFrame&& frame)
+{
+    QMutexLocker locker(&m_videoFileDecodedFramesMutex);
+    while (!m_videoFileDecodedFrames.empty() && (m_videoFileDecodedFrames.size() >= m_maxDecodedStreamFrames))
+    {
+        m_videoFileDecodedFrames.pop_front();
+        ++m_videoFileDecodeDroppedFrames;
+    }
+    m_videoFileDecodedFrames.push_back(std::move(frame));
+    m_videoFileDecodedFramesAvailable.wakeAll();
+}
+
+bool CameraWorker::takeDecodedVideoFileFrame(DecodedVideoFileFrame& frame)
+{
+    QMutexLocker locker(&m_videoFileDecodedFramesMutex);
+    if (m_videoFileDecodedFrames.empty()) {
+        return false;
+    }
+
+    const size_t skippedFrames = m_videoFileDecodedFrames.size() - 1;
+    while (m_videoFileDecodedFrames.size() > 1) {
+        m_videoFileDecodedFrames.pop_front();
+    }
+    if (skippedFrames > 0) {
+        m_videoFileDecodeDroppedFrames.fetch_add(static_cast<quint64>(skippedFrames));
+    }
+
+    frame = std::move(m_videoFileDecodedFrames.front());
+    m_videoFileDecodedFrames.pop_front();
+    m_videoFileDecodedFramesNotFull.wakeAll();
+    return true;
+}
+
+CameraVideoFileDecoder::DebugStats CameraWorker::videoFileDecoderStatsSnapshot() const
+{
+    if (m_settings.isStreamCamera())
+    {
+        QMutexLocker locker(&m_videoFileDecodeStatsMutex);
+        return m_videoFileDecodeStatsSnapshot;
+    }
+
+    return m_videoFileDecoder ? m_videoFileDecoder->debugStats() : CameraVideoFileDecoder::DebugStats();
+}
+
+bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
+{
+    DecodedVideoFileFrame decodedFrame;
+    if (!takeDecodedVideoFileFrame(decodedFrame)) {
+        return false;
+    }
+
+    if (!decodedFrame.m_errorMessage.isEmpty())
+    {
+        reportErrorToFeature(
+            QStringLiteral("videoFileDecode:%1").arg(m_settings.ffmpegMediaSourcePath()),
+            tr("Stream decode failed"),
+            decodedFrame.m_errorMessage);
+        setVideoFilePlaying(false);
+        return true;
+    }
+
+    if (decodedFrame.m_eof || decodedFrame.m_image.isNull())
+    {
+        setVideoFilePlaying(false);
+        return true;
+    }
+
+    qint64 positionMs = decodedFrame.m_positionMs;
+    if (positionMs >= 0)
+    {
+        if (m_videoFileLastFramePtsMs >= 0)
+        {
+            const qint64 frameIntervalMs = videoFileFrameIntervalMs();
+            const qint64 positionDeltaMs = positionMs - m_videoFileLastFramePtsMs;
+            if ((positionDeltaMs <= 0) || (positionDeltaMs > frameIntervalMs * 3)) {
+                positionMs = m_videoFileLastFramePtsMs + frameIntervalMs;
+            }
+        }
+        m_videoFilePositionMs = positionMs;
+    }
+    else
+    {
+        m_videoFilePositionMs += videoFileFrameIntervalMs();
+    }
+
+    m_videoFileLastDecodeMs = 0;
+    m_videoFileLastFramePtsMs = m_videoFilePositionMs;
+    if (m_videoFilePlaybackBasePositionMs < 0)
+    {
+        m_videoFilePlaybackBasePositionMs = m_videoFilePositionMs;
+        if (!m_videoFilePlaybackClock.isValid()) {
+            m_videoFilePlaybackClock.start();
+        } else {
+            m_videoFilePlaybackClock.restart();
+        }
+    }
+
+    qint64 videoLateMs = videoFilePlaybackClockMs() - m_videoFilePositionMs;
+    if (std::abs(videoLateMs) > 150)
+    {
+        m_videoFilePlaybackBasePositionMs = m_videoFilePositionMs;
+        if (!m_videoFilePlaybackClock.isValid()) {
+            m_videoFilePlaybackClock.start();
+        } else {
+            m_videoFilePlaybackClock.restart();
+        }
+        m_videoFilePlaybackTick = 1;
+        videoLateMs = 0;
+    }
+    m_videoFileStatsVideoLateMsTotal += videoLateMs;
+    m_videoFileStatsVideoLateMsMax = std::max(m_videoFileStatsVideoLateMsMax, videoLateMs);
+
+    if (submitAudio && !decodedFrame.m_pcmS16Stereo.isEmpty()) {
+        submitVideoFileAudio(decodedFrame.m_pcmS16Stereo, decodedFrame.m_audioSampleRate);
+    }
+
+    updateVideoFilePlaybackStats(
+        decodedFrame.m_decodeMs,
+        m_videoFilePositionMs,
+        decodedFrame.m_pcmS16Stereo.size());
+
+    if (m_framePreprocessor)
+    {
+        CameraPipelineFramePtr frame(new CameraPipelineFrame);
+        frame->m_image = decodedFrame.m_image;
+        populateFrameExposureMetadata(*frame);
+        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
+        frame->m_playbackPositionMs = m_videoFilePositionMs;
+        frame->m_playbackFrameRate = qMax(1.0, m_videoFileFrameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);
+        submitVideoFileFrame(frame, submitAudio);
+    }
+
+    reportVideoFilePlaybackToGUI();
+    return true;
+}
+
 void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs)
 {
     if (!m_capturing || !m_settings.isFfmpegMediaSource() || !m_videoFileDecoder) {
+        return;
+    }
+
+    if (m_settings.isStreamCamera() && (minimumPositionMs < 0))
+    {
+        readQueuedVideoFileFrame(submitAudio);
         return;
     }
 
@@ -1752,9 +2007,7 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         populateFrameExposureMetadata(*frame);
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackPositionMs = m_videoFilePositionMs;
-        frame->m_playbackFrameRate = m_videoFileDecoder
-            ? qMax(1.0, m_videoFileDecoder->frameRate()) * qMax(0.1, m_settings.m_videoPlaybackRate)
-            : 0.0;
+        frame->m_playbackFrameRate = qMax(1.0, m_videoFileFrameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);
         submitVideoFileFrame(frame, submitAudio && (minimumPositionMs < 0));
     }
 
@@ -1769,7 +2022,7 @@ void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audi
     }
 
     QByteArray monitorAudio = pcmS16Stereo;
-    if (m_videoFileDecoder)
+    if (m_videoFileDecoder && !m_settings.isStreamCamera())
     {
         const uint32_t currentFill = m_qtAudio.monitorAudioFill();
         const int targetFillFrames = m_qtAudio.monitorTargetFillFrames(audioSampleRate);
@@ -1793,7 +2046,7 @@ void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audi
 
 void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
 {
-    if (!m_videoFileDecoder) {
+    if (!m_videoFileDecoder || m_settings.isStreamCamera()) {
         return;
     }
 
@@ -1836,7 +2089,7 @@ int CameraWorker::videoFileFrameIntervalMs() const
 
 double CameraWorker::videoFileExactFrameIntervalMs() const
 {
-    const double decoderFps = m_videoFileDecoder ? m_videoFileDecoder->frameRate() : m_settings.m_framesPerSecond;
+    const double decoderFps = m_videoFileDecoder ? m_videoFileFrameRate : m_settings.m_framesPerSecond;
     return 1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings.m_videoPlaybackRate));
 }
 
@@ -1937,12 +2190,13 @@ void CameraWorker::resetVideoFilePlaybackStats()
     m_videoFileStatsDroppedPipelineFrames = 0;
     m_videoFileStatsVideoLateMsTotal = 0;
     m_videoFileStatsVideoLateMsMax = 0;
+    m_videoFileDecodeDroppedFrames.store(0);
     m_videoFileStatsLastDroppedAudioFrames = m_qtAudio.monitorDroppedFrames();
     m_videoFileStatsLastAudioUnderflows = m_qtAudio.monitorUnderflows();
 
     if (m_videoFileDecoder)
     {
-        const CameraVideoFileDecoder::DebugStats& stats = m_videoFileDecoder->debugStats();
+        const CameraVideoFileDecoder::DebugStats stats = videoFileDecoderStatsSnapshot();
         m_videoFileStatsLastDecoderReadAheadCalls = stats.m_readAheadCalls;
         m_videoFileStatsLastDecoderReadAheadPackets = stats.m_readAheadPackets;
         m_videoFileStatsLastDecoderReadAheadVideoPackets = stats.m_readAheadVideoPackets;
@@ -2058,13 +2312,33 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     const quint64 droppedAudioDelta = droppedAudioFrames - m_videoFileStatsLastDroppedAudioFrames;
     const quint64 audioUnderflows = m_qtAudio.monitorUnderflows();
     const quint64 audioUnderflowDelta = audioUnderflows - m_videoFileStatsLastAudioUnderflows;
-    const int pendingFrames = m_videoFileDecoder ? m_videoFileDecoder->pendingVideoFrameCount() : 0;
-    const int pendingPackets = m_videoFileDecoder ? m_videoFileDecoder->pendingVideoPacketCount() : 0;
-    const qint64 audioLeadMs = m_videoFileDecoder
-        ? m_videoFileDecoder->audioDecodedPositionMs() - m_videoFilePositionMs
-        : 0;
+    const quint64 droppedDecodeQueueFrames = m_videoFileDecodeDroppedFrames.exchange(0);
+    int pendingFrames = 0;
+    int pendingPackets = 0;
+    qint64 audioLeadMs = 0;
+    int pendingAudioBytes = 0;
+    if (m_videoFileDecoder)
+    {
+        if (m_settings.isStreamCamera())
+        {
+            QMutexLocker queueLocker(&m_videoFileDecodedFramesMutex);
+            pendingFrames = static_cast<int>(m_videoFileDecodedFrames.size());
+            queueLocker.unlock();
+            QMutexLocker statsLocker(&m_videoFileDecodeStatsMutex);
+            pendingFrames += m_videoFileDecodePendingVideoFrames;
+            pendingPackets = m_videoFileDecodePendingVideoPackets;
+            pendingAudioBytes = m_videoFileDecodePendingAudioBytes;
+            audioLeadMs = m_videoFileDecodeAudioPositionMs - m_videoFilePositionMs;
+        }
+        else
+        {
+            pendingFrames = m_videoFileDecoder->pendingVideoFrameCount();
+            pendingPackets = m_videoFileDecoder->pendingVideoPacketCount();
+            audioLeadMs = m_videoFileDecoder->audioDecodedPositionMs() - m_videoFilePositionMs;
+            pendingAudioBytes = m_videoFileDecoder->pendingAudioBytes();
+        }
+    }
     const qint64 playbackClockMs = videoFilePlaybackClockMs();
-    const int pendingAudioBytes = m_videoFileDecoder ? m_videoFileDecoder->pendingAudioBytes() : 0;
 
     quint64 readAheadCalls = 0;
     quint64 readAheadPackets = 0;
@@ -2093,7 +2367,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
     qint64 convertMaxMs = 0;
     if (m_videoFileDecoder)
     {
-        const CameraVideoFileDecoder::DebugStats& stats = m_videoFileDecoder->debugStats();
+        const CameraVideoFileDecoder::DebugStats stats = videoFileDecoderStatsSnapshot();
         readAheadCalls = stats.m_readAheadCalls - m_videoFileStatsLastDecoderReadAheadCalls;
         readAheadPackets = stats.m_readAheadPackets - m_videoFileStatsLastDecoderReadAheadPackets;
         readAheadVideoPackets = stats.m_readAheadVideoPackets - m_videoFileStatsLastDecoderReadAheadVideoPackets;
@@ -2152,7 +2426,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "frames" << m_videoFileStatsFrames
              << "timerMs" << videoFileFrameIntervalMs()
              << "timerExactMs" << videoFileExactFrameIntervalMs()
-             << "fps" << (m_videoFileDecoder ? m_videoFileDecoder->frameRate() : 0.0)
+             << "fps" << (m_videoFileDecoder ? m_videoFileFrameRate : 0.0)
              << "rate" << m_settings.m_videoPlaybackRate
              << "decodeAvgMs" << avgDecodeMs
              << "decodeMaxMs" << m_videoFileStatsDecodeMsMax
@@ -2165,6 +2439,7 @@ void CameraWorker::maybeReportVideoFilePlaybackStats()
              << "videoLateAvgMs" << avgVideoLateMs
              << "videoLateMaxMs" << m_videoFileStatsVideoLateMsMax
              << "droppedLateVideoFrames" << m_videoFileStatsDroppedLateFrames
+             << "droppedDecodeQueueFrames" << droppedDecodeQueueFrames
              << "droppedPipelineVideoFrames" << m_videoFileStatsDroppedPipelineFrames
              << "playbackClockMs" << playbackClockMs
              << "audioBytes" << m_videoFileStatsAudioBytes

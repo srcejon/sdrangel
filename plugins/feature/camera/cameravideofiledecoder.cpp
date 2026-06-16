@@ -200,7 +200,13 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     }
 
     QString audioError;
-    if (!openAudioDecoder(audioError)) {
+    if (!openAudioDecoder(audioError))
+    {
+        if (audioError.contains(QStringLiteral("no audio stream"), Qt::CaseInsensitive)) {
+            qDebug() << "CameraVideoFileDecoder:" << audioError;
+        } else {
+            qWarning() << "CameraVideoFileDecoder: audio decoder unavailable:" << audioError;
+        }
         closeAudioDecoder();
     }
 

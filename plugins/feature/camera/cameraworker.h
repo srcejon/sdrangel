@@ -28,8 +28,13 @@
 #include <QDateTime>
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QMutex>
 #include <QRecursiveMutex>
+#include <QWaitCondition>
+#include <atomic>
+#include <deque>
 #include <memory>
+#include <thread>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -46,6 +51,7 @@
 #include "camerapipelineframe.h"
 #include "cameraqtaudiocontroller.h"
 #include "camerasettings.h"
+#include "cameravideofiledecoder.h"
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -53,7 +59,6 @@ class QUrl;
 class CameraPostProcessor;
 class CameraFramePreprocessor;
 class CameraFinder;
-class CameraVideoFileDecoder;
 
 class CameraWorker : public QObject
 {
@@ -623,6 +628,7 @@ private:
     quint64 m_captureEpoch;
     QTimer m_captureTimer;
     std::unique_ptr<CameraVideoFileDecoder> m_videoFileDecoder;
+    double m_videoFileFrameRate = 25.0;
     qint64 m_videoFilePositionMs;
     qint64 m_videoFileDurationMs;
     bool m_videoFilePlaying;
@@ -642,6 +648,30 @@ private:
     QTimer m_videoFileDelayedSubmitTimer;
     QElapsedTimer m_videoFileDelayedSubmitClock;
     QVector<DelayedVideoFileFrame> m_delayedVideoFileFrames;
+    struct DecodedVideoFileFrame
+    {
+        QImage m_image;
+        qint64 m_positionMs = -1;
+        QByteArray m_pcmS16Stereo;
+        int m_audioSampleRate = 0;
+        qint64 m_decodeMs = 0;
+        bool m_eof = false;
+        QString m_errorMessage;
+    };
+    std::thread m_videoFileDecodeThread;
+    std::atomic_bool m_videoFileDecodeThreadStop { false };
+    std::atomic<quint64> m_videoFileDecodeDroppedFrames { 0 };
+    mutable QMutex m_videoFileDecodedFramesMutex;
+    QWaitCondition m_videoFileDecodedFramesAvailable;
+    QWaitCondition m_videoFileDecodedFramesNotFull;
+    std::deque<DecodedVideoFileFrame> m_videoFileDecodedFrames;
+    CameraVideoFileDecoder::DebugStats m_videoFileDecodeStatsSnapshot;
+    mutable QMutex m_videoFileDecodeStatsMutex;
+    qint64 m_videoFileDecodeAudioPositionMs = -1;
+    int m_videoFileDecodePendingAudioBytes = 0;
+    int m_videoFileDecodePendingVideoFrames = 0;
+    int m_videoFileDecodePendingVideoPackets = 0;
+    static constexpr size_t m_maxDecodedStreamFrames = 4;
     QElapsedTimer m_videoFileStatsTimer;
     QElapsedTimer m_videoFileTickTimer;
     quint64 m_videoFileStatsFrames = 0;
@@ -753,6 +783,13 @@ private:
     void clearDelayedVideoFileFrames();
     void scheduleDelayedVideoFileFrameSubmit();
     void releaseDelayedVideoFileFrames();
+    void startVideoFileDecodeThread();
+    void stopVideoFileDecodeThread();
+    void clearDecodedVideoFileFrames();
+    void queueDecodedVideoFileFrame(DecodedVideoFileFrame&& frame);
+    bool takeDecodedVideoFileFrame(DecodedVideoFileFrame& frame);
+    bool readQueuedVideoFileFrame(bool submitAudio);
+    CameraVideoFileDecoder::DebugStats videoFileDecoderStatsSnapshot() const;
     void submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
     void readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
     void seekVideoFile(qint64 positionMs, bool displayFrame);

@@ -103,7 +103,9 @@ private:
     static constexpr size_t m_maxPendingVideoFrames = 3;
     static constexpr size_t m_maxPendingStreamVideoFrames = 24;
     static constexpr size_t m_maxPendingVideoPackets = 30;
-    static constexpr size_t m_maxPendingStreamVideoPackets = 8;
+    // Stream audio read-ahead targets about a second of audio; allow enough
+    // parked interleaved video packets to reach that without starving audio.
+    static constexpr size_t m_maxPendingStreamVideoPackets = 32;
 
     AVFormatContext *m_formatContext = nullptr;
     AVCodecContext *m_videoCodecContext = nullptr;

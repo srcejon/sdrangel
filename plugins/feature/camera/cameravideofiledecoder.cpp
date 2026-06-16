@@ -901,10 +901,12 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     };
 
     const size_t maxPendingVideoPackets = m_urlSource ? m_maxPendingStreamVideoPackets : m_maxPendingVideoPackets;
+    const size_t maxPendingVideoFrames = m_urlSource ? m_maxPendingStreamVideoFrames : m_maxPendingVideoFrames;
     while (needsAudio()
         && !m_eof
         && (packetsRead < maxPacketsRead)
-        && (m_pendingVideoPackets.size() < maxPendingVideoPackets))
+        && (m_pendingVideoPackets.size() < maxPendingVideoPackets)
+        && (!m_urlSource || (m_pendingVideoFrames.size() < maxPendingVideoFrames)))
     {
         int ret = av_read_frame(m_formatContext, m_packet);
         if (ret < 0)
@@ -967,6 +969,20 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         {
             ++m_debugStats.m_inputVideoPackets;
             ++m_debugStats.m_readAheadVideoPackets;
+
+            if (m_urlSource)
+            {
+                const bool sent = sendVideoPacket(m_packet, errorMessage);
+                av_packet_unref(m_packet);
+                if (!sent) {
+                    return false;
+                }
+                if (!queueOneDecodedVideoFrame(errorMessage)) {
+                    return false;
+                }
+                return true;
+            }
+
             AVPacket *parkedPacket = av_packet_clone(m_packet);
             av_packet_unref(m_packet);
             if (!parkedPacket)

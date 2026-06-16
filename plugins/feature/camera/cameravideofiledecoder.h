@@ -101,11 +101,11 @@ private:
     };
 
     static constexpr size_t m_maxPendingVideoFrames = 3;
-    static constexpr size_t m_maxPendingStreamVideoFrames = 24;
+    static constexpr size_t m_maxPendingStreamVideoFrames = 4;
     static constexpr size_t m_maxPendingVideoPackets = 30;
     // Keep a modest packet cushion for live streams; the monitor FIFO provides
     // the main audio jitter buffer, so excessive packet parking makes video lag.
-    static constexpr size_t m_maxPendingStreamVideoPackets = 16;
+    static constexpr size_t m_maxPendingStreamVideoPackets = 4;
 
     AVFormatContext *m_formatContext = nullptr;
     AVCodecContext *m_videoCodecContext = nullptr;

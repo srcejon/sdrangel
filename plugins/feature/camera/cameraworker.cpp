@@ -1627,7 +1627,9 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     int droppedLateFrames = 0;
     static constexpr int maxLateDropFrames = 1;
     static constexpr qint64 maxLateDropDecodeMs = 80;
-    static constexpr qint64 liveFrameLateThresholdMs = 1000;
+    // Live FLV/HTTP streams can report short timestamp discontinuities after
+    // packet loss; avoid compounding those with aggressive catch-up drops.
+    static constexpr qint64 liveFrameLateThresholdMs = 3000;
     for (;;)
     {
         image = QImage();

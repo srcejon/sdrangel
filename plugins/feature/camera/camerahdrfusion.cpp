@@ -66,9 +66,32 @@ bool CameraHdrFusion::mergeMertensCudaRgb(
         return false;
     }
 
+    cv::cuda::GpuMat tonemappedRgbGpu;
+    if (!mergeMertensCudaRgb(rgbFrames, tonemappedRgbGpu, stream, laplacianFilter, errorMessage)) {
+        return false;
+    }
+
+    tonemappedRgbGpu.download(tonemappedRgb, stream);
+    stream.waitForCompletion();
+    return !tonemappedRgb.empty() && (tonemappedRgb.type() == CV_32FC3);
+}
+
+bool CameraHdrFusion::mergeMertensCudaRgb(
+    const std::vector<cv::Mat>& rgbFrames,
+    cv::cuda::GpuMat& tonemappedRgbGpu,
+    cv::cuda::Stream& stream,
+    cv::Ptr<cv::cuda::Filter>& laplacianFilter,
+    QString *errorMessage)
+{
+    tonemappedRgbGpu.release();
+    if (rgbFrames.empty())
+    {
+        setError(errorMessage, QStringLiteral("No HDR frames supplied"));
+        return false;
+    }
+
     std::vector<cv::cuda::GpuMat> rgbFramesGpu;
     rgbFramesGpu.reserve(rgbFrames.size());
-
     for (const cv::Mat& frame : rgbFrames)
     {
         if (frame.empty())
@@ -82,7 +105,7 @@ bool CameraHdrFusion::mergeMertensCudaRgb(
         rgbFramesGpu.push_back(uploadedGpu);
     }
 
-    return mergeMertensCudaRgb(rgbFramesGpu, tonemappedRgb, stream, laplacianFilter, errorMessage);
+    return mergeMertensCudaRgb(rgbFramesGpu, tonemappedRgbGpu, stream, laplacianFilter, errorMessage);
 }
 
 bool CameraHdrFusion::mergeMertensCudaRgb(
@@ -93,6 +116,24 @@ bool CameraHdrFusion::mergeMertensCudaRgb(
     QString *errorMessage)
 {
     tonemappedRgb.release();
+    cv::cuda::GpuMat tonemappedRgbGpu;
+    if (!mergeMertensCudaRgb(rgbFramesGpu, tonemappedRgbGpu, stream, laplacianFilter, errorMessage)) {
+        return false;
+    }
+
+    tonemappedRgbGpu.download(tonemappedRgb, stream);
+    stream.waitForCompletion();
+    return !tonemappedRgb.empty() && (tonemappedRgb.type() == CV_32FC3);
+}
+
+bool CameraHdrFusion::mergeMertensCudaRgb(
+    const std::vector<cv::cuda::GpuMat>& rgbFramesGpu,
+    cv::cuda::GpuMat& tonemappedRgbGpu,
+    cv::cuda::Stream& stream,
+    cv::Ptr<cv::cuda::Filter>& laplacianFilter,
+    QString *errorMessage)
+{
+    tonemappedRgbGpu.release();
     if (rgbFramesGpu.empty())
     {
         setError(errorMessage, QStringLiteral("No HDR frames supplied"));
@@ -263,9 +304,8 @@ bool CameraHdrFusion::mergeMertensCudaRgb(
             cv::cuda::add(outputGpu, fusedPyramid[static_cast<size_t>(level)], outputGpu, cv::noArray(), -1, stream);
         }
 
-        outputGpu.download(tonemappedRgb, stream);
-        stream.waitForCompletion();
-        return !tonemappedRgb.empty() && (tonemappedRgb.type() == CV_32FC3);
+        outputGpu.copyTo(tonemappedRgbGpu, stream);
+        return !tonemappedRgbGpu.empty() && (tonemappedRgbGpu.type() == CV_32FC3);
     }
     catch (const cv::Exception& error)
     {

@@ -41,8 +41,20 @@ public:
         cv::Ptr<cv::cuda::Filter>& laplacianFilter,
         QString *errorMessage = nullptr);
     static bool mergeMertensCudaRgb(
+        const std::vector<cv::Mat>& rgbFrames,
+        cv::cuda::GpuMat& tonemappedRgbGpu,
+        cv::cuda::Stream& stream,
+        cv::Ptr<cv::cuda::Filter>& laplacianFilter,
+        QString *errorMessage = nullptr);
+    static bool mergeMertensCudaRgb(
         const std::vector<cv::cuda::GpuMat>& rgbFramesGpu,
         cv::Mat& tonemappedRgb,
+        cv::cuda::Stream& stream,
+        cv::Ptr<cv::cuda::Filter>& laplacianFilter,
+        QString *errorMessage = nullptr);
+    static bool mergeMertensCudaRgb(
+        const std::vector<cv::cuda::GpuMat>& rgbFramesGpu,
+        cv::cuda::GpuMat& tonemappedRgbGpu,
         cv::cuda::Stream& stream,
         cv::Ptr<cv::cuda::Filter>& laplacianFilter,
         QString *errorMessage = nullptr);

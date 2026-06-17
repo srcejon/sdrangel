@@ -132,7 +132,9 @@ private:
     void subtractFromCudaAccumulator(const cv::Mat& frameMat);
     bool rebuildCudaAverageAccumulator();
     [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* frameGpu, cv::cuda::GpuMat& outputRgbGpu);
-    [[nodiscard]] bool applyMertensFusionCuda(const std::vector<const HdrFrameSample *>& sortedSamples, cv::Mat& tonemappedRgb);
+    [[nodiscard]] bool applyMertensFusionCuda(const std::vector<const HdrFrameSample *>& sortedSamples, cv::cuda::GpuMat& tonemappedRgbGpu);
+    void setCudaBgrOutputFromRgbGpu(CameraPipelineFrame& inputFrame, const cv::cuda::GpuMat& rgbGpu, int outputDepth = CV_8U);
+    bool setCudaBgrOutputFromRgbMat(CameraPipelineFrame& inputFrame, const cv::Mat& rgbMat);
 #endif
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);

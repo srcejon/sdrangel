@@ -271,8 +271,9 @@ bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const
     return false;
 }
 
-bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrameSample *>& sortedSamples, cv::Mat& tonemappedRgb)
+bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrameSample *>& sortedSamples, cv::cuda::GpuMat& tonemappedRgbGpu)
 {
+    tonemappedRgbGpu.release();
     if (!canUseCudaStacking() || sortedSamples.empty()) {
         return false;
     }
@@ -303,10 +304,10 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
     const bool success =
 #if defined(CAMERA_OPENCV_CUDA_STACKING)
         allFramesHaveGpu
-            ? CameraHdrFusion::mergeMertensCudaRgb(rgbFramesGpu, tonemappedRgb, m_cudaStackingStream, m_cudaHdrLaplacianFilter, &errorMessage)
+            ? CameraHdrFusion::mergeMertensCudaRgb(rgbFramesGpu, tonemappedRgbGpu, m_cudaStackingStream, m_cudaHdrLaplacianFilter, &errorMessage)
             :
 #endif
-            CameraHdrFusion::mergeMertensCudaRgb(rgbFrames, tonemappedRgb, m_cudaStackingStream, m_cudaHdrLaplacianFilter, &errorMessage);
+            CameraHdrFusion::mergeMertensCudaRgb(rgbFrames, tonemappedRgbGpu, m_cudaStackingStream, m_cudaHdrLaplacianFilter, &errorMessage);
     if (!success)
     {
         if (!errorMessage.isEmpty()) {
@@ -316,6 +317,34 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
     }
 
     return true;
+}
+
+void CameraFrameStacker::setCudaBgrOutputFromRgbGpu(CameraPipelineFrame& inputFrame, const cv::cuda::GpuMat& rgbGpu, int outputDepth)
+{
+    cv::cuda::GpuMat rgbOutputGpu;
+    if (rgbGpu.depth() == outputDepth) {
+        rgbOutputGpu = rgbGpu;
+    } else {
+        const double scale = ((rgbGpu.depth() == CV_32F) && (outputDepth == CV_8U)) ? 255.0 : 1.0;
+        rgbGpu.convertTo(rgbOutputGpu, CV_MAKETYPE(outputDepth, rgbGpu.channels()), scale, 0.0, m_cudaStackingStream);
+    }
+
+    cv::cuda::cvtColor(rgbOutputGpu, inputFrame.m_cudaBgrImage, cv::COLOR_RGB2BGR, 0, m_cudaStackingStream);
+    inputFrame.m_cudaGrayImage.release();
+    inputFrame.clearCpuImage();
+}
+
+bool CameraFrameStacker::setCudaBgrOutputFromRgbMat(CameraPipelineFrame& inputFrame, const cv::Mat& rgbMat)
+{
+    if (rgbMat.empty() || (rgbMat.channels() != 3)) {
+        return false;
+    }
+
+    cv::cuda::GpuMat rgbGpu;
+    rgbGpu.upload(rgbMat, m_cudaStackingStream);
+    setCudaBgrOutputFromRgbGpu(inputFrame, rgbGpu, rgbMat.depth());
+    m_cudaStackingStream.waitForCompletion();
+    return inputFrame.hasCudaBgrImage();
 }
 #endif
 
@@ -1298,10 +1327,45 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
             if (m_settings.m_stackHdrAlgorithm == CameraSettings::StackHdrAlgorithmMertens)
             {
 #ifdef CAMERA_OPENCV_CUDA_STACKING
-                if (useCudaStacking && applyMertensFusionCuda(sortedSamples, tonemapped))
+                cv::cuda::GpuMat tonemappedGpu;
+                if (useCudaStacking && applyMertensFusionCuda(sortedSamples, tonemappedGpu))
                 {
                     hdrCudaUsed = true;
                     hdrMergeMs = elapsedSince(previousHdrMs);
+
+                    if (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked)
+                    {
+                        const int completedHdrFrameCount = static_cast<int>(m_hdrFrameSamples.size());
+                        setCudaBgrOutputFromRgbGpu(inputFrame, tonemappedGpu, CV_8U);
+                        m_cudaStackingStream.waitForCompletion();
+                        outputImage = QImage();
+                        stackCount = completedHdrFrameCount;
+                        m_hdrFrameSamples.clear();
+                        m_lastStackedImage = QImage();
+                        hdrOutputMs = elapsedSince(previousHdrMs);
+
+                        qDebug() << "CameraFrameStacker: HDR processing timing"
+                                 << "algorithm" << m_settings.m_stackHdrAlgorithm
+                                 << "frames" << completedHdrFrameCount
+                                 << "size" << frameMat.cols << "x" << frameMat.rows
+                                 << "inputDepth" << frameMat.depth()
+                                 << "cudaAvailable" << useCudaStacking
+                                 << "cudaUsed" << hdrCudaUsed
+                                 << "sortMs" << hdrSortMs
+                                 << "prepareMs" << hdrPrepareMs
+                                 << "mergeMs" << hdrMergeMs
+                                 << "tonemapMs" << hdrTonemapMs
+                                 << "validateMs" << hdrValidateMs
+                                 << "fallbackMs" << hdrFallbackMs
+                                 << "outputMs" << hdrOutputMs
+                                 << "totalMs" << hdrTimer.elapsed()
+                                 << "fallback" << hdrFallback;
+                        PROFILER_STOP(__FUNCTION__);
+                        return true;
+                    }
+
+                    tonemappedGpu.download(tonemapped, m_cudaStackingStream);
+                    m_cudaStackingStream.waitForCompletion();
                 }
                 else
 #endif
@@ -1385,6 +1449,37 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 
             cv::Mat ldr8u;
             tonemapped.convertTo(ldr8u, CV_8UC3, 255.0);
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+            if (useCudaStacking
+                && (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked)
+                && setCudaBgrOutputFromRgbMat(inputFrame, ldr8u))
+            {
+                outputImage = QImage();
+                stackCount = static_cast<int>(m_hdrFrameSamples.size());
+                m_lastStackedImage = QImage();
+                hdrOutputMs = elapsedSince(previousHdrMs);
+
+                qDebug() << "CameraFrameStacker: HDR processing timing"
+                         << "algorithm" << m_settings.m_stackHdrAlgorithm
+                         << "frames" << static_cast<int>(m_hdrFrameSamples.size())
+                         << "size" << frameMat.cols << "x" << frameMat.rows
+                         << "inputDepth" << frameMat.depth()
+                         << "cudaAvailable" << useCudaStacking
+                         << "cudaUsed" << hdrCudaUsed
+                         << "sortMs" << hdrSortMs
+                         << "prepareMs" << hdrPrepareMs
+                         << "mergeMs" << hdrMergeMs
+                         << "tonemapMs" << hdrTonemapMs
+                         << "validateMs" << hdrValidateMs
+                         << "fallbackMs" << hdrFallbackMs
+                         << "outputMs" << hdrOutputMs
+                         << "totalMs" << hdrTimer.elapsed()
+                         << "fallback" << hdrFallback;
+                m_hdrFrameSamples.clear();
+                PROFILER_STOP(__FUNCTION__);
+                return true;
+            }
+#endif
             outputImage = workingMatToImage(ldr8u);
             hdrOutputMs = elapsedSince(previousHdrMs);
 
@@ -1527,6 +1622,19 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         const int outputType = (alignedFrameMat.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
         averagedFloat.convertTo(averagedOutput, outputType);
 
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+        if (useCudaStacking
+            && (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked)
+            && setCudaBgrOutputFromRgbMat(inputFrame, averagedOutput))
+        {
+            m_lastStackedImage = QImage();
+            outputImage = QImage();
+            stackCount = static_cast<int>(selectedIndices.size());
+            PROFILER_STOP(__FUNCTION__);
+            return true;
+        }
+#endif
+
         const QImage stackedImage = workingMatToImage(averagedOutput);
         m_lastStackedImage = stackedImage;
         if (!renderStackDisplayImage(stackedImage, outputImage)) {
@@ -1600,6 +1708,19 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         cv::Mat averagedOutput;
         const int outputType = (alignedFrameMat.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
         averagedFloat.convertTo(averagedOutput, outputType);
+
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+        if (useCudaStacking
+            && (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked)
+            && setCudaBgrOutputFromRgbMat(inputFrame, averagedOutput))
+        {
+            m_lastStackedImage = QImage();
+            outputImage = QImage();
+            stackCount = static_cast<int>(m_stackFrameHistory.size());
+            PROFILER_STOP(__FUNCTION__);
+            return true;
+        }
+#endif
 
         const QImage stackedImage = workingMatToImage(averagedOutput);
         m_lastStackedImage = stackedImage;
@@ -1758,6 +1879,21 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         });
 
     PROFILER_STOP(__FUNCTION__);
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    if (useCudaStacking && (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked))
+    {
+        cv::Mat stackedRgbMat(stackedImage.height(), stackedImage.width(), CV_8UC3,
+                              stackedImage.bits(),
+                              static_cast<size_t>(stackedImage.bytesPerLine()));
+        if (setCudaBgrOutputFromRgbMat(inputFrame, stackedRgbMat))
+        {
+            m_lastStackedImage = QImage();
+            outputImage = QImage();
+            stackCount = static_cast<int>(m_stackFrameHistory.size());
+            return true;
+        }
+    }
+#endif
     m_lastStackedImage = stackedImage;
     if (!renderStackDisplayImage(stackedImage, outputImage)) {
         outputImage = stackedImage;

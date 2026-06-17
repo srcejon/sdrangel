@@ -1363,8 +1363,8 @@ void CameraWorker::captureTick()
 
     if (m_settings.isFfmpegMediaSource())
     {
-        const bool frameRead = readVideoFileFrame();
-        if (m_capturing && m_videoFilePlaying && (!m_settings.isStreamCamera() || !frameRead)) {
+        readVideoFileFrame();
+        if (m_capturing && m_videoFilePlaying && !m_settings.isStreamCamera()) {
             scheduleNextVideoFileTick();
         }
         return;
@@ -1488,7 +1488,11 @@ void CameraWorker::setVideoFilePlaying(bool playing)
         }
         m_captureTimer.setSingleShot(true);
         resetVideoFilePlaybackSchedule();
-        scheduleNextVideoFileTick();
+        if (m_settings.isStreamCamera()) {
+            m_captureTimer.stop();
+        } else {
+            scheduleNextVideoFileTick();
+        }
     }
     else
     {

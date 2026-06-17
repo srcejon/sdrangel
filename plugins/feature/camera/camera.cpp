@@ -694,6 +694,7 @@ int Camera::webapiActionsPost(
             std::unique_ptr<QJsonObject> saveImageJson(saveImage->asJsonObject());
             const bool hasRecordRawFits = saveImageJson && saveImageJson->contains("recordRawFits");
             const bool hasRecordCalibratedMedia = saveImageJson && saveImageJson->contains("recordCalibratedMedia");
+            const bool hasRecordFilteredMedia = saveImageJson && saveImageJson->contains("recordFilteredMedia");
             const bool hasRecordPostProcessedMedia = saveImageJson && saveImageJson->contains("recordPostProcessedMedia");
             const bool hasImages = saveImageJson && saveImageJson->contains("images");
 
@@ -710,6 +711,10 @@ int Camera::webapiActionsPost(
             if (hasRecordCalibratedMedia) {
                 settings.m_recordCalibratedMedia = saveImage->getRecordCalibratedMedia() != 0;
                 addSettingsKey("recordCalibratedMedia");
+            }
+            if (hasRecordFilteredMedia) {
+                settings.m_recordFilteredMedia = saveImage->getRecordFilteredMedia() != 0;
+                addSettingsKey("recordFilteredMedia");
             }
             if (hasRecordPostProcessedMedia) {
                 settings.m_recordPostProcessedMedia = saveImage->getRecordPostProcessedMedia() != 0;
@@ -743,6 +748,7 @@ int Camera::webapiActionsPost(
             // Same isSet-via-JSON pattern as saveImage above — see the comment there.
             std::unique_ptr<QJsonObject> recordVideoJson(recordVideo->asJsonObject());
             const bool hasRecordCalibratedMedia = recordVideoJson && recordVideoJson->contains("recordCalibratedMedia");
+            const bool hasRecordFilteredMedia = recordVideoJson && recordVideoJson->contains("recordFilteredMedia");
             const bool hasRecordPostProcessedMedia = recordVideoJson && recordVideoJson->contains("recordPostProcessedMedia");
             const bool hasDuration = recordVideoJson && recordVideoJson->contains("duration");
 
@@ -755,6 +761,10 @@ int Camera::webapiActionsPost(
             if (hasRecordCalibratedMedia) {
                 settings.m_recordCalibratedMedia = recordVideo->getRecordCalibratedMedia() != 0;
                 addSettingsKey("recordCalibratedMedia");
+            }
+            if (hasRecordFilteredMedia) {
+                settings.m_recordFilteredMedia = recordVideo->getRecordFilteredMedia() != 0;
+                addSettingsKey("recordFilteredMedia");
             }
             if (hasRecordPostProcessedMedia) {
                 settings.m_recordPostProcessedMedia = recordVideo->getRecordPostProcessedMedia() != 0;
@@ -883,18 +893,42 @@ void Camera::webapiFormatFeatureSettings(
     swg->setImageFileName(new QString(settings.m_imageFileName));
     swg->setSaveVideo(settings.m_saveVideo ? 1 : 0);
     swg->setVideoFileCameraPath(new QString(settings.m_videoFileCameraPath));
+    swg->setStreamUrl(new QString(settings.m_streamUrl));
+    auto *streamUrlHistory = new QList<QString*>();
+    for (const QString& url : settings.m_streamUrlHistory) {
+        streamUrlHistory->append(new QString(url));
+    }
+    swg->setStreamUrlHistory(streamUrlHistory);
     auto *imageFileCameraPaths = new QList<QString*>();
     for (const QString& path : settings.m_imageFileCameraPaths) {
         imageFileCameraPaths->append(new QString(path));
     }
     swg->setImageFileCameraPaths(imageFileCameraPaths);
     swg->setVideoFileName(new QString(settings.m_videoFileName));
+    swg->setVideoCodec((int) settings.m_videoCodec);
+    swg->setVideoRecordBitrateKbps(settings.m_videoRecordBitrateKbps);
     swg->setRecordRawFits(settings.m_recordRawFits ? 1 : 0);
     swg->setRecordCalibratedMedia(settings.m_recordCalibratedMedia ? 1 : 0);
+    swg->setRecordFilteredMedia(settings.m_recordFilteredMedia ? 1 : 0);
     swg->setRecordPostProcessedMedia(settings.m_recordPostProcessedMedia ? 1 : 0);
+    swg->setKeogramEnabled(settings.m_keogramEnabled ? 1 : 0);
+    swg->setKeogramFileName(new QString(settings.m_keogramFileName));
+    swg->setKeogramDirection((int) settings.m_keogramDirection);
+    swg->setKeogramDayMode((int) settings.m_keogramDayMode);
+    swg->setKeogramSamplePeriodMinutes(settings.m_keogramSamplePeriodMinutes);
+    swg->setKeogramShowPreview(settings.m_keogramShowPreview ? 1 : 0);
+    swg->setYoutubeStreamEnabled(settings.m_youtubeStreamEnabled ? 1 : 0);
+    swg->setYoutubeStreamUrl(new QString(settings.m_youtubeStreamUrl));
+    swg->setYoutubeStreamKey(new QString(settings.m_youtubeStreamKey));
+    swg->setYoutubeStreamPostProcessed(settings.m_youtubeStreamPostProcessed ? 1 : 0);
+    swg->setYoutubeStreamBitrateKbps(settings.m_youtubeStreamBitrateKbps);
+    swg->setYoutubeStreamFps(settings.m_youtubeStreamFps);
+    swg->setYoutubeStreamWidth(settings.m_youtubeStreamWidth);
+    swg->setYoutubeStreamHeight(settings.m_youtubeStreamHeight);
     swg->setVideoHwAcceleration(settings.m_videoHwAcceleration ? 1 : 0);
     swg->setVideoLoop(settings.m_videoLoop ? 1 : 0);
     swg->setVideoPlaybackRate(settings.m_videoPlaybackRate);
+    swg->setVideoPlaybackAudioOffsetMs(settings.m_videoPlaybackAudioOffsetMs);
     swg->setVideoPreRecordBufferSeconds(settings.m_videoPreRecordBufferSeconds);
     swg->setImageRecordLimit(settings.m_imageRecordLimit);
     swg->setVideoRecordLimitSeconds(settings.m_videoRecordLimitSeconds);
@@ -988,6 +1022,8 @@ void Camera::webapiFormatFeatureSettings(
     swg->setTrackObjectMinElevation(settings.m_trackObjectMinElevation);
     swg->setTrackObjectColor((qint32) settings.m_trackObjectColor.rgb());
     swg->setTrackObjectFontScale(settings.m_trackObjectFontScale);
+    swg->setTrackObjectTrails(settings.m_trackObjectTrails ? 1 : 0);
+    swg->setTrackObjectHeatMap(settings.m_trackObjectHeatMap ? 1 : 0);
     swg->setGridLabelFontFamily(new QString(settings.m_gridLabelFontFamily));
     swg->setGridLabelFontScale(settings.m_gridLabelFontScale);
     swg->setOverlayTextString(new QString(settings.m_overlayTextString));
@@ -1055,6 +1091,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setPlateSolveMatchRadius(settings.m_plateSolveMatchRadius);
     swg->setPlateSolveFinalMatchRadius(settings.m_plateSolveFinalMatchRadius);
     swg->setPlateSolveSearchRadius(settings.m_plateSolveAzElSearchRadius);
+    swg->setPlateSolveFovTolerance(settings.m_plateSolveFovTolerance);
     swg->setPlateSolveStartMode((int) settings.m_plateSolveStartMode);
     swg->setPlateSolveLabelMode((int) settings.m_plateSolveLabelMode);
     swg->setPlateSolveUseCaptureDateTime(settings.m_plateSolveUseCaptureDateTime ? 1 : 0);
@@ -1063,6 +1100,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setPlateSolveUseDownloadedCatalog(settings.m_plateSolveUseDownloadedCatalog ? 1 : 0);
     swg->setPlateSolveCatalogSource((int) settings.m_plateSolveCatalogSource);
     swg->setPlateSolveApplyMode((int) settings.m_plateSolveApplyMode);
+    swg->setStarCatalogDiskCacheSizeGb(settings.m_starCatalogDiskCacheSizeGb);
 
     // Spectrum overlay
     swg->setOverlaySpectrum(settings.m_overlaySpectrum ? 1 : 0);
@@ -1080,6 +1118,11 @@ void Camera::webapiFormatFeatureSettings(
     swg->setYoloBoxColor((qint32) settings.m_yoloBoxColor.rgb());
     swg->setYoloTileLargeImages(settings.m_yoloTileLargeImages ? 1 : 0);
     swg->setYoloTileOverlapPercent(settings.m_yoloTileOverlapPercent);
+    auto *yoloIgnoredClassNames = new QList<QString*>();
+    for (const QString& className : settings.m_yoloIgnoredClassNames) {
+        yoloIgnoredClassNames->append(new QString(className));
+    }
+    swg->setYoloIgnoredClassNames(yoloIgnoredClassNames);
     swg->setYoloDnnTarget((int) settings.m_yoloDnnTarget);
 
     // Audio (Qt camera)
@@ -1301,6 +1344,20 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("videoFileCameraPath")) {
         settings.m_videoFileCameraPath = *swg->getVideoFileCameraPath();
     }
+    if (featureSettingsKeys.contains("streamUrl")) {
+        settings.m_streamUrl = *swg->getStreamUrl();
+    }
+    if (featureSettingsKeys.contains("streamUrlHistory"))
+    {
+        settings.m_streamUrlHistory.clear();
+        if (swg->getStreamUrlHistory()) {
+            for (const QString *url : *swg->getStreamUrlHistory()) {
+                if (url) {
+                    settings.m_streamUrlHistory.append(*url);
+                }
+            }
+        }
+    }
     if (featureSettingsKeys.contains("imageFileCameraPaths"))
     {
         settings.m_imageFileCameraPaths.clear();
@@ -1315,14 +1372,65 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("videoFileName")) {
         settings.m_videoFileName = *swg->getVideoFileName();
     }
+    if (featureSettingsKeys.contains("videoCodec")) {
+        settings.m_videoCodec = (CameraSettings::VideoCodec) swg->getVideoCodec();
+    }
+    if (featureSettingsKeys.contains("videoRecordBitrateKbps")) {
+        settings.m_videoRecordBitrateKbps = swg->getVideoRecordBitrateKbps();
+    }
     if (featureSettingsKeys.contains("recordRawFits")) {
         settings.m_recordRawFits = swg->getRecordRawFits() != 0;
     }
     if (featureSettingsKeys.contains("recordCalibratedMedia")) {
         settings.m_recordCalibratedMedia = swg->getRecordCalibratedMedia() != 0;
     }
+    if (featureSettingsKeys.contains("recordFilteredMedia")) {
+        settings.m_recordFilteredMedia = swg->getRecordFilteredMedia() != 0;
+    }
     if (featureSettingsKeys.contains("recordPostProcessedMedia")) {
         settings.m_recordPostProcessedMedia = swg->getRecordPostProcessedMedia() != 0;
+    }
+    if (featureSettingsKeys.contains("keogramEnabled")) {
+        settings.m_keogramEnabled = swg->getKeogramEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("keogramFileName")) {
+        settings.m_keogramFileName = *swg->getKeogramFileName();
+    }
+    if (featureSettingsKeys.contains("keogramDirection")) {
+        settings.m_keogramDirection = (CameraSettings::KeogramDirection) swg->getKeogramDirection();
+    }
+    if (featureSettingsKeys.contains("keogramDayMode")) {
+        settings.m_keogramDayMode = (CameraSettings::KeogramDayMode) swg->getKeogramDayMode();
+    }
+    if (featureSettingsKeys.contains("keogramSamplePeriodMinutes")) {
+        settings.m_keogramSamplePeriodMinutes = swg->getKeogramSamplePeriodMinutes();
+    }
+    if (featureSettingsKeys.contains("keogramShowPreview")) {
+        settings.m_keogramShowPreview = swg->getKeogramShowPreview() != 0;
+    }
+    if (featureSettingsKeys.contains("youtubeStreamEnabled")) {
+        settings.m_youtubeStreamEnabled = swg->getYoutubeStreamEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("youtubeStreamUrl")) {
+        settings.m_youtubeStreamUrl = *swg->getYoutubeStreamUrl();
+    }
+    if (featureSettingsKeys.contains("youtubeStreamKey")) {
+        settings.m_youtubeStreamKey = *swg->getYoutubeStreamKey();
+    }
+    if (featureSettingsKeys.contains("youtubeStreamPostProcessed")) {
+        settings.m_youtubeStreamPostProcessed = swg->getYoutubeStreamPostProcessed() != 0;
+    }
+    if (featureSettingsKeys.contains("youtubeStreamBitrateKbps")) {
+        settings.m_youtubeStreamBitrateKbps = swg->getYoutubeStreamBitrateKbps();
+    }
+    if (featureSettingsKeys.contains("youtubeStreamFps")) {
+        settings.m_youtubeStreamFps = swg->getYoutubeStreamFps();
+    }
+    if (featureSettingsKeys.contains("youtubeStreamWidth")) {
+        settings.m_youtubeStreamWidth = swg->getYoutubeStreamWidth();
+    }
+    if (featureSettingsKeys.contains("youtubeStreamHeight")) {
+        settings.m_youtubeStreamHeight = swg->getYoutubeStreamHeight();
     }
     if (featureSettingsKeys.contains("videoHwAcceleration")) {
         settings.m_videoHwAcceleration = swg->getVideoHwAcceleration() != 0;
@@ -1332,6 +1440,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("videoPlaybackRate")) {
         settings.m_videoPlaybackRate = swg->getVideoPlaybackRate();
+    }
+    if (featureSettingsKeys.contains("videoPlaybackAudioOffsetMs")) {
+        settings.m_videoPlaybackAudioOffsetMs = swg->getVideoPlaybackAudioOffsetMs();
     }
     if (featureSettingsKeys.contains("videoPreRecordBufferSeconds")) {
         settings.m_videoPreRecordBufferSeconds = swg->getVideoPreRecordBufferSeconds();
@@ -1580,6 +1691,12 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("trackObjectFontScale")) {
         settings.m_trackObjectFontScale = swg->getTrackObjectFontScale();
     }
+    if (featureSettingsKeys.contains("trackObjectTrails")) {
+        settings.m_trackObjectTrails = swg->getTrackObjectTrails() != 0;
+    }
+    if (featureSettingsKeys.contains("trackObjectHeatMap")) {
+        settings.m_trackObjectHeatMap = swg->getTrackObjectHeatMap() != 0;
+    }
     if (featureSettingsKeys.contains("gridLabelFontFamily")) {
         settings.m_gridLabelFontFamily = *swg->getGridLabelFontFamily();
     }
@@ -1751,6 +1868,9 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("plateSolveSearchRadius")) {
         settings.m_plateSolveAzElSearchRadius = swg->getPlateSolveSearchRadius();
     }
+    if (featureSettingsKeys.contains("plateSolveFovTolerance")) {
+        settings.m_plateSolveFovTolerance = swg->getPlateSolveFovTolerance();
+    }
     if (featureSettingsKeys.contains("plateSolveStartMode")) {
         settings.m_plateSolveStartMode = (CameraSettings::PlateSolveStartMode) swg->getPlateSolveStartMode();
     }
@@ -1780,6 +1900,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("plateSolveApplyMode")) {
         settings.m_plateSolveApplyMode = (CameraSettings::PlateSolveApplyMode) swg->getPlateSolveApplyMode();
+    }
+    if (featureSettingsKeys.contains("starCatalogDiskCacheSizeGb")) {
+        settings.m_starCatalogDiskCacheSizeGb = swg->getStarCatalogDiskCacheSizeGb();
     }
 
     // Spectrum overlay
@@ -1823,6 +1946,17 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("yoloTileOverlapPercent")) {
         settings.m_yoloTileOverlapPercent = swg->getYoloTileOverlapPercent();
+    }
+    if (featureSettingsKeys.contains("yoloIgnoredClassNames"))
+    {
+        settings.m_yoloIgnoredClassNames.clear();
+        if (swg->getYoloIgnoredClassNames()) {
+            for (const QString *className : *swg->getYoloIgnoredClassNames()) {
+                if (className) {
+                    settings.m_yoloIgnoredClassNames.append(*className);
+                }
+            }
+        }
     }
     if (featureSettingsKeys.contains("yoloDnnTarget")) {
         settings.m_yoloDnnTarget = (CameraSettings::DNNTarget) swg->getYoloDnnTarget();

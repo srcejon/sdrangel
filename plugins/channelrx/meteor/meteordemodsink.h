@@ -209,6 +209,7 @@ private:
     struct SpectralBand {
         bool m_valid;
         double m_centerFrequency;
+        double m_peakFrequency;
         double m_lowFrequency;
         double m_highFrequency;
         double m_bandwidth;
@@ -223,6 +224,7 @@ private:
         SpectralBand() :
             m_valid(false),
             m_centerFrequency(0.0),
+            m_peakFrequency(0.0),
             m_lowFrequency(0.0),
             m_highFrequency(0.0),
             m_bandwidth(0.0),
@@ -251,6 +253,7 @@ private:
         double m_maxContrastDB;
         double m_maxPeakRatio;
         std::vector<double> m_trackFrequencies;
+        std::vector<double> m_trackPeakFrequencies;
         std::vector<double> m_trackLowFrequencies;
         std::vector<double> m_trackHighFrequencies;
         std::vector<double> m_trackBandwidths;
@@ -291,8 +294,16 @@ private:
         double m_reportFrequencySpan;
         double m_sweepScore;
         double m_peakAboveBackgroundDB;
+        double m_maxBandwidth;
+        double m_maxContrastDB;
+        double m_maxPeakRatio;
         double m_acceptanceScore;
         double m_acceptanceThreshold;
+        double m_scoreMargin;
+        double m_signalScore;
+        double m_supportScore;
+        double m_shapeScore;
+        double m_rejectionPenalty;
         int m_frameCount;
         bool m_durationOK;
         bool m_enoughFrames;
@@ -326,8 +337,16 @@ private:
             m_reportFrequencySpan(0.0),
             m_sweepScore(0.0),
             m_peakAboveBackgroundDB(0.0),
+            m_maxBandwidth(0.0),
+            m_maxContrastDB(0.0),
+            m_maxPeakRatio(0.0),
             m_acceptanceScore(0.0),
-            m_acceptanceThreshold(4.0),
+            m_acceptanceThreshold(5.0),
+            m_scoreMargin(0.0),
+            m_signalScore(0.0),
+            m_supportScore(0.0),
+            m_shapeScore(0.0),
+            m_rejectionPenalty(0.0),
             m_frameCount(0),
             m_durationOK(false),
             m_enoughFrames(false),
@@ -423,7 +442,7 @@ private:
     void finishSpectralEvent(const SpectralEvent& event);
     SpectralCandidate buildSpectralCandidate(const SpectralEvent& event) const;
     void classifySpectralCandidate(SpectralCandidate& candidate) const;
-    double scoreSpectralCandidate(const SpectralCandidate& candidate) const;
+    double scoreSpectralCandidate(SpectralCandidate& candidate) const;
     static double weightedQuantile(
         const std::vector<double>& values,
         const std::vector<double>& weights,

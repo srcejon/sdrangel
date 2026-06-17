@@ -436,6 +436,7 @@ std::vector<MeteorDemodSink::SpectralBand> MeteorDemodSink::detectSpectralBands(
         double peakRatio = 0.0;
         double peakPower = 0.0;
         double peakNoise = 1e-30;
+        double peakFrequency = 0.0;
 
         for (int j = lowIndex; j <= highIndex; j++)
         {
@@ -451,6 +452,7 @@ std::vector<MeteorDemodSink::SpectralBand> MeteorDemodSink::detectSpectralBands(
             {
                 peakPower = binPower[j];
                 peakNoise = noise;
+                peakFrequency = frequency;
             }
 
             peakRatio = std::max(peakRatio, binRatio);
@@ -463,6 +465,7 @@ std::vector<MeteorDemodSink::SpectralBand> MeteorDemodSink::detectSpectralBands(
         band.m_highFrequency = ((double) highIndex - (double) m_spectralFrameSize / 2.0) * binWidth + 0.5 * binWidth;
         band.m_bandwidth = std::max(binWidth, band.m_highFrequency - band.m_lowFrequency);
         band.m_centerFrequency = weightSum > 0.0 ? weightedFrequencySum / weightSum : 0.5 * (band.m_lowFrequency + band.m_highFrequency);
+        band.m_peakFrequency = peakFrequency;
         band.m_peakBinPower = peakPower;
         band.m_totalExcessPower = weightSum;
         band.m_contrastDB = 10.0 * std::log10(std::max(peakPower, 1e-30) / std::max(peakNoise, 1e-30));
@@ -483,6 +486,8 @@ void MeteorDemodSink::updateSpectralEvents(const std::vector<SpectralBand>& band
 {
     std::vector<bool> bandMatched(bands.size(), false);
     const int maxMissingFrames = std::max(2, (int) std::ceil(0.15 * (double) m_settings.m_channelSampleRate / (double) std::max(1, m_spectralHopSize)));
+    const double padding = std::max(12.0, (double) m_settings.m_channelSampleRate * 0.012);
+    const double maxTrackingJump = std::max(45.0, (double) m_settings.m_channelSampleRate * 0.08);
 
     for (SpectralEvent& event : m_spectralEvents)
     {
@@ -491,8 +496,10 @@ void MeteorDemodSink::updateSpectralEvents(const std::vector<SpectralBand>& band
         }
 
         int bestBandIndex = -1;
-        double bestDistance = std::numeric_limits<double>::max();
-        const double lastFrequency = event.m_trackFrequencies.empty() ? 0.5 * (event.m_minFrequency + event.m_maxFrequency) : event.m_trackFrequencies.back();
+        double bestScore = std::numeric_limits<double>::max();
+        double predictedFrequency = event.m_trackFrequencies.empty()
+            ? 0.5 * (event.m_minFrequency + event.m_maxFrequency)
+            : event.m_trackFrequencies.back();
 
         for (int i = 0; i < (int) bands.size(); i++)
         {
@@ -501,19 +508,19 @@ void MeteorDemodSink::updateSpectralEvents(const std::vector<SpectralBand>& band
             }
 
             const SpectralBand& band = bands[i];
-            const double padding = std::max(12.0, (double) m_settings.m_channelSampleRate * 0.012);
-            const double maxTrackingJump = std::max(45.0, (double) m_settings.m_channelSampleRate * 0.08);
             const double eventHalfWidth = std::min(
                 maxTrackingJump,
                 std::max(event.m_maxBandwidth, band.m_bandwidth) * 0.5 + padding
             );
-            const bool overlaps = (band.m_highFrequency >= lastFrequency - eventHalfWidth)
-                && (band.m_lowFrequency <= lastFrequency + eventHalfWidth);
-            const double distance = std::fabs(band.m_centerFrequency - lastFrequency);
+            const bool overlaps = (band.m_highFrequency >= predictedFrequency - eventHalfWidth)
+                && (band.m_lowFrequency <= predictedFrequency + eventHalfWidth);
+            const double centerDistance = std::fabs(band.m_centerFrequency - predictedFrequency);
+            const double ridgeDistance = std::fabs(band.m_peakFrequency - predictedFrequency);
+            const double score = centerDistance + 0.05 * ridgeDistance - 0.02 * std::min(40.0, band.m_contrastDB);
 
-            if (overlaps && (distance < bestDistance))
+            if (overlaps && (score < bestScore))
             {
-                bestDistance = distance;
+                bestScore = score;
                 bestBandIndex = i;
             }
         }
@@ -594,6 +601,7 @@ void MeteorDemodSink::updateSpectralEvent(SpectralEvent& event, const SpectralBa
     event.m_maxContrastDB = std::max(event.m_maxContrastDB, band.m_contrastDB);
     event.m_maxPeakRatio = std::max(event.m_maxPeakRatio, band.m_peakRatio);
     event.m_trackFrequencies.push_back(band.m_centerFrequency);
+    event.m_trackPeakFrequencies.push_back(band.m_peakFrequency);
     event.m_trackLowFrequencies.push_back(band.m_lowFrequency);
     event.m_trackHighFrequencies.push_back(band.m_highFrequency);
     event.m_trackBandwidths.push_back(band.m_bandwidth);
@@ -609,7 +617,14 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
         return;
     }
 
-    if (candidate.m_accepted || (candidate.m_spectralEvidenceOK && (candidate.m_durationS >= 1.0)))
+    const bool nearScoreMiss = !candidate.m_accepted
+        && candidate.m_valid
+        && !candidate.m_duplicate
+        && candidate.m_durationOK
+        && candidate.m_enoughFrames
+        && (candidate.m_scoreMargin >= -1.0);
+
+    if (candidate.m_accepted || nearScoreMiss || (candidate.m_spectralEvidenceOK && (candidate.m_durationS >= 1.0)))
     {
         qDebug() << "MeteorDemodSink::finishSpectralEvent:"
                  << " accepted:" << candidate.m_accepted
@@ -625,6 +640,11 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
                  << " boundedBandOK:" << candidate.m_boundedBandOK
                  << " acceptanceScore:" << candidate.m_acceptanceScore
                  << " acceptanceThreshold:" << candidate.m_acceptanceThreshold
+                 << " scoreMargin:" << candidate.m_scoreMargin
+                 << " signalScore:" << candidate.m_signalScore
+                 << " supportScore:" << candidate.m_supportScore
+                 << " shapeScore:" << candidate.m_shapeScore
+                 << " rejectionPenalty:" << candidate.m_rejectionPenalty
                  << " scoreOK:" << candidate.m_scoreOK
                  << " classification:" << candidate.m_classification
                  << " rejectionReason:" << candidate.m_rejectionReason
@@ -791,6 +811,9 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
     }
 
     candidate.m_peakAboveBackgroundDB = 10.0 * std::log10(std::max(event.m_peakPower, 1e-20) / std::max(event.m_backgroundPower, 1e-20));
+    candidate.m_maxBandwidth = event.m_maxBandwidth;
+    candidate.m_maxContrastDB = event.m_maxContrastDB;
+    candidate.m_maxPeakRatio = event.m_maxPeakRatio;
     candidate.m_frameCount = count;
 
     if (count >= 4)
@@ -858,7 +881,8 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
 void MeteorDemodSink::classifySpectralCandidate(SpectralCandidate& candidate) const
 {
     candidate.m_acceptanceScore = scoreSpectralCandidate(candidate);
-    candidate.m_scoreOK = candidate.m_acceptanceScore >= candidate.m_acceptanceThreshold;
+    candidate.m_scoreMargin = candidate.m_acceptanceScore - candidate.m_acceptanceThreshold;
+    candidate.m_scoreOK = candidate.m_scoreMargin >= 0.0;
     candidate.m_classification = "rejected";
     candidate.m_rejectionReason = "none";
     candidate.m_accepted = false;
@@ -920,22 +944,62 @@ void MeteorDemodSink::classifySpectralCandidate(SpectralCandidate& candidate) co
     candidate.m_accepted = true;
 }
 
-double MeteorDemodSink::scoreSpectralCandidate(const SpectralCandidate& candidate) const
+double MeteorDemodSink::scoreSpectralCandidate(SpectralCandidate& candidate) const
 {
     if (!candidate.m_valid) {
         return 0.0;
     }
 
-    double score = 0.0;
-    score += candidate.m_durationOK ? 1.0 : -2.0;
-    score += candidate.m_enoughFrames ? 1.0 : -1.0;
-    score += candidate.m_spectralEvidenceOK ? 2.0 : -2.0;
-    score += candidate.m_insideUsableBandwidth ? 1.0 : -1.0;
-    score += candidate.m_sweepRejected ? -2.0 : 1.0;
-    score += candidate.m_duplicate ? -3.0 : 0.0;
-    score += std::clamp((candidate.m_peakAboveBackgroundDB - 8.0) / 12.0, 0.0, 2.0);
+    const double thresholdDB = std::max(6.0, (double) m_settings.m_detectionThresholdDB);
+    const double usableBandwidth = (double) std::max(1, m_settings.m_channelSampleRate) * 0.30;
+    const double stableBandwidth = std::max(
+        10.0,
+        std::min(220.0, (double) std::max(1, m_settings.m_channelSampleRate) * 0.22));
+    const double sweepFrequencyLimit = std::max(
+        80.0,
+        m_settings.m_maxFrequencyDrift > 0.0f
+            ? std::min((double) m_settings.m_maxFrequencyDrift, (double) m_settings.m_channelSampleRate * 0.12)
+            : (double) m_settings.m_channelSampleRate * 0.12);
+    const double driftRatio = std::fabs(candidate.m_robustFrequencyDrift) / std::max(1.0, sweepFrequencyLimit);
+    const double spanRatio = candidate.m_robustFrequencySpan / std::max(1.0, sweepFrequencyLimit);
+    const double bandwidthRatio = candidate.m_maxBandwidth / std::max(1.0, stableBandwidth);
+    const double usableDistanceRatio = std::fabs(candidate.m_robustCenterFrequency) / std::max(1.0, usableBandwidth);
 
-    return score;
+    candidate.m_signalScore =
+        std::clamp((candidate.m_peakAboveBackgroundDB - thresholdDB) / 5.0, -2.0, 3.0)
+        + std::clamp((candidate.m_maxContrastDB - 8.0) / 5.0, -1.5, 2.5)
+        + std::clamp(std::log10(std::max(candidate.m_maxPeakRatio, 1.0)) / 2.0, 0.0, 1.5);
+
+    candidate.m_supportScore =
+        std::clamp(((double) candidate.m_frameCount - 2.0) / 4.0, -1.0, 2.0)
+        + std::clamp((candidate.m_durationS - 0.05) / 0.45, -0.5, 1.0);
+
+    candidate.m_shapeScore =
+        (candidate.m_durationOK ? 1.0 : -3.0)
+        + (candidate.m_insideUsableBandwidth ? 1.0 : -3.0)
+        + (candidate.m_strongLineOK ? 1.0 : 0.0)
+        + (candidate.m_boundedBandOK ? 1.0 : 0.0)
+        + (candidate.m_spectralEvidenceOK ? 0.5 : -1.0)
+        + std::clamp(1.0 - usableDistanceRatio, -1.0, 1.0)
+        + std::clamp(1.0 - bandwidthRatio, -1.0, 1.0);
+
+    candidate.m_rejectionPenalty = 0.0;
+
+    if (candidate.m_duplicate) {
+        candidate.m_rejectionPenalty += 5.0;
+    }
+
+    if (!candidate.m_enoughFrames) {
+        candidate.m_rejectionPenalty += 1.5;
+    }
+
+    if (candidate.m_sweepRejected) {
+        candidate.m_rejectionPenalty += 2.0 + std::clamp(std::max(driftRatio, spanRatio) - 1.0, 0.0, 3.0);
+    } else {
+        candidate.m_shapeScore += std::clamp(1.0 - std::max(driftRatio, spanRatio), 0.0, 1.0);
+    }
+
+    return candidate.m_signalScore + candidate.m_supportScore + candidate.m_shapeScore - candidate.m_rejectionPenalty;
 }
 
 double MeteorDemodSink::weightedQuantile(

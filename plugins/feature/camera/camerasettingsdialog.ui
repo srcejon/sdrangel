@@ -4093,6 +4093,35 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
+          <item row="9" column="0">
+           <widget class="QLabel" name="streamInputBufferSizeLabel">
+            <property name="text">
+             <string>Stream input buffer</string>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="1">
+           <widget class="QSpinBox" name="streamInputBufferSizeSpin">
+            <property name="toolTip">
+             <string>FFmpeg input/protocol buffer size for stream: sources</string>
+            </property>
+            <property name="suffix">
+             <string> KiB</string>
+            </property>
+            <property name="minimum">
+             <number>64</number>
+            </property>
+            <property name="maximum">
+             <number>65536</number>
+            </property>
+            <property name="singleStep">
+             <number>256</number>
+            </property>
+            <property name="value">
+             <number>1024</number>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

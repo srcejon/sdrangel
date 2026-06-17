@@ -197,6 +197,9 @@ CameraSettings:
       type: array
       items:
         type: string
+    streamInputBufferSizeKiB:
+      description: "FFmpeg protocol/input buffer size in KiB for stream: camera sources"
+      type: integer
     imageFileCameraPaths:
       description: "Ordered image file list for images: image sequence camera source"
       type: array

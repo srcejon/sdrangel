@@ -95,11 +95,16 @@ bool CameraVideoFileDecoder::isOpen() const
     return m_formatContext && m_videoCodecContext && (m_videoStreamIndex >= 0);
 }
 
-bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage, int outputSampleRate)
+bool CameraVideoFileDecoder::open(
+    const QString& fileName,
+    QString& errorMessage,
+    int outputSampleRate,
+    int streamBufferSizeKiB)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(fileName)
     Q_UNUSED(outputSampleRate)
+    Q_UNUSED(streamBufferSizeKiB)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
@@ -113,6 +118,8 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     const QString scheme = QUrl(fileName).scheme().toLower();
     m_urlSource = scheme.size() > 1;
     const bool rtspSource = scheme == QLatin1String("rtsp");
+    const int streamBufferSizeBytes = qBound(64, streamBufferSizeKiB, 65536) * 1024;
+    const QByteArray streamBufferSizeBytesText = QByteArray::number(streamBufferSizeBytes);
     QStringList openErrors;
 
     const auto openInput = [&](const char *rtspTransport) -> bool
@@ -129,6 +136,7 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
             av_dict_set(&options, "analyzeduration", "10000000", 0);
             av_dict_set(&options, "probesize", "5000000", 0);
             av_dict_set(&options, "rw_timeout", "5000000", 0);
+            av_dict_set(&options, "buffer_size", streamBufferSizeBytesText.constData(), 0);
             if ((scheme == QLatin1String("http")) || (scheme == QLatin1String("https"))) {
                 av_dict_set(&options, "flv_ignore_prevtag", "1", 0);
             }
@@ -144,7 +152,8 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
 
         qDebug() << "CameraVideoFileDecoder: opening media source" << fileName
                  << "scheme" << scheme
-                 << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"));
+                 << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"))
+                 << "inputBufferBytes" << (scheme.isEmpty() ? 0 : streamBufferSizeBytes);
         m_formatContext = avformat_alloc_context();
         if (!m_formatContext)
         {
@@ -978,10 +987,10 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     ++m_debugStats.m_readAheadCalls;
     static constexpr qint64 audioLeadMs = 50;
     static constexpr int bytesPerSampleFrame = 4;
-    // Match the live audio decoder cushion to the monitor FIFO low-water mark.
-    // The monitor target is 850 ms with 150 ms jitter, so keeping about 700 ms
-    // decoded prevents per-frame top-up bursts without letting audio run away.
-    static constexpr int streamTargetAudioMs = 700;
+    // Keep a small decoder-side cushion; the monitor FIFO is the main live
+    // jitter buffer. Large per-frame read-ahead can block video on av_read_frame.
+    static constexpr int streamTargetAudioMs = 250;
+    static constexpr qint64 streamReadAheadBudgetMs = 12;
     const int maxPacketsRead = m_urlSource ? 96 : 32;
     const int frameAudioFrames = static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5);
     const int targetAudioFrames = m_urlSource
@@ -992,6 +1001,10 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         ? videoPositionMs + audioLeadMs
         : -1;
     int packetsRead = 0;
+    QElapsedTimer readAheadBudgetTimer;
+    if (m_urlSource) {
+        readAheadBudgetTimer.start();
+    }
 
     auto needsAudio = [&]() {
         if (m_urlSource && ((pendingAudioBytes() + pcmS16Stereo.size()) < targetAudioBytes)) {
@@ -1092,6 +1105,12 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
                 if (!needsAudio() || (m_pendingVideoFrames.size() >= maxPendingVideoFrames)) {
                     return true;
                 }
+                if (readAheadBudgetTimer.isValid()
+                    && (readAheadBudgetTimer.elapsed() >= streamReadAheadBudgetMs)
+                    && ((pendingAudioBytes() + pcmS16Stereo.size()) >= (frameAudioFrames * bytesPerSampleFrame)))
+                {
+                    return true;
+                }
                 continue;
             }
 
@@ -1113,6 +1132,13 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         }
 
         ++packetsRead;
+        if (m_urlSource
+            && readAheadBudgetTimer.isValid()
+            && (readAheadBudgetTimer.elapsed() >= streamReadAheadBudgetMs)
+            && ((pendingAudioBytes() + pcmS16Stereo.size()) >= (frameAudioFrames * bytesPerSampleFrame)))
+        {
+            return true;
+        }
     }
 
     if (m_pendingVideoPackets.size() >= maxPendingVideoPackets) {

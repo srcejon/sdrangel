@@ -1420,7 +1420,11 @@ bool CameraWorker::openVideoFileDecoder()
     qDebug() << "CameraWorker: opening FFmpeg media source"
              << (m_settings.isStreamCamera() ? QStringLiteral("stream") : QStringLiteral("video"))
              << mediaSourcePath;
-    if (!m_mediaPlayback.m_decoder->open(mediaSourcePath, errorMessage, audioOutputSampleRate))
+    if (!m_mediaPlayback.m_decoder->open(
+        mediaSourcePath,
+        errorMessage,
+        audioOutputSampleRate,
+        m_settings.m_streamInputBufferSizeKiB))
     {
         qWarning() << "CameraWorker: FFmpeg media source open failed"
                    << mediaSourcePath

@@ -317,6 +317,8 @@ struct CameraSettings
     static constexpr double m_maxVideoPlaybackRate = 120.0;
     static constexpr int m_minVideoPlaybackAudioOffsetMs = -2000;
     static constexpr int m_maxVideoPlaybackAudioOffsetMs = 5000;
+    static constexpr int m_minStreamInputBufferSizeKiB = 64;
+    static constexpr int m_maxStreamInputBufferSizeKiB = 65536;
 
     QString m_title;
     quint32 m_rgbColor;
@@ -377,6 +379,7 @@ struct CameraSettings
     QString m_streamUrl;
     QStringList m_imageFileCameraPaths;
     QStringList m_streamUrlHistory;
+    int m_streamInputBufferSizeKiB; ///< FFmpeg protocol/input buffer size for stream: camera sources
     QString m_videoFileName;
     bool m_recordRawFits;          ///< Save uncalibrated Bayer still images as FITS
     bool m_recordCalibratedMedia;  ///< Save calibrated/debayered image/video media

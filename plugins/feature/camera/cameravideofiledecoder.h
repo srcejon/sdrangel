@@ -42,7 +42,11 @@ public:
 
     [[nodiscard]] bool isOpen() const;
     [[nodiscard]] bool abortRequested() const { return m_abortRequested.load(); }
-    [[nodiscard]] bool open(const QString& fileName, QString& errorMessage, int outputSampleRate = 48000);
+    [[nodiscard]] bool open(
+        const QString& fileName,
+        QString& errorMessage,
+        int outputSampleRate = 48000,
+        int streamBufferSizeKiB = 1024);
     void requestAbort();
     void close();
     void seek(qint64 positionMs);

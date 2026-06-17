@@ -6,7 +6,7 @@ CameraSettings:
     rgbColor:
       type: integer
     cameraProtocol:
-      description: "Camera protocol identifier (e.g. 'ALPACA', 'QT', 'file:')"
+      description: "Camera protocol identifier (e.g. 'ALPACA', 'QT', 'video:')"
       type: string
     cameraId:
       description: "Camera device identifier"
@@ -189,14 +189,28 @@ CameraSettings:
     videoFileCameraPath:
       description: "File path for file-based camera video source"
       type: string
+    streamUrl:
+      description: "URL for stream: camera source"
+      type: string
+    streamUrlHistory:
+      description: "Previously opened stream URLs for the stream: camera source"
+      type: array
+      items:
+        type: string
     imageFileCameraPaths:
-      description: "Ordered image file list for files: image sequence camera source"
+      description: "Ordered image file list for images: image sequence camera source"
       type: array
       items:
         type: string
     videoFileName:
       description: "File path for recorded video output"
       type: string
+    videoCodec:
+      description: >
+        Codec used for saved video recordings
+          * 0 - H.264
+          * 1 - H.265
+      type: integer
     videoRecordBitrateKbps:
       description: "Saved video bitrate in kbit/s; 0 selects automatic bitrate from frame size and frame rate"
       type: integer
@@ -206,8 +220,59 @@ CameraSettings:
     recordCalibratedMedia:
       description: "Save calibrated/debayered still images and videos (1 for yes, 0 for no)"
       type: integer
+    recordFilteredMedia:
+      description: "Save filtered image-processor still images and videos (1 for yes, 0 for no)"
+      type: integer
     recordPostProcessedMedia:
       description: "Save post-processed still images and videos with overlays (1 for yes, 0 for no)"
+      type: integer
+    keogramEnabled:
+      description: "Build and save a 24-hour keogram from calibrated frames (1 for yes, 0 for no)"
+      type: integer
+    keogramFileName:
+      description: "File basename for saved keograms (.jpg or .png)"
+      type: string
+    keogramDirection:
+      description: >
+        Keogram sample direction
+          * 0 - Horizontal
+          * 1 - Vertical
+      type: integer
+    keogramDayMode:
+      description: >
+        Keogram 24-hour window
+          * 0 - Midnight to midnight
+          * 1 - Midday to midday
+      type: integer
+    keogramSamplePeriodMinutes:
+      description: "Keogram sample period in minutes"
+      type: integer
+    keogramShowPreview:
+      description: "Show live keogram preview (1 for yes, 0 for no)"
+      type: integer
+    youtubeStreamEnabled:
+      description: "Stream captured video to YouTube (1 for yes, 0 for no)"
+      type: integer
+    youtubeStreamUrl:
+      description: "YouTube RTMP/RTMPS ingest URL"
+      type: string
+    youtubeStreamKey:
+      description: "YouTube stream key"
+      type: string
+    youtubeStreamPostProcessed:
+      description: "Stream post-processed frames instead of calibrated frames (1 for yes, 0 for no)"
+      type: integer
+    youtubeStreamBitrateKbps:
+      description: "YouTube stream video bitrate in kbit/s"
+      type: integer
+    youtubeStreamFps:
+      description: "YouTube stream frame rate"
+      type: integer
+    youtubeStreamWidth:
+      description: "YouTube stream output width in pixels; 0 = source width"
+      type: integer
+    youtubeStreamHeight:
+      description: "YouTube stream output height in pixels; 0 = source height"
       type: integer
     videoHwAcceleration:
       description: "Prefer hardware-accelerated video encoding when available (1 for yes, 0 for no)"
@@ -541,6 +606,12 @@ CameraSettings:
       description: "Tracked object label font point size"
       type: number
       format: double
+    trackObjectTrails:
+      description: "Draw persistent trails for tracked overlay objects (1 for yes, 0 for no)"
+      type: integer
+    trackObjectHeatMap:
+      description: "Draw a persistent heat map from tracked overlay object positions (1 for yes, 0 for no)"
+      type: integer
     gridLabelFontFamily:
       description: "Font family for sky grid labels"
       type: string
@@ -723,6 +794,10 @@ CameraSettings:
       description: "Search radius around current pointing estimate in degrees"
       type: number
       format: double
+    plateSolveFovTolerance:
+      description: "Allowed FoV refinement tolerance as a percentage of the entered FoV; 0 pins FoV to the entered value"
+      type: number
+      format: double
     plateSolveStartMode:
       description: >
         Plate solve start mode
@@ -759,6 +834,7 @@ CameraSettings:
           * 0 - Auto
           * 1 - HYG
           * 2 - Siril SPCC Gaia
+          * 3 - Siril Gaia DR3 Astrometric
       type: integer
     plateSolveApplyMode:
       description: >
@@ -767,6 +843,9 @@ CameraSettings:
           * 1 - Azimuth/elevation/roll
           * 2 - Azimuth/elevation/roll/FoV
           * 3 - Azimuth/elevation/roll/FoV/lens
+      type: integer
+    starCatalogDiskCacheSizeGb:
+      description: "Maximum star catalog disk cache size in GB; 0 = unlimited"
       type: integer
     overlaySpectrum:
       description: "Overlay the spectrum view image on each frame (1 for yes, 0 for no)"
@@ -804,16 +883,17 @@ CameraSettings:
     yoloBoxColor:
       description: "Default bounding box colour as 0xRRGGBB integer (used when no per-class colour is set)"
       type: integer
-    yoloDisappearDebounce:
-      description: "Seconds a class must remain absent before it is treated as disappeared"
-      type: number
-      format: double
     yoloTileLargeImages:
       description: "Tile images larger than the YOLO model input size before inference (1 for yes, 0 for no)"
       type: integer
     yoloTileOverlapPercent:
       description: "Tile overlap percentage for large-image YOLO inference"
       type: integer
+    yoloIgnoredClassNames:
+      description: "YOLO class labels to ignore after detection"
+      type: array
+      items:
+        type: string
     yoloDnnTarget:
       description: >
         YOLO inference backend/target
@@ -823,11 +903,6 @@ CameraSettings:
           * 3 - TensorRT FP32
           * 4 - TensorRT FP16
       type: integer
-    objectDeviceSettings:
-      description: "Per-YOLO-class device control settings"
-      type: array
-      items:
-        $ref: "/doc/swagger/include/Camera.yaml#/CameraObjectClassSettings"
     audioMute:
       description: "Silence captured camera audio (1 for yes, 0 for no)"
       type: integer
@@ -868,62 +943,6 @@ CameraSettings:
     workspaceIndex:
       type: integer
 
-CameraObjectClassSettings:
-  description: "Device control settings for a single YOLO object class"
-  properties:
-    className:
-      description: "YOLO class name this entry applies to"
-      type: string
-    deviceSettings:
-      description: "List of SDRangel device set actions to trigger on detection or disappearance"
-      type: array
-      items:
-        $ref: "/doc/swagger/include/Camera.yaml#/CameraObjectDeviceSettings"
-
-CameraObjectDeviceSettings:
-  description: "SDRangel device set actions triggered by YOLO object detection or disappearance"
-  properties:
-    deviceSetIndex:
-      description: "Device set index in SDRangel"
-      type: integer
-    presetGroup:
-      description: "Preset group to load on object detection"
-      type: string
-    presetFrequency:
-      description: "Preset centre frequency in Hz"
-      type: integer
-      format: int64
-    presetDescription:
-      description: "Preset description to identify the preset"
-      type: string
-    startOnDetect:
-      description: "Start acquisition when the object class is detected (1 for yes, 0 for no)"
-      type: integer
-    stopOnDisappear:
-      description: "Stop acquisition when the object class disappears (1 for yes, 0 for no)"
-      type: integer
-    startStopFileSink:
-      description: "Start/stop file sinks with detection/disappearance (1 for yes, 0 for no)"
-      type: integer
-    saveCurrentImage:
-      description: "Save the current image when the object class is detected (1 for yes, 0 for no)"
-      type: integer
-    recordVideo:
-      description: "Start video recording on detection and stop when the object disappears (1 for yes, 0 for no)"
-      type: integer
-    detectCommand:
-      description: "Command or script to execute when the object class is detected"
-      type: string
-    disappearCommand:
-      description: "Command or script to execute when the object class disappears"
-      type: string
-    detectSpeech:
-      description: "Text to speak when the object class is detected"
-      type: string
-    disappearSpeech:
-      description: "Text to speak when the object class disappears"
-      type: string
-
 CameraReport:
   description: "Camera feature report"
   properties:
@@ -958,6 +977,9 @@ CameraActions:
         recordCalibratedMedia:
           description: "Save calibrated/debayered image (1 for yes, 0 for no)"
           type: integer
+        recordFilteredMedia:
+          description: "Save filtered image-processor image (1 for yes, 0 for no)"
+          type: integer
         recordPostProcessedMedia:
           description: "Save post-processed image with overlays (1 for yes, 0 for no)"
           type: integer
@@ -973,6 +995,9 @@ CameraActions:
           type: string
         recordCalibratedMedia:
           description: "Record calibrated/debayered video (1 for yes, 0 for no)"
+          type: integer
+        recordFilteredMedia:
+          description: "Record filtered image-processor video (1 for yes, 0 for no)"
           type: integer
         recordPostProcessedMedia:
           description: "Record post-processed video with overlays (1 for yes, 0 for no)"

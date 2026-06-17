@@ -22,7 +22,6 @@
 #include <QJsonObject>
 
 
-#include "SWGCameraObjectClassSettings.h"
 #include "SWGCameraRect.h"
 #include "SWGRollupState.h"
 #include <QList>
@@ -214,11 +213,23 @@ public:
     QString* getVideoFileCameraPath();
     void setVideoFileCameraPath(QString* video_file_camera_path);
 
+    QString* getStreamUrl();
+    void setStreamUrl(QString* stream_url);
+
+    QList<QString*>* getStreamUrlHistory();
+    void setStreamUrlHistory(QList<QString*>* stream_url_history);
+
     QList<QString*>* getImageFileCameraPaths();
     void setImageFileCameraPaths(QList<QString*>* image_file_camera_paths);
 
     QString* getVideoFileName();
     void setVideoFileName(QString* video_file_name);
+
+    qint32 getVideoCodec();
+    void setVideoCodec(qint32 video_codec);
+
+    qint32 getVideoRecordBitrateKbps();
+    void setVideoRecordBitrateKbps(qint32 video_record_bitrate_kbps);
 
     qint32 getRecordRawFits();
     void setRecordRawFits(qint32 record_raw_fits);
@@ -226,8 +237,53 @@ public:
     qint32 getRecordCalibratedMedia();
     void setRecordCalibratedMedia(qint32 record_calibrated_media);
 
+    qint32 getRecordFilteredMedia();
+    void setRecordFilteredMedia(qint32 record_filtered_media);
+
     qint32 getRecordPostProcessedMedia();
     void setRecordPostProcessedMedia(qint32 record_post_processed_media);
+
+    qint32 getKeogramEnabled();
+    void setKeogramEnabled(qint32 keogram_enabled);
+
+    QString* getKeogramFileName();
+    void setKeogramFileName(QString* keogram_file_name);
+
+    qint32 getKeogramDirection();
+    void setKeogramDirection(qint32 keogram_direction);
+
+    qint32 getKeogramDayMode();
+    void setKeogramDayMode(qint32 keogram_day_mode);
+
+    qint32 getKeogramSamplePeriodMinutes();
+    void setKeogramSamplePeriodMinutes(qint32 keogram_sample_period_minutes);
+
+    qint32 getKeogramShowPreview();
+    void setKeogramShowPreview(qint32 keogram_show_preview);
+
+    qint32 getYoutubeStreamEnabled();
+    void setYoutubeStreamEnabled(qint32 youtube_stream_enabled);
+
+    QString* getYoutubeStreamUrl();
+    void setYoutubeStreamUrl(QString* youtube_stream_url);
+
+    QString* getYoutubeStreamKey();
+    void setYoutubeStreamKey(QString* youtube_stream_key);
+
+    qint32 getYoutubeStreamPostProcessed();
+    void setYoutubeStreamPostProcessed(qint32 youtube_stream_post_processed);
+
+    qint32 getYoutubeStreamBitrateKbps();
+    void setYoutubeStreamBitrateKbps(qint32 youtube_stream_bitrate_kbps);
+
+    qint32 getYoutubeStreamFps();
+    void setYoutubeStreamFps(qint32 youtube_stream_fps);
+
+    qint32 getYoutubeStreamWidth();
+    void setYoutubeStreamWidth(qint32 youtube_stream_width);
+
+    qint32 getYoutubeStreamHeight();
+    void setYoutubeStreamHeight(qint32 youtube_stream_height);
 
     qint32 getVideoHwAcceleration();
     void setVideoHwAcceleration(qint32 video_hw_acceleration);
@@ -237,6 +293,9 @@ public:
 
     double getVideoPlaybackRate();
     void setVideoPlaybackRate(double video_playback_rate);
+
+    qint32 getVideoPlaybackAudioOffsetMs();
+    void setVideoPlaybackAudioOffsetMs(qint32 video_playback_audio_offset_ms);
 
     qint32 getVideoPreRecordBufferSeconds();
     void setVideoPreRecordBufferSeconds(qint32 video_pre_record_buffer_seconds);
@@ -475,6 +534,12 @@ public:
     double getTrackObjectFontScale();
     void setTrackObjectFontScale(double track_object_font_scale);
 
+    qint32 getTrackObjectTrails();
+    void setTrackObjectTrails(qint32 track_object_trails);
+
+    qint32 getTrackObjectHeatMap();
+    void setTrackObjectHeatMap(qint32 track_object_heat_map);
+
     QString* getGridLabelFontFamily();
     void setGridLabelFontFamily(QString* grid_label_font_family);
 
@@ -628,6 +693,9 @@ public:
     double getPlateSolveSearchRadius();
     void setPlateSolveSearchRadius(double plate_solve_search_radius);
 
+    double getPlateSolveFovTolerance();
+    void setPlateSolveFovTolerance(double plate_solve_fov_tolerance);
+
     qint32 getPlateSolveStartMode();
     void setPlateSolveStartMode(qint32 plate_solve_start_mode);
 
@@ -651,6 +719,9 @@ public:
 
     qint32 getPlateSolveApplyMode();
     void setPlateSolveApplyMode(qint32 plate_solve_apply_mode);
+
+    qint32 getStarCatalogDiskCacheSizeGb();
+    void setStarCatalogDiskCacheSizeGb(qint32 star_catalog_disk_cache_size_gb);
 
     qint32 getOverlaySpectrum();
     void setOverlaySpectrum(qint32 overlay_spectrum);
@@ -685,20 +756,17 @@ public:
     qint32 getYoloBoxColor();
     void setYoloBoxColor(qint32 yolo_box_color);
 
-    double getYoloDisappearDebounce();
-    void setYoloDisappearDebounce(double yolo_disappear_debounce);
-
     qint32 getYoloTileLargeImages();
     void setYoloTileLargeImages(qint32 yolo_tile_large_images);
 
     qint32 getYoloTileOverlapPercent();
     void setYoloTileOverlapPercent(qint32 yolo_tile_overlap_percent);
 
+    QList<QString*>* getYoloIgnoredClassNames();
+    void setYoloIgnoredClassNames(QList<QString*>* yolo_ignored_class_names);
+
     qint32 getYoloDnnTarget();
     void setYoloDnnTarget(qint32 yolo_dnn_target);
-
-    QList<SWGCameraObjectClassSettings*>* getObjectDeviceSettings();
-    void setObjectDeviceSettings(QList<SWGCameraObjectClassSettings*>* object_device_settings);
 
     qint32 getAudioMute();
     void setAudioMute(qint32 audio_mute);
@@ -914,11 +982,23 @@ private:
     QString* video_file_camera_path;
     bool m_video_file_camera_path_isSet;
 
+    QString* stream_url;
+    bool m_stream_url_isSet;
+
+    QList<QString*>* stream_url_history;
+    bool m_stream_url_history_isSet;
+
     QList<QString*>* image_file_camera_paths;
     bool m_image_file_camera_paths_isSet;
 
     QString* video_file_name;
     bool m_video_file_name_isSet;
+
+    qint32 video_codec;
+    bool m_video_codec_isSet;
+
+    qint32 video_record_bitrate_kbps;
+    bool m_video_record_bitrate_kbps_isSet;
 
     qint32 record_raw_fits;
     bool m_record_raw_fits_isSet;
@@ -926,8 +1006,53 @@ private:
     qint32 record_calibrated_media;
     bool m_record_calibrated_media_isSet;
 
+    qint32 record_filtered_media;
+    bool m_record_filtered_media_isSet;
+
     qint32 record_post_processed_media;
     bool m_record_post_processed_media_isSet;
+
+    qint32 keogram_enabled;
+    bool m_keogram_enabled_isSet;
+
+    QString* keogram_file_name;
+    bool m_keogram_file_name_isSet;
+
+    qint32 keogram_direction;
+    bool m_keogram_direction_isSet;
+
+    qint32 keogram_day_mode;
+    bool m_keogram_day_mode_isSet;
+
+    qint32 keogram_sample_period_minutes;
+    bool m_keogram_sample_period_minutes_isSet;
+
+    qint32 keogram_show_preview;
+    bool m_keogram_show_preview_isSet;
+
+    qint32 youtube_stream_enabled;
+    bool m_youtube_stream_enabled_isSet;
+
+    QString* youtube_stream_url;
+    bool m_youtube_stream_url_isSet;
+
+    QString* youtube_stream_key;
+    bool m_youtube_stream_key_isSet;
+
+    qint32 youtube_stream_post_processed;
+    bool m_youtube_stream_post_processed_isSet;
+
+    qint32 youtube_stream_bitrate_kbps;
+    bool m_youtube_stream_bitrate_kbps_isSet;
+
+    qint32 youtube_stream_fps;
+    bool m_youtube_stream_fps_isSet;
+
+    qint32 youtube_stream_width;
+    bool m_youtube_stream_width_isSet;
+
+    qint32 youtube_stream_height;
+    bool m_youtube_stream_height_isSet;
 
     qint32 video_hw_acceleration;
     bool m_video_hw_acceleration_isSet;
@@ -937,6 +1062,9 @@ private:
 
     double video_playback_rate;
     bool m_video_playback_rate_isSet;
+
+    qint32 video_playback_audio_offset_ms;
+    bool m_video_playback_audio_offset_ms_isSet;
 
     qint32 video_pre_record_buffer_seconds;
     bool m_video_pre_record_buffer_seconds_isSet;
@@ -1175,6 +1303,12 @@ private:
     double track_object_font_scale;
     bool m_track_object_font_scale_isSet;
 
+    qint32 track_object_trails;
+    bool m_track_object_trails_isSet;
+
+    qint32 track_object_heat_map;
+    bool m_track_object_heat_map_isSet;
+
     QString* grid_label_font_family;
     bool m_grid_label_font_family_isSet;
 
@@ -1328,6 +1462,9 @@ private:
     double plate_solve_search_radius;
     bool m_plate_solve_search_radius_isSet;
 
+    double plate_solve_fov_tolerance;
+    bool m_plate_solve_fov_tolerance_isSet;
+
     qint32 plate_solve_start_mode;
     bool m_plate_solve_start_mode_isSet;
 
@@ -1351,6 +1488,9 @@ private:
 
     qint32 plate_solve_apply_mode;
     bool m_plate_solve_apply_mode_isSet;
+
+    qint32 star_catalog_disk_cache_size_gb;
+    bool m_star_catalog_disk_cache_size_gb_isSet;
 
     qint32 overlay_spectrum;
     bool m_overlay_spectrum_isSet;
@@ -1385,20 +1525,17 @@ private:
     qint32 yolo_box_color;
     bool m_yolo_box_color_isSet;
 
-    double yolo_disappear_debounce;
-    bool m_yolo_disappear_debounce_isSet;
-
     qint32 yolo_tile_large_images;
     bool m_yolo_tile_large_images_isSet;
 
     qint32 yolo_tile_overlap_percent;
     bool m_yolo_tile_overlap_percent_isSet;
 
+    QList<QString*>* yolo_ignored_class_names;
+    bool m_yolo_ignored_class_names_isSet;
+
     qint32 yolo_dnn_target;
     bool m_yolo_dnn_target_isSet;
-
-    QList<SWGCameraObjectClassSettings*>* object_device_settings;
-    bool m_object_device_settings_isSet;
 
     qint32 audio_mute;
     bool m_audio_mute_isSet;

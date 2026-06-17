@@ -11,13 +11,13 @@
  */
 
 /*
- * SWGCameraActions_recordVideo.h
+ * SWGSchedulerSettingValue.h
  *
- * Record video to file
+ * Named setting value patched into a device, channel, or feature
  */
 
-#ifndef SWGCameraActions_recordVideo_H_
-#define SWGCameraActions_recordVideo_H_
+#ifndef SWGSchedulerSettingValue_H_
+#define SWGSchedulerSettingValue_H_
 
 #include <QJsonObject>
 
@@ -29,55 +29,43 @@
 
 namespace SWGSDRangel {
 
-class SWG_API SWGCameraActions_recordVideo: public SWGObject {
+class SWG_API SWGSchedulerSettingValue: public SWGObject {
 public:
-    SWGCameraActions_recordVideo();
-    SWGCameraActions_recordVideo(QString* json);
-    virtual ~SWGCameraActions_recordVideo();
+    SWGSchedulerSettingValue();
+    SWGSchedulerSettingValue(QString* json);
+    virtual ~SWGSchedulerSettingValue();
     void init();
     void cleanup();
 
     virtual QString asJson () override;
     virtual QJsonObject* asJsonObject() override;
     virtual void fromJsonObject(QJsonObject &json) override;
-    virtual SWGCameraActions_recordVideo* fromJson(QString &jsonString) override;
+    virtual SWGSchedulerSettingValue* fromJson(QString &jsonString) override;
 
-    QString* getFilename();
-    void setFilename(QString* filename);
+    QString* getName();
+    void setName(QString* name);
 
-    qint32 getRecordCalibratedMedia();
-    void setRecordCalibratedMedia(qint32 record_calibrated_media);
+    QString* getValue();
+    void setValue(QString* value);
 
-    qint32 getRecordFilteredMedia();
-    void setRecordFilteredMedia(qint32 record_filtered_media);
-
-    qint32 getRecordPostProcessedMedia();
-    void setRecordPostProcessedMedia(qint32 record_post_processed_media);
-
-    qint32 getDuration();
-    void setDuration(qint32 duration);
+    qint32 getType();
+    void setType(qint32 type);
 
 
     virtual bool isSet() override;
 
 private:
-    QString* filename;
-    bool m_filename_isSet;
+    QString* name;
+    bool m_name_isSet;
 
-    qint32 record_calibrated_media;
-    bool m_record_calibrated_media_isSet;
+    QString* value;
+    bool m_value_isSet;
 
-    qint32 record_filtered_media;
-    bool m_record_filtered_media_isSet;
-
-    qint32 record_post_processed_media;
-    bool m_record_post_processed_media_isSet;
-
-    qint32 duration;
-    bool m_duration_isSet;
+    qint32 type;
+    bool m_type_isSet;
 
 };
 
 }
 
-#endif /* SWGCameraActions_recordVideo_H_ */
+#endif /* SWGSchedulerSettingValue_H_ */

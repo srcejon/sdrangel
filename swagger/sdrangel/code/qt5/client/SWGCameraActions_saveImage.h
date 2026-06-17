@@ -51,6 +51,9 @@ public:
     qint32 getRecordCalibratedMedia();
     void setRecordCalibratedMedia(qint32 record_calibrated_media);
 
+    qint32 getRecordFilteredMedia();
+    void setRecordFilteredMedia(qint32 record_filtered_media);
+
     qint32 getRecordPostProcessedMedia();
     void setRecordPostProcessedMedia(qint32 record_post_processed_media);
 
@@ -69,6 +72,9 @@ private:
 
     qint32 record_calibrated_media;
     bool m_record_calibrated_media_isSet;
+
+    qint32 record_filtered_media;
+    bool m_record_filtered_media_isSet;
 
     qint32 record_post_processed_media;
     bool m_record_post_processed_media_isSet;

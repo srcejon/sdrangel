@@ -38,14 +38,20 @@ SWGSchedulerRule::SWGSchedulerRule() {
     m_trigger_type_isSet = false;
     time = nullptr;
     m_time_isSet = false;
+    date_until = nullptr;
+    m_date_until_isSet = false;
     recurrence = 0;
     m_recurrence_isSet = false;
+    weekday_mask = 0;
+    m_weekday_mask_isSet = false;
     event_type = 0;
     m_event_type_isSet = false;
     event_source_id = nullptr;
     m_event_source_id_isSet = false;
     event_data_regex = nullptr;
     m_event_data_regex_isSet = false;
+    event_count = 0;
+    m_event_count_isSet = false;
     event_delay = 0;
     m_event_delay_isSet = false;
     event_delay_unit = 0;
@@ -60,6 +66,8 @@ SWGSchedulerRule::SWGSchedulerRule() {
     m_speech_isSet = false;
     device_set_actions = nullptr;
     m_device_set_actions_isSet = false;
+    channel_actions = nullptr;
+    m_channel_actions_isSet = false;
     feature_actions = nullptr;
     m_feature_actions_isSet = false;
     last_run = nullptr;
@@ -82,14 +90,20 @@ SWGSchedulerRule::init() {
     m_trigger_type_isSet = false;
     time = new QString("");
     m_time_isSet = false;
+    date_until = new QString("");
+    m_date_until_isSet = false;
     recurrence = 0;
     m_recurrence_isSet = false;
+    weekday_mask = 0;
+    m_weekday_mask_isSet = false;
     event_type = 0;
     m_event_type_isSet = false;
     event_source_id = new QString("");
     m_event_source_id_isSet = false;
     event_data_regex = new QString("");
     m_event_data_regex_isSet = false;
+    event_count = 0;
+    m_event_count_isSet = false;
     event_delay = 0;
     m_event_delay_isSet = false;
     event_delay_unit = 0;
@@ -104,6 +118,8 @@ SWGSchedulerRule::init() {
     m_speech_isSet = false;
     device_set_actions = new QList<SWGSchedulerDeviceSetAction*>();
     m_device_set_actions_isSet = false;
+    channel_actions = new QList<SWGSchedulerChannelAction*>();
+    m_channel_actions_isSet = false;
     feature_actions = new QList<SWGSchedulerFeatureAction*>();
     m_feature_actions_isSet = false;
     last_run = new QString("");
@@ -123,6 +139,10 @@ SWGSchedulerRule::cleanup() {
     if(time != nullptr) { 
         delete time;
     }
+    if(date_until != nullptr) { 
+        delete date_until;
+    }
+
 
 
     if(event_source_id != nullptr) { 
@@ -131,6 +151,7 @@ SWGSchedulerRule::cleanup() {
     if(event_data_regex != nullptr) { 
         delete event_data_regex;
     }
+
 
 
 
@@ -147,6 +168,13 @@ SWGSchedulerRule::cleanup() {
             delete o;
         }
         delete device_set_actions;
+    }
+    if(channel_actions != nullptr) { 
+        auto arr = channel_actions;
+        for(auto o: *arr) { 
+            delete o;
+        }
+        delete channel_actions;
     }
     if(feature_actions != nullptr) { 
         auto arr = feature_actions;
@@ -181,13 +209,19 @@ SWGSchedulerRule::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&time, pJson["time"], "QString", "QString");
     
+    ::SWGSDRangel::setValue(&date_until, pJson["dateUntil"], "QString", "QString");
+    
     ::SWGSDRangel::setValue(&recurrence, pJson["recurrence"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&weekday_mask, pJson["weekdayMask"], "qint32", "");
     
     ::SWGSDRangel::setValue(&event_type, pJson["eventType"], "qint32", "");
     
     ::SWGSDRangel::setValue(&event_source_id, pJson["eventSourceId"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&event_data_regex, pJson["eventDataRegex"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&event_count, pJson["eventCount"], "qint32", "");
     
     ::SWGSDRangel::setValue(&event_delay, pJson["eventDelay"], "qint32", "");
     
@@ -203,6 +237,8 @@ SWGSchedulerRule::fromJsonObject(QJsonObject &pJson) {
     
     
     ::SWGSDRangel::setValue(&device_set_actions, pJson["deviceSetActions"], "QList", "SWGSchedulerDeviceSetAction");
+    
+    ::SWGSDRangel::setValue(&channel_actions, pJson["channelActions"], "QList", "SWGSchedulerChannelAction");
     
     ::SWGSDRangel::setValue(&feature_actions, pJson["featureActions"], "QList", "SWGSchedulerFeatureAction");
     ::SWGSDRangel::setValue(&last_run, pJson["lastRun"], "QString", "QString");
@@ -238,8 +274,14 @@ SWGSchedulerRule::asJsonObject() {
     if(time != nullptr && *time != QString("")){
         toJsonValue(QString("time"), time, obj, QString("QString"));
     }
+    if(date_until != nullptr && *date_until != QString("")){
+        toJsonValue(QString("dateUntil"), date_until, obj, QString("QString"));
+    }
     if(m_recurrence_isSet){
         obj->insert("recurrence", QJsonValue(recurrence));
+    }
+    if(m_weekday_mask_isSet){
+        obj->insert("weekdayMask", QJsonValue(weekday_mask));
     }
     if(m_event_type_isSet){
         obj->insert("eventType", QJsonValue(event_type));
@@ -249,6 +291,9 @@ SWGSchedulerRule::asJsonObject() {
     }
     if(event_data_regex != nullptr && *event_data_regex != QString("")){
         toJsonValue(QString("eventDataRegex"), event_data_regex, obj, QString("QString"));
+    }
+    if(m_event_count_isSet){
+        obj->insert("eventCount", QJsonValue(event_count));
     }
     if(m_event_delay_isSet){
         obj->insert("eventDelay", QJsonValue(event_delay));
@@ -270,6 +315,9 @@ SWGSchedulerRule::asJsonObject() {
     }
     if(device_set_actions && device_set_actions->size() > 0){
         toJsonArray((QList<void*>*)device_set_actions, obj, "deviceSetActions", "SWGSchedulerDeviceSetAction");
+    }
+    if(channel_actions && channel_actions->size() > 0){
+        toJsonArray((QList<void*>*)channel_actions, obj, "channelActions", "SWGSchedulerChannelAction");
     }
     if(feature_actions && feature_actions->size() > 0){
         toJsonArray((QList<void*>*)feature_actions, obj, "featureActions", "SWGSchedulerFeatureAction");
@@ -331,6 +379,16 @@ SWGSchedulerRule::setTime(QString* time) {
     this->m_time_isSet = true;
 }
 
+QString*
+SWGSchedulerRule::getDateUntil() {
+    return date_until;
+}
+void
+SWGSchedulerRule::setDateUntil(QString* date_until) {
+    this->date_until = date_until;
+    this->m_date_until_isSet = true;
+}
+
 qint32
 SWGSchedulerRule::getRecurrence() {
     return recurrence;
@@ -339,6 +397,16 @@ void
 SWGSchedulerRule::setRecurrence(qint32 recurrence) {
     this->recurrence = recurrence;
     this->m_recurrence_isSet = true;
+}
+
+qint32
+SWGSchedulerRule::getWeekdayMask() {
+    return weekday_mask;
+}
+void
+SWGSchedulerRule::setWeekdayMask(qint32 weekday_mask) {
+    this->weekday_mask = weekday_mask;
+    this->m_weekday_mask_isSet = true;
 }
 
 qint32
@@ -369,6 +437,16 @@ void
 SWGSchedulerRule::setEventDataRegex(QString* event_data_regex) {
     this->event_data_regex = event_data_regex;
     this->m_event_data_regex_isSet = true;
+}
+
+qint32
+SWGSchedulerRule::getEventCount() {
+    return event_count;
+}
+void
+SWGSchedulerRule::setEventCount(qint32 event_count) {
+    this->event_count = event_count;
+    this->m_event_count_isSet = true;
 }
 
 qint32
@@ -441,6 +519,16 @@ SWGSchedulerRule::setDeviceSetActions(QList<SWGSchedulerDeviceSetAction*>* devic
     this->m_device_set_actions_isSet = true;
 }
 
+QList<SWGSchedulerChannelAction*>*
+SWGSchedulerRule::getChannelActions() {
+    return channel_actions;
+}
+void
+SWGSchedulerRule::setChannelActions(QList<SWGSchedulerChannelAction*>* channel_actions) {
+    this->channel_actions = channel_actions;
+    this->m_channel_actions_isSet = true;
+}
+
 QList<SWGSchedulerFeatureAction*>*
 SWGSchedulerRule::getFeatureActions() {
     return feature_actions;
@@ -481,7 +569,13 @@ SWGSchedulerRule::isSet(){
         if(time && *time != QString("")){
             isObjectUpdated = true; break;
         }
+        if(date_until && *date_until != QString("")){
+            isObjectUpdated = true; break;
+        }
         if(m_recurrence_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_weekday_mask_isSet){
             isObjectUpdated = true; break;
         }
         if(m_event_type_isSet){
@@ -491,6 +585,9 @@ SWGSchedulerRule::isSet(){
             isObjectUpdated = true; break;
         }
         if(event_data_regex && *event_data_regex != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_event_count_isSet){
             isObjectUpdated = true; break;
         }
         if(m_event_delay_isSet){
@@ -512,6 +609,9 @@ SWGSchedulerRule::isSet(){
             isObjectUpdated = true; break;
         }
         if(device_set_actions && (device_set_actions->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(channel_actions && (channel_actions->size() > 0)){
             isObjectUpdated = true; break;
         }
         if(feature_actions && (feature_actions->size() > 0)){

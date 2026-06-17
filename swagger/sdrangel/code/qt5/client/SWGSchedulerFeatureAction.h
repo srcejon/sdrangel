@@ -22,6 +22,8 @@
 #include <QJsonObject>
 
 
+#include "SWGSchedulerSettingValue.h"
+#include <QList>
 #include <QString>
 
 #include "SWGObject.h"
@@ -75,6 +77,9 @@ public:
     QString* getFindTarget();
     void setFindTarget(QString* find_target);
 
+    QList<SWGSchedulerSettingValue*>* getSettings();
+    void setSettings(QList<SWGSchedulerSettingValue*>* settings);
+
 
     virtual bool isSet() override;
 
@@ -111,6 +116,9 @@ private:
 
     QString* find_target;
     bool m_find_target_isSet;
+
+    QList<SWGSchedulerSettingValue*>* settings;
+    bool m_settings_isSet;
 
 };
 

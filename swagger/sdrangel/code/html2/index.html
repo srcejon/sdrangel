@@ -3578,6 +3578,10 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Record calibrated/debayered video (1 for yes, 0 for no)"
     },
+    "recordFilteredMedia" : {
+      "type" : "integer",
+      "description" : "Record filtered image-processor video (1 for yes, 0 for no)"
+    },
     "recordPostProcessedMedia" : {
       "type" : "integer",
       "description" : "Record post-processed video with overlays (1 for yes, 0 for no)"
@@ -3603,6 +3607,10 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Save calibrated/debayered image (1 for yes, 0 for no)"
     },
+    "recordFilteredMedia" : {
+      "type" : "integer",
+      "description" : "Save filtered image-processor image (1 for yes, 0 for no)"
+    },
     "recordPostProcessedMedia" : {
       "type" : "integer",
       "description" : "Save post-processed image with overlays (1 for yes, 0 for no)"
@@ -3613,80 +3621,6 @@ margin-bottom: 20px;
     }
   },
   "description" : "Save image to file"
-};
-            defs.CameraObjectClassSettings = {
-  "properties" : {
-    "className" : {
-      "type" : "string",
-      "description" : "YOLO class name this entry applies to"
-    },
-    "deviceSettings" : {
-      "type" : "array",
-      "description" : "List of SDRangel device set actions to trigger on detection or disappearance",
-      "items" : {
-        "$ref" : "#/definitions/CameraObjectDeviceSettings"
-      }
-    }
-  },
-  "description" : "Device control settings for a single YOLO object class"
-};
-            defs.CameraObjectDeviceSettings = {
-  "properties" : {
-    "deviceSetIndex" : {
-      "type" : "integer",
-      "description" : "Device set index in SDRangel"
-    },
-    "presetGroup" : {
-      "type" : "string",
-      "description" : "Preset group to load on object detection"
-    },
-    "presetFrequency" : {
-      "type" : "integer",
-      "format" : "int64",
-      "description" : "Preset centre frequency in Hz"
-    },
-    "presetDescription" : {
-      "type" : "string",
-      "description" : "Preset description to identify the preset"
-    },
-    "startOnDetect" : {
-      "type" : "integer",
-      "description" : "Start acquisition when the object class is detected (1 for yes, 0 for no)"
-    },
-    "stopOnDisappear" : {
-      "type" : "integer",
-      "description" : "Stop acquisition when the object class disappears (1 for yes, 0 for no)"
-    },
-    "startStopFileSink" : {
-      "type" : "integer",
-      "description" : "Start/stop file sinks with detection/disappearance (1 for yes, 0 for no)"
-    },
-    "saveCurrentImage" : {
-      "type" : "integer",
-      "description" : "Save the current image when the object class is detected (1 for yes, 0 for no)"
-    },
-    "recordVideo" : {
-      "type" : "integer",
-      "description" : "Start video recording on detection and stop when the object disappears (1 for yes, 0 for no)"
-    },
-    "detectCommand" : {
-      "type" : "string",
-      "description" : "Command or script to execute when the object class is detected"
-    },
-    "disappearCommand" : {
-      "type" : "string",
-      "description" : "Command or script to execute when the object class disappears"
-    },
-    "detectSpeech" : {
-      "type" : "string",
-      "description" : "Text to speak when the object class is detected"
-    },
-    "disappearSpeech" : {
-      "type" : "string",
-      "description" : "Text to speak when the object class disappears"
-    }
-  },
-  "description" : "SDRangel device set actions triggered by YOLO object detection or disappearance"
 };
             defs.CameraRect = {
   "properties" : {
@@ -3724,7 +3658,7 @@ margin-bottom: 20px;
     },
     "cameraProtocol" : {
       "type" : "string",
-      "description" : "Camera protocol identifier (e.g. 'ALPACA', 'QT', 'file:')"
+      "description" : "Camera protocol identifier (e.g. 'ALPACA', 'QT', 'video:')"
     },
     "cameraId" : {
       "type" : "string",
@@ -3945,9 +3879,20 @@ margin-bottom: 20px;
       "type" : "string",
       "description" : "File path for file-based camera video source"
     },
+    "streamUrl" : {
+      "type" : "string",
+      "description" : "URL for stream: camera source"
+    },
+    "streamUrlHistory" : {
+      "type" : "array",
+      "description" : "Previously opened stream URLs for the stream: camera source",
+      "items" : {
+        "type" : "string"
+      }
+    },
     "imageFileCameraPaths" : {
       "type" : "array",
-      "description" : "Ordered image file list for files: image sequence camera source",
+      "description" : "Ordered image file list for images: image sequence camera source",
       "items" : {
         "type" : "string"
       }
@@ -3955,6 +3900,14 @@ margin-bottom: 20px;
     "videoFileName" : {
       "type" : "string",
       "description" : "File path for recorded video output"
+    },
+    "videoCodec" : {
+      "type" : "integer",
+      "description" : "Codec used for saved video recordings\n  * 0 - H.264\n  * 1 - H.265\n"
+    },
+    "videoRecordBitrateKbps" : {
+      "type" : "integer",
+      "description" : "Saved video bitrate in kbit/s; 0 selects automatic bitrate from frame size and frame rate"
     },
     "recordRawFits" : {
       "type" : "integer",
@@ -3964,9 +3917,69 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Save calibrated/debayered still images and videos (1 for yes, 0 for no)"
     },
+    "recordFilteredMedia" : {
+      "type" : "integer",
+      "description" : "Save filtered image-processor still images and videos (1 for yes, 0 for no)"
+    },
     "recordPostProcessedMedia" : {
       "type" : "integer",
       "description" : "Save post-processed still images and videos with overlays (1 for yes, 0 for no)"
+    },
+    "keogramEnabled" : {
+      "type" : "integer",
+      "description" : "Build and save a 24-hour keogram from calibrated frames (1 for yes, 0 for no)"
+    },
+    "keogramFileName" : {
+      "type" : "string",
+      "description" : "File basename for saved keograms (.jpg or .png)"
+    },
+    "keogramDirection" : {
+      "type" : "integer",
+      "description" : "Keogram sample direction\n  * 0 - Horizontal\n  * 1 - Vertical\n"
+    },
+    "keogramDayMode" : {
+      "type" : "integer",
+      "description" : "Keogram 24-hour window\n  * 0 - Midnight to midnight\n  * 1 - Midday to midday\n"
+    },
+    "keogramSamplePeriodMinutes" : {
+      "type" : "integer",
+      "description" : "Keogram sample period in minutes"
+    },
+    "keogramShowPreview" : {
+      "type" : "integer",
+      "description" : "Show live keogram preview (1 for yes, 0 for no)"
+    },
+    "youtubeStreamEnabled" : {
+      "type" : "integer",
+      "description" : "Stream captured video to YouTube (1 for yes, 0 for no)"
+    },
+    "youtubeStreamUrl" : {
+      "type" : "string",
+      "description" : "YouTube RTMP/RTMPS ingest URL"
+    },
+    "youtubeStreamKey" : {
+      "type" : "string",
+      "description" : "YouTube stream key"
+    },
+    "youtubeStreamPostProcessed" : {
+      "type" : "integer",
+      "description" : "Stream post-processed frames instead of calibrated frames (1 for yes, 0 for no)"
+    },
+    "youtubeStreamBitrateKbps" : {
+      "type" : "integer",
+      "description" : "YouTube stream video bitrate in kbit/s"
+    },
+    "youtubeStreamFps" : {
+      "type" : "integer",
+      "description" : "YouTube stream frame rate"
+    },
+    "youtubeStreamWidth" : {
+      "type" : "integer",
+      "description" : "YouTube stream output width in pixels; 0 = source width"
+    },
+    "youtubeStreamHeight" : {
+      "type" : "integer",
+      "description" : "YouTube stream output height in pixels; 0 = source height"
     },
     "videoHwAcceleration" : {
       "type" : "integer",
@@ -3980,6 +3993,10 @@ margin-bottom: 20px;
       "type" : "number",
       "format" : "double",
       "description" : "Playback rate multiplier for file-camera video input"
+    },
+    "videoPlaybackAudioOffsetMs" : {
+      "type" : "integer",
+      "description" : "Preview audio offset in milliseconds for video-camera playback; negative plays audio earlier"
     },
     "videoPreRecordBufferSeconds" : {
       "type" : "integer",
@@ -4332,6 +4349,14 @@ margin-bottom: 20px;
       "format" : "double",
       "description" : "Tracked object label font point size"
     },
+    "trackObjectTrails" : {
+      "type" : "integer",
+      "description" : "Draw persistent trails for tracked overlay objects (1 for yes, 0 for no)"
+    },
+    "trackObjectHeatMap" : {
+      "type" : "integer",
+      "description" : "Draw a persistent heat map from tracked overlay object positions (1 for yes, 0 for no)"
+    },
     "gridLabelFontFamily" : {
       "type" : "string",
       "description" : "Font family for sky grid labels"
@@ -4550,6 +4575,11 @@ margin-bottom: 20px;
       "format" : "double",
       "description" : "Search radius around current pointing estimate in degrees"
     },
+    "plateSolveFovTolerance" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Allowed FoV refinement tolerance as a percentage of the entered FoV; 0 pins FoV to the entered value"
+    },
     "plateSolveStartMode" : {
       "type" : "integer",
       "description" : "Plate solve start mode\n  * 0 - Blind\n  * 1 - FoV\n  * 2 - FoV/elevation\n  * 3 - FoV/azimuth/elevation\n  * 4 - FoV/azimuth/elevation/roll\n  * 5 - FoV/azimuth/elevation/roll/lens\n  * 6 - Current settings only\n"
@@ -4576,11 +4606,15 @@ margin-bottom: 20px;
     },
     "plateSolveCatalogSource" : {
       "type" : "integer",
-      "description" : "Plate solve catalog source\n  * 0 - Auto\n  * 1 - HYG\n  * 2 - Siril SPCC Gaia\n"
+      "description" : "Plate solve catalog source\n  * 0 - Auto\n  * 1 - HYG\n  * 2 - Siril SPCC Gaia\n  * 3 - Siril Gaia DR3 Astrometric\n"
     },
     "plateSolveApplyMode" : {
       "type" : "integer",
       "description" : "Plate solve apply mode\n  * 0 - Azimuth/elevation\n  * 1 - Azimuth/elevation/roll\n  * 2 - Azimuth/elevation/roll/FoV\n  * 3 - Azimuth/elevation/roll/FoV/lens\n"
+    },
+    "starCatalogDiskCacheSizeGb" : {
+      "type" : "integer",
+      "description" : "Maximum star catalog disk cache size in GB; 0 = unlimited"
     },
     "overlaySpectrum" : {
       "type" : "integer",
@@ -4629,11 +4663,6 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Default bounding box colour as 0xRRGGBB integer (used when no per-class colour is set)"
     },
-    "yoloDisappearDebounce" : {
-      "type" : "number",
-      "format" : "double",
-      "description" : "Seconds a class must remain absent before it is treated as disappeared"
-    },
     "yoloTileLargeImages" : {
       "type" : "integer",
       "description" : "Tile images larger than the YOLO model input size before inference (1 for yes, 0 for no)"
@@ -4642,16 +4671,16 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Tile overlap percentage for large-image YOLO inference"
     },
+    "yoloIgnoredClassNames" : {
+      "type" : "array",
+      "description" : "YOLO class labels to ignore after detection",
+      "items" : {
+        "type" : "string"
+      }
+    },
     "yoloDnnTarget" : {
       "type" : "integer",
       "description" : "YOLO inference backend/target\n  * 0 - CPU\n  * 1 - CUDA FP32\n  * 2 - CUDA FP16\n  * 3 - TensorRT FP32\n  * 4 - TensorRT FP16\n"
-    },
-    "objectDeviceSettings" : {
-      "type" : "array",
-      "description" : "Per-YOLO-class device control settings",
-      "items" : {
-        "$ref" : "#/definitions/CameraObjectClassSettings"
-      }
     },
     "audioMute" : {
       "type" : "integer",
@@ -16874,6 +16903,55 @@ margin-bottom: 20px;
   },
   "description" : "Satellite Tracker settings"
 };
+            defs.SchedulerChannelAction = {
+  "properties" : {
+    "deviceSetIndex" : {
+      "type" : "integer"
+    },
+    "deviceSetId" : {
+      "type" : "string"
+    },
+    "channelIndex" : {
+      "type" : "integer"
+    },
+    "channelId" : {
+      "type" : "string",
+      "description" : "Channel long ID"
+    },
+    "action" : {
+      "type" : "integer",
+      "description" : "Channel action\n  * 0 - No change\n  * 6 - Start FileSink recording\n  * 7 - Stop FileSink recording\n  * 8 - Start SigMF recording\n  * 9 - Stop SigMF recording\n  * 10 - Transmit RTTY\n  * 11 - Transmit PSK31\n  * 12 - Transmit packet\n  * 13 - Transmit IEEE 802.15.4\n  * 14 - Transmit AIS\n  * 15 - Run frequency scanner\n  * 16 - Stop frequency scanner\n  * 17 - Start radio astronomy sweep\n  * 18 - Apply setting\n"
+    },
+    "text" : {
+      "type" : "string",
+      "description" : "Text payload for text-based transmit actions"
+    },
+    "callsign" : {
+      "type" : "string",
+      "description" : "Source callsign for packet transmit"
+    },
+    "to" : {
+      "type" : "string",
+      "description" : "Destination callsign for packet transmit"
+    },
+    "via" : {
+      "type" : "string",
+      "description" : "Via path for packet transmit"
+    },
+    "data" : {
+      "type" : "string",
+      "description" : "Data payload for binary or structured transmit actions"
+    },
+    "settings" : {
+      "type" : "array",
+      "description" : "Optional channel settings to patch when the rule fires",
+      "items" : {
+        "$ref" : "#/definitions/SchedulerSettingValue"
+      }
+    }
+  },
+  "description" : "Channel action executed by a scheduler rule"
+};
             defs.SchedulerDeviceSetAction = {
   "properties" : {
     "deviceSetIndex" : {
@@ -16911,6 +16989,13 @@ margin-bottom: 20px;
       "type" : "integer",
       "format" : "int64",
       "description" : "Device-set centre frequency in Hz"
+    },
+    "settings" : {
+      "type" : "array",
+      "description" : "Optional device settings to patch when the rule fires",
+      "items" : {
+        "$ref" : "#/definitions/SchedulerSettingValue"
+      }
     }
   },
   "description" : "Device-set action executed by a scheduler rule"
@@ -16929,7 +17014,7 @@ margin-bottom: 20px;
     },
     "action" : {
       "type" : "integer",
-      "description" : "Feature action\n  * 0 - No change\n  * 1 - Start\n  * 2 - Stop\n  * 3 - Camera save image\n  * 4 - Camera record video\n  * 5 - Map or SkyMap find\n"
+      "description" : "Feature action\n  * 0 - No change\n  * 1 - Start\n  * 2 - Stop\n  * 3 - Camera save image\n  * 4 - Camera record video\n  * 5 - Map or SkyMap find\n  * 18 - Apply setting\n"
     },
     "cameraFilename" : {
       "type" : "string",
@@ -16958,6 +17043,13 @@ margin-bottom: 20px;
     "findTarget" : {
       "type" : "string",
       "description" : "Target string for Map or SkyMap find action."
+    },
+    "settings" : {
+      "type" : "array",
+      "description" : "Optional feature settings to patch when the rule fires",
+      "items" : {
+        "$ref" : "#/definitions/SchedulerSettingValue"
+      }
     }
   },
   "description" : "Feature action executed by a scheduler rule"
@@ -16983,9 +17075,17 @@ margin-bottom: 20px;
       "type" : "string",
       "description" : "Rule time for time-based triggers"
     },
+    "dateUntil" : {
+      "type" : "string",
+      "description" : "Optional end date for recurring time-based triggers"
+    },
     "recurrence" : {
       "type" : "integer",
       "description" : "Time trigger recurrence\n  * 0 - Once\n  * 1 - Daily\n  * 2 - Monthly\n"
+    },
+    "weekdayMask" : {
+      "type" : "integer",
+      "description" : "Weekday bit mask for daily recurrence (Mon bit 0 through Sun bit 6)"
     },
     "eventType" : {
       "type" : "integer",
@@ -16998,6 +17098,10 @@ margin-bottom: 20px;
     "eventDataRegex" : {
       "type" : "string",
       "description" : "Optional regular expression matched against event data"
+    },
+    "eventCount" : {
+      "type" : "integer",
+      "description" : "Number of matching events required before triggering actions"
     },
     "eventDelay" : {
       "type" : "integer",
@@ -17030,6 +17134,13 @@ margin-bottom: 20px;
         "$ref" : "#/definitions/SchedulerDeviceSetAction"
       }
     },
+    "channelActions" : {
+      "type" : "array",
+      "description" : "Channel actions executed when the rule fires",
+      "items" : {
+        "$ref" : "#/definitions/SchedulerChannelAction"
+      }
+    },
     "featureActions" : {
       "type" : "array",
       "description" : "Feature actions executed when the rule fires",
@@ -17043,6 +17154,23 @@ margin-bottom: 20px;
     }
   },
   "description" : "Scheduler rule"
+};
+            defs.SchedulerSettingValue = {
+  "properties" : {
+    "name" : {
+      "type" : "string",
+      "description" : "Setting name"
+    },
+    "value" : {
+      "type" : "string",
+      "description" : "Setting value represented as text"
+    },
+    "type" : {
+      "type" : "integer",
+      "description" : "Setting value type\n  * 0 - String\n  * 1 - Integer\n  * 2 - Double\n"
+    }
+  },
+  "description" : "Named setting value patched into a device, channel, or feature"
 };
             defs.SchedulerSettings = {
   "properties" : {
@@ -61853,7 +61981,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-05-29T12:02:04.176+02:00
+              Generated 2026-06-17T15:43:36.900+02:00
             </div>
           </div>
       </div>

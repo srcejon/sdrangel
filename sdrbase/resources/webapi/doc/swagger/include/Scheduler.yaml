@@ -35,12 +35,18 @@ SchedulerRule:
     time:
       description: "Rule time for time-based triggers"
       type: string
+    dateUntil:
+      description: "Optional end date for recurring time-based triggers"
+      type: string
     recurrence:
       description: >
         Time trigger recurrence
           * 0 - Once
           * 1 - Daily
           * 2 - Monthly
+      type: integer
+    weekdayMask:
+      description: "Weekday bit mask for daily recurrence (Mon bit 0 through Sun bit 6)"
       type: integer
     eventType:
       description: "Event type index for event-based triggers"
@@ -51,6 +57,9 @@ SchedulerRule:
     eventDataRegex:
       description: "Optional regular expression matched against event data"
       type: string
+    eventCount:
+      description: "Number of matching events required before triggering actions"
+      type: integer
     eventDelay:
       description: "Delay before executing event-triggered rule"
       type: integer
@@ -80,6 +89,11 @@ SchedulerRule:
       type: array
       items:
         $ref: "/doc/swagger/include/Scheduler.yaml#/SchedulerDeviceSetAction"
+    channelActions:
+      description: "Channel actions executed when the rule fires"
+      type: array
+      items:
+        $ref: "/doc/swagger/include/Scheduler.yaml#/SchedulerChannelAction"
     featureActions:
       description: "Feature actions executed when the rule fires"
       type: array
@@ -127,6 +141,62 @@ SchedulerDeviceSetAction:
       description: "Device-set centre frequency in Hz"
       type: integer
       format: int64
+    settings:
+      description: "Optional device settings to patch when the rule fires"
+      type: array
+      items:
+        $ref: "/doc/swagger/include/Scheduler.yaml#/SchedulerSettingValue"
+
+SchedulerChannelAction:
+  description: "Channel action executed by a scheduler rule"
+  properties:
+    deviceSetIndex:
+      type: integer
+    deviceSetId:
+      type: string
+    channelIndex:
+      type: integer
+    channelId:
+      description: "Channel long ID"
+      type: string
+    action:
+      description: >
+        Channel action
+          * 0 - No change
+          * 6 - Start FileSink recording
+          * 7 - Stop FileSink recording
+          * 8 - Start SigMF recording
+          * 9 - Stop SigMF recording
+          * 10 - Transmit RTTY
+          * 11 - Transmit PSK31
+          * 12 - Transmit packet
+          * 13 - Transmit IEEE 802.15.4
+          * 14 - Transmit AIS
+          * 15 - Run frequency scanner
+          * 16 - Stop frequency scanner
+          * 17 - Start radio astronomy sweep
+          * 18 - Apply setting
+      type: integer
+    text:
+      description: "Text payload for text-based transmit actions"
+      type: string
+    callsign:
+      description: "Source callsign for packet transmit"
+      type: string
+    to:
+      description: "Destination callsign for packet transmit"
+      type: string
+    via:
+      description: "Via path for packet transmit"
+      type: string
+    data:
+      description: "Data payload for binary or structured transmit actions"
+      type: string
+    settings:
+      description: "Optional channel settings to patch when the rule fires"
+      type: array
+      items:
+        $ref: "/doc/swagger/include/Scheduler.yaml#/SchedulerSettingValue"
 
 SchedulerFeatureAction:
   description: "Feature action executed by a scheduler rule"
@@ -147,6 +217,7 @@ SchedulerFeatureAction:
           * 3 - Camera save image
           * 4 - Camera record video
           * 5 - Map or SkyMap find
+          * 18 - Apply setting
       type: integer
     cameraFilename:
       description: "Optional Camera filename for save image or record video actions. Empty uses the Camera feature setting."
@@ -169,3 +240,25 @@ SchedulerFeatureAction:
     findTarget:
       description: "Target string for Map or SkyMap find action."
       type: string
+    settings:
+      description: "Optional feature settings to patch when the rule fires"
+      type: array
+      items:
+        $ref: "/doc/swagger/include/Scheduler.yaml#/SchedulerSettingValue"
+
+SchedulerSettingValue:
+  description: "Named setting value patched into a device, channel, or feature"
+  properties:
+    name:
+      description: "Setting name"
+      type: string
+    value:
+      description: "Setting value represented as text"
+      type: string
+    type:
+      description: >
+        Setting value type
+          * 0 - String
+          * 1 - Integer
+          * 2 - Double
+      type: integer

@@ -32,6 +32,8 @@ SWGCameraActions_recordVideo::SWGCameraActions_recordVideo() {
     m_filename_isSet = false;
     record_calibrated_media = 0;
     m_record_calibrated_media_isSet = false;
+    record_filtered_media = 0;
+    m_record_filtered_media_isSet = false;
     record_post_processed_media = 0;
     m_record_post_processed_media_isSet = false;
     duration = 0;
@@ -48,6 +50,8 @@ SWGCameraActions_recordVideo::init() {
     m_filename_isSet = false;
     record_calibrated_media = 0;
     m_record_calibrated_media_isSet = false;
+    record_filtered_media = 0;
+    m_record_filtered_media_isSet = false;
     record_post_processed_media = 0;
     m_record_post_processed_media_isSet = false;
     duration = 0;
@@ -59,6 +63,7 @@ SWGCameraActions_recordVideo::cleanup() {
     if(filename != nullptr) { 
         delete filename;
     }
+
 
 
 
@@ -78,6 +83,8 @@ SWGCameraActions_recordVideo::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&filename, pJson["filename"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&record_calibrated_media, pJson["recordCalibratedMedia"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&record_filtered_media, pJson["recordFilteredMedia"], "qint32", "");
     
     ::SWGSDRangel::setValue(&record_post_processed_media, pJson["recordPostProcessedMedia"], "qint32", "");
     
@@ -104,6 +111,9 @@ SWGCameraActions_recordVideo::asJsonObject() {
     }
     if(m_record_calibrated_media_isSet){
         obj->insert("recordCalibratedMedia", QJsonValue(record_calibrated_media));
+    }
+    if(m_record_filtered_media_isSet){
+        obj->insert("recordFilteredMedia", QJsonValue(record_filtered_media));
     }
     if(m_record_post_processed_media_isSet){
         obj->insert("recordPostProcessedMedia", QJsonValue(record_post_processed_media));
@@ -136,6 +146,16 @@ SWGCameraActions_recordVideo::setRecordCalibratedMedia(qint32 record_calibrated_
 }
 
 qint32
+SWGCameraActions_recordVideo::getRecordFilteredMedia() {
+    return record_filtered_media;
+}
+void
+SWGCameraActions_recordVideo::setRecordFilteredMedia(qint32 record_filtered_media) {
+    this->record_filtered_media = record_filtered_media;
+    this->m_record_filtered_media_isSet = true;
+}
+
+qint32
 SWGCameraActions_recordVideo::getRecordPostProcessedMedia() {
     return record_post_processed_media;
 }
@@ -164,6 +184,9 @@ SWGCameraActions_recordVideo::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_record_calibrated_media_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_record_filtered_media_isSet){
             isObjectUpdated = true; break;
         }
         if(m_record_post_processed_media_isSet){

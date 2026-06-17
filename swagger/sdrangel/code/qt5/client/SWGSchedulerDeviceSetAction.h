@@ -22,6 +22,8 @@
 #include <QJsonObject>
 
 
+#include "SWGSchedulerSettingValue.h"
+#include <QList>
 #include <QString>
 
 #include "SWGObject.h"
@@ -69,6 +71,9 @@ public:
     qint64 getCenterFrequency();
     void setCenterFrequency(qint64 center_frequency);
 
+    QList<SWGSchedulerSettingValue*>* getSettings();
+    void setSettings(QList<SWGSchedulerSettingValue*>* settings);
+
 
     virtual bool isSet() override;
 
@@ -99,6 +104,9 @@ private:
 
     qint64 center_frequency;
     bool m_center_frequency_isSet;
+
+    QList<SWGSchedulerSettingValue*>* settings;
+    bool m_settings_isSet;
 
 };
 

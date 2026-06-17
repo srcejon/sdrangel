@@ -22,6 +22,7 @@
 #include <QJsonObject>
 
 
+#include "SWGSchedulerChannelAction.h"
 #include "SWGSchedulerDeviceSetAction.h"
 #include "SWGSchedulerFeatureAction.h"
 #include <QList>
@@ -60,8 +61,14 @@ public:
     QString* getTime();
     void setTime(QString* time);
 
+    QString* getDateUntil();
+    void setDateUntil(QString* date_until);
+
     qint32 getRecurrence();
     void setRecurrence(qint32 recurrence);
+
+    qint32 getWeekdayMask();
+    void setWeekdayMask(qint32 weekday_mask);
 
     qint32 getEventType();
     void setEventType(qint32 event_type);
@@ -71,6 +78,9 @@ public:
 
     QString* getEventDataRegex();
     void setEventDataRegex(QString* event_data_regex);
+
+    qint32 getEventCount();
+    void setEventCount(qint32 event_count);
 
     qint32 getEventDelay();
     void setEventDelay(qint32 event_delay);
@@ -92,6 +102,9 @@ public:
 
     QList<SWGSchedulerDeviceSetAction*>* getDeviceSetActions();
     void setDeviceSetActions(QList<SWGSchedulerDeviceSetAction*>* device_set_actions);
+
+    QList<SWGSchedulerChannelAction*>* getChannelActions();
+    void setChannelActions(QList<SWGSchedulerChannelAction*>* channel_actions);
 
     QList<SWGSchedulerFeatureAction*>* getFeatureActions();
     void setFeatureActions(QList<SWGSchedulerFeatureAction*>* feature_actions);
@@ -118,8 +131,14 @@ private:
     QString* time;
     bool m_time_isSet;
 
+    QString* date_until;
+    bool m_date_until_isSet;
+
     qint32 recurrence;
     bool m_recurrence_isSet;
+
+    qint32 weekday_mask;
+    bool m_weekday_mask_isSet;
 
     qint32 event_type;
     bool m_event_type_isSet;
@@ -129,6 +148,9 @@ private:
 
     QString* event_data_regex;
     bool m_event_data_regex_isSet;
+
+    qint32 event_count;
+    bool m_event_count_isSet;
 
     qint32 event_delay;
     bool m_event_delay_isSet;
@@ -150,6 +172,9 @@ private:
 
     QList<SWGSchedulerDeviceSetAction*>* device_set_actions;
     bool m_device_set_actions_isSet;
+
+    QList<SWGSchedulerChannelAction*>* channel_actions;
+    bool m_channel_actions_isSet;
 
     QList<SWGSchedulerFeatureAction*>* feature_actions;
     bool m_feature_actions_isSet;

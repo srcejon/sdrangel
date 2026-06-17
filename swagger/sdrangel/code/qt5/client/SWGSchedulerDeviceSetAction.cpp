@@ -46,6 +46,8 @@ SWGSchedulerDeviceSetAction::SWGSchedulerDeviceSetAction() {
     m_override_center_frequency_isSet = false;
     center_frequency = 0L;
     m_center_frequency_isSet = false;
+    settings = nullptr;
+    m_settings_isSet = false;
 }
 
 SWGSchedulerDeviceSetAction::~SWGSchedulerDeviceSetAction() {
@@ -72,6 +74,8 @@ SWGSchedulerDeviceSetAction::init() {
     m_override_center_frequency_isSet = false;
     center_frequency = 0L;
     m_center_frequency_isSet = false;
+    settings = new QList<SWGSchedulerSettingValue*>();
+    m_settings_isSet = false;
 }
 
 void
@@ -91,6 +95,13 @@ SWGSchedulerDeviceSetAction::cleanup() {
 
 
 
+    if(settings != nullptr) { 
+        auto arr = settings;
+        for(auto o: *arr) { 
+            delete o;
+        }
+        delete settings;
+    }
 }
 
 SWGSchedulerDeviceSetAction*
@@ -122,6 +133,8 @@ SWGSchedulerDeviceSetAction::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&center_frequency, pJson["centerFrequency"], "qint64", "");
     
+    
+    ::SWGSDRangel::setValue(&settings, pJson["settings"], "QList", "SWGSchedulerSettingValue");
 }
 
 QString
@@ -164,6 +177,9 @@ SWGSchedulerDeviceSetAction::asJsonObject() {
     }
     if(m_center_frequency_isSet){
         obj->insert("centerFrequency", QJsonValue(center_frequency));
+    }
+    if(settings && settings->size() > 0){
+        toJsonArray((QList<void*>*)settings, obj, "settings", "SWGSchedulerSettingValue");
     }
 
     return obj;
@@ -259,6 +275,16 @@ SWGSchedulerDeviceSetAction::setCenterFrequency(qint64 center_frequency) {
     this->m_center_frequency_isSet = true;
 }
 
+QList<SWGSchedulerSettingValue*>*
+SWGSchedulerDeviceSetAction::getSettings() {
+    return settings;
+}
+void
+SWGSchedulerDeviceSetAction::setSettings(QList<SWGSchedulerSettingValue*>* settings) {
+    this->settings = settings;
+    this->m_settings_isSet = true;
+}
+
 
 bool
 SWGSchedulerDeviceSetAction::isSet(){
@@ -289,6 +315,9 @@ SWGSchedulerDeviceSetAction::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_center_frequency_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(settings && (settings->size() > 0)){
             isObjectUpdated = true; break;
         }
     }while(false);

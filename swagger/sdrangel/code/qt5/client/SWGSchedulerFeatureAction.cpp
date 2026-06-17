@@ -50,6 +50,8 @@ SWGSchedulerFeatureAction::SWGSchedulerFeatureAction() {
     m_camera_video_duration_isSet = false;
     find_target = nullptr;
     m_find_target_isSet = false;
+    settings = nullptr;
+    m_settings_isSet = false;
 }
 
 SWGSchedulerFeatureAction::~SWGSchedulerFeatureAction() {
@@ -80,6 +82,8 @@ SWGSchedulerFeatureAction::init() {
     m_camera_video_duration_isSet = false;
     find_target = new QString("");
     m_find_target_isSet = false;
+    settings = new QList<SWGSchedulerSettingValue*>();
+    m_settings_isSet = false;
 }
 
 void
@@ -100,6 +104,13 @@ SWGSchedulerFeatureAction::cleanup() {
 
     if(find_target != nullptr) { 
         delete find_target;
+    }
+    if(settings != nullptr) { 
+        auto arr = settings;
+        for(auto o: *arr) { 
+            delete o;
+        }
+        delete settings;
     }
 }
 
@@ -136,6 +147,8 @@ SWGSchedulerFeatureAction::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&find_target, pJson["findTarget"], "QString", "QString");
     
+    
+    ::SWGSDRangel::setValue(&settings, pJson["settings"], "QList", "SWGSchedulerSettingValue");
 }
 
 QString
@@ -184,6 +197,9 @@ SWGSchedulerFeatureAction::asJsonObject() {
     }
     if(find_target != nullptr && *find_target != QString("")){
         toJsonValue(QString("findTarget"), find_target, obj, QString("QString"));
+    }
+    if(settings && settings->size() > 0){
+        toJsonArray((QList<void*>*)settings, obj, "settings", "SWGSchedulerSettingValue");
     }
 
     return obj;
@@ -299,6 +315,16 @@ SWGSchedulerFeatureAction::setFindTarget(QString* find_target) {
     this->m_find_target_isSet = true;
 }
 
+QList<SWGSchedulerSettingValue*>*
+SWGSchedulerFeatureAction::getSettings() {
+    return settings;
+}
+void
+SWGSchedulerFeatureAction::setSettings(QList<SWGSchedulerSettingValue*>* settings) {
+    this->settings = settings;
+    this->m_settings_isSet = true;
+}
+
 
 bool
 SWGSchedulerFeatureAction::isSet(){
@@ -335,6 +361,9 @@ SWGSchedulerFeatureAction::isSet(){
             isObjectUpdated = true; break;
         }
         if(find_target && *find_target != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(settings && (settings->size() > 0)){
             isObjectUpdated = true; break;
         }
     }while(false);

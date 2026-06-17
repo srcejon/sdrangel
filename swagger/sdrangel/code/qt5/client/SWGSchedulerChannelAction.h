@@ -11,17 +11,19 @@
  */
 
 /*
- * SWGCameraActions_recordVideo.h
+ * SWGSchedulerChannelAction.h
  *
- * Record video to file
+ * Channel action executed by a scheduler rule
  */
 
-#ifndef SWGCameraActions_recordVideo_H_
-#define SWGCameraActions_recordVideo_H_
+#ifndef SWGSchedulerChannelAction_H_
+#define SWGSchedulerChannelAction_H_
 
 #include <QJsonObject>
 
 
+#include "SWGSchedulerSettingValue.h"
+#include <QList>
 #include <QString>
 
 #include "SWGObject.h"
@@ -29,55 +31,91 @@
 
 namespace SWGSDRangel {
 
-class SWG_API SWGCameraActions_recordVideo: public SWGObject {
+class SWG_API SWGSchedulerChannelAction: public SWGObject {
 public:
-    SWGCameraActions_recordVideo();
-    SWGCameraActions_recordVideo(QString* json);
-    virtual ~SWGCameraActions_recordVideo();
+    SWGSchedulerChannelAction();
+    SWGSchedulerChannelAction(QString* json);
+    virtual ~SWGSchedulerChannelAction();
     void init();
     void cleanup();
 
     virtual QString asJson () override;
     virtual QJsonObject* asJsonObject() override;
     virtual void fromJsonObject(QJsonObject &json) override;
-    virtual SWGCameraActions_recordVideo* fromJson(QString &jsonString) override;
+    virtual SWGSchedulerChannelAction* fromJson(QString &jsonString) override;
 
-    QString* getFilename();
-    void setFilename(QString* filename);
+    qint32 getDeviceSetIndex();
+    void setDeviceSetIndex(qint32 device_set_index);
 
-    qint32 getRecordCalibratedMedia();
-    void setRecordCalibratedMedia(qint32 record_calibrated_media);
+    QString* getDeviceSetId();
+    void setDeviceSetId(QString* device_set_id);
 
-    qint32 getRecordFilteredMedia();
-    void setRecordFilteredMedia(qint32 record_filtered_media);
+    qint32 getChannelIndex();
+    void setChannelIndex(qint32 channel_index);
 
-    qint32 getRecordPostProcessedMedia();
-    void setRecordPostProcessedMedia(qint32 record_post_processed_media);
+    QString* getChannelId();
+    void setChannelId(QString* channel_id);
 
-    qint32 getDuration();
-    void setDuration(qint32 duration);
+    qint32 getAction();
+    void setAction(qint32 action);
+
+    QString* getText();
+    void setText(QString* text);
+
+    QString* getCallsign();
+    void setCallsign(QString* callsign);
+
+    QString* getTo();
+    void setTo(QString* to);
+
+    QString* getVia();
+    void setVia(QString* via);
+
+    QString* getData();
+    void setData(QString* data);
+
+    QList<SWGSchedulerSettingValue*>* getSettings();
+    void setSettings(QList<SWGSchedulerSettingValue*>* settings);
 
 
     virtual bool isSet() override;
 
 private:
-    QString* filename;
-    bool m_filename_isSet;
+    qint32 device_set_index;
+    bool m_device_set_index_isSet;
 
-    qint32 record_calibrated_media;
-    bool m_record_calibrated_media_isSet;
+    QString* device_set_id;
+    bool m_device_set_id_isSet;
 
-    qint32 record_filtered_media;
-    bool m_record_filtered_media_isSet;
+    qint32 channel_index;
+    bool m_channel_index_isSet;
 
-    qint32 record_post_processed_media;
-    bool m_record_post_processed_media_isSet;
+    QString* channel_id;
+    bool m_channel_id_isSet;
 
-    qint32 duration;
-    bool m_duration_isSet;
+    qint32 action;
+    bool m_action_isSet;
+
+    QString* text;
+    bool m_text_isSet;
+
+    QString* callsign;
+    bool m_callsign_isSet;
+
+    QString* to;
+    bool m_to_isSet;
+
+    QString* via;
+    bool m_via_isSet;
+
+    QString* data;
+    bool m_data_isSet;
+
+    QList<SWGSchedulerSettingValue*>* settings;
+    bool m_settings_isSet;
 
 };
 
 }
 
-#endif /* SWGCameraActions_recordVideo_H_ */
+#endif /* SWGSchedulerChannelAction_H_ */

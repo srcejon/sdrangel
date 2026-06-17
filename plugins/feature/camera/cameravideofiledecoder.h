@@ -90,9 +90,34 @@ public:
         quint64 m_droppedPendingAudioFrames = 0;
         quint64 m_audioTimestampJumps = 0;
         qint64 m_audioTimestampJumpMaxAbsMs = 0;
+        quint64 m_readFrameCalls = 0;
+        quint64 m_readFrameMs = 0;
+        qint64 m_readFrameMaxMs = 0;
+        quint64 m_mainReadPackets = 0;
+        quint64 m_mainReadMs = 0;
+        qint64 m_mainReadMaxMs = 0;
+        quint64 m_sendVideoPackets = 0;
+        quint64 m_sendVideoMs = 0;
+        qint64 m_sendVideoMaxMs = 0;
+        quint64 m_receiveVideoCalls = 0;
+        quint64 m_receiveVideoMs = 0;
+        qint64 m_receiveVideoMaxMs = 0;
+        quint64 m_finishAudioCalls = 0;
+        quint64 m_finishAudioMs = 0;
+        qint64 m_finishAudioMaxMs = 0;
+        quint64 m_readAheadAudioMs = 0;
+        qint64 m_readAheadAudioMaxMs = 0;
+        quint64 m_readAheadReadMs = 0;
+        qint64 m_readAheadReadMaxMs = 0;
+        quint64 m_sendAudioPackets = 0;
+        quint64 m_sendAudioMs = 0;
+        qint64 m_sendAudioMaxMs = 0;
         quint64 m_videoConvertFrames = 0;
         quint64 m_videoConvertMs = 0;
         qint64 m_videoConvertMaxMs = 0;
+        int m_avioBufferSize = 0;
+        int m_avioBufferFill = 0;
+        qint64 m_avioBytesRead = 0;
     };
 
     [[nodiscard]] const DebugStats& debugStats() const { return m_debugStats; }
@@ -158,6 +183,7 @@ private:
     void takePacedAudio(QByteArray& pcmS16Stereo);
     void clearPendingAudio();
     void appendPendingAudio(const QByteArray& pcmS16Stereo);
+    void updateAvioDebugStats();
     void clearPendingVideoPackets();
     void closeAudioDecoder();
 };

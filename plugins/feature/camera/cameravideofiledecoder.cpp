@@ -41,6 +41,32 @@ extern "C" {
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 }
+
+namespace
+{
+class CameraScopedTiming
+{
+public:
+    CameraScopedTiming(quint64& totalMs, qint64& maxMs) :
+        m_totalMs(totalMs),
+        m_maxMs(maxMs)
+    {
+        m_timer.start();
+    }
+
+    ~CameraScopedTiming()
+    {
+        const qint64 elapsedMs = m_timer.elapsed();
+        m_totalMs += static_cast<quint64>(std::max<qint64>(0, elapsedMs));
+        m_maxMs = std::max(m_maxMs, elapsedMs);
+    }
+
+private:
+    QElapsedTimer m_timer;
+    quint64& m_totalMs;
+    qint64& m_maxMs;
+};
+}
 #endif
 
 namespace {
@@ -401,6 +427,8 @@ bool CameraVideoFileDecoder::readNextFrame(
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
+    ++m_debugStats.m_readFrameCalls;
+    CameraScopedTiming readFrameTiming(m_debugStats.m_readFrameMs, m_debugStats.m_readFrameMaxMs);
     image = QImage();
     positionMs = -1;
     pcmS16Stereo.clear();
@@ -442,7 +470,12 @@ bool CameraVideoFileDecoder::readNextFrame(
             continue;
         }
 
-        ret = av_read_frame(m_formatContext, m_packet);
+        {
+            CameraScopedTiming readTiming(m_debugStats.m_mainReadMs, m_debugStats.m_mainReadMaxMs);
+            ret = av_read_frame(m_formatContext, m_packet);
+        }
+        updateAvioDebugStats();
+        ++m_debugStats.m_mainReadPackets;
         if (ret < 0)
         {
             if (ret == AVERROR_EOF)
@@ -720,6 +753,8 @@ bool CameraVideoFileDecoder::sendAudioPacket(AVPacket *packet, QByteArray& pcmS1
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
+    ++m_debugStats.m_sendAudioPackets;
+    CameraScopedTiming sendAudioTiming(m_debugStats.m_sendAudioMs, m_debugStats.m_sendAudioMaxMs);
     static constexpr int maxDrainAttempts = 16;
 
     for (int attempt = 0; attempt <= maxDrainAttempts; ++attempt)
@@ -788,6 +823,8 @@ bool CameraVideoFileDecoder::sendVideoPacket(AVPacket *packet, QString& errorMes
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
+    ++m_debugStats.m_sendVideoPackets;
+    CameraScopedTiming sendVideoTiming(m_debugStats.m_sendVideoMs, m_debugStats.m_sendVideoMaxMs);
     static constexpr int maxDrainAttempts = 16;
 
     for (int attempt = 0; attempt <= maxDrainAttempts; ++attempt)
@@ -822,6 +859,8 @@ bool CameraVideoFileDecoder::receiveVideoFrame(QImage& image, qint64& positionMs
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
+    ++m_debugStats.m_receiveVideoCalls;
+    CameraScopedTiming receiveVideoTiming(m_debugStats.m_receiveVideoMs, m_debugStats.m_receiveVideoMaxMs);
     const int ret = avcodec_receive_frame(m_videoCodecContext, m_videoFrame);
     if (ret == 0)
     {
@@ -911,6 +950,8 @@ bool CameraVideoFileDecoder::finishFrameAudio(
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
+    ++m_debugStats.m_finishAudioCalls;
+    CameraScopedTiming finishAudioTiming(m_debugStats.m_finishAudioMs, m_debugStats.m_finishAudioMaxMs);
     if (!readAheadAudio(decodedAudio, videoPositionMs, errorMessage)) {
         return false;
     }
@@ -929,6 +970,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
+    CameraScopedTiming readAheadTiming(m_debugStats.m_readAheadAudioMs, m_debugStats.m_readAheadAudioMaxMs);
     if (!m_audioCodecContext) {
         return true;
     }
@@ -969,7 +1011,12 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         && (m_pendingVideoPackets.size() < maxPendingVideoPackets)
         && (!m_urlSource || (m_pendingVideoFrames.size() < maxPendingVideoFrames)))
     {
-        int ret = av_read_frame(m_formatContext, m_packet);
+        int ret;
+        {
+            CameraScopedTiming readTiming(m_debugStats.m_readAheadReadMs, m_debugStats.m_readAheadReadMaxMs);
+            ret = av_read_frame(m_formatContext, m_packet);
+        }
+        updateAvioDebugStats();
         if (ret < 0)
         {
             if (ret == AVERROR_EOF)
@@ -1339,6 +1386,32 @@ bool CameraVideoFileDecoder::convertFrameToImage(const AVFrame *frame, QImage& i
     m_debugStats.m_videoConvertMs += static_cast<quint64>(std::max<qint64>(0, convertMs));
     m_debugStats.m_videoConvertMaxMs = std::max(m_debugStats.m_videoConvertMaxMs, convertMs);
     return true;
+#endif
+}
+
+void CameraVideoFileDecoder::updateAvioDebugStats()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    AVIOContext *ioContext = m_formatContext ? m_formatContext->pb : nullptr;
+    if (!ioContext)
+    {
+        m_debugStats.m_avioBufferSize = 0;
+        m_debugStats.m_avioBufferFill = 0;
+        m_debugStats.m_avioBytesRead = 0;
+        return;
+    }
+
+    m_debugStats.m_avioBufferSize = ioContext->buffer_size;
+    if (ioContext->buf_ptr && ioContext->buf_end) {
+        m_debugStats.m_avioBufferFill = static_cast<int>(std::max<qint64>(0, ioContext->buf_end - ioContext->buf_ptr));
+    } else {
+        m_debugStats.m_avioBufferFill = 0;
+    }
+
+    const qint64 position = avio_tell(ioContext);
+    if (position >= 0) {
+        m_debugStats.m_avioBytesRead = position;
+    }
 #endif
 }
 

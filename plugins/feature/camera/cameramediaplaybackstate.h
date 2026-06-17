@@ -100,9 +100,10 @@ public:
     int m_decodePendingAudioBytes = 0;
     int m_decodePendingVideoFrames = 0;
     int m_decodePendingVideoPackets = 0;
-    // Keep live streams close to real time; audio is the main jitter buffer.
-    static constexpr size_t m_streamInitialBufferFrames = 3;
-    static constexpr size_t m_maxDecodedStreamFrames = 4;
+    // Keep enough live video headroom to read interleaved audio packets, while
+    // stale-frame dropping keeps the displayed stream close to real time.
+    static constexpr size_t m_streamInitialBufferFrames = 4;
+    static constexpr size_t m_maxDecodedStreamFrames = 6;
 
     QElapsedTimer m_statsTimer;
     QElapsedTimer m_tickTimer;
